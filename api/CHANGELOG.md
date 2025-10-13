@@ -1,3 +1,10 @@
+## api [1.0.1](https://github.com/Jman-Github/Universal-ReVanced-Manager/compare/api@1.0.0...api@1.0.1) (2025-10-13)
+
+
+### Bug Fixes
+
+* mistakes in README.md and release ([038dc41](https://github.com/Jman-Github/Universal-ReVanced-Manager/commit/038dc41d34be02681ff8a6c0f5e7519e059986dc))
+
 # api 1.0.0 (2025-10-13)
 
 
