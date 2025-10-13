@@ -41,7 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
-import app.revanced.manager.R
+import app.universal.revanced.manager.R
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.ColumnWithScrollbar
 import app.revanced.manager.ui.component.ConfirmDialog
@@ -231,7 +231,7 @@ fun ImportExportSettingsScreen(
                                         src?.also {
                                             coroutineScope.launch {
                                                 vm.resetDialogState =
-                                                    ResetDialogState.PatchSelectionBundle(it.name) {
+                                                    ResetDialogState.PatchSelectionBundle(it.displayTitle) {
                                                         vm.resetSelectionForPatchBundle(it)
                                                     }
                                             }
@@ -286,10 +286,10 @@ fun ImportExportSettingsScreen(
                                     BundleSelector(sources = patchBundles) { src ->
                                         src?.also {
                                             coroutineScope.launch {
-                                                vm.resetDialogState =
-                                                    ResetDialogState.PatchOptionBundle(src.name) {
-                                                        vm.resetOptionsForBundle(src)
-                                                    }
+                                            vm.resetDialogState =
+                                                ResetDialogState.PatchOptionBundle(src.displayTitle) {
+                                                    vm.resetOptionsForBundle(src)
+                                                }
                                             }
                                         }
                                         selectorDialog = null

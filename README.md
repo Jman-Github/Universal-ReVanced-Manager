@@ -60,45 +60,28 @@
 
 # 💊 ReVanced Manager
 
-![GitHub Workflow Status (with event)](https://img.shields.io/github/actions/workflow/status/ReVanced/revanced-manager/release.yml)
 ![GPLv3 License](https://img.shields.io/badge/License-GPL%20v3-yellow.svg)
 
 Application to use ReVanced on Android
 
 ## ❓ About
 
-ReVanced Manager is an application that uses [ReVanced Patcher](https://github.com/revanced/revanced-patcher) to patch Android apps.
+Universal ReVanced Manager is an application that uses [ReVanced Patcher](https://github.com/revanced/revanced-patcher) to patch Android apps.
 
-## 💪 Features
+## 💪 Unique Features
 
-Some of the features ReVanced Manager provides are:
+The unique features Universal ReVanced Manager provides that the official ReVanced Manager doesn't are:
 
-- ⬇️ **Download**: Automatically download apps using the ReVanced Manager downloader plugin system
-- 💉 **Patch**: Select and apply patches to any Android app
-- 🛠️ **Customize**: Manage patches, apps, signing, themes, updates, and many more settings
+- 💉 **Third Party Patch Support**: Import any third party patch of your choice (such as inotia00's or anddea's which the official ReVanced Manager doesn't support)
+- 🛠️ **Additional Customization**: Apply a display name of your choice to your imported patch bundles
+- 🙂**Quality Of Life**: Deselect all patches in selection menu
 
 ## 🔽 Download
 
-You can download the most recent version of ReVanced Manager at [revanced.app/download](https://revanced.app/download) or from [GitHub releases](https://github.com/ReVanced/revanced-manager/releases/latest).  
-Learn how to use ReVanced Manager by following the [documentation](/docs).
-
-## 📚 Everything else
-
-### 📙 Contributing
-
-Thank you for considering contributing to ReVanced Manager.
-You can find the contribution guidelines [here](CONTRIBUTING.md).
-
-### 🛠️ Building
-
-To build a ReVanced Manager, you can follow the [documentation](/docs).
-
-### 📄 Documentation
-
-You can find the documentation for ReVanced Manager [here](/docs).
+You can download the most recent version of ReVanced Manager from [GitHub releases](https://github.com/Jman-Github/universal-revanced-manager/releases/latest).  
 
 ## ⚖️ License
 
-ReVanced Manager is licensed under the GPLv3 license. Please see the [license file](LICENSE) for more information.
-[tl;dr](https://www.tldrlegal.com/license/gnu-general-public-license-v3-gpl-3) you may copy, distribute and modify ReVanced Manager as long as you track changes/dates in source files.
-Any modifications to ReVanced Manager must also be made available under the GPL, along with build & install instructions.
+Universal ReVanced Manager is licensed under the GPLv3 license. Please see the [license file](https://github.com/Jman-Github/universal-revanced-manager/blob/main/LICENSE) for more information.
+[tl;dr](https://www.tldrlegal.com/license/gnu-general-public-license-v3-gpl-3) you may copy, distribute and modify Universal ReVanced Manager as long as you track changes/dates in source files.
+Any modifications to Universal ReVanced Manager must also be made available under the GPL, along with build & install instructions.

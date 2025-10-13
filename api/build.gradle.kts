@@ -18,7 +18,7 @@ dependencies {
 }
 
 android {
-    namespace = "app.revanced.manager.plugin.downloader"
+    namespace = "app.universal.revanced.manager.plugin.downloader"
     compileSdk = 35
 
     defaultConfig {

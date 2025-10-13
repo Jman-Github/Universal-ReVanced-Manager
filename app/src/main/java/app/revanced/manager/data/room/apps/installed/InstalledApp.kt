@@ -3,7 +3,7 @@ package app.revanced.manager.data.room.apps.installed
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
-import app.revanced.manager.R
+import app.universal.revanced.manager.R
 
 enum class InstallType(val stringResource: Int) {
     DEFAULT(R.string.default_install),

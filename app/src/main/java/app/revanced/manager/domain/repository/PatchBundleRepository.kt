@@ -5,7 +5,7 @@ import android.content.Context
 import android.util.Log
 import androidx.annotation.StringRes
 import app.revanced.library.mostCommonCompatibleVersions
-import app.revanced.manager.R
+import app.universal.revanced.manager.R
 import app.revanced.manager.data.platform.NetworkInfo
 import app.revanced.manager.data.redux.Action
 import app.revanced.manager.data.redux.ActionContext
@@ -163,32 +163,36 @@ class PatchBundleRepository(
             (src.patchBundle ?: return@mapNotNull null) to src
         }.toMap()
 
-        val metadata = try {
-            PatchBundle.Loader.metadata(map.keys)
-        } catch (error: Throwable) {
-            val uids = map.values.map { it.uid }
+        if (map.isEmpty()) return emptyMap()
 
+        val failures = mutableListOf<Pair<Int, Throwable>>()
+
+        val metadata = map.mapNotNull { (bundle, src) ->
+            try {
+                src.uid to PatchBundleInfo.Global(
+                    src.displayTitle,
+                    bundle.manifestAttributes?.version,
+                    src.uid,
+                    PatchBundle.Loader.metadata(bundle)
+                )
+            } catch (error: Throwable) {
+                failures += src.uid to error
+                Log.e(tag, "Failed to load bundle ${src.name}", error)
+                null
+            }
+        }.toMap()
+
+        if (failures.isNotEmpty()) {
             dispatchAction("Mark bundles as failed") { state ->
                 state.copy(sources = state.sources.mutate {
-                    uids.forEach { uid ->
-                        it[uid] = it[uid]?.copy(error = error) ?: return@forEach
+                    failures.forEach { (uid, throwable) ->
+                        it[uid] = it[uid]?.copy(error = throwable) ?: return@forEach
                     }
                 })
             }
-
-            Log.e(tag, "Failed to load bundles", error)
-            emptyMap()
         }
 
-        return metadata.entries.associate { (bundle, patches) ->
-            val src = map[bundle]!!
-            src.uid to PatchBundleInfo.Global(
-                src.name,
-                bundle.manifestAttributes?.version,
-                src.uid,
-                patches
-            )
-        }
+        return metadata
     }
 
     suspend fun isVersionAllowed(packageName: String, version: String) =
@@ -208,12 +212,14 @@ class PatchBundleRepository(
         val dir = directoryOf(uid)
         val actualName =
             name.ifEmpty { app.getString(if (uid == 0) R.string.patches_name_default else R.string.patches_name_fallback) }
+        val normalizedDisplayName = displayName?.takeUnless { it.isBlank() }
 
         return when (source) {
-            is SourceInfo.Local -> LocalPatchBundle(actualName, uid, null, dir)
+            is SourceInfo.Local -> LocalPatchBundle(actualName, uid, normalizedDisplayName, null, dir)
             is SourceInfo.API -> APIPatchBundle(
                 actualName,
                 uid,
+                normalizedDisplayName,
                 versionHash,
                 null,
                 dir,
@@ -224,6 +230,7 @@ class PatchBundleRepository(
             is SourceInfo.Remote -> JsonPatchBundle(
                 actualName,
                 uid,
+                normalizedDisplayName,
                 versionHash,
                 null,
                 dir,
@@ -233,10 +240,16 @@ class PatchBundleRepository(
         }
     }
 
-    private suspend fun createEntity(name: String, source: Source, autoUpdate: Boolean = false) =
+    private suspend fun createEntity(
+        name: String,
+        source: Source,
+        autoUpdate: Boolean = false,
+        displayName: String? = null
+    ) =
         PatchBundleEntity(
             uid = generateUid(),
             name = name,
+            displayName = displayName?.takeUnless { it.isBlank() },
             versionHash = null,
             source = source,
             autoUpdate = autoUpdate
@@ -257,6 +270,7 @@ class PatchBundleRepository(
             PatchBundleEntity(
                 uid = uid,
                 name = new.name,
+                displayName = new.displayName?.takeUnless { it.isBlank() },
                 versionHash = new.versionHash,
                 source = new.source,
                 autoUpdate = new.autoUpdate,
@@ -284,6 +298,18 @@ class PatchBundleRepository(
             }
 
             State(sources.toPersistentMap(), info.toPersistentMap())
+        }
+
+    suspend fun setDisplayName(src: PatchBundleSource, displayName: String?) =
+        dispatchAction("Set bundle display name (${src.uid})") { state ->
+            val normalized = displayName?.takeUnless { it.isBlank() }
+
+            updateDb(src.uid) { it.copy(displayName = normalized) }
+
+            val updated = state.sources[src.uid]?.copy(displayName = normalized)
+                ?: return@dispatchAction state
+
+            state.copy(sources = state.sources.put(src.uid, updated))
         }
 
     suspend fun createLocal(createStream: suspend () -> InputStream) = dispatchAction("Add bundle") {
@@ -408,6 +434,7 @@ class PatchBundleRepository(
         val defaultSource = PatchBundleEntity(
             uid = 0,
             name = "",
+            displayName = null,
             versionHash = null,
             source = Source.API,
             autoUpdate = false

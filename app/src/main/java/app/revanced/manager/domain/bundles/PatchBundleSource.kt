@@ -15,6 +15,7 @@ import java.io.OutputStream
 sealed class PatchBundleSource(
     val name: String,
     val uid: Int,
+    val displayName: String?,
     error: Throwable?,
     protected val directory: File
 ) {
@@ -30,12 +31,17 @@ sealed class PatchBundleSource(
     val version get() = patchBundle?.manifestAttributes?.version
     val isNameOutOfDate get() = patchBundle?.manifestAttributes?.name?.let { it != name } == true
     val error get() = (state as? State.Failed)?.throwable
+    val displayTitle get() = displayName?.takeUnless { it.isBlank() } ?: name
 
     suspend fun ActionContext.deleteLocalFile() = withContext(Dispatchers.IO) {
         patchesFile.delete()
     }
 
-    abstract fun copy(error: Throwable? = this.error, name: String = this.name): PatchBundleSource
+    abstract fun copy(
+        error: Throwable? = this.error,
+        name: String = this.name,
+        displayName: String? = this.displayName
+    ): PatchBundleSource
 
     protected fun hasInstalled() = patchesFile.exists()
 
@@ -58,5 +64,6 @@ sealed class PatchBundleSource(
     companion object Extensions {
         val PatchBundleSource.isDefault inline get() = uid == 0
         val PatchBundleSource.asRemoteOrNull inline get() = this as? RemotePatchBundle
+        val PatchBundleSource.actualName inline get() = name
     }
 }

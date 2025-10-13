@@ -121,12 +121,12 @@ buildscript {
 }
 
 android {
-    namespace = "app.revanced.manager"
+    namespace = "app.universal.revanced.manager"
     compileSdk = 35
     buildToolsVersion = "35.0.1"
 
     defaultConfig {
-        applicationId = "app.revanced.manager"
+        applicationId = "app.universal.revanced.manager"
         minSdk = 26
         targetSdk = 35
 
@@ -136,17 +136,14 @@ android {
             major * 10_000_000 +
                     minor * 10_000 +
                     patch * 100 +
-                    (preRelease?.substringAfterLast('.')?.toInt() ?: 99)
+                    (preRelease?.substringAfterLast('.')?.toInt() ?: 0)
         }
         vectorDrawables.useSupportLibrary = true
     }
 
     buildTypes {
         debug {
-            applicationIdSuffix = ".debug"
-            resValue("string", "app_name", "ReVanced Manager (Debug)")
             isPseudoLocalesEnabled = true
-
             buildConfigField("long", "BUILD_ID", "${Random.nextLong()}L")
         }
 
@@ -159,14 +156,10 @@ android {
 
             val keystoreFile = file("keystore.jks")
 
-            if (project.hasProperty("signAsDebug") || !keystoreFile.exists()) {
-                applicationIdSuffix = ".debug_signed"
-                resValue("string", "app_name", "ReVanced Manager (Debug signed)")
-                signingConfig = signingConfigs.getByName("debug")
-
-                isPseudoLocalesEnabled = true
+            signingConfig = if (project.hasProperty("signAsDebug") || !keystoreFile.exists()) {
+                signingConfigs.getByName("debug")
             } else {
-                signingConfig = signingConfigs.create("release") {
+                signingConfigs.create("release") {
                     storeFile = keystoreFile
                     storePassword = System.getenv("KEYSTORE_PASSWORD")
                     keyAlias = System.getenv("KEYSTORE_ENTRY_ALIAS")

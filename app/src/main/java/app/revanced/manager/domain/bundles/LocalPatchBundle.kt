@@ -9,9 +9,10 @@ import java.io.InputStream
 class LocalPatchBundle(
     name: String,
     uid: Int,
+    displayName: String?,
     error: Throwable?,
     directory: File
-) : PatchBundleSource(name, uid, error, directory) {
+) : PatchBundleSource(name, uid, displayName, error, directory) {
     suspend fun ActionContext.replace(patches: InputStream) {
         withContext(Dispatchers.IO) {
             patchBundleOutputStream().use { outputStream ->
@@ -20,9 +21,10 @@ class LocalPatchBundle(
         }
     }
 
-    override fun copy(error: Throwable?, name: String) = LocalPatchBundle(
+    override fun copy(error: Throwable?, name: String, displayName: String?) = LocalPatchBundle(
         name,
         uid,
+        displayName,
         error,
         directory
     )

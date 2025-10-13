@@ -67,6 +67,10 @@ class ManagerApplication : Application() {
 
         scope.launch {
             prefs.preload()
+            val currentApi = prefs.api.get()
+            if (currentApi == LEGACY_MANAGER_REPO_URL || currentApi == LEGACY_MANAGER_REPO_API_URL) {
+                prefs.api.update(DEFAULT_API_URL)
+            }
         }
         scope.launch(Dispatchers.Default) {
             downloaderPluginRepository.reload()
@@ -106,5 +110,11 @@ class ManagerApplication : Application() {
             deleteRecursively()
             mkdirs()
         }
+    }
+
+    private companion object {
+        private const val DEFAULT_API_URL = "https://api.revanced.app"
+        private const val LEGACY_MANAGER_REPO_URL = "https://github.com/Jman-Github/universal-revanced-manager"
+        private const val LEGACY_MANAGER_REPO_API_URL = "https://api.github.com/repos/Jman-Github/universal-revanced-manager"
     }
 }

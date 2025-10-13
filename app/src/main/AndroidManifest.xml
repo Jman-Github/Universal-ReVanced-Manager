@@ -3,13 +3,13 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <permission
-        android:name="app.revanced.manager.permission.PLUGIN_HOST"
+        android:name="app.universal.revanced.manager.permission.PLUGIN_HOST"
         android:protectionLevel="signature"
         android:label="@string/plugin_host_permission_label"
         android:description="@string/plugin_host_permission_description"
         />
 
-    <uses-permission android:name="app.revanced.manager.permission.PLUGIN_HOST" />
+    <uses-permission android:name="app.universal.revanced.manager.permission.PLUGIN_HOST" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -26,7 +26,7 @@
     <uses-permission android:name="android.permission.ENFORCE_UPDATE_OWNERSHIP" />
 
     <application
-        android:name=".ManagerApplication"
+        android:name="app.revanced.manager.ManagerApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:largeHeap="true"
@@ -39,7 +39,7 @@
         tools:targetApi="34">
 
         <activity
-            android:name=".MainActivity"
+            android:name="app.revanced.manager.MainActivity"
             android:exported="true"
             android:theme="@style/Theme.ReVancedManager">
 
@@ -49,10 +49,10 @@
             </intent-filter>
         </activity>
 
-        <activity android:name=".plugin.downloader.webview.WebViewActivity" android:exported="false" android:theme="@style/Theme.WebViewActivity" />
+        <activity android:name="app.revanced.manager.plugin.downloader.webview.WebViewActivity" android:exported="false" android:theme="@style/Theme.WebViewActivity" />
 
-        <service android:name=".service.InstallService" />
-        <service android:name=".service.UninstallService" />
+        <service android:name="app.revanced.manager.service.InstallService" />
+        <service android:name="app.revanced.manager.service.UninstallService" />
 
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"

@@ -33,13 +33,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import app.revanced.manager.R
-import app.revanced.manager.R.string.auto_update
-import app.revanced.manager.R.string.auto_update_description
-import app.revanced.manager.R.string.field_not_set
-import app.revanced.manager.R.string.patches
-import app.revanced.manager.R.string.patches_url
-import app.revanced.manager.R.string.view_patches
+import app.universal.revanced.manager.R
+import app.universal.revanced.manager.R.string.auto_update
+import app.universal.revanced.manager.R.string.auto_update_description
+import app.universal.revanced.manager.R.string.field_not_set
+import app.universal.revanced.manager.R.string.patches
+import app.universal.revanced.manager.R.string.patches_url
+import app.universal.revanced.manager.R.string.view_patches
 import app.revanced.manager.data.platform.NetworkInfo
 import app.revanced.manager.domain.bundles.LocalPatchBundle
 import app.revanced.manager.domain.bundles.PatchBundleSource
@@ -74,6 +74,7 @@ fun BundleInformationDialog(
     val bundleManifestAttributes = src.patchBundle?.manifestAttributes
     val (autoUpdate, endpoint) = src.asRemoteOrNull?.let { it.autoUpdate to it.endpoint }
         ?: (null to null)
+    var showDisplayNameDialog by remember { mutableStateOf(false) }
 
     fun onAutoUpdateChange(new: Boolean) = composableScope.launch {
         with(bundleRepo) {
@@ -96,7 +97,7 @@ fun BundleInformationDialog(
         Scaffold(
             topBar = {
                 BundleTopBar(
-                    title = src.name,
+                    title = src.displayTitle,
                     onBackClick = onDismissRequest,
                     backIcon = {
                         Icon(
@@ -158,6 +159,28 @@ fun BundleInformationDialog(
                 HorizontalDivider(
                     modifier = Modifier.padding(horizontal = 16.dp),
                     color = MaterialTheme.colorScheme.outlineVariant
+                )
+
+                if (showDisplayNameDialog) {
+                    TextInputDialog(
+                        initial = src.displayName.orEmpty(),
+                        title = stringResource(R.string.patches_display_name),
+                        onDismissRequest = { showDisplayNameDialog = false },
+                        onConfirm = { value ->
+                            showDisplayNameDialog = false
+                            composableScope.launch {
+                                bundleRepo.setDisplayName(src, value.trim().ifEmpty { null })
+                            }
+                        },
+                        validator = { true }
+                    )
+                }
+
+                BundleListItem(
+                    modifier = Modifier.clickable { showDisplayNameDialog = true },
+                    headlineText = stringResource(R.string.patches_display_name),
+                    supportingText = src.displayName?.takeUnless { it.isBlank() }
+                        ?: stringResource(field_not_set)
                 )
 
                 if (autoUpdate != null) {

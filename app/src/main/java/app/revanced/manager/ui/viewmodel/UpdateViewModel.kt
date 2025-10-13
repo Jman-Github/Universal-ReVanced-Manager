@@ -15,7 +15,7 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import app.revanced.manager.R
+import app.universal.revanced.manager.R
 import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.data.platform.NetworkInfo
 import app.revanced.manager.network.api.ReVancedAPI
@@ -63,7 +63,7 @@ class UpdateViewModel(
 
     private val location = fs.tempDir.resolve("updater.apk")
     private val job = viewModelScope.launch {
-        uiSafe(app, R.string.download_manager_failed, "Failed to download ReVanced Manager") {
+        uiSafe(app, R.string.download_manager_failed, "Failed to download Universal ReVanced Manager") {
             releaseInfo = reVancedAPI.getAppUpdate() ?: throw Exception("No update available")
 
             if (downloadOnScreenEntry) {

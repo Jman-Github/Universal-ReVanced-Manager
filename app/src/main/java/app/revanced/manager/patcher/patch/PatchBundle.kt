@@ -1,13 +1,13 @@
 package app.revanced.manager.patcher.patch
 
-import kotlinx.parcelize.IgnoredOnParcel
 import android.os.Parcelable
+import app.revanced.patcher.patch.Patch
 import app.revanced.patcher.patch.loadPatchesFromDex
+import kotlinx.parcelize.IgnoredOnParcel
 import kotlinx.parcelize.Parcelize
 import java.io.File
 import java.io.IOException
 import java.util.jar.JarFile
-import kotlin.collections.filter
 
 @Parcelize
 data class PatchBundle(val patchesJar: String) : Parcelable {
@@ -54,30 +54,28 @@ data class PatchBundle(val patchesJar: String) : Parcelable {
     )
 
     object Loader {
-        private fun patches(bundles: Iterable<PatchBundle>) =
-            loadPatchesFromDex(
-                bundles.map { File(it.patchesJar) }.toSet()
-            ).byPatchesFile.mapKeys { (file, _) ->
-                val absPath = file.absolutePath
-                bundles.single { absPath == it.patchesJar }
-            }
+        private fun loadBundle(bundle: PatchBundle): Collection<Patch<*>> {
+            val patchFiles = loadPatchesFromDex(setOf(File(bundle.patchesJar))).byPatchesFile
+            val entry = patchFiles.entries.singleOrNull()
+                ?: throw IllegalStateException("Unexpected patch bundle load result for ${bundle.patchesJar}")
+
+            return entry.value
+        }
+
+        private fun metadataFor(bundle: PatchBundle) = loadBundle(bundle).map(::PatchInfo)
 
         fun metadata(bundles: Iterable<PatchBundle>) =
-            patches(bundles).mapValues { (_, patches) -> patches.map(::PatchInfo) }
+            bundles.associateWith(::metadataFor)
+
+        fun metadata(bundle: PatchBundle) = metadataFor(bundle)
 
         fun patches(bundles: Iterable<PatchBundle>, packageName: String) =
-            patches(bundles).mapValues { (_, patches) ->
-                patches.filter { patch ->
+            bundles.associateWith { bundle ->
+                loadBundle(bundle).filter { patch ->
                     val compatiblePackages = patch.compatiblePackages
-                        ?: // The patch has no compatibility constraints, which means it is universal.
-                        return@filter true
+                        ?: return@filter true // Universal patch
 
-                    if (!compatiblePackages.any { (name, _) -> name == packageName }) {
-                        // Patch is not compatible with this package.
-                        return@filter false
-                    }
-
-                    true
+                    compatiblePackages.any { (name, _) -> name == packageName }
                 }.toSet()
             }
     }

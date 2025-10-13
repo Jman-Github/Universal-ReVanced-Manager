@@ -33,6 +33,7 @@ sealed class Source {
 data class PatchBundleEntity(
     @PrimaryKey val uid: Int,
     @ColumnInfo(name = "name") val name: String,
+    @ColumnInfo(name = "display_name") val displayName: String? = null,
     @ColumnInfo(name = "version") val versionHash: String? = null,
     @ColumnInfo(name = "source") val source: Source,
     @ColumnInfo(name = "auto_update") val autoUpdate: Boolean
@@ -40,6 +41,7 @@ data class PatchBundleEntity(
 
 data class PatchBundleProperties(
     @ColumnInfo(name = "name") val name: String,
+    @ColumnInfo(name = "display_name") val displayName: String? = null,
     @ColumnInfo(name = "version") val versionHash: String? = null,
     @ColumnInfo(name = "source") val source: Source,
     @ColumnInfo(name = "auto_update") val autoUpdate: Boolean

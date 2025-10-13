@@ -15,17 +15,28 @@ import java.io.File
 sealed class RemotePatchBundle(
     name: String,
     uid: Int,
+    displayName: String?,
     protected val versionHash: String?,
     error: Throwable?,
     directory: File,
     val endpoint: String,
     val autoUpdate: Boolean,
-) : PatchBundleSource(name, uid, error, directory), KoinComponent {
+) : PatchBundleSource(name, uid, displayName, error, directory), KoinComponent {
     protected val http: HttpService by inject()
 
     protected abstract suspend fun getLatestInfo(): ReVancedAsset
-    abstract fun copy(error: Throwable? = this.error, name: String = this.name, autoUpdate: Boolean = this.autoUpdate): RemotePatchBundle
-    override fun copy(error: Throwable?, name: String): RemotePatchBundle = copy(error, name, this.autoUpdate)
+    abstract fun copy(
+        error: Throwable? = this.error,
+        name: String = this.name,
+        displayName: String? = this.displayName,
+        autoUpdate: Boolean = this.autoUpdate
+    ): RemotePatchBundle
+
+    override fun copy(
+        error: Throwable?,
+        name: String,
+        displayName: String?
+    ): RemotePatchBundle = copy(error, name, displayName, this.autoUpdate)
 
     private suspend fun download(info: ReVancedAsset) = withContext(Dispatchers.IO) {
         patchBundleOutputStream().use {
@@ -58,21 +69,23 @@ sealed class RemotePatchBundle(
 class JsonPatchBundle(
     name: String,
     uid: Int,
+    displayName: String?,
     versionHash: String?,
     error: Throwable?,
     directory: File,
     endpoint: String,
     autoUpdate: Boolean,
-) : RemotePatchBundle(name, uid, versionHash, error, directory, endpoint, autoUpdate) {
+) : RemotePatchBundle(name, uid, displayName, versionHash, error, directory, endpoint, autoUpdate) {
     override suspend fun getLatestInfo() = withContext(Dispatchers.IO) {
         http.request<ReVancedAsset> {
             url(endpoint)
         }.getOrThrow()
     }
 
-    override fun copy(error: Throwable?, name: String, autoUpdate: Boolean) = JsonPatchBundle(
+    override fun copy(error: Throwable?, name: String, displayName: String?, autoUpdate: Boolean) = JsonPatchBundle(
         name,
         uid,
+        displayName,
         versionHash,
         error,
         directory,
@@ -84,18 +97,20 @@ class JsonPatchBundle(
 class APIPatchBundle(
     name: String,
     uid: Int,
+    displayName: String?,
     versionHash: String?,
     error: Throwable?,
     directory: File,
     endpoint: String,
     autoUpdate: Boolean,
-) : RemotePatchBundle(name, uid, versionHash, error, directory, endpoint, autoUpdate) {
+) : RemotePatchBundle(name, uid, displayName, versionHash, error, directory, endpoint, autoUpdate) {
     private val api: ReVancedAPI by inject()
 
     override suspend fun getLatestInfo() = api.getPatchesUpdate().getOrThrow()
-    override fun copy(error: Throwable?, name: String, autoUpdate: Boolean) = APIPatchBundle(
+    override fun copy(error: Throwable?, name: String, displayName: String?, autoUpdate: Boolean) = APIPatchBundle(
         name,
         uid,
+        displayName,
         versionHash,
         error,
         directory,

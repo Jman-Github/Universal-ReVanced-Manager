@@ -6,20 +6,14 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.FavoriteBorder
-import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
@@ -44,9 +38,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import app.revanced.manager.BuildConfig
-import app.revanced.manager.R
-import app.revanced.manager.network.dto.ReVancedSocial
+import app.universal.revanced.manager.BuildConfig
+import app.universal.revanced.manager.R
+import androidx.compose.ui.graphics.vector.ImageVector
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.ColumnWithScrollbar
 import app.revanced.manager.ui.component.settings.SettingsListItem
@@ -59,7 +53,7 @@ import app.revanced.manager.util.toast
 import com.google.accompanist.drawablepainter.rememberDrawablePainter
 import org.koin.androidx.compose.koinViewModel
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AboutSettingsScreen(
     onBackClick: () -> Unit,
@@ -72,72 +66,27 @@ fun AboutSettingsScreen(
         AppCompatResources.getDrawable(context, R.drawable.ic_logo_ring)
     })
 
-    val (preferredSocials, socials) = remember(viewModel.socials) {
-        viewModel.socials.partition(ReVancedSocial::preferred)
-    }
-
-    val preferredSocialButtons = remember(preferredSocials, viewModel.donate, viewModel.contact) {
-        preferredSocials.map {
+    val githubButtons: List<Triple<ImageVector, String, () -> Unit>> = remember(context) {
+        listOf(
             Triple(
-                getSocialIcon(it.name),
-                it.name,
-                third = {
-                    context.openUrl(it.url)
-                }
+                getSocialIcon("GitHub"),
+                context.getString(R.string.github),
+                { context.openUrl("https://github.com/Jman-Github/universal-revanced-manager") }
+            ),
+            Triple(
+                getSocialIcon("GitHub"),
+                context.getString(R.string.original_revanced_manager_github),
+                { context.openUrl("https://github.com/ReVanced/revanced-manager") }
+            ),
+            Triple(
+                getSocialIcon("GitHub"),
+                context.getString(R.string.patch_bundle_urls),
+                { context.openUrl("https://github.com/Jman-Github/ReVanced-Patch-Bundles#-patch-bundles-urls") }
             )
-        } + listOfNotNull(
-            viewModel.donate?.let {
-                Triple(
-                    Icons.Outlined.FavoriteBorder,
-                    context.getString(R.string.donate),
-                    third = {
-                        context.openUrl(it)
-                    }
-                )
-            },
-            viewModel.contact?.let {
-                Triple(
-                    Icons.Outlined.MailOutline,
-                    context.getString(R.string.contact),
-                    third = {
-                        context.openUrl("mailto:$it")
-                    }
-                )
-            }
         )
     }
 
-    val socialButtons = remember(socials) {
-        socials.map {
-            Triple(
-                getSocialIcon(it.name),
-                it.name,
-                third = {
-                    context.openUrl(it.url)
-                }
-            )
-        }
-    }
-
     val listItems = listOfNotNull(
-        Triple(
-            stringResource(R.string.submit_feedback),
-            stringResource(R.string.submit_feedback_description),
-            third = {
-                context.openUrl("https://github.com/ReVanced/revanced-manager/issues/new/choose")
-            }),
-        Triple(
-            stringResource(R.string.contributors),
-            stringResource(R.string.contributors_description),
-            third = nav@{
-                if (!viewModel.isConnected) {
-                    context.toast(context.getString(R.string.no_network_toast))
-                    return@nav
-                }
-
-                navigate(Settings.Contributors)
-            }
-        ),
         Triple(
             stringResource(R.string.opensource_licenses),
             stringResource(R.string.opensource_licenses_description),
@@ -221,15 +170,16 @@ fun AboutSettingsScreen(
                     color = MaterialTheme.colorScheme.outline
                 )
             }
-            FlowRow(
-                maxItemsInEachRow = 2,
-                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-                modifier = Modifier.padding(horizontal = 16.dp)
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                preferredSocialButtons.forEach { (icon, text, onClick) ->
+                githubButtons.forEach { (icon, text, onClick) ->
                     FilledTonalButton(
                         onClick = onClick,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -245,23 +195,6 @@ fun AboutSettingsScreen(
                                 style = MaterialTheme.typography.labelLarge
                             )
                         }
-                    }
-                }
-            }
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
-            ) {
-                socialButtons.forEach { (icon, text, onClick) ->
-                    IconButton(
-                        onClick = onClick,
-                        modifier = Modifier.padding(end = 8.dp),
-                    ) {
-                        Icon(
-                            icon,
-                            contentDescription = text,
-                            modifier = Modifier.size(28.dp),
-                            tint = MaterialTheme.colorScheme.secondary
-                        )
                     }
                 }
             }

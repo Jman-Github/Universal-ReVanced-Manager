@@ -14,7 +14,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.SavedStateHandleSaveableApi
 import androidx.lifecycle.viewmodel.compose.saveable
-import app.revanced.manager.R
+import app.universal.revanced.manager.R
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.patcher.patch.PatchBundleInfo
@@ -50,6 +50,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
     private val app: Application = get()
     private val savedStateHandle: SavedStateHandle = get()
     private val prefs: PreferencesManager = get()
+    private val patchBundleRepository: PatchBundleRepository = get()
 
     private val packageName = input.app.packageName
     val appVersion = input.app.version
@@ -62,7 +63,11 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
     val allowIncompatiblePatches =
         get<PreferencesManager>().disablePatchVersionCompatCheck.getBlocking()
     val bundlesFlow =
-        get<PatchBundleRepository>().scopedBundleInfoFlow(packageName, input.app.version)
+        patchBundleRepository.scopedBundleInfoFlow(packageName, input.app.version)
+    val bundleDisplayNames =
+        patchBundleRepository.sources.map { sources ->
+            sources.associate { it.uid to it.displayTitle }
+        }
 
     init {
         viewModelScope.launch {
@@ -166,6 +171,13 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         app.toast(app.getString(R.string.patch_selection_reset_toast))
     }
 
+    fun deselectBundle(bundleUid: Int) {
+        hasModifiedSelection = true
+        val selection = customPatchSelection ?: persistentMapOf()
+        customPatchSelection = selection.put(bundleUid, persistentSetOf())
+        patchOptions.remove(bundleUid)
+    }
+
     fun getCustomSelection(): PatchSelection? {
         // Convert persistent collections to standard hash collections because persistent collections are not parcelable.
 
@@ -232,3 +244,4 @@ private typealias PersistentPatchSelection = PersistentMap<Int, PersistentSet<St
 
 private fun PatchSelection.toPersistentPatchSelection(): PersistentPatchSelection =
     mapValues { (_, v) -> v.toPersistentSet() }.toPersistentMap()
+

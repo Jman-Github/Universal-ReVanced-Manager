@@ -13,6 +13,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,6 +27,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Restore
@@ -60,7 +62,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import app.revanced.manager.R
+import app.universal.revanced.manager.R
 import app.revanced.manager.patcher.patch.Option
 import app.revanced.manager.patcher.patch.PatchInfo
 import app.revanced.manager.ui.component.AppTopBar
@@ -91,6 +93,7 @@ fun PatchesSelectorScreen(
     viewModel: PatchesSelectorViewModel
 ) {
     val bundles by viewModel.bundlesFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+    val bundleDisplayNames by viewModel.bundleDisplayNames.collectAsStateWithLifecycle(initialValue = emptyMap())
     val pagerState = rememberPagerState(
         initialPage = 0,
         initialPageOffsetFraction = 0f
@@ -352,13 +355,29 @@ fun PatchesSelectorScreen(
             ) {
                 Column(
                     horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    SmallFloatingActionButton(
-                        onClick = viewModel::reset,
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Outlined.Restore, stringResource(R.string.reset))
+                        SmallFloatingActionButton(
+                            onClick = {
+                                bundles.getOrNull(pagerState.currentPage)?.let { bundle ->
+                                    viewModel.deselectBundle(bundle.uid)
+                                }
+                            },
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                        ) {
+                            Icon(Icons.Filled.Clear, stringResource(R.string.deselect_all))
+                        }
+
+                        SmallFloatingActionButton(
+                            onClick = viewModel::reset,
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                        ) {
+                            Icon(Icons.Outlined.Restore, stringResource(R.string.reset))
+                        }
                     }
                     HapticExtendedFloatingActionButton(
                         text = {
@@ -409,7 +428,7 @@ fun PatchesSelectorScreen(
                             text = {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text(
-                                        text = bundle.name,
+                                        text = bundleDisplayNames[bundle.uid] ?: bundle.name,
                                         style = MaterialTheme.typography.bodyMedium
                                     )
                                     Text(
@@ -639,3 +658,5 @@ private fun OptionsDialog(
         }
     }
 }
+
+

@@ -10,7 +10,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
-import app.revanced.manager.R
+import app.universal.revanced.manager.R
 
 private val DarkColorScheme = darkColorScheme(
     primary = rv_theme_dark_primary,

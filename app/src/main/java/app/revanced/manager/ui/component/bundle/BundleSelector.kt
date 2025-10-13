@@ -16,7 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import app.revanced.manager.R
+import app.universal.revanced.manager.R
 import app.revanced.manager.domain.bundles.PatchBundleSource
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -63,11 +63,29 @@ fun BundleSelector(sources: List<PatchBundleSource>, onFinish: (PatchBundleSourc
                             onFinish(it)
                         }
                 ) {
-                    Text(
-                        "${it.name} ${it.version}",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Column {
+                        Text(
+                            it.displayTitle,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        val hasCustomName =
+                            it.displayName?.takeUnless { name -> name.isBlank() } != null && it.displayTitle != it.name
+                        if (hasCustomName) {
+                            Text(
+                                it.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        it.version?.let { versionLabel ->
+                            Text(
+                                versionLabel,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
+                    }
                 }
             }
         }

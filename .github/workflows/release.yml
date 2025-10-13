@@ -2,14 +2,11 @@ name: Release
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-      - dev
 
 jobs:
   release:
     name: Release
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     permissions:
       contents: write
       packages: write
@@ -72,9 +69,18 @@ jobs:
           KEYSTORE_ENTRY_ALIAS: ${{ secrets.KEYSTORE_ENTRY_ALIAS }}
           KEYSTORE_ENTRY_PASSWORD: ${{ secrets.KEYSTORE_ENTRY_PASSWORD }}
 
+      - name: Name GitHub Release
+        if: steps.release.outputs.NEW_TAG != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release.outputs.NEW_TAG }}
+        run: |
+          gh release edit "$TAG" --title "Universal ReVanaced Manger $TAG" || \
+          gh release create "$TAG" --title "Universal ReVanaced Manger $TAG" --notes "Automated release for $TAG"
+
       - name: Attest
         if: steps.release.outputs.NEW_TAG != ''
         uses: actions/attest-build-provenance@v2
         with:
-          subject-name: 'ReVanced Manager ${{ steps.release.outputs.NEW_TAG }}'
+          subject-name: 'Universal ReVanaced Manger ${{ steps.release.outputs.NEW_TAG }}'
           subject-path: app/build/outputs/apk/release/revanced-manager*.apk

@@ -83,9 +83,6 @@ object Settings {
     data object About : Destination
 
     @Serializable
-    data object Changelogs : Destination
-
-    @Serializable
     data object Contributors : Destination
 
     @Serializable

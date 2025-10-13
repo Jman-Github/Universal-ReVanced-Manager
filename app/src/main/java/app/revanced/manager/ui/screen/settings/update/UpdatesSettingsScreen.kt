@@ -13,7 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import app.revanced.manager.R
+import app.universal.revanced.manager.R
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.ColumnWithScrollbar
 import app.revanced.manager.ui.component.GroupHeader
@@ -28,7 +28,6 @@ import org.koin.androidx.compose.koinViewModel
 @Composable
 fun UpdatesSettingsScreen(
     onBackClick: () -> Unit,
-    onChangelogClick: () -> Unit,
     onUpdateClick: () -> Unit,
     vm: UpdatesSettingsViewModel = koinViewModel(),
 ) {
@@ -65,20 +64,6 @@ fun UpdatesSettingsScreen(
                 },
                 headlineContent = stringResource(R.string.manual_update_check),
                 supportingContent = stringResource(R.string.manual_update_check_description)
-            )
-
-            SettingsListItem(
-                modifier = Modifier.clickable {
-                    if (!vm.isConnected) {
-                        context.toast(context.getString(R.string.no_network_toast))
-                        return@clickable
-                    }
-                    onChangelogClick()
-                },
-                headlineContent = stringResource(R.string.changelog),
-                supportingContent = stringResource(
-                    R.string.changelog_description
-                )
             )
 
             BooleanItem(

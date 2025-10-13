@@ -1,10 +1,8 @@
 package app.revanced.manager.ui.screen
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -26,23 +24,19 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import app.revanced.manager.R
+import app.universal.revanced.manager.R
 import app.revanced.manager.network.dto.ReVancedAsset
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.haptics.HapticExtendedFloatingActionButton
-import app.revanced.manager.ui.component.settings.Changelog
 import app.revanced.manager.ui.viewmodel.UpdateViewModel
 import app.revanced.manager.ui.viewmodel.UpdateViewModel.State
 import app.revanced.manager.util.relativeTime
-import com.gigamole.composefadingedges.content.FadingEdgesContentType
-import com.gigamole.composefadingedges.content.scrollconfig.FadingEdgesScrollConfig
-import com.gigamole.composefadingedges.fill.FadingEdgesFillType
-import com.gigamole.composefadingedges.verticalFadingEdges
 import org.koin.androidx.compose.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -128,8 +122,8 @@ fun UpdateScreen(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(32.dp)
             ) {
-                vm.releaseInfo?.let { changelog ->
-                    Changelog(changelog)
+                vm.releaseInfo?.let { info ->
+                    UpdateInfoSummary(info)
                 }
             }
         }
@@ -165,33 +159,22 @@ private fun MeteredDownloadConfirmationDialog(
 }
 
 @Composable
-private fun ColumnScope.Changelog(releaseInfo: ReVancedAsset) {
-    val scrollState = rememberScrollState()
+private fun UpdateInfoSummary(releaseInfo: ReVancedAsset) {
+    val context = LocalContext.current
+    val published = remember(releaseInfo.createdAt) {
+        releaseInfo.createdAt.relativeTime(context)
+    }
     Column(
-        modifier = Modifier
-            .weight(1f)
-            .verticalScroll(scrollState)
-            .verticalFadingEdges(
-                fillType = FadingEdgesFillType.FadeColor(
-                    color = MaterialTheme.colorScheme.background,
-                    fillStops = Triple(0F, 0.55F, 1F),
-                    secondStopAlpha = 1F
-                ),
-                contentType = FadingEdgesContentType.Dynamic.Scroll(
-                    state = scrollState,
-                    scrollConfig = FadingEdgesScrollConfig.Dynamic(
-                        animationSpec = spring(),
-                        isLerpByDifferenceForPartialContent = true,
-                        scrollFactor = 1.25F
-                    )
-                ),
-                length = 350.dp
-            )
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Changelog(
-            markdown = releaseInfo.description.replace("`", ""),
-            version = releaseInfo.version,
-            publishDate = releaseInfo.createdAt.relativeTime(LocalContext.current)
+        Text(
+            text = stringResource(R.string.version) + " " + releaseInfo.version,
+            style = MaterialTheme.typography.titleLarge
+        )
+        Text(
+            text = stringResource(R.string.update_published, published),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
