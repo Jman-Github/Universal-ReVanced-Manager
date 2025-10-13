@@ -58,7 +58,7 @@
    Continuing the legacy of Vanced
 </p>
 
-# 💊 ReVanced Manager
+# 💊 Universal ReVanced Manager
 
 ![GPLv3 License](https://img.shields.io/badge/License-GPL%20v3-yellow.svg)
 
@@ -72,9 +72,9 @@ Universal ReVanced Manager is an application that uses [ReVanced Patcher](https:
 
 The unique features Universal ReVanced Manager provides that the official ReVanced Manager doesn't are:
 
-- 💉 **Third Party Patch Support**: Import any third party patch of your choice (such as inotia00's or anddea's which the official ReVanced Manager doesn't support)
-- 🛠️ **Additional Customization**: Apply a display name of your choice to your imported patch bundles
-- 🙂**Quality Of Life**: Deselect all patches in selection menu
+- 💉 **Third Party Patch Support**: Import any third party patch bundle of your choice (such as inotia00's or anddea's which the official ReVanced Manager doesn't support)
+- 🛠️ **Additional Customization**: Apply a display name of your choice to any of your imported patch bundles
+- 🙂**Quality Of Life**: A button to deselect all patches in selection menu
 
 ## 🔽 Download
 

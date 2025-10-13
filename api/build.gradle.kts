@@ -59,7 +59,10 @@ publishing {
     repositories {
         maven {
             name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/revanced/revanced-manager")
+            // Publish to the current GitHub repository packages by default.
+            // Fallback keeps local publishing possible when the env var is absent.
+            val ghRepo = System.getenv("GITHUB_REPOSITORY") ?: "Jman-Github/Universal-ReVanced-Manager"
+            url = uri("https://maven.pkg.github.com/$ghRepo")
             credentials {
                 username = System.getenv("GITHUB_ACTOR") ?: extra["gpr.user"] as String?
                 password = System.getenv("GITHUB_TOKEN") ?: extra["gpr.key"] as String?
@@ -96,9 +99,10 @@ publishing {
                     }
                 }
                 scm {
-                    connection = "scm:git:git://github.com/revanced/revanced-manager.git"
-                    developerConnection = "scm:git:git@github.com:revanced/revanced-manager.git"
-                    url = "https://github.com/revanced/revanced-manager"
+                    val ghRepo = System.getenv("GITHUB_REPOSITORY") ?: "Jman-Github/Universal-ReVanced-Manager"
+                    connection = "scm:git:git://github.com/$ghRepo.git"
+                    developerConnection = "scm:git:git@github.com:$ghRepo.git"
+                    url = "https://github.com/$ghRepo"
                 }
             }
         }
@@ -106,6 +110,14 @@ publishing {
 }
 
 signing {
-    useGpgCmd()
+    // Disable signing by default in CI environments unless explicitly enabled.
+    // Enable by setting env SIGNING_REQUIRED=true or Gradle property signing.required=true
+    val requiredFromEnv = System.getenv("SIGNING_REQUIRED")?.toBoolean()
+    val requiredFromProp = (findProperty("signing.required") as String?)?.toBoolean()
+    isRequired = (requiredFromEnv ?: requiredFromProp) ?: false
+
+    if (isRequired) {
+        useGpgCmd()
+    }
     sign(publishing.publications["Api"])
 }
