@@ -75,10 +75,15 @@ The unique features Universal ReVanced Manager provides that the official ReVanc
 - 💉 **Third Party Patch Support**: Import any third party patch bundle of your choice (such as inotia00's or anddea's which the official ReVanced Manager doesn't support)
 - 🛠️ **Additional Customization**: Apply a display name of your choice to any of your imported patch bundles
 - 🙂**Quality Of Life**: A button to deselect all patches in selection menu
+And more..
 
 ## 🔽 Download
 
-You can download the most recent version of ReVanced Manager from [GitHub releases](https://github.com/Jman-Github/universal-revanced-manager/releases/latest).  
+You can download the most recent version of ReVanced Manager from [GitHub releases](https://github.com/Jman-Github/universal-revanced-manager/releases/latest).
+
+## 📋 Patch Bundles
+
+To import patch bundles into Universal ReVanced Manager, use my [ReVanced Patch Bundles](https://github.com/Jman-Github/ReVanced-Patch-Bundles) repository. It includes a detailed [catalog](https://github.com/Jman-Github/ReVanced-Patch-Bundles/blob/bundles/patch-bundles/PATCH-LIST-CATALOG.md) of all patches across 20+ tracked bundles, as well as [bundle URLs](https://github.com/Jman-Github/ReVanced-Patch-Bundles#-patch-bundles-urls) you can paste directly into Universal ReVanced Manager to import them. Keep in mind that only the patch bundles labeled "API v4" can be imported into the manager. Bundles without this label cannot be imported into the app.
 
 ## ⚖️ License
 
