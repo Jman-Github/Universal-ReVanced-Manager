@@ -75,6 +75,7 @@ The unique features Universal ReVanced Manager provides that the official ReVanc
 - 💉 **Third Party Patch Support**: Import any third party patch bundle of your choice (such as inotia00's or anddea's which the official ReVanced Manager doesn't support)
 - 🛠️ **Additional Customization**: Apply a display name of your choice to any of your imported patch bundles
 - 🙂**Quality Of Life**: A button to deselect all patches in selection menu
+
 And more..
 
 ## 🔽 Download
