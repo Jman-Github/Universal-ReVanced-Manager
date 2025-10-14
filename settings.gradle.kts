@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "revanced-manager"
+rootProject.name = "universal-revanced-manager"
 include(":app", ":api")

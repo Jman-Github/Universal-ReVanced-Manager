@@ -83,4 +83,4 @@ jobs:
         uses: actions/attest-build-provenance@v2
         with:
           subject-name: 'Universal ReVanaced Manger ${{ steps.release.outputs.NEW_TAG }}'
-          subject-path: app/build/outputs/apk/release/revanced-manager*.apk
+          subject-path: app/build/outputs/apk/release/universal-revanced-manager*.apk

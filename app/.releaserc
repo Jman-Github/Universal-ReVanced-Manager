@@ -21,7 +21,7 @@
       {
         "assets": [
           {
-            "path": "build/outputs/apk/release/revanced-manager*.apk?(.asc)"
+            "path": "build/outputs/apk/release/universal-revanced-manager*.apk?(.asc)"
           }
         ],
         "successComment": false

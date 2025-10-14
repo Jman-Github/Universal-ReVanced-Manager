@@ -77,7 +77,7 @@ publishing {
             }
 
             groupId = "app.revanced"
-            artifactId = "revanced-manager-api"
+            artifactId = "universal-revanced-manager-api"
             version = project.version.toString()
 
             pom {

@@ -12,7 +12,7 @@ plugins {
     signing
 }
 
-val outputApkFileName = "${rootProject.name}-$version.apk"
+val outputApkFileName = "universal-revanced-manager-$version.apk"
 
 dependencies {
     // AndroidX Core
