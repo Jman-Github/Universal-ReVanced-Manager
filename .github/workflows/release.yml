@@ -69,14 +69,44 @@ jobs:
           KEYSTORE_ENTRY_ALIAS: ${{ secrets.KEYSTORE_ENTRY_ALIAS }}
           KEYSTORE_ENTRY_PASSWORD: ${{ secrets.KEYSTORE_ENTRY_PASSWORD }}
 
+      - name: Extract release notes
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+
+          const changelogPath = 'api/CHANGELOG.md';
+          if (!fs.existsSync(changelogPath)) {
+            throw new Error(`Changelog not found at ${changelogPath}`);
+          }
+
+          const changelog = fs.readFileSync(changelogPath, 'utf8');
+          const lines = changelog.split(/\r?\n/);
+          const releaseSection = [];
+
+          for (let index = 0; index < lines.length; index += 1) {
+            const line = lines[index];
+            if (index > 0 && /^#\s*v/i.test(line)) {
+              break;
+            }
+            releaseSection.push(line);
+          }
+
+          const content = releaseSection.join('\n').replace(/\s+$/, '');
+          if (!content.trim()) {
+            throw new Error('No release notes content extracted from changelog.');
+          }
+
+          fs.writeFileSync('release_notes.md', `${content}\n`, 'utf8');
+          NODE
+
       - name: Name GitHub Release
         if: steps.release.outputs.NEW_TAG != ''
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.release.outputs.NEW_TAG }}
         run: |
-          gh release edit "$TAG" --title "Universal ReVanaced Manger $TAG" || \
-          gh release create "$TAG" --title "Universal ReVanaced Manger $TAG" --notes "Automated release for $TAG"
+          gh release edit "$TAG" --title "Universal ReVanaced Manger $TAG" --notes-file release_notes.md || \
+          gh release create "$TAG" --title "Universal ReVanaced Manger $TAG" --notes-file release_notes.md
 
       - name: Attest
         if: steps.release.outputs.NEW_TAG != ''
