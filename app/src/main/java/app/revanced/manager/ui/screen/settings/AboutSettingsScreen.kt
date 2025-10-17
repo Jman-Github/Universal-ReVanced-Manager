@@ -17,19 +17,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -45,20 +38,15 @@ import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.ColumnWithScrollbar
 import app.revanced.manager.ui.component.settings.SettingsListItem
 import app.revanced.manager.ui.model.navigation.Settings
-import app.revanced.manager.ui.viewmodel.AboutViewModel
-import app.revanced.manager.ui.viewmodel.AboutViewModel.Companion.DEVELOPER_OPTIONS_TAPS
 import app.revanced.manager.ui.viewmodel.AboutViewModel.Companion.getSocialIcon
 import app.revanced.manager.util.openUrl
-import app.revanced.manager.util.toast
 import com.google.accompanist.drawablepainter.rememberDrawablePainter
-import org.koin.androidx.compose.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AboutSettingsScreen(
     onBackClick: () -> Unit,
     navigate: (Settings.Destination) -> Unit,
-    viewModel: AboutViewModel = koinViewModel()
 ) {
     val context = LocalContext.current
     // painterResource() is broken on release builds for some reason.
@@ -95,36 +83,6 @@ fun AboutSettingsScreen(
     )
 
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    val showDeveloperSettings by viewModel.showDeveloperSettings.getAsState()
-    var developerTaps by rememberSaveable { mutableIntStateOf(0) }
-    LaunchedEffect(developerTaps) {
-        if (developerTaps == 0) return@LaunchedEffect
-        if (showDeveloperSettings) {
-            snackbarHostState.showSnackbar(context.getString(R.string.developer_options_already_enabled))
-            developerTaps = 0
-            return@LaunchedEffect
-        }
-
-        val remaining = DEVELOPER_OPTIONS_TAPS - developerTaps
-        if (remaining > 0) {
-            snackbarHostState.showSnackbar(
-                context.getString(
-                    R.string.developer_options_taps,
-                    remaining
-                ),
-                duration = SnackbarDuration.Long
-            )
-        } else if (remaining == 0) {
-            viewModel.showDeveloperSettings.update(true)
-            snackbarHostState.showSnackbar(context.getString(R.string.developer_options_enabled))
-        }
-
-        // Reset the counter
-        developerTaps = 0
-    }
-
     Scaffold(
         topBar = {
             AppTopBar(
@@ -132,9 +90,6 @@ fun AboutSettingsScreen(
                 scrollBehavior = scrollBehavior,
                 onBackClick = onBackClick
             )
-        },
-        snackbarHost = {
-            SnackbarHost(hostState = snackbarHostState)
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
     ) { paddingValues ->
@@ -147,8 +102,7 @@ fun AboutSettingsScreen(
         ) {
             Image(
                 modifier = Modifier
-                    .padding(top = 16.dp)
-                    .clickable { developerTaps += 1 },
+                    .padding(top = 16.dp),
                 painter = icon,
                 contentDescription = stringResource(R.string.app_name)
             )

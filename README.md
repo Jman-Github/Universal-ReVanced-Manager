@@ -72,15 +72,16 @@ Universal ReVanced Manager is an application that uses [ReVanced Patcher](https:
 
 The unique features Universal ReVanced Manager provides that the official ReVanced Manager doesn't are:
 
-- 💉 **Third Party Patch Support**: Import any third party patch bundle of your choice (such as inotia00's or anddea's which the official ReVanced Manager doesn't support)
+- 💉 **Third Party Patch Support**: Import any third party API v4 patch bundle of your choice (such as inotia00's or anddea's which the official ReVanced Manager doesn't support)
 - 🛠️ **Additional Customization**: Apply a display name of your choice to any of your imported patch bundles
-- 🙂**Quality Of Life**: A button to deselect all patches in selection menu
-
-And more..
+- 🙂 **Patch Selection Enhancements**: Global deselect all button and a per‑bundle deselect button
+- 🛜 **Network Flexibility**: Toggle to allow updates on metered connections for both patches and the manager
+- 🧑‍💻 **Always‑Visible Developer Options**: Developer Options are always available in settings without needing to unlock them through a hidden unlock flow
+- 🗂️ **Bundle Import/Export**: Export and import your patch bundles to/from a JSON file
 
 ## 🔽 Download
 
-You can download the most recent version of ReVanced Manager from [GitHub releases](https://github.com/Jman-Github/universal-revanced-manager/releases/latest).
+You can download the most recent version of Universal ReVanced Manager from [GitHub releases](https://github.com/Jman-Github/universal-revanced-manager/releases/latest).
 
 ## 📋 Patch Bundles
 
@@ -91,3 +92,4 @@ To import patch bundles into Universal ReVanced Manager, use my [ReVanced Patch 
 Universal ReVanced Manager is licensed under the GPLv3 license. Please see the [license file](https://github.com/Jman-Github/universal-revanced-manager/blob/main/LICENSE) for more information.
 [tl;dr](https://www.tldrlegal.com/license/gnu-general-public-license-v3-gpl-3) you may copy, distribute and modify Universal ReVanced Manager as long as you track changes/dates in source files.
 Any modifications to Universal ReVanced Manager must also be made available under the GPL, along with build & install instructions.
+

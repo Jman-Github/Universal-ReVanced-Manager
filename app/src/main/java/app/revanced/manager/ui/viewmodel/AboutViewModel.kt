@@ -4,7 +4,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Language
 import androidx.lifecycle.ViewModel
 import app.revanced.manager.data.platform.NetworkInfo
-import app.revanced.manager.domain.manager.PreferencesManager
 import compose.icons.FontAwesomeIcons
 import compose.icons.fontawesomeicons.Brands
 import compose.icons.fontawesomeicons.brands.Discord
@@ -22,7 +21,6 @@ data class SocialLink(
 
 class AboutViewModel(
     private val network: NetworkInfo,
-    prefs: PreferencesManager,
 ) : ViewModel() {
     val socials: List<SocialLink> = listOf(
         SocialLink(
@@ -36,11 +34,7 @@ class AboutViewModel(
     val isConnected: Boolean
         get() = network.isConnected()
 
-    val showDeveloperSettings = prefs.showDeveloperSettings
-
     companion object {
-        const val DEVELOPER_OPTIONS_TAPS = 5
-
         private val socialIcons = mapOf(
             "Discord" to FontAwesomeIcons.Brands.Discord,
             "GitHub" to FontAwesomeIcons.Brands.Github,

@@ -12,6 +12,8 @@ data class ReVancedAsset (
     val createdAt: LocalDateTime,
     @SerialName("signature_download_url")
     val signatureDownloadUrl: String? = null,
+    @SerialName("page_url")
+    val pageUrl: String? = null,
     val description: String,
     val version: String,
 )

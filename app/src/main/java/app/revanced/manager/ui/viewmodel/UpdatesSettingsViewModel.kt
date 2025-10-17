@@ -18,6 +18,7 @@ class UpdatesSettingsViewModel(
     val managerAutoUpdates = prefs.managerAutoUpdates
     val showManagerUpdateDialogOnLaunch = prefs.showManagerUpdateDialogOnLaunch
     val useManagerPrereleases = prefs.useManagerPrereleases
+    val allowMeteredUpdates = prefs.allowMeteredUpdates
 
 
     val isConnected: Boolean

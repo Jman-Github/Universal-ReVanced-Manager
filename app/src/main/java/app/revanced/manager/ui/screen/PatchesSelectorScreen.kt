@@ -1,5 +1,6 @@
 package app.revanced.manager.ui.screen
 
+import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.EaseInOut
@@ -27,7 +28,8 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
-import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.outlined.ClearAll
+import androidx.compose.material.icons.outlined.LayersClear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Restore
@@ -59,6 +61,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -358,26 +362,36 @@ fun PatchesSelectorScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        SmallFloatingActionButton(
+                        SelectionActionButton(
+                            icon = Icons.Outlined.ClearAll,
+                            contentDescription = R.string.deselect_all,
+                            label = R.string.patch_selection_button_label_all,
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                            onClick = viewModel::deselectAll
+                        )
+                        SelectionActionButton(
+                            icon = Icons.Outlined.LayersClear,
+                            contentDescription = R.string.deselect_bundle,
+                            label = R.string.patch_selection_button_label_bundle,
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                             onClick = {
                                 bundles.getOrNull(pagerState.currentPage)?.let { bundle ->
-                                    viewModel.deselectBundle(bundle.uid)
+                                    val displayName = bundleDisplayNames[bundle.uid] ?: bundle.name
+                                    viewModel.deselectBundle(bundle.uid, displayName)
                                 }
                             },
-                            containerColor = MaterialTheme.colorScheme.tertiaryContainer
-                        ) {
-                            Icon(Icons.Filled.Clear, stringResource(R.string.deselect_all))
-                        }
+                        )
 
-                        SmallFloatingActionButton(
-                            onClick = viewModel::reset,
-                            containerColor = MaterialTheme.colorScheme.tertiaryContainer
-                        ) {
-                            Icon(Icons.Outlined.Restore, stringResource(R.string.reset))
-                        }
+                        SelectionActionButton(
+                            icon = Icons.Outlined.Restore,
+                            contentDescription = R.string.reset,
+                            label = R.string.patch_selection_button_label_defaults,
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                            onClick = viewModel::reset
+                        )
                     }
                     HapticExtendedFloatingActionButton(
                         text = {
@@ -532,6 +546,32 @@ private fun PatchItem(
     },
     colors = transparentListItemColors
 )
+
+@Composable
+private fun SelectionActionButton(
+    icon: ImageVector,
+    @StringRes contentDescription: Int,
+    @StringRes label: Int,
+    containerColor: Color,
+    onClick: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        SmallFloatingActionButton(
+            onClick = onClick,
+            containerColor = containerColor
+        ) {
+            Icon(icon, stringResource(contentDescription))
+        }
+        Text(
+            text = stringResource(label),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
 
 @Composable
 fun ListHeader(

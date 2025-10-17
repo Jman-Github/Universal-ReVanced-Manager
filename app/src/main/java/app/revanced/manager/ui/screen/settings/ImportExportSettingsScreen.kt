@@ -52,6 +52,7 @@ import app.revanced.manager.ui.component.settings.ExpandableSettingListItem
 import app.revanced.manager.ui.component.settings.SettingsListItem
 import app.revanced.manager.ui.viewmodel.ImportExportViewModel
 import app.revanced.manager.ui.viewmodel.ResetDialogState
+import app.revanced.manager.util.JSON_MIMETYPE
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.uiSafe
 import kotlinx.coroutines.launch
@@ -74,6 +75,14 @@ fun ImportExportSettingsScreen(
     val exportKeystoreLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) {
             it?.let(vm::exportKeystore)
+        }
+    val importBundlesLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) {
+            it?.let(vm::importPatchBundles)
+        }
+    val exportBundlesLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(JSON_MIMETYPE)) {
+            it?.let(vm::exportPatchBundles)
         }
 
     val patchBundles by vm.patchBundles.collectAsStateWithLifecycle(initialValue = emptyList())
@@ -161,6 +170,13 @@ fun ImportExportSettingsScreen(
                 headline = R.string.import_patch_selection,
                 description = R.string.import_patch_selection_description
             )
+            GroupItem(
+                onClick = {
+                    importBundlesLauncher.launch(JSON_MIMETYPE)
+                },
+                headline = R.string.import_patch_bundles,
+                description = R.string.import_patch_bundles_description
+            )
 
             GroupHeader(stringResource(R.string.export))
             GroupItem(
@@ -178,6 +194,13 @@ fun ImportExportSettingsScreen(
                 onClick = vm::exportSelection,
                 headline = R.string.export_patch_selection,
                 description = R.string.export_patch_selection_description
+            )
+            GroupItem(
+                onClick = {
+                    exportBundlesLauncher.launch("patch-bundles.json")
+                },
+                headline = R.string.export_patch_bundles,
+                description = R.string.export_patch_bundles_description
             )
 
             GroupHeader(stringResource(R.string.reset))

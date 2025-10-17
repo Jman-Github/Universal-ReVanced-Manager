@@ -124,6 +124,7 @@ class ReVancedAPI(
             downloadUrl = asset.downloadUrl,
             createdAt = createdAt,
             signatureDownloadUrl = signatureUrl,
+            pageUrl = "${config.htmlUrl}/releases/tag/${release.tagName}",
             description = description,
             version = release.tagName
         )
@@ -145,11 +146,14 @@ class ReVancedAPI(
                 asset.contentType?.contains("android.package-archive", ignoreCase = true) == true
 
 
-    suspend fun getAppUpdate(): ReVancedAsset? {
+    suspend fun getLatestAppInfo(): APIResponse<ReVancedAsset> {
         val config = repoConfig()
         val includePrerelease = prefs.useManagerPrereleases.get()
-        val response = fetchReleaseAsset(config, includePrerelease, ::isManagerAsset)
-        val asset = response.getOrNull() ?: return null
+        return fetchReleaseAsset(config, includePrerelease, ::isManagerAsset)
+    }
+
+    suspend fun getAppUpdate(): ReVancedAsset? {
+        val asset = getLatestAppInfo().getOrNull() ?: return null
         return asset.takeIf { it.version.removePrefix("v") != BuildConfig.VERSION_NAME }
     }
 

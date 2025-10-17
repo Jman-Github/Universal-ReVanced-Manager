@@ -69,6 +69,17 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
             sources.associate { it.uid to it.displayTitle }
         }
 
+    private val defaultPatchSelection = bundlesFlow.map { bundles ->
+        bundles.toPatchSelection(allowIncompatiblePatches) { _, patch -> patch.include }
+            .toPersistentPatchSelection()
+    }
+
+    private var currentDefaultSelection: PersistentPatchSelection = persistentMapOf()
+
+    val defaultSelectionCount = defaultPatchSelection.map { selection ->
+        selection.values.sumOf { it.size }
+    }
+
     init {
         viewModelScope.launch {
             if (prefs.disableUniversalPatchCheck.get()) {
@@ -85,6 +96,14 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
 
             // Don't show the warning if there are no default patches.
             selectionWarningEnabled = bundlesFlow.first().any(PatchBundleInfo.Scoped::hasDefaultPatches)
+        }
+
+        viewModelScope.launch {
+            currentDefaultSelection = defaultPatchSelection.first()
+        }
+
+        viewModelScope.launch {
+            defaultPatchSelection.collect { currentDefaultSelection = it }
         }
     }
 
@@ -115,15 +134,6 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
     var filter by mutableIntStateOf(SHOW_UNIVERSAL)
         private set
 
-    private val defaultPatchSelection = bundlesFlow.map { bundles ->
-        bundles.toPatchSelection(allowIncompatiblePatches) { _, patch -> patch.include }
-            .toPersistentPatchSelection()
-    }
-
-    val defaultSelectionCount = defaultPatchSelection.map { selection ->
-        selection.values.sumOf { it.size }
-    }
-
     // This is for the required options screen.
     private val requiredOptsPatchesDeferred = viewModelScope.async(start = CoroutineStart.LAZY) {
         bundlesFlow.first().map { bundle ->
@@ -146,22 +156,29 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         }
     }
 
-    fun isSelected(bundle: Int, patch: PatchInfo) = customPatchSelection?.let { selection ->
-        selection[bundle]?.contains(patch.name) == true
-    } ?: patch.include
+    fun isSelected(bundle: Int, patch: PatchInfo): Boolean {
+        customPatchSelection?.let { selection ->
+            return selection[bundle]?.contains(patch.name) == true
+        }
+        return currentDefaultSelection[bundle]?.contains(patch.name) ?: patch.include
+    }
 
     fun togglePatch(bundle: Int, patch: PatchInfo) = viewModelScope.launch {
         hasModifiedSelection = true
 
-        val selection = customPatchSelection ?: defaultPatchSelection.first()
-        val newPatches = selection[bundle]?.let { patches ->
+        val baseSelection = customPatchSelection ?: run {
+            if (currentDefaultSelection.isNotEmpty()) currentDefaultSelection
+            else defaultPatchSelection.first()
+        }
+
+        val newPatches = baseSelection[bundle]?.let { patches ->
             if (patch.name in patches)
                 patches.remove(patch.name)
             else
                 patches.add(patch.name)
         } ?: persistentSetOf(patch.name)
 
-        customPatchSelection = selection.put(bundle, newPatches)
+        customPatchSelection = baseSelection.put(bundle, newPatches)
     }
 
     fun reset() {
@@ -171,11 +188,39 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         app.toast(app.getString(R.string.patch_selection_reset_toast))
     }
 
-    fun deselectBundle(bundleUid: Int) {
+    fun deselectAll() {
         hasModifiedSelection = true
-        val selection = customPatchSelection ?: persistentMapOf()
-        customPatchSelection = selection.put(bundleUid, persistentSetOf())
+        customPatchSelection = persistentMapOf()
+        patchOptions.clear()
+        app.toast(app.getString(R.string.patch_selection_deselected_all_toast))
+    }
+
+    fun deselectBundle(bundleUid: Int, bundleName: String) = viewModelScope.launch {
+        val baseSelection = customPatchSelection ?: run {
+            if (currentDefaultSelection.isNotEmpty()) currentDefaultSelection
+            else defaultPatchSelection.first()
+        }
+
+        val selectedPatches = baseSelection[bundleUid] ?: persistentSetOf()
+        if (selectedPatches.isEmpty()) {
+            app.toast(
+                app.getString(
+                    R.string.patch_selection_no_selected_bundle_toast,
+                    bundleName
+                )
+            )
+            return@launch
+        }
+
+        hasModifiedSelection = true
+        customPatchSelection = baseSelection.put(bundleUid, persistentSetOf())
         patchOptions.remove(bundleUid)
+        app.toast(
+            app.getString(
+                R.string.patch_selection_deselected_bundle_toast,
+                bundleName
+            )
+        )
     }
 
     fun getCustomSelection(): PatchSelection? {

@@ -16,6 +16,8 @@ class PreferencesManager(
     val useProcessRuntime = booleanPreference("use_process_runtime", false)
     val patcherProcessMemoryLimit = intPreference("process_runtime_memory_limit", 700)
 
+    val allowMeteredUpdates = booleanPreference("allow_metered_updates", false)
+
     val keystoreAlias = stringPreference("keystore_alias", KeystoreManager.DEFAULT)
     val keystorePass = stringPreference("keystore_pass", KeystoreManager.DEFAULT)
 
@@ -31,6 +33,4 @@ class PreferencesManager(
     val suggestedVersionSafeguard = booleanPreference("suggested_version_safeguard", true)
 
     val acknowledgedDownloaderPlugins = stringSetPreference("acknowledged_downloader_plugins", emptySet())
-
-    val showDeveloperSettings = booleanPreference("show_developer_settings", context.isDebuggable)
 }

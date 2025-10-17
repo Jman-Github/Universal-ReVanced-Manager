@@ -14,12 +14,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import app.universal.revanced.manager.R
-import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.ColumnWithScrollbar
 import app.revanced.manager.ui.component.settings.SettingsListItem
 import app.revanced.manager.ui.model.navigation.Settings
-import org.koin.compose.koinInject
 
 private data class Section(
     @StringRes val name: Int,
@@ -31,11 +29,8 @@ private data class Section(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> Unit) {
-    val prefs: PreferencesManager = koinInject()
-    val showDeveloperSettings by prefs.showDeveloperSettings.getAsState()
-
-    val settingsSections = remember(showDeveloperSettings) {
-        listOfNotNull(
+    val settingsSections = remember {
+        listOf(
             Section(
                 R.string.general,
                 R.string.general_description,
@@ -77,7 +72,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                 R.string.developer_options_description,
                 Icons.Outlined.Code,
                 Settings.Developer
-            ).takeIf { showDeveloperSettings }
+            )
         )
     }
 

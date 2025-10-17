@@ -2,6 +2,7 @@ package app.revanced.manager.ui.viewmodel
 
 import android.app.Application
 import android.net.Uri
+import android.util.Log
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
@@ -17,14 +18,21 @@ import app.revanced.manager.domain.repository.PatchSelectionRepository
 import app.revanced.manager.domain.repository.SerializedSelection
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.domain.bundles.PatchBundleSource
+import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
+import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
 import app.revanced.manager.domain.repository.PatchOptionsRepository
 import app.revanced.manager.util.JSON_MIMETYPE
+import app.revanced.manager.util.tag
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.uiSafe
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromStream
 import kotlinx.serialization.json.encodeToStream
@@ -88,13 +96,26 @@ sealed class ResetDialogState(
     )
 }
 
+@Serializable
+data class PatchBundleExportFile(
+    val bundles: List<PatchBundleSnapshot>
+)
+
+@Serializable
+data class PatchBundleSnapshot(
+    val endpoint: String,
+    val name: String,
+    val displayName: String? = null,
+    val autoUpdate: Boolean = false
+)
+
 @OptIn(ExperimentalSerializationApi::class)
 class ImportExportViewModel(
     private val app: Application,
     private val keystoreManager: KeystoreManager,
     private val selectionRepository: PatchSelectionRepository,
     private val optionsRepository: PatchOptionsRepository,
-    patchBundleRepository: PatchBundleRepository
+    private val patchBundleRepository: PatchBundleRepository
 ) : ViewModel() {
     private val contentResolver = app.contentResolver
     val patchBundles = patchBundleRepository.sources
@@ -225,6 +246,125 @@ class ImportExportViewModel(
 
     fun exportSelection() = clearSelectionAction().also {
         selectionAction = Export()
+    }
+
+    fun importPatchBundles(source: Uri) = viewModelScope.launch {
+        withContext(NonCancellable) {
+            uiSafe(app, R.string.import_patch_bundles_fail, "Failed to import patch bundles") {
+            val exportFile = withContext(Dispatchers.IO) {
+                contentResolver.openInputStream(source)!!.use {
+                    Json.decodeFromStream<PatchBundleExportFile>(it)
+                }
+            }
+
+            val initialSources = patchBundleRepository.sources.first()
+                .mapNotNull { it.asRemoteOrNull }
+            val endpointToSource = initialSources.associateBy { it.endpoint }.toMutableMap()
+
+            var createdCount = 0
+            var updatedCount = 0
+
+            exportFile.bundles.forEach { snapshot ->
+                val endpoint = snapshot.endpoint.trim()
+                if (endpoint.isBlank()) return@forEach
+
+                val targetDisplayName = snapshot.displayName?.takeUnless { it.isBlank() }
+
+                var existing = endpointToSource[endpoint]
+                if (existing != null) {
+                    var changed = false
+                    if (existing.displayName != targetDisplayName) {
+                        patchBundleRepository.setDisplayName(existing, targetDisplayName)
+                        changed = true
+                    }
+                    if (existing.autoUpdate != snapshot.autoUpdate) {
+                        with(patchBundleRepository) {
+                            existing.setAutoUpdate(snapshot.autoUpdate)
+                        }
+                        changed = true
+                    }
+                    if (changed) updatedCount += 1
+                    return@forEach
+                }
+
+                try {
+                    patchBundleRepository.createRemote(endpoint, snapshot.autoUpdate)
+                } catch (error: Exception) {
+                    Log.e(tag, "Failed to import patch bundle $endpoint", error)
+                    return@forEach
+                }
+
+                val created = withTimeoutOrNull(5_000) {
+                    patchBundleRepository.sources.first { sources ->
+                        sources.any { it.asRemoteOrNull?.endpoint == endpoint }
+                    }.mapNotNull { it.asRemoteOrNull }.firstOrNull { it.endpoint == endpoint }
+                }
+
+                if (created == null) {
+                    Log.e(tag, "Timed out waiting for patch bundle $endpoint to appear after import")
+                    return@forEach
+                }
+
+                createdCount += 1
+                endpointToSource[endpoint] = created
+                existing = created
+
+                if (created.displayName != targetDisplayName) {
+                    patchBundleRepository.setDisplayName(created, targetDisplayName)
+                }
+                if (created.autoUpdate != snapshot.autoUpdate) {
+                    with(patchBundleRepository) {
+                        created.setAutoUpdate(snapshot.autoUpdate)
+                    }
+                }
+            }
+
+            when {
+                createdCount > 0 -> app.toast(app.getString(R.string.import_patch_bundles_success, createdCount))
+                updatedCount > 0 -> app.toast(app.getString(R.string.import_patch_bundles_updated, updatedCount))
+                else -> app.toast(app.getString(R.string.import_patch_bundles_none))
+            }
+        }
+        }
+    }
+
+    fun exportPatchBundles(target: Uri) = viewModelScope.launch {
+        uiSafe(app, R.string.export_patch_bundles_fail, "Failed to export patch bundles") {
+            val sources = patchBundleRepository.sources.first()
+            val localSources = sources
+                .filterNot { it.isDefault }
+                .filter { it.asRemoteOrNull == null }
+
+            if (localSources.isNotEmpty()) {
+                app.toast(app.getString(R.string.export_patch_bundles_local_not_supported))
+                return@uiSafe
+            }
+
+            val bundles = sources
+                .filterNot { it.isDefault }
+                .mapNotNull { it.asRemoteOrNull }
+                .map {
+                    PatchBundleSnapshot(
+                        endpoint = it.endpoint,
+                        name = it.name,
+                        displayName = it.displayName,
+                        autoUpdate = it.autoUpdate
+                    )
+                }
+
+            if (bundles.isEmpty()) {
+                app.toast(app.getString(R.string.export_patch_bundles_empty))
+                return@uiSafe
+            }
+
+            withContext(Dispatchers.IO) {
+                contentResolver.openOutputStream(target, "wt")!!.use {
+                    Json.Default.encodeToStream(PatchBundleExportFile(bundles), it)
+                }
+            }
+
+            app.toast(app.getString(R.string.export_patch_bundles_success, bundles.size))
+        }
     }
 
     sealed interface SelectionAction {

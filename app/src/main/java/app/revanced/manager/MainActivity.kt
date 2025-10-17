@@ -50,6 +50,7 @@ import app.revanced.manager.ui.screen.settings.DownloadsSettingsScreen
 import app.revanced.manager.ui.screen.settings.GeneralSettingsScreen
 import app.revanced.manager.ui.screen.settings.ImportExportSettingsScreen
 import app.revanced.manager.ui.screen.settings.LicensesSettingsScreen
+import app.revanced.manager.ui.screen.settings.update.ChangelogsSettingsScreen
 import app.revanced.manager.ui.screen.settings.update.UpdatesSettingsScreen
 import app.revanced.manager.ui.theme.ReVancedManagerTheme
 import app.revanced.manager.ui.theme.Theme
@@ -283,6 +284,7 @@ private fun ReVancedManager(vm: MainViewModel) {
             composable<Settings.Updates> {
                 UpdatesSettingsScreen(
                     onBackClick = navController::popBackStack,
+                    onChangelogClick = { navController.navigate(Settings.Changelogs) },
                     onUpdateClick = { navController.navigate(Update()) }
                 )
             }
@@ -300,6 +302,10 @@ private fun ReVancedManager(vm: MainViewModel) {
                     onBackClick = navController::popBackStack,
                     navigate = navController::navigate
                 )
+            }
+
+            composable<Settings.Changelogs> {
+                ChangelogsSettingsScreen(onBackClick = navController::popBackStack)
             }
 
             composable<Settings.Contributors> {

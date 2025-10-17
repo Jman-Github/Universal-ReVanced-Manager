@@ -28,11 +28,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
 import app.revanced.manager.network.dto.ReVancedAsset
 import app.revanced.manager.ui.component.AppTopBar
+import app.revanced.manager.ui.component.Markdown
 import app.revanced.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.revanced.manager.ui.viewmodel.UpdateViewModel
 import app.revanced.manager.ui.viewmodel.UpdateViewModel.State
@@ -159,8 +161,11 @@ private fun MeteredDownloadConfirmationDialog(
 }
 
 @Composable
-private fun UpdateInfoSummary(releaseInfo: ReVancedAsset) {
+private fun UpdateInfoSummary(
+    releaseInfo: ReVancedAsset
+) {
     val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
     val published = remember(releaseInfo.createdAt) {
         releaseInfo.createdAt.relativeTime(context)
     }
@@ -176,5 +181,22 @@ private fun UpdateInfoSummary(releaseInfo: ReVancedAsset) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+
+        if (releaseInfo.description.isNotBlank()) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = stringResource(R.string.changelog),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Markdown(releaseInfo.description.replace("`", ""))
+            }
+        }
+
+        releaseInfo.pageUrl?.let { url ->
+            TextButton(onClick = { uriHandler.openUri(url) }) {
+                Text(stringResource(R.string.changelog))
+            }
+        }
     }
 }

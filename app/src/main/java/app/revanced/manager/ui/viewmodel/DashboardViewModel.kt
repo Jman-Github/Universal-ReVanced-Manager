@@ -3,6 +3,7 @@ package app.revanced.manager.ui.viewmodel
 import android.annotation.SuppressLint
 import android.app.Application
 import android.content.ContentResolver
+import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
@@ -25,11 +26,14 @@ import app.revanced.manager.network.api.ReVancedAPI
 import app.revanced.manager.util.PM
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.uiSafe
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.FileNotFoundException
 
 class DashboardViewModel(
     private val app: Application,
@@ -124,10 +128,36 @@ class DashboardViewModel(
 
     @SuppressLint("Recycle")
     fun createLocalSource(patchBundle: Uri) = viewModelScope.launch {
-        patchBundleRepository.createLocal { contentResolver.openInputStream(patchBundle)!! }
+        withContext(NonCancellable) {
+            val permissionFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+            var persistedPermission = false
+            try {
+                contentResolver.takePersistableUriPermission(patchBundle, permissionFlags)
+                persistedPermission = true
+            } catch (_: SecurityException) {
+                // Provider may not support persistable permissions; fall back to transient grant.
+            }
+
+            try {
+                patchBundleRepository.createLocal {
+                    contentResolver.openInputStream(patchBundle)
+                        ?: throw FileNotFoundException("Unable to open $patchBundle")
+                }
+            } finally {
+                if (persistedPermission) {
+                    try {
+                        contentResolver.releasePersistableUriPermission(patchBundle, permissionFlags)
+                    } catch (_: SecurityException) {
+                        // Ignore if provider revoked or already released.
+                    }
+                }
+            }
+        }
     }
 
     fun createRemoteSource(apiUrl: String, autoUpdate: Boolean) = viewModelScope.launch {
-        patchBundleRepository.createRemote(apiUrl, autoUpdate)
+        withContext(NonCancellable) {
+            patchBundleRepository.createRemote(apiUrl, autoUpdate)
+        }
     }
 }

@@ -44,12 +44,12 @@ fun ImportPatchBundleDialog(
     var autoUpdate by rememberSaveable { mutableStateOf(true) }
 
     val patchActivityLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             uri?.let { patchBundle = it }
         }
 
     fun launchPatchActivity() {
-        patchActivityLauncher.launch(BIN_MIMETYPE)
+        patchActivityLauncher.launch(arrayOf(BIN_MIMETYPE))
     }
 
     val steps = listOf<@Composable () -> Unit>(
@@ -189,7 +189,7 @@ private fun ImportBundleStep(
                 ) {
                     ListItem(
                         headlineContent = {
-                            Text(stringResource(R.string.patches))
+                            Text(stringResource(R.string.patch_bundle))
                         },
                         supportingContent = { Text(stringResource(if (patchBundle != null) R.string.file_field_set else R.string.file_field_not_set)) },
                         trailingContent = {

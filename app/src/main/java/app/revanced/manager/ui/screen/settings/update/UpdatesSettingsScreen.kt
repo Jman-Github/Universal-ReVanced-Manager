@@ -28,6 +28,7 @@ import org.koin.androidx.compose.koinViewModel
 @Composable
 fun UpdatesSettingsScreen(
     onBackClick: () -> Unit,
+    onChangelogClick: () -> Unit,
     onUpdateClick: () -> Unit,
     vm: UpdatesSettingsViewModel = koinViewModel(),
 ) {
@@ -50,6 +51,14 @@ fun UpdatesSettingsScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
+            GroupHeader(stringResource(R.string.patches_and_manager))
+
+            BooleanItem(
+                preference = vm.allowMeteredUpdates,
+                headline = R.string.update_on_metered_connections,
+                description = R.string.update_on_metered_connections_description
+            )
+
             GroupHeader(stringResource(R.string.manager))
 
             SettingsListItem(
@@ -64,6 +73,18 @@ fun UpdatesSettingsScreen(
                 },
                 headlineContent = stringResource(R.string.manual_update_check),
                 supportingContent = stringResource(R.string.manual_update_check_description)
+            )
+
+            SettingsListItem(
+                modifier = Modifier.clickable {
+                    if (!vm.isConnected) {
+                        context.toast(context.getString(R.string.no_network_toast))
+                        return@clickable
+                    }
+                    onChangelogClick()
+                },
+                headlineContent = stringResource(R.string.changelog),
+                supportingContent = stringResource(R.string.changelog_description)
             )
 
             BooleanItem(

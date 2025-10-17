@@ -380,7 +380,8 @@ class PatchBundleRepository(
         override suspend fun ActionContext.execute(
             current: State
         ) = coroutineScope {
-            if (!networkInfo.isSafe()) {
+            val allowMeteredUpdates = prefs.allowMeteredUpdates.get()
+            if (!allowMeteredUpdates && !networkInfo.isSafe()) {
                 Log.d(tag, "Skipping update check because the network is down or metered.")
                 return@coroutineScope current
             }

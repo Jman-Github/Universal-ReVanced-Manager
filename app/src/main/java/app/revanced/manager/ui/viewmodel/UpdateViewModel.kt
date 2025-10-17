@@ -22,6 +22,7 @@ import app.revanced.manager.network.api.ReVancedAPI
 import app.revanced.manager.network.dto.ReVancedAsset
 import app.revanced.manager.network.service.HttpService
 import app.revanced.manager.service.InstallService
+import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.util.PM
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.uiSafe
@@ -42,6 +43,7 @@ class UpdateViewModel(
     private val pm: PM by inject()
     private val networkInfo: NetworkInfo by inject()
     private val fs: Filesystem by inject()
+    private val prefs: PreferencesManager by inject()
 
     var downloadedSize by mutableLongStateOf(0L)
         private set
@@ -77,8 +79,9 @@ class UpdateViewModel(
     fun downloadUpdate(ignoreInternetCheck: Boolean = false) = viewModelScope.launch {
         uiSafe(app, R.string.failed_to_download_update, "Failed to download update") {
             val release = releaseInfo!!
+            val allowMeteredUpdates = prefs.allowMeteredUpdates.get()
             withContext(Dispatchers.IO) {
-                if (!networkInfo.isSafe() && !ignoreInternetCheck) {
+                if (!allowMeteredUpdates && !networkInfo.isSafe() && !ignoreInternetCheck) {
                     showInternetCheckDialog = true
                 } else {
                     state = State.DOWNLOADING

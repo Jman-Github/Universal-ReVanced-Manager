@@ -1,3 +1,17 @@
+# v1.1.0 (2025-10-16)
+
+
+# Features
+
+- Added patch bundle exporting and importing support
+- Added a deselect all per-bundle button in patch selection menu (the global deselect all button now has a different icon)
+- Permentalty enabled "Developer Options" in setings (removed the hidden flow to unlock them)
+- Added an toggle in settings for updating the manager and patch bundles on metered connections
+- Re-added the manager changelog app functions, screens, and buttons
+- Added labels to the global patch deselection, per-bundle patch deselection, and reset to default buttons in the patch selection screen
+- Renamed parts of the app from "Patch" or "Patches" to "Patch Bundle" to help with termonalogy clarity
+
+
 # v1.0.0 (2025-10-13)
 
 
