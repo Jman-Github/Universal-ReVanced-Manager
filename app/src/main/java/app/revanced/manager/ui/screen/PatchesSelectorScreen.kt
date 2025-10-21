@@ -38,6 +38,8 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -393,23 +395,25 @@ fun PatchesSelectorScreen(
                             onClick = viewModel::reset
                         )
                     }
+                    val saveButtonExpanded =
+                        patchLazyListStates.getOrNull(pagerState.currentPage)?.isScrollingUp ?: true
+                    val saveButtonText = stringResource(
+                        R.string.save_with_count,
+                        selectedPatchCount
+                    )
+
                     HapticExtendedFloatingActionButton(
                         text = {
-                            Text(
-                                stringResource(
-                                    R.string.save_with_count,
-                                    selectedPatchCount
-                                )
-                            )
+                            Text(saveButtonText)
                         },
                         icon = {
-                            Icon(
-                                imageVector = Icons.Outlined.Save,
-                                contentDescription = stringResource(R.string.save)
+                            SaveFabIcon(
+                                expanded = saveButtonExpanded,
+                                count = selectedPatchCount,
+                                contentDescription = saveButtonText
                             )
                         },
-                        expanded = patchLazyListStates.getOrNull(pagerState.currentPage)?.isScrollingUp
-                            ?: true,
+                        expanded = saveButtonExpanded,
                         onClick = {
                             onSave(viewModel.getCustomSelection(), viewModel.getOptions())
                         }
@@ -546,6 +550,40 @@ private fun PatchItem(
     },
     colors = transparentListItemColors
 )
+
+@Composable
+private fun SaveFabIcon(
+    expanded: Boolean,
+    count: Int,
+    contentDescription: String
+) {
+    if (expanded) {
+        Icon(
+            imageVector = Icons.Outlined.Save,
+            contentDescription = contentDescription
+        )
+    } else {
+        BadgedBox(
+            badge = {
+                Badge {
+                    Text(
+                        text = formatPatchCountForBadge(count),
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1
+                    )
+                }
+            }
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Save,
+                contentDescription = contentDescription
+            )
+        }
+    }
+}
+
+private fun formatPatchCountForBadge(count: Int): String =
+    if (count > 999) "999+" else count.toString()
 
 @Composable
 private fun SelectionActionButton(

@@ -130,3 +130,5 @@ node_modules/
 local.properties
 
 .cxx
+AGENT.md
+.gitignore

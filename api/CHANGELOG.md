@@ -1,3 +1,18 @@
+# v1.1.1 (2025-10-20)
+**Minimal changes & bug fixes**
+
+
+# Features
+
+- App launcher name is now "URV Manager" so the full name is displayed on different ROMs (name isnide the app still remains the same)
+- Selected patch counter shows count when scrolling in patch selection menu
+
+# Bug fixes
+
+- Incorrect keystore used on releases
+- Incorrect patch count in patch selection menu
+
+
 # v1.1.0 (2025-10-16)
 
 
