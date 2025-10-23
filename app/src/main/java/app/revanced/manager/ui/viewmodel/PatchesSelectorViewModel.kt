@@ -1,6 +1,7 @@
 package app.revanced.manager.ui.viewmodel
 
 import android.app.Application
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -15,14 +16,20 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.SavedStateHandleSaveableApi
 import androidx.lifecycle.viewmodel.compose.saveable
 import app.universal.revanced.manager.R
+import app.revanced.manager.data.room.profile.PatchProfilePayload
+import app.revanced.manager.data.room.options.Option as StoredOption
 import app.revanced.manager.domain.manager.PreferencesManager
+import app.revanced.manager.domain.bundles.RemotePatchBundle
 import app.revanced.manager.domain.repository.PatchBundleRepository
+import app.revanced.manager.domain.repository.PatchProfileRepository
+import app.revanced.manager.patcher.patch.Option
 import app.revanced.manager.patcher.patch.PatchBundleInfo
 import app.revanced.manager.patcher.patch.PatchBundleInfo.Extensions.toPatchSelection
 import app.revanced.manager.patcher.patch.PatchInfo
 import app.revanced.manager.ui.model.navigation.SelectedApplicationInfo
 import app.revanced.manager.util.Options
 import app.revanced.manager.util.PatchSelection
+import app.revanced.manager.util.tag
 import app.revanced.manager.util.saver.Nullable
 import app.revanced.manager.util.saver.nullableSaver
 import app.revanced.manager.util.saver.persistentMapSaver
@@ -51,6 +58,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
     private val savedStateHandle: SavedStateHandle = get()
     private val prefs: PreferencesManager = get()
     private val patchBundleRepository: PatchBundleRepository = get()
+    private val patchProfileRepository: PatchProfileRepository = get()
 
     private val packageName = input.app.packageName
     val appVersion = input.app.version
@@ -67,6 +75,12 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
     val bundleDisplayNames =
         patchBundleRepository.sources.map { sources ->
             sources.associate { it.uid to it.displayTitle }
+        }
+    val bundleEndpoints =
+        patchBundleRepository.sources.map { sources ->
+            sources.associate { source ->
+                source.uid to (source as? RemotePatchBundle)?.endpoint
+            }
         }
 
     private val defaultPatchSelection = bundlesFlow.map { bundles ->
@@ -253,6 +267,71 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         patchOptions[bundle] = patchOptions[bundle]?.remove(patch.name) ?: return
     }
 
+    suspend fun savePatchProfile(
+        name: String,
+        selectedBundles: Set<Int>
+    ): Boolean {
+        if (selectedBundles.isEmpty()) return false
+        val selection = (customPatchSelection ?: currentDefaultSelection).toPatchSelection()
+        val options = getOptions()
+        val displayNames = bundleDisplayNames.first()
+        val endpoints = bundleEndpoints.first()
+
+        val bundles = selectedBundles.map { bundleUid ->
+            val patches = selection[bundleUid]?.toList().orEmpty()
+            val serializedOptions = serializeOptions(bundleUid, patches.toSet(), options)
+            PatchProfilePayload.Bundle(
+                bundleUid = bundleUid,
+                patches = patches,
+                options = serializedOptions,
+                displayName = displayNames[bundleUid],
+                sourceEndpoint = endpoints[bundleUid]
+            )
+        }
+
+        val payload = PatchProfilePayload(bundles)
+        patchProfileRepository.createProfile(
+            packageName = packageName,
+            appVersion = appVersion,
+            name = name,
+            payload = payload
+        )
+        app.toast(app.getString(R.string.patch_profile_saved_toast, name))
+        return true
+    }
+
+    private fun serializeOptions(
+        bundleUid: Int,
+        selectedPatches: Set<String>,
+        options: Options
+    ): Map<String, Map<String, StoredOption.SerializedValue>> {
+        val bundleOptions = options[bundleUid] ?: return emptyMap()
+        val serializedOptions = mutableMapOf<String, MutableMap<String, StoredOption.SerializedValue>>()
+
+        bundleOptions.forEach { (patchName, optionValues) ->
+            if (selectedPatches.isNotEmpty() && patchName !in selectedPatches) return@forEach
+            val serializedForPatch = mutableMapOf<String, StoredOption.SerializedValue>()
+
+            optionValues.forEach { (key, value) ->
+                try {
+                    serializedForPatch[key] = StoredOption.SerializedValue.fromValue(value)
+                } catch (e: StoredOption.SerializationException) {
+                    Log.w(
+                        tag,
+                        "Failed to serialize option $patchName:$key for bundle $bundleUid",
+                        e
+                    )
+                }
+            }
+
+            if (serializedForPatch.isNotEmpty()) {
+                serializedOptions[patchName] = serializedForPatch
+            }
+        }
+
+        return serializedOptions.mapValues { entry -> entry.value.toMap() }
+    }
+
     fun dismissDialogs() {
         optionsDialog = null
         compatibleVersions.clear()
@@ -289,4 +368,7 @@ private typealias PersistentPatchSelection = PersistentMap<Int, PersistentSet<St
 
 private fun PatchSelection.toPersistentPatchSelection(): PersistentPatchSelection =
     mapValues { (_, v) -> v.toPersistentSet() }.toPersistentMap()
+
+private fun PersistentPatchSelection.toPatchSelection(): PatchSelection =
+    mapValues { (_, v) -> v.toSet() }
 

@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.Application
 import android.content.Intent
 import android.content.pm.PackageInfo
+import android.net.Uri
 import android.os.Parcelable
 import android.util.Log
 import androidx.activity.result.ActivityResult
@@ -20,6 +21,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.SavedStateHandleSaveableApi
 import androidx.lifecycle.viewmodel.compose.saveable
 import app.universal.revanced.manager.R
+import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.data.room.apps.installed.InstalledApp
 import app.revanced.manager.domain.installer.RootInstaller
 import app.revanced.manager.domain.manager.PreferencesManager
@@ -27,7 +29,10 @@ import app.revanced.manager.domain.repository.DownloaderPluginRepository
 import app.revanced.manager.domain.repository.InstalledAppRepository
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.domain.repository.PatchOptionsRepository
+import app.revanced.manager.domain.repository.PatchProfile
+import app.revanced.manager.domain.repository.PatchProfileRepository
 import app.revanced.manager.domain.repository.PatchSelectionRepository
+import app.revanced.manager.domain.repository.toConfiguration
 import app.revanced.manager.patcher.patch.PatchBundleInfo
 import app.revanced.manager.patcher.patch.PatchBundleInfo.Extensions.toPatchSelection
 import app.revanced.manager.network.downloader.LoadedDownloaderPlugin
@@ -51,6 +56,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -59,6 +66,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.parcelize.Parcelize
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
+import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 @OptIn(SavedStateHandleSaveableApi::class, PluginHostApi::class)
 class SelectedAppInfoViewModel(
@@ -69,14 +79,25 @@ class SelectedAppInfoViewModel(
     private val selectionRepository: PatchSelectionRepository = get()
     private val optionsRepository: PatchOptionsRepository = get()
     private val pluginsRepository: DownloaderPluginRepository = get()
+    private val patchProfileRepository: PatchProfileRepository = get()
     private val installedAppRepository: InstalledAppRepository = get()
     private val rootInstaller: RootInstaller = get()
     private val pm: PM = get()
+    private val filesystem: Filesystem = get()
     private val savedStateHandle: SavedStateHandle = get()
     val prefs: PreferencesManager = get()
     val plugins = pluginsRepository.loadedPluginsFlow
     val desiredVersion = input.app.version
     val packageName = input.app.packageName
+    private val profileId = input.profileId
+    private val requiresSourceSelection = input.requiresSourceSelection
+    val sourceSelectionRequired get() = requiresSourceSelection
+    private val storageInputFile = File(filesystem.uiTempDir, "profile_input.apk").apply { delete() }
+    private val storageSelectionChannel = Channel<Unit>(Channel.CONFLATED)
+    val requestStorageSelection = storageSelectionChannel.receiveAsFlow()
+    private val _profileLaunchState = MutableStateFlow<ProfileLaunchState?>(null)
+    val profileLaunchState = _profileLaunchState.asStateFlow()
+    private var autoLaunchProfilePatcher = profileId != null
 
     private val persistConfiguration = input.patches == null
 
@@ -100,6 +121,7 @@ class SelectedAppInfoViewModel(
 
     init {
         invalidateSelectedAppInfo()
+        profileId?.let(::loadProfileConfiguration)
         viewModelScope.launch(Dispatchers.Main) {
             val packageInfo = async(Dispatchers.IO) { pm.getPackageInfo(packageName) }
             val installedAppDeferred =
@@ -112,6 +134,47 @@ class SelectedAppInfoViewModel(
                         it.versionName!!
                     ) to installedAppDeferred.await()
                 }
+        }
+    }
+
+    private fun loadProfileConfiguration(id: Int) {
+        viewModelScope.launch(Dispatchers.Default) {
+            val profile = patchProfileRepository.getProfile(id) ?: run {
+                withContext(Dispatchers.Main) {
+                    app.toast(app.getString(R.string.patch_profile_launch_error))
+                }
+                autoLaunchProfilePatcher = false
+                return@launch
+            }
+
+            val scopedBundles = bundleRepository
+                .scopedBundleInfoFlow(profile.packageName, profile.appVersion)
+                .first()
+                .associateBy { it.uid }
+            val sources = bundleRepository.sources.first().associateBy { it.uid }
+            val configuration = profile.toConfiguration(scopedBundles, sources)
+            val selection = configuration.selection.takeUnless { it.isEmpty() }
+
+            updateConfiguration(selection, configuration.options).join()
+
+            _profileLaunchState.value = ProfileLaunchState(
+                profile = profile,
+                selection = selection,
+                options = configuration.options,
+                missingBundles = configuration.missingBundles,
+                changedBundles = configuration.changedBundles
+            )
+
+            if (configuration.missingBundles.isNotEmpty()) {
+                withContext(Dispatchers.Main) {
+                    app.toast(app.getString(R.string.patch_profile_missing_bundles_toast))
+                }
+            }
+            if (configuration.changedBundles.isNotEmpty()) {
+                withContext(Dispatchers.Main) {
+                    app.toast(app.getString(R.string.patch_profile_changed_patches_toast))
+                }
+            }
         }
     }
 
@@ -163,7 +226,7 @@ class SelectedAppInfoViewModel(
         selection
     }
 
-    var showSourceSelector by mutableStateOf(false)
+    var showSourceSelector by mutableStateOf(requiresSourceSelection)
         private set
     private var pluginAction: Pair<LoadedDownloaderPlugin, Job>? by mutableStateOf(null)
     val activePluginAction get() = pluginAction?.first?.packageName
@@ -183,6 +246,10 @@ class SelectedAppInfoViewModel(
         showSourceSelector = true
     }
 
+    fun requestLocalSelection() {
+        storageSelectionChannel.trySend(Unit)
+    }
+
     private fun cancelPluginAction() {
         pluginAction?.second?.cancel()
         pluginAction = null
@@ -192,6 +259,42 @@ class SelectedAppInfoViewModel(
         cancelPluginAction()
         showSourceSelector = false
     }
+
+    fun handleStorageResult(uri: Uri?) {
+        if (uri == null) {
+            if (requiresSourceSelection && selectedApp is SelectedApp.Search) {
+                showSourceSelector = true
+            }
+            return
+        }
+
+        viewModelScope.launch {
+            val local = withContext(Dispatchers.IO) { loadLocalApk(uri) }
+            if (local == null) {
+                app.toast(app.getString(R.string.failed_to_load_apk))
+                if (requiresSourceSelection && selectedApp is SelectedApp.Search) {
+                    showSourceSelector = true
+                }
+                return@launch
+            }
+            selectedApp = local
+            dismissSourceSelector()
+        }
+    }
+
+    private fun loadLocalApk(uri: Uri): SelectedApp.Local? =
+        app.contentResolver.openInputStream(uri)?.use { stream ->
+            storageInputFile.delete()
+            Files.copy(stream, storageInputFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            pm.getPackageInfo(storageInputFile)?.let { packageInfo ->
+                SelectedApp.Local(
+                    packageName = packageInfo.packageName,
+                    version = packageInfo.versionName ?: "",
+                    file = storageInputFile,
+                    temporary = true
+                )
+            }
+        }
 
     fun searchUsingPlugin(plugin: LoadedDownloaderPlugin) {
         cancelPluginAction()
@@ -310,6 +413,20 @@ class SelectedAppInfoViewModel(
             optionsRepository.saveOptions(packageName, filteredOptions)
         }
     }
+
+    fun shouldAutoLaunchProfile() = autoLaunchProfilePatcher
+
+    fun markProfileAutoLaunchConsumed() {
+        autoLaunchProfilePatcher = false
+    }
+
+    data class ProfileLaunchState(
+        val profile: PatchProfile,
+        val selection: PatchSelection?,
+        val options: Options,
+        val missingBundles: Set<Int>,
+        val changedBundles: Set<Int>
+    )
 
     enum class Error(@StringRes val resourceId: Int) {
         NoPlugins(R.string.downloader_no_plugins_available)

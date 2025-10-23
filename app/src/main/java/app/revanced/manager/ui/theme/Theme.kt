@@ -11,6 +11,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import app.universal.revanced.manager.R
+import kotlinx.serialization.Serializable
 
 private val DarkColorScheme = darkColorScheme(
     primary = rv_theme_dark_primary,
@@ -117,6 +118,7 @@ fun ReVancedManagerTheme(
     )
 }
 
+@Serializable
 enum class Theme(val displayName: Int) {
     SYSTEM(R.string.system),
     LIGHT(R.string.light),

@@ -14,9 +14,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.universal.revanced.manager.R
 import app.revanced.manager.domain.manager.KeystoreManager
+import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.repository.PatchSelectionRepository
 import app.revanced.manager.domain.repository.SerializedSelection
 import app.revanced.manager.domain.repository.PatchBundleRepository
+import app.revanced.manager.domain.repository.PatchProfileExportEntry
+import app.revanced.manager.domain.repository.PatchProfileRepository
 import app.revanced.manager.domain.bundles.PatchBundleSource
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
@@ -109,13 +112,26 @@ data class PatchBundleSnapshot(
     val autoUpdate: Boolean = false
 )
 
+@Serializable
+data class PatchProfileExportFile(
+    val profiles: List<PatchProfileExportEntry>
+)
+
+@Serializable
+data class ManagerSettingsExportFile(
+    val version: Int = 1,
+    val settings: PreferencesManager.SettingsSnapshot
+)
+
 @OptIn(ExperimentalSerializationApi::class)
 class ImportExportViewModel(
     private val app: Application,
     private val keystoreManager: KeystoreManager,
     private val selectionRepository: PatchSelectionRepository,
     private val optionsRepository: PatchOptionsRepository,
-    private val patchBundleRepository: PatchBundleRepository
+    private val patchBundleRepository: PatchBundleRepository,
+    private val patchProfileRepository: PatchProfileRepository,
+    private val preferencesManager: PreferencesManager
 ) : ViewModel() {
     private val contentResolver = app.contentResolver
     val patchBundles = patchBundleRepository.sources
@@ -364,6 +380,81 @@ class ImportExportViewModel(
             }
 
             app.toast(app.getString(R.string.export_patch_bundles_success, bundles.size))
+        }
+    }
+
+    fun importPatchProfiles(source: Uri) = viewModelScope.launch {
+        withContext(NonCancellable) {
+            uiSafe(app, R.string.import_patch_profiles_fail, "Failed to import patch profiles") {
+                val exportFile = withContext(Dispatchers.IO) {
+                    contentResolver.openInputStream(source)!!.use {
+                        Json.decodeFromStream<PatchProfileExportFile>(it)
+                    }
+                }
+
+                val entries = exportFile.profiles.filter { it.name.isNotBlank() && it.packageName.isNotBlank() }
+                if (entries.isEmpty()) {
+                    app.toast(app.getString(R.string.import_patch_profiles_none))
+                    return@uiSafe
+                }
+
+                val imported = patchProfileRepository.importProfiles(entries)
+                if (imported > 0) {
+                    app.toast(app.getString(R.string.import_patch_profiles_success, imported))
+                } else {
+                    app.toast(app.getString(R.string.import_patch_profiles_none))
+                }
+            }
+        }
+    }
+
+    fun exportPatchProfiles(target: Uri) = viewModelScope.launch {
+        uiSafe(app, R.string.export_patch_profiles_fail, "Failed to export patch profiles") {
+            val profiles = patchProfileRepository.exportProfiles()
+            if (profiles.isEmpty()) {
+                app.toast(app.getString(R.string.export_patch_profiles_empty))
+                return@uiSafe
+            }
+
+            withContext(Dispatchers.IO) {
+                contentResolver.openOutputStream(target, "wt")!!.use {
+                    Json.Default.encodeToStream(PatchProfileExportFile(profiles), it)
+                }
+            }
+
+            app.toast(app.getString(R.string.export_patch_profiles_success, profiles.size))
+        }
+    }
+
+    fun importManagerSettings(source: Uri) = viewModelScope.launch {
+        uiSafe(app, R.string.import_manager_settings_fail, "Failed to import manager settings") {
+            val exportFile = withContext(Dispatchers.IO) {
+                contentResolver.openInputStream(source)!!.use {
+                    Json {
+                        ignoreUnknownKeys = true
+                    }.decodeFromStream<ManagerSettingsExportFile>(it)
+                }
+            }
+
+            preferencesManager.importSettings(exportFile.settings)
+            app.toast(app.getString(R.string.import_manager_settings_success))
+        }
+    }
+
+    fun exportManagerSettings(target: Uri) = viewModelScope.launch {
+        uiSafe(app, R.string.export_manager_settings_fail, "Failed to export manager settings") {
+            val snapshot = preferencesManager.exportSettings()
+
+            withContext(Dispatchers.IO) {
+                contentResolver.openOutputStream(target, "wt")!!.use {
+                    Json.Default.encodeToStream(
+                        ManagerSettingsExportFile(settings = snapshot),
+                        it
+                    )
+                }
+            }
+
+            app.toast(app.getString(R.string.export_manager_settings_success))
         }
     }
 

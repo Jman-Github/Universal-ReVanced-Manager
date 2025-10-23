@@ -27,7 +27,9 @@ data object SelectedApplicationInfo : ComplexParameter<SelectedApplicationInfo.V
     @Parcelize
     data class ViewModelParams(
         val app: SelectedApp,
-        val patches: PatchSelection? = null
+        val patches: PatchSelection? = null,
+        val profileId: Int? = null,
+        val requiresSourceSelection: Boolean = false
     ) : Parcelable
 
     @Serializable

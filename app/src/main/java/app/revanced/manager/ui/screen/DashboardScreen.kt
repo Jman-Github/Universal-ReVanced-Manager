@@ -27,6 +27,7 @@ import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Source
+import androidx.compose.material.icons.outlined.Bookmarks
 import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.Badge
@@ -69,6 +70,8 @@ import app.revanced.manager.ui.component.bundle.ImportPatchBundleDialog
 import app.revanced.manager.ui.component.haptics.HapticFloatingActionButton
 import app.revanced.manager.ui.component.haptics.HapticTab
 import app.revanced.manager.ui.viewmodel.DashboardViewModel
+import app.revanced.manager.ui.viewmodel.PatchProfileLaunchData
+import app.revanced.manager.ui.viewmodel.PatchProfilesViewModel
 import app.revanced.manager.util.RequestInstallAppsContract
 import app.revanced.manager.util.toast
 import kotlinx.coroutines.launch
@@ -80,6 +83,7 @@ enum class DashboardPage(
 ) {
     DASHBOARD(R.string.tab_apps, Icons.Outlined.Apps),
     BUNDLES(R.string.tab_patches, Icons.Outlined.Source),
+    PROFILES(R.string.tab_profiles, Icons.Outlined.Bookmarks),
 }
 
 @SuppressLint("BatteryLife")
@@ -91,10 +95,14 @@ fun DashboardScreen(
     onSettingsClick: () -> Unit,
     onUpdateClick: () -> Unit,
     onDownloaderPluginClick: () -> Unit,
-    onAppClick: (String) -> Unit
+    onAppClick: (String) -> Unit,
+    onProfileLaunch: (PatchProfileLaunchData) -> Unit
 ) {
+    val patchProfilesViewModel: PatchProfilesViewModel = koinViewModel()
     var selectedSourceCount by rememberSaveable { mutableIntStateOf(0) }
     val bundlesSelectable by remember { derivedStateOf { selectedSourceCount > 0 } }
+    val selectedProfileCount by remember { derivedStateOf { patchProfilesViewModel.selectedProfiles.size } }
+    val profilesSelectable = selectedProfileCount > 0
     val availablePatches by vm.availablePatches.collectAsStateWithLifecycle(0)
     val showNewDownloaderPluginsNotification by vm.newDownloaderPluginsAvailable.collectAsStateWithLifecycle(
         false
@@ -108,6 +116,9 @@ fun DashboardScreen(
 
     LaunchedEffect(pagerState.currentPage) {
         if (pagerState.currentPage != DashboardPage.BUNDLES.ordinal) vm.cancelSourceSelection()
+        if (pagerState.currentPage != DashboardPage.PROFILES.ordinal) {
+            patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
+        }
     }
 
     val firstLaunch by vm.prefs.firstLaunch.getAsState()
@@ -158,6 +169,7 @@ fun DashboardScreen(
     )
 
     var showDeleteConfirmationDialog by rememberSaveable { mutableStateOf(false) }
+    var showDeleteProfilesConfirmationDialog by rememberSaveable { mutableStateOf(false) }
     if (showDeleteConfirmationDialog) {
         ConfirmDialog(
             onDismiss = { showDeleteConfirmationDialog = false },
@@ -167,69 +179,109 @@ fun DashboardScreen(
             icon = Icons.Outlined.Delete
         )
     }
+    if (showDeleteProfilesConfirmationDialog) {
+        ConfirmDialog(
+            onDismiss = { showDeleteProfilesConfirmationDialog = false },
+            onConfirm = {
+                patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.DELETE_SELECTED)
+                showDeleteProfilesConfirmationDialog = false
+            },
+            title = stringResource(R.string.delete),
+            description = stringResource(R.string.patch_profile_delete_multiple_dialog_description),
+            icon = Icons.Outlined.Delete
+        )
+    }
 
     Scaffold(
         topBar = {
-            if (bundlesSelectable) {
-                BundleTopBar(
-                    title = stringResource(R.string.patches_selected, selectedSourceCount),
-                    onBackClick = vm::cancelSourceSelection,
-                    backIcon = {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = stringResource(R.string.back)
-                        )
-                    },
-                    actions = {
-                        IconButton(
-                            onClick = {
-                                showDeleteConfirmationDialog = true
-                            }
-                        ) {
+            when {
+                bundlesSelectable -> {
+                    BundleTopBar(
+                        title = stringResource(R.string.patches_selected, selectedSourceCount),
+                        onBackClick = vm::cancelSourceSelection,
+                        backIcon = {
                             Icon(
-                                Icons.Outlined.DeleteOutline,
-                                stringResource(R.string.delete)
+                                imageVector = Icons.Default.Close,
+                                contentDescription = stringResource(R.string.back)
                             )
-                        }
-                        IconButton(
-                            onClick = vm::updateSources
-                        ) {
-                            Icon(
-                                Icons.Outlined.Refresh,
-                                stringResource(R.string.refresh)
-                            )
-                        }
-                    }
-                )
-            } else {
-                AppTopBar(
-                    title = stringResource(R.string.app_name),
-                    actions = {
-                        if (!vm.updatedManagerVersion.isNullOrEmpty()) {
+                        },
+                        actions = {
                             IconButton(
-                                onClick = onUpdateClick,
+                                onClick = {
+                                    showDeleteConfirmationDialog = true
+                                }
                             ) {
-                                BadgedBox(
-                                    badge = {
-                                        Badge(modifier = Modifier.size(6.dp))
-                                    }
+                                Icon(
+                                    Icons.Outlined.DeleteOutline,
+                                    stringResource(R.string.delete)
+                                )
+                            }
+                            IconButton(
+                                onClick = vm::updateSources
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Refresh,
+                                    stringResource(R.string.refresh)
+                                )
+                            }
+                        }
+                    )
+                }
+
+                profilesSelectable -> {
+                    BundleTopBar(
+                        title = stringResource(R.string.patch_profiles_selected, selectedProfileCount),
+                        onBackClick = { patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL) },
+                        backIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = stringResource(R.string.back)
+                            )
+                        },
+                        actions = {
+                            IconButton(
+                                onClick = { showDeleteProfilesConfirmationDialog = true }
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Delete,
+                                    stringResource(R.string.delete)
+                                )
+                            }
+                        }
+                    )
+                }
+
+                else -> {
+                    AppTopBar(
+                        title = stringResource(R.string.app_name),
+                        actions = {
+                            if (!vm.updatedManagerVersion.isNullOrEmpty()) {
+                                IconButton(
+                                    onClick = onUpdateClick,
                                 ) {
-                                    Icon(Icons.Outlined.Update, stringResource(R.string.update))
+                                    BadgedBox(
+                                        badge = {
+                                            Badge(modifier = Modifier.size(6.dp))
+                                        }
+                                    ) {
+                                        Icon(Icons.Outlined.Update, stringResource(R.string.update))
+                                    }
                                 }
                             }
-                        }
-                        IconButton(onClick = onSettingsClick) {
-                            Icon(Icons.Outlined.Settings, stringResource(R.string.settings))
-                        }
-                    },
-                    applyContainerColor = true
-                )
+                            IconButton(onClick = onSettingsClick) {
+                                Icon(Icons.Outlined.Settings, stringResource(R.string.settings))
+                            }
+                        },
+                        applyContainerColor = true
+                    )
+                }
             }
         },
         floatingActionButton = {
             HapticFloatingActionButton(
                 onClick = {
                     vm.cancelSourceSelection()
+                    patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
 
                     when (pagerState.currentPage) {
                         DashboardPage.DASHBOARD.ordinal -> {
@@ -347,6 +399,14 @@ fun DashboardScreen(
                             BundleListScreen(
                                 eventsFlow = vm.bundleListEventsFlow,
                                 setSelectedSourceCount = { selectedSourceCount = it }
+                            )
+                        }
+
+                        DashboardPage.PROFILES -> {
+                            PatchProfilesScreen(
+                                onProfileClick = onProfileLaunch,
+                                modifier = Modifier.fillMaxSize(),
+                                viewModel = patchProfilesViewModel
                             )
                         }
                     }

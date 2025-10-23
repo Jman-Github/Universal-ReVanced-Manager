@@ -3,9 +3,11 @@ package app.revanced.manager.ui.component.bundle
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -18,6 +20,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
 import app.revanced.manager.domain.bundles.PatchBundleSource
+import app.revanced.manager.ui.component.ColumnWithScrollbar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,59 +38,52 @@ fun BundleSelector(sources: List<PatchBundleSource>, onFinish: (PatchBundleSourc
     ModalBottomSheet(
         onDismissRequest = { onFinish(null) }
     ) {
-        Column(
+        ColumnWithScrollbar(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-                modifier = Modifier
-                    .height(48.dp)
-                    .fillMaxWidth()
-            ) {
-                Text(
-                    text = stringResource(R.string.select),
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-            sources.forEach {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
+            Text(
+                text = stringResource(R.string.select),
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+            HorizontalDivider()
+            sources.forEachIndexed { index, source ->
+                Column(
                     modifier = Modifier
-                        .height(48.dp)
                         .fillMaxWidth()
-                        .clickable {
-                            onFinish(it)
-                        }
+                        .clickable { onFinish(source) }
+                        .padding(horizontal = 24.dp, vertical = 12.dp)
                 ) {
-                    Column {
+                    Text(
+                        source.displayTitle,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    val hasCustomName =
+                        source.displayName?.takeUnless { name -> name.isBlank() } != null && source.displayTitle != source.name
+                    if (hasCustomName) {
                         Text(
-                            it.displayTitle,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface
+                            source.name,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        val hasCustomName =
-                            it.displayName?.takeUnless { name -> name.isBlank() } != null && it.displayTitle != it.name
-                        if (hasCustomName) {
-                            Text(
-                                it.name,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        it.version?.let { versionLabel ->
-                            Text(
-                                versionLabel,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.outline
-                            )
-                        }
+                    }
+                    source.version?.let { versionLabel ->
+                        Text(
+                            versionLabel,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
                     }
                 }
+                if (index != sources.lastIndex) {
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 24.dp))
+                }
             }
+            Spacer(modifier = Modifier.height(12.dp))
         }
     }
 }

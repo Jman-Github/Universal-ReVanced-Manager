@@ -25,6 +25,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import androidx.lifecycle.lifecycleScope
 import app.revanced.manager.ui.model.navigation.AppSelector
 import app.revanced.manager.ui.model.navigation.ComplexParameter
 import app.revanced.manager.ui.model.navigation.Dashboard
@@ -33,6 +34,7 @@ import app.revanced.manager.ui.model.navigation.Patcher
 import app.revanced.manager.ui.model.navigation.SelectedApplicationInfo
 import app.revanced.manager.ui.model.navigation.Settings
 import app.revanced.manager.ui.model.navigation.Update
+import app.revanced.manager.ui.model.SelectedApp
 import app.revanced.manager.ui.screen.AppSelectorScreen
 import app.revanced.manager.ui.screen.DashboardScreen
 import app.revanced.manager.ui.screen.InstalledAppInfoScreen
@@ -58,6 +60,7 @@ import app.revanced.manager.ui.viewmodel.MainViewModel
 import app.revanced.manager.ui.viewmodel.SelectedAppInfoViewModel
 import app.revanced.manager.util.EventEffect
 import kotlinx.coroutines.launch
+import androidx.lifecycle.withResumed
 import org.koin.androidx.compose.koinViewModel
 import org.koin.androidx.compose.navigation.koinNavViewModel
 import org.koin.core.parameter.parametersOf
@@ -132,6 +135,20 @@ private fun ReVancedManager(vm: MainViewModel) {
                 },
                 onAppClick = { packageName ->
                     navController.navigate(InstalledApplicationInfo(packageName))
+                },
+                onProfileLaunch = { launchData ->
+                    navController.navigateComplex(
+                        SelectedApplicationInfo,
+                        SelectedApplicationInfo.ViewModelParams(
+                            app = SelectedApp.Search(
+                                launchData.profile.packageName,
+                                launchData.profile.appVersion
+                            ),
+                            patches = null,
+                            profileId = launchData.profile.uid,
+                            requiresSourceSelection = true
+                        )
+                    )
                 }
             )
         }
@@ -224,9 +241,14 @@ private fun ReVancedManager(vm: MainViewModel) {
             composable<SelectedApplicationInfo.PatchesSelector> {
                 val data =
                     it.getComplexArg<SelectedApplicationInfo.PatchesSelector.ViewModelParams>()
+                val parentEntry = navController.navGraphEntry(it)
+                val parentArgs =
+                    parentEntry.getComplexArg<SelectedApplicationInfo.ViewModelParams>()
                 val selectedAppInfoVm = koinNavViewModel<SelectedAppInfoViewModel>(
-                    viewModelStoreOwner = navController.navGraphEntry(it)
-                )
+                    viewModelStoreOwner = parentEntry
+                ) {
+                    parametersOf(parentArgs)
+                }
 
                 PatchesSelectorScreen(
                     onBackClick = navController::popBackStack,
@@ -241,9 +263,14 @@ private fun ReVancedManager(vm: MainViewModel) {
             composable<SelectedApplicationInfo.RequiredOptions> {
                 val data =
                     it.getComplexArg<SelectedApplicationInfo.PatchesSelector.ViewModelParams>()
+                val parentEntry = navController.navGraphEntry(it)
+                val parentArgs =
+                    parentEntry.getComplexArg<SelectedApplicationInfo.ViewModelParams>()
                 val selectedAppInfoVm = koinNavViewModel<SelectedAppInfoViewModel>(
-                    viewModelStoreOwner = navController.navGraphEntry(it)
-                )
+                    viewModelStoreOwner = parentEntry
+                ) {
+                    parametersOf(parentArgs)
+                }
 
                 RequiredOptionsScreen(
                     onBackClick = navController::popBackStack,

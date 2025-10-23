@@ -1,3 +1,22 @@
+# v1.2.0 (2025-10-22)
+
+
+# Features
+
+- Added Patch Profiles; the ability to save individual patch selections per bundle(s) for a specific app to the new "Patch Profiles" tab
+- Added a "Show actions" button that collapses/expands the action buttons in the patch selection menu
+- Added the ability to export and import Patch Profiles to/from JSON files
+- Added a copy patch bundle URL button in patch bundle options
+- Added the ability to export and import the managers settings from/to a JSON file (this only includes settings, not patch bundles, patch options, patch selections, etc)
+- Adjusted the placement of the patch selection menu action buttons to be go vertically instead of horizontally
+- Upstrean with the Official ReVanced Manager `dev` branch
+
+
+# Bug fixes
+
+- UI being cut off in patch bundle selection menus for reseting patch selection & options
+
+
 # v1.1.1 (2025-10-20)
 **Minimal changes & bug fixes**
 

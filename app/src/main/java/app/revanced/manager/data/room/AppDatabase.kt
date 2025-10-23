@@ -18,11 +18,13 @@ import app.revanced.manager.data.room.options.OptionDao
 import app.revanced.manager.data.room.options.OptionGroup
 import app.revanced.manager.data.room.plugins.TrustedDownloaderPlugin
 import app.revanced.manager.data.room.plugins.TrustedDownloaderPluginDao
+import app.revanced.manager.data.room.profile.PatchProfileDao
+import app.revanced.manager.data.room.profile.PatchProfileEntity
 import kotlin.random.Random
 
 @Database(
-    entities = [PatchBundleEntity::class, PatchSelection::class, SelectedPatch::class, DownloadedApp::class, InstalledApp::class, AppliedPatch::class, OptionGroup::class, Option::class, TrustedDownloaderPlugin::class],
-    version = 2
+    entities = [PatchBundleEntity::class, PatchSelection::class, SelectedPatch::class, DownloadedApp::class, InstalledApp::class, AppliedPatch::class, OptionGroup::class, Option::class, TrustedDownloaderPlugin::class, PatchProfileEntity::class],
+    version = 3
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
@@ -32,6 +34,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun installedAppDao(): InstalledAppDao
     abstract fun optionDao(): OptionDao
     abstract fun trustedDownloaderPluginDao(): TrustedDownloaderPluginDao
+    abstract fun patchProfileDao(): PatchProfileDao
 
     companion object {
         fun generateUid() = Random.Default.nextInt()

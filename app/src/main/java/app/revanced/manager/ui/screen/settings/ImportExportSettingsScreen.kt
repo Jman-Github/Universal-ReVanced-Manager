@@ -84,6 +84,22 @@ fun ImportExportSettingsScreen(
         rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(JSON_MIMETYPE)) {
             it?.let(vm::exportPatchBundles)
         }
+    val importProfilesLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) {
+            it?.let(vm::importPatchProfiles)
+        }
+    val exportProfilesLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(JSON_MIMETYPE)) {
+            it?.let(vm::exportPatchProfiles)
+        }
+    val importSettingsLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) {
+            it?.let(vm::importManagerSettings)
+        }
+    val exportSettingsLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(JSON_MIMETYPE)) {
+            it?.let(vm::exportManagerSettings)
+        }
 
     val patchBundles by vm.patchBundles.collectAsStateWithLifecycle(initialValue = emptyList())
     val packagesWithSelections by vm.packagesWithSelection.collectAsStateWithLifecycle(initialValue = emptySet())
@@ -177,6 +193,20 @@ fun ImportExportSettingsScreen(
                 headline = R.string.import_patch_bundles,
                 description = R.string.import_patch_bundles_description
             )
+            GroupItem(
+                onClick = {
+                    importProfilesLauncher.launch(JSON_MIMETYPE)
+                },
+                headline = R.string.import_patch_profiles,
+                description = R.string.import_patch_profiles_description
+            )
+            GroupItem(
+                onClick = {
+                    importSettingsLauncher.launch(JSON_MIMETYPE)
+                },
+                headline = R.string.import_manager_settings,
+                description = R.string.import_manager_settings_description
+            )
 
             GroupHeader(stringResource(R.string.export))
             GroupItem(
@@ -201,6 +231,20 @@ fun ImportExportSettingsScreen(
                 },
                 headline = R.string.export_patch_bundles,
                 description = R.string.export_patch_bundles_description
+            )
+            GroupItem(
+                onClick = {
+                    exportProfilesLauncher.launch("patch-profiles.json")
+                },
+                headline = R.string.export_patch_profiles,
+                description = R.string.export_patch_profiles_description
+            )
+            GroupItem(
+                onClick = {
+                    exportSettingsLauncher.launch("manager-settings.json")
+                },
+                headline = R.string.export_manager_settings,
+                description = R.string.export_manager_settings_description
             )
 
             GroupHeader(stringResource(R.string.reset))

@@ -25,6 +25,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -48,6 +49,7 @@ import app.revanced.manager.ui.component.NotificationCard
 import app.revanced.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.revanced.manager.ui.model.SelectedApp
 import app.revanced.manager.ui.viewmodel.SelectedAppInfoViewModel
+import app.revanced.manager.util.APK_MIMETYPE
 import app.revanced.manager.util.EventEffect
 import app.revanced.manager.util.Options
 import app.revanced.manager.util.PatchSelection
@@ -90,11 +92,28 @@ fun SelectedAppInfoScreen(
     EventEffect(flow = vm.launchActivityFlow) { intent ->
         launcher.launch(intent)
     }
+    val storagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+        onResult = vm::handleStorageResult
+    )
+    EventEffect(flow = vm.requestStorageSelection) {
+        storagePickerLauncher.launch(APK_MIMETYPE)
+    }
     val composableScope = rememberCoroutineScope()
 
     val error by vm.errorFlow.collectAsStateWithLifecycle(null)
+    val profileLaunchState by vm.profileLaunchState.collectAsStateWithLifecycle(null)
 
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+
+    LaunchedEffect(profileLaunchState, vm.selectedApp) {
+        val launchState = profileLaunchState ?: return@LaunchedEffect
+        if (!vm.shouldAutoLaunchProfile()) return@LaunchedEffect
+        val appSource = vm.selectedApp
+        if (appSource is SelectedApp.Search) return@LaunchedEffect
+        vm.markProfileAutoLaunchConsumed()
+        onPatchSelectorClick(appSource, launchState.selection, launchState.options)
+    }
 
     Scaffold(
         topBar = {
@@ -153,9 +172,12 @@ fun SelectedAppInfoScreen(
                 ),
                 activeSearchJob = vm.activePluginAction,
                 hasRoot = vm.hasRoot,
+                includeAutoOption = !vm.sourceSelectionRequired,
+                includeInstalledOption = !vm.sourceSelectionRequired,
                 onDismissRequest = vm::dismissSourceSelector,
                 onSelectPlugin = vm::searchUsingPlugin,
                 requiredVersion = requiredVersion,
+                onSelectLocal = vm::requestLocalSelection,
                 onSelect = {
                     vm.selectedApp = it
                     vm.dismissSourceSelector()
@@ -283,9 +305,12 @@ private fun AppSourceSelectorDialog(
     searchApp: SelectedApp.Search,
     activeSearchJob: String?,
     hasRoot: Boolean,
+    includeAutoOption: Boolean = true,
+    includeInstalledOption: Boolean = true,
     requiredVersion: String?,
     onDismissRequest: () -> Unit,
     onSelectPlugin: (LoadedDownloaderPlugin) -> Unit,
+    onSelectLocal: (() -> Unit)?,
     onSelect: (SelectedApp) -> Unit,
 ) {
     val canSelect = activeSearchJob == null
@@ -301,35 +326,34 @@ private fun AppSourceSelectorDialog(
         textHorizontalPadding = PaddingValues(horizontal = 0.dp),
         text = {
             LazyColumn {
-                item(key = "auto") {
-                    val hasPlugins = plugins.isNotEmpty()
-                    ListItem(
-                        modifier = Modifier
-                            .clickable(enabled = canSelect && hasPlugins) { onSelect(searchApp) }
-                            .enabled(hasPlugins),
-                        headlineContent = { Text(stringResource(R.string.app_source_dialog_option_auto)) },
-                        supportingContent = {
-                            Text(
-                                if (hasPlugins)
-                                    stringResource(R.string.app_source_dialog_option_auto_description)
-                                else
-                                    stringResource(R.string.app_source_dialog_option_auto_unavailable)
-                            )
-                        },
-                        colors = transparentListItemColors
-                    )
+                if (includeAutoOption) {
+                    item(key = "auto") {
+                        val hasPlugins = plugins.isNotEmpty()
+                        ListItem(
+                            modifier = Modifier
+                                .clickable(enabled = canSelect && hasPlugins) { onSelect(searchApp) }
+                                .enabled(hasPlugins),
+                            headlineContent = { Text(stringResource(R.string.app_source_dialog_option_auto)) },
+                            supportingContent = {
+                                Text(
+                                    if (hasPlugins)
+                                        stringResource(R.string.app_source_dialog_option_auto_description)
+                                    else
+                                        stringResource(R.string.app_source_dialog_option_auto_unavailable)
+                                )
+                            },
+                            colors = transparentListItemColors
+                        )
+                    }
                 }
 
-                installedApp?.let { (app, meta) ->
+                if (includeInstalledOption) installedApp?.let { (app, meta) ->
                     item(key = "installed") {
                         val (usable, text) = when {
-                            // Mounted apps must be unpatched before patching, which cannot be done without root access.
                             meta?.installType == InstallType.MOUNT && !hasRoot -> false to stringResource(
                                 R.string.app_source_dialog_option_installed_no_root
                             )
-                            // Patching already patched apps is not allowed because patches expect unpatched apps.
                             meta?.installType == InstallType.DEFAULT -> false to stringResource(R.string.already_patched)
-                            // Version does not match suggested version.
                             requiredVersion != null && app.version != requiredVersion -> false to stringResource(
                                 R.string.app_source_dialog_option_installed_version_not_suggested,
                                 app.version
@@ -343,6 +367,19 @@ private fun AppSourceSelectorDialog(
                                 .enabled(usable),
                             headlineContent = { Text(stringResource(R.string.installed)) },
                             supportingContent = { Text(text) },
+                            colors = transparentListItemColors
+                        )
+                    }
+                }
+
+                onSelectLocal?.let { selectLocal ->
+                    item(key = "storage") {
+                        ListItem(
+                            modifier = Modifier.clickable(enabled = canSelect) { selectLocal() },
+                            headlineContent = { Text(stringResource(R.string.app_source_dialog_option_storage)) },
+                            supportingContent = {
+                                Text(stringResource(R.string.app_source_dialog_option_storage_description))
+                            },
                             colors = transparentListItemColors
                         )
                     }

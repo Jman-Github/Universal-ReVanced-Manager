@@ -1,5 +1,7 @@
 package app.revanced.manager.ui.component.bundle
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.webkit.URLUtil.isValidUrl
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -13,6 +15,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Commit
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Gavel
@@ -20,16 +23,28 @@ import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Sell
 import androidx.compose.material.icons.outlined.Update
-import androidx.compose.material3.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.*
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -52,7 +67,9 @@ import app.revanced.manager.ui.component.ExceptionViewerDialog
 import app.revanced.manager.ui.component.FullscreenDialog
 import app.revanced.manager.ui.component.TextInputDialog
 import app.revanced.manager.ui.component.haptics.HapticSwitch
+import app.revanced.manager.util.toast
 import kotlinx.coroutines.launch
+import androidx.core.content.getSystemService
 import org.koin.compose.koinInject
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -69,6 +86,8 @@ fun BundleInformationDialog(
     val prefs = koinInject<PreferencesManager>()
     val hasNetwork = remember { networkInfo.isConnected() }
     val composableScope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val clipboard = remember(context) { context.getSystemService<ClipboardManager>() }
     var viewCurrentBundlePatches by remember { mutableStateOf(false) }
     val isLocal = src is LocalPatchBundle
     val bundleManifestAttributes = src.patchBundle?.manifestAttributes
@@ -258,6 +277,25 @@ fun BundleInformationDialog(
                         headlineText = stringResource(patches_url),
                         supportingText = url.ifEmpty {
                             stringResource(field_not_set)
+                        },
+                        trailingContent = {
+                            IconButton(
+                                onClick = {
+                                    clipboard?.setPrimaryClip(
+                                        ClipData.newPlainText(
+                                            context.getString(patches_url),
+                                            url
+                                        )
+                                    )
+                                    context.toast(context.getString(R.string.toast_copied_to_clipboard))
+                                },
+                                enabled = url.isNotEmpty()
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.ContentCopy,
+                                    contentDescription = stringResource(R.string.copy_to_clipboard)
+                                )
+                            }
                         }
                     )
                 }

@@ -2,8 +2,10 @@ package app.revanced.manager.domain.manager
 
 import android.content.Context
 import app.revanced.manager.domain.manager.base.BasePreferencesManager
+import app.revanced.manager.domain.manager.base.EditorContext
 import app.revanced.manager.ui.theme.Theme
 import app.revanced.manager.util.isDebuggable
+import kotlinx.serialization.Serializable
 
 class PreferencesManager(
     context: Context
@@ -33,4 +35,67 @@ class PreferencesManager(
     val suggestedVersionSafeguard = booleanPreference("suggested_version_safeguard", true)
 
     val acknowledgedDownloaderPlugins = stringSetPreference("acknowledged_downloader_plugins", emptySet())
+
+    @Serializable
+    data class SettingsSnapshot(
+        val dynamicColor: Boolean? = null,
+        val theme: Theme? = null,
+        val api: String? = null,
+        val useProcessRuntime: Boolean? = null,
+        val patcherProcessMemoryLimit: Int? = null,
+        val allowMeteredUpdates: Boolean? = null,
+        val keystoreAlias: String? = null,
+        val keystorePass: String? = null,
+        val firstLaunch: Boolean? = null,
+        val managerAutoUpdates: Boolean? = null,
+        val showManagerUpdateDialogOnLaunch: Boolean? = null,
+        val useManagerPrereleases: Boolean? = null,
+        val disablePatchVersionCompatCheck: Boolean? = null,
+        val disableSelectionWarning: Boolean? = null,
+        val disableUniversalPatchCheck: Boolean? = null,
+        val suggestedVersionSafeguard: Boolean? = null,
+        val acknowledgedDownloaderPlugins: Set<String>? = null
+    )
+
+    suspend fun exportSettings() = SettingsSnapshot(
+        dynamicColor = dynamicColor.get(),
+        theme = theme.get(),
+        api = api.get(),
+        useProcessRuntime = useProcessRuntime.get(),
+        patcherProcessMemoryLimit = patcherProcessMemoryLimit.get(),
+        allowMeteredUpdates = allowMeteredUpdates.get(),
+        keystoreAlias = keystoreAlias.get(),
+        keystorePass = keystorePass.get(),
+        firstLaunch = firstLaunch.get(),
+        managerAutoUpdates = managerAutoUpdates.get(),
+        showManagerUpdateDialogOnLaunch = showManagerUpdateDialogOnLaunch.get(),
+        useManagerPrereleases = useManagerPrereleases.get(),
+        disablePatchVersionCompatCheck = disablePatchVersionCompatCheck.get(),
+        disableSelectionWarning = disableSelectionWarning.get(),
+        disableUniversalPatchCheck = disableUniversalPatchCheck.get(),
+        suggestedVersionSafeguard = suggestedVersionSafeguard.get(),
+        acknowledgedDownloaderPlugins = acknowledgedDownloaderPlugins.get()
+    )
+
+    suspend fun importSettings(snapshot: SettingsSnapshot) = edit {
+        snapshot.dynamicColor?.let { dynamicColor.value = it }
+        snapshot.theme?.let { theme.value = it }
+        snapshot.api?.let { api.value = it }
+        snapshot.useProcessRuntime?.let { useProcessRuntime.value = it }
+        snapshot.patcherProcessMemoryLimit?.let { patcherProcessMemoryLimit.value = it }
+        snapshot.allowMeteredUpdates?.let { allowMeteredUpdates.value = it }
+        snapshot.keystoreAlias?.let { keystoreAlias.value = it }
+        snapshot.keystorePass?.let { keystorePass.value = it }
+        snapshot.firstLaunch?.let { firstLaunch.value = it }
+        snapshot.managerAutoUpdates?.let { managerAutoUpdates.value = it }
+        snapshot.showManagerUpdateDialogOnLaunch?.let {
+            showManagerUpdateDialogOnLaunch.value = it
+        }
+        snapshot.useManagerPrereleases?.let { useManagerPrereleases.value = it }
+        snapshot.disablePatchVersionCompatCheck?.let { disablePatchVersionCompatCheck.value = it }
+        snapshot.disableSelectionWarning?.let { disableSelectionWarning.value = it }
+        snapshot.disableUniversalPatchCheck?.let { disableUniversalPatchCheck.value = it }
+        snapshot.suggestedVersionSafeguard?.let { suggestedVersionSafeguard.value = it }
+        snapshot.acknowledgedDownloaderPlugins?.let { acknowledgedDownloaderPlugins.value = it }
+    }
 }
