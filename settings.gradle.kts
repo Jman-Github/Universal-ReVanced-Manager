@@ -10,7 +10,12 @@ dependencyResolutionManagement {
     repositories {
         mavenCentral()
         google()
-        maven("https://jitpack.io")
+        maven("https://jitpack.io") {
+            metadataSources {
+                mavenPom()
+                artifact()
+            }
+        }
         maven {
             // A repository must be specified for some reason. "registry" is a dummy.
             url = uri("https://maven.pkg.github.com/revanced/registry")
