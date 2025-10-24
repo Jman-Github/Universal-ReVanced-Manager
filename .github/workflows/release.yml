@@ -39,6 +39,17 @@ jobs:
           KEYSTORE_ENTRY_PASSWORD: ${{ secrets.KEYSTORE_ENTRY_PASSWORD }}
         run: ./gradlew assembleRelease
 
+      - name: Locate release artifact
+        id: artifact
+        run: |
+          APK_PATH=$(ls app/build/outputs/apk/release/universal-revanced-manager-*.apk | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "Unable to find release APK in app/build/outputs/apk/release"
+            exit 1
+          fi
+          echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
+          echo "Found APK at $APK_PATH"
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -130,9 +141,22 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.release.outputs.NEW_TAG }}
+          APK_PATH: ${{ steps.artifact.outputs.apk_path }}
         run: |
-          gh release edit "$TAG" --title "Universal ReVanaced Manger $TAG" --notes-file release_notes.md || \
-          gh release create "$TAG" --title "Universal ReVanaced Manger $TAG" --notes-file release_notes.md
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" "$APK_PATH" --title "Universal ReVanaced Manger $TAG" --notes-file release_notes.md
+          else
+            gh release edit "$TAG" --title "Universal ReVanaced Manger $TAG" --notes-file release_notes.md
+          fi
+
+      - name: Upload APK asset
+        if: steps.release.outputs.NEW_TAG != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release.outputs.NEW_TAG }}
+          APK_PATH: ${{ steps.artifact.outputs.apk_path }}
+        run: |
+          gh release upload "$TAG" "$APK_PATH" --clobber
 
       - name: Attest
         if: steps.release.outputs.NEW_TAG != ''
