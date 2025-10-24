@@ -12,6 +12,7 @@
 # Bug fixes
 
 - (ci): incorrect version names on releases sometimes
+- (ci): not uploading APK artifact to release
 - Exporting patch bundles with locally imported patch bundles mixed with ones imported by a URL will now export (automatically excluding the locally imported ones from the export)
 
 

@@ -116,7 +116,6 @@ jobs:
             echo "Version extracted from changelog is empty."
             exit 1
           fi
-          npx multi-semantic-release --tag-format 'v${version}' --ignore-packages api
           echo "NEW_TAG=${VERSION}" >> $GITHUB_OUTPUT
         env:
           GITHUB_ACTOR: ${{ github.actor }}
