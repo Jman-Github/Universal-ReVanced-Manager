@@ -18,9 +18,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import app.universal.revanced.manager.R
 import app.revanced.manager.domain.bundles.PatchBundleSource
+import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.revanced.manager.ui.component.ColumnWithScrollbar
+import app.universal.revanced.manager.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,9 +76,16 @@ fun BundleSelector(sources: List<PatchBundleSource>, onFinish: (PatchBundleSourc
                         Text(
                             versionLabel,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.outline
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    Text(
+                        text = stringResource(
+                            if (source.asRemoteOrNull != null) R.string.bundle_type_remote else R.string.bundle_type_local
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
                 }
                 if (index != sources.lastIndex) {
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 24.dp))

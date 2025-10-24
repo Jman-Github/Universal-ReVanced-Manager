@@ -19,6 +19,7 @@ import app.universal.revanced.manager.R
 import app.revanced.manager.data.room.profile.PatchProfilePayload
 import app.revanced.manager.data.room.options.Option as StoredOption
 import app.revanced.manager.domain.manager.PreferencesManager
+import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.revanced.manager.domain.bundles.RemotePatchBundle
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.domain.repository.PatchProfileRepository
@@ -80,6 +81,12 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         patchBundleRepository.sources.map { sources ->
             sources.associate { source ->
                 source.uid to (source as? RemotePatchBundle)?.endpoint
+            }
+        }
+    val bundleTypes =
+        patchBundleRepository.sources.map { sources ->
+            sources.associate { source ->
+                source.uid to (source.asRemoteOrNull != null)
             }
         }
 

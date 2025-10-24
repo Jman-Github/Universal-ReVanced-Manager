@@ -1,3 +1,20 @@
+# v1.2.1 (2025-10-23)
+**Minimal changes & bug fixes**
+
+
+# Features
+
+- Added a changelog log section in remote/URL imported patch bundles information that shows the latest GitHub release changelog for said bundle
+- Added a note on each patch bunlde on whether they where imported via remote, or local (remote is via URL and local is via a file on your device)
+- Removed reduntant bundle counter on patches profile tab (there were two counters)
+
+
+# Bug fixes
+
+- (ci): incorrect version names on releases sometimes
+- Exporting patch bundles with locally imported patch bundles mixed with ones imported by a URL will now export (automatically excluding the locally imported ones from the export)
+
+
 # v1.2.0 (2025-10-22)
 
 

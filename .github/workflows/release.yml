@@ -61,18 +61,8 @@ jobs:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Release
-        id: release
-        run: |
-          echo "NEW_TAG=$(npx multi-semantic-release --tag-format 'v${version}' --ignore-packages api | tee | grep 'Created tag ' | sed -E 's/.*Created tag ([^ ]+).*/\1/')" >> $GITHUB_OUTPUT
-        env:
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEYSTORE_ENTRY_ALIAS: ${{ secrets.KEYSTORE_ENTRY_ALIAS }}
-          KEYSTORE_ENTRY_PASSWORD: ${{ secrets.KEYSTORE_ENTRY_PASSWORD }}
-
       - name: Extract release notes
+        id: changelog
         run: |
           node - <<'NODE'
           const fs = require('fs');
@@ -99,8 +89,42 @@ jobs:
             throw new Error('No release notes content extracted from changelog.');
           }
 
+          const headerLine = releaseSection.find((line) => /^#\s*v/i.test(line));
+          if (!headerLine) {
+            throw new Error('Failed to locate version header in changelog.');
+          }
+
+          const versionMatch = headerLine.match(/^#\s*(v[0-9]+\.[0-9]+\.[0-9]+)/i);
+          if (!versionMatch) {
+            throw new Error(`Unable to parse version from changelog header: "${headerLine}"`);
+          }
+
+          const version = versionMatch[1];
           fs.writeFileSync('release_notes.md', `${content}\n`, 'utf8');
+
+          const outputFile = process.env.GITHUB_OUTPUT;
+          if (!outputFile) {
+            throw new Error('GITHUB_OUTPUT environment variable is not defined.');
+          }
+          fs.appendFileSync(outputFile, `version=${version}\n`);
           NODE
+
+      - name: Release
+        id: release
+        run: |
+          if [ -z "${VERSION}" ]; then
+            echo "Version extracted from changelog is empty."
+            exit 1
+          fi
+          npx multi-semantic-release --tag-format 'v${version}' --ignore-packages api
+          echo "NEW_TAG=${VERSION}" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEYSTORE_ENTRY_ALIAS: ${{ secrets.KEYSTORE_ENTRY_ALIAS }}
+          KEYSTORE_ENTRY_PASSWORD: ${{ secrets.KEYSTORE_ENTRY_PASSWORD }}
+          VERSION: ${{ steps.changelog.outputs.version }}
 
       - name: Name GitHub Release
         if: steps.release.outputs.NEW_TAG != ''

@@ -2,6 +2,9 @@ package app.revanced.manager.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.revanced.manager.data.room.profile.PatchProfilePayload
+import app.revanced.manager.domain.bundles.PatchBundleSource
+import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.revanced.manager.domain.bundles.RemotePatchBundle
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.domain.repository.PatchProfile
@@ -26,12 +29,18 @@ data class PatchProfileListItem(
     val bundleDetails: List<BundleDetail>
 )
 
+enum class BundleSourceType {
+    Remote,
+    Local
+}
+
 data class BundleDetail(
     val uid: Int,
     val displayName: String?,
     val patchCount: Int,
     val patches: List<String>,
-    val isAvailable: Boolean
+    val isAvailable: Boolean,
+    val type: BundleSourceType
 )
 
 class PatchProfilesViewModel(
@@ -75,12 +84,14 @@ class PatchProfilesViewModel(
                     val resolvedSource = sourceMap[bundle.bundleUid]
                         ?: bundle.sourceEndpoint?.let { endpointToSource[it] }
                     val resolvedName = resolvedSource?.displayTitle ?: bundle.displayName
+                    val type = resolvedSource.determineType(bundle)
                     BundleDetail(
                         uid = bundle.bundleUid,
                         displayName = resolvedName,
                         patchCount = bundle.patches.size,
                         patches = bundle.patches,
-                        isAvailable = resolvedSource != null
+                        isAvailable = resolvedSource != null,
+                        type = type
                     )
                 }
             )
@@ -133,6 +144,15 @@ class PatchProfilesViewModel(
         }
     }
 
+}
+
+private fun PatchBundleSource?.determineType(bundle: PatchProfilePayload.Bundle): BundleSourceType {
+    return when {
+        this?.asRemoteOrNull != null -> BundleSourceType.Remote
+        this != null -> BundleSourceType.Local
+        bundle.sourceEndpoint != null -> BundleSourceType.Remote
+        else -> BundleSourceType.Local
+    }
 }
 
 data class PatchProfileLaunchData(

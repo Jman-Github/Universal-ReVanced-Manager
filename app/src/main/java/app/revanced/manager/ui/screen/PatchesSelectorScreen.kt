@@ -117,6 +117,7 @@ fun PatchesSelectorScreen(
 ) {
     val bundles by viewModel.bundlesFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     val bundleDisplayNames by viewModel.bundleDisplayNames.collectAsStateWithLifecycle(initialValue = emptyMap())
+    val bundleTypes by viewModel.bundleTypes.collectAsStateWithLifecycle(initialValue = emptyMap())
     val pagerState = rememberPagerState(
         initialPage = 0,
         initialPageOffsetFraction = 0f
@@ -236,6 +237,7 @@ fun PatchesSelectorScreen(
         PatchProfileBundleDialog(
             bundles = bundles,
             bundleDisplayNames = bundleDisplayNames,
+            bundleTypes = bundleTypes,
             selectedBundleUids = selectedBundleUids,
             onDismiss = {
                 showBundleDialog = false
@@ -566,6 +568,13 @@ fun PatchesSelectorScreen(
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
+                                    Text(
+                                        text = stringResource(
+                                            if (bundleTypes[bundle.uid] == true) R.string.bundle_type_remote else R.string.bundle_type_local
+                                        ),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
                                 }
                             },
                             selectedContentColor = MaterialTheme.colorScheme.primary,
@@ -701,6 +710,7 @@ private fun formatPatchCountForBadge(count: Int): String =
 private fun PatchProfileBundleDialog(
     bundles: List<PatchBundleInfo.Scoped>,
     bundleDisplayNames: Map<Int, String>,
+    bundleTypes: Map<Int, Boolean>,
     selectedBundleUids: MutableList<Int>,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
@@ -769,9 +779,16 @@ private fun PatchProfileBundleDialog(
                                         Text(
                                             text = version,
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.outline
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
+                                    Text(
+                                        text = stringResource(
+                                            if (bundleTypes[bundle.uid] == true) R.string.bundle_type_remote else R.string.bundle_type_local
+                                        ),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
                                 }
                             }
                         }

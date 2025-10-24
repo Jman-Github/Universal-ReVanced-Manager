@@ -347,18 +347,20 @@ class ImportExportViewModel(
     fun exportPatchBundles(target: Uri) = viewModelScope.launch {
         uiSafe(app, R.string.export_patch_bundles_fail, "Failed to export patch bundles") {
             val sources = patchBundleRepository.sources.first()
-            val localSources = sources
-                .filterNot { it.isDefault }
-                .filter { it.asRemoteOrNull == null }
+            val nonDefaultSources = sources.filterNot { it.isDefault }
+            val localSources = nonDefaultSources.filter { it.asRemoteOrNull == null }
+            val remoteSources = nonDefaultSources.mapNotNull { it.asRemoteOrNull }
 
-            if (localSources.isNotEmpty()) {
-                app.toast(app.getString(R.string.export_patch_bundles_local_not_supported))
+            if (remoteSources.isEmpty()) {
+                if (localSources.isNotEmpty()) {
+                    app.toast(app.getString(R.string.export_patch_bundles_local_not_supported))
+                } else {
+                    app.toast(app.getString(R.string.export_patch_bundles_empty))
+                }
                 return@uiSafe
             }
 
-            val bundles = sources
-                .filterNot { it.isDefault }
-                .mapNotNull { it.asRemoteOrNull }
+            val bundles = remoteSources
                 .map {
                     PatchBundleSnapshot(
                         endpoint = it.endpoint,
@@ -368,18 +370,19 @@ class ImportExportViewModel(
                     )
                 }
 
-            if (bundles.isEmpty()) {
-                app.toast(app.getString(R.string.export_patch_bundles_empty))
-                return@uiSafe
-            }
-
             withContext(Dispatchers.IO) {
                 contentResolver.openOutputStream(target, "wt")!!.use {
                     Json.Default.encodeToStream(PatchBundleExportFile(bundles), it)
                 }
             }
 
-            app.toast(app.getString(R.string.export_patch_bundles_success, bundles.size))
+            val message = if (localSources.isNotEmpty()) {
+                R.string.export_patch_bundles_partial
+            } else {
+                R.string.export_patch_bundles_success
+            }
+
+            app.toast(app.getString(message, bundles.size))
         }
     }
 

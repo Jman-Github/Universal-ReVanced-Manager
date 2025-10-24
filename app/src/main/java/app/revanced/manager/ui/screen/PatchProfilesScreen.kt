@@ -46,6 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.revanced.manager.ui.component.haptics.HapticCheckbox
+import app.revanced.manager.ui.viewmodel.BundleSourceType
 import app.revanced.manager.ui.viewmodel.PatchProfileLaunchData
 import app.revanced.manager.ui.viewmodel.PatchProfileListItem
 import app.revanced.manager.ui.viewmodel.PatchProfilesViewModel
@@ -221,6 +222,9 @@ fun PatchProfilesScreen(
                                         detail.patchCount,
                                         detail.patchCount
                                     )
+                                    val typeLabel = stringResource(
+                                        if (detail.type == BundleSourceType.Remote) R.string.bundle_type_remote else R.string.bundle_type_local
+                                    )
                                     Text(
                                         text = stringResource(
                                             R.string.patch_profile_bundle_header,
@@ -229,6 +233,11 @@ fun PatchProfilesScreen(
                                         ),
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = typeLabel,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.outline
                                     )
                                     Text(
                                         text = detail.patches.joinToString(", "),
@@ -266,12 +275,6 @@ fun PatchProfilesScreen(
                             CircularProgressIndicator(
                                 modifier = Modifier.size(20.dp),
                                 strokeWidth = 2.dp
-                            )
-                        } else {
-                            Text(
-                                text = bundleCountText,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                     }

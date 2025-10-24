@@ -74,7 +74,7 @@ The unique features Universal ReVanced Manager provides that the official ReVanc
 
 - 💉 **Third Party Patch Support**: Import any third party API v4 patch bundle of your choice (such as inotia00's or anddea's which the official ReVanced Manager doesn't support)
 - 🛠️ **Additional Customization**: Apply a display name of your choice to any of your imported patch bundles
-- 🙂 **Patch Selection Enhancements**: Global deselect all button, a per‑bundle deselect button and patch profiles to save patch selection and option states per app
+- 🙂 **Patch Bundle & Selection Enhancements**: Global deselect all button, a per‑bundle deselect button, patch profiles button to save patch selection and option states per app, and the latest patch bundle changelogs in bundle information
 - 🛜 **Network Flexibility**: Toggle to allow updates on metered connections for both patches and the manager
 - 🧑‍💻 **Always‑Visible Developer Options**: Developer Options are always available in settings without needing to unlock them through a hidden unlock flow
 - 🗂️ **More Imports/Exports**: Export and import your patch bundles, patch profiles, and app settings to/from a JSON files

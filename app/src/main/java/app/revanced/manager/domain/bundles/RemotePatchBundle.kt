@@ -61,6 +61,8 @@ sealed class RemotePatchBundle(
         download(info)
     }
 
+    suspend fun fetchLatestReleaseInfo(): ReVancedAsset = getLatestInfo()
+
     companion object {
         const val updateFailMsg = "Failed to update patches"
     }

@@ -89,6 +89,7 @@ fun BundleInformationDialog(
     val context = LocalContext.current
     val clipboard = remember(context) { context.getSystemService<ClipboardManager>() }
     var viewCurrentBundlePatches by remember { mutableStateOf(false) }
+    var viewBundleChangelog by remember { mutableStateOf(false) }
     val isLocal = src is LocalPatchBundle
     val bundleManifestAttributes = src.patchBundle?.manifestAttributes
     val (autoUpdate, endpoint) = src.asRemoteOrNull?.let { it.autoUpdate to it.endpoint }
@@ -108,6 +109,19 @@ fun BundleInformationDialog(
                 viewCurrentBundlePatches = false
             }
         )
+    }
+    if (viewBundleChangelog) {
+        val remote = src.asRemoteOrNull
+        if (remote != null) {
+            BundleChangelogDialog(
+                src = remote,
+                onDismissRequest = {
+                    viewBundleChangelog = false
+                }
+            )
+        } else {
+            viewBundleChangelog = false
+        }
     }
 
     FullscreenDialog(
@@ -315,6 +329,21 @@ fun BundleInformationDialog(
                         Icon(
                             Icons.AutoMirrored.Outlined.ArrowRight,
                             stringResource(patches)
+                        )
+                    }
+                }
+
+                src.asRemoteOrNull?.let {
+                    BundleListItem(
+                        headlineText = stringResource(R.string.bundle_changelog),
+                        supportingText = stringResource(R.string.bundle_view_changelog),
+                        modifier = Modifier.clickable {
+                            viewBundleChangelog = true
+                        }
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Outlined.ArrowRight,
+                            stringResource(R.string.bundle_changelog)
                         )
                     }
                 }
