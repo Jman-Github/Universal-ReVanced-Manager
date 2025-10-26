@@ -24,6 +24,7 @@
 # Bug fixes
 
 - A few grammatical errors
+- Release workflow errors
 
 
 # v1.2.1 (2025-10-23)
