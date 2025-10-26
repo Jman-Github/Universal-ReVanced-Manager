@@ -92,7 +92,8 @@ fun PatchItem(
     expandVersions: Boolean,
     onExpandVersions: () -> Unit,
     expandOptions: Boolean,
-    onExpandOptions: () -> Unit
+    onExpandOptions: () -> Unit,
+    showCompatibilityMeta: Boolean = true
 ) {
     ElevatedCard(
         modifier = Modifier
@@ -129,54 +130,56 @@ fun PatchItem(
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
-            Column(
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                if (patch.compatiblePackages.isNullOrEmpty()) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        PatchInfoChip(
-                            text = "$PACKAGE_ICON ${stringResource(R.string.patches_view_any_package)}"
-                        )
-                        PatchInfoChip(
-                            text = "$VERSION_ICON ${stringResource(R.string.patches_view_any_version)}"
-                        )
-                    }
-                } else {
-                    patch.compatiblePackages.forEach { compatiblePackage ->
-                        val packageName = compatiblePackage.packageName
-                        val versions = compatiblePackage.versions.orEmpty().reversed()
-
-                        FlowRow(
+            if (showCompatibilityMeta) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    if (patch.compatiblePackages.isNullOrEmpty()) {
+                        Row(
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             PatchInfoChip(
-                                modifier = Modifier.align(Alignment.CenterVertically),
-                                text = "$PACKAGE_ICON $packageName"
+                                text = "$PACKAGE_ICON ${stringResource(R.string.patches_view_any_package)}"
                             )
+                            PatchInfoChip(
+                                text = "$VERSION_ICON ${stringResource(R.string.patches_view_any_version)}"
+                            )
+                        }
+                    } else {
+                        patch.compatiblePackages.forEach { compatiblePackage ->
+                            val packageName = compatiblePackage.packageName
+                            val versions = compatiblePackage.versions.orEmpty().reversed()
 
-                            if (versions.isNotEmpty()) {
-                                if (expandVersions) {
-                                    versions.forEach { version ->
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                PatchInfoChip(
+                                    modifier = Modifier.align(Alignment.CenterVertically),
+                                    text = "$PACKAGE_ICON $packageName"
+                                )
+
+                                if (versions.isNotEmpty()) {
+                                    if (expandVersions) {
+                                        versions.forEach { version ->
+                                            PatchInfoChip(
+                                                modifier = Modifier.align(Alignment.CenterVertically),
+                                                text = "$VERSION_ICON $version"
+                                            )
+                                        }
+                                    } else {
                                         PatchInfoChip(
                                             modifier = Modifier.align(Alignment.CenterVertically),
-                                            text = "$VERSION_ICON $version"
+                                            text = "$VERSION_ICON ${versions.first()}"
                                         )
                                     }
-                                } else {
-                                    PatchInfoChip(
-                                        modifier = Modifier.align(Alignment.CenterVertically),
-                                        text = "$VERSION_ICON ${versions.first()}"
-                                    )
-                                }
-                                if (versions.size > 1) {
-                                    PatchInfoChip(
-                                        onClick = onExpandVersions,
-                                        text = if (expandVersions) stringResource(R.string.less) else "+${versions.size - 1}"
-                                    )
+                                    if (versions.size > 1) {
+                                        PatchInfoChip(
+                                            onClick = onExpandVersions,
+                                            text = if (expandVersions) stringResource(R.string.less) else "+${versions.size - 1}"
+                                        )
+                                    }
                                 }
                             }
                         }

@@ -44,7 +44,7 @@
     <string name="selected_app_meta_any_version">Any available version</string>
     <string name="app_source_dialog_title">Select source</string>
     <string name="app_source_dialog_option_auto">Auto</string>
-    <string name="app_source_dialog_option_auto_description">Use all available downloader to download the app</string>
+    <string name="app_source_dialog_option_auto_description">Use all available downloaders to download the app</string>
     <string name="app_source_dialog_option_auto_unavailable">No plugins available</string>
     <string name="app_source_dialog_option_storage">Storage</string>
     <string name="app_source_dialog_option_storage_description">Select an APK from local storage</string>
@@ -60,10 +60,11 @@
     <string name="network_metered_warning">You are currently on a metered connection. Data charges from your service provider may apply.</string>
 
     <string name="apk_source_selector_item">Select APK source</string>
-    <string name="apk_source_auto">Using all APK downloader</string>
+    <string name="apk_source_auto">Using all APK downloaders</string>
     <string name="apk_source_downloader">Using %s</string>
     <string name="apk_source_installed">Using installed APK</string>
     <string name="apk_source_local">Using a local APK file</string>
+    <string name="apk_source_downloaded">Using downloaded APK</string>
 
     <string name="legacy_import_failed">Could not import legacy settings</string>
 
@@ -96,11 +97,21 @@
     <string name="contributors_description">View the contributors of ReVanced</string>
     <string name="dynamic_color">Dynamic color</string>
     <string name="dynamic_color_description">Adapt colors to the wallpaper</string>
+    <string name="accent_color">Accent color</string>
+    <string name="accent_color_description">Choose a custom accent color for the app</string>
+    <string name="accent_color_picker_title">Accent color</string>
+    <string name="accent_color_preview">Preview</string>
+    <string name="accent_color_reset">Reset accent</string>
+    <string name="color_channel_red">Red</string>
+    <string name="color_channel_green">Green</string>
+    <string name="color_channel_blue">Blue</string>
+    <string name="pure_black_theme">Pure black theme</string>
+    <string name="pure_black_theme_description">Use pure black backgrounds for dark theme</string>
     <string name="theme">Theme</string>
     <string name="theme_description">Choose between light or dark theme</string>
     <string name="safeguards">Safeguards</string>
     <string name="patch_compat_check">Disable version compatibility check</string>
-    <string name="patch_compat_check_description">The check restricts patches to compatible app versions</string>
+    <string name="patch_compat_check_description">Do not restrict patches to compatible app versions</string>
     <string name="patch_compat_check_confirmation">Selecting incompatible patches can result in a broken app.\n\nDo you want to proceed anyways?</string>
     <string name="suggested_version_safeguard">Require suggested app version</string>
     <string name="suggested_version_safeguard_description">Enforce selection of the suggested app version</string>
@@ -189,8 +200,8 @@
     <string name="patch_selection_toggle_expand">Show actions</string>
     <string name="patch_selection_toggle_collapse">Hide actions</string>
     <string name="patch_selection_reset_all">Reset patch selection globally</string>
-    <string name="patch_selection_reset_all_dialog_description">You are about to reset all the patch selections. You will need to manually select each patch again.</string>
-    <string name="patch_selection_reset_all_description">Resets all the patch selections</string>
+    <string name="patch_selection_reset_all_dialog_description">You are about to reset all patch selections. You will need to manually select each patch again.</string>
+    <string name="patch_selection_reset_all_description">Resets all patch selections</string>
     <string name="patch_selection_reset_package">Reset patch selection for app</string>
     <string name="patch_selection_reset_package_dialog_description">You are about to reset the patch selection for the app \"%s\". You will have to manually select each patch again.</string>
     <string name="patch_selection_reset_package_description">Resets patch selection for a single app</string>
@@ -204,7 +215,7 @@
     <string name="patch_options_reset_patches_dialog_description">You are about to reset the patch options for \"%s\". You will have to reapply each option again.</string>
     <string name="patch_options_reset_patches_description">Resets the patch options for a specific collection of patches</string>
     <string name="patch_options_reset_all">Reset patch options globally</string>
-    <string name="patch_options_reset_all_dialog_description">You are about to reset patch options. You will have to reapply each option again.</string>
+    <string name="patch_options_reset_all_dialog_description">You are about to reset all patch options. You will have to reapply each option again.</string>
     <string name="patch_options_reset_all_description">Resets all patch options</string>
     <string name="downloader_plugins">Plugins</string>
     <string name="downloader_plugin_state_trusted">Trusted</string>
@@ -213,9 +224,13 @@
     <string name="downloader_plugin_trust_dialog_title">Trust plugin?</string>
     <string name="downloader_plugin_revoke_trust_dialog_title">Revoke trust?</string>
     <string name="downloader_plugin_trust_dialog_body">Package name: %1$s\nSignature (SHA-256): %2$s</string>
+    <string name="downloader_plugin_view_error">View error details</string>
+    <string name="downloader_plugin_failed_dialog_body">Failed to load "%1$s". You can view the error details or uninstall the plugin.</string>
+    <string name="downloader_plugin_uninstall_title">Uninstall plugin?</string>
+    <string name="downloader_plugin_uninstall_description">Are you sure you want to uninstall "%1$s"?</string>
     <string name="downloader_plugin_delete_apps_title">Delete selected apps</string>
     <string name="downloader_plugin_delete_apps_description">Are you sure you want to delete the selected apps?</string>
-    <string name="downloader_settings_no_apps">No downloaded apps found</string>
+    <string name="downloader_settings_no_apps">No downloaded apps found.</string>
 
     <string name="search_apps">Search apps…</string>
     <string name="loading_body">Loading…</string>
@@ -249,6 +264,8 @@
     <string name="downloaded_apps">Downloaded apps</string>
     <string name="process_runtime">Run Patcher in another process (experimental)</string>
     <string name="process_runtime_description">This is faster and allows Patcher to use more memory.</string>
+    <string name="strip_unused_libs">Remove unused native libraries</string>
+    <string name="strip_unused_libs_description">Delete native libraries for unsupported CPU architectures from patched apps.</string>
     <string name="process_runtime_memory_limit">Patcher process memory limit</string>
     <string name="process_runtime_memory_limit_description">The max amount of memory that the Patcher process can use (in megabytes)</string>
     <string name="debug_logs_export">Export debug logs</string>
@@ -256,7 +273,7 @@
     <string name="debug_logs_export_failed">Failed to export logs</string>
     <string name="debug_logs_export_success">Exported logs</string>
     <string name="api_url">API URL</string>
-    <string name="api_url_description">The API used to download necessary files.</string>
+    <string name="api_url_description">The API used to download necessary files</string>
     <string name="api_url_dialog_title">Change API URL</string>
     <string name="api_url_dialog_description">Change the API URL of Universal ReVanced Manager. Universal ReVanced Manager uses the API to download patches and updates.</string>
     <string name="api_url_dialog_warning">Universal ReVanced Manager connects to the API to download patches and updates. Make sure that you trust it.</string>
@@ -289,6 +306,8 @@
     <string name="tap_on_patches">Tap on the patches to get more information about them</string>
     <string name="patches_selected">%s patch bundle(s) selected</string>
     <string name="patch_profiles_selected">%1$d patch profile(s) selected</string>
+    <string name="selected_apps_count">%1$d app(s) selected</string>
+    <string name="selected_apps_delete_dialog_description">Remove the selected apps from the manager? Installed apps on your device will stay untouched.</string>
     <string name="incompatible_patches">Incompatible patches</string>
     <string name="universal_patches">Universal patches</string>
     <string name="patch_selection_reset_toast">Patch selection and options has been reset to recommended defaults</string>
@@ -302,9 +321,13 @@
     <string name="patch_profile_select_bundles_description">Choose the patch bundles to include in this profile.</string>
     <string name="patch_profile_select_bundles_empty">No patch bundles are available to save.</string>
     <string name="patch_profile_name_title">Name patch profile</string>
-    <string name="patch_profile_name_description">Enter a name for this patch profile.</string>
+    <string name="patch_profile_name_description">Enter a name for this patch profile or select one below to update it</string>
+    <string name="patch_profile_update_existing_title">Update existing profile</string>
+    <string name="patch_profile_update_existing_description">Tap a saved profile to overwrite it, or leave everything unselected to create a new profile.</string>
     <string name="patch_profile_name_hint">Profile name</string>
     <string name="patch_profile_saved_toast">Patch profile "%1$s" saved</string>
+    <string name="patch_profile_updated_toast">Patch profile "%1$s" updated</string>
+    <string name="patch_profile_save_failed_toast">Failed to save patch profile</string>
     <string name="patch_profile_empty_state">Save a configuration from the patch selection screen to see it here.</string>
     <string name="patch_profile_missing_bundles_toast">Some bundles in this profile are not available and will be skipped.</string>
     <string name="patch_profile_changed_patches_toast">Some patches or options in this profile no longer match the bundle and were skipped.</string>
@@ -347,12 +370,17 @@
     <string name="original_package_name">Original package name</string>
     <string name="applied_patches">Applied patches</string>
     <string name="view_applied_patches">View applied patches</string>
+    <string name="patch_bundles_used">Patch bundles used</string>
+    <string name="applied_patches_empty">No patches recorded for this app</string>
+    <string name="applied_patches_bundle_missing">Bundle metadata unavailable. Showing saved patch names.</string>
+    <string name="no_patch_bundles_tracked">No patch bundles recorded for this app</string>
     <string name="default_install">Default</string>
     <string name="mount_install">Mount</string>
     <string name="mounted">Mounted</string>
     <string name="not_mounted">Not mounted</string>
     <string name="mount">Mount</string>
     <string name="unmount">Unmount</string>
+    <string name="saved_install">Saved</string>
     <string name="failed_to_mount">Failed to mount: %s</string>
     <string name="failed_to_unmount">Failed to unmount: %s</string>
     <string name="unpatch_app">Unpatch app?</string>
@@ -362,7 +390,12 @@
     <string name="downloader_app_not_found">Downloader did not find the app</string>
     <string name="downloader_error">Downloader error: %s</string>
     <string name="downloader_no_plugins_installed">No downloader installed.</string>
-    <string name="downloader_no_plugins_available">There are downloader installed but none is trusted. Check your settings.</string>
+    <string name="downloader_no_plugins_available">There are downloader(s) installed but none are trusted. Check your settings.</string>
+    <string name="downloader_plugin_uninstall_success">Uninstalled %1$s</string>
+    <string name="downloader_plugin_uninstall_failed">Failed to uninstall %1$s</string>
+    <string name="downloaded_apps_export">Export selected apps</string>
+    <string name="downloaded_apps_export_success">Exported %1$d app(s)</string>
+    <string name="downloaded_apps_export_failed">Failed to export downloaded apps</string>
     <string name="already_patched">Already patched</string>
 
     <string name="patch_selector_sheet_filter_title">Filter</string>
@@ -388,6 +421,15 @@
     <string name="open_app">Open</string>
     <string name="save_apk">Save APK</string>
     <string name="save_apk_success">APK Saved</string>
+    <string name="saved_app_export_success">Exported patched app</string>
+    <string name="saved_app_export_failed">Failed to export patched app</string>
+    <string name="saved_app_removed_toast">Removed saved patched app</string>
+    <string name="saved_app_launch_unavailable">Install the app before opening it.</string>
+    <string name="install_saved_app">Install</string>
+    <string name="installing_saved_app">Installing saved app…</string>
+    <string name="saved_app_install_success">Installed saved app</string>
+    <string name="saved_app_install_failed">Failed to install saved app</string>
+    <string name="saved_app_install_missing">Saved APK not found</string>
     <string name="sign_fail">Failed to sign APK: %s</string>
     <string name="save_logs">Save logs</string>
     <string name="plugin_activity_dialog_body">User interaction is required in order to proceed with this plugin.</string>
@@ -408,6 +450,15 @@
     <string name="execute_patches">Execute patches</string>
     <string name="executing_patch">Execute %s</string>
     <string name="failed_to_execute_patch">Failed to execute %s</string>
+    <string name="save_patched_app_dialog_title">Leave the patcher?</string>
+    <string name="save_patched_app_dialog_message">You are about to leave the patcher. The patched app will be lost unless you save it for later.</string>
+    <string name="save_patched_app_dialog_save">Save patched app</string>
+    <string name="save_patched_app_dialog_leave">Leave without saving</string>
+    <string name="save_patched_app_dialog_cancel">Stay on patcher</string>
+    <string name="save_patched_app_dialog_hint_save">Keeps the patched APK accessible from the Apps tab for future installation.</string>
+    <string name="save_patched_app_dialog_hint_leave">Discards the patched APK and returns you to the previous screen.</string>
+    <string name="patched_app_saved_toast">Patched app saved for later</string>
+    <string name="patched_app_save_failed_toast">Failed to save patched app</string>
 
     <string name="step_completed">completed</string>
     <string name="step_failed">failed</string>
@@ -455,7 +506,7 @@
     <string name="install_update_manager_failed">Failed to install update</string>
     <string name="manual_update_check">Check for updates</string>
     <string name="manual_update_check_description">Manually check for updates</string>
-    <string name="patches_and_manager">Patches &amp; Manager</string>
+    <string name="patches_and_manager">Patch Bundles &amp; Manager</string>
     <string name="update_on_metered_connections">Update on metered connections</string>
     <string name="update_on_metered_connections_description">Allow patch and manager updates over metered networks</string>
     <string name="update_checking_manager">Check for updates on launch</string>
@@ -535,8 +586,8 @@
     <string name="any_version">Any</string>
     <string name="never_show_again">Never show again</string>
     <string name="show_manager_update_dialog_on_launch">Show update message on launch</string>
-    <string name="show_manager_update_dialog_on_launch_description">Shows a popup notification whenever there is a new update available on launch.</string>
+    <string name="show_manager_update_dialog_on_launch_description">Show a popup notification whenever a new update is available on launch</string>
     <string name="failed_to_import_keystore">Failed to import keystore</string>
     <string name="export">Export</string>
     <string name="confirm">Confirm</string>
-</resources>
+    <string name="saved_app_install_cancelled">Installation cancelled</string>`n</resources>

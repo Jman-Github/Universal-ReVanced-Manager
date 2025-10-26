@@ -11,11 +11,14 @@ class PreferencesManager(
     context: Context
 ) : BasePreferencesManager(context, "settings") {
     val dynamicColor = booleanPreference("dynamic_color", true)
+    val pureBlackTheme = booleanPreference("pure_black_theme", false)
+    val customAccentColor = stringPreference("custom_accent_color", "")
     val theme = enumPreference("theme", Theme.SYSTEM)
 
     val api = stringPreference("api_url", "https://api.revanced.app")
 
     val useProcessRuntime = booleanPreference("use_process_runtime", false)
+    val stripUnusedNativeLibs = booleanPreference("strip_unused_native_libs", false)
     val patcherProcessMemoryLimit = intPreference("process_runtime_memory_limit", 700)
 
     val allowMeteredUpdates = booleanPreference("allow_metered_updates", false)
@@ -39,6 +42,9 @@ class PreferencesManager(
     @Serializable
     data class SettingsSnapshot(
         val dynamicColor: Boolean? = null,
+        val pureBlackTheme: Boolean? = null,
+        val customAccentColor: String? = null,
+        val stripUnusedNativeLibs: Boolean? = null,
         val theme: Theme? = null,
         val api: String? = null,
         val useProcessRuntime: Boolean? = null,
@@ -59,6 +65,9 @@ class PreferencesManager(
 
     suspend fun exportSettings() = SettingsSnapshot(
         dynamicColor = dynamicColor.get(),
+        pureBlackTheme = pureBlackTheme.get(),
+        customAccentColor = customAccentColor.get(),
+        stripUnusedNativeLibs = stripUnusedNativeLibs.get(),
         theme = theme.get(),
         api = api.get(),
         useProcessRuntime = useProcessRuntime.get(),
@@ -79,6 +88,9 @@ class PreferencesManager(
 
     suspend fun importSettings(snapshot: SettingsSnapshot) = edit {
         snapshot.dynamicColor?.let { dynamicColor.value = it }
+        snapshot.pureBlackTheme?.let { pureBlackTheme.value = it }
+        snapshot.customAccentColor?.let { customAccentColor.value = it }
+        snapshot.stripUnusedNativeLibs?.let { stripUnusedNativeLibs.value = it }
         snapshot.theme?.let { theme.value = it }
         snapshot.api?.let { api.value = it }
         snapshot.useProcessRuntime?.let { useProcessRuntime.value = it }

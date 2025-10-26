@@ -1,3 +1,31 @@
+# v1.3.0 (2025-10-26)
+
+
+# Features
+
+- Added the ability to uninstall downloader plugins from inside the manager via the downloads settings page
+- Upstream with Official ReVanced Mananger
+  - Add pure black theme
+  - Correct grammer mistakes
+  - Prevent back presses during installation
+- Added an advanced option to strip unused native libraries (unsupported ABIs) from patched APKs during the patching process [#7](https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/7)
+- Added support for the manager to store multiple downloaded apps (ones downloaded through the downloader plugins) in the downloads settings & the ability to export the app to your devices storage
+- Added a "Downloaded apps" option on the select source screen for patching apps that allows the user to select a APK that the manager has cached from a downloader plugins downloads (this option will only appear if the said app is downloaded, otherwise you won't see it)
+- Added the ability to update an existing patch profiles through the save profile menu on the patch selection page
+- Exporting a patched app to storage from the patching screen will now automatically save the patched app under the "Apps" tab. This previously only occurred when the user installed the app directly from the patching screen
+- Added an accent color picker in appearance settings so users can choose a custom theme color (in addition to Material You and pure black)
+- Added a confirmation popup when tapping the back button on the patching screen after the app has been successfully patched confirming the user wants to leave the screen. It also includes a option to save the patched app for later (saves it to the "Apps" tab) on the popup
+- Added the ability to see the applied patches of a patched APK in the "Apps" tab, and the patch bundle(s) used
+- Added the "View changelog" button to the chanelog viewer in settings
+- Added the ability to delete saved patched apps in the "Apps" tab (this will not uninstall them from your device)
+- Removed redundant "View changelog" button at the top of the changelog screen popup
+
+
+# Bug fixes
+
+- A few grammatical errors
+
+
 # v1.2.1 (2025-10-23)
 **Minimal changes & bug fixes**
 

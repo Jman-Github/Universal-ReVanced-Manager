@@ -25,7 +25,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
-import androidx.lifecycle.lifecycleScope
 import app.revanced.manager.ui.model.navigation.AppSelector
 import app.revanced.manager.ui.model.navigation.ComplexParameter
 import app.revanced.manager.ui.model.navigation.Dashboard
@@ -60,7 +59,6 @@ import app.revanced.manager.ui.viewmodel.MainViewModel
 import app.revanced.manager.ui.viewmodel.SelectedAppInfoViewModel
 import app.revanced.manager.util.EventEffect
 import kotlinx.coroutines.launch
-import androidx.lifecycle.withResumed
 import org.koin.androidx.compose.koinViewModel
 import org.koin.androidx.compose.navigation.koinNavViewModel
 import org.koin.core.parameter.parametersOf
@@ -84,6 +82,8 @@ class MainActivity : ComponentActivity() {
             )
             val theme by vm.prefs.theme.getAsState()
             val dynamicColor by vm.prefs.dynamicColor.getAsState()
+            val pureBlackTheme by vm.prefs.pureBlackTheme.getAsState()
+            val customAccentColor by vm.prefs.customAccentColor.getAsState()
 
             EventEffect(vm.legacyImportActivityFlow) {
                 try {
@@ -94,7 +94,9 @@ class MainActivity : ComponentActivity() {
 
             ReVancedManagerTheme(
                 darkTheme = theme == Theme.SYSTEM && isSystemInDarkTheme() || theme == Theme.DARK,
-                dynamicColor = dynamicColor
+                dynamicColor = dynamicColor,
+                pureBlackTheme = pureBlackTheme,
+                accentColorHex = customAccentColor.takeUnless { it.isBlank() }
             ) {
                 ReVancedManager(vm)
             }

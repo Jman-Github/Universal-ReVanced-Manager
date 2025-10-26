@@ -183,14 +183,7 @@ private fun UpdateInfoSummary(
         )
 
         if (releaseInfo.description.isNotBlank()) {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    text = stringResource(R.string.changelog),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Markdown(releaseInfo.description.replace("`", ""))
-            }
+            Markdown(releaseInfo.description.replace("`", ""))
         }
 
         releaseInfo.pageUrl?.let { url ->

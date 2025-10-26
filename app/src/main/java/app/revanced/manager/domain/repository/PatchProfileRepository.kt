@@ -43,6 +43,25 @@ class PatchProfileRepository(
         dao.delete(uids.toList())
     }
 
+    suspend fun updateProfile(
+        uid: Int,
+        packageName: String,
+        appVersion: String?,
+        name: String,
+        payload: PatchProfilePayload
+    ): PatchProfile? {
+        val existing = dao.get(uid) ?: return null
+        val entity = existing.copy(
+            packageName = packageName,
+            appVersion = appVersion,
+            name = name,
+            payload = payload,
+            createdAt = System.currentTimeMillis()
+        )
+        dao.upsert(entity)
+        return entity.toDomain()
+    }
+
     suspend fun getProfile(uid: Int): PatchProfile? = dao.get(uid)?.toDomain()
 
     suspend fun exportProfiles(): List<PatchProfileExportEntry> =

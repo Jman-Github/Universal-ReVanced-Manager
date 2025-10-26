@@ -13,6 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
@@ -23,6 +24,9 @@ import app.revanced.manager.ui.component.settings.Changelog
 import app.revanced.manager.ui.viewmodel.ChangelogsViewModel
 import app.revanced.manager.util.relativeTime
 import org.koin.androidx.compose.koinViewModel
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,12 +54,21 @@ fun ChangelogsSettingsScreen(
             verticalArrangement = if (vm.releaseInfo == null) Arrangement.Center else Arrangement.Top
         ) {
             vm.releaseInfo?.let { info ->
-                Column(modifier = Modifier.padding(16.dp)) {
+                val uriHandler = LocalUriHandler.current
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     Changelog(
                         markdown = info.description.replace("`", ""),
                         version = info.version,
                         publishDate = info.createdAt.relativeTime(LocalContext.current)
                     )
+                    info.pageUrl?.let { url ->
+                        TextButton(onClick = { uriHandler.openUri(url) }) {
+                            Text(stringResource(R.string.changelog))
+                        }
+                    }
                 }
             } ?: LoadingIndicator()
         }

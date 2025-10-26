@@ -12,6 +12,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +36,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.ClearAll
 import androidx.compose.material.icons.outlined.LayersClear
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
 import androidx.compose.material.icons.outlined.FilterList
@@ -73,6 +75,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -87,6 +90,7 @@ import app.universal.revanced.manager.R
 import app.revanced.manager.patcher.patch.Option
 import app.revanced.manager.patcher.patch.PatchBundleInfo
 import app.revanced.manager.patcher.patch.PatchInfo
+import app.revanced.manager.domain.repository.PatchProfile
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.CheckedFilterChip
 import app.revanced.manager.ui.component.FullscreenDialog
@@ -118,6 +122,7 @@ fun PatchesSelectorScreen(
     val bundles by viewModel.bundlesFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     val bundleDisplayNames by viewModel.bundleDisplayNames.collectAsStateWithLifecycle(initialValue = emptyMap())
     val bundleTypes by viewModel.bundleTypes.collectAsStateWithLifecycle(initialValue = emptyMap())
+    val profiles by viewModel.profiles.collectAsStateWithLifecycle(initialValue = emptyList<PatchProfile>())
     val pagerState = rememberPagerState(
         initialPage = 0,
         initialPageOffsetFraction = 0f
@@ -139,6 +144,7 @@ fun PatchesSelectorScreen(
     var showBundleDialog by rememberSaveable { mutableStateOf(false) }
     var showProfileNameDialog by rememberSaveable { mutableStateOf(false) }
     var pendingProfileName by rememberSaveable { mutableStateOf("") }
+    var selectedProfileId by rememberSaveable { mutableStateOf<Int?>(null) }
     var isSavingProfile by remember { mutableStateOf(false) }
 
     val defaultPatchSelectionCount by viewModel.defaultSelectionCount
@@ -161,6 +167,7 @@ fun PatchesSelectorScreen(
             bundles.getOrNull(pagerState.currentPage)?.uid ?: bundles.firstOrNull()?.uid
         defaultBundleUid?.let { selectedBundleUids.add(it) }
         pendingProfileName = ""
+        selectedProfileId = null
         if (searchExpanded) setSearchExpanded(false)
         showBottomSheet = false
         showBundleDialog = true
@@ -243,6 +250,7 @@ fun PatchesSelectorScreen(
                 showBundleDialog = false
                 selectedBundleUids.clear()
                 pendingProfileName = ""
+                selectedProfileId = null
             },
             onConfirm = {
                 if (selectedBundleUids.isNotEmpty()) {
@@ -258,11 +266,22 @@ fun PatchesSelectorScreen(
             name = pendingProfileName,
             onNameChange = { pendingProfileName = it },
             isSaving = isSavingProfile,
+            profiles = profiles,
+            selectedProfileId = selectedProfileId,
+            onProfileSelected = { profile ->
+                if (profile == null) {
+                    selectedProfileId = null
+                } else {
+                    selectedProfileId = profile.uid
+                    pendingProfileName = profile.name
+                }
+            },
             onDismiss = {
                 if (isSavingProfile) return@PatchProfileNameDialog
                 showProfileNameDialog = false
                 selectedBundleUids.clear()
                 pendingProfileName = ""
+                selectedProfileId = null
             },
             onConfirm = {
                 if (pendingProfileName.isBlank() || isSavingProfile) return@PatchProfileNameDialog
@@ -271,7 +290,8 @@ fun PatchesSelectorScreen(
                     val success = try {
                         viewModel.savePatchProfile(
                             pendingProfileName.trim(),
-                            selectedBundleUids.toSet()
+                            selectedBundleUids.toSet(),
+                            selectedProfileId
                         )
                     } finally {
                         isSavingProfile = false
@@ -281,6 +301,7 @@ fun PatchesSelectorScreen(
                         showBundleDialog = false
                         pendingProfileName = ""
                         selectedBundleUids.clear()
+                        selectedProfileId = null
                     }
                 }
             }
@@ -804,6 +825,9 @@ private fun PatchProfileNameDialog(
     name: String,
     onNameChange: (String) -> Unit,
     isSaving: Boolean,
+    profiles: List<PatchProfile>,
+    selectedProfileId: Int?,
+    onProfileSelected: (PatchProfile?) -> Unit,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
@@ -843,6 +867,58 @@ private fun PatchProfileNameDialog(
                         }
                     )
                 )
+
+                if (profiles.isNotEmpty()) {
+                    Text(stringResource(R.string.patch_profile_update_existing_title))
+                    Text(
+                        text = stringResource(R.string.patch_profile_update_existing_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 240.dp)
+                    ) {
+                        items(
+                            items = profiles,
+                            key = { it.uid }
+                        ) { profile ->
+                            val selected = selectedProfileId == profile.uid
+                            ListItem(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(
+                                        if (selected)
+                                            MaterialTheme.colorScheme.secondaryContainer
+                                        else
+                                            Color.Transparent
+                                    )
+                                    .clickable(enabled = !isSaving) {
+                                        onProfileSelected(if (selected) null else profile)
+                                    }
+                                    .padding(horizontal = 4.dp),
+                                headlineContent = { Text(profile.name) },
+                                supportingContent = profile.appVersion?.let { version ->
+                                    {
+                                        Text(
+                                            text = version.ifBlank { stringResource(R.string.any_version) },
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                },
+                                trailingContent = {
+                                    if (selected) {
+                                        Icon(Icons.Filled.Check, null)
+                                    }
+                                },
+                                colors = transparentListItemColors
+                            )
+                        }
+                    }
+                }
             }
         }
     )

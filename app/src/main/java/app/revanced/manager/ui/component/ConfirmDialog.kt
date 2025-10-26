@@ -25,12 +25,7 @@ fun ConfirmDialog(
             }
         },
         confirmButton = {
-            TextButton(
-                onClick = {
-                    onConfirm()
-                    onDismiss()
-                }
-            ) {
+            TextButton(onClick = onConfirm) {
                 Text(stringResource(R.string.confirm))
             }
         },

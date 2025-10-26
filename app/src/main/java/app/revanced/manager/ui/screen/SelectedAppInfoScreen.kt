@@ -14,6 +14,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowRight
 import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.outlined.UnfoldLess
+import androidx.compose.material.icons.outlined.UnfoldMore
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -27,8 +29,10 @@ import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
@@ -37,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.revanced.manager.R
 import app.revanced.manager.data.platform.NetworkInfo
+import app.revanced.manager.data.room.apps.downloaded.DownloadedApp
 import app.revanced.manager.data.room.apps.installed.InstallType
 import app.revanced.manager.data.room.apps.installed.InstalledApp
 import app.revanced.manager.network.downloader.LoadedDownloaderPlugin
@@ -102,6 +107,7 @@ fun SelectedAppInfoScreen(
     val composableScope = rememberCoroutineScope()
 
     val error by vm.errorFlow.collectAsStateWithLifecycle(null)
+    val downloadedApps by vm.downloadedApps.collectAsStateWithLifecycle(emptyList())
     val profileLaunchState by vm.profileLaunchState.collectAsStateWithLifecycle(null)
 
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
@@ -172,11 +178,13 @@ fun SelectedAppInfoScreen(
                 ),
                 activeSearchJob = vm.activePluginAction,
                 hasRoot = vm.hasRoot,
+                downloadedApps = downloadedApps,
                 includeAutoOption = !vm.sourceSelectionRequired,
                 includeInstalledOption = !vm.sourceSelectionRequired,
+                requiredVersion = requiredVersion,
                 onDismissRequest = vm::dismissSourceSelector,
                 onSelectPlugin = vm::searchUsingPlugin,
-                requiredVersion = requiredVersion,
+                onSelectDownloaded = vm::selectDownloadedApp,
                 onSelectLocal = vm::requestLocalSelection,
                 onSelect = {
                     vm.selectedApp = it
@@ -226,7 +234,11 @@ fun SelectedAppInfoScreen(
                             ?: app.data.pluginPackageName
                     )
 
-                    is SelectedApp.Local -> stringResource(R.string.apk_source_local)
+                    is SelectedApp.Local ->
+                        if (app.temporary)
+                            stringResource(R.string.apk_source_local)
+                        else
+                            stringResource(R.string.apk_source_downloaded)
                 },
                 onClick = {
                     vm.showSourceSelector()
@@ -305,15 +317,18 @@ private fun AppSourceSelectorDialog(
     searchApp: SelectedApp.Search,
     activeSearchJob: String?,
     hasRoot: Boolean,
+    downloadedApps: List<DownloadedApp>,
     includeAutoOption: Boolean = true,
     includeInstalledOption: Boolean = true,
     requiredVersion: String?,
     onDismissRequest: () -> Unit,
     onSelectPlugin: (LoadedDownloaderPlugin) -> Unit,
+    onSelectDownloaded: (DownloadedApp) -> Unit,
     onSelectLocal: (() -> Unit)?,
     onSelect: (SelectedApp) -> Unit,
 ) {
     val canSelect = activeSearchJob == null
+    var showDownloadedApps by remember { mutableStateOf(false) }
 
     AlertDialogExtended(
         onDismissRequest = onDismissRequest,
@@ -326,6 +341,35 @@ private fun AppSourceSelectorDialog(
         textHorizontalPadding = PaddingValues(horizontal = 0.dp),
         text = {
             LazyColumn {
+                if (downloadedApps.isNotEmpty()) {
+                    item(key = "downloaded_header") {
+                        val icon = if (showDownloadedApps) Icons.Outlined.UnfoldLess else Icons.Outlined.UnfoldMore
+                        ListItem(
+                            modifier = Modifier
+                                .clickable { showDownloadedApps = !showDownloadedApps }
+                                .enabled(downloadedApps.isNotEmpty()),
+                            headlineContent = { Text(stringResource(R.string.downloaded_apps)) },
+                            trailingContent = { Icon(icon, null) },
+                            colors = transparentListItemColors
+                        )
+                    }
+                    if (showDownloadedApps) {
+                        items(
+                            items = downloadedApps,
+                            key = { "downloaded_${it.packageName}_${it.version}" }
+                        ) { downloadedApp ->
+                            ListItem(
+                                modifier = Modifier
+                                    .clickable(enabled = canSelect) { onSelectDownloaded(downloadedApp) }
+                                    .padding(start = 16.dp),
+                                headlineContent = { Text(downloadedApp.version) },
+                                supportingContent = { Text(downloadedApp.packageName) },
+                                colors = transparentListItemColors
+                            )
+                        }
+                    }
+                }
+
                 if (includeAutoOption) {
                     item(key = "auto") {
                         val hasPlugins = plugins.isNotEmpty()

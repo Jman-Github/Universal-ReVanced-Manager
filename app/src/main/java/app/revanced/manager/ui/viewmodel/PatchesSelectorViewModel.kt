@@ -274,9 +274,12 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         patchOptions[bundle] = patchOptions[bundle]?.remove(patch.name) ?: return
     }
 
+    val profiles = patchProfileRepository.profilesForPackageFlow(packageName)
+
     suspend fun savePatchProfile(
         name: String,
-        selectedBundles: Set<Int>
+        selectedBundles: Set<Int>,
+        existingProfileId: Int?
     ): Boolean {
         if (selectedBundles.isEmpty()) return false
         val selection = (customPatchSelection ?: currentDefaultSelection).toPatchSelection()
@@ -297,14 +300,41 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         }
 
         val payload = PatchProfilePayload(bundles)
-        patchProfileRepository.createProfile(
-            packageName = packageName,
-            appVersion = appVersion,
-            name = name,
-            payload = payload
-        )
-        app.toast(app.getString(R.string.patch_profile_saved_toast, name))
-        return true
+        return try {
+            if (existingProfileId != null) {
+                val updated = patchProfileRepository.updateProfile(
+                    uid = existingProfileId,
+                    packageName = packageName,
+                    appVersion = appVersion,
+                    name = name,
+                    payload = payload
+                )
+                if (updated != null) {
+                    app.toast(app.getString(R.string.patch_profile_updated_toast, name))
+                } else {
+                    patchProfileRepository.createProfile(
+                        packageName = packageName,
+                        appVersion = appVersion,
+                        name = name,
+                        payload = payload
+                    )
+                    app.toast(app.getString(R.string.patch_profile_saved_toast, name))
+                }
+            } else {
+                patchProfileRepository.createProfile(
+                    packageName = packageName,
+                    appVersion = appVersion,
+                    name = name,
+                    payload = payload
+                )
+                app.toast(app.getString(R.string.patch_profile_saved_toast, name))
+            }
+            true
+        } catch (t: Exception) {
+            Log.e(tag, "Failed to save patch profile", t)
+            app.toast(app.getString(R.string.patch_profile_save_failed_toast))
+            false
+        }
     }
 
     private fun serializeOptions(

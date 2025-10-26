@@ -30,6 +30,7 @@ class Filesystem(private val app: Application) {
      * Paths to this directory can be safely stored in parcels.
      */
     val uiTempDir: File = app.getDir("ui_ephemeral", Context.MODE_PRIVATE)
+    private val patchedAppsDir: File = app.getDir("patched-apps", Context.MODE_PRIVATE).apply { mkdirs() }
 
     fun externalFilesDir(): Path = Environment.getExternalStorageDirectory().toPath()
 
@@ -48,4 +49,22 @@ class Filesystem(private val app: Application) {
         if (usesManagePermission()) Environment.isExternalStorageManager() else app.checkSelfPermission(
             storagePermissionName
         ) == PackageManager.PERMISSION_GRANTED
+
+    fun getPatchedAppFile(packageName: String, version: String): File {
+        val safePackage = packageName.sanitizeForFilename()
+        val safeVersion = version.ifBlank { "unspecified" }.sanitizeForFilename()
+        return patchedAppsDir.resolve("${safePackage}_${safeVersion}.apk")
+    }
+
+    private fun String.sanitizeForFilename(): String =
+        fold(StringBuilder(length)) { acc, char ->
+            val sanitized = when (char) {
+                in '0'..'9',
+                in 'a'..'z',
+                in 'A'..'Z',
+                '-', '_', '.' -> char
+                else -> '_'
+            }
+            acc.append(sanitized)
+        }.toString()
 }

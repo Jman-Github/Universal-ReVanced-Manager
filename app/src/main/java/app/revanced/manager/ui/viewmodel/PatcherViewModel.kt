@@ -67,6 +67,7 @@ import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
 import org.koin.core.component.inject
 import java.io.File
+import java.io.IOException
 import java.nio.file.Files
 import java.time.Duration
 
@@ -106,6 +107,8 @@ class PatcherViewModel(
 
     var isInstalling by mutableStateOf(ongoingPmSession)
         private set
+    private var savedPatchedApp by savedStateHandle.saveableVar { false }
+    val hasSavedPatchedApp get() = savedPatchedApp
 
     private var currentActivityRequest: Pair<CompletableDeferred<Boolean>, String>? by mutableStateOf(
         null
@@ -246,6 +249,71 @@ class PatcherViewModel(
             }
         }
 
+    private suspend fun persistPatchedApp(
+        currentPackageName: String?,
+        installType: InstallType
+    ): Boolean = withContext(Dispatchers.IO) {
+        val installedPackageInfo = currentPackageName?.let(pm::getPackageInfo)
+        val patchedPackageInfo = pm.getPackageInfo(outputFile)
+        val packageInfo = installedPackageInfo ?: patchedPackageInfo
+        if (packageInfo == null) {
+            Log.e(TAG, "Failed to resolve package info for patched APK")
+            return@withContext false
+        }
+
+        val finalPackageName = packageInfo.packageName
+        val finalVersion = packageInfo.versionName?.takeUnless { it.isBlank() } ?: version ?: "unspecified"
+
+        if (installType == InstallType.SAVED) {
+            try {
+                val destination = fs.getPatchedAppFile(finalPackageName, finalVersion)
+                outputFile.copyTo(destination, overwrite = true)
+            } catch (error: IOException) {
+                Log.e(TAG, "Failed to copy patched APK for later", error)
+                return@withContext false
+            }
+        } else {
+            val savedCopy = fs.getPatchedAppFile(finalPackageName, finalVersion)
+            if (savedCopy.exists() && !savedCopy.delete()) {
+                Log.w(TAG, "Failed to delete saved patched APK copy for $finalPackageName")
+            }
+        }
+
+        installedAppRepository.addOrUpdate(
+            finalPackageName,
+            packageName,
+            finalVersion,
+            installType,
+            input.selectedPatches
+        )
+
+        savedPatchedApp = installType == InstallType.SAVED
+        true
+    }
+
+    fun savePatchedAppForLater(
+        onResult: (Boolean) -> Unit = {},
+        showToast: Boolean = true
+    ) {
+        if (!outputFile.exists()) {
+            app.toast(app.getString(R.string.patched_app_save_failed_toast))
+            onResult(false)
+            return
+        }
+
+        viewModelScope.launch {
+            val success = persistPatchedApp(null, InstallType.SAVED)
+            if (success) {
+                if (showToast) {
+                    app.toast(app.getString(R.string.patched_app_saved_toast))
+                }
+            } else {
+                app.toast(app.getString(R.string.patched_app_save_failed_toast))
+            }
+            onResult(success)
+        }
+    }
+
     private val installerBroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
@@ -263,14 +331,10 @@ class PatcherViewModel(
                         installedPackageName =
                             intent.getStringExtra(InstallService.EXTRA_PACKAGE_NAME)
                         viewModelScope.launch {
-                            installedAppRepository.addOrUpdate(
-                                installedPackageName!!,
-                                packageName,
-                                input.selectedApp.version
-                                    ?: pm.getPackageInfo(outputFile)?.versionName!!,
-                                InstallType.DEFAULT,
-                                input.selectedPatches
-                            )
+                            val persisted = persistPatchedApp(installedPackageName, InstallType.DEFAULT)
+                            if (!persisted) {
+                                Log.w(TAG, "Failed to persist installed patched app metadata")
+                            }
                         }
                     } else packageInstallerStatus = pmStatus
 
@@ -347,11 +411,28 @@ class PatcherViewModel(
     }
 
     fun export(uri: Uri?) = viewModelScope.launch {
-        uri?.let {
-            withContext(Dispatchers.IO) {
-                app.contentResolver.openOutputStream(it)
-                    .use { stream -> Files.copy(outputFile.toPath(), stream) }
+        uri?.let { targetUri ->
+            val exportSucceeded = runCatching {
+                withContext(Dispatchers.IO) {
+                    app.contentResolver.openOutputStream(targetUri)
+                        ?.use { stream -> Files.copy(outputFile.toPath(), stream) }
+                        ?: throw IOException("Could not open output stream for export")
+                }
+            }.isSuccess
+
+            if (!exportSucceeded) {
+                app.toast(app.getString(R.string.saved_app_export_failed))
+                return@launch
             }
+
+            val wasAlreadySaved = hasSavedPatchedApp
+            val saved = persistPatchedApp(null, InstallType.SAVED)
+            if (!saved) {
+                app.toast(app.getString(R.string.patched_app_save_failed_toast))
+            } else if (!wasAlreadySaved) {
+                app.toast(app.getString(R.string.patched_app_saved_toast))
+            }
+
             app.toast(app.getString(R.string.save_apk_success))
         }
     }
@@ -392,7 +473,7 @@ class PatcherViewModel(
             }
 
             when (installType) {
-                InstallType.DEFAULT -> {
+                InstallType.DEFAULT, InstallType.SAVED -> {
                     // Check if the app is mounted as root
                     // If it is, unmount it first, silently
                     if (rootInstaller.hasRootAccess() && rootInstaller.isAppMounted(packageName)) {
@@ -435,13 +516,9 @@ class PatcherViewModel(
                             label
                         )
 
-                        installedAppRepository.addOrUpdate(
-                            packageInfo.packageName,
-                            packageName,
-                            inputVersion,
-                            InstallType.MOUNT,
-                            input.selectedPatches
-                        )
+                        if (!persistPatchedApp(packageInfo.packageName, InstallType.MOUNT)) {
+                            Log.w(TAG, "Failed to persist mounted patched app metadata")
+                        }
 
                         rootInstaller.mount(packageName)
 

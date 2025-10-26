@@ -22,9 +22,11 @@ import androidx.lifecycle.viewmodel.compose.SavedStateHandleSaveableApi
 import androidx.lifecycle.viewmodel.compose.saveable
 import app.universal.revanced.manager.R
 import app.revanced.manager.data.platform.Filesystem
+import app.revanced.manager.data.room.apps.downloaded.DownloadedApp
 import app.revanced.manager.data.room.apps.installed.InstalledApp
 import app.revanced.manager.domain.installer.RootInstaller
 import app.revanced.manager.domain.manager.PreferencesManager
+import app.revanced.manager.domain.repository.DownloadedAppRepository
 import app.revanced.manager.domain.repository.DownloaderPluginRepository
 import app.revanced.manager.domain.repository.InstalledAppRepository
 import app.revanced.manager.domain.repository.PatchBundleRepository
@@ -48,7 +50,7 @@ import app.revanced.manager.util.Options
 import app.revanced.manager.util.PM
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.simpleMessage
-import app.revanced.manager.util.tag
+
 import app.revanced.manager.util.toast
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -60,6 +62,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -79,6 +82,7 @@ class SelectedAppInfoViewModel(
     private val selectionRepository: PatchSelectionRepository = get()
     private val optionsRepository: PatchOptionsRepository = get()
     private val pluginsRepository: DownloaderPluginRepository = get()
+    private val downloadedAppRepository: DownloadedAppRepository = get()
     private val patchProfileRepository: PatchProfileRepository = get()
     private val installedAppRepository: InstalledAppRepository = get()
     private val rootInstaller: RootInstaller = get()
@@ -104,6 +108,11 @@ class SelectedAppInfoViewModel(
     val hasRoot = rootInstaller.hasRootAccess()
     var installedAppData: Pair<SelectedApp.Installed, InstalledApp?>? by mutableStateOf(null)
         private set
+    val downloadedApps =
+        downloadedAppRepository.getAll().map { apps ->
+            apps.filter { it.packageName == packageName }
+                .sortedByDescending { it.lastUsed }
+        }
 
     private var _selectedApp by savedStateHandle.saveable {
         mutableStateOf(input.app)
@@ -296,6 +305,38 @@ class SelectedAppInfoViewModel(
             }
         }
 
+    fun selectDownloadedApp(downloadedApp: DownloadedApp) {
+        cancelPluginAction()
+        viewModelScope.launch {
+            val result = runCatching {
+                val apkFile = withContext(Dispatchers.IO) {
+                    downloadedAppRepository.getApkFileForApp(downloadedApp)
+                }
+                withContext(Dispatchers.IO) {
+                    downloadedAppRepository.get(
+                        downloadedApp.packageName,
+                        downloadedApp.version,
+                        markUsed = true
+                    )
+                }
+                SelectedApp.Local(
+                    packageName = downloadedApp.packageName,
+                    version = downloadedApp.version,
+                    file = apkFile,
+                    temporary = false
+                )
+            }
+
+            result.onSuccess { local ->
+                selectedApp = local
+                dismissSourceSelector()
+            }.onFailure { throwable ->
+                Log.e(TAG, "Failed to select downloaded app", throwable)
+                app.toast(app.getString(R.string.failed_to_load_apk))
+            }
+        }
+    }
+
     fun searchUsingPlugin(plugin: LoadedDownloaderPlugin) {
         cancelPluginAction()
         pluginAction = plugin to viewModelScope.launch {
@@ -345,7 +386,7 @@ class SelectedAppInfoViewModel(
                 throw e
             } catch (e: Exception) {
                 app.toast(app.getString(R.string.downloader_error, e.simpleMessage()))
-                Log.e(tag, "Downloader.get threw an exception", e)
+                Log.e(TAG, "Downloader.get threw an exception", e)
             } finally {
                 pluginAction = null
                 dismissSourceSelector()
@@ -433,6 +474,7 @@ class SelectedAppInfoViewModel(
     }
 
     private companion object {
+        private val TAG = SelectedAppInfoViewModel::class.java.simpleName ?: "SelectedAppInfoViewModel"
         /**
          * Returns a copy with all nonexistent options removed.
          */

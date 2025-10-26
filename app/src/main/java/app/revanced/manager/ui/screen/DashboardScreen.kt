@@ -72,6 +72,7 @@ import app.revanced.manager.ui.component.haptics.HapticTab
 import app.revanced.manager.ui.viewmodel.DashboardViewModel
 import app.revanced.manager.ui.viewmodel.PatchProfileLaunchData
 import app.revanced.manager.ui.viewmodel.PatchProfilesViewModel
+import app.revanced.manager.ui.viewmodel.InstalledAppsViewModel
 import app.revanced.manager.util.RequestInstallAppsContract
 import app.revanced.manager.util.toast
 import kotlinx.coroutines.launch
@@ -98,6 +99,7 @@ fun DashboardScreen(
     onAppClick: (String) -> Unit,
     onProfileLaunch: (PatchProfileLaunchData) -> Unit
 ) {
+    val installedAppsViewModel: InstalledAppsViewModel = koinViewModel()
     val patchProfilesViewModel: PatchProfilesViewModel = koinViewModel()
     var selectedSourceCount by rememberSaveable { mutableIntStateOf(0) }
     val bundlesSelectable by remember { derivedStateOf { selectedSourceCount > 0 } }
@@ -113,8 +115,13 @@ fun DashboardScreen(
         initialPage = DashboardPage.DASHBOARD.ordinal,
         initialPageOffsetFraction = 0f
     ) { DashboardPage.entries.size }
+    val appsSelectionActive = installedAppsViewModel.selectedApps.isNotEmpty()
+    val selectedAppCount = installedAppsViewModel.selectedApps.size
 
     LaunchedEffect(pagerState.currentPage) {
+        if (pagerState.currentPage != DashboardPage.DASHBOARD.ordinal) {
+            installedAppsViewModel.clearSelection()
+        }
         if (pagerState.currentPage != DashboardPage.BUNDLES.ordinal) vm.cancelSourceSelection()
         if (pagerState.currentPage != DashboardPage.PROFILES.ordinal) {
             patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
@@ -168,8 +175,21 @@ fun DashboardScreen(
         }
     )
 
+    var showDeleteSavedAppsDialog by rememberSaveable { mutableStateOf(false) }
     var showDeleteConfirmationDialog by rememberSaveable { mutableStateOf(false) }
     var showDeleteProfilesConfirmationDialog by rememberSaveable { mutableStateOf(false) }
+    if (showDeleteSavedAppsDialog) {
+        ConfirmDialog(
+            onDismiss = { showDeleteSavedAppsDialog = false },
+            onConfirm = {
+                installedAppsViewModel.deleteSelectedApps()
+                showDeleteSavedAppsDialog = false
+            },
+            title = stringResource(R.string.delete),
+            description = stringResource(R.string.selected_apps_delete_dialog_description),
+            icon = Icons.Outlined.Delete
+        )
+    }
     if (showDeleteConfirmationDialog) {
         ConfirmDialog(
             onDismiss = { showDeleteConfirmationDialog = false },
@@ -195,6 +215,29 @@ fun DashboardScreen(
     Scaffold(
         topBar = {
             when {
+                appsSelectionActive && pagerState.currentPage == DashboardPage.DASHBOARD.ordinal -> {
+                    BundleTopBar(
+                        title = stringResource(R.string.selected_apps_count, selectedAppCount),
+                        onBackClick = installedAppsViewModel::clearSelection,
+                        backIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = stringResource(R.string.back)
+                            )
+                        },
+                        actions = {
+                            IconButton(
+                                onClick = { showDeleteSavedAppsDialog = true }
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Delete,
+                                    stringResource(R.string.delete)
+                                )
+                            }
+                        }
+                    )
+                }
+
                 bundlesSelectable -> {
                     BundleTopBar(
                         title = stringResource(R.string.patches_selected, selectedSourceCount),
@@ -281,6 +324,7 @@ fun DashboardScreen(
             HapticFloatingActionButton(
                 onClick = {
                     vm.cancelSourceSelection()
+                    installedAppsViewModel.clearSelection()
                     patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
 
                     when (pagerState.currentPage) {
@@ -382,8 +426,15 @@ fun DashboardScreen(
                 pageContent = { index ->
                     when (DashboardPage.entries[index]) {
                         DashboardPage.DASHBOARD -> {
+                            BackHandler(enabled = appsSelectionActive) {
+                                installedAppsViewModel.clearSelection()
+                            }
                             InstalledAppsScreen(
-                                onAppClick = { onAppClick(it.currentPackageName) }
+                                onAppClick = {
+                                    installedAppsViewModel.clearSelection()
+                                    onAppClick(it.currentPackageName)
+                                },
+                                viewModel = installedAppsViewModel
                             )
                         }
 

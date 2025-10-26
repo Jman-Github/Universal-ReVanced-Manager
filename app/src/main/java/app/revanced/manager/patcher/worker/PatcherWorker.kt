@@ -47,6 +47,9 @@ import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.io.File
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 
 typealias ProgressEventHandler = (name: String?, state: State?, message: String?) -> Unit
 
@@ -231,6 +234,10 @@ class PatcherWorker(
                 args.onProgress
             )
 
+            if (prefs.stripUnusedNativeLibs.get()) {
+                stripUnusedNativeLibraries(patchedApk)
+            }
+
             keystoreManager.sign(patchedApk, File(args.output))
             updateProgress(state = State.COMPLETED) // Signing
 
@@ -258,5 +265,64 @@ class PatcherWorker(
     companion object {
         private const val LOG_PREFIX = "[Worker]"
         private fun String.logFmt() = "$LOG_PREFIX $this"
+    }
+
+    private suspend fun stripUnusedNativeLibraries(apkFile: File) = withContext(Dispatchers.IO) {
+        val supportedAbis = Build.SUPPORTED_ABIS.filter { it.isNotBlank() }.toSet()
+        if (supportedAbis.isEmpty()) return@withContext
+
+        val tempFile = File(apkFile.parentFile, "${apkFile.nameWithoutExtension}-abi-stripped.apk")
+        var removedEntries = 0
+
+        ZipInputStream(apkFile.inputStream().buffered()).use { zis ->
+            ZipOutputStream(tempFile.outputStream().buffered()).use { zos ->
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                var entry = zis.nextEntry
+                while (entry != null) {
+                    val name = entry.name
+                    val keepEntry = shouldKeepZipEntry(name, supportedAbis)
+
+                    if (keepEntry) {
+                        val newEntry = ZipEntry(name).apply {
+                            time = entry.time
+                            comment = entry.comment
+                        }
+                        zos.putNextEntry(newEntry)
+                        if (!entry.isDirectory) {
+                            while (true) {
+                                val read = zis.read(buffer)
+                                if (read == -1) break
+                                zos.write(buffer, 0, read)
+                            }
+                        }
+                        zos.closeEntry()
+                    } else if (!entry.isDirectory) {
+                        removedEntries++
+                    }
+
+                    zis.closeEntry()
+                    entry = zis.nextEntry
+                }
+            }
+        }
+
+        if (removedEntries > 0) {
+            if (!apkFile.delete()) {
+                Log.w(tag, "Failed to delete original APK before stripping ABIs".logFmt())
+            }
+            tempFile.copyTo(apkFile, overwrite = true)
+            tempFile.delete()
+            Log.i(tag, "Removed $removedEntries native library entries for unsupported ABIs".logFmt())
+        } else {
+            tempFile.delete()
+        }
+    }
+
+    private fun shouldKeepZipEntry(name: String, supportedAbis: Set<String>): Boolean {
+        if (!name.startsWith("lib/")) return true
+        val secondSlash = name.indexOf('/', startIndex = 4)
+        if (secondSlash == -1) return true
+        val abi = name.substring(4, secondSlash)
+        return abi in supportedAbis
     }
 }

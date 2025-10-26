@@ -1,9 +1,11 @@
 package app.revanced.manager.ui.screen
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ListItem
@@ -17,20 +19,24 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.revanced.manager.R
+import app.revanced.manager.data.room.apps.installed.InstallType
 import app.revanced.manager.data.room.apps.installed.InstalledApp
 import app.revanced.manager.ui.component.AppIcon
 import app.revanced.manager.ui.component.AppLabel
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
 import app.revanced.manager.ui.component.LoadingIndicator
+import app.revanced.manager.ui.component.haptics.HapticCheckbox
 import app.revanced.manager.ui.viewmodel.InstalledAppsViewModel
 import org.koin.androidx.compose.koinViewModel
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun InstalledAppsScreen(
     onAppClick: (InstalledApp) -> Unit,
     viewModel: InstalledAppsViewModel = koinViewModel()
 ) {
     val installedApps by viewModel.apps.collectAsStateWithLifecycle(initialValue = null)
+    val selectionActive = viewModel.selectedApps.isNotEmpty()
 
     Column {
         LazyColumnWithScrollbar(
@@ -44,21 +50,58 @@ fun InstalledAppsScreen(
                         installedApps,
                         key = { it.currentPackageName }
                     ) { installedApp ->
-                        viewModel.packageInfoMap[installedApp.currentPackageName].let { packageInfo ->
-                            ListItem(
-                                modifier = Modifier.clickable { onAppClick(installedApp) },
-                                leadingContent = {
+                        val packageName = installedApp.currentPackageName
+                        val packageInfo = viewModel.packageInfoMap[packageName]
+                        val isSaved = installedApp.installType == InstallType.SAVED
+                        val isMissingInstall = packageName in viewModel.missingPackages
+                        val isSelectable = isSaved || isMissingInstall
+                        val isSelected = packageName in viewModel.selectedApps
+
+                        ListItem(
+                            modifier = Modifier.combinedClickable(
+                                onClick = {
+                                    when {
+                                        selectionActive && isSelectable -> viewModel.toggleSelection(installedApp)
+                                        selectionActive -> {}
+                                        else -> onAppClick(installedApp)
+                                    }
+                                },
+                                onLongClick = {
+                                    if (isSelectable) {
+                                        viewModel.toggleSelection(installedApp)
+                                    } else {
+                                        onAppClick(installedApp)
+                                    }
+                                }
+                            ),
+                            leadingContent = {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    if (selectionActive) {
+                                        HapticCheckbox(
+                                            checked = isSelected,
+                                            onCheckedChange = if (isSelectable) { checked ->
+                                                viewModel.setSelection(installedApp, checked)
+                                            } else null,
+                                            enabled = isSelectable
+                                        )
+                                    }
                                     AppIcon(
                                         packageInfo,
                                         contentDescription = null,
                                         Modifier.size(36.dp)
                                     )
-                                },
-                                headlineContent = { AppLabel(packageInfo, defaultText = null) },
-                                supportingContent = { Text(installedApp.currentPackageName) }
-                            )
-
-                        }
+                                }
+                            },
+                            headlineContent = { AppLabel(packageInfo, defaultText = packageName) },
+                            supportingContent = {
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(installedApp.currentPackageName)
+                                }
+                            }
+                        )
                     }
                 } else {
                     item {

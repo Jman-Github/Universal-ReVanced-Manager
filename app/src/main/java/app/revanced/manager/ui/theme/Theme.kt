@@ -1,6 +1,7 @@
 package app.revanced.manager.ui.theme
 
 import android.app.Activity
+import android.graphics.Color as AndroidColor
 import android.os.Build
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -9,6 +10,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.core.graphics.ColorUtils
 import androidx.core.view.WindowCompat
 import app.universal.revanced.manager.R
 import kotlinx.serialization.Serializable
@@ -81,6 +83,8 @@ private val LightColorScheme = lightColorScheme(
 fun ReVancedManagerTheme(
     darkTheme: Boolean,
     dynamicColor: Boolean,
+    pureBlackTheme: Boolean,
+    accentColorHex: String? = null,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
@@ -94,6 +98,27 @@ fun ReVancedManagerTheme(
 
         darkTheme -> DarkColorScheme
         else -> LightColorScheme
+    }.let {
+        if (darkTheme && pureBlackTheme) {
+            it.copy(
+                background = Color.Black,
+                surface = Color.Black,
+                surfaceVariant = Color.Black,
+                surfaceTint = Color.Black,
+                surfaceDim = Color.Black,
+                surfaceBright = Color.Black,
+                surfaceContainerLowest = Color.Black,
+                surfaceContainerLow = Color.Black,
+                surfaceContainer = Color.Black,
+                surfaceContainerHigh = Color.Black,
+                surfaceContainerHighest = Color.Black
+            )
+        } else it
+    }.let { scheme ->
+        val accentColor = parseCustomColor(accentColorHex)
+        if (accentColor != null) {
+            applyCustomAccent(scheme, accentColor, darkTheme)
+        } else scheme
     }
 
     val view = LocalView.current
@@ -123,4 +148,51 @@ enum class Theme(val displayName: Int) {
     SYSTEM(R.string.system),
     LIGHT(R.string.light),
     DARK(R.string.dark);
+}
+
+private fun parseCustomColor(hex: String?): Color? {
+    val normalized = hex?.trim()
+    if (normalized.isNullOrEmpty()) return null
+    return runCatching { Color(AndroidColor.parseColor(normalized)) }.getOrNull()
+}
+
+private fun applyCustomAccent(
+    colorScheme: ColorScheme,
+    accent: Color,
+    darkTheme: Boolean
+): ColorScheme {
+    val primary = accent
+    val primaryContainer = accent.adjustLightness(if (darkTheme) 0.25f else -0.25f)
+    val secondary = accent.adjustLightness(if (darkTheme) 0.15f else -0.15f)
+    val secondaryContainer = accent.adjustLightness(if (darkTheme) 0.35f else -0.35f)
+    val tertiary = accent.adjustLightness(if (darkTheme) -0.1f else 0.1f)
+    val tertiaryContainer = accent.adjustLightness(if (darkTheme) 0.4f else -0.4f)
+    return colorScheme.copy(
+        primary = primary,
+        onPrimary = primary.contrastingForeground(),
+        primaryContainer = primaryContainer,
+        onPrimaryContainer = primaryContainer.contrastingForeground(),
+        secondary = secondary,
+        onSecondary = secondary.contrastingForeground(),
+        secondaryContainer = secondaryContainer,
+        onSecondaryContainer = secondaryContainer.contrastingForeground(),
+        tertiary = tertiary,
+        onTertiary = tertiary.contrastingForeground(),
+        tertiaryContainer = tertiaryContainer,
+        onTertiaryContainer = tertiaryContainer.contrastingForeground(),
+        surfaceTint = primary,
+        inversePrimary = primary.adjustLightness(if (darkTheme) -0.4f else 0.4f)
+    )
+}
+
+private fun Color.adjustLightness(delta: Float): Color {
+    val hsl = FloatArray(3)
+    ColorUtils.colorToHSL(this.toArgb(), hsl)
+    hsl[2] = (hsl[2] + delta).coerceIn(0f, 1f)
+    return Color(ColorUtils.HSLToColor(hsl))
+}
+
+private fun Color.contrastingForeground(): Color {
+    val luminance = ColorUtils.calculateLuminance(this.toArgb())
+    return if (luminance > 0.5) Color.Black else Color.White
 }

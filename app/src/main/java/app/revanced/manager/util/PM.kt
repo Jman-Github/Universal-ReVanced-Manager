@@ -43,6 +43,7 @@ class PM(
     patchBundleRepository: PatchBundleRepository
 ) {
     private val scope = CoroutineScope(Dispatchers.IO)
+    val application: Application get() = app
 
     val appList = patchBundleRepository.bundleInfoFlow.map { bundles ->
         val compatibleApps = scope.async {

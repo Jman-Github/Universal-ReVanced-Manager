@@ -144,6 +144,12 @@ fun AdvancedSettingsScreen(
 
             GroupHeader(stringResource(R.string.patcher))
             BooleanItem(
+                preference = viewModel.prefs.stripUnusedNativeLibs,
+                coroutineScope = viewModel.viewModelScope,
+                headline = R.string.strip_unused_libs,
+                description = R.string.strip_unused_libs_description,
+            )
+            BooleanItem(
                 preference = viewModel.prefs.useProcessRuntime,
                 coroutineScope = viewModel.viewModelScope,
                 headline = R.string.process_runtime,

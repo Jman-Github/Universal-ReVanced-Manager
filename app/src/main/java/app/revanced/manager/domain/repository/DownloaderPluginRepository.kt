@@ -143,6 +143,13 @@ class DownloaderPluginRepository(
     suspend fun acknowledgeAllNewPlugins() =
         acknowledgedDownloaderPlugins.update(installedPluginPackageNames.value)
 
+    suspend fun removePlugin(packageName: String) {
+        trustDao.remove(packageName)
+        acknowledgedDownloaderPlugins.update(acknowledgedDownloaderPlugins.get() - packageName)
+        _pluginStates.value = _pluginStates.value - packageName
+        installedPluginPackageNames.value = installedPluginPackageNames.value - packageName
+    }
+
     private suspend fun verify(packageName: String): Boolean {
         val expectedSignature =
             trustDao.getTrustedSignature(packageName) ?: return false
