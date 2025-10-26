@@ -18,10 +18,14 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Java
+        id: setup-java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
+
+      - name: Set Gradle Java Home
+        run: echo "ORG_GRADLE_JAVA_HOME=${{ steps.setup-java.outputs.path }}" >> $GITHUB_ENV
 
       - name: Cache Gradle
         uses: burrunan/gradle-cache-action@v3
