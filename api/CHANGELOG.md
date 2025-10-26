@@ -8,7 +8,7 @@
   - Add pure black theme
   - Correct grammer mistakes
   - Prevent back presses during installation
-- Added an advanced option to strip unused native libraries (unsupported ABIs) from patched APKs during the patching process [#7](https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/7)
+- Added an advanced option to strip unused native libraries (unsupported ABIs) from patched APKs during the patching process (https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/7)
 - Added support for the manager to store multiple downloaded apps (ones downloaded through the downloader plugins) in the downloads settings & the ability to export the app to your devices storage
 - Added a "Downloaded apps" option on the select source screen for patching apps that allows the user to select a APK that the manager has cached from a downloader plugins downloads (this option will only appear if the said app is downloaded, otherwise you won't see it)
 - Added the ability to update an existing patch profiles through the save profile menu on the patch selection page
