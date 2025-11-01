@@ -24,6 +24,10 @@ class PatchProfileRepository(
         name: String,
         payload: PatchProfilePayload
     ): PatchProfile {
+        val existing = dao.findByPackageAndName(packageName, name)
+        if (existing != null) {
+            throw DuplicatePatchProfileNameException(packageName, name)
+        }
         val entity = PatchProfileEntity(
             uid = AppDatabase.generateUid(),
             packageName = packageName,
@@ -51,6 +55,10 @@ class PatchProfileRepository(
         payload: PatchProfilePayload
     ): PatchProfile? {
         val existing = dao.get(uid) ?: return null
+        val conflicting = dao.findByPackageAndName(packageName, name)
+        if (conflicting != null && conflicting.uid != uid) {
+            throw DuplicatePatchProfileNameException(packageName, name)
+        }
         val entity = existing.copy(
             packageName = packageName,
             appVersion = appVersion,
@@ -67,11 +75,28 @@ class PatchProfileRepository(
     suspend fun exportProfiles(): List<PatchProfileExportEntry> =
         dao.getAll().map(PatchProfileEntity::toExportEntry)
 
-    suspend fun importProfiles(entries: Collection<PatchProfileExportEntry>): Int {
-        if (entries.isEmpty()) return 0
-        val entities = entries.map(PatchProfileExportEntry::toEntity)
-        dao.insertAll(entities)
-        return entities.size
+    suspend fun importProfiles(entries: Collection<PatchProfileExportEntry>): ImportProfilesResult {
+        if (entries.isEmpty()) return ImportProfilesResult(0, 0)
+        var imported = 0
+        var skipped = 0
+        for (entry in entries) {
+            val existing = dao.findByPackageAndName(entry.packageName, entry.name)
+            if (existing != null) {
+                skipped++
+                continue
+            }
+            val entity = PatchProfileEntity(
+                uid = AppDatabase.generateUid(),
+                packageName = entry.packageName,
+                appVersion = entry.appVersion,
+                name = entry.name,
+                payload = entry.payload,
+                createdAt = entry.createdAt ?: System.currentTimeMillis()
+            )
+            dao.upsert(entity)
+            imported++
+        }
+        return ImportProfilesResult(imported, skipped)
     }
 }
 
@@ -93,6 +118,11 @@ data class PatchProfileExportEntry(
     val payload: PatchProfilePayload
 )
 
+data class ImportProfilesResult(
+    val imported: Int,
+    val skipped: Int
+)
+
 private fun PatchProfileEntity.toDomain() = PatchProfile(
     uid = uid,
     packageName = packageName,
@@ -102,6 +132,11 @@ private fun PatchProfileEntity.toDomain() = PatchProfile(
     payload = payload
 )
 
+class DuplicatePatchProfileNameException(
+    val packageName: String,
+    val profileName: String
+) : IllegalArgumentException("Duplicate patch profile name \"$profileName\" for package $packageName")
+
 private fun List<PatchProfileEntity>.toDomain() = map(PatchProfileEntity::toDomain)
 
 private fun PatchProfileEntity.toExportEntry() = PatchProfileExportEntry(
@@ -110,13 +145,4 @@ private fun PatchProfileEntity.toExportEntry() = PatchProfileExportEntry(
     appVersion = appVersion,
     createdAt = createdAt,
     payload = payload
-)
-
-private fun PatchProfileExportEntry.toEntity() = PatchProfileEntity(
-    uid = AppDatabase.generateUid(),
-    packageName = packageName,
-    appVersion = appVersion,
-    name = name,
-    payload = payload,
-    createdAt = createdAt ?: System.currentTimeMillis()
 )

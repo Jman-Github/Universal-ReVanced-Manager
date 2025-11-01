@@ -8,6 +8,8 @@ import app.revanced.manager.network.utils.getOrThrow
 import io.ktor.client.request.url
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.io.File
@@ -61,10 +63,26 @@ sealed class RemotePatchBundle(
         download(info)
     }
 
-    suspend fun fetchLatestReleaseInfo(): ReVancedAsset = getLatestInfo()
+    suspend fun fetchLatestReleaseInfo(): ReVancedAsset {
+        val key = "$uid|$endpoint"
+        val now = System.currentTimeMillis()
+        val cached = changelogCacheMutex.withLock {
+            changelogCache[key]?.takeIf { now - it.timestamp <= CHANGELOG_CACHE_TTL }
+        }
+        if (cached != null) return cached.asset
+
+        val asset = getLatestInfo()
+        changelogCacheMutex.withLock {
+            changelogCache[key] = CachedChangelog(asset, now)
+        }
+        return asset
+    }
 
     companion object {
         const val updateFailMsg = "Failed to update patches"
+        private const val CHANGELOG_CACHE_TTL = 10 * 60 * 1000L
+        private val changelogCacheMutex = Mutex()
+        private val changelogCache = mutableMapOf<String, CachedChangelog>()
     }
 }
 
@@ -120,3 +138,5 @@ class APIPatchBundle(
         autoUpdate,
     )
 }
+
+private data class CachedChangelog(val asset: ReVancedAsset, val timestamp: Long)

@@ -216,6 +216,32 @@ fun BundleInformationDialog(
                         ?: stringResource(field_not_set)
                 )
 
+                if (isLocal) {
+                    val identifierValue = src.uid.toString()
+                    BundleListItem(
+                        headlineText = stringResource(R.string.bundle_uid),
+                        supportingText = identifierValue,
+                        trailingContent = {
+                            IconButton(
+                                onClick = {
+                                    clipboard?.setPrimaryClip(
+                                        ClipData.newPlainText(
+                                            context.getString(R.string.bundle_uid),
+                                            identifierValue
+                                        )
+                                    )
+                                    context.toast(context.getString(R.string.toast_copied_to_clipboard))
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.ContentCopy,
+                                    contentDescription = stringResource(R.string.copy_to_clipboard)
+                                )
+                            }
+                        }
+                    )
+                }
+
                 if (autoUpdate != null) {
                     BundleListItem(
                         headlineText = stringResource(auto_update),

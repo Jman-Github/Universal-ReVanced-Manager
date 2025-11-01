@@ -1,6 +1,7 @@
 package app.revanced.manager.ui.viewmodel
 
 import android.app.Application
+import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -17,9 +18,10 @@ import androidx.compose.runtime.saveable.autoSaver
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MediatorLiveData
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.map
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.SavedStateHandleSaveableApi
 import androidx.lifecycle.viewmodel.compose.saveable
@@ -29,11 +31,14 @@ import app.universal.revanced.manager.R
 import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.data.room.apps.installed.InstallType
 import app.revanced.manager.data.room.apps.installed.InstalledApp
+import app.revanced.manager.domain.installer.InstallerManager
 import app.revanced.manager.domain.installer.RootInstaller
+import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.repository.InstalledAppRepository
 import app.revanced.manager.domain.worker.WorkerRepository
 import app.revanced.manager.patcher.logger.LogLevel
 import app.revanced.manager.patcher.logger.Logger
+import app.revanced.manager.patcher.runtime.ProcessRuntime
 import app.revanced.manager.patcher.worker.PatcherWorker
 import app.revanced.manager.plugin.downloader.PluginHostApi
 import app.revanced.manager.plugin.downloader.UserInteractionException
@@ -57,7 +62,9 @@ import app.revanced.manager.util.uiSafe
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
@@ -70,6 +77,7 @@ import java.io.File
 import java.io.IOException
 import java.nio.file.Files
 import java.time.Duration
+import java.util.UUID
 
 @OptIn(SavedStateHandleSaveableApi::class, PluginHostApi::class)
 class PatcherViewModel(
@@ -81,7 +89,13 @@ class PatcherViewModel(
     private val workerRepository: WorkerRepository by inject()
     private val installedAppRepository: InstalledAppRepository by inject()
     private val rootInstaller: RootInstaller by inject()
+    private val installerManager: InstallerManager by inject()
+    private val prefs: PreferencesManager by inject()
     private val savedStateHandle: SavedStateHandle = get()
+
+    private var pendingExternalInstall: InstallerManager.InstallPlan.External? = null
+    private var externalInstallTimeoutJob: Job? = null
+
 
     private var installedApp: InstalledApp? = null
     private val selectedApp = input.selectedApp
@@ -156,6 +170,14 @@ class PatcherViewModel(
         mutableStateOf<Pair<Long, Long?>?>(null)
     }
         private set
+    data class MemoryAdjustmentDialogState(
+        val previousLimit: Int,
+        val newLimit: Int,
+        val adjusted: Boolean
+    )
+
+    var memoryAdjustmentDialog by mutableStateOf<MemoryAdjustmentDialogState?>(null)
+        private set
     val steps by savedStateHandle.saveable(saver = snapshotStateListSaver()) {
         generateSteps(
             app,
@@ -175,79 +197,19 @@ class PatcherViewModel(
     }
 
     private val workManager = WorkManager.getInstance(app)
+    private val _patcherSucceeded = MediatorLiveData<Boolean?>()
+    val patcherSucceeded: LiveData<Boolean?> get() = _patcherSucceeded
+    private var currentWorkSource: LiveData<WorkInfo?>? = null
+    private val handledFailureIds = mutableSetOf<UUID>()
+    private var forceKeepLocalInput = false
 
-    private val patcherWorkerId by savedStateHandle.saveable<ParcelUuid> {
-        ParcelUuid(workerRepository.launchExpedited<PatcherWorker, PatcherWorker.Args>(
-            "patching", PatcherWorker.Args(
-                input.selectedApp,
-                outputFile.path,
-                input.selectedPatches,
-                input.options,
-                logger,
-                onDownloadProgress = {
-                    withContext(Dispatchers.Main) {
-                        downloadProgress = it
-                    }
-                },
-                onPatchCompleted = { withContext(Dispatchers.Main) { completedPatchCount += 1 } },
-                setInputFile = { withContext(Dispatchers.Main) { inputFile = it } },
-                handleStartActivityRequest = { plugin, intent ->
-                    withContext(Dispatchers.Main) {
-                        if (currentActivityRequest != null) throw Exception("Another request is already pending.")
-                        try {
-                            // Wait for the dialog interaction.
-                            val accepted = with(CompletableDeferred<Boolean>()) {
-                                currentActivityRequest = this to plugin.name
-
-                                await()
-                            }
-                            if (!accepted) throw UserInteractionException.RequestDenied()
-
-                            // Launch the activity and wait for the result.
-                            try {
-                                with(CompletableDeferred<ActivityResult>()) {
-                                    launchedActivity = this
-                                    launchActivityChannel.send(intent)
-                                    await()
-                                }
-                            } finally {
-                                launchedActivity = null
-                            }
-                        } finally {
-                            currentActivityRequest = null
-                        }
-                    }
-                },
-                onProgress = { name, state, message ->
-                    viewModelScope.launch {
-                        steps[currentStepIndex] = steps[currentStepIndex].run {
-                            copy(
-                                name = name ?: this.name,
-                                state = state ?: this.state,
-                                message = message ?: this.message
-                            )
-                        }
-
-                        if (state == State.COMPLETED && currentStepIndex != steps.lastIndex) {
-                            currentStepIndex++
-
-                            steps[currentStepIndex] =
-                                steps[currentStepIndex].copy(state = State.RUNNING)
-                        }
-                    }
-                }
-            )
-        ))
+    private var patcherWorkerId: ParcelUuid by savedStateHandle.saveableVar {
+        ParcelUuid(launchWorker())
     }
 
-    val patcherSucceeded =
-        workManager.getWorkInfoByIdLiveData(patcherWorkerId.uuid).map { workInfo: WorkInfo? ->
-            when (workInfo?.state) {
-                WorkInfo.State.SUCCEEDED -> true
-                WorkInfo.State.FAILED -> false
-                else -> null
-            }
-        }
+    init {
+        observeWorker(patcherWorkerId.uuid)
+    }
 
     private suspend fun persistPatchedApp(
         currentPackageName: String?,
@@ -317,6 +279,12 @@ class PatcherViewModel(
     private val installerBroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
+                Intent.ACTION_PACKAGE_ADDED,
+                Intent.ACTION_PACKAGE_REPLACED -> {
+                    val pkg = intent.data?.schemeSpecificPart ?: return
+                    handleExternalInstallSuccess(pkg)
+                }
+
                 InstallService.APP_INSTALL_ACTION -> {
                     val pmStatus = intent.getIntExtra(
                         InstallService.EXTRA_INSTALL_STATUS,
@@ -365,6 +333,9 @@ class PatcherViewModel(
             IntentFilter().apply {
                 addAction(InstallService.APP_INSTALL_ACTION)
                 addAction(UninstallService.APP_UNINSTALL_ACTION)
+                addAction(Intent.ACTION_PACKAGE_ADDED)
+                addAction(Intent.ACTION_PACKAGE_REPLACED)
+                addDataScheme("package")
             },
             ContextCompat.RECEIVER_NOT_EXPORTED
         )
@@ -379,6 +350,10 @@ class PatcherViewModel(
         super.onCleared()
         app.unregisterReceiver(installerBroadcastReceiver)
         workManager.cancelWorkById(patcherWorkerId.uuid)
+        pendingExternalInstall?.let(installerManager::cleanup)
+        pendingExternalInstall = null
+        externalInstallTimeoutJob?.cancel()
+        externalInstallTimeoutJob = null
 
         if (input.selectedApp is SelectedApp.Installed && installedApp?.installType == InstallType.MOUNT) {
             GlobalScope.launch(Dispatchers.Main) {
@@ -388,6 +363,11 @@ class PatcherViewModel(
                     }
                 }
             }
+        }
+
+        if (input.selectedApp is SelectedApp.Local && input.selectedApp.temporary) {
+            inputFile?.takeIf { it.exists() }?.delete()
+            inputFile = null
         }
     }
 
@@ -453,7 +433,7 @@ class PatcherViewModel(
 
     fun open() = installedPackageName?.let(pm::launch)
 
-    fun install(installType: InstallType) = viewModelScope.launch {
+    private suspend fun performInstall(installType: InstallType) {
         var pmInstallStarted = false
         try {
             isInstalling = true
@@ -468,7 +448,7 @@ class PatcherViewModel(
                 if (pm.getVersionCode(currentPackageInfo) < pm.getVersionCode(existingPackageInfo)) {
                     // Exit if the selected app version is less than the installed version
                     packageInstallerStatus = PackageInstaller.STATUS_FAILURE_CONFLICT
-                    return@launch
+                    return
                 }
             }
 
@@ -499,7 +479,7 @@ class PatcherViewModel(
                             if (currentPackageInfo.splitNames.isNotEmpty()) {
                                 // Exit if there is no base APK package
                                 packageInstallerStatus = PackageInstaller.STATUS_FAILURE_INVALID
-                                return@launch
+                                return
                             }
                         }
 
@@ -543,19 +523,143 @@ class PatcherViewModel(
         }
     }
 
+    private suspend fun executeInstallPlan(plan: InstallerManager.InstallPlan) {
+        when (plan) {
+            is InstallerManager.InstallPlan.Internal -> {
+                pendingExternalInstall?.let(installerManager::cleanup)
+                pendingExternalInstall = null
+                externalInstallTimeoutJob?.cancel()
+        externalInstallTimeoutJob = null
+                externalInstallTimeoutJob = null
+                performInstall(installTypeFor(plan.target))
+            }
+
+            is InstallerManager.InstallPlan.Root -> {
+                pendingExternalInstall?.let(installerManager::cleanup)
+                pendingExternalInstall = null
+                externalInstallTimeoutJob?.cancel()
+        externalInstallTimeoutJob = null
+                externalInstallTimeoutJob = null
+                performInstall(InstallType.MOUNT)
+            }
+
+            is InstallerManager.InstallPlan.External -> launchExternalInstaller(plan)
+        }
+    }
+
+    private fun installTypeFor(target: InstallerManager.InstallTarget): InstallType = when (target) {
+        InstallerManager.InstallTarget.PATCHER -> InstallType.DEFAULT
+        InstallerManager.InstallTarget.SAVED_APP -> InstallType.DEFAULT
+        InstallerManager.InstallTarget.MANAGER_UPDATE -> InstallType.DEFAULT
+    }
+
+    private fun launchExternalInstaller(plan: InstallerManager.InstallPlan.External) {
+        pendingExternalInstall?.let { installerManager.cleanup(it) }
+        externalInstallTimeoutJob?.cancel()
+        externalInstallTimeoutJob = null
+
+        pendingExternalInstall = plan
+        isInstalling = true
+
+        try {
+            ContextCompat.startActivity(app, plan.intent, null)
+            app.toast(app.getString(R.string.installer_external_launched, plan.installerLabel))
+        } catch (error: ActivityNotFoundException) {
+            installerManager.cleanup(plan)
+            pendingExternalInstall = null
+            isInstalling = false
+            externalInstallTimeoutJob = null
+            app.toast(app.getString(R.string.install_app_fail, error.simpleMessage()))
+            return
+        }
+
+        externalInstallTimeoutJob = viewModelScope.launch {
+            delay(EXTERNAL_INSTALL_TIMEOUT_MS)
+            if (pendingExternalInstall == plan) {
+                installerManager.cleanup(plan)
+                pendingExternalInstall = null
+                isInstalling = false
+                externalInstallTimeoutJob = null
+                app.toast(app.getString(R.string.installer_external_timeout, plan.installerLabel))
+            }
+        }
+    }
+
+    private fun handleExternalInstallSuccess(packageName: String) {
+        val plan = pendingExternalInstall ?: return
+        if (plan.expectedPackage != packageName) return
+
+        pendingExternalInstall = null
+        externalInstallTimeoutJob?.cancel()
+        externalInstallTimeoutJob = null
+        installerManager.cleanup(plan)
+        isInstalling = false
+
+        when (plan.target) {
+            InstallerManager.InstallTarget.PATCHER -> {
+                installedPackageName = packageName
+                viewModelScope.launch {
+                    val persisted = persistPatchedApp(packageName, InstallType.DEFAULT)
+                    if (!persisted) {
+                        Log.w(TAG, "Failed to persist installed patched app metadata (external installer)")
+                    }
+                }
+                app.toast(app.getString(R.string.installer_external_success, plan.installerLabel))
+            }
+
+            InstallerManager.InstallTarget.SAVED_APP,
+            InstallerManager.InstallTarget.MANAGER_UPDATE -> {
+                app.toast(app.getString(R.string.installer_external_success, plan.installerLabel))
+            }
+        }
+    }
+
     override fun install() {
-        // InstallType.MOUNT is never used here since this overload is for the package installer status dialog.
-        install(InstallType.DEFAULT)
+        if (isInstalling) return
+        viewModelScope.launch {
+            val plan = installerManager.resolvePlan(
+                InstallerManager.InstallTarget.PATCHER,
+                outputFile,
+                packageName,
+                null
+            )
+            executeInstallPlan(plan)
+        }
     }
 
     override fun reinstall() {
+        if (isInstalling) return
         viewModelScope.launch {
-            uiSafe(app, R.string.reinstall_app_fail, "Failed to reinstall") {
-                pm.getPackageInfo(outputFile)?.packageName?.let { pm.uninstallPackage(it) }
-                    ?: throw Exception("Failed to load application info")
-
-                pm.installApp(listOf(outputFile))
-                isInstalling = true
+            val plan = installerManager.resolvePlan(
+                InstallerManager.InstallTarget.PATCHER,
+                outputFile,
+                packageName,
+                null
+            )
+            when (plan) {
+                is InstallerManager.InstallPlan.Internal -> {
+                    pendingExternalInstall?.let(installerManager::cleanup)
+                    pendingExternalInstall = null
+                    externalInstallTimeoutJob?.cancel()
+                    externalInstallTimeoutJob = null
+                    try {
+                        val pkg = pm.getPackageInfo(outputFile)?.packageName
+                            ?: throw Exception("Failed to load application info")
+                        pm.uninstallPackage(pkg)
+                        performInstall(InstallType.DEFAULT)
+                    } catch (e: Exception) {
+                        Log.e(tag, "Failed to reinstall", e)
+                        app.toast(app.getString(R.string.reinstall_app_fail, e.simpleMessage()))
+                    }
+                }
+                is InstallerManager.InstallPlan.Root -> {
+                    pendingExternalInstall?.let(installerManager::cleanup)
+                    pendingExternalInstall = null
+                    externalInstallTimeoutJob?.cancel()
+                    externalInstallTimeoutJob = null
+                    performInstall(InstallType.MOUNT)
+                }
+                is InstallerManager.InstallPlan.External -> launchExternalInstaller(plan)
             }
         }
     }
@@ -564,8 +668,183 @@ class PatcherViewModel(
         packageInstallerStatus = null
     }
 
+    private fun launchWorker(): UUID =
+        workerRepository.launchExpedited<PatcherWorker, PatcherWorker.Args>(
+            "patching",
+            buildWorkerArgs()
+        )
+
+    private fun buildWorkerArgs(): PatcherWorker.Args {
+        val selectedForRun = when (val selected = input.selectedApp) {
+            is SelectedApp.Local -> {
+                val reuseFile = inputFile ?: selected.file
+                val temporary = if (forceKeepLocalInput) false else selected.temporary
+                selected.copy(file = reuseFile, temporary = temporary)
+            }
+
+            else -> selected
+        }
+
+        val shouldPreserveInput =
+            selectedForRun is SelectedApp.Local && (selectedForRun.temporary || forceKeepLocalInput)
+
+        return PatcherWorker.Args(
+            selectedForRun,
+            outputFile.path,
+            input.selectedPatches,
+            input.options,
+            logger,
+            onDownloadProgress = {
+                withContext(Dispatchers.Main) {
+                    downloadProgress = it
+                }
+            },
+            onPatchCompleted = {
+                withContext(Dispatchers.Main) { completedPatchCount += 1 }
+            },
+            setInputFile = { file ->
+                val storedFile = if (shouldPreserveInput) {
+                    val existing = inputFile
+                    if (existing?.exists() == true) {
+                        existing
+                    } else withContext(Dispatchers.IO) {
+                        val destination = File(fs.tempDir, "input-${System.currentTimeMillis()}.apk")
+                        file.copyTo(destination, overwrite = true)
+                        destination
+                    }
+                } else file
+
+                withContext(Dispatchers.Main) { inputFile = storedFile }
+            },
+            handleStartActivityRequest = { plugin, intent ->
+                withContext(Dispatchers.Main) {
+                    if (currentActivityRequest != null) throw Exception("Another request is already pending.")
+                    try {
+                        val accepted = with(CompletableDeferred<Boolean>()) {
+                            currentActivityRequest = this to plugin.name
+                            await()
+                        }
+                        if (!accepted) throw UserInteractionException.RequestDenied()
+
+                        try {
+                            with(CompletableDeferred<ActivityResult>()) {
+                                launchedActivity = this
+                                launchActivityChannel.send(intent)
+                                await()
+                            }
+                        } finally {
+                            launchedActivity = null
+                        }
+                    } finally {
+                        currentActivityRequest = null
+                    }
+                }
+            },
+            onProgress = { name, state, message ->
+                viewModelScope.launch {
+                    steps[currentStepIndex] = steps[currentStepIndex].run {
+                        copy(
+                            name = name ?: this.name,
+                            state = state ?: this.state,
+                            message = message ?: this.message
+                        )
+                    }
+
+                    if (state == State.COMPLETED && currentStepIndex != steps.lastIndex) {
+                        currentStepIndex++
+                        steps[currentStepIndex] =
+                            steps[currentStepIndex].copy(state = State.RUNNING)
+                    }
+                }
+            }
+        )
+    }
+
+    private fun observeWorker(id: UUID) {
+        val source = workManager.getWorkInfoByIdLiveData(id)
+        currentWorkSource?.let { _patcherSucceeded.removeSource(it) }
+        currentWorkSource = source
+        _patcherSucceeded.addSource(source) { workInfo ->
+            when (workInfo?.state) {
+                WorkInfo.State.SUCCEEDED -> {
+                    forceKeepLocalInput = false
+                    if (input.selectedApp is SelectedApp.Local && input.selectedApp.temporary) {
+                        inputFile?.takeIf { it.exists() }?.delete()
+                        inputFile = null
+                    }
+                    _patcherSucceeded.value = true
+                }
+
+                WorkInfo.State.FAILED -> {
+                    handleWorkerFailure(workInfo)
+                    _patcherSucceeded.value = false
+                }
+
+                WorkInfo.State.RUNNING,
+                WorkInfo.State.ENQUEUED,
+                WorkInfo.State.BLOCKED -> _patcherSucceeded.value = null
+                else -> _patcherSucceeded.value = null
+            }
+        }
+    }
+
+    private fun handleWorkerFailure(workInfo: WorkInfo) {
+        if (!handledFailureIds.add(workInfo.id)) return
+        val exitCode = workInfo.outputData.getInt(PatcherWorker.PROCESS_EXIT_CODE_KEY, Int.MIN_VALUE)
+        if (exitCode == ProcessRuntime.OOM_EXIT_CODE) {
+            viewModelScope.launch {
+                if (!prefs.useProcessRuntime.get()) return@launch
+                forceKeepLocalInput = true
+                val previousFromWorker = workInfo.outputData.getInt(
+                    PatcherWorker.PROCESS_PREVIOUS_LIMIT_KEY,
+                    -1
+                )
+                val previousLimit = if (previousFromWorker > 0) previousFromWorker else prefs.patcherProcessMemoryLimit.get()
+                val newLimit = (previousLimit - MEMORY_ADJUSTMENT_MB).coerceAtLeast(MIN_MEMORY_LIMIT_MB)
+                val adjusted = newLimit < previousLimit
+                if (adjusted) {
+                    prefs.patcherProcessMemoryLimit.update(newLimit)
+                }
+                memoryAdjustmentDialog = MemoryAdjustmentDialogState(
+                    previousLimit = previousLimit,
+                    newLimit = if (adjusted) newLimit else previousLimit,
+                    adjusted = adjusted
+                )
+            }
+        }
+    }
+
+    fun dismissMemoryAdjustmentDialog() {
+        memoryAdjustmentDialog = null
+    }
+
+    fun retryAfterMemoryAdjustment() {
+        viewModelScope.launch {
+            memoryAdjustmentDialog = null
+            handledFailureIds.clear()
+            resetStateForRetry()
+            workManager.cancelWorkById(patcherWorkerId.uuid)
+            val newId = launchWorker()
+            patcherWorkerId = ParcelUuid(newId)
+            observeWorker(newId)
+        }
+    }
+
+    private fun resetStateForRetry() {
+        completedPatchCount = 0
+        downloadProgress = null
+        val newSteps = generateSteps(app, input.selectedApp).toMutableStateList()
+        steps.clear()
+        steps.addAll(newSteps)
+        currentStepIndex = newSteps.indexOfFirst { it.state == State.RUNNING }.takeIf { it >= 0 } ?: 0
+        _patcherSucceeded.value = null
+    }
+
     private companion object {
         const val TAG = "ReVanced Patcher"
+        private const val EXTERNAL_INSTALL_TIMEOUT_MS = 60_000L
+        private const val MEMORY_ADJUSTMENT_MB = 200
+        private const val MIN_MEMORY_LIMIT_MB = 200
 
         fun LogLevel.androidLog(msg: String) = when (this) {
             LogLevel.TRACE -> Log.v(TAG, msg)

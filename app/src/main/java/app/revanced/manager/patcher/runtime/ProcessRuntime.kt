@@ -107,7 +107,7 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
 
             Log.d(tag, "Process finished with exit code ${result.resultCode}")
 
-            if (result.resultCode != 0) throw Exception("Process exited with nonzero exit code ${result.resultCode}")
+            if (result.resultCode != 0) throw ProcessExitException(result.resultCode)
         }
 
         val patching = CompletableDeferred<Unit>()
@@ -167,6 +167,7 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
 
     companion object : LibraryResolver() {
         private const val APP_PROCESS_BIN_PATH = "/system/bin/app_process"
+        const val OOM_EXIT_CODE = 134
 
         const val CONNECT_TO_APP_ACTION = "CONNECT_TO_APP_ACTION"
         const val INTENT_BUNDLE_KEY = "BUNDLE"
@@ -181,5 +182,7 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
      * @param originalStackTrace The stack trace of the original [Exception].
      */
     class RemoteFailureException(val originalStackTrace: String) : Exception()
-}
 
+    class ProcessExitException(val exitCode: Int) :
+        Exception("Process exited with nonzero exit code $exitCode")
+}

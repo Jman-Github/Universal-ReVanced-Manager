@@ -23,6 +23,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Bookmarks
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
@@ -35,6 +36,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
@@ -45,15 +47,19 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.revanced.manager.ui.component.TextInputDialog
 import app.revanced.manager.ui.component.haptics.HapticCheckbox
+import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.ui.viewmodel.BundleSourceType
 import app.revanced.manager.ui.viewmodel.PatchProfileLaunchData
 import app.revanced.manager.ui.viewmodel.PatchProfileListItem
 import app.revanced.manager.ui.viewmodel.PatchProfilesViewModel
+import app.revanced.manager.ui.viewmodel.PatchProfilesViewModel.RenameResult
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.transparentListItemColors
 import app.universal.revanced.manager.R
 import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -65,11 +71,83 @@ fun PatchProfilesScreen(
     val profiles by viewModel.profiles.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
+    val prefs = koinInject<PreferencesManager>()
+    val allowUniversal by prefs.disableUniversalPatchCheck.flow.collectAsStateWithLifecycle(
+        initialValue = prefs.disableUniversalPatchCheck.default
+    )
     var loadingProfileId by remember { mutableStateOf<Int?>(null) }
+    var blockedProfile by remember { mutableStateOf<PatchProfileLaunchData?>(null) }
+    var renameProfileId by rememberSaveable { mutableStateOf<Int?>(null) }
+    var renameProfileName by rememberSaveable { mutableStateOf("") }
+    data class ChangeUidTarget(val profileId: Int, val bundleUid: Int, val bundleName: String?)
+    var changeUidTarget by remember { mutableStateOf<ChangeUidTarget?>(null) }
     val expandedProfiles = remember { mutableStateMapOf<Int, Boolean>() }
     val selectionActive = viewModel.selectedProfiles.isNotEmpty()
 
     BackHandler(enabled = selectionActive) { viewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL) }
+
+    renameProfileId?.let { targetId ->
+        TextInputDialog(
+            initial = renameProfileName,
+            title = stringResource(R.string.patch_profile_rename_title),
+            onDismissRequest = { renameProfileId = null },
+            onConfirm = { newName ->
+                val trimmed = newName.trim()
+                if (trimmed.isEmpty()) return@TextInputDialog
+                scope.launch {
+                    when (viewModel.renameProfile(targetId, trimmed)) {
+                        RenameResult.SUCCESS -> {
+                            context.toast(context.getString(R.string.patch_profile_updated_toast, trimmed))
+                            renameProfileId = null
+                        }
+                        RenameResult.DUPLICATE_NAME -> {
+                            context.toast(context.getString(R.string.patch_profile_duplicate_toast, trimmed))
+                            renameProfileName = trimmed
+                        }
+                        RenameResult.FAILED -> {
+                            context.toast(context.getString(R.string.patch_profile_save_failed_toast))
+                            renameProfileId = null
+                        }
+                    }
+                }
+            },
+            validator = { it.isNotBlank() }
+        )
+    }
+
+    changeUidTarget?.let { target ->
+        TextInputDialog(
+            initial = target.bundleUid.toString(),
+            title = stringResource(
+                R.string.patch_profile_bundle_change_uid_title,
+                target.bundleName ?: target.bundleUid.toString()
+            ),
+            onDismissRequest = { changeUidTarget = null },
+            onConfirm = { newValue ->
+                val trimmed = newValue.trim()
+                val newUid = trimmed.toIntOrNull()
+                if (newUid == null) {
+                    context.toast(context.getString(R.string.patch_profile_bundle_change_uid_invalid))
+                    return@TextInputDialog
+                }
+                scope.launch {
+                    val result = viewModel.changeLocalBundleUid(target.profileId, target.bundleUid, newUid)
+                    when (result) {
+                        PatchProfilesViewModel.ChangeUidResult.SUCCESS -> context.toast(
+                            context.getString(R.string.patch_profile_bundle_change_uid_success, newUid)
+                        )
+
+                        PatchProfilesViewModel.ChangeUidResult.PROFILE_OR_BUNDLE_NOT_FOUND,
+                        PatchProfilesViewModel.ChangeUidResult.TARGET_NOT_FOUND -> context.toast(
+                            context.getString(R.string.patch_profile_bundle_change_uid_not_found, newUid)
+                        )
+                    }
+                    changeUidTarget = null
+                }
+            },
+            validator = { it.trim().toIntOrNull() != null }
+        )
+    }
 
     if (profiles.isEmpty()) {
         Box(
@@ -150,6 +228,10 @@ fun PatchProfilesScreen(
                                             context.toast(
                                                 context.getString(R.string.patch_profile_changed_patches_toast)
                                             )
+                                        }
+                                        if (!allowUniversal && launchData.containsUniversalPatches) {
+                                            blockedProfile = launchData
+                                            return@launch
                                         }
                                         onProfileClick(launchData)
                                     } else {
@@ -239,6 +321,40 @@ fun PatchProfilesScreen(
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.outline
                                     )
+                                    if (detail.type == BundleSourceType.Local) {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = stringResource(
+                                                    R.string.patch_profile_bundle_uid_label,
+                                                    detail.uid
+                                                ),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            if (!selectionActive) {
+                                                Text(
+                                                    text = stringResource(R.string.patch_profile_bundle_change_uid),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(8.dp))
+                                                        .clickable {
+                                                            changeUidTarget = ChangeUidTarget(
+                                                                profileId = profile.id,
+                                                                bundleUid = detail.uid,
+                                                                bundleName = detail.displayName
+                                                                    ?: detail.uid.toString()
+                                                            )
+                                                        }
+                                                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        }
+                                    }
                                     Text(
                                         text = detail.patches.joinToString(", "),
                                         style = MaterialTheme.typography.bodySmall,
@@ -270,6 +386,21 @@ fun PatchProfilesScreen(
                                     .padding(horizontal = 8.dp, vertical = 2.dp)
                             )
                         }
+                        if (!selectionActive) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = stringResource(R.string.patch_profile_rename),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        renameProfileId = profile.id
+                                        renameProfileName = profile.name
+                                    }
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
                         Spacer(modifier = Modifier.height(4.dp))
                         if (loadingProfileId == profile.id) {
                             CircularProgressIndicator(
@@ -281,5 +412,27 @@ fun PatchProfilesScreen(
                 }
             )
         }
+    }
+
+    blockedProfile?.let {
+        AlertDialog(
+            onDismissRequest = { blockedProfile = null },
+            confirmButton = {
+                TextButton(onClick = { blockedProfile = null }) {
+                    Text(stringResource(R.string.close))
+                }
+            },
+            title = { Text(stringResource(R.string.universal_patches_profile_blocked_title)) },
+            text = {
+                Text(
+                    text = stringResource(
+                        R.string.universal_patches_profile_blocked_description,
+                        stringResource(R.string.universal_patches_safeguard)
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        )
     }
 }

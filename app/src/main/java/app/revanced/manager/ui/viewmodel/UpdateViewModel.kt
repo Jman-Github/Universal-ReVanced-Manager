@@ -1,6 +1,7 @@
 package app.revanced.manager.ui.viewmodel
 
 import android.app.Application
+import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -21,15 +22,19 @@ import app.revanced.manager.data.platform.NetworkInfo
 import app.revanced.manager.network.api.ReVancedAPI
 import app.revanced.manager.network.dto.ReVancedAsset
 import app.revanced.manager.network.service.HttpService
+import app.revanced.manager.domain.installer.InstallerManager
 import app.revanced.manager.service.InstallService
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.util.PM
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.uiSafe
+import app.revanced.manager.util.simpleMessage
 import io.ktor.client.plugins.onDownload
 import io.ktor.client.request.url
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -44,6 +49,10 @@ class UpdateViewModel(
     private val networkInfo: NetworkInfo by inject()
     private val fs: Filesystem by inject()
     private val prefs: PreferencesManager by inject()
+    private val installerManager: InstallerManager by inject()
+
+    private var pendingExternalInstall: InstallerManager.InstallPlan.External? = null
+    private var externalInstallTimeoutJob: Job? = null
 
     var downloadedSize by mutableLongStateOf(0L)
         private set
@@ -100,30 +109,128 @@ class UpdateViewModel(
     }
 
     fun installUpdate() = viewModelScope.launch {
+        pendingExternalInstall?.let(installerManager::cleanup)
+        pendingExternalInstall = null
+        externalInstallTimeoutJob?.cancel()
+        externalInstallTimeoutJob = null
+        installError = ""
+
+        val plan = installerManager.resolvePlan(
+            InstallerManager.InstallTarget.MANAGER_UPDATE,
+            location,
+            app.packageName,
+            app.getString(R.string.app_name)
+        )
+
+        when (plan) {
+            is InstallerManager.InstallPlan.Internal -> {
+                state = State.INSTALLING
+                pm.installApp(listOf(location))
+            }
+
+            is InstallerManager.InstallPlan.Root -> {
+                val hint = app.getString(R.string.installer_status_not_supported)
+                app.toast(app.getString(R.string.install_app_fail, hint))
+                installError = hint
+                state = State.FAILED
+            }
+
+            is InstallerManager.InstallPlan.External -> launchExternalInstaller(plan)
+        }
+    }
+
+    private fun launchExternalInstaller(plan: InstallerManager.InstallPlan.External) {
+        pendingExternalInstall?.let(installerManager::cleanup)
+        externalInstallTimeoutJob?.cancel()
+
+        pendingExternalInstall = plan
+        installError = ""
+        try {
+            ContextCompat.startActivity(app, plan.intent, null)
+            app.toast(app.getString(R.string.installer_external_launched, plan.installerLabel))
+        } catch (error: ActivityNotFoundException) {
+            installerManager.cleanup(plan)
+            pendingExternalInstall = null
+            installError = error.simpleMessage().orEmpty()
+            app.toast(app.getString(R.string.install_app_fail, error.simpleMessage()))
+            state = State.FAILED
+            return
+        }
+
         state = State.INSTALLING
 
-        pm.installApp(listOf(location))
+        externalInstallTimeoutJob = viewModelScope.launch {
+            delay(EXTERNAL_INSTALL_TIMEOUT_MS)
+            if (pendingExternalInstall == plan) {
+                installerManager.cleanup(plan)
+                pendingExternalInstall = null
+                installError = app.getString(R.string.installer_external_timeout, plan.installerLabel)
+                app.toast(installError)
+                state = State.FAILED
+                externalInstallTimeoutJob = null
+            }
+        }
+    }
+
+    private fun handleExternalInstallSuccess(packageName: String) {
+        val plan = pendingExternalInstall ?: return
+        if (plan.expectedPackage != packageName) return
+
+        pendingExternalInstall = null
+        externalInstallTimeoutJob?.cancel()
+        externalInstallTimeoutJob = null
+        installerManager.cleanup(plan)
+
+        installError = ""
+        app.toast(app.getString(R.string.installer_external_success, plan.installerLabel))
+        state = State.SUCCESS
     }
 
     private val installBroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            intent?.let {
-                val pmStatus = intent.getIntExtra(InstallService.EXTRA_INSTALL_STATUS, -999)
-                val extra =
-                    intent.getStringExtra(InstallService.EXTRA_INSTALL_STATUS_MESSAGE)!!
+            when (intent?.action) {
+                Intent.ACTION_PACKAGE_ADDED,
+                Intent.ACTION_PACKAGE_REPLACED -> {
+                    val pkg = intent.data?.schemeSpecificPart ?: return
+                    handleExternalInstallSuccess(pkg)
+                }
 
-                when(pmStatus) {
-                    PackageInstaller.STATUS_SUCCESS -> {
-                        app.toast(app.getString(R.string.install_app_success))
-                        state = State.SUCCESS
-                    }
-                    PackageInstaller.STATUS_FAILURE_ABORTED -> {
-                        state = State.CAN_INSTALL
-                    }
-                    else -> {
-                        app.toast(app.getString(R.string.install_app_fail, extra))
-                        installError = extra
-                        state = State.FAILED
+                InstallService.APP_INSTALL_ACTION -> {
+                    val pmStatus = intent.getIntExtra(InstallService.EXTRA_INSTALL_STATUS, -999)
+                    val extra =
+                        intent.getStringExtra(InstallService.EXTRA_INSTALL_STATUS_MESSAGE) ?: ""
+
+                    when (pmStatus) {
+                        PackageInstaller.STATUS_SUCCESS -> {
+                            pendingExternalInstall?.let(installerManager::cleanup)
+                            pendingExternalInstall = null
+                            externalInstallTimeoutJob?.cancel()
+                            externalInstallTimeoutJob = null
+                            installError = ""
+                            app.toast(app.getString(R.string.install_app_success))
+                            state = State.SUCCESS
+                        }
+                        PackageInstaller.STATUS_FAILURE_ABORTED -> {
+                            pendingExternalInstall?.let(installerManager::cleanup)
+                            pendingExternalInstall = null
+                            externalInstallTimeoutJob?.cancel()
+                            externalInstallTimeoutJob = null
+                            state = State.CAN_INSTALL
+                        }
+                        else -> {
+                            val hint = installerManager.formatFailureHint(pmStatus, extra)
+                            val message = app.getString(
+                                R.string.install_app_fail,
+                                hint ?: extra.ifBlank { pmStatus.toString() }
+                            )
+                            pendingExternalInstall?.let(installerManager::cleanup)
+                            pendingExternalInstall = null
+                            externalInstallTimeoutJob?.cancel()
+                            externalInstallTimeoutJob = null
+                            app.toast(message)
+                            installError = hint ?: extra
+                            state = State.FAILED
+                        }
                     }
                 }
             }
@@ -133,6 +240,9 @@ class UpdateViewModel(
     init {
         ContextCompat.registerReceiver(app, installBroadcastReceiver, IntentFilter().apply {
             addAction(InstallService.APP_INSTALL_ACTION)
+            addAction(Intent.ACTION_PACKAGE_ADDED)
+            addAction(Intent.ACTION_PACKAGE_REPLACED)
+            addDataScheme("package")
         }, ContextCompat.RECEIVER_NOT_EXPORTED)
     }
 
@@ -140,8 +250,17 @@ class UpdateViewModel(
         super.onCleared()
         app.unregisterReceiver(installBroadcastReceiver)
 
+        pendingExternalInstall?.let(installerManager::cleanup)
+        pendingExternalInstall = null
+        externalInstallTimeoutJob?.cancel()
+        externalInstallTimeoutJob = null
+
         job.cancel()
         location.delete()
+    }
+
+    companion object {
+        private const val EXTERNAL_INSTALL_TIMEOUT_MS = 60_000L
     }
 
     enum class State(@StringRes val title: Int) {

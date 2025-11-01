@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.universal.revanced.manager.R
+import app.revanced.manager.domain.installer.InstallerManager
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.util.tag
@@ -25,7 +26,8 @@ import java.time.format.DateTimeFormatter
 class AdvancedSettingsViewModel(
     val prefs: PreferencesManager,
     private val app: Application,
-    private val patchBundleRepository: PatchBundleRepository
+    private val patchBundleRepository: PatchBundleRepository,
+    private val installerManager: InstallerManager
 ) : ViewModel() {
     val debugLogFileName: String
         get() {
@@ -66,5 +68,13 @@ class AdvancedSettingsViewModel(
             app.toast(app.getString(R.string.debug_logs_export_success))
         else
             app.toast(app.getString(R.string.debug_logs_export_read_failed, exitCode))
+    }
+
+    fun setPrimaryInstaller(token: InstallerManager.Token) = viewModelScope.launch(Dispatchers.Default) {
+        installerManager.updatePrimaryToken(token)
+    }
+
+    fun setFallbackInstaller(token: InstallerManager.Token) = viewModelScope.launch(Dispatchers.Default) {
+        installerManager.updateFallbackToken(token)
     }
 }

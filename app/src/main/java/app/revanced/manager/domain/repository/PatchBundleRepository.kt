@@ -39,7 +39,13 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.io.InputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+import java.util.Locale
 import kotlin.collections.joinToString
 import kotlin.collections.map
 import kotlin.text.ifEmpty
@@ -115,7 +121,7 @@ class PatchBundleRepository(
             Log.d(tag, "Bundle: $it")
         }
 
-        val sources = entities.associate { it.uid to it.load() }.toPersistentMap()
+        val sources = entities.associate { it.uid to it.load() }.toMutableMap()
 
         val hasOutOfDateNames = sources.values.any { it.isNameOutOfDate }
         if (hasOutOfDateNames) dispatchAction(
@@ -138,9 +144,18 @@ class PatchBundleRepository(
 
             State(sources.toPersistentMap(), info.toPersistentMap())
         }
-        val info = loadMetadata(sources).toPersistentMap()
+        val info = loadMetadata(sources).toMutableMap()
 
-        return State(sources, info)
+        val officialDisplayName = info[0]?.name?.takeUnless { it.isBlank() }
+        if (officialDisplayName != null) {
+            val officialSource = sources[0]
+            if (officialSource != null && officialSource.displayName != officialDisplayName) {
+                updateDb(officialSource.uid) { it.copy(displayName = officialDisplayName) }
+                sources[officialSource.uid] = officialSource.copy(displayName = officialDisplayName)
+            }
+        }
+
+        return State(sources.toPersistentMap(), info.toPersistentMap())
     }
 
     suspend fun reload() = dispatchAction("Full reload") {
@@ -244,18 +259,21 @@ class PatchBundleRepository(
         name: String,
         source: Source,
         autoUpdate: Boolean = false,
-        displayName: String? = null
-    ) =
-        PatchBundleEntity(
-            uid = generateUid(),
+        displayName: String? = null,
+        uid: Int? = null
+    ): PatchBundleEntity {
+        val normalizedDisplayName = displayName?.takeUnless { it.isBlank() }
+        val entity = PatchBundleEntity(
+            uid = uid ?: generateUid(),
             name = name,
-            displayName = displayName?.takeUnless { it.isBlank() },
+            displayName = normalizedDisplayName,
             versionHash = null,
             source = source,
             autoUpdate = autoUpdate
-        ).also {
-            dao.upsert(it)
-        }
+        )
+        dao.upsert(entity)
+        return entity
+    }
 
     /**
      * Updates a patch bundle in the database. Do not use this outside an action.
@@ -313,21 +331,75 @@ class PatchBundleRepository(
         }
 
     suspend fun createLocal(createStream: suspend () -> InputStream) = dispatchAction("Add bundle") {
-        with(createEntity("", SourceInfo.Local).load() as LocalPatchBundle) {
-            try {
-                createStream().use { patches -> replace(patches) }
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-                Log.e(tag, "Got exception while importing bundle", e)
-                withContext(Dispatchers.Main) {
-                    app.toast(app.getString(R.string.patches_replace_fail, e.simpleMessage()))
+        val tempFile = withContext(Dispatchers.IO) {
+            File.createTempFile("local_bundle", ".jar", app.cacheDir)
+        }
+        try {
+            withContext(Dispatchers.IO) {
+                tempFile.outputStream().use { output ->
+                    createStream().use { input -> input.copyTo(output) }
                 }
-
-                deleteLocalFile()
             }
+
+            val manifestName = runCatching {
+                PatchBundle(tempFile.absolutePath).manifestAttributes?.name
+            }.getOrNull()?.takeUnless { it.isNullOrBlank() }
+
+            val uid = stableLocalUid(manifestName, tempFile)
+            val existingProps = dao.getProps(uid)
+            val entity = createEntity(
+                name = manifestName ?: existingProps?.name.orEmpty(),
+                source = SourceInfo.Local,
+                uid = uid,
+                displayName = existingProps?.displayName
+            )
+            val localBundle = entity.load() as LocalPatchBundle
+
+            with(localBundle) {
+                try {
+                    tempFile.inputStream().use { patches -> replace(patches) }
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    Log.e(tag, "Got exception while importing bundle", e)
+                    withContext(Dispatchers.Main) {
+                        app.toast(app.getString(R.string.patches_replace_fail, e.simpleMessage()))
+                    }
+
+                    deleteLocalFile()
+                }
+            }
+        } finally {
+            tempFile.delete()
         }
 
         doReload()
+    }
+
+    private fun stableLocalUid(manifestName: String?, file: File): Int {
+        val digest = MessageDigest.getInstance("SHA-256")
+        val hashedFile = runCatching {
+            file.inputStream().use { input ->
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read == -1) break
+                    digest.update(buffer, 0, read)
+                }
+            }
+        }.isSuccess
+
+        if (!hashedFile) {
+            val normalizedName = manifestName?.trim()?.takeUnless(String::isEmpty)
+            if (normalizedName != null) {
+                digest.update("local:name".toByteArray(StandardCharsets.UTF_8))
+                digest.update(normalizedName.lowercase(Locale.US).toByteArray(StandardCharsets.UTF_8))
+            } else {
+                digest.update(file.absolutePath.toByteArray(StandardCharsets.UTF_8))
+            }
+        }
+
+        val raw = ByteBuffer.wrap(digest.digest(), 0, 4).order(ByteOrder.BIG_ENDIAN).int
+        return if (raw != 0) raw else 1
     }
 
     suspend fun createRemote(url: String, autoUpdate: Boolean) =

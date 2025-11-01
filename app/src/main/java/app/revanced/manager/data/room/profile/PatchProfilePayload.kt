@@ -13,6 +13,7 @@ data class PatchProfilePayload(
         val patches: List<String>,
         val options: Map<String, Map<String, Option.SerializedValue>>,
         val displayName: String? = null,
-        val sourceEndpoint: String? = null
+        val sourceEndpoint: String? = null,
+        val sourceName: String? = null
     )
 }

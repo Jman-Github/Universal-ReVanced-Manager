@@ -193,7 +193,10 @@ fun DashboardScreen(
     if (showDeleteConfirmationDialog) {
         ConfirmDialog(
             onDismiss = { showDeleteConfirmationDialog = false },
-            onConfirm = vm::deleteSources,
+            onConfirm = {
+                vm.deleteSources()
+                showDeleteConfirmationDialog = false
+            },
             title = stringResource(R.string.delete),
             description = stringResource(R.string.patches_delete_multiple_dialog_description),
             icon = Icons.Outlined.Delete
@@ -321,37 +324,39 @@ fun DashboardScreen(
             }
         },
         floatingActionButton = {
-            HapticFloatingActionButton(
-                onClick = {
-                    vm.cancelSourceSelection()
-                    installedAppsViewModel.clearSelection()
-                    patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
+            if (pagerState.currentPage != DashboardPage.PROFILES.ordinal) {
+                HapticFloatingActionButton(
+                    onClick = {
+                        vm.cancelSourceSelection()
+                        installedAppsViewModel.clearSelection()
+                        patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
 
-                    when (pagerState.currentPage) {
-                        DashboardPage.DASHBOARD.ordinal -> {
-                            if (availablePatches < 1) {
-                                androidContext.toast(androidContext.getString(R.string.no_patch_found))
-                                composableScope.launch {
-                                    pagerState.animateScrollToPage(
-                                        DashboardPage.BUNDLES.ordinal
-                                    )
+                        when (pagerState.currentPage) {
+                            DashboardPage.DASHBOARD.ordinal -> {
+                                if (availablePatches < 1) {
+                                    androidContext.toast(androidContext.getString(R.string.no_patch_found))
+                                    composableScope.launch {
+                                        pagerState.animateScrollToPage(
+                                            DashboardPage.BUNDLES.ordinal
+                                        )
+                                    }
+                                    return@HapticFloatingActionButton
                                 }
-                                return@HapticFloatingActionButton
-                            }
-                            if (vm.android11BugActive) {
-                                showAndroid11Dialog = true
-                                return@HapticFloatingActionButton
+                                if (vm.android11BugActive) {
+                                    showAndroid11Dialog = true
+                                    return@HapticFloatingActionButton
+                                }
+
+                                onAppSelectorClick()
                             }
 
-                            onAppSelectorClick()
-                        }
-
-                        DashboardPage.BUNDLES.ordinal -> {
-                            showAddBundleDialog = true
+                            DashboardPage.BUNDLES.ordinal -> {
+                                showAddBundleDialog = true
+                            }
                         }
                     }
-                }
-            ) { Icon(Icons.Default.Add, stringResource(R.string.add)) }
+                ) { Icon(Icons.Default.Add, stringResource(R.string.add)) }
+            }
         }
     ) { paddingValues ->
         Column(Modifier.padding(paddingValues)) {

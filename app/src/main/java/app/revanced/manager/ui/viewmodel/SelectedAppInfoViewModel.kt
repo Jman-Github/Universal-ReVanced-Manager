@@ -10,7 +10,6 @@ import android.util.Log
 import androidx.activity.result.ActivityResult
 import androidx.annotation.StringRes
 import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -34,6 +33,7 @@ import app.revanced.manager.domain.repository.PatchOptionsRepository
 import app.revanced.manager.domain.repository.PatchProfile
 import app.revanced.manager.domain.repository.PatchProfileRepository
 import app.revanced.manager.domain.repository.PatchSelectionRepository
+import app.revanced.manager.domain.repository.remapLocalBundles
 import app.revanced.manager.domain.repository.toConfiguration
 import app.revanced.manager.patcher.patch.PatchBundleInfo
 import app.revanced.manager.patcher.patch.PatchBundleInfo.Extensions.toPatchSelection
@@ -50,18 +50,20 @@ import app.revanced.manager.util.Options
 import app.revanced.manager.util.PM
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.simpleMessage
-
 import app.revanced.manager.util.toast
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
@@ -73,7 +75,7 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
-@OptIn(SavedStateHandleSaveableApi::class, PluginHostApi::class)
+@OptIn(SavedStateHandleSaveableApi::class, PluginHostApi::class, ExperimentalCoroutinesApi::class)
 class SelectedAppInfoViewModel(
     input: SelectedApplicationInfo.ViewModelParams
 ) : ViewModel(), KoinComponent {
@@ -102,6 +104,11 @@ class SelectedAppInfoViewModel(
     private val _profileLaunchState = MutableStateFlow<ProfileLaunchState?>(null)
     val profileLaunchState = _profileLaunchState.asStateFlow()
     private var autoLaunchProfilePatcher = profileId != null
+    private val allowUniversalFlow = prefs.disableUniversalPatchCheck.flow
+    private var allowUniversalPatches = true
+    private val bundleInfoFlowInternal =
+        MutableStateFlow<List<PatchBundleInfo.Scoped>>(emptyList())
+    val bundleInfoFlow = bundleInfoFlowInternal.asStateFlow()
 
     private val persistConfiguration = input.patches == null
 
@@ -117,6 +124,7 @@ class SelectedAppInfoViewModel(
     private var _selectedApp by savedStateHandle.saveable {
         mutableStateOf(input.app)
     }
+    private val selectedAppState = MutableStateFlow(_selectedApp)
 
     var selectedAppInfo: PackageInfo? by mutableStateOf(null)
         private set
@@ -125,6 +133,7 @@ class SelectedAppInfoViewModel(
         get() = _selectedApp
         set(value) {
             _selectedApp = value
+            selectedAppState.value = value
             invalidateSelectedAppInfo()
         }
 
@@ -144,6 +153,27 @@ class SelectedAppInfoViewModel(
                     ) to installedAppDeferred.await()
                 }
         }
+
+        allowUniversalPatches = prefs.disableUniversalPatchCheck.getBlocking()
+
+        viewModelScope.launch {
+            selectedAppState
+                .flatMapLatest { app ->
+                    bundleRepository.scopedBundleInfoFlow(app.packageName, app.version)
+                }
+                .combine(allowUniversalFlow.distinctUntilChanged()) { bundles, allowUniversal ->
+                    allowUniversal to if (allowUniversal) {
+                        bundles
+                    } else {
+                        bundles.map(PatchBundleInfo.Scoped::withoutUniversalPatches)
+                    }
+                }
+                .collect { (allowUniversal, bundles) ->
+                    allowUniversalPatches = allowUniversal
+                    bundleInfoFlowInternal.value = bundles
+                    if (!allowUniversal) pruneSelectionForUniversal(bundles)
+                }
+        }
     }
 
     private fun loadProfileConfiguration(id: Int) {
@@ -156,18 +186,57 @@ class SelectedAppInfoViewModel(
                 return@launch
             }
 
+            val sourcesList = bundleRepository.sources.first()
+            val bundleInfoSnapshot = bundleRepository.bundleInfoFlow.first()
+            val signatureMap = bundleInfoSnapshot.mapValues { (_, info) ->
+                info.patches.map { it.name.trim().lowercase() }.toSet()
+            }
+            val remappedPayload = profile.payload.remapLocalBundles(sourcesList, signatureMap)
+            val workingProfile = if (remappedPayload === profile.payload) profile else profile.copy(payload = remappedPayload)
+
             val scopedBundles = bundleRepository
                 .scopedBundleInfoFlow(profile.packageName, profile.appVersion)
                 .first()
                 .associateBy { it.uid }
-            val sources = bundleRepository.sources.first().associateBy { it.uid }
-            val configuration = profile.toConfiguration(scopedBundles, sources)
+            val allowUniversal = prefs.disableUniversalPatchCheck.get()
+            if (!allowUniversal) {
+                val universalPatchNames = bundleInfoSnapshot
+                    .values
+                    .flatMap { it.patches }
+                    .filter { it.compatiblePackages == null }
+                    .mapTo(mutableSetOf()) { it.name.lowercase() }
+                val containsUniversal = workingProfile.payload.bundles.any { bundle ->
+                    val info = scopedBundles[bundle.bundleUid]
+                    bundle.patches.any { patchName ->
+                        val normalized = patchName.lowercase()
+                        val matchesScoped = info?.patches?.any {
+                            it.name.equals(patchName, true) && it.compatiblePackages == null
+                        } == true
+                        matchesScoped || universalPatchNames.contains(normalized)
+                    }
+                }
+                if (containsUniversal) {
+                    autoLaunchProfilePatcher = false
+                    withContext(Dispatchers.Main) {
+                        app.toast(
+                            app.getString(
+                                R.string.universal_patches_profile_blocked_description,
+                                app.getString(R.string.universal_patches_safeguard)
+                            )
+                        )
+                    }
+                    return@launch
+                }
+            }
+
+            val sources = sourcesList.associateBy { it.uid }
+            val configuration = workingProfile.toConfiguration(scopedBundles, sources)
             val selection = configuration.selection.takeUnless { it.isEmpty() }
 
             updateConfiguration(selection, configuration.options).join()
 
             _profileLaunchState.value = ProfileLaunchState(
-                profile = profile,
+                profile = workingProfile,
                 selection = selection,
                 options = configuration.options,
                 missingBundles = configuration.missingBundles,
@@ -186,6 +255,31 @@ class SelectedAppInfoViewModel(
             }
         }
     }
+    private fun pruneSelectionForUniversal(bundles: List<PatchBundleInfo.Scoped>) {
+        if (bundles.isEmpty()) return
+
+        val currentState = selectionState
+        if (currentState is SelectionState.Customized) {
+            val available = bundles.associate { bundle ->
+                bundle.uid to bundle.patches.map { it.name }.toSet()
+            }
+            val filteredSelection = buildMap<Int, Set<String>> {
+                currentState.patchSelection.forEach { (bundleUid, patches) ->
+                    val allowed = available[bundleUid] ?: return@forEach
+                    val kept = patches.filter { it in allowed }.toSet()
+                    if (kept.isNotEmpty()) put(bundleUid, kept)
+                }
+            }
+            if (filteredSelection != currentState.patchSelection) {
+                selectionState = SelectionState.Customized(filteredSelection)
+            }
+        }
+
+        val filteredOptions = options.filtered(bundles)
+        if (filteredOptions != options) {
+            options = filteredOptions
+        }
+    }
 
     val requiredVersion = combine(
         prefs.suggestedVersionSafeguard.flow,
@@ -195,11 +289,6 @@ class SelectedAppInfoViewModel(
 
         suggestedVersions[input.app.packageName]
     }
-
-    val bundleInfoFlow by derivedStateOf {
-        bundleRepository.scopedBundleInfoFlow(packageName, selectedApp.version)
-    }
-
     var options: Options by savedStateHandle.saveable {
         val state = mutableStateOf<Options>(emptyMap())
 
@@ -520,4 +609,15 @@ private sealed interface SelectionState : Parcelable {
             bundles.toPatchSelection(allowIncompatible) { _, patch -> patch.include }
     }
 }
+
+private fun PatchBundleInfo.Scoped.withoutUniversalPatches(): PatchBundleInfo.Scoped {
+    if (universal.isEmpty()) return this
+
+    val filteredPatches = patches.filter { it.compatiblePackages != null }
+    return copy(
+        patches = filteredPatches,
+        universal = emptyList()
+    )
+}
+
 

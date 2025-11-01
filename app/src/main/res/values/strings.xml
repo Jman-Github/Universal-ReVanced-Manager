@@ -34,6 +34,7 @@
     <string name="patches_not_downloaded">Patches has not been downloaded. Click here to download it</string>
     <string name="patches_name_default">Patches</string>
     <string name="patches_name_fallback">Unnamed</string>
+    <string name="bundle_uid">Bundle UID</string>
     <string name="patches_display_name">Display name</string>
 
     <string name="android_11_bug_dialog_title">Android 11 bug</string>
@@ -119,9 +120,11 @@
     <string name="patch_selection_safeguard">Allow changing patch selection and options</string>
     <string name="patch_selection_safeguard_description">Do not prevent selecting or deselecting patches and customization of options</string>
     <string name="patch_selection_safeguard_confirmation">Changing the selection of patches may cause unexpected issues.\n\nEnable anyways?</string>
-    <string name="universal_patches_safeguard">Allow using universal patches</string>
-    <string name="universal_patches_safeguard_description">Do not prevent using universal patches</string>
-    <string name="universal_patches_safeguard_confirmation">Universal patches are not as well tested as those that target specific apps.\n\nEnable anyways?</string>
+    <string name="universal_patches_safeguard">Show &amp; allow using universal patches</string>
+    <string name="universal_patches_safeguard_description">Do not hide universal patches or prevent the using of them</string>
+    <string name="universal_patches_profile_blocked_title">Universal patches disabled</string>
+    <string name="universal_patches_profile_blocked_description">This patch profile contains universal patches. Enable “%1$s” in advanced settings to use it.</string>
+    <string name="universal_patches_app_blocked_description">This app contains universal patches. Enable “%1$s” in advanced settings to continue.</string>
     <string name="import_keystore">Import keystore</string>
     <string name="import_keystore_description">Import a custom keystore</string>
     <string name="import_keystore_dialog_title">Enter keystore credentials</string>
@@ -146,6 +149,7 @@
     <string name="import_patch_bundles">Import patch bundles</string>
     <string name="import_patch_bundles_description">Restore remote patch bundles from a JSON file</string>
     <string name="import_patch_bundles_fail">Could not import patch bundles: %s</string>
+    <string name="import_patch_bundles_in_progress">Importing...</string>
     <string name="import_patch_bundles_success">Imported %d patch bundles</string>
     <string name="import_patch_bundles_updated">Updated %d patch bundles</string>
     <string name="import_patch_bundles_none">No new patch bundles were imported</string>
@@ -153,6 +157,8 @@
     <string name="import_patch_profiles_description">Import saved patch profiles from a JSON file</string>
     <string name="import_patch_profiles_fail">Could not import patch profiles: %s</string>
     <string name="import_patch_profiles_success">Imported %d patch profiles</string>
+    <string name="import_patch_profiles_partial">Imported %1$d patch profiles with %2$d skipped</string>
+    <string name="import_patch_profiles_skipped">Skipped %d duplicate patch profiles</string>
     <string name="import_patch_profiles_none">No patch profiles were imported</string>
     <string name="import_manager_settings">Import manager settings</string>
     <string name="import_manager_settings_description">Restore saved manager settings from a JSON file</string>
@@ -326,8 +332,11 @@
     <string name="patch_profile_update_existing_description">Tap a saved profile to overwrite it, or leave everything unselected to create a new profile.</string>
     <string name="patch_profile_name_hint">Profile name</string>
     <string name="patch_profile_saved_toast">Patch profile "%1$s" saved</string>
+    <string name="patch_profile_duplicate_toast">Patch profile "%1$s" already exists for this app</string>
     <string name="patch_profile_updated_toast">Patch profile "%1$s" updated</string>
     <string name="patch_profile_save_failed_toast">Failed to save patch profile</string>
+    <string name="patch_profile_rename">Rename</string>
+    <string name="patch_profile_rename_title">Rename patch profile</string>
     <string name="patch_profile_empty_state">Save a configuration from the patch selection screen to see it here.</string>
     <string name="patch_profile_missing_bundles_toast">Some bundles in this profile are not available and will be skipped.</string>
     <string name="patch_profile_changed_patches_toast">Some patches or options in this profile no longer match the bundle and were skipped.</string>
@@ -337,6 +346,18 @@
     <string name="patch_profile_show_less">Show less</string>
     <string name="patch_profile_bundle_header">%1$s • %2$s</string>
     <string name="patch_profile_bundle_unavailable_suffix">%1$s (unavailable)</string>
+    <string name="patch_profile_bundle_uid_label">UID: %1$d</string>
+    <string name="patch_profile_bundle_change_uid">Change UID</string>
+    <string name="patch_profile_bundle_change_uid_title">Change UID for %1$s</string>
+    <string name="patch_profile_bundle_change_uid_invalid">Enter a valid numeric UID.</string>
+    <string name="patch_profile_bundle_change_uid_success">Bundle UID updated to %1$d.</string>
+    <string name="patch_profile_bundle_change_uid_not_found">No local patch bundle found with UID %1$d.</string>
+    <string name="patcher_process_exit_message">Patcher process exited with code %1$d.</string>
+    <string name="patcher_memory_adjustment_title">The patcher ran out of memory</string>
+    <string name="patcher_memory_adjustment_message_reduced">The experimental patcher process stopped because it ran out of memory. We lowered its memory limit from %1$d MB to %2$d MB so you can try again immediately.</string>
+    <string name="patcher_memory_adjustment_message_no_change">The experimental patcher process stopped because it ran out of memory, but the memory limit is already at %1$d MB. Try lowering it further in Advanced settings or disable the experimental mode before retrying.</string>
+    <string name="patcher_memory_adjustment_retry">Try again</string>
+    <string name="patcher_memory_adjustment_dismiss">Dismiss</string>
     <string name="delete_profile_confirmation">Delete "%1$s"?</string>
     <string name="patch_profile_delete_multiple_dialog_description">Delete the selected patch profiles?</string>
     <plurals name="patch_profile_bundle_patch_count">
@@ -347,7 +368,7 @@
         <item quantity="one">%d bundle</item>
         <item quantity="other">%d bundles</item>
     </plurals>
-    <string name="universal_patch_warning_description">Universal patches have a more generalized use and do not work as reliably as patches that target specific apps. You may encounter issues while using them.\n\nYou need to turn on \"Allow using universal patches\" in the advanced settings before using universal patches.</string>
+    <string name="universal_patch_warning_description">Universal patches have a more generalized use and do not work as reliably as patches that target specific apps. You may encounter issues while using them.\n\nYou need to turn on "Show &amp; allow using universal patches" in the advanced settings before using universal patches.</string>
     <string name="this_version">This version</string>
     <string name="universal">Any app</string>
     <string name="search_patches">Search patches</string>
@@ -413,6 +434,28 @@
     <string name="hide_password_field">Hide password</string>
 
     <string name="installer">Installer</string>
+    <string name="installer_primary_title">Primary installer</string>
+    <string name="installer_primary_description">Used first when installing patched apps.</string>
+    <string name="installer_fallback_title">Fallback installer</string>
+    <string name="installer_fallback_description">Used automatically when the primary installer is unavailable.</string>
+    <string name="installer_internal_name">System installer</string>
+    <string name="installer_internal_description">Use the Android package installer.</string>
+    <string name="installer_option_none">No fallback</string>
+    <string name="installer_none_description">No fallback installer is configured.</string>
+    <string name="installer_status_requires_root">Requires root access</string>
+    <string name="installer_status_not_supported">Not supported for this action.</string>
+    <string name="installer_hint_generic">The installation failed. Try again or switch to a different installer.</string>
+    <string name="installer_hint_blocked">The installation was blocked by Android. Check Play Protect or security settings.</string>
+    <string name="installer_hint_conflict">Another app with this package name is already installed. Uninstall it before continuing.</string>
+    <string name="installer_hint_incompatible">The APK is not compatible with this device or Android version.</string>
+    <string name="installer_hint_invalid">The APK is invalid or corrupted.</string>
+    <string name="installer_hint_storage">There is not enough storage space for the installation.</string>
+    <string name="installer_hint_timeout">The installation timed out. Try again.</string>
+    <string name="installer_hint_aborted">The installation was cancelled.</string>
+    <string name="installer_hint_with_reason">%1$s&#10;&#10;Details: %2$s</string>
+    <string name="installer_external_launched">Opening %1$s…</string>
+    <string name="installer_external_timeout">%1$s did not confirm the installation. Check the other app and try again.</string>
+    <string name="installer_external_success">%1$s reported a successful installation.</string>
     <string name="install_app">Install</string>
     <string name="install_app_success">App installed</string>
     <string name="install_app_fail">Failed to install app: %s</string>
@@ -591,3 +634,6 @@
     <string name="export">Export</string>
     <string name="confirm">Confirm</string>
     <string name="saved_app_install_cancelled">Installation cancelled</string>`n</resources>
+
+
+

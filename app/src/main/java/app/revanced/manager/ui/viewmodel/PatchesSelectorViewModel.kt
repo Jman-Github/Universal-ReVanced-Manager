@@ -22,7 +22,9 @@ import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.revanced.manager.domain.bundles.RemotePatchBundle
 import app.revanced.manager.domain.repository.PatchBundleRepository
+import app.revanced.manager.domain.repository.DuplicatePatchProfileNameException
 import app.revanced.manager.domain.repository.PatchProfileRepository
+import app.revanced.manager.domain.repository.remapLocalBundles
 import app.revanced.manager.patcher.patch.Option
 import app.revanced.manager.patcher.patch.PatchBundleInfo
 import app.revanced.manager.patcher.patch.PatchBundleInfo.Extensions.toPatchSelection
@@ -44,7 +46,10 @@ import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toPersistentMap
 import kotlinx.collections.immutable.toPersistentSet
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
@@ -63,16 +68,21 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
 
     private val packageName = input.app.packageName
     val appVersion = input.app.version
+    private var currentBundles: List<PatchBundleInfo.Scoped> = emptyList()
 
     var selectionWarningEnabled by mutableStateOf(true)
         private set
-    var universalPatchWarningEnabled by mutableStateOf(true)
+    var allowUniversalPatches by mutableStateOf(true)
         private set
 
     val allowIncompatiblePatches =
         get<PreferencesManager>().disablePatchVersionCompatCheck.getBlocking()
+    private val allowUniversalPatchesFlow = prefs.disableUniversalPatchCheck.flow
     val bundlesFlow =
         patchBundleRepository.scopedBundleInfoFlow(packageName, input.app.version)
+            .combine(allowUniversalPatchesFlow) { bundles, allowUniversal ->
+                if (allowUniversal) bundles else bundles.map(PatchBundleInfo.Scoped::withoutUniversalPatches)
+            }
     val bundleDisplayNames =
         patchBundleRepository.sources.map { sources ->
             sources.associate { it.uid to it.displayTitle }
@@ -81,6 +91,14 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         patchBundleRepository.sources.map { sources ->
             sources.associate { source ->
                 source.uid to (source as? RemotePatchBundle)?.endpoint
+            }
+        }
+    val bundleIdentifiers =
+        patchBundleRepository.sources.map { sources ->
+            sources.associate { source ->
+                val identifier = source.patchBundle?.manifestAttributes?.name?.takeUnless { it.isNullOrBlank() }
+                    ?: source.name
+                source.uid to identifier
             }
         }
     val bundleTypes =
@@ -102,11 +120,30 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
     }
 
     init {
-        viewModelScope.launch {
-            if (prefs.disableUniversalPatchCheck.get()) {
-                universalPatchWarningEnabled = false
-            }
+        allowUniversalPatches = prefs.disableUniversalPatchCheck.getBlocking()
 
+        viewModelScope.launch {
+            allowUniversalPatchesFlow
+                .distinctUntilChanged()
+                .collect { allowUniversal ->
+                    allowUniversalPatches = allowUniversal
+                    if (allowUniversal) {
+                        filter = filter or SHOW_UNIVERSAL
+                    } else {
+                        filter = filter and SHOW_UNIVERSAL.inv()
+                        pruneSelectionsAndOptions()
+                    }
+                }
+        }
+
+        viewModelScope.launch {
+            bundlesFlow.collect { bundles ->
+                currentBundles = bundles
+                if (!allowUniversalPatches) pruneSelectionsAndOptions()
+            }
+        }
+
+        viewModelScope.launch {
             if (prefs.disableSelectionWarning.get()) {
                 selectionWarningEnabled = false
                 return@launch
@@ -274,7 +311,62 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         patchOptions[bundle] = patchOptions[bundle]?.remove(patch.name) ?: return
     }
 
-    val profiles = patchProfileRepository.profilesForPackageFlow(packageName)
+    private fun pruneSelectionsAndOptions() {
+        if (currentBundles.isEmpty()) return
+
+        val availablePatches = currentBundles.associate { bundle ->
+            bundle.uid to bundle.patches.map(PatchInfo::name).toSet()
+        }
+
+        customPatchSelection?.let { current ->
+            val pruned = current.pruneTo(availablePatches)
+            if (pruned !== current) {
+                customPatchSelection = pruned
+                hasModifiedSelection = true
+            }
+        }
+
+        patchOptions.keys.toList().forEach { bundleUid ->
+            val bundleOptions = patchOptions[bundleUid] ?: return@forEach
+            val allowed = availablePatches[bundleUid] ?: emptySet()
+            val filtered = bundleOptions
+                .filterKeys { it in allowed }
+                .toPersistentMap()
+
+            when {
+                filtered.isEmpty() -> patchOptions.remove(bundleUid)
+                filtered.size != bundleOptions.size -> patchOptions[bundleUid] = filtered
+            }
+        }
+    }
+
+    val profiles = combine(
+        patchProfileRepository.profilesForPackageFlow(packageName),
+        patchBundleRepository.bundleInfoFlow,
+        patchBundleRepository.sources
+    ) { profiles, bundleInfoSnapshot, sources ->
+        if (profiles.isEmpty()) return@combine emptyList()
+
+        val signatureMap = bundleInfoSnapshot.mapValues { (_, info) ->
+            info.patches.map { it.name.trim().lowercase() }.toSet()
+        }
+
+        profiles.map { profile ->
+            val remappedPayload = profile.payload.remapLocalBundles(sources, signatureMap)
+            if (remappedPayload !== profile.payload) {
+                viewModelScope.launch(Dispatchers.Default) {
+                    patchProfileRepository.updateProfile(
+                        uid = profile.uid,
+                        packageName = profile.packageName,
+                        appVersion = profile.appVersion,
+                        name = profile.name,
+                        payload = remappedPayload
+                    )
+                }
+                profile.copy(payload = remappedPayload)
+            } else profile
+        }
+    }
 
     suspend fun savePatchProfile(
         name: String,
@@ -286,6 +378,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         val options = getOptions()
         val displayNames = bundleDisplayNames.first()
         val endpoints = bundleEndpoints.first()
+        val identifiers = bundleIdentifiers.first()
 
         val bundles = selectedBundles.map { bundleUid ->
             val patches = selection[bundleUid]?.toList().orEmpty()
@@ -295,7 +388,8 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
                 patches = patches,
                 options = serializedOptions,
                 displayName = displayNames[bundleUid],
-                sourceEndpoint = endpoints[bundleUid]
+                sourceEndpoint = endpoints[bundleUid],
+                sourceName = identifiers[bundleUid]
             )
         }
 
@@ -330,6 +424,9 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
                 app.toast(app.getString(R.string.patch_profile_saved_toast, name))
             }
             true
+        } catch (duplicate: DuplicatePatchProfileNameException) {
+            app.toast(app.getString(R.string.patch_profile_duplicate_toast, duplicate.profileName))
+            false
         } catch (t: Exception) {
             Log.e(tag, "Failed to save patch profile", t)
             app.toast(app.getString(R.string.patch_profile_save_failed_toast))
@@ -408,4 +505,35 @@ private fun PatchSelection.toPersistentPatchSelection(): PersistentPatchSelectio
 
 private fun PersistentPatchSelection.toPatchSelection(): PatchSelection =
     mapValues { (_, v) -> v.toSet() }
+
+private fun PatchBundleInfo.Scoped.withoutUniversalPatches(): PatchBundleInfo.Scoped {
+    if (universal.isEmpty()) return this
+
+    val filteredPatches = patches.filter { it.compatiblePackages != null }
+    return copy(
+        patches = filteredPatches,
+        universal = emptyList()
+    )
+}
+
+private fun PersistentPatchSelection.pruneTo(
+    available: Map<Int, Set<String>>
+): PersistentPatchSelection {
+    var changed = false
+    val filtered = buildMap<Int, PersistentSet<String>> {
+        this@pruneTo.forEach { (bundleUid, patches) ->
+            val allowed = available[bundleUid] ?: run {
+                if (patches.isNotEmpty()) changed = true
+                return@forEach
+            }
+            val kept = patches.filter { it in allowed }.toPersistentSet()
+            if (kept.size != patches.size) changed = true
+            if (kept.isNotEmpty()) put(bundleUid, kept)
+        }
+    }
+
+    if (!changed) return this
+    if (filtered.isEmpty()) return persistentMapOf()
+    return filtered.toPersistentMap()
+}
 

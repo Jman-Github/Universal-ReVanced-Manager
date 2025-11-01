@@ -22,6 +22,8 @@ class PreferencesManager(
     val patcherProcessMemoryLimit = intPreference("process_runtime_memory_limit", 700)
 
     val allowMeteredUpdates = booleanPreference("allow_metered_updates", false)
+    val installerPrimary = stringPreference("installer_primary", InstallerPreferenceTokens.INTERNAL)
+    val installerFallback = stringPreference("installer_fallback", InstallerPreferenceTokens.NONE)
 
     val keystoreAlias = stringPreference("keystore_alias", KeystoreManager.DEFAULT)
     val keystorePass = stringPreference("keystore_pass", KeystoreManager.DEFAULT)
@@ -34,7 +36,7 @@ class PreferencesManager(
 
     val disablePatchVersionCompatCheck = booleanPreference("disable_patch_version_compatibility_check", false)
     val disableSelectionWarning = booleanPreference("disable_selection_warning", false)
-    val disableUniversalPatchCheck = booleanPreference("disable_patch_universal_check", false)
+    val disableUniversalPatchCheck = booleanPreference("disable_patch_universal_check", true)
     val suggestedVersionSafeguard = booleanPreference("suggested_version_safeguard", true)
 
     val acknowledgedDownloaderPlugins = stringSetPreference("acknowledged_downloader_plugins", emptySet())
@@ -50,6 +52,8 @@ class PreferencesManager(
         val useProcessRuntime: Boolean? = null,
         val patcherProcessMemoryLimit: Int? = null,
         val allowMeteredUpdates: Boolean? = null,
+        val installerPrimary: String? = null,
+        val installerFallback: String? = null,
         val keystoreAlias: String? = null,
         val keystorePass: String? = null,
         val firstLaunch: Boolean? = null,
@@ -73,6 +77,8 @@ class PreferencesManager(
         useProcessRuntime = useProcessRuntime.get(),
         patcherProcessMemoryLimit = patcherProcessMemoryLimit.get(),
         allowMeteredUpdates = allowMeteredUpdates.get(),
+        installerPrimary = installerPrimary.get(),
+        installerFallback = installerFallback.get(),
         keystoreAlias = keystoreAlias.get(),
         keystorePass = keystorePass.get(),
         firstLaunch = firstLaunch.get(),
@@ -96,6 +102,8 @@ class PreferencesManager(
         snapshot.useProcessRuntime?.let { useProcessRuntime.value = it }
         snapshot.patcherProcessMemoryLimit?.let { patcherProcessMemoryLimit.value = it }
         snapshot.allowMeteredUpdates?.let { allowMeteredUpdates.value = it }
+        snapshot.installerPrimary?.let { installerPrimary.value = it }
+        snapshot.installerFallback?.let { installerFallback.value = it }
         snapshot.keystoreAlias?.let { keystoreAlias.value = it }
         snapshot.keystorePass?.let { keystorePass.value = it }
         snapshot.firstLaunch?.let { firstLaunch.value = it }
@@ -110,4 +118,12 @@ class PreferencesManager(
         snapshot.suggestedVersionSafeguard?.let { suggestedVersionSafeguard.value = it }
         snapshot.acknowledgedDownloaderPlugins?.let { acknowledgedDownloaderPlugins.value = it }
     }
+
+}
+
+object InstallerPreferenceTokens {
+    const val INTERNAL = ":internal:"
+    const val SYSTEM = ":system:"
+    const val ROOT = ":root:"
+    const val NONE = ":none:"
 }

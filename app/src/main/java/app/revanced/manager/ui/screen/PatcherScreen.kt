@@ -49,13 +49,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
-import app.revanced.manager.data.room.apps.installed.InstallType
 import app.revanced.manager.ui.component.AppScaffold
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.ConfirmDialog
 import app.revanced.manager.ui.component.InstallerStatusDialog
 import app.revanced.manager.ui.component.haptics.HapticExtendedFloatingActionButton
-import app.revanced.manager.ui.component.patcher.InstallPickerDialog
 import app.revanced.manager.ui.component.patcher.Steps
 import app.revanced.manager.ui.model.StepCategory
 import app.revanced.manager.ui.viewmodel.PatcherViewModel
@@ -80,7 +78,6 @@ fun PatcherScreen(
 
     val patcherSucceeded by viewModel.patcherSucceeded.observeAsState(null)
     val canInstall by remember { derivedStateOf { patcherSucceeded == true && (viewModel.installedPackageName != null || !viewModel.isInstalling) } }
-    var showInstallPicker by rememberSaveable { mutableStateOf(false) }
     var showDismissConfirmationDialog by rememberSaveable { mutableStateOf(false) }
     var showSavePatchedAppDialog by rememberSaveable { mutableStateOf(false) }
 
@@ -108,12 +105,6 @@ fun PatcherScreen(
             }
         }
     }
-
-    if (showInstallPicker)
-        InstallPickerDialog(
-            onDismiss = { showInstallPicker = false },
-            onConfirm = viewModel::install
-        )
 
     if (showDismissConfirmationDialog) {
         ConfirmDialog(
@@ -145,6 +136,36 @@ fun PatcherScreen(
 
     viewModel.packageInstallerStatus?.let {
         InstallerStatusDialog(it, viewModel, viewModel::dismissPackageInstallerDialog)
+    }
+
+    viewModel.memoryAdjustmentDialog?.let { state ->
+        val message = if (state.adjusted) {
+            stringResource(
+                R.string.patcher_memory_adjustment_message_reduced,
+                state.previousLimit,
+                state.newLimit
+            )
+        } else {
+            stringResource(
+                R.string.patcher_memory_adjustment_message_no_change,
+                state.previousLimit
+            )
+        }
+        AlertDialog(
+            onDismissRequest = viewModel::dismissMemoryAdjustmentDialog,
+            title = { Text(stringResource(R.string.patcher_memory_adjustment_title)) },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = viewModel::retryAfterMemoryAdjustment) {
+                    Text(stringResource(R.string.patcher_memory_adjustment_retry))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissMemoryAdjustmentDialog) {
+                    Text(stringResource(R.string.patcher_memory_adjustment_dismiss))
+                }
+            }
+        )
     }
 
     val activityLauncher = rememberLauncherForActivityResult(
@@ -223,10 +244,11 @@ fun PatcherScreen(
                                 )
                             },
                             onClick = {
-                                if (viewModel.installedPackageName == null)
-                                    if (viewModel.isDeviceRooted()) showInstallPicker = true
-                                    else viewModel.install(InstallType.DEFAULT)
-                                else viewModel.open()
+                                if (viewModel.installedPackageName == null) {
+                                    viewModel.install()
+                                } else {
+                                    viewModel.open()
+                                }
                             }
                         )
                     }

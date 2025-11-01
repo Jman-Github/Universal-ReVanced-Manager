@@ -1,3 +1,29 @@
+# v1.3.1 (2025-11-01)
+**Minimal changes & bug fixes**
+
+
+# Features
+
+- Added a full installer management system with metadata, configurable primary/fallback choices that applies to patched apps, manager updates, etc. Configurable from Settings > Advanced (https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/8)
+- Updated the "Allow using universal patches" (now renamed to "Show & allow using universal patches") settubg to also hide universal patches when toggled off and not just prevent the selection of them (https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/9)
+- Local patch bundle details show their bundle UID with a quick copy shortcut, imported & existing patch profiles automatically update their local patch bundle by using hashes, and the ability to manually edit the bundle UID for patch profiles that are using local patch bundles (https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/11)
+- Added the preinstalled, official ReVanced patch bundle user set display name to patch bundle exports
+- Added the ability to edit/update existing patch profile names
+- Prevent users from naming patch profiles the same as another per app (different apps patch profiles can only have the same names now)
+- Remove obsolete add/plus button in the bottom right hand corner on the patch profiles tab
+- Removed selection warning popup for toggling Universal Patches
+
+
+# Bug fixes
+
+- Made the patcher recover from out-of-memory exits caused by the user set memory limit with the experimental patcher process memory limit setting by automatically prompting the user to repatch, and lowering the memory limit (https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/12)
+- Cached bundle changelog responses so repeated requests fall back to a stored version instead of hitting GitHub rate limits (https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/10)
+- Fixed patch profiles duplicating instead of overlapping when imported multiple times
+- Fixed delete confirmation menus not disappearing after confirming a deletion
+- Fixed patch deselection shorcuts (deselect all & deselect all per bundle) not following patch selection safeguard settings
+- Optimized patch bundles importing
+
+
 # v1.3.0 (2025-10-26)
 
 

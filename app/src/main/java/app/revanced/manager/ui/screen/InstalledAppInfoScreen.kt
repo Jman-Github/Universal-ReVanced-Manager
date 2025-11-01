@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.revanced.manager.R
 import app.revanced.manager.data.room.apps.installed.InstallType
+import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.ui.component.AppInfo
 import app.revanced.manager.ui.component.AppliedPatchBundleUi
@@ -65,9 +66,12 @@ fun InstalledAppInfoScreen(
 ) {
     val context = LocalContext.current
     val patchBundleRepository: PatchBundleRepository = koinInject()
+    val prefs: PreferencesManager = koinInject()
     val bundleInfo by patchBundleRepository.bundleInfoFlow.collectAsStateWithLifecycle(emptyMap())
     val bundleSources by patchBundleRepository.sources.collectAsStateWithLifecycle(emptyList())
+    val allowUniversalPatches by prefs.disableUniversalPatchCheck.getAsState()
     var showAppliedPatchesDialog by rememberSaveable { mutableStateOf(false) }
+    var showUniversalBlockedDialog by rememberSaveable { mutableStateOf(false) }
     val appliedSelection = viewModel.appliedPatches
     val isInstalledOnDevice = viewModel.isInstalledOnDevice
 
@@ -109,6 +113,29 @@ fun InstalledAppInfoScreen(
         }.sortedBy { it.title }
     }
 
+    val globalUniversalPatchNames = remember(bundleInfo) {
+        bundleInfo.values
+            .flatMap { it.patches }
+            .filter { it.compatiblePackages == null }
+            .mapTo(mutableSetOf()) { it.name.lowercase() }
+    }
+
+    val appliedBundlesContainUniversal = remember(appliedBundles, globalUniversalPatchNames) {
+        appliedBundles.any { bundle ->
+            val hasByMetadata = bundle.patchInfos.any { it.compatiblePackages == null }
+            val fallbackMatch = bundle.fallbackNames.any { name ->
+                globalUniversalPatchNames.contains(name.lowercase())
+            }
+            hasByMetadata || fallbackMatch
+        }
+    }
+
+    val appliedSelectionContainsUniversal = remember(appliedSelection, globalUniversalPatchNames) {
+        appliedSelection?.values?.any { patches ->
+            patches.any { globalUniversalPatchNames.contains(it.lowercase()) }
+        } ?: false
+    }
+
     val bundlesUsedSummary = remember(appliedBundles) {
         if (appliedBundles.isEmpty()) ""
         else appliedBundles.joinToString("\n") { bundle ->
@@ -138,6 +165,28 @@ fun InstalledAppInfoScreen(
         AppliedPatchesDialog(
             bundles = appliedBundles,
             onDismissRequest = { showAppliedPatchesDialog = false }
+        )
+    }
+
+    if (showUniversalBlockedDialog) {
+        AlertDialog(
+            onDismissRequest = { showUniversalBlockedDialog = false },
+            confirmButton = {
+                TextButton(onClick = { showUniversalBlockedDialog = false }) {
+                    Text(stringResource(R.string.close))
+                }
+            },
+            title = { Text(stringResource(R.string.universal_patches_profile_blocked_title)) },
+            text = {
+                Text(
+                    text = stringResource(
+                        R.string.universal_patches_app_blocked_description,
+                        stringResource(R.string.universal_patches_safeguard)
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
         )
     }
 
@@ -202,7 +251,11 @@ fun InstalledAppInfoScreen(
                             icon = Icons.Outlined.Update,
                             text = stringResource(R.string.repatch),
                             onClick = {
-                                onPatchClick(installedApp.originalPackageName)
+                                if (!allowUniversalPatches && (appliedBundlesContainUniversal || appliedSelectionContainsUniversal)) {
+                                    showUniversalBlockedDialog = true
+                                } else {
+                                    onPatchClick(installedApp.originalPackageName)
+                                }
                             }
                         )
                     }
@@ -216,10 +269,11 @@ fun InstalledAppInfoScreen(
                         SegmentedButton(
                             icon = Icons.Outlined.SettingsBackupRestore,
                             text = stringResource(R.string.unpatch),
-                            onClick = { showUninstallDialog = true },
+                            onClick = {
+                                showUninstallDialog = true
+                            },
                             enabled = viewModel.rootInstaller.hasRootAccess()
                         )
-
                         SegmentedButton(
                             icon = Icons.Outlined.Circle,
                             text = if (viewModel.isMounted) stringResource(R.string.unmount) else stringResource(R.string.mount),
@@ -231,7 +285,11 @@ fun InstalledAppInfoScreen(
                             icon = Icons.Outlined.Update,
                             text = stringResource(R.string.repatch),
                             onClick = {
-                                onPatchClick(installedApp.originalPackageName)
+                                if (!allowUniversalPatches && (appliedBundlesContainUniversal || appliedSelectionContainsUniversal)) {
+                                    showUniversalBlockedDialog = true
+                                } else {
+                                    onPatchClick(installedApp.originalPackageName)
+                                }
                             },
                             enabled = viewModel.rootInstaller.hasRootAccess()
                         )
@@ -273,7 +331,11 @@ fun InstalledAppInfoScreen(
                             icon = Icons.Outlined.Update,
                             text = stringResource(R.string.repatch),
                             onClick = {
-                                onPatchClick(installedApp.originalPackageName)
+                                if (!allowUniversalPatches && (appliedBundlesContainUniversal || appliedSelectionContainsUniversal)) {
+                                    showUniversalBlockedDialog = true
+                                } else {
+                                    onPatchClick(installedApp.originalPackageName)
+                                }
                             }
                         )
                     }
@@ -364,3 +426,4 @@ fun UninstallDialog(
         }
     }
 )
+

@@ -16,6 +16,7 @@ import android.util.Log
 import androidx.activity.result.ActivityResult
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import app.revanced.manager.MainActivity
 import app.universal.revanced.manager.R
 import app.revanced.manager.data.platform.Filesystem
@@ -243,6 +244,24 @@ class PatcherWorker(
 
             Log.i(tag, "Patching succeeded".logFmt())
             Result.success()
+        } catch (e: ProcessRuntime.ProcessExitException) {
+            Log.e(
+                tag,
+                "Patcher process exited with code ${e.exitCode}".logFmt(),
+                e
+            )
+            val message = applicationContext.getString(
+                R.string.patcher_process_exit_message,
+                e.exitCode
+            )
+            updateProgress(state = State.FAILED, message = message)
+            val previousLimit = prefs.patcherProcessMemoryLimit.get()
+            Result.failure(
+                workDataOf(
+                    PROCESS_EXIT_CODE_KEY to e.exitCode,
+                    PROCESS_PREVIOUS_LIMIT_KEY to previousLimit
+                )
+            )
         } catch (e: ProcessRuntime.RemoteFailureException) {
             Log.e(
                 tag,
@@ -265,6 +284,8 @@ class PatcherWorker(
     companion object {
         private const val LOG_PREFIX = "[Worker]"
         private fun String.logFmt() = "$LOG_PREFIX $this"
+        const val PROCESS_EXIT_CODE_KEY = "process_exit_code"
+        const val PROCESS_PREVIOUS_LIMIT_KEY = "process_previous_limit"
     }
 
     private suspend fun stripUnusedNativeLibraries(apkFile: File) = withContext(Dispatchers.IO) {

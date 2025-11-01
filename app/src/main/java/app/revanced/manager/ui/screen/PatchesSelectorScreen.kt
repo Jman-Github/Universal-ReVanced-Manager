@@ -95,7 +95,6 @@ import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.CheckedFilterChip
 import app.revanced.manager.ui.component.FullscreenDialog
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
-import app.revanced.manager.ui.component.SafeguardDialog
 import app.revanced.manager.ui.component.SearchBar
 import app.revanced.manager.ui.component.AlertDialogExtended
 import app.revanced.manager.ui.component.haptics.HapticCheckbox
@@ -204,11 +203,13 @@ fun PatchesSelectorScreen(
                         label = { Text(stringResource(R.string.this_version)) }
                     )
 
-                    CheckedFilterChip(
-                        selected = viewModel.filter and SHOW_UNIVERSAL != 0,
-                        onClick = { viewModel.toggleFlag(SHOW_UNIVERSAL) },
-                        label = { Text(stringResource(R.string.universal)) },
-                    )
+                    if (viewModel.allowUniversalPatches) {
+                        CheckedFilterChip(
+                            selected = viewModel.filter and SHOW_UNIVERSAL != 0,
+                            onClick = { viewModel.toggleFlag(SHOW_UNIVERSAL) },
+                            label = { Text(stringResource(R.string.universal)) },
+                        )
+                    }
                 }
             }
         }
@@ -309,13 +310,9 @@ fun PatchesSelectorScreen(
     }
 
     var showSelectionWarning by rememberSaveable { mutableStateOf(false) }
-    var showUniversalWarning by rememberSaveable { mutableStateOf(false) }
 
     if (showSelectionWarning)
         SelectionWarningDialog(onDismiss = { showSelectionWarning = false })
-
-    if (showUniversalWarning)
-        UniversalPatchWarningDialog(onDismiss = { showUniversalWarning = false })
 
     fun LazyListScope.patchList(
         uid: Int,
@@ -350,9 +347,6 @@ fun PatchesSelectorScreen(
 
                             // Show selection warning if enabled
                             viewModel.selectionWarningEnabled -> showSelectionWarning = true
-
-                            // Show universal warning if universal patch is selected and the toggle is off
-                            patch.compatiblePackages == null && viewModel.universalPatchWarningEnabled -> showUniversalWarning = true
 
                             // Toggle the patch otherwise
                             else -> viewModel.togglePatch(uid, patch)
@@ -492,17 +486,29 @@ fun PatchesSelectorScreen(
                                 contentDescription = R.string.deselect_all,
                                 label = R.string.patch_selection_button_label_all,
                                 containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                onClick = viewModel::deselectAll
+                                enabled = !viewModel.selectionWarningEnabled,
+                                onClick = {
+                                    if (viewModel.selectionWarningEnabled) {
+                                        showSelectionWarning = true
+                                    } else {
+                                        viewModel.deselectAll()
+                                    }
+                                }
                             )
                             SelectionActionButton(
                                 icon = Icons.Outlined.LayersClear,
                                 contentDescription = R.string.deselect_bundle,
                                 label = R.string.patch_selection_button_label_bundle,
                                 containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                enabled = !viewModel.selectionWarningEnabled,
                                 onClick = {
-                                    bundles.getOrNull(pagerState.currentPage)?.let { bundle ->
-                                        val displayName = bundleDisplayNames[bundle.uid] ?: bundle.name
-                                        viewModel.deselectBundle(bundle.uid, displayName)
+                                    if (viewModel.selectionWarningEnabled) {
+                                        showSelectionWarning = true
+                                    } else {
+                                        bundles.getOrNull(pagerState.currentPage)?.let { bundle ->
+                                            val displayName = bundleDisplayNames[bundle.uid] ?: bundle.name
+                                            viewModel.deselectBundle(bundle.uid, displayName)
+                                        }
                                     }
                                 },
                             )
@@ -649,17 +655,6 @@ fun PatchesSelectorScreen(
             )
         }
     }
-}
-
-@Composable
-private fun UniversalPatchWarningDialog(
-    onDismiss: () -> Unit
-) {
-    SafeguardDialog(
-        onDismiss = onDismiss,
-        title = R.string.warning,
-        body = stringResource(R.string.universal_patch_warning_description),
-    )
 }
 
 @Composable

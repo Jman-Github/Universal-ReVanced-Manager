@@ -23,6 +23,9 @@ interface PatchProfileDao {
     @Query("SELECT * FROM patch_profiles ORDER BY created_at DESC")
     suspend fun getAll(): List<PatchProfileEntity>
 
+    @Query("SELECT * FROM patch_profiles WHERE package_name = :packageName AND name = :name LIMIT 1")
+    suspend fun findByPackageAndName(packageName: String, name: String): PatchProfileEntity?
+
     @Query("DELETE FROM patch_profiles WHERE uid = :uid")
     suspend fun delete(uid: Int)
 
