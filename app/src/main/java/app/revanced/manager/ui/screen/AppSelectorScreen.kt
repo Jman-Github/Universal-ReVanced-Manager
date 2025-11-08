@@ -2,17 +2,33 @@ package app.revanced.manager.ui.screen
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -20,10 +36,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,9 +50,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.revanced.manager.R
@@ -46,10 +69,13 @@ import app.revanced.manager.ui.component.NonSuggestedVersionDialog
 import app.revanced.manager.ui.component.SearchView
 import app.revanced.manager.ui.model.SelectedApp
 import app.revanced.manager.ui.viewmodel.AppSelectorViewModel
+import app.revanced.manager.ui.viewmodel.BundleVersionSuggestion
+import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.util.APK_MIMETYPE
 import app.revanced.manager.util.EventEffect
 import app.revanced.manager.util.transparentListItemColors
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,6 +85,11 @@ fun AppSelectorScreen(
     onBackClick: () -> Unit,
     vm: AppSelectorViewModel = koinViewModel()
 ) {
+    val prefs = koinInject<PreferencesManager>()
+    val allowIncompatiblePatches by prefs.disablePatchVersionCompatCheck.getAsState()
+    val suggestedVersionSafeguard by prefs.suggestedVersionSafeguard.getAsState()
+    val bundleRecommendationsEnabled = allowIncompatiblePatches && !suggestedVersionSafeguard
+
     EventEffect(flow = vm.storageSelectionFlow) {
         onStorageSelect(it)
     }
@@ -69,6 +100,7 @@ fun AppSelectorScreen(
         }
 
     val suggestedVersions by vm.suggestedAppVersions.collectAsStateWithLifecycle(emptyMap())
+    val bundleSuggestionsByApp by vm.bundleSuggestionsByApp.collectAsStateWithLifecycle(emptyMap())
 
     var filterText by rememberSaveable { mutableStateOf("") }
     var search by rememberSaveable { mutableStateOf(false) }
@@ -215,8 +247,92 @@ fun AppSelectorScreen(
                             )
                         },
                         supportingContent = {
-                            suggestedVersions[app.packageName]?.let {
-                                Text(stringResource(R.string.suggested_version_info, it))
+                            val bundleSuggestions = bundleSuggestionsByApp[app.packageName].orEmpty()
+                            var expanded by remember { mutableStateOf(false) }
+                            var dialogBundleUid by remember { mutableStateOf<Int?>(null) }
+
+                            LaunchedEffect(bundleRecommendationsEnabled) {
+                                if (!bundleRecommendationsEnabled) {
+                                    expanded = false
+                                    dialogBundleUid = null
+                                }
+                            }
+
+                            if (bundleSuggestions.isNotEmpty()) {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    val toggleLabel = stringResource(
+                                        if (expanded) R.string.hide_suggested_versions
+                                        else R.string.show_suggested_versions
+                                    )
+                                    TextButton(
+                                        onClick = { expanded = !expanded },
+                                        enabled = bundleRecommendationsEnabled,
+                                        modifier = Modifier.align(Alignment.Start),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                                            contentDescription = null
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = toggleLabel,
+                                            style = MaterialTheme.typography.labelLarge
+                                        )
+                                    }
+
+                                    if (!bundleRecommendationsEnabled) {
+                                        Text(
+                                            text = stringResource(R.string.bundle_version_dialog_locked_hint),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+
+                                    if (expanded) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally
+                                        ) {
+                                            bundleSuggestions.forEach { suggestion ->
+                                                BundleSuggestionCard(
+                                                    suggestion = suggestion,
+                                                    enabled = bundleRecommendationsEnabled,
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .widthIn(max = 560.dp)
+                                                        .alpha(if (bundleRecommendationsEnabled) 1f else 0.6f),
+                                                    onShowOtherVersions = {
+                                                        if (bundleRecommendationsEnabled) {
+                                                            dialogBundleUid = suggestion.bundleUid
+                                                        }
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                                if (dialogBundleUid != null && bundleRecommendationsEnabled) {
+                                    bundleSuggestions
+                                        .firstOrNull { it.bundleUid == dialogBundleUid }
+                                        ?.let { suggestion ->
+                                            OtherSupportedVersionsInfoDialog(
+                                                bundleName = suggestion.bundleName,
+                                                recommendedVersion = suggestion.recommendedVersion,
+                                                otherVersions = suggestion.otherSupportedVersions,
+                                                supportsAllVersions = suggestion.supportsAllVersions,
+                                                onDismissRequest = { dialogBundleUid = null }
+                                            )
+                                        }
+                                } else if (dialogBundleUid != null) {
+                                    dialogBundleUid = null
+                                }
                             }
                         },
                         trailingContent = app.patches?.let {
@@ -241,6 +357,141 @@ fun AppSelectorScreen(
                         LoadingIndicator()
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OtherSupportedVersionsInfoDialog(
+    bundleName: String,
+    recommendedVersion: String?,
+    otherVersions: List<String>,
+    supportsAllVersions: Boolean,
+    onDismissRequest: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        confirmButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text(stringResource(R.string.close))
+            }
+        },
+        title = { Text(stringResource(R.string.other_supported_versions_title, bundleName)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                recommendedVersion?.let {
+                    Text(
+                        stringResource(
+                            R.string.bundle_version_dialog_recommended,
+                            stringResource(R.string.version_label, it)
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                when {
+                    otherVersions.isNotEmpty() -> {
+                        val context = LocalContext.current
+                        val versionsText = otherVersions.joinToString(", ") { version ->
+                            context.getString(R.string.version_label, version)
+                        }
+                        Text(
+                            versionsText,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    supportsAllVersions -> {
+                        Text(
+                            stringResource(R.string.other_supported_versions_all),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    else -> {
+                        Text(
+                            stringResource(R.string.other_supported_versions_empty),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            }
+        }
+    )
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun BundleSuggestionCard(
+    suggestion: BundleVersionSuggestion,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    onShowOtherVersions: () -> Unit
+) {
+    ElevatedCard(
+        modifier = modifier,
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                suggestion.bundleName,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.basicMarquee()
+            )
+            val versionLabel = suggestion.recommendedVersion
+                ?.let { stringResource(R.string.version_label, it) }
+                ?: stringResource(R.string.bundle_version_all_versions)
+            Surface(
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                contentColor = MaterialTheme.colorScheme.primary,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(
+                    text = versionLabel,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                )
+            }
+            Text(
+                text = if (suggestion.supportsAllVersions) {
+                    stringResource(R.string.other_supported_versions_all)
+                } else {
+                    stringResource(R.string.bundle_version_dialog_recommended, versionLabel)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            TextButton(
+                onClick = onShowOtherVersions,
+                enabled = enabled,
+                shape = RoundedCornerShape(50),
+                colors = ButtonDefaults.textButtonColors(
+                    containerColor = if (enabled) {
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                    } else {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                    },
+                    contentColor = if (enabled) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                ),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                modifier = Modifier.clip(RoundedCornerShape(50))
+            ) {
+                Text(
+                    text = stringResource(R.string.show_other_versions),
+                    style = MaterialTheme.typography.labelLarge
+                )
             }
         }
     }

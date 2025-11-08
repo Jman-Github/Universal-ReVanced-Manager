@@ -2,6 +2,8 @@ package app.revanced.manager.ui.viewmodel
 
 import android.app.Application
 import android.util.Log
+import androidx.compose.runtime.MutableIntState
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -20,6 +22,7 @@ import app.revanced.manager.data.room.profile.PatchProfilePayload
 import app.revanced.manager.data.room.options.Option as StoredOption
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
+import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
 import app.revanced.manager.domain.bundles.RemotePatchBundle
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.domain.repository.DuplicatePatchProfileNameException
@@ -85,7 +88,10 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
             }
     val bundleDisplayNames =
         patchBundleRepository.sources.map { sources ->
-            sources.associate { it.uid to it.displayTitle }
+            sources.associate { source ->
+                val title = source.displayTitle
+                source.uid to title
+            }
         }
     val bundleEndpoints =
         patchBundleRepository.sources.map { sources ->
@@ -104,7 +110,12 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
     val bundleTypes =
         patchBundleRepository.sources.map { sources ->
             sources.associate { source ->
-                source.uid to (source.asRemoteOrNull != null)
+                val type = when {
+                    source.isDefault -> BundleSourceType.Preinstalled
+                    source.asRemoteOrNull != null -> BundleSourceType.Remote
+                    else -> BundleSourceType.Local
+                }
+                source.uid to type
             }
         }
 
@@ -189,8 +200,13 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
 
     val compatibleVersions = mutableStateListOf<String>()
 
-    var filter by mutableIntStateOf(SHOW_UNIVERSAL)
-        private set
+    private val filterState = mutableIntStateOf(resolveInitialFilter(savedStateHandle))
+    var filter: Int
+        get() = filterState.intValue
+        private set(value) {
+            filterState.intValue = value
+            savedStateHandle["filter"] = value
+        }
 
     // This is for the required options screen.
     private val requiredOptsPatchesDeferred = viewModelScope.async(start = CoroutineStart.LAZY) {
@@ -477,6 +493,18 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
 
     fun toggleFlag(flag: Int) {
         filter = filter xor flag
+    }
+
+    private fun resolveInitialFilter(handle: SavedStateHandle): Int {
+        val stored = handle.get<Any?>("filter")
+        val resolved = when (stored) {
+            is Int -> stored
+            is MutableIntState -> stored.intValue
+            is MutableState<*> -> (stored.value as? Int) ?: SHOW_UNIVERSAL
+            else -> SHOW_UNIVERSAL
+        }
+        handle["filter"] = resolved
+        return resolved
     }
 
     companion object {

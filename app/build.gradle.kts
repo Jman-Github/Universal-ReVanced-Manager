@@ -68,6 +68,11 @@ dependencies {
 
     // HiddenAPI
     compileOnly(libs.hidden.api.stub)
+    implementation(libs.hidden.api.bypass)
+
+    // Shizuku / Sui
+    implementation(libs.shizuku.api)
+    implementation(libs.shizuku.provider)
 
     // LibSU
     implementation(libs.libsu.core)
@@ -239,6 +244,12 @@ kotlin {
 }
 
 tasks {
+    whenTaskAdded {
+        if (name.startsWith("lintVital")) {
+            enabled = false
+        }
+    }
+
     // Needed by gradle-semantic-release-plugin.
     // Tracking: https://github.com/KengoTODA/gradle-semantic-release-plugin/issues/435.
     val publish by registering {

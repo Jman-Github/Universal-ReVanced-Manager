@@ -1,3 +1,39 @@
+# v1.4.0 (2025-11-07)
+
+
+# Features
+
+- Added an export filename template for patched APKs with placeholders for app and patch metadata
+- Added Shizuku as an installer option for silent installs when Shizuku/Sui is available https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/17
+- Official patch bundle can now be deleted from the patch bundles tab, and restored from Advanced settings https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/18
+- Primary and fallback installer menus now prevent selecting the same installer twice and grey out conflicting entries
+- Advanced settings now support saving custom installer packages, including package-name lookup with autocomplete, and dedicated management for third-party installers https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/17
+- Installer workflow now times out on stalled installs and automatically surfaces the system error dialog
+- New bundle recommendation picker lets you choose per-bundle suggested versions or override them with any other supported version
+- "Select an app" screen now groups bundle suggestions behind a toggle with inline dialogs for viewing additional supported versions
+- The built-in Official ReVanced patch bundle now shows a dedicated "Pre-installed" origin label when viewed or restored
+- Added a hyerplink in Settings > About that links to the unique features section of the README.md
+- Changed the "Universal ReVanced Manager" title text on the main three tabs to "URV Manager"
+- Updated the app icon of the manager to a custom one
+- Removed the "Open souce licenses" button & page in Settings > About
+
+
+# Bug fixes
+
+- Fixed patch option expandables in bundle patch lists collapsing or opening in sync when toggling multiple patches
+- Fixed incorrect themeing of certain UI elements with the pure black theme toggled on https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/15 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/20
+- "Remove unused native libraries" setting should now actually remove all unnecessary/unused libraries completely when toggled on
+- Fixed repatching through the "Apps" tab & using last applied patches & sub options on apps not saving https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/19
+- Saved apps in the "Apps" tab should now stay (and not delete themselves automatically) when the user unisntalls the app directly from that page
+- Fixed issues with installing directly from the patcher page https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/22
+
+
+# Docs
+
+- Updated the README.md to include the new unique features added in this release
+- Added a section to the README.md which lists what downloader plugins that are currently supported by the manager
+
+
 # v1.3.1 (2025-11-01)
 **Minimal changes & bug fixes**
 

@@ -6,8 +6,7 @@
         android:name="app.universal.revanced.manager.permission.PLUGIN_HOST"
         android:protectionLevel="signature"
         android:label="@string/plugin_host_permission_label"
-        android:description="@string/plugin_host_permission_description"
-        />
+        android:description="@string/plugin_host_permission_description" />
 
     <uses-permission android:name="app.universal.revanced.manager.permission.PLUGIN_HOST" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
@@ -37,6 +36,14 @@
         android:theme="@style/Theme.ReVancedManager"
         android:enableOnBackInvokedCallback="true"
         tools:targetApi="34">
+
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:enabled="true"
+            android:exported="true"
+            android:multiprocess="false"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
         <activity
             android:name="app.revanced.manager.MainActivity"

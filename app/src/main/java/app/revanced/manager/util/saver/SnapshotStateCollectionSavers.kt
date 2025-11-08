@@ -1,5 +1,7 @@
 package app.revanced.manager.util.saver
 
+import androidx.compose.runtime.MutableIntState
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.snapshots.SnapshotStateList
@@ -72,4 +74,9 @@ fun <K, Original, Saveable : Any> snapshotStateMapSaver(
             valueSaver.restore(value)?.let { restored -> key to restored }
         }.toMutableStateMap()
     }
+)
+
+val mutableIntStateSaver: Saver<MutableIntState, Int> = Saver(
+    save = { it.intValue },
+    restore = { mutableIntStateOf(it) }
 )

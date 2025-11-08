@@ -6,11 +6,14 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -25,18 +28,22 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.BuildConfig
 import app.universal.revanced.manager.R
 import androidx.compose.ui.graphics.vector.ImageVector
 import app.revanced.manager.ui.component.AppTopBar
-import app.revanced.manager.ui.component.ColumnWithScrollbar
-import app.revanced.manager.ui.component.settings.SettingsListItem
+import app.revanced.manager.ui.component.LazyColumnWithScrollbar
 import app.revanced.manager.ui.model.navigation.Settings
 import app.revanced.manager.ui.viewmodel.AboutViewModel.Companion.getSocialIcon
 import app.revanced.manager.util.openUrl
@@ -51,7 +58,7 @@ fun AboutSettingsScreen(
     val context = LocalContext.current
     // painterResource() is broken on release builds for some reason.
     val icon = rememberDrawablePainter(drawable = remember {
-        AppCompatResources.getDrawable(context, R.drawable.ic_logo_ring)
+        AppCompatResources.getDrawable(context, R.mipmap.ic_launcher)
     })
 
     val githubButtons: List<Triple<ImageVector, String, () -> Unit>> = remember(context) {
@@ -74,14 +81,6 @@ fun AboutSettingsScreen(
         )
     }
 
-    val listItems = listOfNotNull(
-        Triple(
-            stringResource(R.string.opensource_licenses),
-            stringResource(R.string.opensource_licenses_description),
-            third = { navigate(Settings.Licenses) }
-        )
-    )
-
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
     Scaffold(
         topBar = {
@@ -93,93 +92,112 @@ fun AboutSettingsScreen(
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
     ) { paddingValues ->
-        ColumnWithScrollbar(
+        LazyColumnWithScrollbar(
             modifier = Modifier
-                .fillMaxSize()
                 .padding(paddingValues),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(bottom = 64.dp)
         ) {
-            Image(
-                modifier = Modifier
-                    .padding(top = 16.dp),
-                painter = icon,
-                contentDescription = stringResource(R.string.app_name)
-            )
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    stringResource(R.string.app_name),
-                    style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.semantics {
-                        // Icon already has this information for the purpose of being clickable.
-                        hideFromAccessibility()
-                    }
-                )
-                Text(
-                    text = stringResource(R.string.version) + " " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.outline
+            item {
+                Image(
+                    modifier = Modifier
+                        .padding(top = 16.dp),
+                    painter = icon,
+                    contentDescription = stringResource(R.string.app_name)
                 )
             }
-            Column(
-                modifier = Modifier
-                    .padding(horizontal = 16.dp)
-                    .fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                githubButtons.forEach { (icon, text, onClick) ->
-                    FilledTonalButton(
-                        onClick = onClick,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+            item {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        stringResource(R.string.app_name),
+                        style = MaterialTheme.typography.headlineSmall,
+                        modifier = Modifier.semantics {
+                            hideFromAccessibility()
+                        }
+                    )
+                    Text(
+                        text = stringResource(R.string.version) + " " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+            }
+            item {
+                Column(
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp)
+                        .fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    githubButtons.forEach { (icon, text, onClick) ->
+                        FilledTonalButton(
+                            onClick = onClick,
+                            modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Icon(
-                                icon,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(
-                                text,
-                                style = MaterialTheme.typography.labelLarge
-                            )
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    icon,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    text,
+                                    style = MaterialTheme.typography.labelLarge
+                                )
+                            }
                         }
                     }
                 }
             }
-            OutlinedCard(
-                modifier = Modifier.padding(horizontal = 16.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+            item {
+                OutlinedCard(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
-                    Text(
-                        text = stringResource(R.string.about_revanced_manager),
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Text(
-                        text = stringResource(R.string.revanced_manager_description),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            Column {
-                listItems.forEach { (title, description, onClick) ->
-                    SettingsListItem(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onClick() },
-                        headlineContent = title,
-                        supportingContent = description
-                    )
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.about_revanced_manager),
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        val description = stringResource(R.string.revanced_manager_description)
+                        val uniqueFeaturesLabel = stringResource(R.string.unique_features_label)
+                        val uniqueFeaturesUrl = "https://github.com/Jman-Github/Universal-ReVanced-Manager#-unique-features"
+                        val annotatedDescription = buildAnnotatedString {
+                            append(description)
+                            append(" ")
+                            pushStringAnnotation(tag = "unique_features", annotation = uniqueFeaturesUrl)
+                            withStyle(
+                                SpanStyle(
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold,
+                                    textDecoration = TextDecoration.Underline
+                                )
+                            ) {
+                                append(uniqueFeaturesLabel)
+                            }
+                            pop()
+                        }
+                        val launchUrl = { url: String -> context.openUrl(url) }
+                        ClickableText(
+                            text = annotatedDescription,
+                            style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant),
+                            onClick = { offset ->
+                                annotatedDescription.getStringAnnotations("unique_features", offset, offset)
+                                    .firstOrNull()
+                                    ?.let { launchUrl(it.item) }
+                            }
+                        )
+                    }
                 }
             }
         }

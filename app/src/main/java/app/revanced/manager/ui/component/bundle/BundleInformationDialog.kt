@@ -139,13 +139,11 @@ fun BundleInformationDialog(
                         )
                     },
                     actions = {
-                        if (!src.isDefault) {
-                            IconButton(onClick = onDeleteRequest) {
-                                Icon(
-                                    Icons.Outlined.DeleteOutline,
-                                    stringResource(R.string.delete)
-                                )
-                            }
+                        IconButton(onClick = onDeleteRequest) {
+                            Icon(
+                                Icons.Outlined.DeleteOutline,
+                                stringResource(R.string.delete)
+                            )
                         }
                         if (!isLocal && hasNetwork) {
                             IconButton(onClick = onUpdate) {

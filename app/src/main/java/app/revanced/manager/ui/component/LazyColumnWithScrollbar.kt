@@ -3,8 +3,9 @@ package app.revanced.manager.ui.component
 import androidx.compose.foundation.gestures.FlingBehavior
 import androidx.compose.foundation.gestures.ScrollableDefaults
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
@@ -27,16 +28,21 @@ fun LazyColumnWithScrollbar(
     userScrollEnabled: Boolean = true,
     content: LazyListScope.() -> Unit
 ) {
-    LazyColumn(
-        modifier = modifier,
-        state = state,
-        contentPadding = contentPadding,
-        reverseLayout = reverseLayout,
-        verticalArrangement = verticalArrangement,
-        horizontalAlignment = horizontalAlignment,
-        flingBehavior = flingBehavior,
-        userScrollEnabled = userScrollEnabled,
-        content = content
-    )
-    Scrollbar(state, Modifier.then(modifier.padding())) // Get the modifier's padding to maintain scrollbar within the screen, e.g. paddingValues
+    Box(modifier) {
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth(),
+            state = state,
+            contentPadding = contentPadding,
+            reverseLayout = reverseLayout,
+            verticalArrangement = verticalArrangement,
+            horizontalAlignment = horizontalAlignment,
+            flingBehavior = flingBehavior,
+            userScrollEnabled = userScrollEnabled,
+            content = content
+        )
+        Scrollbar(
+            state,
+            Modifier.align(Alignment.CenterEnd)
+        )
+    }
 }

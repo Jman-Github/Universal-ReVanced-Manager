@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageInstaller
+import android.content.pm.PackageInfo
 import android.net.Uri
 import android.os.ParcelUuid
 import android.util.Log
@@ -33,7 +34,11 @@ import app.revanced.manager.data.room.apps.installed.InstallType
 import app.revanced.manager.data.room.apps.installed.InstalledApp
 import app.revanced.manager.domain.installer.InstallerManager
 import app.revanced.manager.domain.installer.RootInstaller
+import app.revanced.manager.domain.installer.ShizukuInstaller
 import app.revanced.manager.domain.manager.PreferencesManager
+import app.revanced.manager.domain.repository.PatchBundleRepository
+import app.revanced.manager.domain.repository.PatchOptionsRepository
+import app.revanced.manager.domain.repository.PatchSelectionRepository
 import app.revanced.manager.domain.repository.InstalledAppRepository
 import app.revanced.manager.domain.worker.WorkerRepository
 import app.revanced.manager.patcher.logger.LogLevel
@@ -53,6 +58,10 @@ import app.revanced.manager.ui.model.StepCategory
 import app.revanced.manager.ui.model.StepProgressProvider
 import app.revanced.manager.ui.model.navigation.Patcher
 import app.revanced.manager.util.PM
+import app.revanced.manager.util.PatchedAppExportData
+import app.revanced.manager.util.Options
+import app.revanced.manager.util.PatchSelection
+import app.revanced.manager.patcher.patch.PatchBundleInfo
 import app.revanced.manager.util.saveableVar
 import app.revanced.manager.util.saver.snapshotStateListSaver
 import app.revanced.manager.util.simpleMessage
@@ -67,6 +76,7 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.time.withTimeout
 import kotlinx.coroutines.withContext
@@ -87,8 +97,12 @@ class PatcherViewModel(
     private val fs: Filesystem by inject()
     private val pm: PM by inject()
     private val workerRepository: WorkerRepository by inject()
+    private val patchBundleRepository: PatchBundleRepository by inject()
+    private val patchSelectionRepository: PatchSelectionRepository by inject()
+    private val patchOptionsRepository: PatchOptionsRepository by inject()
     private val installedAppRepository: InstalledAppRepository by inject()
     private val rootInstaller: RootInstaller by inject()
+    private val shizukuInstaller: ShizukuInstaller by inject()
     private val installerManager: InstallerManager by inject()
     private val prefs: PreferencesManager by inject()
     private val savedStateHandle: SavedStateHandle = get()
@@ -121,8 +135,25 @@ class PatcherViewModel(
 
     var isInstalling by mutableStateOf(ongoingPmSession)
         private set
+    var installStatus by mutableStateOf<InstallCompletionStatus?>(null)
+        private set
+
+    private fun updateInstallingState(value: Boolean) {
+        ongoingPmSession = value
+        isInstalling = value
+        if (!value) {
+            awaitingPackageInstall = null
+            externalInstallTimeoutJob?.cancel()
+            externalInstallTimeoutJob = null
+        }
+    }
     private var savedPatchedApp by savedStateHandle.saveableVar { false }
     val hasSavedPatchedApp get() = savedPatchedApp
+
+    var exportMetadata by mutableStateOf<PatchedAppExportData?>(null)
+        private set
+    private var appliedSelection: PatchSelection = input.selectedPatches.mapValues { it.value.toSet() }
+    private var appliedOptions: Options = input.options
 
     private var currentActivityRequest: Pair<CompletableDeferred<Boolean>, String>? by mutableStateOf(
         null
@@ -132,6 +163,34 @@ class PatcherViewModel(
     private var launchedActivity: CompletableDeferred<ActivityResult>? = null
     private val launchActivityChannel = Channel<Intent>()
     val launchActivityFlow = launchActivityChannel.receiveAsFlow()
+
+    var installFailureMessage by mutableStateOf<String?>(null)
+        private set
+
+    private fun showInstallFailure(message: String) {
+        installFailureMessage = message
+        installStatus = InstallCompletionStatus.Failure(message)
+        updateInstallingState(false)
+        pendingExternalInstall?.let(installerManager::cleanup)
+        pendingExternalInstall = null
+    }
+
+    private fun scheduleInstallTimeout(
+        packageName: String,
+        durationMs: Long = SYSTEM_INSTALL_TIMEOUT_MS,
+        timeoutMessage: (() -> String)? = null
+    ) {
+        externalInstallTimeoutJob?.cancel()
+        externalInstallTimeoutJob = viewModelScope.launch {
+            delay(durationMs)
+            if (installStatus is InstallCompletionStatus.InProgress) {
+                logger.trace("install timeout for $packageName")
+                packageInstallerStatus = null
+                val message = timeoutMessage?.invoke() ?: app.getString(R.string.install_timeout_message)
+                showInstallFailure(message)
+            }
+        }
+    }
 
     private val tempDir = savedStateHandle.saveable(key = "tempDir") {
         fs.uiTempDir.resolve("installer").also {
@@ -178,6 +237,59 @@ class PatcherViewModel(
 
     var memoryAdjustmentDialog by mutableStateOf<MemoryAdjustmentDialogState?>(null)
         private set
+
+    private suspend fun collectSelectedBundleMetadata(): Pair<List<String>, List<String>> {
+        val globalBundles = patchBundleRepository.bundleInfoFlow.first()
+        val scopedBundles = patchBundleRepository.scopedBundleInfoFlow(
+            packageName,
+            input.selectedApp.version
+        ).first().associateBy { it.uid }
+        val sanitizedSelection = sanitizeSelection(appliedSelection, scopedBundles)
+        val versions = mutableListOf<String>()
+        val names = mutableListOf<String>()
+        val displayNames = patchBundleRepository.sources.first().associate { it.uid to it.displayTitle }
+        sanitizedSelection.keys.forEach { uid ->
+            val scoped = scopedBundles[uid]
+            val global = globalBundles[uid]
+            val displayName = displayNames[uid]
+                ?: scoped?.name
+                ?: global?.name
+            global?.version?.takeIf { it.isNotBlank() }?.let(versions::add)
+            displayName?.takeIf { it.isNotBlank() }?.let(names::add)
+        }
+        return versions.distinct() to names.distinct()
+    }
+
+    private suspend fun buildExportMetadata(packageInfo: PackageInfo?): PatchedAppExportData? {
+        val info = packageInfo ?: pm.getPackageInfo(outputFile) ?: return null
+        val (bundleVersions, bundleNames) = collectSelectedBundleMetadata()
+        val label = runCatching { with(pm) { info.label() } }.getOrNull()
+        val versionName = info.versionName?.takeUnless { it.isBlank() } ?: version ?: "unspecified"
+        return PatchedAppExportData(
+            appName = label,
+            packageName = info.packageName,
+            appVersion = versionName,
+            patchBundleVersions = bundleVersions,
+            patchBundleNames = bundleNames
+        )
+    }
+
+    private fun refreshExportMetadata() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val metadata = buildExportMetadata(null)
+            withContext(Dispatchers.Main) {
+                exportMetadata = metadata
+            }
+        }
+    }
+
+    private suspend fun ensureExportMetadata() {
+        if (exportMetadata != null) return
+        val metadata = buildExportMetadata(null) ?: return
+        withContext(Dispatchers.Main) {
+            exportMetadata = metadata
+        }
+    }
     val steps by savedStateHandle.saveable(saver = snapshotStateListSaver()) {
         generateSteps(
             app,
@@ -202,6 +314,7 @@ class PatcherViewModel(
     private var currentWorkSource: LiveData<WorkInfo?>? = null
     private val handledFailureIds = mutableSetOf<UUID>()
     private var forceKeepLocalInput = false
+    private var awaitingPackageInstall: String? = null
 
     private var patcherWorkerId: ParcelUuid by savedStateHandle.saveableVar {
         ParcelUuid(launchWorker())
@@ -226,30 +339,54 @@ class PatcherViewModel(
         val finalPackageName = packageInfo.packageName
         val finalVersion = packageInfo.versionName?.takeUnless { it.isBlank() } ?: version ?: "unspecified"
 
-        if (installType == InstallType.SAVED) {
-            try {
-                val destination = fs.getPatchedAppFile(finalPackageName, finalVersion)
-                outputFile.copyTo(destination, overwrite = true)
-            } catch (error: IOException) {
+        val savedCopy = fs.getPatchedAppFile(finalPackageName, finalVersion)
+        try {
+            savedCopy.parentFile?.mkdirs()
+            outputFile.copyTo(savedCopy, overwrite = true)
+        } catch (error: IOException) {
+            if (installType == InstallType.SAVED) {
                 Log.e(TAG, "Failed to copy patched APK for later", error)
                 return@withContext false
-            }
-        } else {
-            val savedCopy = fs.getPatchedAppFile(finalPackageName, finalVersion)
-            if (savedCopy.exists() && !savedCopy.delete()) {
-                Log.w(TAG, "Failed to delete saved patched APK copy for $finalPackageName")
+            } else {
+                Log.w(TAG, "Failed to update saved copy for $finalPackageName", error)
             }
         }
+
+        val metadata = buildExportMetadata(patchedPackageInfo ?: packageInfo)
+        withContext(Dispatchers.Main) {
+            exportMetadata = metadata
+        }
+
+        val scopedBundlesFinal = patchBundleRepository.scopedBundleInfoFlow(finalPackageName, finalVersion)
+            .first()
+            .associateBy { it.uid }
+        val sanitizedSelectionFinal = sanitizeSelection(appliedSelection, scopedBundlesFinal)
+        val sanitizedOptionsFinal = sanitizeOptions(appliedOptions, scopedBundlesFinal)
+        val scopedBundlesOriginal = patchBundleRepository.scopedBundleInfoFlow(
+            packageName,
+            input.selectedApp.version
+        ).first().associateBy { it.uid }
+        val sanitizedSelectionOriginal = sanitizeSelection(appliedSelection, scopedBundlesOriginal)
+        val sanitizedOptionsOriginal = sanitizeOptions(appliedOptions, scopedBundlesOriginal)
 
         installedAppRepository.addOrUpdate(
             finalPackageName,
             packageName,
             finalVersion,
             installType,
-            input.selectedPatches
+            sanitizedSelectionFinal
         )
 
-        savedPatchedApp = installType == InstallType.SAVED
+        if (finalPackageName != packageName) {
+            patchSelectionRepository.updateSelection(finalPackageName, sanitizedSelectionFinal)
+            patchOptionsRepository.saveOptions(finalPackageName, sanitizedOptionsFinal)
+        }
+        patchSelectionRepository.updateSelection(packageName, sanitizedSelectionOriginal)
+        patchOptionsRepository.saveOptions(packageName, sanitizedOptionsOriginal)
+        appliedSelection = sanitizedSelectionOriginal
+        appliedOptions = sanitizedOptionsOriginal
+
+        savedPatchedApp = savedPatchedApp || installType == InstallType.SAVED || savedCopy.exists()
         true
     }
 
@@ -282,7 +419,20 @@ class PatcherViewModel(
                 Intent.ACTION_PACKAGE_ADDED,
                 Intent.ACTION_PACKAGE_REPLACED -> {
                     val pkg = intent.data?.schemeSpecificPart ?: return
-                    handleExternalInstallSuccess(pkg)
+                    if (pkg == awaitingPackageInstall) {
+                        awaitingPackageInstall = null
+                        installedPackageName = pkg
+                        viewModelScope.launch {
+                            val persisted = persistPatchedApp(pkg, InstallType.DEFAULT)
+                            if (!persisted) {
+                                Log.w(TAG, "Failed to persist installed patched app metadata (package added broadcast)")
+                            }
+                        }
+                        app.toast(app.getString(R.string.install_app_success))
+                        updateInstallingState(false)
+                    } else {
+                        handleExternalInstallSuccess(pkg)
+                    }
                 }
 
                 InstallService.APP_INSTALL_ACTION -> {
@@ -294,19 +444,40 @@ class PatcherViewModel(
                     intent.getStringExtra(UninstallService.EXTRA_UNINSTALL_STATUS_MESSAGE)
                         ?.let(logger::trace)
 
-                    if (pmStatus == PackageInstaller.STATUS_SUCCESS) {
-                        app.toast(app.getString(R.string.install_app_success))
-                        installedPackageName =
-                            intent.getStringExtra(InstallService.EXTRA_PACKAGE_NAME)
-                        viewModelScope.launch {
-                            val persisted = persistPatchedApp(installedPackageName, InstallType.DEFAULT)
-                            if (!persisted) {
-                                Log.w(TAG, "Failed to persist installed patched app metadata")
-                            }
-                        }
-                    } else packageInstallerStatus = pmStatus
+                    updateInstallingState(false)
 
-                    isInstalling = false
+                    if (pmStatus == PackageInstaller.STATUS_PENDING_USER_ACTION) {
+                        updateInstallingState(true)
+                        return
+                    }
+
+                    if (pmStatus == PackageInstaller.STATUS_SUCCESS) {
+                        val packageName = intent.getStringExtra(InstallService.EXTRA_PACKAGE_NAME)
+                        awaitingPackageInstall = null
+                        installedPackageName = packageName
+                        installFailureMessage = null
+                viewModelScope.launch {
+                    val persisted = persistPatchedApp(installedPackageName, InstallType.DEFAULT)
+                    if (!persisted) {
+                        Log.w(TAG, "Failed to persist installed patched app metadata")
+                    }
+                }
+                app.toast(app.getString(R.string.install_app_success))
+                        installStatus = InstallCompletionStatus.Success(packageName)
+                        updateInstallingState(false)
+                        packageInstallerStatus = null
+                    } else {
+                        awaitingPackageInstall = null
+                        packageInstallerStatus = pmStatus
+                        val rawMessage = intent.getStringExtra(InstallService.EXTRA_INSTALL_STATUS_MESSAGE)
+                            ?.takeIf { it.isNotBlank() }
+                        val formatted = installerManager.formatFailureHint(pmStatus, rawMessage)
+                        val message = formatted
+                            ?: rawMessage
+                            ?: app.getString(R.string.install_app_fail, pmStatus.toString())
+                        packageInstallerStatus = null
+                        showInstallFailure(message)
+                    }
                 }
 
                 UninstallService.APP_UNINSTALL_ACTION -> {
@@ -392,6 +563,7 @@ class PatcherViewModel(
 
     fun export(uri: Uri?) = viewModelScope.launch {
         uri?.let { targetUri ->
+            ensureExportMetadata()
             val exportSucceeded = runCatching {
                 withContext(Dispatchers.IO) {
                     app.contentResolver.openOutputStream(targetUri)
@@ -436,7 +608,8 @@ class PatcherViewModel(
     private suspend fun performInstall(installType: InstallType) {
         var pmInstallStarted = false
         try {
-            isInstalling = true
+            updateInstallingState(true)
+            installStatus = InstallCompletionStatus.InProgress
 
             val currentPackageInfo = pm.getPackageInfo(outputFile)
                 ?: throw Exception("Failed to load application info")
@@ -461,8 +634,24 @@ class PatcherViewModel(
                     }
 
                     // Install regularly
-                    pm.installApp(listOf(outputFile))
-                    pmInstallStarted = true
+                    awaitingPackageInstall = currentPackageInfo.packageName
+                    try {
+                        pm.installApp(listOf(outputFile))
+                        pmInstallStarted = true
+                        installStatus = InstallCompletionStatus.InProgress
+                        scheduleInstallTimeout(currentPackageInfo.packageName)
+                    } catch (installError: Exception) {
+                        Log.e(TAG, "PackageInstaller.installApp failed", installError)
+                        packageInstallerStatus = null
+                        awaitingPackageInstall = null
+                        showInstallFailure(
+                            app.getString(
+                                R.string.install_app_fail,
+                                installError.simpleMessage() ?: installError.javaClass.simpleName.orEmpty()
+                            )
+                        )
+                        return
+                    }
                 }
 
                 InstallType.MOUNT -> {
@@ -507,7 +696,13 @@ class PatcherViewModel(
                         app.toast(app.getString(R.string.install_app_success))
                     } catch (e: Exception) {
                         Log.e(tag, "Failed to install as root", e)
-                        app.toast(app.getString(R.string.install_app_fail, e.simpleMessage()))
+                        packageInstallerStatus = null
+                        showInstallFailure(
+                            app.getString(
+                                R.string.install_app_fail,
+                                e.simpleMessage() ?: e.javaClass.simpleName.orEmpty()
+                            )
+                        )
                         try {
                             rootInstaller.uninstall(packageName)
                         } catch (_: Exception) {
@@ -516,10 +711,79 @@ class PatcherViewModel(
                 }
             }
         } catch (e: Exception) {
-            Log.e(tag, "Failed to install", e)
-            app.toast(app.getString(R.string.install_app_fail, e.simpleMessage()))
+                    Log.e(tag, "Failed to install", e)
+                    awaitingPackageInstall = null
+                    packageInstallerStatus = null
+                    showInstallFailure(
+                        app.getString(
+                            R.string.install_app_fail,
+                            e.simpleMessage() ?: e.javaClass.simpleName.orEmpty()
+                        )
+                    )
+                } finally {
+                    if (!pmInstallStarted) updateInstallingState(false)
+                }
+            }
+
+    private suspend fun performShizukuInstall() {
+        updateInstallingState(true)
+        installStatus = InstallCompletionStatus.InProgress
+        packageInstallerStatus = null
+        try {
+
+            val currentPackageInfo = pm.getPackageInfo(outputFile)
+                ?: throw Exception("Failed to load application info")
+
+            val existingPackageInfo = pm.getPackageInfo(currentPackageInfo.packageName)
+            if (existingPackageInfo != null) {
+                if (pm.getVersionCode(currentPackageInfo) < pm.getVersionCode(existingPackageInfo)) {
+                    packageInstallerStatus = PackageInstaller.STATUS_FAILURE_CONFLICT
+                    return
+                }
+            }
+
+            if (rootInstaller.hasRootAccess() && rootInstaller.isAppMounted(packageName)) {
+                rootInstaller.unmount(packageName)
+            }
+
+            awaitingPackageInstall = currentPackageInfo.packageName
+            val result = shizukuInstaller.install(outputFile, currentPackageInfo.packageName)
+            packageInstallerStatus = result.status
+            if (result.status != PackageInstaller.STATUS_SUCCESS) {
+                throw ShizukuInstaller.InstallerOperationException(result.status, result.message)
+            }
+
+            val persisted = persistPatchedApp(currentPackageInfo.packageName, InstallType.DEFAULT)
+            if (!persisted) {
+                Log.w(TAG, "Failed to persist installed patched app metadata")
+            }
+
+            installedPackageName = currentPackageInfo.packageName
+            app.toast(app.getString(R.string.install_app_success))
+            updateInstallingState(false)
+        } catch (error: ShizukuInstaller.InstallerOperationException) {
+            Log.e(tag, "Failed to install via Shizuku", error)
+            val message = error.message ?: app.getString(R.string.installer_hint_generic)
+            packageInstallerStatus = null
+            showInstallFailure(app.getString(R.string.install_app_fail, message))
+        } catch (error: Exception) {
+            Log.e(tag, "Failed to install via Shizuku", error)
+            if (packageInstallerStatus == null) {
+                packageInstallerStatus = PackageInstaller.STATUS_FAILURE
+            }
+            showInstallFailure(
+                app.getString(
+                    R.string.install_app_fail,
+                    error.simpleMessage() ?: error.javaClass.simpleName.orEmpty()
+                )
+            )
         } finally {
-            if (!pmInstallStarted) isInstalling = false
+            if (packageInstallerStatus != PackageInstaller.STATUS_SUCCESS) {
+                awaitingPackageInstall = null
+            }
+            if (packageInstallerStatus == PackageInstaller.STATUS_SUCCESS) {
+                updateInstallingState(false)
+            }
         }
     }
 
@@ -529,7 +793,6 @@ class PatcherViewModel(
                 pendingExternalInstall?.let(installerManager::cleanup)
                 pendingExternalInstall = null
                 externalInstallTimeoutJob?.cancel()
-        externalInstallTimeoutJob = null
                 externalInstallTimeoutJob = null
                 performInstall(installTypeFor(plan.target))
             }
@@ -538,9 +801,16 @@ class PatcherViewModel(
                 pendingExternalInstall?.let(installerManager::cleanup)
                 pendingExternalInstall = null
                 externalInstallTimeoutJob?.cancel()
-        externalInstallTimeoutJob = null
                 externalInstallTimeoutJob = null
                 performInstall(InstallType.MOUNT)
+            }
+
+            is InstallerManager.InstallPlan.Shizuku -> {
+                pendingExternalInstall?.let(installerManager::cleanup)
+                pendingExternalInstall = null
+                externalInstallTimeoutJob?.cancel()
+                externalInstallTimeoutJob = null
+                performShizukuInstall()
             }
 
             is InstallerManager.InstallPlan.External -> launchExternalInstaller(plan)
@@ -559,7 +829,8 @@ class PatcherViewModel(
         externalInstallTimeoutJob = null
 
         pendingExternalInstall = plan
-        isInstalling = true
+        updateInstallingState(true)
+        installStatus = InstallCompletionStatus.InProgress
 
         try {
             ContextCompat.startActivity(app, plan.intent, null)
@@ -567,22 +838,18 @@ class PatcherViewModel(
         } catch (error: ActivityNotFoundException) {
             installerManager.cleanup(plan)
             pendingExternalInstall = null
-            isInstalling = false
+            updateInstallingState(false)
             externalInstallTimeoutJob = null
-            app.toast(app.getString(R.string.install_app_fail, error.simpleMessage()))
+            showInstallFailure(
+                app.getString(
+                    R.string.install_app_fail,
+                    error.simpleMessage() ?: error.javaClass.simpleName.orEmpty()
+                )
+            )
             return
         }
 
-        externalInstallTimeoutJob = viewModelScope.launch {
-            delay(EXTERNAL_INSTALL_TIMEOUT_MS)
-            if (pendingExternalInstall == plan) {
-                installerManager.cleanup(plan)
-                pendingExternalInstall = null
-                isInstalling = false
-                externalInstallTimeoutJob = null
-                app.toast(app.getString(R.string.installer_external_timeout, plan.installerLabel))
-            }
-        }
+        scheduleInstallTimeout(plan.expectedPackage, EXTERNAL_INSTALL_TIMEOUT_MS)
     }
 
     private fun handleExternalInstallSuccess(packageName: String) {
@@ -593,7 +860,8 @@ class PatcherViewModel(
         externalInstallTimeoutJob?.cancel()
         externalInstallTimeoutJob = null
         installerManager.cleanup(plan)
-        isInstalling = false
+        updateInstallingState(false)
+        installStatus = InstallCompletionStatus.Success(packageName)
 
         when (plan.target) {
             InstallerManager.InstallTarget.PATCHER -> {
@@ -659,6 +927,13 @@ class PatcherViewModel(
                     externalInstallTimeoutJob = null
                     performInstall(InstallType.MOUNT)
                 }
+                is InstallerManager.InstallPlan.Shizuku -> {
+                    pendingExternalInstall?.let(installerManager::cleanup)
+                    pendingExternalInstall = null
+                    externalInstallTimeoutJob?.cancel()
+                    externalInstallTimeoutJob = null
+                    performShizukuInstall()
+                }
                 is InstallerManager.InstallPlan.External -> launchExternalInstaller(plan)
             }
         }
@@ -666,6 +941,23 @@ class PatcherViewModel(
 
     fun dismissPackageInstallerDialog() {
         packageInstallerStatus = null
+    }
+
+    fun dismissInstallFailureMessage() {
+        installFailureMessage = null
+        packageInstallerStatus = null
+        awaitingPackageInstall = null
+        installStatus = null
+    }
+
+    fun clearInstallStatus() {
+        installStatus = null
+    }
+
+    sealed class InstallCompletionStatus {
+        data object InProgress : InstallCompletionStatus()
+        data class Success(val packageName: String?) : InstallCompletionStatus()
+        data class Failure(val message: String) : InstallCompletionStatus()
     }
 
     private fun launchWorker(): UUID =
@@ -772,6 +1064,7 @@ class PatcherViewModel(
                         inputFile?.takeIf { it.exists() }?.delete()
                         inputFile = null
                     }
+                    refreshExportMetadata()
                     _patcherSucceeded.value = true
                 }
 
@@ -840,9 +1133,41 @@ class PatcherViewModel(
         _patcherSucceeded.value = null
     }
 
+    private fun sanitizeSelection(
+        selection: PatchSelection,
+        bundles: Map<Int, PatchBundleInfo.Scoped>
+    ): PatchSelection = buildMap {
+        selection.forEach { (uid, patches) ->
+            val bundle = bundles[uid] ?: return@forEach
+            val valid = bundle.patches.map { it.name }.toSet()
+            val kept = patches.filter { it in valid }.toSet()
+            if (kept.isNotEmpty()) put(uid, kept)
+        }
+    }
+
+    private fun sanitizeOptions(
+        options: Options,
+        bundles: Map<Int, PatchBundleInfo.Scoped>
+    ): Options = buildMap {
+        options.forEach { (uid, patchOptions) ->
+            val bundle = bundles[uid] ?: return@forEach
+            val patches = bundle.patches.associateBy { it.name }
+            val filtered = buildMap<String, Map<String, Any?>> {
+                patchOptions.forEach { (patchName, values) ->
+                    val patch = patches[patchName] ?: return@forEach
+                    val validKeys = patch.options?.map { it.key }?.toSet() ?: emptySet()
+                    val kept = if (validKeys.isEmpty()) values else values.filterKeys { it in validKeys }
+                    if (kept.isNotEmpty()) put(patchName, kept)
+                }
+            }
+            if (filtered.isNotEmpty()) put(uid, filtered)
+        }
+    }
+
     private companion object {
         const val TAG = "ReVanced Patcher"
-        private const val EXTERNAL_INSTALL_TIMEOUT_MS = 60_000L
+        private const val SYSTEM_INSTALL_TIMEOUT_MS = 15_000L
+        private const val EXTERNAL_INSTALL_TIMEOUT_MS = 25_000L
         private const val MEMORY_ADJUSTMENT_MB = 200
         private const val MIN_MEMORY_LIMIT_MB = 200
 

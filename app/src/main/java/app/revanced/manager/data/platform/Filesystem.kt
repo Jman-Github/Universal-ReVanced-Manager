@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Environment
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
+import app.revanced.manager.util.FilenameUtils
 import app.revanced.manager.util.RequestManageStorageContract
 import java.io.File
 import java.nio.file.Path
@@ -51,20 +52,8 @@ class Filesystem(private val app: Application) {
         ) == PackageManager.PERMISSION_GRANTED
 
     fun getPatchedAppFile(packageName: String, version: String): File {
-        val safePackage = packageName.sanitizeForFilename()
-        val safeVersion = version.ifBlank { "unspecified" }.sanitizeForFilename()
+        val safePackage = FilenameUtils.sanitize(packageName)
+        val safeVersion = FilenameUtils.sanitize(version.ifBlank { "unspecified" })
         return patchedAppsDir.resolve("${safePackage}_${safeVersion}.apk")
     }
-
-    private fun String.sanitizeForFilename(): String =
-        fold(StringBuilder(length)) { acc, char ->
-            val sanitized = when (char) {
-                in '0'..'9',
-                in 'a'..'z',
-                in 'A'..'Z',
-                '-', '_', '.' -> char
-                else -> '_'
-            }
-            acc.append(sanitized)
-        }.toString()
 }

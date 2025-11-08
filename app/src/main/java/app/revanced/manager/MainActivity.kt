@@ -50,7 +50,6 @@ import app.revanced.manager.ui.screen.settings.DeveloperSettingsScreen
 import app.revanced.manager.ui.screen.settings.DownloadsSettingsScreen
 import app.revanced.manager.ui.screen.settings.GeneralSettingsScreen
 import app.revanced.manager.ui.screen.settings.ImportExportSettingsScreen
-import app.revanced.manager.ui.screen.settings.LicensesSettingsScreen
 import app.revanced.manager.ui.screen.settings.update.ChangelogsSettingsScreen
 import app.revanced.manager.ui.screen.settings.update.UpdatesSettingsScreen
 import app.revanced.manager.ui.theme.ReVancedManagerTheme
@@ -341,9 +340,6 @@ private fun ReVancedManager(vm: MainViewModel) {
                 ContributorSettingsScreen(onBackClick = navController::popBackStack)
             }
 
-            composable<Settings.Licenses> {
-                LicensesSettingsScreen(onBackClick = navController::popBackStack)
-            }
 
         }
     }

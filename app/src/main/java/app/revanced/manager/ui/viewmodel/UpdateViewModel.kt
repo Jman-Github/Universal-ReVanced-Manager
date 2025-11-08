@@ -23,6 +23,7 @@ import app.revanced.manager.network.api.ReVancedAPI
 import app.revanced.manager.network.dto.ReVancedAsset
 import app.revanced.manager.network.service.HttpService
 import app.revanced.manager.domain.installer.InstallerManager
+import app.revanced.manager.domain.installer.ShizukuInstaller
 import app.revanced.manager.service.InstallService
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.util.PM
@@ -46,6 +47,7 @@ class UpdateViewModel(
     private val reVancedAPI: ReVancedAPI by inject()
     private val http: HttpService by inject()
     private val pm: PM by inject()
+    private val shizukuInstaller: ShizukuInstaller by inject()
     private val networkInfo: NetworkInfo by inject()
     private val fs: Filesystem by inject()
     private val prefs: PreferencesManager by inject()
@@ -133,6 +135,26 @@ class UpdateViewModel(
                 app.toast(app.getString(R.string.install_app_fail, hint))
                 installError = hint
                 state = State.FAILED
+            }
+
+            is InstallerManager.InstallPlan.Shizuku -> {
+                state = State.INSTALLING
+                try {
+                    shizukuInstaller.install(location, app.packageName)
+                    installError = ""
+                    state = State.SUCCESS
+                    app.toast(app.getString(R.string.update_completed))
+                } catch (error: ShizukuInstaller.InstallerOperationException) {
+                    val message = error.message ?: app.getString(R.string.installer_hint_generic)
+                    installError = message
+                    app.toast(app.getString(R.string.install_app_fail, message))
+                    state = State.FAILED
+                } catch (error: Exception) {
+                    val message = error.simpleMessage().orEmpty()
+                    installError = message
+                    app.toast(app.getString(R.string.install_app_fail, message))
+                    state = State.FAILED
+                }
             }
 
             is InstallerManager.InstallPlan.External -> launchExternalInstaller(plan)

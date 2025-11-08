@@ -22,6 +22,7 @@ import app.revanced.manager.data.room.apps.installed.InstallType
 import app.revanced.manager.data.room.apps.installed.InstalledApp
 import app.revanced.manager.domain.installer.InstallerManager
 import app.revanced.manager.domain.installer.RootInstaller
+import app.revanced.manager.domain.installer.ShizukuInstaller
 import app.revanced.manager.domain.repository.InstalledAppRepository
 import app.revanced.manager.service.InstallService
 import app.revanced.manager.service.UninstallService
@@ -48,6 +49,7 @@ class InstalledAppInfoViewModel(
     private val installedAppRepository: InstalledAppRepository by inject()
     val rootInstaller: RootInstaller by inject()
     private val installerManager: InstallerManager by inject()
+    private val shizukuInstaller: ShizukuInstaller by inject()
     private val filesystem: Filesystem by inject()
     private var pendingExternalInstall: InstallerManager.InstallPlan.External? = null
     private var externalInstallTimeoutJob: Job? = null
@@ -62,6 +64,8 @@ class InstalledAppInfoViewModel(
     var isMounted by mutableStateOf(false)
         private set
     var isInstalledOnDevice by mutableStateOf(false)
+        private set
+    var hasSavedCopy by mutableStateOf(false)
         private set
 
     init {
@@ -89,7 +93,6 @@ class InstalledAppInfoViewModel(
 
     fun installSavedApp() = viewModelScope.launch {
         val app = installedApp ?: return@launch
-        if (app.installType != InstallType.SAVED) return@launch
 
         val apk = savedApkFile(app)
         if (apk == null) {
@@ -118,6 +121,9 @@ class InstalledAppInfoViewModel(
 
                 if (!success) {
                     context.toast(context.getString(R.string.saved_app_install_failed))
+                } else {
+                    viewModelScope.launch { refreshAppState(app) }
+                    isMounted = false
                 }
             }
 
@@ -143,6 +149,22 @@ class InstalledAppInfoViewModel(
                 } catch (e: Exception) {
                     Log.e(tag, "Failed to install saved app with root", e)
                     context.toast(context.getString(R.string.saved_app_install_failed))
+                }
+            }
+
+            is InstallerManager.InstallPlan.Shizuku -> {
+                try {
+                    shizukuInstaller.install(apk, app.currentPackageName)
+                    refreshAppState(app)
+                    isMounted = false
+                    context.toast(context.getString(R.string.saved_app_install_success))
+                } catch (error: ShizukuInstaller.InstallerOperationException) {
+                    val message = error.message ?: context.getString(R.string.installer_hint_generic)
+                    Log.e(tag, "Failed to install saved app with Shizuku", error)
+                    context.toast(context.getString(R.string.install_app_fail, message))
+                } catch (error: Exception) {
+                    Log.e(tag, "Failed to install saved app with Shizuku", error)
+                    context.toast(context.getString(R.string.install_app_fail, error.simpleMessage()))
                 }
             }
 
@@ -199,7 +221,7 @@ class InstalledAppInfoViewModel(
 
     fun uninstallSavedInstallation() = viewModelScope.launch {
         val app = installedApp ?: return@launch
-        if (app.installType != InstallType.SAVED || !isInstalledOnDevice) return@launch
+        if (!isInstalledOnDevice) return@launch
         pm.uninstallPackage(app.currentPackageName)
     }
 
@@ -234,7 +256,7 @@ class InstalledAppInfoViewModel(
                 onBackClick()
             }
 
-            InstallType.SAVED -> removeSavedApp()
+            InstallType.SAVED -> uninstallSavedInstallation()
         }
     }
 
@@ -265,17 +287,40 @@ class InstalledAppInfoViewModel(
     fun removeSavedApp() = viewModelScope.launch {
         val app = installedApp ?: return@launch
         if (app.installType != InstallType.SAVED) return@launch
-
-        installedAppRepository.delete(app)
-        withContext(Dispatchers.IO) {
-            savedApkFile(app)?.delete()
-        }
+        clearSavedData(app, deleteRecord = true)
         installedApp = null
         appInfo = null
         appliedPatches = null
         isInstalledOnDevice = false
         context.toast(context.getString(R.string.saved_app_removed_toast))
         onBackClick()
+    }
+
+    fun deleteSavedEntry() = viewModelScope.launch {
+        val app = installedApp ?: return@launch
+        clearSavedData(app, deleteRecord = true)
+        installedApp = null
+        appInfo = null
+        appliedPatches = null
+        isInstalledOnDevice = false
+        context.toast(context.getString(R.string.saved_app_removed_toast))
+        onBackClick()
+    }
+
+    fun deleteSavedCopy() = viewModelScope.launch {
+        val app = installedApp ?: return@launch
+        clearSavedData(app, deleteRecord = false)
+        context.toast(context.getString(R.string.saved_app_copy_removed_toast))
+    }
+
+    private suspend fun clearSavedData(app: InstalledApp, deleteRecord: Boolean) {
+        if (deleteRecord) {
+            installedAppRepository.delete(app)
+        }
+        withContext(Dispatchers.IO) {
+            savedApkFile(app)?.delete()
+        }
+        hasSavedCopy = false
     }
 
     private fun savedApkFile(app: InstalledApp? = this.installedApp): File? {
@@ -288,6 +333,8 @@ class InstalledAppInfoViewModel(
         val installedInfo = withContext(Dispatchers.IO) {
             pm.getPackageInfo(app.currentPackageName)
         }
+        hasSavedCopy = withContext(Dispatchers.IO) { savedApkFile(app) != null }
+
         if (installedInfo != null) {
             isInstalledOnDevice = true
             appInfo = installedInfo
@@ -305,7 +352,25 @@ class InstalledAppInfoViewModel(
                 Intent.ACTION_PACKAGE_ADDED,
                 Intent.ACTION_PACKAGE_REPLACED -> {
                     val pkg = intent.data?.schemeSpecificPart ?: return
-                    handleExternalInstallSuccess(pkg)
+                    val currentApp = installedApp ?: return
+                    if (pkg != currentApp.currentPackageName) return
+
+                    if (pendingExternalInstall != null) {
+                        handleExternalInstallSuccess(pkg)
+                    } else {
+                        viewModelScope.launch { refreshAppState(currentApp) }
+                    }
+                }
+
+                Intent.ACTION_PACKAGE_REMOVED -> {
+                    if (intent?.getBooleanExtra(Intent.EXTRA_REPLACING, false) == true) return
+                    val pkg = intent?.data?.schemeSpecificPart ?: return
+                    val currentApp = installedApp ?: return
+                    if (pkg != currentApp.currentPackageName) return
+                    viewModelScope.launch {
+                        refreshAppState(currentApp)
+                        isMounted = false
+                    }
                 }
 
                 InstallService.APP_INSTALL_ACTION -> {
@@ -351,6 +416,7 @@ class InstalledAppInfoViewModel(
                 addAction(InstallService.APP_INSTALL_ACTION)
                 addAction(Intent.ACTION_PACKAGE_ADDED)
                 addAction(Intent.ACTION_PACKAGE_REPLACED)
+                addAction(Intent.ACTION_PACKAGE_REMOVED)
                 addDataScheme("package")
             },
             ContextCompat.RECEIVER_NOT_EXPORTED
@@ -375,10 +441,39 @@ class InstalledAppInfoViewModel(
                         viewModelScope.launch {
                             if (currentApp.installType == InstallType.SAVED) {
                                 refreshAppState(currentApp)
-                            } else {
+                                return@launch
+                            }
+
+                            val hasLocalCopy = withContext(Dispatchers.IO) {
+                                savedApkFile(currentApp) != null
+                            }
+
+                            if (!hasLocalCopy) {
                                 installedAppRepository.delete(currentApp)
                                 onBackClick()
+                                return@launch
                             }
+
+                            val selection = appliedPatches ?: withContext(Dispatchers.IO) {
+                                installedAppRepository.getAppliedPatches(currentApp.currentPackageName)
+                            }
+
+                            withContext(Dispatchers.IO) {
+                                installedAppRepository.addOrUpdate(
+                                    currentApp.currentPackageName,
+                                    currentApp.originalPackageName,
+                                    currentApp.version,
+                                    InstallType.SAVED,
+                                    selection
+                                )
+                            }
+
+                            val updatedApp = currentApp.copy(installType = InstallType.SAVED)
+                            installedApp = updatedApp
+                            appliedPatches = selection
+                            isMounted = false
+                            hasSavedCopy = true
+                            refreshAppState(updatedApp)
                         }
                     } else if (extraStatus != PackageInstaller.STATUS_FAILURE_ABORTED) {
                         this@InstalledAppInfoViewModel.context.toast(

@@ -115,8 +115,15 @@ data class PatchBundleSnapshot(
     val endpoint: String,
     val name: String,
     val displayName: String? = null,
-    val autoUpdate: Boolean = false
+    val autoUpdate: Boolean = false,
+    val officialState: OfficialBundleState? = null
 )
+
+@Serializable
+enum class OfficialBundleState {
+    PRESENT,
+    ABSENT
+}
 
 private data class PatchBundleImportSummary(
     val created: Int,
@@ -311,13 +318,12 @@ class ImportExportViewModel(
 
                             var createdCount = 0
                             var updatedCount = 0
-                            var officialDisplayName: String? = null
+                            var officialSnapshot: PatchBundleSnapshot? = null
 
                             for (snapshot in exportFile.bundles) {
                                 val endpoint = snapshot.endpoint.trim()
                                 if (endpoint.equals(SourceInfo.API.SENTINEL, true)) {
-                                    val displayName = snapshot.displayName?.takeUnless { it.isBlank() }
-                                    if (displayName != null) officialDisplayName = displayName
+                                    officialSnapshot = snapshot
                                     continue
                                 }
                                 if (endpoint.isBlank()) continue
@@ -366,13 +372,26 @@ class ImportExportViewModel(
                                 }
                             }
 
-                            officialDisplayName?.let { displayName ->
-                                val normalized = displayName.trim()
-                                if (normalized.isNotEmpty()) {
-                                    val defaultSource = patchBundleRepository.sources.first()
-                                        .firstOrNull { it.isDefault }
-                                    if (defaultSource != null && defaultSource.displayName != normalized) {
-                                        patchBundleRepository.setDisplayName(defaultSource, normalized)
+                            officialSnapshot?.let { snapshot ->
+                                val desiredState = snapshot.officialState ?: OfficialBundleState.PRESENT
+                                val desiredDisplayName = snapshot.displayName?.takeUnless { it.isBlank() }
+                                when (desiredState) {
+                                    OfficialBundleState.PRESENT -> {
+                                        var defaultSource = patchBundleRepository.sources.first()
+                                            .firstOrNull { it.isDefault }
+                                        if (defaultSource == null) {
+                                            patchBundleRepository.restoreDefaultBundle()
+                                            defaultSource = patchBundleRepository.sources.first()
+                                                .firstOrNull { it.isDefault }
+                                        }
+                                        if (desiredDisplayName != null && defaultSource != null && defaultSource.displayName != desiredDisplayName) {
+                                            patchBundleRepository.setDisplayName(defaultSource, desiredDisplayName)
+                                        }
+                                    }
+                                    OfficialBundleState.ABSENT -> {
+                                        patchBundleRepository.sources.first()
+                                            .firstOrNull { it.isDefault }
+                                            ?.let { patchBundleRepository.remove(it) }
                                     }
                                 }
                             }
@@ -401,18 +420,11 @@ class ImportExportViewModel(
             val localSources = nonDefaultSources.filter { it.asRemoteOrNull == null }
             val remoteSources = nonDefaultSources.mapNotNull { it.asRemoteOrNull }
 
-            if (remoteSources.isEmpty()) {
-                if (localSources.isNotEmpty()) {
-                    app.toast(app.getString(R.string.export_patch_bundles_local_not_supported))
-                } else {
-                    app.toast(app.getString(R.string.export_patch_bundles_empty))
-                }
-                return@uiSafe
-            }
-
-            val officialDisplayName = sources.firstOrNull { it.isDefault }
+            val officialSource = sources.firstOrNull { it.isDefault }
+            val officialDisplayName = officialSource
                 ?.displayName
                 ?.takeUnless { it.isBlank() }
+            val officialState = officialSource?.let { OfficialBundleState.PRESENT } ?: OfficialBundleState.ABSENT
 
             val exportedCount = remoteSources.size
 
@@ -425,16 +437,15 @@ class ImportExportViewModel(
                         autoUpdate = it.autoUpdate
                     )
                 }
-                if (officialDisplayName != null) {
-                    add(
-                        PatchBundleSnapshot(
-                            endpoint = SourceInfo.API.SENTINEL,
-                            name = "",
-                            displayName = officialDisplayName,
-                            autoUpdate = false
-                        )
+                add(
+                    PatchBundleSnapshot(
+                        endpoint = SourceInfo.API.SENTINEL,
+                        name = "",
+                        displayName = officialDisplayName,
+                        autoUpdate = false,
+                        officialState = officialState
                     )
-                }
+                )
             }
 
             withContext(Dispatchers.IO) {

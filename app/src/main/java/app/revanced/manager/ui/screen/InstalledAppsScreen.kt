@@ -3,8 +3,9 @@ package app.revanced.manager.ui.screen
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.items
@@ -38,18 +39,38 @@ fun InstalledAppsScreen(
     val installedApps by viewModel.apps.collectAsStateWithLifecycle(initialValue = null)
     val selectionActive = viewModel.selectedApps.isNotEmpty()
 
-    Column {
-        LazyColumnWithScrollbar(
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = if (installedApps.isNullOrEmpty()) Arrangement.Center else Arrangement.Top,
-        ) {
-            installedApps?.let { installedApps ->
-                if (installedApps.isNotEmpty()) {
-                    items(
-                        installedApps,
-                        key = { it.currentPackageName }
-                    ) { installedApp ->
+    when {
+        installedApps == null -> {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                LoadingIndicator()
+            }
+        }
+
+        installedApps!!.isEmpty() -> {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = stringResource(R.string.no_patched_apps_found),
+                    style = MaterialTheme.typography.titleLarge
+                )
+            }
+        }
+
+        else -> {
+            LazyColumnWithScrollbar(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Top,
+            ) {
+                items(
+                    installedApps!!,
+                    key = { it.currentPackageName }
+                ) { installedApp ->
                         val packageName = installedApp.currentPackageName
                         val packageInfo = viewModel.packageInfoMap[packageName]
                         val isSaved = installedApp.installType == InstallType.SAVED
@@ -103,16 +124,7 @@ fun InstalledAppsScreen(
                             }
                         )
                     }
-                } else {
-                    item {
-                        Text(
-                            text = stringResource(R.string.no_patched_apps_found),
-                            style = MaterialTheme.typography.titleLarge
-                        )
-                    }
-                }
-
-            } ?: item { LoadingIndicator() }
+            }
         }
     }
 }

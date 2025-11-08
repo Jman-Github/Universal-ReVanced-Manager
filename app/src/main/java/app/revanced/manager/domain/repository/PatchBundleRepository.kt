@@ -5,6 +5,7 @@ import android.content.Context
 import android.util.Log
 import androidx.annotation.StringRes
 import app.revanced.library.mostCommonCompatibleVersions
+import app.revanced.patcher.patch.Patch
 import app.universal.revanced.manager.R
 import app.revanced.manager.data.platform.NetworkInfo
 import app.revanced.manager.data.redux.Action
@@ -84,23 +85,14 @@ class PatchBundleRepository(
         val allPatches =
             it.values.flatMap { bundle -> bundle.patches.map(PatchInfo::toPatcherPatch) }.toSet()
 
-        allPatches.mostCommonCompatibleVersions(countUnusedPatches = true)
-            .mapValues { (_, versions) ->
-                if (versions.keys.size < 2)
-                    return@mapValues versions.keys.firstOrNull()
+        suggestedVersionsFor(allPatches)
+    }
 
-                // The entries are ordered from most compatible to least compatible.
-                // If there are entries with the same number of compatible patches, older versions will be first, which is undesirable.
-                // This means we have to pick the last entry we find that has the highest patch count.
-                // The order may change in future versions of ReVanced Library.
-                var currentHighestPatchCount = -1
-                versions.entries.last { (_, patchCount) ->
-                    if (patchCount >= currentHighestPatchCount) {
-                        currentHighestPatchCount = patchCount
-                        true
-                    } else false
-                }.key
-            }
+    val suggestedVersionsByBundle = bundleInfoFlow.map { bundleInfos ->
+        bundleInfos.mapValues { (_, info) ->
+            val patches = info.patches.map(PatchInfo::toPatcherPatch).toSet()
+            suggestedVersionsFor(patches)
+        }
     }
 
     private suspend inline fun dispatchAction(
@@ -146,13 +138,11 @@ class PatchBundleRepository(
         }
         val info = loadMetadata(sources).toMutableMap()
 
-        val officialDisplayName = info[0]?.name?.takeUnless { it.isBlank() }
-        if (officialDisplayName != null) {
-            val officialSource = sources[0]
-            if (officialSource != null && officialSource.displayName != officialDisplayName) {
-                updateDb(officialSource.uid) { it.copy(displayName = officialDisplayName) }
-                sources[officialSource.uid] = officialSource.copy(displayName = officialDisplayName)
-            }
+        val officialSource = sources[0]
+        val officialDisplayName = "Official ReVanced Patches"
+        if (officialSource != null && officialSource.displayName != officialDisplayName) {
+            updateDb(officialSource.uid) { it.copy(displayName = officialDisplayName) }
+            sources[officialSource.uid] = officialSource.copy(displayName = officialDisplayName)
         }
 
         return State(sources.toPersistentMap(), info.toPersistentMap())
@@ -165,8 +155,12 @@ class PatchBundleRepository(
     private suspend fun loadFromDb(): List<PatchBundleEntity> {
         val all = dao.all()
         if (all.isEmpty()) {
-            dao.upsert(defaultSource)
-            return listOf(defaultSource)
+            val shouldRestoreDefault = !prefs.officialBundleRemoved.get()
+            if (shouldRestoreDefault) {
+                dao.upsert(defaultSource)
+                return listOf(defaultSource)
+            }
+            return emptyList()
         }
 
         return all
@@ -262,7 +256,7 @@ class PatchBundleRepository(
         displayName: String? = null,
         uid: Int? = null
     ): PatchBundleEntity {
-        val normalizedDisplayName = displayName?.takeUnless { it.isBlank() }
+        val normalizedDisplayName = displayName?.takeUnless { it.isBlank() } ?: if (uid == defaultSource.uid) "Official ReVanced Patches" else null
         val entity = PatchBundleEntity(
             uid = uid ?: generateUid(),
             name = name,
@@ -298,6 +292,7 @@ class PatchBundleRepository(
 
     suspend fun reset() = dispatchAction("Reset") { state ->
         dao.reset()
+        prefs.officialBundleRemoved.update(false)
         state.sources.keys.forEach { directoryOf(it).deleteRecursively() }
         doReload()
     }
@@ -307,7 +302,9 @@ class PatchBundleRepository(
             val sources = state.sources.toMutableMap()
             val info = state.info.toMutableMap()
             bundles.forEach {
-                if (it.isDefault) return@forEach
+                if (it.isDefault) {
+                    prefs.officialBundleRemoved.update(true)
+                }
 
                 dao.remove(it.uid)
                 directoryOf(it.uid).deleteRecursively()
@@ -317,6 +314,14 @@ class PatchBundleRepository(
 
             State(sources.toPersistentMap(), info.toPersistentMap())
         }
+
+    suspend fun restoreDefaultBundle() = dispatchAction("Restore default bundle") {
+        prefs.officialBundleRemoved.update(false)
+        dao.upsert(defaultSource)
+        doReload()
+    }
+
+    suspend fun refreshDefaultBundle() = store.dispatch(Update(force = true) { it.uid == defaultSource.uid })
 
     suspend fun setDisplayName(src: PatchBundleSource, displayName: String?) =
         dispatchAction("Set bundle display name (${src.uid})") { state ->
@@ -495,6 +500,24 @@ class PatchBundleRepository(
         override suspend fun catch(exception: Exception) {
             Log.e(tag, "Failed to update patches", exception)
             toast(R.string.patches_download_fail, exception.simpleMessage())
+        }
+    }
+
+    private fun suggestedVersionsFor(patches: Set<Patch<*>>): Map<String, String?> {
+        val versionCounts = patches.mostCommonCompatibleVersions(countUnusedPatches = true)
+
+        return versionCounts.mapValues { (_, versions) ->
+            if (versions.keys.size < 2) {
+                return@mapValues versions.keys.firstOrNull()
+            }
+
+            var currentHighestPatchCount = -1
+            versions.entries.last { (_, patchCount) ->
+                if (patchCount >= currentHighestPatchCount) {
+                    currentHighestPatchCount = patchCount
+                    true
+                } else false
+            }.key
         }
     }
 

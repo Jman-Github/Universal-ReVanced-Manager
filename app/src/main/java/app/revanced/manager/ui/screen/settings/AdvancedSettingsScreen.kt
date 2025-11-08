@@ -3,6 +3,7 @@ package app.revanced.manager.ui.screen.settings
 import android.app.ActivityManager
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ComponentName
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.view.HapticFeedbackConstants
@@ -17,19 +18,27 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Android
 import androidx.compose.material.icons.outlined.Api
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -37,23 +46,28 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.google.accompanist.drawablepainter.rememberDrawablePainter
 import androidx.core.content.getSystemService
@@ -67,11 +81,18 @@ import app.revanced.manager.ui.component.settings.BooleanItem
 import app.revanced.manager.ui.component.settings.IntegerItem
 import app.revanced.manager.ui.component.settings.SafeguardBooleanItem
 import app.revanced.manager.ui.component.settings.SettingsListItem
-import app.revanced.manager.ui.viewmodel.AdvancedSettingsViewModel
 import app.revanced.manager.domain.installer.InstallerManager
+import app.revanced.manager.ui.viewmodel.AdvancedSettingsViewModel
+import app.revanced.manager.util.ExportNameFormatter
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.transparentListItemColors
 import app.revanced.manager.util.withHapticFeedback
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 
@@ -84,6 +105,8 @@ fun AdvancedSettingsScreen(
     val context = LocalContext.current
     val installerManager: InstallerManager = koinInject()
     var installerDialogTarget by rememberSaveable { mutableStateOf<InstallerDialogTarget?>(null) }
+    var showCustomInstallerDialog by rememberSaveable { mutableStateOf(false) }
+    val hasOfficialBundle by viewModel.hasOfficialBundle.collectAsStateWithLifecycle(true)
     val memoryLimit = remember {
         val activityManager = context.getSystemService<ActivityManager>()!!
         context.getString(
@@ -137,11 +160,91 @@ fun AdvancedSettingsScreen(
             val fallbackPreference by viewModel.prefs.installerFallback.getAsState()
             val primaryToken = remember(primaryPreference) { installerManager.parseToken(primaryPreference) }
             val fallbackToken = remember(fallbackPreference) { installerManager.parseToken(fallbackPreference) }
-            val primaryEntries = installerManager.listEntries(installTarget, includeNone = false)
-            val fallbackEntries = installerManager.listEntries(installTarget, includeNone = true)
+            fun ensureSelection(
+                entries: List<InstallerManager.Entry>,
+                token: InstallerManager.Token,
+                includeNone: Boolean,
+                blockedToken: InstallerManager.Token? = null
+            ): List<InstallerManager.Entry> {
+                val normalized = buildList {
+                    val seen = mutableSetOf<Any>()
+                    entries.forEach { entry ->
+                        val key = when (val entryToken = entry.token) {
+                            is InstallerManager.Token.Component -> entryToken.componentName
+                            else -> entryToken
+                        }
+                        if (seen.add(key)) add(entry)
+                    }
+                }
+                val ensured = if (
+                    token == InstallerManager.Token.Internal ||
+                    token == InstallerManager.Token.Root ||
+                    (token == InstallerManager.Token.None && includeNone) ||
+                    normalized.any { tokensEqual(it.token, token) }
+                ) {
+                    normalized
+                } else {
+                    val described = installerManager.describeEntry(token, installTarget) ?: return normalized
+                    normalized + described
+                }
 
-            val primaryEntry = primaryEntries.find { it.token == primaryToken } ?: primaryEntries.first()
-            val fallbackEntry = fallbackEntries.find { it.token == fallbackToken } ?: fallbackEntries.first()
+                if (blockedToken == null) return ensured
+
+                return ensured.map { entry ->
+                    if (!tokensEqual(entry.token, token) && tokensEqual(entry.token, blockedToken)) {
+                        entry.copy(availability = entry.availability.copy(available = false))
+                    } else entry
+                }
+            }
+
+            var primaryEntries by remember(primaryToken, fallbackToken) {
+                mutableStateOf(
+                    ensureSelection(
+                        installerManager.listEntries(installTarget, includeNone = false),
+                        primaryToken,
+                        includeNone = false,
+                        blockedToken = fallbackToken.takeUnless { tokensEqual(it, InstallerManager.Token.None) }
+                    )
+                )
+            }
+            var fallbackEntries by remember(primaryToken, fallbackToken) {
+                mutableStateOf(
+                    ensureSelection(
+                        installerManager.listEntries(installTarget, includeNone = true),
+                        fallbackToken,
+                        includeNone = true,
+                        blockedToken = primaryToken
+                    )
+                )
+            }
+
+            LaunchedEffect(installTarget, primaryToken, fallbackToken) {
+                while (isActive) {
+                    val updatedPrimary = ensureSelection(
+                        installerManager.listEntries(installTarget, includeNone = false),
+                        primaryToken,
+                        includeNone = false,
+                        blockedToken = fallbackToken.takeUnless { tokensEqual(it, InstallerManager.Token.None) }
+                    )
+                    val updatedFallback = ensureSelection(
+                        installerManager.listEntries(installTarget, includeNone = true),
+                        fallbackToken,
+                        includeNone = true,
+                        blockedToken = primaryToken
+                    )
+
+                    primaryEntries = updatedPrimary
+                    fallbackEntries = updatedFallback
+                    delay(1_500)
+                }
+            }
+
+            val primaryEntry = primaryEntries.find { it.token == primaryToken }
+                ?: installerManager.describeEntry(primaryToken, installTarget)
+                ?: primaryEntries.first()
+            val fallbackEntry = fallbackEntries.find { it.token == fallbackToken }
+                ?: installerManager.describeEntry(fallbackToken, installTarget)
+                ?: fallbackEntries.first()
 
             @Composable
             fun entrySupporting(entry: InstallerManager.Entry): String? {
@@ -154,23 +257,27 @@ fun AdvancedSettingsScreen(
 
             val primarySupporting = entrySupporting(primaryEntry)
             val fallbackSupporting = entrySupporting(fallbackEntry)
-            fun installerLeadingContent(entry: InstallerManager.Entry): (@Composable () -> Unit)? =
-                when (entry.token) {
-                    InstallerManager.Token.Internal,
-                    InstallerManager.Token.None,
-                    InstallerManager.Token.Root -> null
-                    is InstallerManager.Token.Component -> entry.icon?.let { drawable ->
-                        {
-                            InstallerIcon(
-                                drawable = drawable,
-                                selected = false,
-                                enabled = entry.availability.available
-                            )
-                        }
+            fun installerLeadingContent(
+                entry: InstallerManager.Entry,
+                selected: Boolean
+            ): (@Composable () -> Unit)? = when (entry.token) {
+                InstallerManager.Token.Internal,
+                InstallerManager.Token.None,
+                InstallerManager.Token.Root -> null
+                InstallerManager.Token.Shizuku,
+                is InstallerManager.Token.Component -> entry.icon?.let { drawable ->
+                    {
+                        InstallerIcon(
+                            drawable = drawable,
+                            selected = selected,
+                            enabled = entry.availability.available || selected
+                        )
                     }
                 }
-            val primaryLeadingContent = installerLeadingContent(primaryEntry)
-            val fallbackLeadingContent = installerLeadingContent(fallbackEntry)
+            }
+
+            val primaryLeadingContent = installerLeadingContent(primaryEntry, primaryEntry.token == primaryToken)
+            val fallbackLeadingContent = installerLeadingContent(fallbackEntry, fallbackEntry.token == fallbackToken)
 
             SettingsListItem(
                 headlineContent = stringResource(R.string.installer_primary_title),
@@ -185,6 +292,35 @@ fun AdvancedSettingsScreen(
                 leadingContent = fallbackLeadingContent
             )
 
+            SettingsListItem(
+                headlineContent = stringResource(R.string.installer_custom_manage_title),
+                supportingContent = stringResource(R.string.installer_custom_manage_description),
+                modifier = Modifier.clickable { showCustomInstallerDialog = true }
+            )
+
+            if (showCustomInstallerDialog) {
+                CustomInstallerManagerDialog(
+                    installerManager = installerManager,
+                    viewModel = viewModel,
+                    installTarget = installTarget,
+                    onDismiss = { showCustomInstallerDialog = false }
+                )
+            }
+
+            val exportFormat by viewModel.prefs.patchedAppExportFormat.getAsState()
+            var showExportFormatDialog by rememberSaveable { mutableStateOf(false) }
+
+            if (showExportFormatDialog) {
+                ExportNameFormatDialog(
+                    currentValue = exportFormat,
+                    onDismiss = { showExportFormatDialog = false },
+                    onSave = {
+                        viewModel.setPatchedAppExportFormat(it)
+                        showExportFormatDialog = false
+                    }
+                )
+            }
+
             installerDialogTarget?.let { target ->
                 val isPrimary = target == InstallerDialogTarget.Primary
                 val options = if (isPrimary) primaryEntries else fallbackEntries
@@ -194,6 +330,10 @@ fun AdvancedSettingsScreen(
                     ),
                     options = options,
                     selected = if (isPrimary) primaryToken else fallbackToken,
+                    blockedToken = if (isPrimary)
+                        fallbackToken.takeUnless { tokensEqual(it, InstallerManager.Token.None) }
+                    else
+                        primaryToken,
                     onDismiss = { installerDialogTarget = null },
                     onConfirm = { selection ->
                         if (isPrimary) {
@@ -202,7 +342,8 @@ fun AdvancedSettingsScreen(
                             viewModel.setFallbackInstaller(selection)
                         }
                         installerDialogTarget = null
-                    }
+                    },
+                    onOpenShizuku = installerManager::openShizukuApp
                 )
             }
 
@@ -235,6 +376,29 @@ fun AdvancedSettingsScreen(
                 description = R.string.universal_patches_safeguard_description,
             )
 
+            val restoreDescription = if (hasOfficialBundle) {
+                stringResource(R.string.restore_official_bundle_description_installed)
+            } else {
+                stringResource(R.string.restore_official_bundle_description_missing)
+            }
+            val restoreModifier = if (hasOfficialBundle) Modifier else Modifier.clickable {
+                viewModel.restoreOfficialBundle()
+            }
+            SettingsListItem(
+                headlineContent = stringResource(R.string.restore_official_bundle),
+                supportingContent = restoreDescription,
+                modifier = restoreModifier,
+                trailingContent = if (hasOfficialBundle) {
+                    {
+                        Text(
+                            text = stringResource(R.string.installed),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else null
+            )
+
             GroupHeader(stringResource(R.string.patcher))
             BooleanItem(
                 preference = viewModel.prefs.stripUnusedNativeLibs,
@@ -253,6 +417,19 @@ fun AdvancedSettingsScreen(
                 coroutineScope = viewModel.viewModelScope,
                 headline = R.string.process_runtime_memory_limit,
                 description = R.string.process_runtime_memory_limit_description,
+            )
+
+            GroupHeader(stringResource(R.string.app_exporting))
+            val exportFormatSummary = buildString {
+                appendLine(stringResource(R.string.export_name_format_description))
+                append(stringResource(R.string.export_name_format_current, exportFormat))
+            }.trimEnd()
+            SettingsListItem(
+                headlineContent = stringResource(R.string.export_name_format),
+                supportingContent = exportFormatSummary,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showExportFormatDialog = true }
             )
 
             GroupHeader(stringResource(R.string.debugging))
@@ -298,20 +475,524 @@ private enum class InstallerDialogTarget {
 }
 
 @Composable
+private fun ExportNameFormatDialog(
+    currentValue: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    var value by rememberSaveable(currentValue) { mutableStateOf(currentValue) }
+    var showError by rememberSaveable { mutableStateOf(false) }
+    val variables = remember { ExportNameFormatter.availableVariables() }
+    val preview = remember(value) { ExportNameFormatter.preview(value) }
+
+    val scrollState = rememberScrollState()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = {
+                if (value.isBlank()) {
+                    showError = true
+                } else {
+                    onSave(value.trim())
+                }
+            }) {
+                Text(stringResource(R.string.save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+        title = { Text(stringResource(R.string.export_name_format_dialog_title)) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.export_name_format_dialog_supporting),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = {
+                        value = it
+                        if (showError) showError = false
+                    },
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.export_name_format)) },
+                    isError = showError && value.isBlank(),
+                    supportingText = if (showError && value.isBlank()) {
+                        { Text(stringResource(R.string.export_name_format_error_blank)) }
+                    } else null,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Surface(
+                    tonalElevation = 2.dp,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.export_name_format_preview_label),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = preview,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = stringResource(R.string.export_name_format_variables),
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    variables.forEach { variable ->
+                        Surface(
+                            tonalElevation = 1.dp,
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = stringResource(variable.label),
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                    TextButton(onClick = {
+                                        value += variable.token
+                                        if (showError) showError = false
+                                    }) {
+                                        Text(stringResource(R.string.export_name_format_insert))
+                                    }
+                                }
+                                Text(
+                                    text = variable.token,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = stringResource(variable.description),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+                TextButton(
+                    onClick = {
+                        value = ExportNameFormatter.DEFAULT_TEMPLATE
+                        showError = false
+                    },
+                    modifier = Modifier.align(Alignment.Start)
+                ) {
+                    Text(stringResource(R.string.export_name_format_reset))
+                }
+            }
+        }
+    )
+}
+
+@Composable
+private fun CustomInstallerManagerDialog(
+    installerManager: InstallerManager,
+    viewModel: AdvancedSettingsViewModel,
+    installTarget: InstallerManager.InstallTarget,
+    onDismiss: () -> Unit
+) {
+    val scrollState = rememberScrollState()
+    val builtinComponents = remember(installTarget) {
+        val autoComponents = installerManager.listEntries(installTarget, includeNone = true)
+            .mapNotNull { (it.token as? InstallerManager.Token.Component)?.componentName }
+            .toMutableSet()
+        autoComponents += ComponentName("com.google.android.packageinstaller", "com.android.packageinstaller.PackageInstallerActivity")
+        autoComponents
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.close))
+            }
+        },
+        title = { Text(stringResource(R.string.installer_custom_header)) },
+        text = {
+            CustomInstallerContent(
+                installerManager = installerManager,
+                viewModel = viewModel,
+                installTarget = installTarget,
+                builtinComponents = builtinComponents,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 520.dp)
+                    .verticalScroll(scrollState)
+            )
+        }
+    )
+}
+
+@Composable
+private fun CustomInstallerContent(
+    installerManager: InstallerManager,
+    viewModel: AdvancedSettingsViewModel,
+    installTarget: InstallerManager.InstallTarget,
+    builtinComponents: Set<ComponentName>,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val customValues by viewModel.prefs.installerCustomComponents.getAsState()
+    val savedComponents = remember(customValues) { customValues.toSet() }
+    val savedEntries = remember(customValues, installTarget) {
+        customValues.mapNotNull { flattened ->
+            ComponentName.unflattenFromString(flattened)?.let { component ->
+                installerManager.describeEntry(InstallerManager.Token.Component(component), installTarget)
+                    ?.let { component to it }
+            }
+        }.sortedBy { (_, entry) -> entry.label.lowercase() }
+    }
+    var inputValue by rememberSaveable { mutableStateOf("") }
+    var lookupResults by remember { mutableStateOf<List<InstallerManager.Entry>>(emptyList()) }
+    var lastQuery by remember { mutableStateOf<String?>(null) }
+    var isSearching by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+    val trimmedInput = remember(inputValue) { inputValue.trim() }
+
+    fun handleLookup(packageName: String) {
+        coroutineScope.launch {
+            val normalized = packageName.trim()
+            if (normalized.isEmpty()) {
+                isSearching = false
+                lastQuery = null
+                lookupResults = emptyList()
+                context.toast(context.getString(R.string.installer_custom_lookup_empty))
+                return@launch
+            }
+            isSearching = true
+            val entries = try {
+                withContext(Dispatchers.Default) {
+                    viewModel.searchInstallerEntries(normalized, installTarget)
+                }
+            } finally {
+                isSearching = false
+            }
+            lastQuery = normalized
+            lookupResults = entries
+            if (entries.isEmpty()) {
+                context.toast(context.getString(R.string.installer_custom_lookup_none, normalized))
+            } else {
+                context.toast(context.getString(R.string.installer_custom_lookup_found, entries.size))
+            }
+        }
+    }
+
+    fun handleAdd(component: ComponentName) {
+        viewModel.addCustomInstaller(component) { added ->
+            val messageRes = if (added) {
+                R.string.installer_custom_added
+            } else {
+                R.string.installer_custom_exists
+            }
+            context.toast(context.getString(messageRes))
+        }
+    }
+
+    fun handleRemove(component: ComponentName) {
+        viewModel.removeCustomInstaller(component) { removed ->
+            val messageRes = if (removed) {
+                R.string.installer_custom_removed
+            } else {
+                R.string.installer_custom_remove_failed
+            }
+            context.toast(context.getString(messageRes))
+        }
+    }
+
+    LaunchedEffect(isSearching) {
+        if (isSearching) {
+            context.toast(context.getString(R.string.installer_custom_searching))
+            while (isSearching) {
+                delay(2_000)
+                if (isSearching) {
+                    context.toast(context.getString(R.string.installer_custom_searching))
+                }
+            }
+        }
+    }
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        @Composable
+        fun StatusBadge(text: String, modifier: Modifier = Modifier) {
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                tonalElevation = 0.dp,
+                modifier = modifier
+            ) {
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                )
+            }
+        }
+
+        OutlinedTextField(
+            value = inputValue,
+            onValueChange = {
+                inputValue = it
+            },
+            label = { Text(stringResource(R.string.installer_custom_input_label)) },
+            supportingText = { Text(stringResource(R.string.installer_custom_package_hint)) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        FilledTonalButton(
+            onClick = { handleLookup(trimmedInput) },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(stringResource(R.string.installer_custom_lookup))
+        }
+
+        Text(
+            text = stringResource(R.string.installer_custom_saved_header),
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (savedEntries.isEmpty()) {
+            Text(
+                text = stringResource(R.string.installer_custom_empty),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                savedEntries.forEach { (component, entry) ->
+                    val isBuiltinSaved = component in builtinComponents ||
+                        component.packageName == "com.google.android.packageinstaller"
+                    val badgeText = if (isBuiltinSaved) {
+                        stringResource(R.string.installer_custom_builtin_indicator)
+                    } else {
+                        stringResource(R.string.installer_custom_saved_indicator)
+                    }
+                    val supportingLines = buildList {
+                        entry.description?.takeIf { it.isNotBlank() }?.let { add(it) }
+                        entry.availability.reason?.let { add(context.getString(it)) }
+                        add(component.flattenToString())
+                    }
+                    ListItem(
+                        headlineContent = {
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(end = 4.dp),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    StatusBadge(badgeText)
+                                }
+                                Text(
+                                    text = entry.label,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.basicMarquee()
+                                )
+                            }
+                        },
+                        supportingContent = {
+                            supportingLines.forEach { line ->
+                                Text(line, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        },
+                        leadingContent = entry.icon?.let { drawable ->
+                            {
+                                InstallerIcon(
+                                    drawable = drawable,
+                                    selected = false,
+                                    enabled = entry.availability.available
+                                )
+                            }
+                        },
+                        trailingContent = {
+                            IconButton(onClick = { handleRemove(component) }) {
+                                Icon(
+                                    Icons.Outlined.Delete,
+                                    contentDescription = stringResource(R.string.installer_custom_action_remove)
+                                )
+                            }
+                        }
+                    )
+                }
+            }
+        }
+
+        if (lookupResults.isNotEmpty()) {
+            val headerText = stringResource(
+                R.string.installer_custom_candidates_title,
+                lastQuery ?: ""
+            )
+            Text(
+                text = headerText,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                lookupResults.forEach { entry ->
+                    val token = entry.token as? InstallerManager.Token.Component ?: return@forEach
+                    val flattened = token.componentName.flattenToString()
+                    val isSaved = flattened in savedComponents
+                    val isBuiltin = token.componentName in builtinComponents ||
+                        token.componentName.packageName == "com.google.android.packageinstaller"
+                    val badgeText = when {
+                        isSaved -> stringResource(R.string.installer_custom_saved_indicator)
+                        isBuiltin -> stringResource(R.string.installer_custom_builtin_indicator)
+                        else -> null
+                    }
+                    val supportingLines = buildList {
+                        entry.description?.takeIf { it.isNotBlank() }?.let { add(it) }
+                        entry.availability.reason?.let { add(context.getString(it)) }
+                        add(flattened)
+                    }
+                    ListItem(
+                        modifier = Modifier
+                            .alpha(if (isSaved || isBuiltin) 0.5f else 1f)
+                            .clickable(
+                                enabled = !isSaved && !isBuiltin && entry.availability.available
+                            ) {
+                                if (!isSaved && !isBuiltin) handleAdd(token.componentName)
+                            },
+                        headlineContent = {
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                if (badgeText != null) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(end = 4.dp),
+                                        horizontalArrangement = Arrangement.End
+                                    ) {
+                                        StatusBadge(badgeText)
+                                    }
+                                }
+                                Text(
+                                    text = entry.label,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.basicMarquee()
+                                )
+                            }
+                        },
+                        supportingContent = {
+                            supportingLines.forEach { line ->
+                                Text(line, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        },
+                        leadingContent = entry.icon?.let { drawable ->
+                            {
+                                InstallerIcon(
+                                    drawable = drawable,
+                                    selected = false,
+                                    enabled = entry.availability.available
+                                )
+                            }
+                        },
+                        trailingContent = {
+                            if (!isSaved && !isBuiltin) {
+                                IconButton(
+                                    onClick = { handleAdd(token.componentName) },
+                                    enabled = entry.availability.available
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.Add,
+                                        contentDescription = stringResource(R.string.installer_custom_action_add)
+                                    )
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+        } else if (lastQuery != null) {
+            Text(
+                text = stringResource(R.string.installer_custom_lookup_none, lastQuery!!),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
 private fun InstallerSelectionDialog(
     title: String,
     options: List<InstallerManager.Entry>,
     selected: InstallerManager.Token,
+    blockedToken: InstallerManager.Token?,
     onDismiss: () -> Unit,
-    onConfirm: (InstallerManager.Token) -> Unit
+    onConfirm: (InstallerManager.Token) -> Unit,
+    onOpenShizuku: (() -> Boolean)? = null
 ) {
-    val initialSelection = remember(options, selected) {
-        options.firstOrNull { it.token == selected && it.availability.available }?.token
-            ?: options.firstOrNull { it.availability.available }?.token
-            ?: selected
+    val context = LocalContext.current
+    val shizukuPromptReasons = remember {
+        setOf(
+            R.string.installer_status_shizuku_not_running,
+            R.string.installer_status_shizuku_permission
+        )
     }
-    var currentSelection by remember(options, selected) { mutableStateOf(initialSelection) }
-    val confirmEnabled = options.find { it.token == currentSelection }?.availability?.available != false
+    var currentSelection by remember(selected) { mutableStateOf(selected) }
+
+    LaunchedEffect(options, selected, blockedToken) {
+        val tokens = options.map { it.token }
+        var selection = currentSelection
+        if (selection !in tokens) {
+            selection = when {
+                selected in tokens -> selected
+                else -> options.firstOrNull { it.availability.available }?.token
+                    ?: tokens.firstOrNull()
+                    ?: selected
+            }
+        }
+
+        if (blockedToken != null && tokensEqual(selection, blockedToken)) {
+            selection = options.firstOrNull {
+                !tokensEqual(it.token, blockedToken) && it.availability.available
+            }?.token ?: options.firstOrNull { !tokensEqual(it.token, blockedToken) }?.token
+            ?: selection
+        }
+        currentSelection = selection
+    }
+    val confirmEnabled = options.find { it.token == currentSelection }?.availability?.available != false &&
+        !(blockedToken != null && tokensEqual(currentSelection, blockedToken))
     val scrollState = rememberScrollState()
 
     AlertDialog(
@@ -338,36 +1019,33 @@ private fun InstallerSelectionDialog(
                 options.forEach { option ->
                     val enabled = option.availability.available
                     val selectedOption = currentSelection == option.token
+                    val showShizukuAction = option.token == InstallerManager.Token.Shizuku &&
+                        option.availability.reason in shizukuPromptReasons &&
+                        onOpenShizuku != null
                     ListItem(
                         modifier = Modifier.clickable(enabled = enabled) {
                             if (enabled) currentSelection = option.token
                         },
                         colors = transparentListItemColors,
                         leadingContent = {
-                            when (val token = option.token) {
-                                InstallerManager.Token.Internal,
-                                InstallerManager.Token.None,
-                                InstallerManager.Token.Root -> {
-                                    RadioButton(
-                                        selected = selectedOption,
-                                        onClick = null,
-                                        enabled = enabled
-                                    )
-                                }
-
-                                is InstallerManager.Token.Component -> {
-                                    option.icon?.let { drawable ->
-                                        InstallerIcon(
-                                            drawable = drawable,
-                                            selected = selectedOption,
-                                            enabled = enabled
-                                        )
-                                    } ?: RadioButton(
-                                        selected = selectedOption,
-                                        onClick = null,
-                                        enabled = enabled
-                                    )
-                                }
+                            val iconDrawable = option.icon
+                            val useInstallerIcon = iconDrawable != null && when (option.token) {
+                                InstallerManager.Token.Shizuku -> true
+                                is InstallerManager.Token.Component -> true
+                                else -> false
+                            }
+                            if (useInstallerIcon) {
+                                InstallerIcon(
+                                    drawable = iconDrawable,
+                                    selected = selectedOption,
+                                    enabled = enabled || selectedOption
+                                )
+                            } else {
+                                RadioButton(
+                                    selected = selectedOption,
+                                    onClick = null,
+                                    enabled = enabled
+                                )
                             }
                         },
                         headlineContent = {
@@ -385,11 +1063,28 @@ private fun InstallerSelectionDialog(
                                 option.description?.takeIf { it.isNotBlank() }?.let { add(it) }
                                 option.availability.reason?.let { add(stringResource(it)) }
                             }
-                            if (lines.isNotEmpty()) {
-                                Text(
-                                    lines.joinToString("\n"),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                            if (lines.isNotEmpty() || showShizukuAction) {
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    if (lines.isNotEmpty()) {
+                                        lines.forEach { line ->
+                                            Text(
+                                                line,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                    if (showShizukuAction) {
+                                        TextButton(onClick = {
+                                            val launched = runCatching { onOpenShizuku?.invoke() ?: false }
+                                                .getOrDefault(false)
+                                            if (!launched) {
+                                                context.toast(context.getString(R.string.installer_shizuku_launch_failed))
+                                            }
+                                        }) {
+                                            Text(stringResource(R.string.installer_action_open_shizuku))
+                                        }
+                                    }
+                                }
                             }
                         }
                     )
@@ -437,6 +1132,14 @@ private fun InstallerIcon(
             )
         }
     }
+}
+
+private fun tokensEqual(a: InstallerManager.Token?, b: InstallerManager.Token?): Boolean = when {
+    a === b -> true
+    a == null || b == null -> false
+    a is InstallerManager.Token.Component && b is InstallerManager.Token.Component ->
+        a.componentName == b.componentName
+    else -> false
 }
 
 @Composable

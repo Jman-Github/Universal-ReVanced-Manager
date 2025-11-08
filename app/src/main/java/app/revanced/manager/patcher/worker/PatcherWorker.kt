@@ -51,6 +51,7 @@ import java.io.File
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
+import java.util.zip.ZipFile
 
 typealias ProgressEventHandler = (name: String?, state: State?, message: String?) -> Unit
 
@@ -289,8 +290,15 @@ class PatcherWorker(
     }
 
     private suspend fun stripUnusedNativeLibraries(apkFile: File) = withContext(Dispatchers.IO) {
-        val supportedAbis = Build.SUPPORTED_ABIS.filter { it.isNotBlank() }.toSet()
+        val supportedAbis = Build.SUPPORTED_ABIS.filter { it.isNotBlank() }
         if (supportedAbis.isEmpty()) return@withContext
+
+        val preferredAbi = determinePreferredAbi(apkFile, supportedAbis)
+        val allowedAbis = preferredAbi?.let { setOf(it) } ?: supportedAbis.toSet()
+
+        if (preferredAbi != null) {
+            Log.i(tag, "Preserving native libraries for ABI $preferredAbi".logFmt())
+        }
 
         val tempFile = File(apkFile.parentFile, "${apkFile.nameWithoutExtension}-abi-stripped.apk")
         var removedEntries = 0
@@ -301,13 +309,10 @@ class PatcherWorker(
                 var entry = zis.nextEntry
                 while (entry != null) {
                     val name = entry.name
-                    val keepEntry = shouldKeepZipEntry(name, supportedAbis)
+                    val keepEntry = shouldKeepZipEntry(name, allowedAbis)
 
                     if (keepEntry) {
-                        val newEntry = ZipEntry(name).apply {
-                            time = entry.time
-                            comment = entry.comment
-                        }
+                        val newEntry = cloneEntry(entry)
                         zos.putNextEntry(newEntry)
                         if (!entry.isDirectory) {
                             while (true) {
@@ -339,11 +344,57 @@ class PatcherWorker(
         }
     }
 
-    private fun shouldKeepZipEntry(name: String, supportedAbis: Set<String>): Boolean {
-        if (!name.startsWith("lib/")) return true
-        val secondSlash = name.indexOf('/', startIndex = 4)
-        if (secondSlash == -1) return true
-        val abi = name.substring(4, secondSlash)
-        return abi in supportedAbis
+    private fun shouldKeepZipEntry(name: String, allowedAbis: Set<String>): Boolean {
+        val abi = extractAbiFromEntry(name) ?: return true
+        return abi in allowedAbis
     }
+
+    private fun cloneEntry(entry: ZipEntry): ZipEntry {
+        val clone = ZipEntry(entry.name)
+        clone.time = entry.time
+        clone.comment = entry.comment
+        entry.extra?.let { clone.extra = it.copyOf() }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                entry.creationTime?.let { clone.creationTime = it }
+                entry.lastAccessTime?.let { clone.lastAccessTime = it }
+                entry.lastModifiedTime?.let { clone.lastModifiedTime = it }
+            } catch (_: Exception) {
+                // Some builders may throw if the values are unavailable; ignore.
+            }
+        }
+
+        when (entry.method) {
+            ZipEntry.STORED -> {
+                clone.method = ZipEntry.STORED
+                if (entry.size >= 0) clone.size = entry.size
+                if (entry.compressedSize >= 0) clone.compressedSize = entry.compressedSize
+                clone.crc = entry.crc
+            }
+
+            ZipEntry.DEFLATED -> clone.method = ZipEntry.DEFLATED
+            else -> if (entry.method != -1) clone.method = entry.method
+        }
+
+        return clone
+    }
+
+    private fun extractAbiFromEntry(name: String): String? {
+        if (!name.startsWith("lib/")) return null
+        val secondSlash = name.indexOf('/', startIndex = 4)
+        if (secondSlash == -1) return null
+        return name.substring(4, secondSlash)
+    }
+
+    private fun determinePreferredAbi(apkFile: File, supportedAbis: List<String>): String? =
+        runCatching {
+            ZipFile(apkFile).use { zip ->
+                val abisInApk = zip.entries().asSequence()
+                    .map { it.name }
+                    .mapNotNull(::extractAbiFromEntry)
+                    .toSet()
+
+                supportedAbis.firstOrNull { it in abisInApk }
+            }
+        }.getOrNull()
 }

@@ -1,5 +1,6 @@
 <resources>
     <string name="app_name">Universal ReVanced Manager</string>
+    <string name="main_top_title">URV Manager</string>
     <string name="patcher">Patcher</string>
     <string name="patches">Patches</string>
     <string name="patch_bundles">Patch Bundles</string>
@@ -51,6 +52,32 @@
     <string name="app_source_dialog_option_storage_description">Select an APK from local storage</string>
     <string name="app_source_dialog_option_installed_no_root">Mounted apps cannot be patched again without root access</string>
     <string name="app_source_dialog_option_installed_version_not_suggested">Version %s does not match the suggested version</string>
+    <string name="bundle_version_item">Bundle recommendation</string>
+    <string name="bundle_version_item_description_default">Using default recommendation</string>
+    <string name="bundle_version_item_description_selected">Following %1$s (%2$s)</string>
+    <string name="bundle_version_dialog_title">Choose bundle recommendation</string>
+    <string name="bundle_version_dialog_description">Pick which bundle’s suggestion should be used when downloading an APK.</string>
+    <string name="bundle_version_dialog_default">Use default recommendation</string>
+    <string name="bundle_version_dialog_default_subtitle">Automatically pick the most common compatible version.</string>
+    <string name="bundle_version_dialog_option_subtitle">Use version %1$s</string>
+    <string name="version_label">v%1$s</string>
+    <string name="bundle_version_line">%1$s: %2$s</string>
+    <string name="bundle_version_all_versions">All versions</string>
+    <string name="bundle_version_no_version">No suggested version</string>
+    <string name="bundle_version_suggested_label">Suggested version: %1$s</string>
+    <string name="bundle_version_other_heading">Other supported versions</string>
+    <string name="show_suggested_versions">Show suggested versions</string>
+    <string name="hide_suggested_versions">Hide suggested versions</string>
+    <string name="show_other_versions">Show other versions</string>
+    <string name="other_supported_versions_title">Other supported versions (%1$s)</string>
+    <string name="other_supported_versions_empty">No other supported versions available.</string>
+    <string name="other_supported_versions_all">Supports all versions.</string>
+    <string name="bundle_version_dialog_recommended">Suggested version: %1$s</string>
+    <string name="bundle_version_dialog_selected_override">Selected version: %1$s</string>
+    <string name="bundle_version_dialog_selected_indicator">Selected</string>
+    <string name="bundle_version_dialog_selected_indicator_inline">%1$s (selected)</string>
+    <string name="bundle_version_dialog_other_title">Select another supported version:</string>
+    <string name="bundle_version_dialog_locked_hint">Version safeguards are enabled. Adjust Safeguards settings to choose bundle-specific versions.</string>
 
     <string name="patch_item_description">Start patching the application</string>
     <string name="patch_selector_item">Select patches</string>
@@ -66,6 +93,7 @@
     <string name="apk_source_installed">Using installed APK</string>
     <string name="apk_source_local">Using a local APK file</string>
     <string name="apk_source_downloaded">Using downloaded APK</string>
+    <string name="suggested_version_bundle_info">%1$s · v%2$s</string>
 
     <string name="legacy_import_failed">Could not import legacy settings</string>
 
@@ -177,6 +205,7 @@
     <string name="export_patch_bundles_local_not_supported">Export is only available for patch bundles imported from URLs</string>
     <string name="bundle_type_remote">Remote</string>
     <string name="bundle_type_local">Local</string>
+    <string name="bundle_type_preinstalled">Pre-installed</string>
     <string name="bundle_changelog">Changelog</string>
     <string name="bundle_view_changelog">View the latest changelog</string>
     <string name="bundle_changelog_error">Failed to load changelog: %s</string>
@@ -274,6 +303,42 @@
     <string name="strip_unused_libs_description">Delete native libraries for unsupported CPU architectures from patched apps.</string>
     <string name="process_runtime_memory_limit">Patcher process memory limit</string>
     <string name="process_runtime_memory_limit_description">The max amount of memory that the Patcher process can use (in megabytes)</string>
+    <string name="restore_official_bundle">Restore official patch bundle</string>
+    <string name="restore_official_bundle_description_missing">Reinstall the built-in ReVanced patches bundle.</string>
+    <string name="restore_official_bundle_description_installed">The built-in ReVanced patches bundle is currently installed.</string>
+    <string name="restore_official_bundle_success">Official patch bundle restored.</string>
+    <string name="restore_official_bundle_failed">Failed to restore the official patch bundle: %1$s</string>
+    <string name="restore_official_bundle_already">The official patch bundle is already installed.</string>
+
+    <string name="app_exporting">App exporting</string>
+    <string name="export_name_format">Export filename format</string>
+    <string name="export_name_format_description">Customize the default filename for exported patched apps.</string>
+    <string name="export_name_format_dialog_title">Export filename format</string>
+    <string name="export_name_format_dialog_supporting">Use the placeholders below to build a filename. The .apk extension is added automatically if missing.</string>
+    <string name="export_name_format_preview">Preview: %1$s</string>
+    <string name="export_name_format_preview_label">Preview</string>
+    <string name="export_name_format_variables">Variables</string>
+    <string name="export_name_format_reset">Reset to default</string>
+    <string name="export_name_format_error_blank">Filename format cannot be blank.</string>
+    <string name="export_name_format_current">Current pattern: %1$s</string>
+    <string name="export_name_format_insert">Insert</string>
+
+    <string name="export_name_variable_app_name">App name</string>
+    <string name="export_name_variable_app_name_description">Replaced with the app\'s display name.</string>
+    <string name="export_name_variable_package_name">Package name</string>
+    <string name="export_name_variable_package_name_description">Replaced with the app\'s package name.</string>
+    <string name="export_name_variable_app_version">App version</string>
+    <string name="export_name_variable_app_version_description">Replaced with the app\'s version name.</string>
+    <string name="export_name_variable_patches_version">Patches version</string>
+    <string name="export_name_variable_patches_version_description">Replaced with the applied patch bundle version(s).</string>
+    <string name="export_name_variable_bundle_names">Patch bundle names</string>
+    <string name="export_name_variable_bundle_names_description">Replaced with the applied patch bundle name(s).</string>
+    <string name="export_name_variable_manager_version">Manager version</string>
+    <string name="export_name_variable_manager_version_description">Replaced with the manager version.</string>
+    <string name="export_name_variable_timestamp">Timestamp</string>
+    <string name="export_name_variable_timestamp_description">Replaced with the current time (yyyyMMdd-HHmmss).</string>
+    <string name="export_name_variable_date">Date</string>
+    <string name="export_name_variable_date_description">Replaced with the current date (yyyyMMdd).</string>
     <string name="debug_logs_export">Export debug logs</string>
     <string name="debug_logs_export_read_failed">Failed to read logs (exit code %d)</string>
     <string name="debug_logs_export_failed">Failed to export logs</string>
@@ -440,10 +505,39 @@
     <string name="installer_fallback_description">Used automatically when the primary installer is unavailable.</string>
     <string name="installer_internal_name">System installer</string>
     <string name="installer_internal_description">Use the Android package installer.</string>
+    <string name="installer_shizuku_name">Shizuku</string>
+    <string name="installer_shizuku_description">Install silently using Shizuku or Sui.</string>
     <string name="installer_option_none">No fallback</string>
     <string name="installer_none_description">No fallback installer is configured.</string>
     <string name="installer_status_requires_root">Requires root access</string>
     <string name="installer_status_not_supported">Not supported for this action.</string>
+    <string name="installer_status_shizuku_not_installed">Install Shizuku or Sui to use this option.</string>
+    <string name="installer_status_shizuku_not_running">Start Shizuku or Sui and try again.</string>
+    <string name="installer_status_shizuku_permission">Grant Shizuku permission to Universal ReVanced Manager from the Shizuku app.</string>
+    <string name="installer_status_shizuku_unsupported">The installed Shizuku version is not supported.</string>
+    <string name="installer_action_open_shizuku">Open Shizuku</string>
+    <string name="installer_shizuku_launch_failed">Unable to open Shizuku. Launch it manually and try again.</string>
+    <string name="installer_custom_header">Custom installers</string>
+    <string name="installer_custom_manage_title">Manage custom installers</string>
+    <string name="installer_custom_manage_description">Save third-party installer activities for use as primary or fallback installers.</string>
+    <string name="installer_custom_input_label">Package name</string>
+    <string name="installer_custom_package_hint">Type a package name and tap &quot;Find installers&quot; to discover installer activities.</string>
+    <string name="installer_custom_lookup">Find installers</string>
+    <string name="installer_custom_lookup_empty">Enter a package name first.</string>
+    <string name="installer_custom_searching">Searching installer activities…</string>
+    <string name="installer_custom_lookup_found">Found %1$d installer(s).</string>
+    <string name="installer_custom_action_add">Save installer</string>
+    <string name="installer_custom_action_remove">Remove saved installer</string>
+    <string name="installer_custom_builtin_indicator">Auto saved</string>
+    <string name="installer_custom_saved_indicator">Saved</string>
+    <string name="installer_custom_lookup_none">No installer activities found for %1$s.</string>
+    <string name="installer_custom_candidates_title">Available activities for %1$s</string>
+    <string name="installer_custom_saved_header">Saved installers</string>
+    <string name="installer_custom_empty">No custom installers saved yet.</string>
+    <string name="installer_custom_added">Custom installer saved.</string>
+    <string name="installer_custom_exists">That installer is already saved.</string>
+    <string name="installer_custom_removed">Custom installer removed.</string>
+    <string name="installer_custom_remove_failed">Could not remove the installer. Try again.</string>
     <string name="installer_hint_generic">The installation failed. Try again or switch to a different installer.</string>
     <string name="installer_hint_blocked">The installation was blocked by Android. Check Play Protect or security settings.</string>
     <string name="installer_hint_conflict">Another app with this package name is already installed. Uninstall it before continuing.</string>
@@ -458,7 +552,9 @@
     <string name="installer_external_success">%1$s reported a successful installation.</string>
     <string name="install_app">Install</string>
     <string name="install_app_success">App installed</string>
+    <string name="install_app_fail_title">Installation failed</string>
     <string name="install_app_fail">Failed to install app: %s</string>
+    <string name="install_timeout_message">Installation did not finish. Check the system installer dialog and try again.</string>
     <string name="reinstall_app_fail">Failed to reinstall app: %s</string>
     <string name="uninstall_app_fail">Failed to uninstall app: %s</string>
     <string name="open_app">Open</string>
@@ -467,12 +563,18 @@
     <string name="saved_app_export_success">Exported patched app</string>
     <string name="saved_app_export_failed">Failed to export patched app</string>
     <string name="saved_app_removed_toast">Removed saved patched app</string>
+    <string name="saved_app_copy_removed_toast">Removed saved copy</string>
+    <string name="delete_saved_app_title">Delete saved app</string>
+    <string name="delete_saved_app_description">This will remove the saved app entry and its stored APK.</string>
+    <string name="delete_saved_entry_title">Remove saved app entry</string>
+    <string name="delete_saved_entry_description">This will remove the saved app entry and its saved APK. The app will remain installed.</string>
     <string name="saved_app_launch_unavailable">Install the app before opening it.</string>
     <string name="install_saved_app">Install</string>
     <string name="installing_saved_app">Installing saved app…</string>
     <string name="saved_app_install_success">Installed saved app</string>
     <string name="saved_app_install_failed">Failed to install saved app</string>
     <string name="saved_app_install_missing">Saved APK not found</string>
+    <string name="delete_saved_copy">Delete saved copy</string>
     <string name="sign_fail">Failed to sign APK: %s</string>
     <string name="save_logs">Save logs</string>
     <string name="plugin_activity_dialog_body">User interaction is required in order to proceed with this plugin.</string>
@@ -537,7 +639,8 @@
     <string name="patches_delete_multiple_dialog_description">Are you sure you want to delete the selected patch bundles?</string>
 
     <string name="about_revanced_manager">About Universal ReVanced Manager</string>
-    <string name="revanced_manager_description">The Universal ReVanced Manager is a fork of the Official ReVanced Manager. Both applications use the ReVanced Patcher which allows you to download and patch apps with custom patches and manage the patching process. The unique features included in the Universal ReVanced Manager are, patch bundle display names, support for importing any third party patch bundles, and more.</string>
+    <string name="revanced_manager_description">The Universal ReVanced Manager (URV Manager) is a fork of the Official ReVanced Manager. Both applications use the ReVanced Patcher which allows you to download and patch apps with custom patches and manage the patching process. The unique features included in the Universal ReVanced Manager are patch bundle display names, support for importing any third party patch bundles, and much more. See a full list of unique features the Universal ReVanced Manager has to offer</string>
+    <string name="unique_features_label">here.</string>
     <string name="developer_options_enabled">Developer options enabled</string>
     <string name="developer_options_taps">%d taps remaining</string>
     <string name="developer_options_already_enabled">Developer options are already enabled</string>
@@ -633,7 +736,6 @@
     <string name="failed_to_import_keystore">Failed to import keystore</string>
     <string name="export">Export</string>
     <string name="confirm">Confirm</string>
-    <string name="saved_app_install_cancelled">Installation cancelled</string>`n</resources>
-
-
+    <string name="saved_app_install_cancelled">Installation cancelled</string>
+</resources>
 

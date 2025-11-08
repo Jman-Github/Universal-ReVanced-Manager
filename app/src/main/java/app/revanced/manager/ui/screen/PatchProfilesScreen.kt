@@ -305,7 +305,11 @@ fun PatchProfilesScreen(
                                         detail.patchCount
                                     )
                                     val typeLabel = stringResource(
-                                        if (detail.type == BundleSourceType.Remote) R.string.bundle_type_remote else R.string.bundle_type_local
+                                        when (detail.type) {
+                                            BundleSourceType.Preinstalled -> R.string.bundle_type_preinstalled
+                                            BundleSourceType.Remote -> R.string.bundle_type_remote
+                                            else -> R.string.bundle_type_local
+                                        }
                                     )
                                     Text(
                                         text = stringResource(

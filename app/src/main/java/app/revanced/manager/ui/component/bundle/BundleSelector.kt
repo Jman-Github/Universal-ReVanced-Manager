@@ -20,6 +20,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.revanced.manager.domain.bundles.PatchBundleSource
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
+import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
 import app.revanced.manager.ui.component.ColumnWithScrollbar
 import app.universal.revanced.manager.R
 
@@ -81,7 +82,11 @@ fun BundleSelector(sources: List<PatchBundleSource>, onFinish: (PatchBundleSourc
                     }
                     Text(
                         text = stringResource(
-                            if (source.asRemoteOrNull != null) R.string.bundle_type_remote else R.string.bundle_type_local
+                            when {
+                                source.isDefault -> R.string.bundle_type_preinstalled
+                                source.asRemoteOrNull != null -> R.string.bundle_type_remote
+                                else -> R.string.bundle_type_local
+                            }
                         ),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.outline

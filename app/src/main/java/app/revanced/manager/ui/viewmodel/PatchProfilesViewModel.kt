@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import app.revanced.manager.data.room.profile.PatchProfilePayload
 import app.revanced.manager.domain.bundles.PatchBundleSource
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
+import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
 import app.revanced.manager.domain.bundles.RemotePatchBundle
 import app.revanced.manager.domain.repository.DuplicatePatchProfileNameException
 import app.revanced.manager.domain.repository.PatchBundleRepository
@@ -36,7 +37,8 @@ data class PatchProfileListItem(
 
 enum class BundleSourceType {
     Remote,
-    Local
+    Local,
+    Preinstalled
 }
 
 data class BundleDetail(
@@ -264,10 +266,11 @@ class PatchProfilesViewModel(
 
 private fun PatchBundleSource?.determineType(bundle: PatchProfilePayload.Bundle): BundleSourceType {
     return when {
+        this?.isDefault == true || bundle.bundleUid == 0 -> BundleSourceType.Preinstalled
         this?.asRemoteOrNull != null -> BundleSourceType.Remote
         this != null -> BundleSourceType.Local
         bundle.sourceEndpoint != null -> BundleSourceType.Remote
-        else -> BundleSourceType.Local
+        else -> if (bundle.bundleUid == 0) BundleSourceType.Preinstalled else BundleSourceType.Local
     }
 }
 

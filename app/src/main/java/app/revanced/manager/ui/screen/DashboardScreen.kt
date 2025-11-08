@@ -299,7 +299,7 @@ fun DashboardScreen(
 
                 else -> {
                     AppTopBar(
-                        title = stringResource(R.string.app_name),
+                        title = stringResource(R.string.main_top_title),
                         actions = {
                             if (!vm.updatedManagerVersion.isNullOrEmpty()) {
                                 IconButton(

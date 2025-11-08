@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -27,6 +28,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -41,6 +43,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -57,9 +60,13 @@ import app.revanced.manager.ui.component.haptics.HapticExtendedFloatingActionBut
 import app.revanced.manager.ui.component.patcher.Steps
 import app.revanced.manager.ui.model.StepCategory
 import app.revanced.manager.ui.viewmodel.PatcherViewModel
+import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.util.APK_MIMETYPE
+import app.revanced.manager.util.ExportNameFormatter
 import app.revanced.manager.util.EventEffect
+import app.revanced.manager.util.PatchedAppExportData
 import app.revanced.manager.util.toast
+import org.koin.compose.koinInject
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,6 +80,19 @@ fun PatcherScreen(
     }
 
     val context = LocalContext.current
+    val prefs: PreferencesManager = koinInject()
+    val exportFormat by prefs.patchedAppExportFormat.getAsState()
+    val exportMetadata = viewModel.exportMetadata
+    val fallbackExportMetadata = remember(viewModel.packageName, viewModel.version) {
+        PatchedAppExportData(
+            appName = viewModel.packageName,
+            packageName = viewModel.packageName,
+            appVersion = viewModel.version ?: "unspecified"
+        )
+    }
+    val exportFileName = remember(exportFormat, exportMetadata, fallbackExportMetadata) {
+        ExportNameFormatter.format(exportFormat, exportMetadata ?: fallbackExportMetadata)
+    }
     val exportApkLauncher =
         rememberLauncherForActivityResult(CreateDocument(APK_MIMETYPE), viewModel::export)
 
@@ -168,6 +188,50 @@ fun PatcherScreen(
         )
     }
 
+    viewModel.installFailureMessage?.let { message ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissInstallFailureMessage,
+            title = { Text(stringResource(R.string.install_app_fail_title)) },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissInstallFailureMessage) {
+                    Text(stringResource(R.string.ok))
+                }
+            }
+        )
+    }
+
+    viewModel.installStatus?.let { status ->
+        when (status) {
+            PatcherViewModel.InstallCompletionStatus.InProgress -> {
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            }
+
+            is PatcherViewModel.InstallCompletionStatus.Success -> {
+                LaunchedEffect(status) {
+                    viewModel.clearInstallStatus()
+                }
+            }
+
+            is PatcherViewModel.InstallCompletionStatus.Failure -> {
+                if (viewModel.installFailureMessage == null) {
+                    AlertDialog(
+                        onDismissRequest = viewModel::dismissInstallFailureMessage,
+                        title = { Text(stringResource(R.string.install_app_fail_title)) },
+                        text = { Text(status.message) },
+                        confirmButton = {
+                            TextButton(onClick = viewModel::dismissInstallFailureMessage) {
+                                Text(stringResource(R.string.ok))
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    }
+
     val activityLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult(),
         onResult = viewModel::handleActivityResult
@@ -212,7 +276,7 @@ fun PatcherScreen(
             BottomAppBar(
                 actions = {
                     IconButton(
-                        onClick = { exportApkLauncher.launch("${viewModel.packageName}_${viewModel.version}_revanced_patched.apk") },
+                        onClick = { exportApkLauncher.launch(exportFileName) },
                         enabled = patcherSucceeded == true
                     ) {
                         Icon(Icons.Outlined.Save, stringResource(id = R.string.save_apk))

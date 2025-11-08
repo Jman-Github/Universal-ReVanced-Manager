@@ -59,6 +59,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -66,6 +67,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.parcelize.Parcelize
@@ -74,6 +76,7 @@ import org.koin.core.component.get
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.util.Locale
 
 @OptIn(SavedStateHandleSaveableApi::class, PluginHostApi::class, ExperimentalCoroutinesApi::class)
 class SelectedAppInfoViewModel(
@@ -92,6 +95,8 @@ class SelectedAppInfoViewModel(
     private val filesystem: Filesystem = get()
     private val savedStateHandle: SavedStateHandle = get()
     val prefs: PreferencesManager = get()
+    private var selectionLoadJob: Job? = null
+    private var optionsLoadJob: Job? = null
     val plugins = pluginsRepository.loadedPluginsFlow
     val desiredVersion = input.app.version
     val packageName = input.app.packageName
@@ -106,9 +111,75 @@ class SelectedAppInfoViewModel(
     private var autoLaunchProfilePatcher = profileId != null
     private val allowUniversalFlow = prefs.disableUniversalPatchCheck.flow
     private var allowUniversalPatches = true
+    private var _selectedApp by savedStateHandle.saveable {
+        mutableStateOf(input.app)
+    }
+    private val selectedAppState = MutableStateFlow(_selectedApp)
     private val bundleInfoFlowInternal =
         MutableStateFlow<List<PatchBundleInfo.Scoped>>(emptyList())
     val bundleInfoFlow = bundleInfoFlowInternal.asStateFlow()
+    private val preferredBundleOverrideFlow =
+        savedStateHandle.getStateFlow("preferred_bundle_override", null as String?)
+    val suggestedVersionsByBundle = selectedAppState
+        .flatMapLatest { selected ->
+            combine(
+                bundleRepository.suggestedVersionsByBundle,
+                bundleInfoFlow
+            ) { bundleVersions, bundles ->
+                val relevantBundles = bundles.map { it.uid }.toSet()
+                buildMap {
+                    bundleVersions.forEach { (bundleUid, versions) ->
+                        if (bundleUid in relevantBundles) {
+                            put(bundleUid, versions[selected.packageName])
+                        }
+                    }
+                }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+    private val preferredBundleUidFlow =
+        savedStateHandle.getStateFlow("preferred_bundle_uid", null as Int?)
+    private val preferredBundleAllVersionsFlow =
+        savedStateHandle.getStateFlow("preferred_bundle_all_versions", false)
+    val selectedBundleUidFlow = preferredBundleUidFlow
+    val selectedBundleVersionOverrideFlow = preferredBundleOverrideFlow
+    val preferredBundleTargetsAllVersionsFlow = preferredBundleAllVersionsFlow
+    val preferredBundleVersionFlow = combine(
+        preferredBundleUidFlow,
+        preferredBundleOverrideFlow,
+        suggestedVersionsByBundle
+    ) { uid, override, versions ->
+        if (uid == null) null else override ?: versions[uid]
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    val preferredBundleVersion get() = preferredBundleVersionFlow.value
+    val effectiveDesiredVersion get() = preferredBundleVersion ?: desiredVersion
+    val bundleRecommendationDetailsFlow = combine(
+        bundleInfoFlow,
+        suggestedVersionsByBundle
+    ) { scopedBundles, versions ->
+        scopedBundles.mapNotNull { scoped ->
+            val support = scoped.collectBundleSupport(packageName)
+            if (!support.hasSupport) return@mapNotNull null
+            val recommended = versions[scoped.uid]
+            if (
+                recommended == null &&
+                support.versions.isEmpty() &&
+                !support.supportsAllVersions
+            ) return@mapNotNull null
+
+            val otherVersions = support.versions
+                .filterNot { recommended.equals(it, ignoreCase = true) }
+                .sorted()
+
+            BundleRecommendationDetail(
+                bundleUid = scoped.uid,
+                name = scoped.name,
+                recommendedVersion = recommended,
+                otherSupportedVersions = otherVersions,
+                supportsAllVersions = support.supportsAllVersions
+            )
+        }.sortedBy { it.name.lowercase(Locale.ROOT) }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val persistConfiguration = input.patches == null
 
@@ -120,11 +191,6 @@ class SelectedAppInfoViewModel(
             apps.filter { it.packageName == packageName }
                 .sortedByDescending { it.lastUsed }
         }
-
-    private var _selectedApp by savedStateHandle.saveable {
-        mutableStateOf(input.app)
-    }
-    private val selectedAppState = MutableStateFlow(_selectedApp)
 
     var selectedAppInfo: PackageInfo? by mutableStateOf(null)
         private set
@@ -173,6 +239,33 @@ class SelectedAppInfoViewModel(
                     bundleInfoFlowInternal.value = bundles
                     if (!allowUniversal) pruneSelectionForUniversal(bundles)
                 }
+        }
+
+        viewModelScope.launch {
+            preferredBundleVersionFlow.collect { version ->
+                val target = version ?: desiredVersion
+                val current = selectedApp
+                if (current is SelectedApp.Search && current.version != target) {
+                    selectedApp = SelectedApp.Search(packageName, target)
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            combine(
+                prefs.disablePatchVersionCompatCheck.flow,
+                prefs.suggestedVersionSafeguard.flow,
+                selectedBundleUidFlow,
+                selectedBundleVersionOverrideFlow
+            ) { allowIncompatible, requireSuggested, selectedUid, override ->
+                val overridesAllowed = allowIncompatible && !requireSuggested
+                val hasSelection = selectedUid != null || override != null
+                overridesAllowed to hasSelection
+            }.collect { (overridesAllowed, hasSelection) ->
+                if (!overridesAllowed && hasSelection) {
+                    selectBundleRecommendation(null, null)
+                }
+            }
         }
     }
 
@@ -283,21 +376,26 @@ class SelectedAppInfoViewModel(
 
     val requiredVersion = combine(
         prefs.suggestedVersionSafeguard.flow,
-        bundleRepository.suggestedVersions
-    ) { suggestedVersionSafeguard, suggestedVersions ->
+        bundleRepository.suggestedVersions,
+        preferredBundleVersionFlow
+    ) { suggestedVersionSafeguard, suggestedVersions, preferred ->
         if (!suggestedVersionSafeguard) return@combine null
 
-        suggestedVersions[input.app.packageName]
+        preferred ?: suggestedVersions[input.app.packageName]
     }
     var options: Options by savedStateHandle.saveable {
         val state = mutableStateOf<Options>(emptyMap())
 
-        viewModelScope.launch {
+        optionsLoadJob = viewModelScope.launch {
             if (!persistConfiguration) return@launch // TODO: save options for patched apps.
-            val bundlePatches = bundleInfoFlow.first()
-                .associate { it.uid to it.patches.associateBy { patch -> patch.name } }
+            val bundlePatches = withContext(Dispatchers.Default) {
+                bundleRepository
+                    .scopedBundleInfoFlow(packageName, input.app.version)
+                    .first()
+                    .associate { scoped -> scoped.uid to scoped.patches.associateBy { it.name } }
+            }
 
-            options = withContext(Dispatchers.Default) {
+            state.value = withContext(Dispatchers.Default) {
                 optionsRepository.getOptions(packageName, bundlePatches)
             }
         }
@@ -306,6 +404,11 @@ class SelectedAppInfoViewModel(
     }
         private set
 
+    suspend fun awaitOptions(): Options {
+        optionsLoadJob?.join()
+        return options
+    }
+
     private var selectionState: SelectionState by savedStateHandle.saveable {
         if (input.patches != null)
             return@saveable mutableStateOf(SelectionState.Customized(input.patches))
@@ -313,9 +416,7 @@ class SelectedAppInfoViewModel(
         val selection: MutableState<SelectionState> = mutableStateOf(SelectionState.Default)
 
         // Try to get the previous selection if customization is enabled.
-        viewModelScope.launch {
-            if (!prefs.disableSelectionWarning.get()) return@launch
-
+        selectionLoadJob = viewModelScope.launch {
             val previous = selectionRepository.getSelection(packageName)
             if (previous.values.sumOf { it.size } == 0) return@launch
             selectionState = SelectionState.Customized(previous)
@@ -426,6 +527,22 @@ class SelectedAppInfoViewModel(
         }
     }
 
+    fun selectBundleRecommendation(
+        bundleUid: Int?,
+        versionOverride: String?,
+        targetsAllVersions: Boolean = false
+    ) {
+        if (bundleUid == null) {
+            savedStateHandle["preferred_bundle_uid"] = null
+            savedStateHandle["preferred_bundle_override"] = null
+            savedStateHandle["preferred_bundle_all_versions"] = false
+        } else {
+            savedStateHandle["preferred_bundle_uid"] = bundleUid
+            savedStateHandle["preferred_bundle_override"] = versionOverride
+            savedStateHandle["preferred_bundle_all_versions"] = targetsAllVersions
+        }
+    }
+
     fun searchUsingPlugin(plugin: LoadedDownloaderPlugin) {
         cancelPluginAction()
         pluginAction = plugin to viewModelScope.launch {
@@ -456,10 +573,13 @@ class SelectedAppInfoViewModel(
                         }
                 }
 
+                val targetsAllVersions = preferredBundleAllVersionsFlow.value
+                val targetVersion =
+                    if (targetsAllVersions) null else preferredBundleVersion ?: desiredVersion
                 withContext(Dispatchers.IO) {
-                    plugin.get(scope, packageName, desiredVersion)
+                    plugin.get(scope, packageName, targetVersion)
                 }?.let { (data, version) ->
-                    if (desiredVersion != null && version != desiredVersion) {
+                    if (targetVersion != null && version != targetVersion) {
                         app.toast(app.getString(R.string.downloader_invalid_version))
                         return@launch
                     }
@@ -507,6 +627,8 @@ class SelectedAppInfoViewModel(
         )
 
     suspend fun getPatcherParams(): Patcher.ViewModelParams {
+        selectionLoadJob?.join()
+        optionsLoadJob?.join()
         val allowIncompatible = prefs.disablePatchVersionCompatCheck.get()
         val bundles = bundleInfoFlow.first()
         return Patcher.ViewModelParams(
@@ -562,13 +684,48 @@ class SelectedAppInfoViewModel(
         NoPlugins(R.string.downloader_no_plugins_available)
     }
 
+    private fun PatchBundleInfo.Scoped.collectBundleSupport(packageName: String): BundleSupport {
+        var supportsAllVersions = false
+        val versions = mutableSetOf<String>()
+        var hasSupport = false
+
+        patches.forEach { patch ->
+            patch.compatiblePackages
+                ?.filter { it.packageName.equals(packageName, ignoreCase = true) }
+                ?.forEach { compatible ->
+                    hasSupport = true
+                    val supportedVersions = compatible.versions
+                    if (supportedVersions.isNullOrEmpty()) {
+                        supportsAllVersions = true
+                    } else {
+                        versions += supportedVersions
+                    }
+                }
+        }
+
+        return BundleSupport(
+            hasSupport = hasSupport,
+            supportsAllVersions = supportsAllVersions,
+            versions = versions
+        )
+    }
+
+    private data class BundleSupport(
+        val hasSupport: Boolean,
+        val supportsAllVersions: Boolean,
+        val versions: Set<String>
+    )
+
     private companion object {
         private val TAG = SelectedAppInfoViewModel::class.java.simpleName ?: "SelectedAppInfoViewModel"
         /**
          * Returns a copy with all nonexistent options removed.
          */
-        private fun Options.filtered(bundles: List<PatchBundleInfo.Scoped>): Options =
-            buildMap options@{
+        private fun Options.filtered(bundles: List<PatchBundleInfo.Scoped>): Options {
+            if (isEmpty()) return this
+            if (bundles.isEmpty()) return this
+
+            return buildMap options@{
                 bundles.forEach bundles@{ bundle ->
                     val bundleOptions = this@filtered[bundle.uid] ?: return@bundles
 
@@ -587,6 +744,7 @@ class SelectedAppInfoViewModel(
                     }
                 }
             }
+        }
     }
 }
 
@@ -609,6 +767,14 @@ private sealed interface SelectionState : Parcelable {
             bundles.toPatchSelection(allowIncompatible) { _, patch -> patch.include }
     }
 }
+
+data class BundleRecommendationDetail(
+    val bundleUid: Int,
+    val name: String,
+    val recommendedVersion: String?,
+    val otherSupportedVersions: List<String>,
+    val supportsAllVersions: Boolean
+)
 
 private fun PatchBundleInfo.Scoped.withoutUniversalPatches(): PatchBundleInfo.Scoped {
     if (universal.isEmpty()) return this

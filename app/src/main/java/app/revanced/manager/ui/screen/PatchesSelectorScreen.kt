@@ -102,6 +102,7 @@ import app.revanced.manager.ui.component.haptics.HapticExtendedFloatingActionBut
 import app.revanced.manager.ui.component.haptics.HapticTab
 import app.revanced.manager.ui.component.patches.OptionItem
 import app.revanced.manager.ui.component.patches.SelectionWarningDialog
+import app.revanced.manager.ui.viewmodel.BundleSourceType
 import app.revanced.manager.ui.viewmodel.PatchesSelectorViewModel
 import app.revanced.manager.ui.viewmodel.PatchesSelectorViewModel.Companion.SHOW_INCOMPATIBLE
 import app.revanced.manager.ui.viewmodel.PatchesSelectorViewModel.Companion.SHOW_UNIVERSAL
@@ -120,7 +121,7 @@ fun PatchesSelectorScreen(
 ) {
     val bundles by viewModel.bundlesFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     val bundleDisplayNames by viewModel.bundleDisplayNames.collectAsStateWithLifecycle(initialValue = emptyMap())
-    val bundleTypes by viewModel.bundleTypes.collectAsStateWithLifecycle(initialValue = emptyMap())
+    val bundleTypes by viewModel.bundleTypes.collectAsStateWithLifecycle(initialValue = emptyMap<Int, BundleSourceType>())
     val profiles by viewModel.profiles.collectAsStateWithLifecycle(initialValue = emptyList<PatchProfile>())
     val pagerState = rememberPagerState(
         initialPage = 0,
@@ -596,9 +597,7 @@ fun PatchesSelectorScreen(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Text(
-                                        text = stringResource(
-                                            if (bundleTypes[bundle.uid] == true) R.string.bundle_type_remote else R.string.bundle_type_local
-                                        ),
+                                        text = stringResource(bundleTypeLabelRes(bundleTypes[bundle.uid])),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.outline
                                     )
@@ -719,6 +718,12 @@ private fun SaveFabIcon(
     }
 }
 
+private fun bundleTypeLabelRes(type: BundleSourceType?): Int = when (type) {
+    BundleSourceType.Preinstalled -> R.string.bundle_type_preinstalled
+    BundleSourceType.Remote -> R.string.bundle_type_remote
+    else -> R.string.bundle_type_local
+}
+
 private fun formatPatchCountForBadge(count: Int): String =
     if (count > 999) "999+" else count.toString()
 
@@ -726,7 +731,7 @@ private fun formatPatchCountForBadge(count: Int): String =
 private fun PatchProfileBundleDialog(
     bundles: List<PatchBundleInfo.Scoped>,
     bundleDisplayNames: Map<Int, String>,
-    bundleTypes: Map<Int, Boolean>,
+    bundleTypes: Map<Int, BundleSourceType>,
     selectedBundleUids: MutableList<Int>,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
@@ -799,9 +804,7 @@ private fun PatchProfileBundleDialog(
                                         )
                                     }
                                     Text(
-                                        text = stringResource(
-                                            if (bundleTypes[bundle.uid] == true) R.string.bundle_type_remote else R.string.bundle_type_local
-                                        ),
+                                        text = stringResource(bundleTypeLabelRes(bundleTypes[bundle.uid])),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.outline
                                     )

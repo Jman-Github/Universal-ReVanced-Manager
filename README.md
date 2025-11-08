@@ -6,7 +6,7 @@ Application to use ReVanced on Android
 
 ## ❓ About
 
-Universal ReVanced Manager is an application that uses [ReVanced Patcher](https://github.com/revanced/revanced-patcher) to patch Android apps.
+Universal ReVanced Manager (URV Manager) is an application that uses [ReVanced Patcher](https://github.com/revanced/revanced-patcher) to patch Android apps.
 
 ## 💪 Unique Features
 
@@ -20,6 +20,10 @@ Universal ReVanced Manager includes powerful features that the official ReVanced
   - Per-bundle deselect button  
   - Patch profiles button to save patch selections and option states per app  
   - Latest patch bundle changelogs shown in bundle info
+- 🧭 **Bundle Recommendation Picker**: Choose per-bundle suggested versions or override with any other supported version
+- 🔍 **Suggestion Toggle on Select-App**: Bundle suggestions are grouped behind a toggle with inline dialogs to view additional supported versions
+- 🧹 **Official Bundle Management**: Delete the Official ReVanced patch bundle from the Patch Bundles tab and restore it from Advanced settings
+- 📝 **Export Filename Templates**: Configure a filename template for exported patched APKs with placeholders for app and patch metadata
 
 ### 📦 App Patching Flow
 - 🧠 **Downloaded App Source**: Added a "Downloaded apps" source in the select source screen when patching. If the manager has cached an APK from a downloader plugin, you can pick it directly from there. This option only appears when that app is available
@@ -28,6 +32,12 @@ Universal ReVanced Manager includes powerful features that the official ReVanced
 - 📲 **Installer Management**: A full installer management system with installer metadata, and configurable primary and fallback that applies everywhere across the app
 - 📋 **View Applied Patches**: The "Apps" tab shows the applied patches for each saved patched APK and which patch bundle(s) were used
 - 🛑 **Accidental Exit Protection**: After patching, pressing the back button now shows a confirmation popup. It asks if you really want to leave and gives you the option to save the patched app for later (adds it to the "Apps" tab)
+
+- 🧩 **Installer Management**: Full installer management system covering app installs, saved app reinstalls, and manager updates
+  - Metadata display for each installer
+  - Configurable primary and fallback installers
+  - Shizuku installer option for silent installs when Shizuku or Sui is available
+  - Advanced settings support saving custom installer packages with package-name lookup and autocomplete, plus dedicated management for third party installers
 
 ### 📥 Downloader & Storage Management
 - 📂 **Cached Downloads Management**: The manager can now keep multiple downloaded apps (from downloader plugins) inside the downloader settings. You can also export any of these APKs to your device storage whenever you want
@@ -50,6 +60,13 @@ You can download the most recent version of Universal ReVanced Manager from [Git
 ## 📋 Patch Bundles
 
 To import patch bundles into Universal ReVanced Manager, use my [ReVanced Patch Bundles](https://github.com/Jman-Github/ReVanced-Patch-Bundles) repository. It includes a detailed [catalog](https://github.com/Jman-Github/ReVanced-Patch-Bundles/blob/bundles/patch-bundles/PATCH-LIST-CATALOG.md) of all patches across 20+ tracked bundles, as well as [bundle URLs](https://github.com/Jman-Github/ReVanced-Patch-Bundles#-patch-bundles-urls) you can paste directly into Universal ReVanced Manager to import them. Keep in mind that only the patch bundles labeled "API v4" can be imported into the manager. Bundles without this label cannot be imported into the app.
+
+## 🔌 Supported Downloader Plugins
+
+[Play Store Downloader](https://github.com/ReVanced/revanced-manager-downloaders) ❌  
+[ApkMirror Downloader](https://github.com/ReVanced/revanced-manager-downloaders) ✅  
+[APKPure Downloader](https://github.com/Aunali321/revanced-downloader-plugins) ✅  
+[APKCombo Downloader](https://github.com/Aunali321/revanced-downloader-plugins) ✅  
 
 ## ⚖️ License
 

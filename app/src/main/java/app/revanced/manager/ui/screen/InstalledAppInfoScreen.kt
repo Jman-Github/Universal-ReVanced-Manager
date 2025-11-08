@@ -5,7 +5,8 @@ import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -52,12 +53,15 @@ import app.revanced.manager.ui.component.AppliedPatchesDialog
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.ColumnWithScrollbar
 import app.revanced.manager.ui.component.SegmentedButton
+import app.revanced.manager.ui.component.ConfirmDialog
 import app.revanced.manager.ui.component.settings.SettingsListItem
 import app.revanced.manager.ui.viewmodel.InstalledAppInfoViewModel
 import app.revanced.manager.util.APK_MIMETYPE
+import app.revanced.manager.util.ExportNameFormatter
+import app.revanced.manager.util.PatchedAppExportData
 import org.koin.compose.koinInject
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun InstalledAppInfoScreen(
     onPatchClick: (packageName: String) -> Unit,
@@ -70,6 +74,7 @@ fun InstalledAppInfoScreen(
     val bundleInfo by patchBundleRepository.bundleInfoFlow.collectAsStateWithLifecycle(emptyMap())
     val bundleSources by patchBundleRepository.sources.collectAsStateWithLifecycle(emptyList())
     val allowUniversalPatches by prefs.disableUniversalPatchCheck.getAsState()
+    val exportFormat by prefs.patchedAppExportFormat.getAsState()
     var showAppliedPatchesDialog by rememberSaveable { mutableStateOf(false) }
     var showUniversalBlockedDialog by rememberSaveable { mutableStateOf(false) }
     val appliedSelection = viewModel.appliedPatches
@@ -227,45 +232,36 @@ fun InstalledAppInfoScreen(
                 }
             }
 
-            Row(
+            FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
                 modifier = Modifier
                     .padding(horizontal = 16.dp)
                     .clip(RoundedCornerShape(24.dp))
             ) {
+                val showSavedControls = viewModel.hasSavedCopy || installedApp.installType == InstallType.SAVED
+
+                if (viewModel.appInfo != null) {
+                    SegmentedButton(
+                        icon = Icons.AutoMirrored.Outlined.OpenInNew,
+                        text = stringResource(R.string.open_app),
+                        onClick = viewModel::launch,
+                        enabled = isInstalledOnDevice
+                    )
+                }
+
                 when (installedApp.installType) {
                     InstallType.DEFAULT -> {
-                        if (viewModel.appInfo != null) {
+                        if (!showSavedControls) {
                             SegmentedButton(
-                                icon = Icons.AutoMirrored.Outlined.OpenInNew,
-                                text = stringResource(R.string.open_app),
-                                onClick = viewModel::launch
+                                icon = Icons.Outlined.Delete,
+                                text = stringResource(R.string.uninstall),
+                                onClick = viewModel::uninstall
                             )
                         }
-                        SegmentedButton(
-                            icon = Icons.Outlined.Delete,
-                            text = stringResource(R.string.uninstall),
-                            onClick = viewModel::uninstall
-                        )
-                        SegmentedButton(
-                            icon = Icons.Outlined.Update,
-                            text = stringResource(R.string.repatch),
-                            onClick = {
-                                if (!allowUniversalPatches && (appliedBundlesContainUniversal || appliedSelectionContainsUniversal)) {
-                                    showUniversalBlockedDialog = true
-                                } else {
-                                    onPatchClick(installedApp.originalPackageName)
-                                }
-                            }
-                        )
                     }
 
                     InstallType.MOUNT -> {
-                        SegmentedButton(
-                            icon = Icons.AutoMirrored.Outlined.OpenInNew,
-                            text = stringResource(R.string.open_app),
-                            onClick = viewModel::launch
-                        )
                         SegmentedButton(
                             icon = Icons.Outlined.SettingsBackupRestore,
                             text = stringResource(R.string.unpatch),
@@ -280,7 +276,6 @@ fun InstalledAppInfoScreen(
                             onClick = viewModel::mountOrUnmount,
                             enabled = viewModel.rootInstaller.hasRootAccess()
                         )
-
                         SegmentedButton(
                             icon = Icons.Outlined.Update,
                             text = stringResource(R.string.repatch),
@@ -295,50 +290,115 @@ fun InstalledAppInfoScreen(
                         )
                     }
 
-                    InstallType.SAVED -> {
-                        val exportFileName = remember(installedApp.currentPackageName, installedApp.version) {
-                            val base = "${installedApp.currentPackageName}_${installedApp.version}"
-                                .replace(Regex("[^A-Za-z0-9._-]"), "_")
-                            "$base.apk"
-                        }
-                        SegmentedButton(
-                            icon = Icons.Outlined.Save,
-                            text = stringResource(R.string.export),
-                            onClick = { exportSavedLauncher.launch(exportFileName) }
-                        )
-                        val installText = if (isInstalledOnDevice) {
-                            stringResource(R.string.uninstall)
-                        } else {
-                            stringResource(R.string.install_saved_app)
-                        }
-                        SegmentedButton(
-                            icon = Icons.Outlined.InstallMobile,
-                            text = installText,
-                            onClick = {
-                                if (isInstalledOnDevice) {
-                                    viewModel.uninstallSavedInstallation()
-                                } else {
-                                    viewModel.installSavedApp()
-                                }
+                    InstallType.SAVED -> Unit
+                }
+
+                if (!showSavedControls && installedApp.installType == InstallType.DEFAULT) {
+                    SegmentedButton(
+                        icon = Icons.Outlined.Update,
+                        text = stringResource(R.string.repatch),
+                        onClick = {
+                            if (!allowUniversalPatches && (appliedBundlesContainUniversal || appliedSelectionContainsUniversal)) {
+                                showUniversalBlockedDialog = true
+                            } else {
+                                onPatchClick(installedApp.originalPackageName)
                             }
-                        )
-                        SegmentedButton(
-                            icon = Icons.Outlined.Delete,
-                            text = stringResource(R.string.delete),
-                            onClick = viewModel::removeSavedApp
-                        )
-                        SegmentedButton(
-                            icon = Icons.Outlined.Update,
-                            text = stringResource(R.string.repatch),
-                            onClick = {
-                                if (!allowUniversalPatches && (appliedBundlesContainUniversal || appliedSelectionContainsUniversal)) {
-                                    showUniversalBlockedDialog = true
-                                } else {
-                                    onPatchClick(installedApp.originalPackageName)
-                                }
-                            }
+                        }
+                    )
+                }
+
+                if (showSavedControls) {
+                    val exportMetadata = remember(
+                        installedApp.currentPackageName,
+                        installedApp.version,
+                        appliedBundles,
+                        viewModel.appInfo
+                    ) {
+                        val label = viewModel.appInfo?.applicationInfo?.loadLabel(context.packageManager)?.toString()
+                            ?: installedApp.currentPackageName
+                        val bundleVersions = appliedBundles.mapNotNull { it.version?.takeIf(String::isNotBlank) }
+                        val bundleNames = appliedBundles.map { it.title }.filter(String::isNotBlank)
+                        PatchedAppExportData(
+                            appName = label,
+                            packageName = installedApp.currentPackageName,
+                            appVersion = installedApp.version,
+                            patchBundleVersions = bundleVersions,
+                            patchBundleNames = bundleNames
                         )
                     }
+                    val exportFileName = remember(exportMetadata, exportFormat) {
+                        ExportNameFormatter.format(exportFormat, exportMetadata)
+                    }
+
+                    SegmentedButton(
+                        icon = Icons.Outlined.Save,
+                        text = stringResource(R.string.export),
+                        onClick = { exportSavedLauncher.launch(exportFileName) }
+                    )
+
+                    val installText = if (isInstalledOnDevice) {
+                        stringResource(R.string.uninstall)
+                    } else {
+                        stringResource(R.string.install_saved_app)
+                    }
+                    SegmentedButton(
+                        icon = Icons.Outlined.InstallMobile,
+                        text = installText,
+                        onClick = {
+                            if (isInstalledOnDevice) {
+                                viewModel.uninstallSavedInstallation()
+                            } else {
+                                viewModel.installSavedApp()
+                            }
+                        }
+                    )
+
+                    val deleteAction: () -> Unit = if (installedApp.installType == InstallType.SAVED) {
+                        viewModel::removeSavedApp
+                    } else {
+                        viewModel::deleteSavedEntry
+                    }
+                    val deleteTitle = if (installedApp.installType == InstallType.SAVED) {
+                        stringResource(R.string.delete_saved_app_title)
+                    } else {
+                        stringResource(R.string.delete_saved_entry_title)
+                    }
+                    val deleteDescription = if (installedApp.installType == InstallType.SAVED) {
+                        stringResource(R.string.delete_saved_app_description)
+                    } else {
+                        stringResource(R.string.delete_saved_entry_description)
+                    }
+                    val deleteLabel = stringResource(R.string.delete)
+                    var showDeleteConfirmation by rememberSaveable { mutableStateOf(false) }
+                    if (showDeleteConfirmation) {
+                        ConfirmDialog(
+                            onDismiss = { showDeleteConfirmation = false },
+                            onConfirm = {
+                                showDeleteConfirmation = false
+                                deleteAction()
+                            },
+                            title = deleteTitle,
+                            description = deleteDescription,
+                            icon = Icons.Outlined.Delete
+                        )
+                    }
+                    SegmentedButton(
+                        icon = Icons.Outlined.Delete,
+                        text = deleteLabel,
+                        onClick = { showDeleteConfirmation = true }
+                    )
+
+                    SegmentedButton(
+                        icon = Icons.Outlined.Update,
+                        text = stringResource(R.string.repatch),
+                        onClick = {
+                            if (!allowUniversalPatches && (appliedBundlesContainUniversal || appliedSelectionContainsUniversal)) {
+                                showUniversalBlockedDialog = true
+                            } else {
+                                onPatchClick(installedApp.originalPackageName)
+                            }
+                        }
+                    )
                 }
             }
 

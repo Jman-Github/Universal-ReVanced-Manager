@@ -4,6 +4,7 @@ import android.content.Context
 import app.revanced.manager.domain.manager.base.BasePreferencesManager
 import app.revanced.manager.domain.manager.base.EditorContext
 import app.revanced.manager.ui.theme.Theme
+import app.revanced.manager.util.ExportNameFormatter
 import app.revanced.manager.util.isDebuggable
 import kotlinx.serialization.Serializable
 
@@ -20,10 +21,16 @@ class PreferencesManager(
     val useProcessRuntime = booleanPreference("use_process_runtime", false)
     val stripUnusedNativeLibs = booleanPreference("strip_unused_native_libs", false)
     val patcherProcessMemoryLimit = intPreference("process_runtime_memory_limit", 700)
+    val patchedAppExportFormat = stringPreference(
+        "patched_app_export_format",
+        ExportNameFormatter.DEFAULT_TEMPLATE
+    )
+    val officialBundleRemoved = booleanPreference("official_bundle_removed", false)
 
     val allowMeteredUpdates = booleanPreference("allow_metered_updates", false)
     val installerPrimary = stringPreference("installer_primary", InstallerPreferenceTokens.INTERNAL)
     val installerFallback = stringPreference("installer_fallback", InstallerPreferenceTokens.NONE)
+    val installerCustomComponents = stringSetPreference("installer_custom_components", emptySet())
 
     val keystoreAlias = stringPreference("keystore_alias", KeystoreManager.DEFAULT)
     val keystorePass = stringPreference("keystore_pass", KeystoreManager.DEFAULT)
@@ -51,9 +58,12 @@ class PreferencesManager(
         val api: String? = null,
         val useProcessRuntime: Boolean? = null,
         val patcherProcessMemoryLimit: Int? = null,
+        val patchedAppExportFormat: String? = null,
+        val officialBundleRemoved: Boolean? = null,
         val allowMeteredUpdates: Boolean? = null,
         val installerPrimary: String? = null,
         val installerFallback: String? = null,
+        val installerCustomComponents: Set<String>? = null,
         val keystoreAlias: String? = null,
         val keystorePass: String? = null,
         val firstLaunch: Boolean? = null,
@@ -76,9 +86,12 @@ class PreferencesManager(
         api = api.get(),
         useProcessRuntime = useProcessRuntime.get(),
         patcherProcessMemoryLimit = patcherProcessMemoryLimit.get(),
+        patchedAppExportFormat = patchedAppExportFormat.get(),
+        officialBundleRemoved = officialBundleRemoved.get(),
         allowMeteredUpdates = allowMeteredUpdates.get(),
         installerPrimary = installerPrimary.get(),
         installerFallback = installerFallback.get(),
+        installerCustomComponents = installerCustomComponents.get(),
         keystoreAlias = keystoreAlias.get(),
         keystorePass = keystorePass.get(),
         firstLaunch = firstLaunch.get(),
@@ -101,9 +114,12 @@ class PreferencesManager(
         snapshot.api?.let { api.value = it }
         snapshot.useProcessRuntime?.let { useProcessRuntime.value = it }
         snapshot.patcherProcessMemoryLimit?.let { patcherProcessMemoryLimit.value = it }
+        snapshot.patchedAppExportFormat?.let { patchedAppExportFormat.value = it }
+        snapshot.officialBundleRemoved?.let { officialBundleRemoved.value = it }
         snapshot.allowMeteredUpdates?.let { allowMeteredUpdates.value = it }
         snapshot.installerPrimary?.let { installerPrimary.value = it }
         snapshot.installerFallback?.let { installerFallback.value = it }
+        snapshot.installerCustomComponents?.let { installerCustomComponents.value = it }
         snapshot.keystoreAlias?.let { keystoreAlias.value = it }
         snapshot.keystorePass?.let { keystorePass.value = it }
         snapshot.firstLaunch?.let { firstLaunch.value = it }
@@ -125,5 +141,6 @@ object InstallerPreferenceTokens {
     const val INTERNAL = ":internal:"
     const val SYSTEM = ":system:"
     const val ROOT = ":root:"
+    const val SHIZUKU = ":shizuku:"
     const val NONE = ":none:"
 }

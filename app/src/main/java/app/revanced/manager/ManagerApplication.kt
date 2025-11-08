@@ -2,6 +2,8 @@ package app.revanced.manager
 
 import android.app.Activity
 import android.app.Application
+import android.content.Context
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import app.revanced.manager.data.platform.Filesystem
@@ -24,6 +26,7 @@ import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
 import org.koin.androidx.workmanager.koin.workManagerFactory
 import org.koin.core.context.startKoin
+import org.lsposed.hiddenapibypass.HiddenApiBypass
 
 class ManagerApplication : Application() {
     private val scope = MainScope()
@@ -103,6 +106,13 @@ class ManagerApplication : Application() {
             override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
             override fun onActivityDestroyed(activity: Activity) {}
         })
+    }
+
+    override fun attachBaseContext(base: Context?) {
+        super.attachBaseContext(base)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            HiddenApiBypass.addHiddenApiExemptions("L")
+        }
     }
 
     private fun onFreshProcessStart() {

@@ -29,6 +29,7 @@ import androidx.compose.ui.res.stringResource
 import app.universal.revanced.manager.R
 import app.revanced.manager.domain.bundles.PatchBundleSource
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
+import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
 import app.revanced.manager.ui.component.ConfirmDialog
 import app.revanced.manager.ui.component.haptics.HapticCheckbox
 
@@ -134,7 +135,11 @@ fun BundleItem(
                 }
 
                 val typeLabel = stringResource(
-                    if (src.asRemoteOrNull != null) R.string.bundle_type_remote else R.string.bundle_type_local
+                    when {
+                        src.isDefault -> R.string.bundle_type_preinstalled
+                        src.asRemoteOrNull != null -> R.string.bundle_type_remote
+                        else -> R.string.bundle_type_local
+                    }
                 )
 
                 Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {

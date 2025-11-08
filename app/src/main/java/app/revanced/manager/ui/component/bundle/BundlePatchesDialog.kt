@@ -40,8 +40,6 @@ fun BundlePatchesDialog(
     onDismissRequest: () -> Unit,
     src: PatchBundleSource,
 ) {
-    var showAllVersions by rememberSaveable { mutableStateOf(false) }
-    var showOptions by rememberSaveable { mutableStateOf(false) }
     val patchBundleRepository: PatchBundleRepository = koinInject()
     val patches by remember(src.uid) {
         patchBundleRepository.bundleInfoFlow.mapNotNull { it[src.uid]?.patches }
@@ -71,13 +69,19 @@ fun BundlePatchesDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(16.dp)
             ) {
-                items(patches) { patch ->
+                items(
+                    items = patches,
+                    key = { it.name }
+                ) { patch ->
+                    var expandVersions by rememberSaveable(src.uid, patch.name, "versions") { mutableStateOf(false) }
+                    var expandOptions by rememberSaveable(src.uid, patch.name, "options") { mutableStateOf(false) }
+
                     PatchItem(
                         patch,
-                        showAllVersions,
-                        onExpandVersions = { showAllVersions = !showAllVersions },
-                        showOptions,
-                        onExpandOptions = { showOptions = !showOptions }
+                        expandVersions,
+                        onExpandVersions = { expandVersions = !expandVersions },
+                        expandOptions,
+                        onExpandOptions = { expandOptions = !expandOptions }
                     )
                 }
             }

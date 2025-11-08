@@ -100,18 +100,11 @@ fun ReVancedManagerTheme(
         else -> LightColorScheme
     }.let {
         if (darkTheme && pureBlackTheme) {
+            val pureBlack = Color.Black
             it.copy(
-                background = Color.Black,
-                surface = Color.Black,
-                surfaceVariant = Color.Black,
-                surfaceTint = Color.Black,
-                surfaceDim = Color.Black,
-                surfaceBright = Color.Black,
-                surfaceContainerLowest = Color.Black,
-                surfaceContainerLow = Color.Black,
-                surfaceContainer = Color.Black,
-                surfaceContainerHigh = Color.Black,
-                surfaceContainerHighest = Color.Black
+                background = pureBlack,
+                surface = pureBlack,
+                surfaceDim = pureBlack
             )
         } else it
     }.let { scheme ->
