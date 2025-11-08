@@ -41,7 +41,7 @@
 # Features
 
 - Added a full installer management system with metadata, configurable primary/fallback choices that applies to patched apps, manager updates, etc. Configurable from Settings > Advanced (https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/8)
-- Updated the "Allow using universal patches" (now renamed to "Show & allow using universal patches") settubg to also hide universal patches when toggled off and not just prevent the selection of them (https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/9)
+- Updated the "Allow using universal patches" (now renamed to "Show & allow using universal patches") setting to also hide universal patches when toggled off and not just prevent the selection of them (https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/9)
 - Local patch bundle details show their bundle UID with a quick copy shortcut, imported & existing patch profiles automatically update their local patch bundle by using hashes, and the ability to manually edit the bundle UID for patch profiles that are using local patch bundles (https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/11)
 - Added the preinstalled, official ReVanced patch bundle user set display name to patch bundle exports
 - Added the ability to edit/update existing patch profile names
@@ -56,7 +56,7 @@
 - Cached bundle changelog responses so repeated requests fall back to a stored version instead of hitting GitHub rate limits (https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/10)
 - Fixed patch profiles duplicating instead of overlapping when imported multiple times
 - Fixed delete confirmation menus not disappearing after confirming a deletion
-- Fixed patch deselection shorcuts (deselect all & deselect all per bundle) not following patch selection safeguard settings
+- Fixed patch deselection shortcuts (deselect all & deselect all per bundle) not following patch selection safeguard settings
 - Optimized patch bundles importing
 
 
@@ -164,3 +164,4 @@
 - Added patch bundle display naming
 - Added support for all 3rd party patch bundles
 - Added the ability to deselect all patches in selection menu
+
