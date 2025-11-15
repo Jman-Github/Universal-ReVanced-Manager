@@ -14,6 +14,7 @@ data class PatchProfilePayload(
         val options: Map<String, Map<String, Option.SerializedValue>>,
         val displayName: String? = null,
         val sourceEndpoint: String? = null,
-        val sourceName: String? = null
+        val sourceName: String? = null,
+        val version: String? = null
     )
 }

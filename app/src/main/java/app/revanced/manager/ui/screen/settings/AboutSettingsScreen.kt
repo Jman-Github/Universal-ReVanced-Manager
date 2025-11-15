@@ -6,14 +6,14 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.ClickableText
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -43,7 +43,6 @@ import app.universal.revanced.manager.BuildConfig
 import app.universal.revanced.manager.R
 import androidx.compose.ui.graphics.vector.ImageVector
 import app.revanced.manager.ui.component.AppTopBar
-import app.revanced.manager.ui.component.LazyColumnWithScrollbar
 import app.revanced.manager.ui.model.navigation.Settings
 import app.revanced.manager.ui.viewmodel.AboutViewModel.Companion.getSocialIcon
 import app.revanced.manager.util.openUrl
@@ -92,112 +91,107 @@ fun AboutSettingsScreen(
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
     ) { paddingValues ->
-        LazyColumnWithScrollbar(
+        val scrollState = rememberScrollState()
+        Column(
             modifier = Modifier
-                .padding(paddingValues),
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(paddingValues)
+                .padding(bottom = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(bottom = 64.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item {
-                Image(
-                    modifier = Modifier
-                        .padding(top = 16.dp),
-                    painter = icon,
-                    contentDescription = stringResource(R.string.app_name)
+            Image(
+                modifier = Modifier
+                    .padding(top = 16.dp),
+                painter = icon,
+                contentDescription = stringResource(R.string.app_name)
+            )
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    stringResource(R.string.app_name),
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.semantics {
+                        hideFromAccessibility()
+                    }
+                )
+                Text(
+                    text = stringResource(R.string.version) + " " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.outline
                 )
             }
-            item {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text(
-                        stringResource(R.string.app_name),
-                        style = MaterialTheme.typography.headlineSmall,
-                        modifier = Modifier.semantics {
-                            hideFromAccessibility()
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                githubButtons.forEach { (icon, text, onClick) ->
+                    FilledTonalButton(
+                        onClick = onClick,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                icon,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text,
+                                style = MaterialTheme.typography.labelLarge
+                            )
                         }
-                    )
-                    Text(
-                        text = stringResource(R.string.version) + " " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.outline
-                    )
+                    }
                 }
             }
-            item {
+            OutlinedCard(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            ) {
                 Column(
-                    modifier = Modifier
-                        .padding(horizontal = 16.dp)
-                        .fillMaxWidth(),
+                    modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    githubButtons.forEach { (icon, text, onClick) ->
-                        FilledTonalButton(
-                            onClick = onClick,
-                            modifier = Modifier.fillMaxWidth(),
+                    Text(
+                        text = stringResource(R.string.about_revanced_manager),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    val description = stringResource(R.string.revanced_manager_description)
+                    val uniqueFeaturesLabel = stringResource(R.string.unique_features_label)
+                    val uniqueFeaturesUrl = "https://github.com/Jman-Github/Universal-ReVanced-Manager#-unique-features"
+                    val annotatedDescription = buildAnnotatedString {
+                        append(description)
+                        append(" ")
+                        pushStringAnnotation(tag = "unique_features", annotation = uniqueFeaturesUrl)
+                        withStyle(
+                            SpanStyle(
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold,
+                                textDecoration = TextDecoration.Underline
+                            )
                         ) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    icon,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Text(
-                                    text,
-                                    style = MaterialTheme.typography.labelLarge
-                                )
-                            }
+                            append(uniqueFeaturesLabel)
                         }
+                        pop()
                     }
-                }
-            }
-            item {
-                OutlinedCard(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.about_revanced_manager),
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        val description = stringResource(R.string.revanced_manager_description)
-                        val uniqueFeaturesLabel = stringResource(R.string.unique_features_label)
-                        val uniqueFeaturesUrl = "https://github.com/Jman-Github/Universal-ReVanced-Manager#-unique-features"
-                        val annotatedDescription = buildAnnotatedString {
-                            append(description)
-                            append(" ")
-                            pushStringAnnotation(tag = "unique_features", annotation = uniqueFeaturesUrl)
-                            withStyle(
-                                SpanStyle(
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Bold,
-                                    textDecoration = TextDecoration.Underline
-                                )
-                            ) {
-                                append(uniqueFeaturesLabel)
-                            }
-                            pop()
+                    val launchUrl = { url: String -> context.openUrl(url) }
+                    ClickableText(
+                        text = annotatedDescription,
+                        style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant),
+                        onClick = { offset ->
+                            annotatedDescription.getStringAnnotations("unique_features", offset, offset)
+                                .firstOrNull()
+                                ?.let { launchUrl(it.item) }
                         }
-                        val launchUrl = { url: String -> context.openUrl(url) }
-                        ClickableText(
-                            text = annotatedDescription,
-                            style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurfaceVariant),
-                            onClick = { offset ->
-                                annotatedDescription.getStringAnnotations("unique_features", offset, offset)
-                                    .firstOrNull()
-                                    ?.let { launchUrl(it.item) }
-                            }
-                        )
-                    }
+                    )
                 }
             }
         }

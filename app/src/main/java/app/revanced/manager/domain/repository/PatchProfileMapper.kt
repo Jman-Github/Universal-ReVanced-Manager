@@ -19,6 +19,41 @@ data class PatchProfileConfiguration(
     val changedBundles: Set<Int>
 )
 
+fun PatchSelection.toPayload(
+    sources: List<PatchBundleSource>,
+    bundleInfo: Map<Int, PatchBundleInfo.Global>
+): PatchProfilePayload? {
+    if (isEmpty()) return null
+    val sourceMap = sources.associateBy { it.uid }
+    return PatchProfilePayload(
+        entries.map { (uid, patches) ->
+            val source = sourceMap[uid]
+            val info = bundleInfo[uid]
+            PatchProfilePayload.Bundle(
+                bundleUid = uid,
+                patches = patches.map { it.trim() }.filter { it.isNotEmpty() }.sorted(),
+                options = emptyMap(),
+                displayName = source?.displayTitle ?: info?.name,
+                sourceEndpoint = (source as? RemotePatchBundle)?.endpoint,
+                sourceName = source?.patchBundle?.manifestAttributes?.name ?: source?.name ?: info?.name,
+                version = info?.version
+            )
+        }
+    )
+}
+
+fun PatchProfilePayload.remapAndExtractSelection(
+    sources: List<PatchBundleSource>,
+    signatures: Map<Int, Set<String>>
+): Pair<PatchProfilePayload, PatchSelection> {
+    val remapped = remapLocalBundles(sources, signatures)
+    val selection = remapped.bundles.associate { bundle ->
+        val patches = bundle.patches.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+        bundle.bundleUid to patches
+    }.filterValues { it.isNotEmpty() }
+    return remapped to selection
+}
+
 fun PatchProfile.toConfiguration(
     bundles: Map<Int, PatchBundleInfo.Scoped>,
     sources: Map<Int, PatchBundleSource>
@@ -222,6 +257,11 @@ fun PatchProfilePayload.remapLocalBundles(
 
     return if (changed) copy(bundles = remappedBundles) else this
 }
+
+fun Map<Int, PatchBundleInfo.Global>.toSignatureMap() =
+    mapValues { (_, info) ->
+        info.patches.map { it.name.trim().lowercase() }.toSet()
+    }
 
 private fun Collection<String>.signatureHash(): String? {
     if (isEmpty()) return null

@@ -10,9 +10,11 @@ class LocalPatchBundle(
     name: String,
     uid: Int,
     displayName: String?,
+    createdAt: Long?,
+    updatedAt: Long?,
     error: Throwable?,
     directory: File
-) : PatchBundleSource(name, uid, displayName, error, directory) {
+) : PatchBundleSource(name, uid, displayName, createdAt, updatedAt, error, directory) {
     suspend fun ActionContext.replace(patches: InputStream) {
         withContext(Dispatchers.IO) {
             patchBundleOutputStream().use { outputStream ->
@@ -21,10 +23,18 @@ class LocalPatchBundle(
         }
     }
 
-    override fun copy(error: Throwable?, name: String, displayName: String?) = LocalPatchBundle(
+    override fun copy(
+        error: Throwable?,
+        name: String,
+        displayName: String?,
+        createdAt: Long?,
+        updatedAt: Long?
+    ) = LocalPatchBundle(
         name,
         uid,
         displayName,
+        createdAt,
+        updatedAt,
         error,
         directory
     )

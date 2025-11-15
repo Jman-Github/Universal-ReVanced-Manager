@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.horizontalScroll
+import app.revanced.manager.util.consumeHorizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -70,6 +72,7 @@ import app.revanced.manager.ui.component.ColumnWithScrollbar
 import app.revanced.manager.ui.component.LoadingIndicator
 import app.revanced.manager.ui.component.NotificationCard
 import app.revanced.manager.ui.component.haptics.HapticExtendedFloatingActionButton
+import app.revanced.manager.ui.component.SafeguardHintCard
 import app.revanced.manager.ui.model.SelectedApp
 import app.revanced.manager.ui.viewmodel.SelectedAppInfoViewModel
 import app.revanced.manager.ui.viewmodel.BundleRecommendationDetail
@@ -411,11 +414,12 @@ private fun BundleVersionSelectionDialog(
                 }
                 if (!recommendationsEnabled) {
                     item(key = "locked_hint") {
-                        Text(
-                            text = stringResource(R.string.bundle_version_dialog_locked_hint),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 24.dp)
+                        SafeguardHintCard(
+                            title = stringResource(R.string.bundle_version_dialog_locked_title),
+                            description = stringResource(R.string.bundle_version_dialog_locked_hint),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp)
                         )
                     }
                 }
@@ -494,6 +498,7 @@ private fun BundleRecommendationCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val nameScrollState = rememberScrollState()
                 Text(
                     detail.name,
                     style = MaterialTheme.typography.titleMedium,
@@ -502,7 +507,8 @@ private fun BundleRecommendationCard(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
                         .weight(1f)
-                        .basicMarquee()
+                        .consumeHorizontalScroll(nameScrollState)
+                        .horizontalScroll(nameScrollState)
                 )
                 if (isActive && selectedOverride == null) {
                     SelectionBadge(

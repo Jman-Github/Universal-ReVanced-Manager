@@ -45,6 +45,7 @@ import app.universal.revanced.manager.R
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.ColumnWithScrollbar
 import app.revanced.manager.ui.component.ConfirmDialog
+import app.revanced.manager.ui.component.DownloadProgressBanner
 import app.revanced.manager.ui.component.GroupHeader
 import app.revanced.manager.ui.component.PasswordField
 import app.revanced.manager.ui.component.bundle.BundleSelector
@@ -104,6 +105,7 @@ fun ImportExportSettingsScreen(
     val patchBundles by vm.patchBundles.collectAsStateWithLifecycle(initialValue = emptyList())
     val packagesWithSelections by vm.packagesWithSelection.collectAsStateWithLifecycle(initialValue = emptySet())
     val packagesWithOptions by vm.packagesWithOptions.collectAsStateWithLifecycle(initialValue = emptySet())
+    val importProgress by vm.bundleImportProgress.collectAsStateWithLifecycle(initialValue = null)
 
     vm.selectionAction?.let { action ->
         val launcher = rememberLauncherForActivityResult(action.activityContract) { uri ->
@@ -140,11 +142,14 @@ fun ImportExportSettingsScreen(
         )
     }
 
-    vm.resetDialogState?.let {
-        with(vm.resetDialogState!!) {
+    vm.resetDialogState?.let { state ->
+        with(state) {
             ConfirmDialog(
                 onDismiss = { vm.resetDialogState = null },
-                onConfirm = onConfirm,
+                onConfirm = {
+                    vm.resetDialogState = null
+                    state.onConfirm()
+                },
                 title = stringResource(titleResId),
                 description = dialogOptionName?.let {
                     stringResource(descriptionResId, it)
@@ -173,6 +178,21 @@ fun ImportExportSettingsScreen(
         ) {
             selectorDialog?.invoke()
 
+            importProgress?.let { progress ->
+                DownloadProgressBanner(
+                    title = stringResource(R.string.import_patch_bundles_banner_title),
+                    subtitle = stringResource(
+                        R.string.import_patch_bundles_banner_subtitle,
+                        progress.processed,
+                        progress.total
+                    ),
+                    progress = progress.ratio,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
+
             GroupHeader(stringResource(R.string.import_))
             GroupItem(
                 onClick = {
@@ -186,6 +206,7 @@ fun ImportExportSettingsScreen(
                 headline = R.string.import_patch_selection,
                 description = R.string.import_patch_selection_description
             )
+
             GroupItem(
                 onClick = {
                     importBundlesLauncher.launch(JSON_MIMETYPE)
@@ -227,21 +248,21 @@ fun ImportExportSettingsScreen(
             )
             GroupItem(
                 onClick = {
-                    exportBundlesLauncher.launch("patch-bundles.json")
+                    exportBundlesLauncher.launch("urv_patch_bundles.json")
                 },
                 headline = R.string.export_patch_bundles,
                 description = R.string.export_patch_bundles_description
             )
             GroupItem(
                 onClick = {
-                    exportProfilesLauncher.launch("patch-profiles.json")
+                    exportProfilesLauncher.launch("urv_patch_profiles.json")
                 },
                 headline = R.string.export_patch_profiles,
                 description = R.string.export_patch_profiles_description
             )
             GroupItem(
                 onClick = {
-                    exportSettingsLauncher.launch("manager-settings.json")
+                    exportSettingsLauncher.launch("urv_settings.json")
                 },
                 headline = R.string.export_manager_settings,
                 description = R.string.export_manager_settings_description
@@ -435,12 +456,14 @@ private fun PackageSelector(packages: Set<String>, onFinish: (String?) -> Unit) 
 private fun GroupItem(
     onClick: () -> Unit,
     @StringRes headline: Int,
-    @StringRes description: Int? = null
+    @StringRes description: Int? = null,
+    supportingContent: (@Composable () -> Unit)? = null
 ) {
     SettingsListItem(
         modifier = Modifier.clickable { onClick() },
         headlineContent = stringResource(headline),
-        supportingContent = description?.let { stringResource(it) }
+        supportingContent = description?.let { stringResource(it) },
+        supportingContentSlot = supportingContent
     )
 }
 

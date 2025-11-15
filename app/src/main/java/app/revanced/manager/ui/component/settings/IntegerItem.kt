@@ -26,7 +26,11 @@ fun IntegerItem(
     preference: Preference<Int>,
     coroutineScope: CoroutineScope = rememberCoroutineScope(),
     @StringRes headline: Int,
-    @StringRes description: Int
+    @StringRes description: Int,
+    supportingText: String? = null,
+    trailingContent: (@Composable () -> Unit)? = null,
+    neutralButtonLabel: String? = null,
+    neutralValueProvider: (() -> Int?)? = null
 ) {
     val value by preference.getAsState()
 
@@ -35,7 +39,11 @@ fun IntegerItem(
         value = value,
         onValueChange = { coroutineScope.launch { preference.update(it) } },
         headline = headline,
-        description = description
+        description = description,
+        supportingText = supportingText,
+        trailingContent = trailingContent,
+        neutralButtonLabel = neutralButtonLabel,
+        neutralValueProvider = neutralValueProvider
     )
 }
 
@@ -45,17 +53,27 @@ fun IntegerItem(
     value: Int,
     onValueChange: (Int) -> Unit,
     @StringRes headline: Int,
-    @StringRes description: Int
+    @StringRes description: Int,
+    supportingText: String? = null,
+    trailingContent: (@Composable () -> Unit)? = null,
+    neutralButtonLabel: String? = null,
+    neutralValueProvider: (() -> Int?)? = null
 ) {
     var dialogOpen by rememberSaveable {
         mutableStateOf(false)
     }
 
     if (dialogOpen) {
-        IntInputDialog(current = value, name = stringResource(headline)) { new ->
+        IntInputDialog(
+            current = value,
+            name = stringResource(headline),
+            onSubmit = { new ->
             dialogOpen = false
             new?.let(onValueChange)
-        }
+            },
+            neutralButtonLabel = neutralButtonLabel,
+            neutralValueProvider = neutralValueProvider
+        )
     }
 
     SettingsListItem(
@@ -63,7 +81,7 @@ fun IntegerItem(
             .clickable { dialogOpen = true }
             .then(modifier),
         headlineContent = stringResource(headline),
-        supportingContent = stringResource(description),
+        supportingContent = supportingText ?: stringResource(description),
         trailingContent = {
             IconButton(onClick = { dialogOpen = true }) {
                 Icon(
@@ -71,6 +89,7 @@ fun IntegerItem(
                     contentDescription = stringResource(R.string.edit)
                 )
             }
+            trailingContent?.invoke()
         }
     )
 }

@@ -16,6 +16,8 @@ sealed class PatchBundleSource(
     val name: String,
     val uid: Int,
     val displayName: String?,
+    val createdAt: Long?,
+    val updatedAt: Long?,
     error: Throwable?,
     protected val directory: File
 ) {
@@ -40,7 +42,9 @@ sealed class PatchBundleSource(
     abstract fun copy(
         error: Throwable? = this.error,
         name: String = this.name,
-        displayName: String? = this.displayName
+        displayName: String? = this.displayName,
+        createdAt: Long? = this.createdAt,
+        updatedAt: Long? = this.updatedAt
     ): PatchBundleSource
 
     protected fun hasInstalled() = patchesFile.exists()

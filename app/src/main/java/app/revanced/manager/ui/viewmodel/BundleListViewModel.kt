@@ -9,8 +9,8 @@ import app.revanced.manager.domain.bundles.PatchBundleSource
 import app.revanced.manager.domain.bundles.RemotePatchBundle
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.util.mutableStateSetOf
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
@@ -21,13 +21,10 @@ class BundleListViewModel : ViewModel(), KoinComponent {
     var isRefreshing by mutableStateOf(false)
         private set
 
-    val sources = combine(
-        patchBundleRepository.sources,
-        patchBundleRepository.patchCountsFlow
-    ) { sources, patchCounts ->
+    val sources = patchBundleRepository.sources.onEach {
         isRefreshing = false
-        sources.sortedByDescending { patchCounts[it.uid] ?: 0 }
     }
+    val manualUpdateInfo = patchBundleRepository.manualUpdateInfo
 
     val selectedSources = mutableStateSetOf<Int>()
 
@@ -66,6 +63,10 @@ class BundleListViewModel : ViewModel(), KoinComponent {
         if (src !is RemotePatchBundle) return@launch
 
         patchBundleRepository.update(src, showToast = true)
+    }
+
+    fun reorder(order: List<Int>) = viewModelScope.launch {
+        patchBundleRepository.reorderBundles(order)
     }
 
     enum class Event {

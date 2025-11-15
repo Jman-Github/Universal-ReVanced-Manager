@@ -15,7 +15,6 @@ import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -34,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
 import app.revanced.manager.network.dto.ReVancedAsset
 import app.revanced.manager.ui.component.AppTopBar
+import app.revanced.manager.ui.component.DownloadProgressBanner
 import app.revanced.manager.ui.component.Markdown
 import app.revanced.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.revanced.manager.ui.viewmodel.UpdateViewModel
@@ -53,21 +53,7 @@ fun UpdateScreen(
     Scaffold(
         topBar = {
             AppTopBar(
-                title = {
-                    Column {
-                        Text(stringResource(vm.state.title))
-
-                        if (vm.state == State.DOWNLOADING) {
-                            Text(
-                                text = "${vm.downloadedSize.div(1000000)} MB /  ${
-                                    vm.totalSize.div(1000000)
-                                } MB (${vm.downloadProgress.times(100).toInt()}%)",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.outline
-                            )
-                        }
-                    }
-                },
+                title = { Text(stringResource(vm.state.title)) },
                 scrollBehavior = scrollBehavior,
                 onBackClick = onBackClick
             )
@@ -76,7 +62,7 @@ fun UpdateScreen(
             val buttonConfig = when (vm.state) {
                 State.CAN_DOWNLOAD -> Triple(
                     { vm.downloadUpdate() },
-                    R.string.download,
+                    if (vm.canResumeDownload) R.string.resume_download else R.string.download,
                     Icons.Outlined.InstallMobile
                 )
 
@@ -105,11 +91,22 @@ fun UpdateScreen(
             modifier = Modifier
                 .padding(paddingValues),
         ) {
-            if (vm.state == State.DOWNLOADING)
-                LinearProgressIndicator(
-                    progress = { vm.downloadProgress },
-                    modifier = Modifier.fillMaxWidth(),
+            if (vm.state == State.DOWNLOADING) {
+                val progressLabel = stringResource(
+                    R.string.manager_update_progress_detail,
+                    formatMegabytes(vm.downloadedSize),
+                    formatMegabytes(vm.totalSize),
+                    (vm.downloadProgress * 100).toInt()
                 )
+                DownloadProgressBanner(
+                    title = stringResource(R.string.manager_update_banner_title),
+                    subtitle = progressLabel,
+                    progress = vm.downloadProgress,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
 
             AnimatedVisibility(visible = vm.showInternetCheckDialog) {
                 MeteredDownloadConfirmationDialog(
@@ -193,3 +190,6 @@ private fun UpdateInfoSummary(
         }
     }
 }
+
+private fun formatMegabytes(bytes: Long): Float =
+    if (bytes <= 0) 0f else bytes / 1_000_000f

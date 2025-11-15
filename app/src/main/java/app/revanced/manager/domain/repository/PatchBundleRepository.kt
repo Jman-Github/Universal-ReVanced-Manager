@@ -27,6 +27,7 @@ import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.patcher.patch.PatchInfo
 import app.revanced.manager.patcher.patch.PatchBundle
 import app.revanced.manager.patcher.patch.PatchBundleInfo
+import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.simpleMessage
 import app.revanced.manager.util.tag
 import app.revanced.manager.util.toast
@@ -37,8 +38,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.InputStream
@@ -47,6 +52,7 @@ import java.nio.ByteOrder
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.Locale
+import kotlin.collections.LinkedHashSet
 import kotlin.collections.joinToString
 import kotlin.collections.map
 import kotlin.text.ifEmpty
@@ -94,6 +100,22 @@ class PatchBundleRepository(
             suggestedVersionsFor(patches)
         }
     }
+
+    private val manualUpdateInfoFlow = MutableStateFlow<Map<Int, ManualBundleUpdateInfo>>(emptyMap())
+    val manualUpdateInfo: StateFlow<Map<Int, ManualBundleUpdateInfo>> = manualUpdateInfoFlow.asStateFlow()
+
+    private val bundleUpdateProgressFlow = MutableStateFlow<BundleUpdateProgress?>(null)
+    val bundleUpdateProgress: StateFlow<BundleUpdateProgress?> = bundleUpdateProgressFlow.asStateFlow()
+
+    private val bundleImportProgressFlow = MutableStateFlow<ImportProgress?>(null)
+    val bundleImportProgress: StateFlow<ImportProgress?> = bundleImportProgressFlow.asStateFlow()
+
+    fun setBundleImportProgress(progress: ImportProgress?) {
+        bundleImportProgressFlow.value = progress
+    }
+
+    suspend fun snapshotSelection(selection: PatchSelection) =
+        selection.toPayload(sources.first(), bundleInfoFlow.first())
 
     private suspend inline fun dispatchAction(
         name: String,
@@ -145,6 +167,13 @@ class PatchBundleRepository(
             sources[officialSource.uid] = officialSource.copy(displayName = officialDisplayName)
         }
 
+        manualUpdateInfoFlow.update { current ->
+            current.filterKeys { uid ->
+                val bundle = sources[uid] as? RemotePatchBundle
+                bundle != null && !bundle.autoUpdate
+            }
+        }
+
         return State(sources.toPersistentMap(), info.toPersistentMap())
     }
 
@@ -157,8 +186,9 @@ class PatchBundleRepository(
         if (all.isEmpty()) {
             val shouldRestoreDefault = !prefs.officialBundleRemoved.get()
             if (shouldRestoreDefault) {
-                dao.upsert(defaultSource)
-                return listOf(defaultSource)
+                val default = defaultSource()
+                dao.upsert(default)
+                return listOf(default)
             }
             return emptyList()
         }
@@ -224,11 +254,13 @@ class PatchBundleRepository(
         val normalizedDisplayName = displayName?.takeUnless { it.isBlank() }
 
         return when (source) {
-            is SourceInfo.Local -> LocalPatchBundle(actualName, uid, normalizedDisplayName, null, dir)
+            is SourceInfo.Local -> LocalPatchBundle(actualName, uid, normalizedDisplayName, createdAt, updatedAt, null, dir)
             is SourceInfo.API -> APIPatchBundle(
                 actualName,
                 uid,
                 normalizedDisplayName,
+                createdAt,
+                updatedAt,
                 versionHash,
                 null,
                 dir,
@@ -240,6 +272,8 @@ class PatchBundleRepository(
                 actualName,
                 uid,
                 normalizedDisplayName,
+                createdAt,
+                updatedAt,
                 versionHash,
                 null,
                 dir,
@@ -249,21 +283,57 @@ class PatchBundleRepository(
         }
     }
 
+    private suspend fun nextSortOrder(): Int = (dao.maxSortOrder() ?: -1) + 1
+
+    private suspend fun ensureUniqueName(requestedName: String?): String {
+        val trimmed = requestedName?.trim().orEmpty()
+        if (trimmed.isEmpty()) return trimmed
+
+        val existing = dao.all().map { it.name.lowercase(Locale.US) }.toSet()
+        if (trimmed.lowercase(Locale.US) !in existing) return trimmed
+
+        var suffix = 2
+        var candidate: String
+        do {
+            candidate = "$trimmed ($suffix)"
+            suffix += 1
+        } while (candidate.lowercase(Locale.US) in existing)
+        return candidate
+    }
+
     private suspend fun createEntity(
         name: String,
         source: Source,
         autoUpdate: Boolean = false,
         displayName: String? = null,
-        uid: Int? = null
+        uid: Int? = null,
+        sortOrder: Int? = null,
+        createdAt: Long? = null,
+        updatedAt: Long? = null
     ): PatchBundleEntity {
-        val normalizedDisplayName = displayName?.takeUnless { it.isBlank() } ?: if (uid == defaultSource.uid) "Official ReVanced Patches" else null
+        val resolvedUid = uid ?: generateUid()
+        val existingProps = dao.getProps(resolvedUid)
+        val normalizedDisplayName = displayName?.takeUnless { it.isBlank() }
+            ?: existingProps?.displayName?.takeUnless { it.isBlank() }
+            ?: if (resolvedUid == DEFAULT_SOURCE_UID) "Official ReVanced Patches" else null
+        val normalizedName = ensureUniqueName(name)
+        val assignedSortOrder = when {
+            sortOrder != null -> sortOrder
+            else -> existingProps?.sortOrder ?: nextSortOrder()
+        }
+        val now = System.currentTimeMillis()
+        val resolvedCreatedAt = createdAt ?: existingProps?.createdAt ?: now
+        val resolvedUpdatedAt = updatedAt ?: now
         val entity = PatchBundleEntity(
-            uid = uid ?: generateUid(),
-            name = name,
+            uid = resolvedUid,
+            name = normalizedName,
             displayName = normalizedDisplayName,
             versionHash = null,
             source = source,
-            autoUpdate = autoUpdate
+            autoUpdate = autoUpdate,
+            sortOrder = assignedSortOrder,
+            createdAt = resolvedCreatedAt,
+            updatedAt = resolvedUpdatedAt
         )
         dao.upsert(entity)
         return entity
@@ -286,6 +356,9 @@ class PatchBundleRepository(
                 versionHash = new.versionHash,
                 source = new.source,
                 autoUpdate = new.autoUpdate,
+                sortOrder = new.sortOrder,
+                createdAt = new.createdAt,
+                updatedAt = new.updatedAt
             )
         )
     }
@@ -317,23 +390,87 @@ class PatchBundleRepository(
 
     suspend fun restoreDefaultBundle() = dispatchAction("Restore default bundle") {
         prefs.officialBundleRemoved.update(false)
-        dao.upsert(defaultSource)
+        dao.upsert(defaultSource())
         doReload()
     }
 
-    suspend fun refreshDefaultBundle() = store.dispatch(Update(force = true) { it.uid == defaultSource.uid })
+    suspend fun refreshDefaultBundle() = store.dispatch(Update(force = true) { it.uid == DEFAULT_SOURCE_UID })
 
-    suspend fun setDisplayName(src: PatchBundleSource, displayName: String?) =
-        dispatchAction("Set bundle display name (${src.uid})") { state ->
-            val normalized = displayName?.takeUnless { it.isBlank() }
+    enum class DisplayNameUpdateResult {
+        SUCCESS,
+        NO_CHANGE,
+        DUPLICATE,
+        NOT_FOUND
+    }
 
-            updateDb(src.uid) { it.copy(displayName = normalized) }
+    suspend fun setDisplayName(uid: Int, displayName: String?): DisplayNameUpdateResult {
+        val normalized = displayName?.trim()?.takeUnless { it.isEmpty() }
 
-            val updated = state.sources[src.uid]?.copy(displayName = normalized)
-                ?: return@dispatchAction state
+        val result = withContext(Dispatchers.IO) {
+            val props = dao.getProps(uid) ?: return@withContext DisplayNameUpdateResult.NOT_FOUND
+            val currentName = props.displayName?.trim()
 
-            state.copy(sources = state.sources.put(src.uid, updated))
+            if (normalized == null && currentName == null) {
+                return@withContext DisplayNameUpdateResult.NO_CHANGE
+            }
+            if (normalized != null && currentName != null && normalized == currentName) {
+                return@withContext DisplayNameUpdateResult.NO_CHANGE
+            }
+
+            if (normalized != null && dao.hasDisplayNameConflict(uid, normalized)) {
+                return@withContext DisplayNameUpdateResult.DUPLICATE
+            }
+
+            dao.upsert(
+                PatchBundleEntity(
+                    uid = uid,
+                    name = props.name,
+                    displayName = normalized,
+                    versionHash = props.versionHash,
+                    source = props.source,
+                    autoUpdate = props.autoUpdate,
+                    sortOrder = props.sortOrder,
+                    createdAt = props.createdAt,
+                    updatedAt = props.updatedAt
+                )
+            )
+            DisplayNameUpdateResult.SUCCESS
         }
+
+        if (result == DisplayNameUpdateResult.SUCCESS || result == DisplayNameUpdateResult.NO_CHANGE) {
+            dispatchAction("Sync display name ($uid)") { state ->
+                val src = state.sources[uid] ?: return@dispatchAction state
+                val updated = src.copy(displayName = normalized)
+                state.copy(sources = state.sources.put(uid, updated))
+            }
+        }
+
+        return result
+    }
+
+    suspend fun updateTimestamps(src: PatchBundleSource, createdAt: Long?, updatedAt: Long?) {
+        if (createdAt == null && updatedAt == null) return
+
+        dispatchAction("Update timestamps (${src.uid})") { state ->
+            val currentSource = state.sources[src.uid] ?: return@dispatchAction state
+            updateDb(src.uid) {
+                it.copy(
+                    createdAt = createdAt ?: it.createdAt,
+                    updatedAt = updatedAt ?: it.updatedAt
+                )
+            }
+
+            state.copy(
+                sources = state.sources.put(
+                    src.uid,
+                    currentSource.copy(
+                        createdAt = createdAt ?: currentSource.createdAt,
+                        updatedAt = updatedAt ?: currentSource.updatedAt
+                    )
+                )
+            )
+        }
+    }
 
     suspend fun createLocal(createStream: suspend () -> InputStream) = dispatchAction("Add bundle") {
         val tempFile = withContext(Dispatchers.IO) {
@@ -407,9 +544,9 @@ class PatchBundleRepository(
         return if (raw != 0) raw else 1
     }
 
-    suspend fun createRemote(url: String, autoUpdate: Boolean) =
+    suspend fun createRemote(url: String, autoUpdate: Boolean, createdAt: Long? = null, updatedAt: Long? = null) =
         dispatchAction("Add bundle ($url)") { state ->
-            val src = createEntity("", SourceInfo.from(url), autoUpdate).load() as RemotePatchBundle
+            val src = createEntity("", SourceInfo.from(url), autoUpdate, createdAt = createdAt, updatedAt = updatedAt).load() as RemotePatchBundle
             update(src)
             state.copy(sources = state.sources.put(src.uid, src))
         }
@@ -423,7 +560,7 @@ class PatchBundleRepository(
         doReload()
     }
 
-    suspend fun RemotePatchBundle.setAutoUpdate(value: Boolean) =
+    suspend fun RemotePatchBundle.setAutoUpdate(value: Boolean) {
         dispatchAction("Set auto update ($name, $value)") { state ->
             updateDb(uid) { it.copy(autoUpdate = value) }
             val newSrc = (state.sources[uid] as? RemotePatchBundle)?.copy(autoUpdate = value)
@@ -431,6 +568,13 @@ class PatchBundleRepository(
 
             state.copy(sources = state.sources.put(uid, newSrc))
         }
+
+        if (value) {
+            manualUpdateInfoFlow.update { map -> map - uid }
+        } else {
+            checkManualUpdates(uid)
+        }
+    }
 
     suspend fun update(vararg sources: RemotePatchBundle, showToast: Boolean = false) {
         val uids = sources.map { it.uid }.toSet()
@@ -442,7 +586,32 @@ class PatchBundleRepository(
     /**
      * Updates all bundles that should be automatically updated.
      */
-    suspend fun updateCheck() = store.dispatch(Update { it.autoUpdate })
+    suspend fun updateCheck() {
+        store.dispatch(Update { it.autoUpdate })
+        checkManualUpdates()
+    }
+
+    suspend fun checkManualUpdates(vararg bundleUids: Int) =
+        store.dispatch(ManualUpdateCheck(bundleUids.toSet().takeIf { it.isNotEmpty() }))
+
+    suspend fun reorderBundles(prioritizedUids: List<Int>) = dispatchAction("Reorder bundles") { state ->
+        val currentOrder = state.sources.keys.toList()
+        if (currentOrder.isEmpty()) return@dispatchAction state
+
+        val sanitized = LinkedHashSet(prioritizedUids.filter { it in currentOrder })
+        if (sanitized.isEmpty()) return@dispatchAction state
+
+        val finalOrder = buildList {
+            addAll(sanitized)
+            currentOrder.filterNotTo(this) { it in sanitized }
+        }
+
+        finalOrder.forEachIndexed { index, uid ->
+            dao.updateSortOrder(uid, index)
+        }
+
+        doReload()
+    }
 
     private inner class Update(
         private val force: Boolean = false,
@@ -460,37 +629,74 @@ class PatchBundleRepository(
             val allowMeteredUpdates = prefs.allowMeteredUpdates.get()
             if (!allowMeteredUpdates && !networkInfo.isSafe()) {
                 Log.d(tag, "Skipping update check because the network is down or metered.")
+                bundleUpdateProgressFlow.value = null
                 return@coroutineScope current
             }
 
-            val updated = current.sources.values
+            val targets = current.sources.values
                 .filterIsInstance<RemotePatchBundle>()
                 .filter { predicate(it) }
-                .map {
-                    async {
-                        Log.d(tag, "Updating patch bundle: ${it.name}")
 
-                        val newVersion = with(it) {
-                            if (force) downloadLatest() else update()
-                        } ?: return@async null
+            if (targets.isEmpty()) {
+                if (showToast) toast(R.string.patches_update_unavailable)
+                bundleUpdateProgressFlow.value = null
+                return@coroutineScope current
+            }
 
-                        it to newVersion
+            bundleUpdateProgressFlow.value = BundleUpdateProgress(
+                total = targets.size,
+                completed = 0
+            )
+
+            val updated = try {
+                targets
+                    .map { bundle ->
+                        async {
+                            Log.d(tag, "Updating patch bundle: ${bundle.name}")
+
+                            val result = with(bundle) {
+                                if (force) downloadLatest() else update()
+                            }
+
+                            bundleUpdateProgressFlow.update { progress ->
+                                progress?.copy(
+                                    completed = (progress.completed + 1).coerceAtMost(progress.total)
+                                )
+                            }
+
+                            if (result == null) return@async null
+
+                            bundle to result
+                        }
                     }
-                }
-                .awaitAll()
-                .filterNotNull()
-                .toMap()
+                    .awaitAll()
+                    .filterNotNull()
+                    .toMap()
+            } finally {
+                bundleUpdateProgressFlow.value = null
+            }
             if (updated.isEmpty()) {
                 if (showToast) toast(R.string.patches_update_unavailable)
                 return@coroutineScope current
             }
 
-            updated.forEach { (src, newVersionHash) ->
+            updated.forEach { (src, downloadResult) ->
                 val name = src.patchBundle?.manifestAttributes?.name ?: src.name
+                val now = System.currentTimeMillis()
 
                 updateDb(src.uid) {
-                    it.copy(versionHash = newVersionHash, name = name)
+                    it.copy(
+                        versionHash = downloadResult.versionSignature,
+                        name = name,
+                        createdAt = downloadResult.assetCreatedAtMillis ?: it.createdAt,
+                        updatedAt = now
+                    )
                 }
+            }
+
+            if (updated.isNotEmpty()) {
+                val updatedUids = updated.keys.map(RemotePatchBundle::uid).toSet()
+                manualUpdateInfoFlow.update { currentMap -> currentMap - updatedUids }
             }
 
             if (showToast) toast(R.string.patches_update_success)
@@ -500,6 +706,71 @@ class PatchBundleRepository(
         override suspend fun catch(exception: Exception) {
             Log.e(tag, "Failed to update patches", exception)
             toast(R.string.patches_download_fail, exception.simpleMessage())
+        }
+    }
+
+    private inner class ManualUpdateCheck(
+        private val targetUids: Set<Int>? = null
+    ) : Action<State> {
+        override suspend fun ActionContext.execute(current: State) = coroutineScope {
+            val manualBundles = current.sources.values
+                .filterIsInstance<RemotePatchBundle>()
+                .filter {
+                    targetUids?.contains(it.uid) ?: !it.autoUpdate
+                }
+
+            if (manualBundles.isEmpty()) {
+                if (targetUids != null) {
+                    manualUpdateInfoFlow.update { it - targetUids }
+                } else {
+                    manualUpdateInfoFlow.update { map ->
+                        map.filterKeys { uid ->
+                            val bundle = current.sources[uid] as? RemotePatchBundle
+                            bundle != null && !bundle.autoUpdate
+                        }
+                    }
+                }
+                return@coroutineScope current
+            }
+
+            val allowMeteredUpdates = prefs.allowMeteredUpdates.get()
+            if (!allowMeteredUpdates && !networkInfo.isSafe()) {
+                Log.d(tag, "Skipping manual update check because the network is down or metered.")
+                return@coroutineScope current
+            }
+
+            val results = manualBundles
+                .map { bundle ->
+                    async {
+                        try {
+                            val info = bundle.fetchLatestReleaseInfo()
+                            val latestSignature = info.version.takeUnless { it.isBlank() }
+                            val installedSignature = bundle.installedVersionSignature
+                            val hasUpdate = latestSignature == null || installedSignature != latestSignature
+                            if (!hasUpdate) return@async bundle.uid to null
+                            bundle.uid to ManualBundleUpdateInfo(
+                                latestVersion = latestSignature ?: bundle.version,
+                                pageUrl = info.pageUrl
+                            )
+                        } catch (t: Throwable) {
+                            Log.e(tag, "Failed to check manual update for ${bundle.name}", t)
+                            bundle.uid to null
+                        }
+                    }
+                }
+                .awaitAll()
+
+            manualUpdateInfoFlow.update { map ->
+                val next = map.toMutableMap()
+                val manualUids = manualBundles.map(RemotePatchBundle::uid).toSet()
+                next.keys.retainAll(manualUids)
+                results.forEach { (uid, info) ->
+                    if (info == null) next.remove(uid) else next[uid] = info
+                }
+                next
+            }
+
+            current
         }
     }
 
@@ -526,14 +797,36 @@ class PatchBundleRepository(
         val info: PersistentMap<Int, PatchBundleInfo.Global> = persistentMapOf()
     )
 
+    data class BundleUpdateProgress(
+        val total: Int,
+        val completed: Int,
+    )
+
+    data class ImportProgress(
+        val processed: Int,
+        val total: Int
+    ) {
+        val ratio: Float
+            get() = processed.coerceAtLeast(0).toFloat() / total.coerceAtLeast(1)
+    }
+
+    data class ManualBundleUpdateInfo(
+        val latestVersion: String?,
+        val pageUrl: String?,
+    )
+
     private companion object {
-        val defaultSource = PatchBundleEntity(
-            uid = 0,
+        const val DEFAULT_SOURCE_UID = 0
+        fun defaultSource() = PatchBundleEntity(
+            uid = DEFAULT_SOURCE_UID,
             name = "",
             displayName = null,
             versionHash = null,
             source = Source.API,
-            autoUpdate = false
+            autoUpdate = false,
+            sortOrder = 0,
+            createdAt = System.currentTimeMillis(),
+            updatedAt = System.currentTimeMillis()
         )
     }
 }

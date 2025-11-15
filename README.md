@@ -1,8 +1,30 @@
+
+<p align="center">
+  <picture>
+    <source
+      width="256px"
+      media="(prefers-color-scheme: dark)"
+      srcset="assests/icons/icon-circle.png"
+    >
+    <img
+      width="256px"
+      src="assests/icons/icon-circle.png"
+      alt="Universal ReVanced Manager icon"
+    />
+  
 # 💊 Universal ReVanced Manager
 
-![GPLv3 License](https://img.shields.io/badge/License-GPL%20v3-yellow.svg)
-
 Application to use ReVanced on Android
+
+  <img src="https://img.shields.io/badge/License-GPL%20v3-yellow.svg" alt="GPLv3 License" />
+  &nbsp;
+  <a href="https://t.me/urv_chat">
+      <picture>
+         <source height="24px" media="(prefers-color-scheme: dark)" srcset="https://user-images.githubusercontent.com/13122796/178032213-faf25ab8-0bc3-4a94-a730-b524c96df124.png" />
+         <img height="24px" src="https://user-images.githubusercontent.com/13122796/178032213-faf25ab8-0bc3-4a94-a730-b524c96df124.png" alt="Telegram" />
+      </picture>
+  </a>
+</p>
 
 ## ❓ About
 
@@ -16,14 +38,20 @@ Universal ReVanced Manager includes powerful features that the official ReVanced
 - 💉 **Third-Party Patch Support**: Import any third party API v4 patch bundle you want (including popular ones like inotia00's or anddea's) which the official ReVanced Manager does not support
 - 🛠️ **Custom Bundle Names**: Set a custom display name for any imported patch bundle so you can tell them apart at a glance
 - 🙂 **Smarter Patch Selection**:
-  - Global "deselect all" button  
-  - Per-bundle deselect button  
+  - Global deselect all button  
+  - Per-bundle deselect all button
+  - Per-bundle select all button
+  - Global select all button 
   - Patch profiles button to save patch selections and option states per app  
   - Latest patch bundle changelogs shown in bundle info
+  - Undo & redo buttons
 - 🧭 **Bundle Recommendation Picker**: Choose per-bundle suggested versions or override with any other supported version
 - 🔍 **Suggestion Toggle on Select-App**: Bundle suggestions are grouped behind a toggle with inline dialogs to view additional supported versions
 - 🧹 **Official Bundle Management**: Delete the Official ReVanced patch bundle from the Patch Bundles tab and restore it from Advanced settings
 - 📝 **Export Filename Templates**: Configure a filename template for exported patched APKs with placeholders for app and patch metadata
+- 🌐 **Release Link Button**: GitHub button on each bundle’s info page opens the bundle repository’s releases
+- 🕒 **Bundle Timestamps**: Cards show Created and Updated times; exports and imports preserve these timestamps
+- 🧭 **Organize Bundles**: "Organize" button to manually reorder bundles; exports and imports keep the custom order
 
 ### 📦 App Patching Flow
 - 🧠 **Downloaded App Source**: Added a "Downloaded apps" source in the select source screen when patching. If the manager has cached an APK from a downloader plugin, you can pick it directly from there. This option only appears when that app is available
@@ -32,7 +60,11 @@ Universal ReVanced Manager includes powerful features that the official ReVanced
 - 📲 **Installer Management**: A full installer management system with installer metadata, and configurable primary and fallback that applies everywhere across the app
 - 📋 **View Applied Patches**: The "Apps" tab shows the applied patches for each saved patched APK and which patch bundle(s) were used
 - 🛑 **Accidental Exit Protection**: After patching, pressing the back button now shows a confirmation popup. It asks if you really want to leave and gives you the option to save the patched app for later (adds it to the "Apps" tab)
+- 🧩 **Missing Patch Recovery**: If a selected patch no longer exists, a detailed dialog explains the issue and returns you to patch selection with missing patches highlighted
+- 🧷 **Step Auto-Collapse**: Completed patcher steps auto-collapse; toggle in Settings > Advanced > "Auto-collapse completed patcher steps"
 
+### 📥 Patch Bundle Updates & Imports
+- ⏳ **Progress with Percentages**: Progress bars with percentage for bundle updates, update checks, and imports
 - 🧩 **Installer Management**: Full installer management system covering app installs, saved app reinstalls, and manager updates
   - Metadata display for each installer
   - Configurable primary and fallback installers
@@ -45,12 +77,16 @@ Universal ReVanced Manager includes powerful features that the official ReVanced
 
 ### 🎨 Appearance & Theming
 - 🎯 **Accent Color Picker**: Appearance settings include an accent color picker so you can choose a custom theme color. This is in addition to Material You theming and the pure black theme
+- ⚫ **Monochrome App Icons**: Support for Android monochrome icons
+- 🎛️ **Theme Color Pickers**: Teme color pickers with a live preview, plus manual HEX input for both accent and theme colors
+- ↔️ **Better Long Names**: Long labels use horizontal swipe instead of auto-sliding or wrapping
 
 ### 🌐 Network & Updates
 - 🛜 **Metered Connection Control**: Toggle to allow updates on metered connections for both patch bundles and the manager itself, so you are not blocked on mobile data
 
 ### 🧑‍💻 Developer & Power Features
 - 🧑‍💻 **Always-Visible Developer Options**: Developer Options are always available in Settings by default. No hidden or secret unlock flow
+
 - 📤 **Robust Import / Export**: Export and import your patch bundles, your patch profiles, and your app settings to and from JSON files for easy backup, sharing, or migration between devices
 
 ## 🔽 Download

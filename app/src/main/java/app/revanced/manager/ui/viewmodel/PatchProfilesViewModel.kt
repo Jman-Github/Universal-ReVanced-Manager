@@ -46,9 +46,34 @@ data class BundleDetail(
     val displayName: String?,
     val patchCount: Int,
     val patches: List<String>,
+    val options: Map<String, List<BundleOptionDisplay>>,
     val isAvailable: Boolean,
     val type: BundleSourceType
 )
+
+data class BundleOptionDisplay(
+    val key: String,
+    val label: String,
+    val value: String
+)
+
+private fun Any?.toDisplayString(): String = when (this) {
+    null -> ""
+    is Boolean, is Number -> toString()
+    is String -> this
+    is List<*> -> joinToString(", ", prefix = "[", postfix = "]")
+    else -> toString()
+}
+
+private fun Map<Int, Map<String, Map<String, Any?>>>.toStringMap(): Map<Int, Map<String, Map<String, String>>> =
+    mapValues { (_, patchMap) ->
+        patchMap.mapValues { (_, optionMap) ->
+            optionMap.mapValues { (_, value) -> value.toDisplayString() }
+        }
+    }
+
+private fun Map<String, Map<String, app.revanced.manager.data.room.options.Option.SerializedValue>>.toSerializedStringMap(): Map<String, Map<String, String>> =
+    mapValues { (_, options) -> options.mapValues { (_, value) -> value.toJsonString() } }
 
 class PatchProfilesViewModel(
     private val patchProfileRepository: PatchProfileRepository,
@@ -103,6 +128,12 @@ class PatchProfilesViewModel(
                 }
                 remappedPayload
             }
+            val workingProfile = profile.copy(payload = workingPayload)
+            val scopedBundles = bundleInfoMap.mapValues { (_, info) ->
+                info.forPackage(profile.packageName, profile.appVersion)
+            }
+            val configuration = workingProfile.toConfiguration(scopedBundles, sourceMap)
+            val optionsByBundle = configuration.options.toStringMap()
             PatchProfileListItem(
                 id = profile.uid,
                 name = profile.name,
@@ -123,11 +154,28 @@ class PatchProfilesViewModel(
                         ?: bundle.sourceEndpoint?.let { endpointToSource[it] }
                     val resolvedName = resolvedSource?.displayTitle ?: bundle.displayName ?: bundle.sourceName
                     val type = resolvedSource.determineType(bundle)
+                    val resolvedUid = resolvedSource?.uid ?: bundle.bundleUid
+                    val scopedInfo = scopedBundles[resolvedUid]
+                    val fallbackOptions = bundle.options.toSerializedStringMap()
+                    val resolvedOptions = optionsByBundle[resolvedUid]?.takeIf { it.isNotEmpty() } ?: fallbackOptions
+                    val patchMetadataForDisplay = scopedInfo
+                    val optionDisplays = resolvedOptions.mapValues { (patchName, optionValues) ->
+                        val metadata = patchMetadataForDisplay?.patches
+                            ?.firstOrNull { it.name.trim().equals(patchName.trim(), ignoreCase = true) }
+                            ?.options
+                            ?.associateBy { it.key }
+                            ?: emptyMap()
+                        optionValues.map { (key, value) ->
+                            val label = metadata[key]?.title ?: key
+                            BundleOptionDisplay(key = key, label = label, value = value)
+                        }
+                    }
                     BundleDetail(
                         uid = bundle.bundleUid,
                         displayName = resolvedName,
                         patchCount = bundle.patches.size,
                         patches = bundle.patches,
+                        options = optionDisplays,
                         isAvailable = resolvedSource != null,
                         type = type
                     )

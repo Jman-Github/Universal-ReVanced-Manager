@@ -46,6 +46,8 @@ class DashboardViewModel(
 ) : ViewModel() {
     val availablePatches =
         patchBundleRepository.bundleInfoFlow.map { it.values.sumOf { bundle -> bundle.patches.size } }
+    val bundleUpdateProgress = patchBundleRepository.bundleUpdateProgress
+    val bundleImportProgress = patchBundleRepository.bundleImportProgress
     private val contentResolver: ContentResolver = app.contentResolver
     private val powerManager = app.getSystemService<PowerManager>()!!
 

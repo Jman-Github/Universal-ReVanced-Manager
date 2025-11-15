@@ -85,15 +85,13 @@ fun ReVancedManagerTheme(
     dynamicColor: Boolean,
     pureBlackTheme: Boolean,
     accentColorHex: String? = null,
+    themeColorHex: String? = null,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when {
+    val baseScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
-            if (darkTheme)
-                dynamicDarkColorScheme(context)
-            else
-                dynamicLightColorScheme(context)
+            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
 
         darkTheme -> DarkColorScheme
@@ -107,12 +105,15 @@ fun ReVancedManagerTheme(
                 surfaceDim = pureBlack
             )
         } else it
-    }.let { scheme ->
-        val accentColor = parseCustomColor(accentColorHex)
-        if (accentColor != null) {
-            applyCustomAccent(scheme, accentColor, darkTheme)
-        } else scheme
     }
+
+    val schemeWithAccent = parseCustomColor(accentColorHex)?.let {
+        applyCustomAccent(baseScheme, it, darkTheme)
+    } ?: baseScheme
+
+    val finalScheme = parseCustomColor(themeColorHex)?.let {
+        applyCustomThemeColor(schemeWithAccent, it, darkTheme)
+    } ?: schemeWithAccent
 
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -130,7 +131,7 @@ fun ReVancedManagerTheme(
     }
 
     MaterialTheme(
-        colorScheme = colorScheme,
+        colorScheme = finalScheme,
         typography = Typography,
         content = content
     )
@@ -175,6 +176,43 @@ private fun applyCustomAccent(
         onTertiaryContainer = tertiaryContainer.contrastingForeground(),
         surfaceTint = primary,
         inversePrimary = primary.adjustLightness(if (darkTheme) -0.4f else 0.4f)
+    )
+}
+
+private fun applyCustomThemeColor(
+    colorScheme: ColorScheme,
+    themeColor: Color,
+    darkTheme: Boolean
+): ColorScheme {
+    val background = themeColor.adjustLightness(if (darkTheme) -0.45f else 0.55f)
+    val surface = themeColor.adjustLightness(if (darkTheme) -0.35f else 0.45f)
+    val surfaceVariant = themeColor.adjustLightness(if (darkTheme) -0.25f else 0.35f)
+    val containerLowest = themeColor.adjustLightness(if (darkTheme) -0.4f else 0.5f)
+    val containerLow = themeColor.adjustLightness(if (darkTheme) -0.38f else 0.48f)
+    val container = themeColor.adjustLightness(if (darkTheme) -0.32f else 0.42f)
+    val containerHigh = themeColor.adjustLightness(if (darkTheme) -0.24f else 0.34f)
+    val containerHighest = themeColor.adjustLightness(if (darkTheme) -0.18f else 0.28f)
+    val surfaceBright = themeColor.adjustLightness(if (darkTheme) -0.1f else 0.12f)
+    val surfaceDim = themeColor.adjustLightness(if (darkTheme) -0.5f else 0.6f)
+    val onBackground = background.contrastingForeground()
+    val onSurface = surface.contrastingForeground()
+    val onSurfaceVariant = surfaceVariant.contrastingForeground()
+
+    return colorScheme.copy(
+        background = background,
+        onBackground = onBackground,
+        surface = surface,
+        onSurface = onSurface,
+        surfaceVariant = surfaceVariant,
+        onSurfaceVariant = onSurfaceVariant,
+        surfaceTint = themeColor,
+        surfaceContainerLowest = containerLowest,
+        surfaceContainerLow = containerLow,
+        surfaceContainer = container,
+        surfaceContainerHigh = containerHigh,
+        surfaceContainerHighest = containerHighest,
+        surfaceBright = surfaceBright,
+        surfaceDim = surfaceDim
     )
 }
 

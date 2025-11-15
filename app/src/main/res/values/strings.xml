@@ -66,6 +66,22 @@
     <string name="bundle_version_no_version">No suggested version</string>
     <string name="bundle_version_suggested_label">Suggested version: %1$s</string>
     <string name="bundle_version_other_heading">Other supported versions</string>
+    <string name="bundle_update_manual_available">Update available</string>
+    <string name="bundle_update_manual_available_with_version">Update available: %1$s</string>
+    <string name="bundle_update_progress">%1$d/%2$d bundles processed</string>
+    <string name="bundle_update_banner_title">Updating patch bundles</string>
+    <string name="bundle_reorder">Organize bundles</string>
+    <string name="bundle_reorder_title">Organize patch bundles</string>
+    <string name="bundle_reorder_description">Drag the handle to arrange the order bundles appear in the list and the patch selection menu.</string>
+    <string name="bundle_reorder_move_up">Move bundle up</string>
+    <string name="bundle_reorder_move_down">Move bundle down</string>
+    <string name="bundle_actions_expand">Show bundle actions</string>
+    <string name="bundle_actions_collapse">Hide bundle actions</string>
+    <string name="patch_bundle_duplicate_name_error">A patch bundle with this name already exists</string>
+    <string name="patch_bundle_missing_error">Could not update this patch bundle.</string>
+    <string name="bundle_release_page">Open release page</string>
+    <string name="bundle_release_page_unavailable">Release page is not available for this bundle</string>
+    <string name="bundle_release_page_error">Could not open release page: %s</string>
     <string name="show_suggested_versions">Show suggested versions</string>
     <string name="hide_suggested_versions">Hide suggested versions</string>
     <string name="show_other_versions">Show other versions</string>
@@ -77,7 +93,8 @@
     <string name="bundle_version_dialog_selected_indicator">Selected</string>
     <string name="bundle_version_dialog_selected_indicator_inline">%1$s (selected)</string>
     <string name="bundle_version_dialog_other_title">Select another supported version:</string>
-    <string name="bundle_version_dialog_locked_hint">Version safeguards are enabled. Adjust Safeguards settings to choose bundle-specific versions.</string>
+    <string name="bundle_version_dialog_locked_title">Version safeguards are enabled</string>
+    <string name="bundle_version_dialog_locked_hint">Go to Settings &gt; Advanced &gt; Safeguards and set both \"Require suggested app version\" (toggle off) and \"Disable version compatibility check\" (toggle on) to choose bundle-specific versions.</string>
 
     <string name="patch_item_description">Start patching the application</string>
     <string name="patch_selector_item">Select patches</string>
@@ -131,6 +148,27 @@
     <string name="accent_color_picker_title">Accent color</string>
     <string name="accent_color_preview">Preview</string>
     <string name="accent_color_reset">Reset accent</string>
+    <string name="accent_color_presets">Accent presets</string>
+    <string name="accent_color_presets_description">Tap a color to apply it instantly</string>
+    <string name="theme_color">Theme color</string>
+    <string name="theme_color_description">Tint surfaces and backgrounds with your own color</string>
+    <string name="theme_color_picker_title">Theme color</string>
+    <string name="theme_color_preview">Preview</string>
+    <string name="theme_color_reset">Reset theme color</string>
+    <string name="theme_color_presets">Theme color presets</string>
+    <string name="theme_color_presets_description">Tap a color to recolor backgrounds and cards</string>
+    <string name="theme_preview_title">Theme preview</string>
+    <string name="theme_preview_description">Updates instantly when changing theme settings</string>
+    <string name="theme_presets">Theme presets</string>
+    <string name="theme_presets_description">Quick switches for the most popular looks</string>
+    <string name="theme_preset_default">Default</string>
+    <string name="theme_preset_amoled">Pure black</string>
+    <string name="theme_preset_sunset">Sunset</string>
+    <string name="theme_preset_forest">Forest</string>
+    <string name="theme_preset_ocean">Ocean</string>
+    <string name="theme_preset_midnight">Midnight</string>
+    <string name="theme_preset_dynamic">Material You</string>
+    <string name="theme_reset">Reset all theme settings</string>
     <string name="color_channel_red">Red</string>
     <string name="color_channel_green">Green</string>
     <string name="color_channel_blue">Blue</string>
@@ -181,6 +219,8 @@
     <string name="import_patch_bundles_success">Imported %d patch bundles</string>
     <string name="import_patch_bundles_updated">Updated %d patch bundles</string>
     <string name="import_patch_bundles_none">No new patch bundles were imported</string>
+    <string name="import_patch_bundles_banner_title">Importing patch bundles</string>
+    <string name="import_patch_bundles_banner_subtitle">%1$d of %2$d processed</string>
     <string name="import_patch_profiles">Import patch profiles</string>
     <string name="import_patch_profiles_description">Import saved patch profiles from a JSON file</string>
     <string name="import_patch_profiles_fail">Could not import patch profiles: %s</string>
@@ -206,6 +246,8 @@
     <string name="bundle_type_remote">Remote</string>
     <string name="bundle_type_local">Local</string>
     <string name="bundle_type_preinstalled">Pre-installed</string>
+    <string name="bundle_created_at">Created %1$s</string>
+    <string name="bundle_updated_at">Updated %1$s</string>
     <string name="bundle_changelog">Changelog</string>
     <string name="bundle_view_changelog">View the latest changelog</string>
     <string name="bundle_changelog_error">Failed to load changelog: %s</string>
@@ -228,29 +270,74 @@
     <string name="patch_selection_deselected_all_toast">Deselected all patches</string>
     <string name="patch_selection_deselected_bundle_toast">Deselected all patches in %s</string>
     <string name="patch_selection_no_selected_bundle_toast">No patches to deselect in %s</string>
-    <string name="patch_selection_button_label_all">All patches</string>
-    <string name="patch_selection_button_label_bundle">Current bundle</string>
-    <string name="patch_selection_button_label_defaults">Reset defaults</string>
+    <string name="patch_selection_selected_all_toast">Selected all patches</string>
+    <string name="patch_selection_select_all_empty_toast">No patches available to select</string>
+    <string name="patch_selection_selected_bundle_toast">Selected all patches in %s</string>
+    <string name="patch_selection_select_bundle_empty_toast">No selectable patches in %s</string>
+    <string name="patch_selection_reset_bundle_toast">Reset defaults for %s</string>
+    <string name="patch_selection_button_label_all">Deselect all</string>
+    <string name="patch_selection_button_label_bundle">Deselect bundle</string>
+    <string name="patch_selection_button_label_defaults">All defaults</string>
+    <string name="patch_selection_button_label_select_bundle">Select bundle</string>
+    <string name="patch_selection_button_label_select_all">Select all</string>
+    <string name="patch_selection_button_label_undo_action">Undo action</string>
+    <string name="patch_selection_button_label_redo_action">Redo action</string>
+    <string name="patch_selection_history_undo">Undid %1$s</string>
+    <string name="patch_selection_history_redo">Redid %1$s</string>
+    <string name="patch_selection_action_all_defaults">all defaults</string>
+    <string name="patch_selection_action_deselect_all">deselect all</string>
+    <string name="patch_selection_action_select_all">select all</string>
+    <string name="patch_selection_action_select_bundle">select bundle “%1$s”</string>
+    <string name="patch_selection_action_deselect_bundle">deselect bundle “%1$s”</string>
+    <string name="patch_selection_action_bundle_defaults">bundle defaults for “%1$s”</string>
+    <string name="disable_patch_selection_confirmations">Disable action confirmations</string>
+    <string name="disable_patch_selection_confirmations_description">Skip confirmation dialogs for patch selection actions</string>
+    <string name="disable_patch_selection_confirmations_warning">Disabling confirmations may cause unintended bulk changes.</string>
+    <string name="patch_selection_confirm_deselect_bundle_title">Deselect bundle?</string>
+    <string name="patch_selection_confirm_deselect_bundle_message">Deselect all patches selected from %1$s?</string>
+    <string name="patch_selection_confirm_deselect_all_title">Deselect all patches?</string>
+    <string name="patch_selection_confirm_deselect_all_message">This clears every selected patch across all bundles.</string>
+    <string name="patch_selection_confirm_bundle_defaults_title">Restore bundle defaults?</string>
+    <string name="patch_selection_confirm_bundle_defaults_message">This restores the recommended defaults for %1$s.</string>
+    <string name="patch_selection_confirm_select_bundle_title">Select bundle?</string>
+    <string name="patch_selection_confirm_select_bundle_message">Select every patch provided by %1$s?</string>
+    <string name="patch_selection_confirm_select_all_title">Select all patches?</string>
+    <string name="patch_selection_confirm_select_all_message">This selects every patch across all bundles.</string>
+    <string name="patch_selection_button_label_reset_bundle">Bundle defaults</string>
     <string name="patch_profile_save_label">Save profile</string>
     <string name="patch_selection_toggle_expand">Show actions</string>
     <string name="patch_selection_toggle_collapse">Hide actions</string>
     <string name="patch_selection_reset_all">Reset patch selection globally</string>
-    <string name="patch_selection_reset_all_dialog_description">You are about to reset all patch selections. You will need to manually select each patch again.</string>
+    <string name="patch_selection_reset_all_dialog_description">You are about to reset all patch selections. You will need to manually select each patch again.
+
+Patch profiles are not affected.</string>
     <string name="patch_selection_reset_all_description">Resets all patch selections</string>
+    <string name="patch_selection_reset_dialog_title">Reset patch defaults?</string>
+    <string name="patch_selection_reset_dialog_message">This will restore your patch selections and options to their recommended defaults.</string>
     <string name="patch_selection_reset_package">Reset patch selection for app</string>
-    <string name="patch_selection_reset_package_dialog_description">You are about to reset the patch selection for the app \"%s\". You will have to manually select each patch again.</string>
+    <string name="patch_selection_reset_package_dialog_description">You are about to reset the patch selection for the app \"%s\". You will have to manually select each patch again.
+
+Patch profiles are not affected.</string>
     <string name="patch_selection_reset_package_description">Resets patch selection for a single app</string>
     <string name="patch_selection_reset_patches">Reset patch selection (single)</string>
-    <string name="patch_selection_reset_patches_dialog_description">You are about to reset the patch selection for \"%s\". You will have to manually select each patch again.</string>
+    <string name="patch_selection_reset_patches_dialog_description">You are about to reset the patch selection for \"%s\". You will have to manually select each patch again.
+
+Patch profiles are not affected.</string>
     <string name="patch_selection_reset_patches_description">Resets the patch selection for a specific collection of patches</string>
     <string name="patch_options_reset_package">Reset patch options for app</string>
-    <string name="patch_options_reset_package_dialog_description">You are about to reset the patch options for the app \"%s\". You will have to reapply each option again.</string>
+    <string name="patch_options_reset_package_dialog_description">You are about to reset the patch options for the app \"%s\". You will have to reapply each option again.
+
+Patch profiles are not affected.</string>
     <string name="patch_options_reset_package_description">Resets patch options for a single app</string>
     <string name="patch_options_reset_patches">Reset patch options (single)</string>
-    <string name="patch_options_reset_patches_dialog_description">You are about to reset the patch options for \"%s\". You will have to reapply each option again.</string>
+    <string name="patch_options_reset_patches_dialog_description">You are about to reset the patch options for \"%s\". You will have to reapply each option again.
+
+Patch profiles are not affected.</string>
     <string name="patch_options_reset_patches_description">Resets the patch options for a specific collection of patches</string>
     <string name="patch_options_reset_all">Reset patch options globally</string>
-    <string name="patch_options_reset_all_dialog_description">You are about to reset all patch options. You will have to reapply each option again.</string>
+    <string name="patch_options_reset_all_dialog_description">You are about to reset all patch options. You will have to reapply each option again.
+
+Patch profiles are not affected.</string>
     <string name="patch_options_reset_all_description">Resets all patch options</string>
     <string name="downloader_plugins">Plugins</string>
     <string name="downloader_plugin_state_trusted">Trusted</string>
@@ -298,21 +385,29 @@
     <string name="appearance">Appearance</string>
     <string name="downloaded_apps">Downloaded apps</string>
     <string name="process_runtime">Run Patcher in another process (experimental)</string>
-    <string name="process_runtime_description">This is faster and allows Patcher to use more memory.</string>
+    <string name="process_runtime_description">This is faster and allows Patcher to use more memory</string>
     <string name="strip_unused_libs">Remove unused native libraries</string>
-    <string name="strip_unused_libs_description">Delete native libraries for unsupported CPU architectures from patched apps.</string>
+    <string name="strip_unused_libs_description">Delete native libraries for unsupported CPU architectures from patched apps</string>
     <string name="process_runtime_memory_limit">Patcher process memory limit</string>
     <string name="process_runtime_memory_limit_description">The max amount of memory that the Patcher process can use (in megabytes)</string>
-    <string name="restore_official_bundle">Restore official patch bundle</string>
-    <string name="restore_official_bundle_description_missing">Reinstall the built-in ReVanced patches bundle.</string>
-    <string name="restore_official_bundle_description_installed">The built-in ReVanced patches bundle is currently installed.</string>
-    <string name="restore_official_bundle_success">Official patch bundle restored.</string>
-    <string name="restore_official_bundle_failed">Failed to restore the official patch bundle: %1$s</string>
-    <string name="restore_official_bundle_already">The official patch bundle is already installed.</string>
+    <string name="process_runtime_memory_limit_description_detailed">The max amount of memory that the Patcher process can use (in megabytes).
+Recommended for this device: %1$d MB.</string>
+    <string name="reset_to_recommended">Reset to recommended</string>
+    <string name="patcher_auto_collapse_steps">Auto-collapse completed patcher steps</string>
+    <string name="patcher_auto_collapse_steps_description">Automatically collapse each patcher progress widget after all of its steps finish.</string>
+    <string name="patch_bundle_rename">Rename patch bundle</string>
+    <string name="patch_profile_view_options">View options</string>
+    <string name="patch_profile_patch_options_title">Options for %1$s</string>
+    <string name="restore_official_bundle">Restore pre-installed Official ReVanced patch bundle</string>
+    <string name="restore_official_bundle_description_missing">Reinstall the pre-installed Official ReVanced patches bundle</string>
+    <string name="restore_official_bundle_description_installed">The pre-installed Official ReVanced patches bundle is currently installed</string>
+    <string name="restore_official_bundle_success">Official ReVanced patch bundle restored</string>
+    <string name="restore_official_bundle_failed">Failed to restore the Official ReVanced patch bundle: %1$s</string>
+    <string name="restore_official_bundle_already">The Official ReVanced patch bundle is already installed</string>
 
     <string name="app_exporting">App exporting</string>
     <string name="export_name_format">Export filename format</string>
-    <string name="export_name_format_description">Customize the default filename for exported patched apps.</string>
+    <string name="export_name_format_description">Customize the default filename for exported patched apps</string>
     <string name="export_name_format_dialog_title">Export filename format</string>
     <string name="export_name_format_dialog_supporting">Use the placeholders below to build a filename. The .apk extension is added automatically if missing.</string>
     <string name="export_name_format_preview">Preview: %1$s</string>
@@ -409,6 +504,7 @@
     <string name="patch_profile_launch_error">Could not open this patch profile.</string>
     <string name="patch_profile_show_more">Show more</string>
     <string name="patch_profile_show_less">Show less</string>
+    <string name="patch_profile_created_at">Created %1$s</string>
     <string name="patch_profile_bundle_header">%1$s • %2$s</string>
     <string name="patch_profile_bundle_unavailable_suffix">%1$s (unavailable)</string>
     <string name="patch_profile_bundle_uid_label">UID: %1$d</string>
@@ -423,6 +519,15 @@
     <string name="patcher_memory_adjustment_message_no_change">The experimental patcher process stopped because it ran out of memory, but the memory limit is already at %1$d MB. Try lowering it further in Advanced settings or disable the experimental mode before retrying.</string>
     <string name="patcher_memory_adjustment_retry">Try again</string>
     <string name="patcher_memory_adjustment_dismiss">Dismiss</string>
+    <string name="patcher_missing_patch_title">Patch selection needs attention</string>
+    <string name="patcher_missing_patch_message">Patching failed because the following patches were not found in the current bundle:
+%1$s
+Reopen the selection and reselect them (or choose replacements) before retrying.</string>
+    <string name="patcher_missing_patch_review">Review selection</string>
+    <string name="patch_selector_missing_patch_title">Re-select missing patches</string>
+    <string name="patch_selector_missing_patch_message">These patches need to be reselected:
+%1$s
+Enable them again (or pick alternatives) and then try patching once more.</string>
     <string name="delete_profile_confirmation">Delete "%1$s"?</string>
     <string name="patch_profile_delete_multiple_dialog_description">Delete the selected patch profiles?</string>
     <plurals name="patch_profile_bundle_patch_count">
@@ -504,11 +609,11 @@
     <string name="installer_fallback_title">Fallback installer</string>
     <string name="installer_fallback_description">Used automatically when the primary installer is unavailable.</string>
     <string name="installer_internal_name">System installer</string>
-    <string name="installer_internal_description">Use the Android package installer.</string>
+    <string name="installer_internal_description">Use the Android package installer</string>
     <string name="installer_shizuku_name">Shizuku</string>
     <string name="installer_shizuku_description">Install silently using Shizuku or Sui.</string>
     <string name="installer_option_none">No fallback</string>
-    <string name="installer_none_description">No fallback installer is configured.</string>
+    <string name="installer_none_description">No fallback installer is configured</string>
     <string name="installer_status_requires_root">Requires root access</string>
     <string name="installer_status_not_supported">Not supported for this action.</string>
     <string name="installer_status_shizuku_not_installed">Install Shizuku or Sui to use this option.</string>
@@ -519,9 +624,15 @@
     <string name="installer_shizuku_launch_failed">Unable to open Shizuku. Launch it manually and try again.</string>
     <string name="installer_custom_header">Custom installers</string>
     <string name="installer_custom_manage_title">Manage custom installers</string>
-    <string name="installer_custom_manage_description">Save third-party installer activities for use as primary or fallback installers.</string>
+    <string name="installer_custom_tab_saved">Saved</string>
+    <string name="installer_custom_saved_note">Installers manually added by the user to the Primary &amp; Fallback installer selection menus.</string>
+    <string name="installer_custom_tab_auto_saved">Auto saved</string>
+    <string name="installer_custom_auto_note">Installers automatically detected and added to the Primary &amp; Fallback installer selection menus.</string>
+    <string name="installer_custom_tab_discover">Discover</string>
+    <string name="installer_custom_close">Close</string>
+    <string name="installer_custom_manage_description">Save third-party installer activities for use as primary or fallback installers</string>
     <string name="installer_custom_input_label">Package name</string>
-    <string name="installer_custom_package_hint">Type a package name and tap &quot;Find installers&quot; to discover installer activities.</string>
+    <string name="installer_custom_package_hint">Type a package name and tap \"Find installers\" to discover installer activities</string>
     <string name="installer_custom_lookup">Find installers</string>
     <string name="installer_custom_lookup_empty">Enter a package name first.</string>
     <string name="installer_custom_searching">Searching installer activities…</string>
@@ -663,6 +774,8 @@
     <string name="battery_optimization_notification">Battery optimizations must be turned off in order for Universal ReVanced Manager to work correctly in the background. Click here to turn off optimizations.</string>
     <string name="installing_manager_update">Installing update…</string>
     <string name="downloading_manager_update">Downloading update…</string>
+    <string name="manager_update_banner_title">Downloading manager update</string>
+    <string name="manager_update_progress_detail">%1$.1f MB / %2$.1f MB (%3$d%%)</string>
     <string name="download_manager_failed">Failed to download update: %s</string>
     <string name="cancel">Cancel</string>
     <string name="save">Save</string>
@@ -687,6 +800,7 @@
     <string name="update_available_dialog_description">A new version of Universal ReVanced Manager (%s) is available.</string>
     <string name="failed_to_download_update">Failed to download update: %s</string>
     <string name="download">Download</string>
+    <string name="resume_download">Resume download</string>
     <string name="download_confirmation_metered">You are currently on a metered connection, and data charges from your service provider may apply.\n\nDo you still want to continue?</string>
     <string name="download_update_confirmation">Download update?</string>
     <string name="no_contributors_found">No contributors found</string>
@@ -738,4 +852,3 @@
     <string name="confirm">Confirm</string>
     <string name="saved_app_install_cancelled">Installation cancelled</string>
 </resources>
-

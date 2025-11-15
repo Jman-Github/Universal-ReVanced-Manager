@@ -638,7 +638,8 @@ private class ListOptionEditor<T : Serializable>(private val elementEditor: Opti
                     itemsIndexed(items, key = { _, item -> item.key }) { index, item ->
                         val interactionSource = remember { MutableInteractionSource() }
 
-                        ReorderableItem(reorderableLazyColumnState, key = item.key) {
+                        ReorderableItem(reorderableLazyColumnState, key = item.key) { _ ->
+                            val reorderableScope = this
                             WithOptionEditor(
                                 elementEditor,
                                 elementOption,
@@ -674,8 +675,11 @@ private class ListOptionEditor<T : Serializable>(private val elementEditor: Opti
                                     tonalElevation = if (deleteMode && item.key in deletionTargets) 8.dp else 0.dp,
                                     leadingContent = {
                                         IconButton(
-                                            modifier = Modifier.draggableHandle(interactionSource = interactionSource),
                                             onClick = {},
+                                            interactionSource = interactionSource,
+                                            modifier = with(reorderableScope) {
+                                                Modifier.longPressDraggableHandle()
+                                            }
                                         ) {
                                             Icon(
                                                 Icons.Filled.DragHandle,

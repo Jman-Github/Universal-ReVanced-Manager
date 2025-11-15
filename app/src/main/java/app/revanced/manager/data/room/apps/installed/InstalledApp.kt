@@ -3,6 +3,7 @@ package app.revanced.manager.data.room.apps.installed
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import app.revanced.manager.data.room.profile.PatchProfilePayload
 import app.universal.revanced.manager.R
 
 enum class InstallType(val stringResource: Int) {
@@ -17,5 +18,6 @@ data class InstalledApp(
     @ColumnInfo(name = "current_package_name") val currentPackageName: String,
     @ColumnInfo(name = "original_package_name") val originalPackageName: String,
     @ColumnInfo(name = "version") val version: String,
-    @ColumnInfo(name = "install_type") val installType: InstallType
+    @ColumnInfo(name = "install_type") val installType: InstallType,
+    @ColumnInfo(name = "selection_payload") val selectionPayload: PatchProfilePayload? = null
 )

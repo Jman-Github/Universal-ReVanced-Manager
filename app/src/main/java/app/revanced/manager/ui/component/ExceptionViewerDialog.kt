@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import app.revanced.manager.util.consumeHorizontalScroll
 import app.universal.revanced.manager.R
 import app.revanced.manager.ui.component.bundle.BundleTopBar
 
@@ -66,7 +67,13 @@ fun ExceptionViewerDialog(text: String, onDismiss: () -> Unit) {
             ColumnWithScrollbar(
                 modifier = Modifier.padding(paddingValues)
             ) {
-                Text(text, modifier = Modifier.horizontalScroll(rememberScrollState()))
+                val stackScrollState = rememberScrollState()
+                Text(
+                    text,
+                    modifier = Modifier
+                        .consumeHorizontalScroll(stackScrollState)
+                        .horizontalScroll(stackScrollState)
+                )
             }
         }
     }

@@ -10,20 +10,29 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.io.File
+
+data class PatchBundleDownloadResult(
+    val versionSignature: String,
+    val assetCreatedAtMillis: Long?
+)
 
 sealed class RemotePatchBundle(
     name: String,
     uid: Int,
     displayName: String?,
-    protected val versionHash: String?,
+    createdAt: Long?,
+    updatedAt: Long?,
+    private val installedVersionSignatureInternal: String?,
     error: Throwable?,
     directory: File,
     val endpoint: String,
     val autoUpdate: Boolean,
-) : PatchBundleSource(name, uid, displayName, error, directory), KoinComponent {
+) : PatchBundleSource(name, uid, displayName, createdAt, updatedAt, error, directory), KoinComponent {
     protected val http: HttpService by inject()
 
     protected abstract suspend fun getLatestInfo(): ReVancedAsset
@@ -31,14 +40,18 @@ sealed class RemotePatchBundle(
         error: Throwable? = this.error,
         name: String = this.name,
         displayName: String? = this.displayName,
+        createdAt: Long? = this.createdAt,
+        updatedAt: Long? = this.updatedAt,
         autoUpdate: Boolean = this.autoUpdate
     ): RemotePatchBundle
 
     override fun copy(
         error: Throwable?,
         name: String,
-        displayName: String?
-    ): RemotePatchBundle = copy(error, name, displayName, this.autoUpdate)
+        displayName: String?,
+        createdAt: Long?,
+        updatedAt: Long?
+    ): RemotePatchBundle = copy(error, name, displayName, createdAt, updatedAt, this.autoUpdate)
 
     private suspend fun download(info: ReVancedAsset) = withContext(Dispatchers.IO) {
         patchBundleOutputStream().use {
@@ -47,17 +60,22 @@ sealed class RemotePatchBundle(
             }
         }
 
-        info.version
+        PatchBundleDownloadResult(
+            versionSignature = info.version,
+            assetCreatedAtMillis = runCatching {
+                info.createdAt.toInstant(TimeZone.UTC).toEpochMilliseconds()
+            }.getOrNull()
+        )
     }
 
     /**
      * Downloads the latest version regardless if there is a new update available.
      */
-    suspend fun ActionContext.downloadLatest() = download(getLatestInfo())
+    suspend fun ActionContext.downloadLatest(): PatchBundleDownloadResult = download(getLatestInfo())
 
-    suspend fun ActionContext.update(): String? = withContext(Dispatchers.IO) {
+    suspend fun ActionContext.update(): PatchBundleDownloadResult? = withContext(Dispatchers.IO) {
         val info = getLatestInfo()
-        if (hasInstalled() && info.version == versionHash)
+        if (hasInstalled() && info.version == installedVersionSignatureInternal)
             return@withContext null
 
         download(info)
@@ -84,29 +102,42 @@ sealed class RemotePatchBundle(
         private val changelogCacheMutex = Mutex()
         private val changelogCache = mutableMapOf<String, CachedChangelog>()
     }
+
+    val installedVersionSignature: String? get() = installedVersionSignatureInternal
 }
 
 class JsonPatchBundle(
     name: String,
     uid: Int,
     displayName: String?,
-    versionHash: String?,
+    createdAt: Long?,
+    updatedAt: Long?,
+    installedVersionSignature: String?,
     error: Throwable?,
     directory: File,
     endpoint: String,
     autoUpdate: Boolean,
-) : RemotePatchBundle(name, uid, displayName, versionHash, error, directory, endpoint, autoUpdate) {
+) : RemotePatchBundle(name, uid, displayName, createdAt, updatedAt, installedVersionSignature, error, directory, endpoint, autoUpdate) {
     override suspend fun getLatestInfo() = withContext(Dispatchers.IO) {
         http.request<ReVancedAsset> {
             url(endpoint)
         }.getOrThrow()
     }
 
-    override fun copy(error: Throwable?, name: String, displayName: String?, autoUpdate: Boolean) = JsonPatchBundle(
+    override fun copy(
+        error: Throwable?,
+        name: String,
+        displayName: String?,
+        createdAt: Long?,
+        updatedAt: Long?,
+        autoUpdate: Boolean
+    ) = JsonPatchBundle(
         name,
         uid,
         displayName,
-        versionHash,
+        createdAt,
+        updatedAt,
+        installedVersionSignature,
         error,
         directory,
         endpoint,
@@ -118,20 +149,31 @@ class APIPatchBundle(
     name: String,
     uid: Int,
     displayName: String?,
-    versionHash: String?,
+    createdAt: Long?,
+    updatedAt: Long?,
+    installedVersionSignature: String?,
     error: Throwable?,
     directory: File,
     endpoint: String,
     autoUpdate: Boolean,
-) : RemotePatchBundle(name, uid, displayName, versionHash, error, directory, endpoint, autoUpdate) {
+) : RemotePatchBundle(name, uid, displayName, createdAt, updatedAt, installedVersionSignature, error, directory, endpoint, autoUpdate) {
     private val api: ReVancedAPI by inject()
 
     override suspend fun getLatestInfo() = api.getPatchesUpdate().getOrThrow()
-    override fun copy(error: Throwable?, name: String, displayName: String?, autoUpdate: Boolean) = APIPatchBundle(
+    override fun copy(
+        error: Throwable?,
+        name: String,
+        displayName: String?,
+        createdAt: Long?,
+        updatedAt: Long?,
+        autoUpdate: Boolean
+    ) = APIPatchBundle(
         name,
         uid,
         displayName,
-        versionHash,
+        createdAt,
+        updatedAt,
+        installedVersionSignature,
         error,
         directory,
         endpoint,

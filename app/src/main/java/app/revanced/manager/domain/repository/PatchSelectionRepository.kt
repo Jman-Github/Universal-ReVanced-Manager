@@ -3,11 +3,16 @@ package app.revanced.manager.domain.repository
 import app.revanced.manager.data.room.AppDatabase
 import app.revanced.manager.data.room.AppDatabase.Companion.generateUid
 import app.revanced.manager.data.room.selection.PatchSelection
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.map
 
 class PatchSelectionRepository(db: AppDatabase) {
     private val dao = db.selectionDao()
+    private val resetEventsFlow = MutableSharedFlow<ResetEvent>(extraBufferCapacity = 4)
+    val resetEvents: SharedFlow<ResetEvent> = resetEventsFlow.asSharedFlow()
 
     private suspend fun getOrCreateSelection(bundleUid: Int, packageName: String) =
         dao.getSelectionId(bundleUid, packageName) ?: PatchSelection(
@@ -34,13 +39,18 @@ class PatchSelectionRepository(db: AppDatabase) {
 
     suspend fun resetSelectionForPackage(packageName: String) {
         dao.resetForPackage(packageName)
+        resetEventsFlow.emit(ResetEvent.Package(packageName))
     }
 
     suspend fun resetSelectionForPatchBundle(uid: Int) {
         dao.resetForPatchBundle(uid)
+        resetEventsFlow.emit(ResetEvent.Bundle(uid))
     }
 
-    suspend fun reset() = dao.reset()
+    suspend fun reset() {
+        dao.reset()
+        resetEventsFlow.emit(ResetEvent.All)
+    }
 
     suspend fun export(bundleUid: Int): SerializedSelection = dao.exportSelection(bundleUid)
 
@@ -49,6 +59,13 @@ class PatchSelectionRepository(db: AppDatabase) {
         dao.updateSelections(selection.entries.associate { (packageName, patches) ->
             getOrCreateSelection(bundleUid, packageName) to patches.toSet()
         })
+        resetEventsFlow.emit(ResetEvent.Bundle(bundleUid))
+    }
+
+    sealed interface ResetEvent {
+        data object All : ResetEvent
+        data class Package(val packageName: String) : ResetEvent
+        data class Bundle(val bundleUid: Int) : ResetEvent
     }
 }
 

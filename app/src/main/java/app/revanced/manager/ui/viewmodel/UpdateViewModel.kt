@@ -55,6 +55,7 @@ class UpdateViewModel(
 
     private var pendingExternalInstall: InstallerManager.InstallPlan.External? = null
     private var externalInstallTimeoutJob: Job? = null
+    private var currentDownloadVersion: String? = null
 
     var downloadedSize by mutableLongStateOf(0L)
         private set
@@ -74,6 +75,9 @@ class UpdateViewModel(
     var releaseInfo: ReVancedAsset? by mutableStateOf(null)
         private set
 
+    var canResumeDownload by mutableStateOf(false)
+        private set
+
     private val location = fs.tempDir.resolve("updater.apk")
     private val job = viewModelScope.launch {
         uiSafe(app, R.string.download_manager_failed, "Failed to download Universal ReVanced Manager") {
@@ -89,22 +93,48 @@ class UpdateViewModel(
 
     fun downloadUpdate(ignoreInternetCheck: Boolean = false) = viewModelScope.launch {
         uiSafe(app, R.string.failed_to_download_update, "Failed to download update") {
-            val release = releaseInfo!!
+            val release = releaseInfo ?: return@uiSafe
             val allowMeteredUpdates = prefs.allowMeteredUpdates.get()
             withContext(Dispatchers.IO) {
                 if (!allowMeteredUpdates && !networkInfo.isSafe() && !ignoreInternetCheck) {
                     showInternetCheckDialog = true
                 } else {
+                    if (currentDownloadVersion != release.version) {
+                        currentDownloadVersion = release.version
+                        if (location.exists()) {
+                            location.delete()
+                        }
+                        downloadedSize = 0L
+                        totalSize = 0L
+                        canResumeDownload = false
+                    }
+
+                    val resumeOffset = if (location.exists()) location.length() else 0L
+                    downloadedSize = resumeOffset
+                    totalSize = resumeOffset
+                    canResumeDownload = resumeOffset > 0L
+
                     state = State.DOWNLOADING
 
-                    http.download(location) {
-                        url(release.downloadUrl)
-                        onDownload { bytesSentTotal, contentLength ->
-                            downloadedSize = bytesSentTotal
-                            totalSize = contentLength
+                    try {
+                        http.download(location, resumeOffset) {
+                            url(release.downloadUrl)
+                            onDownload { bytesSentTotal, contentLength ->
+                                downloadedSize = resumeOffset + bytesSentTotal
+                                totalSize = resumeOffset + contentLength
+                            }
                         }
+                        canResumeDownload = false
+                        installUpdate()
+                    } catch (error: Exception) {
+                        downloadedSize = location.takeIf { it.exists() }?.length() ?: 0L
+                        if (totalSize < downloadedSize) {
+                            totalSize = downloadedSize
+                        }
+                        canResumeDownload = downloadedSize > 0L
+                        state = State.CAN_DOWNLOAD
+                        throw error
                     }
-                    installUpdate()
                 }
             }
         }

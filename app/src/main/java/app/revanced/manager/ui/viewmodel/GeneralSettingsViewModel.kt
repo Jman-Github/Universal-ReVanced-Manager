@@ -17,9 +17,24 @@ class GeneralSettingsViewModel(
         resetListItemColorsCached()
     }
 
+    fun resetThemeSettings() = viewModelScope.launch {
+        prefs.theme.update(Theme.SYSTEM)
+        prefs.dynamicColor.update(true)
+        prefs.pureBlackTheme.update(false)
+        prefs.customAccentColor.update("")
+        prefs.customThemeColor.update("")
+        resetListItemColorsCached()
+    }
+
     fun setCustomAccentColor(color: Color?) = viewModelScope.launch {
         val value = color?.toHexString().orEmpty()
         prefs.customAccentColor.update(value)
+        resetListItemColorsCached()
+    }
+
+    fun setCustomThemeColor(color: Color?) = viewModelScope.launch {
+        val value = color?.toHexString().orEmpty()
+        prefs.customThemeColor.update(value)
         resetListItemColorsCached()
     }
 }

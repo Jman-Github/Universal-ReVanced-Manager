@@ -102,7 +102,7 @@ class PatcherProcess(private val context: Context) : IPatcherProcess.Stub() {
         @SuppressLint("PrivateApi")
         @JvmStatic
         fun main(args: Array<String>) {
-            Looper.prepare()
+            Looper.prepareMainLooper()
 
             val managerPackageName = args[0]
 

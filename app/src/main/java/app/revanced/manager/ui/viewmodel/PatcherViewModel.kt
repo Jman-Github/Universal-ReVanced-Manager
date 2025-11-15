@@ -43,6 +43,7 @@ import app.revanced.manager.domain.repository.InstalledAppRepository
 import app.revanced.manager.domain.worker.WorkerRepository
 import app.revanced.manager.patcher.logger.LogLevel
 import app.revanced.manager.patcher.logger.Logger
+import app.revanced.manager.patcher.runtime.MemoryLimitConfig
 import app.revanced.manager.patcher.runtime.ProcessRuntime
 import app.revanced.manager.patcher.worker.PatcherWorker
 import app.revanced.manager.plugin.downloader.PluginHostApi
@@ -154,6 +155,19 @@ class PatcherViewModel(
         private set
     private var appliedSelection: PatchSelection = input.selectedPatches.mapValues { it.value.toSet() }
     private var appliedOptions: Options = input.options
+    val currentSelectedApp: SelectedApp get() = selectedApp
+
+    fun currentSelectionSnapshot(): PatchSelection =
+        appliedSelection.mapValues { (_, patches) -> patches.toSet() }
+
+    fun currentOptionsSnapshot(): Options =
+        appliedOptions.mapValues { (_, bundleOptions) ->
+            bundleOptions.mapValues { (_, patchOptions) -> patchOptions.toMap() }.toMap()
+        }.toMap()
+
+    fun dismissMissingPatchDialog() {
+        missingPatchDialog = null
+    }
 
     private var currentActivityRequest: Pair<CompletableDeferred<Boolean>, String>? by mutableStateOf(
         null
@@ -236,6 +250,10 @@ class PatcherViewModel(
     )
 
     var memoryAdjustmentDialog by mutableStateOf<MemoryAdjustmentDialogState?>(null)
+        private set
+
+    data class MissingPatchDialogState(val patchNames: List<String>)
+    var missingPatchDialog by mutableStateOf<MissingPatchDialogState?>(null)
         private set
 
     private suspend fun collectSelectedBundleMetadata(): Pair<List<String>, List<String>> {
@@ -369,12 +387,15 @@ class PatcherViewModel(
         val sanitizedSelectionOriginal = sanitizeSelection(appliedSelection, scopedBundlesOriginal)
         val sanitizedOptionsOriginal = sanitizeOptions(appliedOptions, scopedBundlesOriginal)
 
+        val selectionPayload = patchBundleRepository.snapshotSelection(sanitizedSelectionFinal)
+
         installedAppRepository.addOrUpdate(
             finalPackageName,
             packageName,
             finalVersion,
             installType,
-            sanitizedSelectionFinal
+            sanitizedSelectionFinal,
+            selectionPayload
         )
 
         if (finalPackageName != packageName) {
@@ -590,12 +611,43 @@ class PatcherViewModel(
     }
 
     fun exportLogs(context: Context) {
+        val stepLines = steps.mapIndexed { index, step ->
+            buildString {
+                append(index + 1)
+                append(". ")
+                append(step.name)
+                append(" [")
+                append(context.getString(step.category.displayName))
+                append("] - ")
+                append(step.state.name)
+                step.message?.takeIf { it.isNotBlank() }?.let {
+                    append(": ")
+                    append(it)
+                }
+            }
+        }
+
+        val logLines = logs.toList().map { (level, msg) -> "[${level.name}]: $msg" }
+
+        val content = buildString {
+            appendLine("=== Patcher Steps ===")
+            if (stepLines.isEmpty()) {
+                appendLine("No steps recorded.")
+            } else {
+                stepLines.forEach { appendLine(it) }
+            }
+            appendLine()
+            appendLine("=== Patcher Log ===")
+            if (logLines.isEmpty()) {
+                appendLine("No log messages recorded.")
+            } else {
+                logLines.forEach { appendLine(it) }
+            }
+        }
+
         val sendIntent: Intent = Intent().apply {
             action = Intent.ACTION_SEND
-            putExtra(
-                Intent.EXTRA_TEXT,
-                logs.asSequence().map { (level, msg) -> "[${level.name}]: $msg" }.joinToString("\n")
-            )
+            putExtra(Intent.EXTRA_TEXT, content)
             type = "text/plain"
         }
 
@@ -1093,7 +1145,7 @@ class PatcherViewModel(
                     -1
                 )
                 val previousLimit = if (previousFromWorker > 0) previousFromWorker else prefs.patcherProcessMemoryLimit.get()
-                val newLimit = (previousLimit - MEMORY_ADJUSTMENT_MB).coerceAtLeast(MIN_MEMORY_LIMIT_MB)
+                val newLimit = (previousLimit - MEMORY_ADJUSTMENT_MB).coerceAtLeast(MemoryLimitConfig.MIN_LIMIT_MB)
                 val adjusted = newLimit < previousLimit
                 if (adjusted) {
                     prefs.patcherProcessMemoryLimit.update(newLimit)
@@ -1103,6 +1155,18 @@ class PatcherViewModel(
                     newLimit = if (adjusted) newLimit else previousLimit,
                     adjusted = adjusted
                 )
+            }
+        }
+
+        val failureMessage = workInfo.outputData.getString(PatcherWorker.PROCESS_FAILURE_MESSAGE_KEY)
+        if (!failureMessage.isNullOrBlank()) {
+            val missing = MISSING_PATCH_REGEX.findAll(failureMessage)
+                .map { it.groupValues[1].trim() }
+                .filter { it.isNotEmpty() }
+                .distinct()
+                .toList()
+            if (missing.isNotEmpty()) {
+                missingPatchDialog = MissingPatchDialogState(missing)
             }
         }
     }
@@ -1169,7 +1233,7 @@ class PatcherViewModel(
         private const val SYSTEM_INSTALL_TIMEOUT_MS = 15_000L
         private const val EXTERNAL_INSTALL_TIMEOUT_MS = 25_000L
         private const val MEMORY_ADJUSTMENT_MB = 200
-        private const val MIN_MEMORY_LIMIT_MB = 200
+        private val MISSING_PATCH_REGEX = Regex("Patch with name (.+?) does not exist")
 
         fun LogLevel.androidLog(msg: String) = when (this) {
             LogLevel.TRACE -> Log.v(TAG, msg)

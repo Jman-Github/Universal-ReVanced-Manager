@@ -33,6 +33,8 @@ import app.revanced.manager.domain.repository.PatchOptionsRepository
 import app.revanced.manager.domain.repository.PatchProfile
 import app.revanced.manager.domain.repository.PatchProfileRepository
 import app.revanced.manager.domain.repository.PatchSelectionRepository
+import app.revanced.manager.domain.repository.PatchOptionsRepository.ResetEvent as OptionsResetEvent
+import app.revanced.manager.domain.repository.PatchSelectionRepository.ResetEvent as SelectionResetEvent
 import app.revanced.manager.domain.repository.remapLocalBundles
 import app.revanced.manager.domain.repository.toConfiguration
 import app.revanced.manager.patcher.patch.PatchBundleInfo
@@ -267,6 +269,61 @@ class SelectedAppInfoViewModel(
                 }
             }
         }
+
+        if (persistConfiguration) {
+            viewModelScope.launch {
+                selectionRepository.resetEvents.collect(::handleSelectionResetEvent)
+            }
+            viewModelScope.launch {
+                optionsRepository.resetEvents.collect(::handleOptionsResetEvent)
+            }
+        }
+    }
+
+    private fun handleSelectionResetEvent(event: SelectionResetEvent) {
+        if (!persistConfiguration) return
+        when (event) {
+            SelectionResetEvent.All -> clearSelectionState()
+            is SelectionResetEvent.Package -> if (event.packageName == packageName) {
+                clearSelectionState()
+            }
+
+            is SelectionResetEvent.Bundle -> clearSelectionForBundle(event.bundleUid)
+        }
+    }
+
+    private fun clearSelectionState() {
+        if (selectionState is SelectionState.Customized) {
+            selectionState = SelectionState.Default
+        }
+    }
+
+    private fun clearSelectionForBundle(bundleUid: Int) {
+        val current = selectionState
+        if (current !is SelectionState.Customized) return
+        if (bundleUid !in current.patchSelection) return
+        val updated = current.patchSelection
+            .filterKeys { it != bundleUid }
+        selectionState = if (updated.isEmpty()) SelectionState.Default else SelectionState.Customized(updated)
+    }
+
+    private fun handleOptionsResetEvent(event: OptionsResetEvent) {
+        if (!persistConfiguration) return
+        when (event) {
+            OptionsResetEvent.All -> if (options.isNotEmpty()) {
+                options = emptyMap()
+            }
+
+            is OptionsResetEvent.Package -> if (event.packageName == packageName && options.isNotEmpty()) {
+                options = emptyMap()
+            }
+
+            is OptionsResetEvent.Bundle -> {
+                if (event.bundleUid in options) {
+                    options = options.filterKeys { it != event.bundleUid }
+                }
+            }
+        }
     }
 
     private fun loadProfileConfiguration(id: Int) {
@@ -326,7 +383,12 @@ class SelectedAppInfoViewModel(
             val configuration = workingProfile.toConfiguration(scopedBundles, sources)
             val selection = configuration.selection.takeUnless { it.isEmpty() }
 
-            updateConfiguration(selection, configuration.options).join()
+            updateConfiguration(
+                selection,
+                configuration.options,
+                persistState = false,
+                filterOptions = false
+            ).join()
 
             _profileLaunchState.value = ProfileLaunchState(
                 profile = workingProfile,
@@ -419,7 +481,7 @@ class SelectedAppInfoViewModel(
         selectionLoadJob = viewModelScope.launch {
             val previous = selectionRepository.getSelection(packageName)
             if (previous.values.sumOf { it.size } == 0) return@launch
-            selectionState = SelectionState.Customized(previous)
+            selection.value = SelectionState.Customized(previous)
         }
 
         selection
@@ -650,14 +712,23 @@ class SelectedAppInfoViewModel(
 
     fun updateConfiguration(
         selection: PatchSelection?,
-        options: Options
+        options: Options,
+        persistState: Boolean = persistConfiguration,
+        filterOptions: Boolean = true
     ) = viewModelScope.launch {
+        optionsLoadJob?.cancel()
+        optionsLoadJob = null
+
         selectionState = selection?.let(SelectionState::Customized) ?: SelectionState.Default
 
-        val filteredOptions = options.filtered(bundleInfoFlow.first())
+        val filteredOptions = if (filterOptions) {
+            options.filtered(bundleInfoFlow.first())
+        } else {
+            options
+        }
         this@SelectedAppInfoViewModel.options = filteredOptions
 
-        if (!persistConfiguration) return@launch
+        if (!persistConfiguration || !persistState) return@launch
         viewModelScope.launch(Dispatchers.Default) {
             selection?.let { selectionRepository.updateSelection(packageName, it) }
                 ?: selectionRepository.resetSelectionForPackage(packageName)

@@ -1,13 +1,13 @@
 package app.revanced.manager.ui.component
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -20,11 +20,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import app.revanced.manager.util.consumeHorizontalScroll
 
 /**
  * Credits to [Vendetta](https://github.com/vendetta-mod)
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun RowScope.SegmentedButton(
     icon: Any,
@@ -69,11 +69,14 @@ fun RowScope.SegmentedButton(
                 }
             }
 
+            val labelScrollState = rememberScrollState()
             Text(
                 text = text,
                 style = MaterialTheme.typography.labelLarge,
                 maxLines = 1,
-                modifier = Modifier.basicMarquee()
+                modifier = Modifier
+                    .consumeHorizontalScroll(labelScrollState)
+                    .horizontalScroll(labelScrollState)
             )
         }
     }

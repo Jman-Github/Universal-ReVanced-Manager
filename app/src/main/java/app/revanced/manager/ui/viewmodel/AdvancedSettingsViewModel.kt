@@ -10,6 +10,8 @@ import app.universal.revanced.manager.R
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
 import app.revanced.manager.domain.installer.InstallerManager
 import app.revanced.manager.domain.manager.PreferencesManager
+import app.revanced.manager.domain.manager.hideInstallerComponent
+import app.revanced.manager.domain.manager.showInstallerComponent
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.util.tag
 import app.revanced.manager.util.toast
@@ -130,6 +132,9 @@ class AdvancedSettingsViewModel(
     fun addCustomInstaller(component: ComponentName, onResult: (Boolean) -> Unit = {}) =
         viewModelScope.launch(Dispatchers.Default) {
             val added = installerManager.addCustomInstaller(component)
+            if (added) {
+                prefs.showInstallerComponent(component)
+            }
             withContext(Dispatchers.Main) {
                 onResult(added)
             }
@@ -137,8 +142,11 @@ class AdvancedSettingsViewModel(
 
     fun removeCustomInstaller(component: ComponentName, onResult: (Boolean) -> Unit = {}) =
         viewModelScope.launch(Dispatchers.Default) {
-            val removed = installerManager.removeCustomInstaller(component)
-            if (removed) {
+        val removed = installerManager.removeCustomInstaller(component)
+        if (removed) {
+            prefs.hideInstallerComponent(component)
+            val componentAvailable = installerManager.isComponentAvailable(component)
+            if (!componentAvailable) {
                 val currentPrimary = installerManager.getPrimaryToken()
                 if (currentPrimary is InstallerManager.Token.Component &&
                     currentPrimary.componentName == component
@@ -152,6 +160,7 @@ class AdvancedSettingsViewModel(
                     installerManager.updateFallbackToken(InstallerManager.Token.None)
                 }
             }
+        }
             withContext(Dispatchers.Main) {
                 onResult(removed)
             }

@@ -63,8 +63,7 @@ class PatchProfileRepository(
             packageName = packageName,
             appVersion = appVersion,
             name = name,
-            payload = payload,
-            createdAt = System.currentTimeMillis()
+            payload = payload
         )
         dao.upsert(entity)
         return entity.toDomain()

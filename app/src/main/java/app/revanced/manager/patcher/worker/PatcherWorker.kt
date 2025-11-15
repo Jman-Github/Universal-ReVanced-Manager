@@ -137,11 +137,17 @@ class PatcherWorker(
 
         val args = workerRepository.claimInput(this)
 
-        return try {
+        val result = try {
             runPatcher(args)
         } finally {
             wakeLock.release()
         }
+
+        if (result is Result.Success && args.input is SelectedApp.Local && args.input.temporary) {
+            args.input.file.delete()
+        }
+
+        return result
     }
 
     private suspend fun runPatcher(args: Args): Result {
@@ -260,7 +266,8 @@ class PatcherWorker(
             Result.failure(
                 workDataOf(
                     PROCESS_EXIT_CODE_KEY to e.exitCode,
-                    PROCESS_PREVIOUS_LIMIT_KEY to previousLimit
+                    PROCESS_PREVIOUS_LIMIT_KEY to previousLimit,
+                    PROCESS_FAILURE_MESSAGE_KEY to message
                 )
             )
         } catch (e: ProcessRuntime.RemoteFailureException) {
@@ -269,16 +276,17 @@ class PatcherWorker(
                 "An exception occurred in the remote process while patching. ${e.originalStackTrace}".logFmt()
             )
             updateProgress(state = State.FAILED, message = e.originalStackTrace)
-            Result.failure()
+            Result.failure(
+                workDataOf(PROCESS_FAILURE_MESSAGE_KEY to e.originalStackTrace)
+            )
         } catch (e: Exception) {
             Log.e(tag, "An exception occurred while patching".logFmt(), e)
             updateProgress(state = State.FAILED, message = e.stackTraceToString())
-            Result.failure()
+            Result.failure(
+                workDataOf(PROCESS_FAILURE_MESSAGE_KEY to e.stackTraceToString())
+            )
         } finally {
             patchedApk.delete()
-            if (args.input is SelectedApp.Local && args.input.temporary) {
-                args.input.file.delete()
-            }
         }
     }
 
@@ -287,6 +295,7 @@ class PatcherWorker(
         private fun String.logFmt() = "$LOG_PREFIX $this"
         const val PROCESS_EXIT_CODE_KEY = "process_exit_code"
         const val PROCESS_PREVIOUS_LIMIT_KEY = "process_previous_limit"
+        const val PROCESS_FAILURE_MESSAGE_KEY = "process_failure_message"
     }
 
     private suspend fun stripUnusedNativeLibraries(apkFile: File) = withContext(Dispatchers.IO) {

@@ -62,15 +62,21 @@ import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemote
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.repository.PatchBundleRepository
+import app.revanced.manager.domain.repository.PatchBundleRepository.DisplayNameUpdateResult
 import app.revanced.manager.ui.component.ColumnWithScrollbar
 import app.revanced.manager.ui.component.ExceptionViewerDialog
 import app.revanced.manager.ui.component.FullscreenDialog
 import app.revanced.manager.ui.component.TextInputDialog
 import app.revanced.manager.ui.component.haptics.HapticSwitch
+import app.revanced.manager.util.simpleMessage
 import app.revanced.manager.util.toast
 import kotlinx.coroutines.launch
 import androidx.core.content.getSystemService
+import compose.icons.FontAwesomeIcons
+import compose.icons.fontawesomeicons.Brands
+import compose.icons.fontawesomeicons.brands.Github
 import org.koin.compose.koinInject
+import java.net.URI
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -80,6 +86,7 @@ fun BundleInformationDialog(
     onDismissRequest: () -> Unit,
     onDeleteRequest: () -> Unit,
     onUpdate: () -> Unit,
+    autoOpenReleaseRequest: Int? = null,
 ) {
     val bundleRepo = koinInject<PatchBundleRepository>()
     val networkInfo = koinInject<NetworkInfo>()
@@ -88,17 +95,76 @@ fun BundleInformationDialog(
     val composableScope = rememberCoroutineScope()
     val context = LocalContext.current
     val clipboard = remember(context) { context.getSystemService<ClipboardManager>() }
+    val uriHandler = LocalUriHandler.current
     var viewCurrentBundlePatches by remember { mutableStateOf(false) }
     var viewBundleChangelog by remember { mutableStateOf(false) }
     val isLocal = src is LocalPatchBundle
     val bundleManifestAttributes = src.patchBundle?.manifestAttributes
+    val manifestSource = bundleManifestAttributes?.source
     val (autoUpdate, endpoint) = src.asRemoteOrNull?.let { it.autoUpdate to it.endpoint }
         ?: (null to null)
     var showDisplayNameDialog by remember { mutableStateOf(false) }
+    var releasePageUrl by remember(src.uid, manifestSource) {
+        mutableStateOf(
+            initialGithubReleaseUrl(
+                src = src,
+                manifestSource = manifestSource
+            )
+        )
+    }
+    var releasePageLoading by remember { mutableStateOf(false) }
 
     fun onAutoUpdateChange(new: Boolean) = composableScope.launch {
         with(bundleRepo) {
             src.asRemoteOrNull?.setAutoUpdate(new)
+        }
+    }
+
+    fun openReleasePage() = composableScope.launch {
+        releasePageUrl?.let {
+            uriHandler.openUri(it)
+            return@launch
+        }
+
+        val remote = src.asRemoteOrNull
+        if (remote == null) {
+            context.toast(context.getString(R.string.bundle_release_page_unavailable))
+            return@launch
+        }
+
+        if (!hasNetwork) {
+            context.toast(context.getString(R.string.bundle_release_page_unavailable))
+            return@launch
+        }
+
+        releasePageLoading = true
+        try {
+            val asset = remote.fetchLatestReleaseInfo()
+            val url = extractGithubReleaseUrlFromDownload(asset.downloadUrl)
+                ?: asset.pageUrl?.takeUnless { it.isBlank() }
+                ?: extractGithubReleaseUrlFromDownload(remote.endpoint)
+            if (url.isNullOrBlank()) {
+                context.toast(context.getString(R.string.bundle_release_page_unavailable))
+            } else {
+                releasePageUrl = url
+                uriHandler.openUri(url)
+            }
+        } catch (t: Throwable) {
+            context.toast(
+                context.getString(
+                    R.string.bundle_release_page_error,
+                    t.simpleMessage().orEmpty()
+                )
+            )
+        } finally {
+            releasePageLoading = false
+        }
+    }
+
+    LaunchedEffect(autoOpenReleaseRequest) {
+        autoOpenReleaseRequest?.let {
+            openReleasePage()
+            onDismissRequest()
         }
     }
 
@@ -139,6 +205,18 @@ fun BundleInformationDialog(
                         )
                     },
                     actions = {
+                        val githubButtonEnabled =
+                            (releasePageUrl != null || (!isLocal && hasNetwork)) && !releasePageLoading
+                        IconButton(
+                            onClick = { if (!releasePageLoading) openReleasePage() },
+                            enabled = githubButtonEnabled
+                        ) {
+                            Icon(
+                                imageVector = FontAwesomeIcons.Brands.Github,
+                                contentDescription = stringResource(R.string.bundle_release_page),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
                         IconButton(onClick = onDeleteRequest) {
                             Icon(
                                 Icons.Outlined.DeleteOutline,
@@ -198,9 +276,19 @@ fun BundleInformationDialog(
                         title = stringResource(R.string.patches_display_name),
                         onDismissRequest = { showDisplayNameDialog = false },
                         onConfirm = { value ->
-                            showDisplayNameDialog = false
                             composableScope.launch {
-                                bundleRepo.setDisplayName(src, value.trim().ifEmpty { null })
+                                val result = bundleRepo.setDisplayName(src.uid, value.trim().ifEmpty { null })
+                                when (result) {
+                                    DisplayNameUpdateResult.SUCCESS, DisplayNameUpdateResult.NO_CHANGE -> {
+                                        showDisplayNameDialog = false
+                                    }
+                                    DisplayNameUpdateResult.DUPLICATE -> {
+                                        context.toast(context.getString(R.string.patch_bundle_duplicate_name_error))
+                                    }
+                                    DisplayNameUpdateResult.NOT_FOUND -> {
+                                        context.toast(context.getString(R.string.patch_bundle_missing_error))
+                                    }
+                                }
                             }
                         },
                         validator = { true }
@@ -439,3 +527,47 @@ private fun Tag(
         )
     }
 }
+
+internal const val DEFAULT_PATCH_RELEASES_URL =
+    "https://github.com/ReVanced/revanced-patches/releases"
+internal val GITHUB_SOURCE_REGEX =
+    Regex("^(?:git@|ssh://git@|https?://|git://)?github\\.com[:/](.+)$", RegexOption.IGNORE_CASE)
+
+internal fun initialGithubReleaseUrl(
+    src: PatchBundleSource,
+    manifestSource: String?
+): String? {
+    if (src.isDefault) return DEFAULT_PATCH_RELEASES_URL
+    if (src !is LocalPatchBundle) return null
+    return manifestSource
+        ?.extractGithubRepoPath()
+        ?.let(::buildGithubReleaseUrl)
+}
+
+internal fun extractGithubReleaseUrlFromDownload(downloadUrl: String?): String? {
+    if (downloadUrl.isNullOrBlank()) return null
+    val uri = runCatching { URI(downloadUrl) }.getOrNull() ?: return null
+    val path = uri.path ?: return null
+    val marker = "/releases"
+    val index = path.indexOf(marker, ignoreCase = true)
+    if (index == -1) return null
+    val authority = uri.authority ?: return null
+    val scheme = uri.scheme ?: "https"
+    val releasePath = path.substring(0, index + marker.length)
+    return buildString {
+        append(scheme)
+        append("://")
+        append(authority)
+        append(releasePath)
+    }
+}
+
+internal fun String.extractGithubRepoPath(): String? {
+    val cleaned = trim().removeSuffix(".git")
+    val match = GITHUB_SOURCE_REGEX.find(cleaned) ?: return null
+    val path = match.groupValues[1].trimStart('/', ':')
+    return path.takeIf { it.isNotEmpty() }
+}
+
+internal fun buildGithubReleaseUrl(repoPath: String): String =
+    "https://github.com/${repoPath.trim('/').trim()}/releases"

@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,19 +18,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Bookmarks
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -39,24 +40,27 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.revanced.manager.ui.component.LazyColumnWithScrollbar
 import app.revanced.manager.ui.component.TextInputDialog
 import app.revanced.manager.ui.component.haptics.HapticCheckbox
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.ui.viewmodel.BundleSourceType
+import app.revanced.manager.ui.viewmodel.BundleOptionDisplay
 import app.revanced.manager.ui.viewmodel.PatchProfileLaunchData
 import app.revanced.manager.ui.viewmodel.PatchProfileListItem
 import app.revanced.manager.ui.viewmodel.PatchProfilesViewModel
 import app.revanced.manager.ui.viewmodel.PatchProfilesViewModel.RenameResult
+import app.revanced.manager.util.relativeTime
 import app.revanced.manager.util.toast
-import app.revanced.manager.util.transparentListItemColors
 import app.universal.revanced.manager.R
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -70,7 +74,7 @@ fun PatchProfilesScreen(
 ) {
     val profiles by viewModel.profiles.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     val prefs = koinInject<PreferencesManager>()
     val allowUniversal by prefs.disableUniversalPatchCheck.flow.collectAsStateWithLifecycle(
         initialValue = prefs.disableUniversalPatchCheck.default
@@ -83,6 +87,8 @@ fun PatchProfilesScreen(
     var changeUidTarget by remember { mutableStateOf<ChangeUidTarget?>(null) }
     val expandedProfiles = remember { mutableStateMapOf<Int, Boolean>() }
     val selectionActive = viewModel.selectedProfiles.isNotEmpty()
+    data class OptionDialogData(val patchName: String, val entries: List<BundleOptionDisplay>)
+    var optionDialogData by remember { mutableStateOf<OptionDialogData?>(null) }
 
     BackHandler(enabled = selectionActive) { viewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL) }
 
@@ -178,7 +184,7 @@ fun PatchProfilesScreen(
         return
     }
 
-    LazyColumn(
+    LazyColumnWithScrollbar(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -191,15 +197,29 @@ fun PatchProfilesScreen(
             )
 
             val detailLine = buildList {
-                profile.appVersion?.let { add(it) }
+                profile.appVersion?.let {
+                    val formatted = if (it.startsWith("v", ignoreCase = true)) it else "v$it"
+                    add(formatted)
+                }
                 add(bundleCountText)
-            }.joinToString("  ")
+            }.joinToString(" • ")
+            val creationText = profile.createdAt.takeIf { it > 0 }?.relativeTime(context)?.let {
+                stringResource(R.string.patch_profile_created_at, it)
+            }
             val expanded = expandedProfiles[profile.id] == true
             val isSelected = profile.id in viewModel.selectedProfiles
+            val cardShape = RoundedCornerShape(16.dp)
+            val cardColor = if (isSelected) {
+                MaterialTheme.colorScheme.surfaceColorAtElevation(6.dp)
+            } else {
+                MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
+            }
 
-            ListItem(
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .clip(cardShape)
                     .combinedClickable(
                         enabled = loadingProfileId == null,
                         onClick = {
@@ -246,77 +266,134 @@ fun PatchProfilesScreen(
                         },
                         onLongClick = { viewModel.toggleSelection(profile.id) }
                     ),
-                colors = transparentListItemColors,
-                leadingContent = if (selectionActive) {
-                    {
-                        HapticCheckbox(
-                            checked = isSelected,
-                            onCheckedChange = { viewModel.setSelection(profile.id, it) }
-                        )
-                    }
-                } else null,
-                overlineContent = {
-                    Text(
-                        text = profile.packageName,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                },
-                headlineContent = {
-                    Text(
-                        text = profile.name,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                },
-                supportingContent = {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                shape = cardShape,
+                tonalElevation = if (isSelected) 4.dp else 2.dp,
+                color = cardColor
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.Top
                     ) {
-                        if (detailLine.isNotEmpty()) {
-                            Text(
-                                text = detailLine,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        if (selectionActive) {
+                            HapticCheckbox(
+                                checked = isSelected,
+                                onCheckedChange = { viewModel.setSelection(profile.id, it) }
                             )
                         }
-                        AnimatedVisibility(
-                            visible = expanded,
-                            enter = fadeIn(),
-                            exit = fadeOut()
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Column(
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            Text(
+                                text = profile.packageName,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                            Text(
+                                text = profile.name,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            if (detailLine.isNotEmpty()) {
+                                Text(
+                                    text = detailLine,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            creationText?.let { created ->
+                                Text(
+                                    text = created,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        if (loadingProfileId == profile.id) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp
+                            )
+                        }
+                    }
+                    if (profile.bundleDetails.isNotEmpty()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            profile.bundleDetails.forEach { detail ->
+                                val countText = pluralStringResource(
+                                    R.plurals.patch_profile_bundle_patch_count,
+                                    detail.patchCount,
+                                    detail.patchCount
+                                )
+                                val name = detail.displayName
+                                    ?: stringResource(R.string.patches_name_fallback)
+                                Text(
+                                    text = stringResource(R.string.patch_profile_bundle_header, name, countText),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        ProfileActionText(
+                            text = stringResource(
+                                if (expanded) R.string.patch_profile_show_less
+                                else R.string.patch_profile_show_more
+                            ),
+                            enabled = !selectionActive
+                        ) {
+                            expandedProfiles[profile.id] = !expanded
+                        }
+                        Spacer(modifier = Modifier.weight(1f))
+                        if (!selectionActive) {
+                            ProfileActionText(
+                                text = stringResource(R.string.patch_profile_rename)
                             ) {
-                                profile.bundleDetails.forEach { detail ->
-                                    val baseName = detail.displayName
-                                        ?: stringResource(R.string.patches_name_fallback)
-                                    val displayName = if (detail.isAvailable) {
+                                renameProfileId = profile.id
+                                renameProfileName = profile.name
+                            }
+                        }
+                    }
+                    AnimatedVisibility(
+                        visible = expanded,
+                        enter = fadeIn(),
+                        exit = fadeOut()
+                    ) {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            profile.bundleDetails.forEach { detail ->
+                                val baseName = detail.displayName
+                                    ?: stringResource(R.string.patches_name_fallback)
+                                val displayName = if (detail.isAvailable) {
+                                    baseName
+                                } else {
+                                    stringResource(
+                                        R.string.patch_profile_bundle_unavailable_suffix,
                                         baseName
-                                    } else {
-                                        stringResource(
-                                            R.string.patch_profile_bundle_unavailable_suffix,
-                                            baseName
-                                        )
+                                    )
+                                }
+                                val typeLabel = stringResource(
+                                    when (detail.type) {
+                                        BundleSourceType.Preinstalled -> R.string.bundle_type_preinstalled
+                                        BundleSourceType.Remote -> R.string.bundle_type_remote
+                                        else -> R.string.bundle_type_local
                                     }
-                                    val patchCountText = pluralStringResource(
-                                        R.plurals.patch_profile_bundle_patch_count,
-                                        detail.patchCount,
-                                        detail.patchCount
-                                    )
-                                    val typeLabel = stringResource(
-                                        when (detail.type) {
-                                            BundleSourceType.Preinstalled -> R.string.bundle_type_preinstalled
-                                            BundleSourceType.Remote -> R.string.bundle_type_remote
-                                            else -> R.string.bundle_type_local
-                                        }
-                                    )
+                                )
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
                                     Text(
-                                        text = stringResource(
-                                            R.string.patch_profile_bundle_header,
-                                            displayName,
-                                            patchCountText
-                                        ),
+                                        text = displayName,
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
@@ -325,6 +402,9 @@ fun PatchProfilesScreen(
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.outline
                                     )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Divider(color = MaterialTheme.colorScheme.outlineVariant)
+                                    Spacer(modifier = Modifier.height(4.dp))
                                     if (detail.type == BundleSourceType.Local) {
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Row(
@@ -340,82 +420,84 @@ fun PatchProfilesScreen(
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                             if (!selectionActive) {
-                                                Text(
-                                                    text = stringResource(R.string.patch_profile_bundle_change_uid),
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.primary,
-                                                    modifier = Modifier
-                                                        .clip(RoundedCornerShape(8.dp))
-                                                        .clickable {
-                                                            changeUidTarget = ChangeUidTarget(
-                                                                profileId = profile.id,
-                                                                bundleUid = detail.uid,
-                                                                bundleName = detail.displayName
-                                                                    ?: detail.uid.toString()
-                                                            )
-                                                        }
-                                                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                                                )
+                                                ProfileActionText(
+                                                    text = stringResource(R.string.patch_profile_bundle_change_uid)
+                                                ) {
+                                                    changeUidTarget = ChangeUidTarget(
+                                                        profileId = profile.id,
+                                                        bundleUid = detail.uid,
+                                                        bundleName = detail.displayName
+                                                            ?: detail.uid.toString()
+                                                    )
+                                                }
                                             }
                                         }
                                     }
-                                    Text(
-                                        text = detail.patches.joinToString(", "),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                detail.patches.forEachIndexed { index, patchName ->
+                                    val optionList = detail.options[patchName]
+                                        ?: detail.options[patchName.trim()]
+                                        ?: detail.options.entries.firstOrNull { it.key.equals(patchName, ignoreCase = true) }?.value
+                                        ?: emptyList()
+                                    val hasOptions = optionList.isNotEmpty()
+                                    Column(
+                                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                                        modifier = Modifier
+                                            .then(
+                                                if (hasOptions) Modifier.clickable {
+                                                    optionDialogData = OptionDialogData(
+                                                        patchName = patchName,
+                                                        entries = optionList
+                                                    )
+                                                } else Modifier
+                                            )
+                                    ) {
+                                        Text(
+                                            text = patchName,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        if (hasOptions) {
+                                            Text(
+                                                text = stringResource(R.string.patch_profile_view_options),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    }
+                                    if (index != detail.patches.lastIndex) {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                    }
                                 }
                             }
                         }
                     }
-                },
-                trailingContent = {
-                    Column(horizontalAlignment = Alignment.End) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = stringResource(
-                                    if (expanded) R.string.patch_profile_show_less
-                                    else R.string.patch_profile_show_more
-                                ),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .clickable(enabled = !selectionActive) {
-                                        expandedProfiles[profile.id] = !expanded
-                                    }
-                                    .padding(horizontal = 8.dp, vertical = 2.dp)
-                            )
-                        }
-                        if (!selectionActive) {
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = stringResource(R.string.patch_profile_rename),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .clickable {
-                                        renameProfileId = profile.id
-                                        renameProfileName = profile.name
-                                    }
-                                    .padding(horizontal = 8.dp, vertical = 2.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        if (loadingProfileId == profile.id) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
-                            )
-                        }
+                }
+            }
+            }
+        }
+    }
+
+    optionDialogData?.let { data ->
+        AlertDialog(
+            onDismissRequest = { optionDialogData = null },
+            confirmButton = {
+                TextButton(onClick = { optionDialogData = null }) {
+                    Text(stringResource(R.string.close))
+                }
+            },
+            title = { Text(stringResource(R.string.patch_profile_patch_options_title, data.patchName)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    data.entries.forEach { entry ->
+                        Text(
+                            text = "${entry.label}: ${entry.value}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
-            )
-        }
+            }
+        )
     }
 
     blockedProfile?.let {
@@ -439,4 +521,22 @@ fun PatchProfilesScreen(
             }
         )
     }
+}
+
+
+@Composable
+private fun ProfileActionText(
+    text: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall,
+        color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(enabled = enabled) { onClick() }
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    )
 }

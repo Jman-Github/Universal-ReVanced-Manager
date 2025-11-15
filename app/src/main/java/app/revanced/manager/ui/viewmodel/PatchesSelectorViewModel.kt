@@ -2,10 +2,9 @@ package app.revanced.manager.ui.viewmodel
 
 import android.app.Application
 import android.util.Log
-import androidx.compose.runtime.MutableIntState
+import androidx.annotation.StringRes
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -51,22 +50,26 @@ import kotlinx.collections.immutable.toPersistentSet
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
+import kotlin.collections.ArrayDeque
 
 @OptIn(SavedStateHandleSaveableApi::class)
 class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.ViewModelParams) :
     ViewModel(), KoinComponent {
     private val app: Application = get()
     private val savedStateHandle: SavedStateHandle = get()
-    private val prefs: PreferencesManager = get()
+    val prefs: PreferencesManager = get()
     private val patchBundleRepository: PatchBundleRepository = get()
+    val missingPatchNames: List<String>? = input.missingPatchNames
     private val patchProfileRepository: PatchProfileRepository = get()
 
     private val packageName = input.app.packageName
@@ -78,8 +81,9 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
     var allowUniversalPatches by mutableStateOf(true)
         private set
 
-    val allowIncompatiblePatches =
-        get<PreferencesManager>().disablePatchVersionCompatCheck.getBlocking()
+    var allowIncompatiblePatches by mutableStateOf(prefs.disablePatchVersionCompatCheck.getBlocking())
+        private set
+    private val suggestedVersionSafeguardEnabled = prefs.suggestedVersionSafeguard.getBlocking()
     private val allowUniversalPatchesFlow = prefs.disableUniversalPatchCheck.flow
     val bundlesFlow =
         patchBundleRepository.scopedBundleInfoFlow(packageName, input.app.version)
@@ -119,10 +123,16 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
             }
         }
 
-    private val defaultPatchSelection = bundlesFlow.map { bundles ->
-        bundles.toPatchSelection(allowIncompatiblePatches) { _, patch -> patch.include }
-            .toPersistentPatchSelection()
-    }
+    private val defaultPatchSelection = bundlesFlow
+        .map { bundles ->
+            bundles.toPatchSelection(allowIncompatiblePatches) { _, patch -> patch.include }
+                .toPersistentPatchSelection()
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = persistentMapOf()
+        )
 
     private var currentDefaultSelection: PersistentPatchSelection = persistentMapOf()
 
@@ -130,7 +140,28 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         selection.values.sumOf { it.size }
     }
 
+    private val filterState = mutableStateOf(resolveInitialFilter(savedStateHandle))
+    var filter: Int
+        get() = filterState.value
+        private set(value) {
+            filterState.value = value
+            savedStateHandle["filter"] = value
+        }
+
     init {
+        viewModelScope.launch {
+            prefs.disablePatchVersionCompatCheck.flow
+                .distinctUntilChanged()
+                .collect { allow ->
+                    allowIncompatiblePatches = allow
+                    filter = if (allow) {
+                        filter or SHOW_INCOMPATIBLE
+                    } else {
+                        filter and SHOW_INCOMPATIBLE.inv()
+                    }
+                }
+        }
+
         allowUniversalPatches = prefs.disableUniversalPatchCheck.getBlocking()
 
         viewModelScope.launch {
@@ -200,14 +231,6 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
 
     val compatibleVersions = mutableStateListOf<String>()
 
-    private val filterState = mutableIntStateOf(resolveInitialFilter(savedStateHandle))
-    var filter: Int
-        get() = filterState.intValue
-        private set(value) {
-            filterState.intValue = value
-            savedStateHandle["filter"] = value
-        }
-
     // This is for the required options screen.
     private val requiredOptsPatchesDeferred = viewModelScope.async(start = CoroutineStart.LAZY) {
         bundlesFlow.first().map { bundle ->
@@ -223,6 +246,24 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         }.filter { (_, patches) -> patches.isNotEmpty() }
     }
     val requiredOptsPatches = flow { emit(requiredOptsPatchesDeferred.await()) }
+
+    var canUndo by mutableStateOf(false)
+        private set
+    var canRedo by mutableStateOf(false)
+        private set
+
+    private data class SelectionSnapshot(
+        val selection: PersistentPatchSelection?,
+        val options: Options
+    )
+
+    private data class HistoryEntry(
+        val snapshot: SelectionSnapshot,
+        val description: String
+    )
+
+    private val history = ArrayDeque<HistoryEntry>()
+    private val future = ArrayDeque<HistoryEntry>()
 
     fun selectionIsValid(bundles: List<PatchBundleInfo.Scoped>) = bundles.any { bundle ->
         bundle.patchSequence(allowIncompatiblePatches).any { patch ->
@@ -242,7 +283,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
 
         val baseSelection = customPatchSelection ?: run {
             if (currentDefaultSelection.isNotEmpty()) currentDefaultSelection
-            else defaultPatchSelection.first()
+            else defaultPatchSelection.value ?: defaultPatchSelection.first()
         }
 
         val newPatches = baseSelection[bundle]?.let { patches ->
@@ -256,6 +297,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
     }
 
     fun reset() {
+        recordSnapshot(actionLabel(R.string.patch_selection_action_all_defaults))
         patchOptions.clear()
         customPatchSelection = null
         hasModifiedSelection = false
@@ -263,16 +305,71 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
     }
 
     fun deselectAll() {
+        recordSnapshot(actionLabel(R.string.patch_selection_action_deselect_all))
         hasModifiedSelection = true
         customPatchSelection = persistentMapOf()
         patchOptions.clear()
         app.toast(app.getString(R.string.patch_selection_deselected_all_toast))
     }
 
+    fun selectAll() {
+        if (currentBundles.isEmpty()) return
+
+        val selections = currentBundles
+            .associate { bundle ->
+                bundle.uid to bundle.patchSequence(allowIncompatiblePatches)
+                    .map(PatchInfo::name)
+                    .toPersistentSet()
+            }
+            .filterValues { it.isNotEmpty() }
+
+        if (selections.isEmpty()) {
+            app.toast(app.getString(R.string.patch_selection_select_all_empty_toast))
+            return
+        }
+
+        recordSnapshot(actionLabel(R.string.patch_selection_action_select_all))
+        hasModifiedSelection = true
+        customPatchSelection = selections.toPersistentMap()
+        app.toast(app.getString(R.string.patch_selection_selected_all_toast))
+    }
+
+    fun selectBundle(bundleUid: Int, bundleName: String) = viewModelScope.launch {
+        val bundle = currentBundles.firstOrNull { it.uid == bundleUid }
+        if (bundle == null) {
+            app.toast(app.getString(R.string.patch_selection_select_bundle_empty_toast, bundleName))
+            return@launch
+        }
+
+        val patches = bundle.patchSequence(allowIncompatiblePatches)
+            .map(PatchInfo::name)
+            .toPersistentSet()
+
+        if (patches.isEmpty()) {
+            app.toast(app.getString(R.string.patch_selection_select_bundle_empty_toast, bundleName))
+            return@launch
+        }
+
+        val baseSelection = customPatchSelection ?: run {
+            if (currentDefaultSelection.isNotEmpty()) currentDefaultSelection
+            else defaultPatchSelection.value ?: defaultPatchSelection.first()
+        }
+
+        recordSnapshot(actionLabel(R.string.patch_selection_action_select_bundle, bundleName))
+        hasModifiedSelection = true
+        customPatchSelection = baseSelection.put(bundleUid, patches)
+        app.toast(
+            app.getString(
+                R.string.patch_selection_selected_bundle_toast,
+                bundleName
+            )
+        )
+    }
+
     fun deselectBundle(bundleUid: Int, bundleName: String) = viewModelScope.launch {
         val baseSelection = customPatchSelection ?: run {
             if (currentDefaultSelection.isNotEmpty()) currentDefaultSelection
-            else defaultPatchSelection.first()
+            else defaultPatchSelection.value ?: defaultPatchSelection.first()
         }
 
         val selectedPatches = baseSelection[bundleUid] ?: persistentSetOf()
@@ -286,12 +383,36 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
             return@launch
         }
 
+        recordSnapshot(actionLabel(R.string.patch_selection_action_deselect_bundle, bundleName))
         hasModifiedSelection = true
         customPatchSelection = baseSelection.put(bundleUid, persistentSetOf())
         patchOptions.remove(bundleUid)
         app.toast(
             app.getString(
                 R.string.patch_selection_deselected_bundle_toast,
+                bundleName
+            )
+        )
+    }
+
+    fun resetBundleToDefaults(bundleUid: Int, bundleName: String) = viewModelScope.launch {
+        val defaultSelection = currentDefaultSelection[bundleUid] ?: persistentSetOf()
+        val baseSelection = customPatchSelection ?: run {
+            if (currentDefaultSelection.isNotEmpty()) currentDefaultSelection
+            else defaultPatchSelection.value ?: defaultPatchSelection.first()
+        }
+
+        recordSnapshot(actionLabel(R.string.patch_selection_action_bundle_defaults, bundleName))
+        hasModifiedSelection = true
+        customPatchSelection = if (defaultSelection.isEmpty()) {
+            baseSelection.remove(bundleUid)
+        } else {
+            baseSelection.put(bundleUid, defaultSelection)
+        }
+        patchOptions.remove(bundleUid)
+        app.toast(
+            app.getString(
+                R.string.patch_selection_reset_bundle_toast,
                 bundleName
             )
         )
@@ -499,13 +620,70 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         val stored = handle.get<Any?>("filter")
         val resolved = when (stored) {
             is Int -> stored
-            is MutableIntState -> stored.intValue
-            is MutableState<*> -> (stored.value as? Int) ?: SHOW_UNIVERSAL
-            else -> SHOW_UNIVERSAL
+            is MutableState<*> -> defaultFilterFlags()
+            else -> defaultFilterFlags()
         }
         handle["filter"] = resolved
         return resolved
     }
+
+    fun undoAction() {
+        val entry = history.removeLastOrNull() ?: return
+        future.addLast(HistoryEntry(currentSnapshot(), entry.description))
+        applySnapshot(entry.snapshot)
+        updateHistoryState()
+        app.toast(app.getString(R.string.patch_selection_history_undo, entry.description))
+    }
+
+    fun redoAction() {
+        val entry = future.removeLastOrNull() ?: return
+        history.addLast(HistoryEntry(currentSnapshot(), entry.description))
+        applySnapshot(entry.snapshot)
+        updateHistoryState()
+        app.toast(app.getString(R.string.patch_selection_history_redo, entry.description))
+    }
+
+    private fun recordSnapshot(actionDescription: String) {
+        history.addLast(HistoryEntry(currentSnapshot(), actionDescription))
+        future.clear()
+        updateHistoryState()
+    }
+
+    private fun currentSnapshot() = SelectionSnapshot(
+        customPatchSelection,
+        patchOptions.toOptions()
+    )
+
+    private fun applySnapshot(snapshot: SelectionSnapshot) {
+        customPatchSelection = snapshot.selection
+        patchOptions.clear()
+        snapshot.options.forEach { (bundleUid, patchMap) ->
+            val persistent = patchMap.mapValues { (_, options) ->
+                options.toPersistentMap()
+            }.toPersistentMap()
+            patchOptions[bundleUid] = persistent
+        }
+        hasModifiedSelection = true
+    }
+
+    private fun updateHistoryState() {
+        canUndo = history.isNotEmpty()
+        canRedo = future.isNotEmpty()
+    }
+
+    private fun PersistentOptions.toOptions(): Options =
+        mapValues { (_, bundleOptions) ->
+            bundleOptions.mapValues { (_, options) -> options.toMap() }.toMap()
+        }.toMap()
+
+    private fun actionLabel(@StringRes labelRes: Int, vararg args: Any?): String =
+        app.getString(labelRes, *args)
+
+    private fun defaultFilterFlags(): Int =
+        if (allowIncompatiblePatches || !suggestedVersionSafeguardEnabled)
+            SHOW_UNIVERSAL or SHOW_INCOMPATIBLE
+        else
+            SHOW_UNIVERSAL
 
     companion object {
         const val SHOW_INCOMPATIBLE = 1 // 2^0
@@ -564,4 +742,3 @@ private fun PersistentPatchSelection.pruneTo(
     if (filtered.isEmpty()) return persistentMapOf()
     return filtered.toPersistentMap()
 }
-

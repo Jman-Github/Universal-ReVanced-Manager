@@ -99,8 +99,10 @@ fun AppliedPatchesDialog(
                         )
 
                         bundle.patchInfos.forEachIndexed { index, patch ->
-                            var expandVersions by rememberSaveable(bundle.uid, patch.name, "versions") { mutableStateOf(false) }
-                            var expandOptions by rememberSaveable(bundle.uid, patch.name, "options") { mutableStateOf(false) }
+                            val versionKey = "versions-$index"
+                            val optionsKey = "options-$index"
+                            var expandVersions by rememberSaveable(bundle.uid, patch.name, versionKey) { mutableStateOf(false) }
+                            var expandOptions by rememberSaveable(bundle.uid, patch.name, optionsKey) { mutableStateOf(false) }
 
                             PatchItem(
                                 patch = patch,

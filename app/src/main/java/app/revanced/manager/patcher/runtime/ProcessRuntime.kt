@@ -72,7 +72,12 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
         // Get the location of our own Apk.
         val managerBaseApk = pm.getPackageInfo(context.packageName)!!.applicationInfo!!.sourceDir
 
-        val limit = "${prefs.patcherProcessMemoryLimit.get()}M"
+        val requestedLimit = prefs.patcherProcessMemoryLimit.get()
+        val sanitizedLimit = MemoryLimitConfig.clampLimitMb(context, requestedLimit)
+        if (sanitizedLimit != requestedLimit) {
+            Log.w(tag, "Requested process memory limit ${requestedLimit}MB exceeded device capabilities; clamped to ${sanitizedLimit}MB")
+        }
+        val limit = "${sanitizedLimit}M"
         val propOverride = resolvePropOverride(context)?.absolutePath
             ?: throw Exception("Couldn't find prop override library")
 

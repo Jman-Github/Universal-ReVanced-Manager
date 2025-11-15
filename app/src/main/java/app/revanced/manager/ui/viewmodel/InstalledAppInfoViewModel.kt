@@ -24,6 +24,9 @@ import app.revanced.manager.domain.installer.InstallerManager
 import app.revanced.manager.domain.installer.RootInstaller
 import app.revanced.manager.domain.installer.ShizukuInstaller
 import app.revanced.manager.domain.repository.InstalledAppRepository
+import app.revanced.manager.domain.repository.PatchBundleRepository
+import app.revanced.manager.domain.repository.remapAndExtractSelection
+import app.revanced.manager.domain.repository.toSignatureMap
 import app.revanced.manager.service.InstallService
 import app.revanced.manager.service.UninstallService
 import app.revanced.manager.util.PM
@@ -36,6 +39,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.first
 import java.io.File
 import java.io.IOException
 import org.koin.core.component.KoinComponent
@@ -47,6 +51,7 @@ class InstalledAppInfoViewModel(
     private val context: Application by inject()
     private val pm: PM by inject()
     private val installedAppRepository: InstalledAppRepository by inject()
+    private val patchBundleRepository: PatchBundleRepository by inject()
     val rootInstaller: RootInstaller by inject()
     private val installerManager: InstallerManager by inject()
     private val shizukuInstaller: ShizukuInstaller by inject()
@@ -75,11 +80,31 @@ class InstalledAppInfoViewModel(
             if (app != null) {
                 isMounted = rootInstaller.isAppMounted(app.currentPackageName)
                 refreshAppState(app)
-                appliedPatches = withContext(Dispatchers.IO) {
-                    installedAppRepository.getAppliedPatches(app.currentPackageName)
-                }
+                appliedPatches = resolveAppliedSelection(app)
             }
         }
+    }
+
+    private suspend fun resolveAppliedSelection(app: InstalledApp) = withContext(Dispatchers.IO) {
+        val selection = installedAppRepository.getAppliedPatches(app.currentPackageName)
+        if (selection.isNotEmpty()) return@withContext selection
+        val payload = app.selectionPayload ?: return@withContext emptyMap()
+        val sources = patchBundleRepository.sources.first()
+        val sourceIds = sources.map { it.uid }.toSet()
+        val signatures = patchBundleRepository.bundleInfoFlow.first().toSignatureMap()
+        val (remappedPayload, remappedSelection) = payload.remapAndExtractSelection(sources, signatures)
+        val persistableSelection = remappedSelection.filterKeys { it in sourceIds }
+        if (persistableSelection.isNotEmpty()) {
+            installedAppRepository.addOrUpdate(
+                app.currentPackageName,
+                app.originalPackageName,
+                app.version,
+                app.installType,
+                persistableSelection,
+                remappedPayload
+            )
+        }
+        remappedSelection
     }
 
     fun launch() {
@@ -454,17 +479,20 @@ class InstalledAppInfoViewModel(
                                 return@launch
                             }
 
-                            val selection = appliedPatches ?: withContext(Dispatchers.IO) {
-                                installedAppRepository.getAppliedPatches(currentApp.currentPackageName)
-                            }
+                            val selection = appliedPatches ?: resolveAppliedSelection(currentApp)
 
                             withContext(Dispatchers.IO) {
+                                val sourcesSnapshot = patchBundleRepository.sources.first()
+                                val availableIds = sourcesSnapshot.map { it.uid }.toSet()
+                                val persistableSelection = selection.filterKeys { it in availableIds }
+                                val payload = patchBundleRepository.snapshotSelection(selection)
                                 installedAppRepository.addOrUpdate(
                                     currentApp.currentPackageName,
                                     currentApp.originalPackageName,
                                     currentApp.version,
                                     InstallType.SAVED,
-                                    selection
+                                    persistableSelection,
+                                    payload
                                 )
                             }
 

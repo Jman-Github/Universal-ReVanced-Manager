@@ -18,7 +18,8 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -38,18 +39,21 @@ import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -78,12 +82,14 @@ import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.ColumnWithScrollbar
 import app.revanced.manager.ui.component.GroupHeader
 import app.revanced.manager.ui.component.settings.BooleanItem
+import app.revanced.manager.patcher.runtime.MemoryLimitConfig
 import app.revanced.manager.ui.component.settings.IntegerItem
 import app.revanced.manager.ui.component.settings.SafeguardBooleanItem
 import app.revanced.manager.ui.component.settings.SettingsListItem
 import app.revanced.manager.domain.installer.InstallerManager
 import app.revanced.manager.ui.viewmodel.AdvancedSettingsViewModel
 import app.revanced.manager.util.ExportNameFormatter
+import app.revanced.manager.util.consumeHorizontalScroll
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.transparentListItemColors
 import app.revanced.manager.util.withHapticFeedback
@@ -369,6 +375,13 @@ fun AdvancedSettingsScreen(
                 description = R.string.patch_selection_safeguard_description,
                 confirmationText = R.string.patch_selection_safeguard_confirmation
             )
+            SafeguardBooleanItem(
+                preference = viewModel.prefs.disablePatchSelectionConfirmations,
+                coroutineScope = viewModel.viewModelScope,
+                headline = R.string.disable_patch_selection_confirmations,
+                description = R.string.disable_patch_selection_confirmations_description,
+                confirmationText = R.string.disable_patch_selection_confirmations_warning
+            )
             BooleanItem(
                 preference = viewModel.prefs.disableUniversalPatchCheck,
                 coroutineScope = viewModel.viewModelScope,
@@ -412,11 +425,20 @@ fun AdvancedSettingsScreen(
                 headline = R.string.process_runtime,
                 description = R.string.process_runtime_description,
             )
+            val recommendedProcessLimit = remember { 700 }
             IntegerItem(
                 preference = viewModel.prefs.patcherProcessMemoryLimit,
                 coroutineScope = viewModel.viewModelScope,
                 headline = R.string.process_runtime_memory_limit,
                 description = R.string.process_runtime_memory_limit_description,
+                neutralButtonLabel = stringResource(R.string.reset_to_recommended),
+                neutralValueProvider = { recommendedProcessLimit }
+            )
+            BooleanItem(
+                preference = viewModel.prefs.autoCollapsePatcherSteps,
+                coroutineScope = viewModel.viewModelScope,
+                headline = R.string.patcher_auto_collapse_steps,
+                description = R.string.patcher_auto_collapse_steps_description,
             )
 
             GroupHeader(stringResource(R.string.app_exporting))
@@ -614,6 +636,8 @@ private fun ExportNameFormatDialog(
     )
 }
 
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CustomInstallerManagerDialog(
     installerManager: InstallerManager,
@@ -621,35 +645,45 @@ private fun CustomInstallerManagerDialog(
     installTarget: InstallerManager.InstallTarget,
     onDismiss: () -> Unit
 ) {
-    val scrollState = rememberScrollState()
-    val builtinComponents = remember(installTarget) {
+    val customValues by viewModel.prefs.installerCustomComponents.getAsState()
+    val hiddenValues by viewModel.prefs.installerHiddenComponents.getAsState()
+    val customComponentNames = remember(customValues) {
+        customValues.mapNotNull(ComponentName::unflattenFromString).toSet()
+    }
+    val hiddenComponentNames = remember(hiddenValues) {
+        hiddenValues.mapNotNull(ComponentName::unflattenFromString).toSet()
+    }
+    val builtinComponents = remember(installTarget, customComponentNames, hiddenComponentNames) {
         val autoComponents = installerManager.listEntries(installTarget, includeNone = true)
             .mapNotNull { (it.token as? InstallerManager.Token.Component)?.componentName }
+            .filterNot { it in customComponentNames || it in hiddenComponentNames }
             .toMutableSet()
-        autoComponents += ComponentName("com.google.android.packageinstaller", "com.android.packageinstaller.PackageInstallerActivity")
+        autoComponents += ComponentName(
+            "com.google.android.packageinstaller",
+            "com.android.packageinstaller.PackageInstallerActivity"
+        )
         autoComponents
     }
-    AlertDialog(
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val coroutineScope = rememberCoroutineScope()
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.close))
+        sheetState = sheetState
+    ) {
+        CustomInstallerContent(
+            installerManager = installerManager,
+            viewModel = viewModel,
+            installTarget = installTarget,
+            customComponents = customValues,
+            builtinComponents = builtinComponents,
+            onClose = {
+                coroutineScope.launch {
+                    sheetState.hide()
+                    onDismiss()
+                }
             }
-        },
-        title = { Text(stringResource(R.string.installer_custom_header)) },
-        text = {
-            CustomInstallerContent(
-                installerManager = installerManager,
-                viewModel = viewModel,
-                installTarget = installTarget,
-                builtinComponents = builtinComponents,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 520.dp)
-                    .verticalScroll(scrollState)
-            )
-        }
-    )
+        )
+    }
 }
 
 @Composable
@@ -657,14 +691,15 @@ private fun CustomInstallerContent(
     installerManager: InstallerManager,
     viewModel: AdvancedSettingsViewModel,
     installTarget: InstallerManager.InstallTarget,
+    customComponents: Set<String>,
     builtinComponents: Set<ComponentName>,
+    onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val customValues by viewModel.prefs.installerCustomComponents.getAsState()
-    val savedComponents = remember(customValues) { customValues.toSet() }
-    val savedEntries = remember(customValues, installTarget) {
-        customValues.mapNotNull { flattened ->
+    val savedComponents = remember(customComponents) { customComponents.toSet() }
+    val savedEntries = remember(customComponents, installTarget) {
+        customComponents.mapNotNull { flattened ->
             ComponentName.unflattenFromString(flattened)?.let { component ->
                 installerManager.describeEntry(InstallerManager.Token.Component(component), installTarget)
                     ?.let { component to it }
@@ -677,6 +712,14 @@ private fun CustomInstallerContent(
     var isSearching by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     val trimmedInput = remember(inputValue) { inputValue.trim() }
+    var selectedTab by rememberSaveable { mutableStateOf(InstallerTab.Saved) }
+    val scrollState = rememberScrollState()
+    val autoSavedEntries = remember(builtinComponents, installTarget) {
+        builtinComponents.mapNotNull { component ->
+            installerManager.describeEntry(InstallerManager.Token.Component(component), installTarget)
+                ?.let { component to it }
+        }.sortedBy { (_, entry) -> entry.label.lowercase() }
+    }
 
     fun handleLookup(packageName: String) {
         coroutineScope.launch {
@@ -741,9 +784,26 @@ private fun CustomInstallerContent(
     }
 
     Column(
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = modifier.fillMaxWidth()
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .verticalScroll(scrollState)
     ) {
+        Text(
+            text = stringResource(R.string.installer_custom_header),
+            style = MaterialTheme.typography.titleLarge
+        )
+        TabRow(selectedTabIndex = selectedTab.ordinal) {
+            InstallerTab.entries.forEachIndexed { index, tab ->
+                Tab(
+                    selected = selectedTab.ordinal == index,
+                    onClick = { selectedTab = tab },
+                    text = { Text(stringResource(tab.titleRes)) }
+                )
+            }
+        }
+
         @Composable
         fun StatusBadge(text: String, modifier: Modifier = Modifier) {
             Surface(
@@ -761,195 +821,278 @@ private fun CustomInstallerContent(
             }
         }
 
-        OutlinedTextField(
-            value = inputValue,
-            onValueChange = {
-                inputValue = it
-            },
-            label = { Text(stringResource(R.string.installer_custom_input_label)) },
-            supportingText = { Text(stringResource(R.string.installer_custom_package_hint)) },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        FilledTonalButton(
-            onClick = { handleLookup(trimmedInput) },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(stringResource(R.string.installer_custom_lookup))
-        }
-
-        Text(
-            text = stringResource(R.string.installer_custom_saved_header),
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        if (savedEntries.isEmpty()) {
-            Text(
-                text = stringResource(R.string.installer_custom_empty),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        } else {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                savedEntries.forEach { (component, entry) ->
-                    val isBuiltinSaved = component in builtinComponents ||
-                        component.packageName == "com.google.android.packageinstaller"
-                    val badgeText = if (isBuiltinSaved) {
-                        stringResource(R.string.installer_custom_builtin_indicator)
-                    } else {
-                        stringResource(R.string.installer_custom_saved_indicator)
-                    }
-                    val supportingLines = buildList {
-                        entry.description?.takeIf { it.isNotBlank() }?.let { add(it) }
-                        entry.availability.reason?.let { add(context.getString(it)) }
-                        add(component.flattenToString())
-                    }
-                    ListItem(
-                        headlineContent = {
-                            Column(
-                                verticalArrangement = Arrangement.spacedBy(4.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(end = 4.dp),
-                                    horizontalArrangement = Arrangement.End
-                                ) {
-                                    StatusBadge(badgeText)
-                                }
-                                Text(
-                                    text = entry.label,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.basicMarquee()
-                                )
-                            }
-                        },
-                        supportingContent = {
-                            supportingLines.forEach { line ->
-                                Text(line, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        },
-                        leadingContent = entry.icon?.let { drawable ->
-                            {
-                                InstallerIcon(
-                                    drawable = drawable,
-                                    selected = false,
-                                    enabled = entry.availability.available
-                                )
-                            }
-                        },
-                        trailingContent = {
-                            IconButton(onClick = { handleRemove(component) }) {
-                                Icon(
-                                    Icons.Outlined.Delete,
-                                    contentDescription = stringResource(R.string.installer_custom_action_remove)
-                                )
-                            }
-                        }
+        when (selectedTab) {
+            InstallerTab.Saved -> {
+                Text(
+                    text = stringResource(R.string.installer_custom_saved_header),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = stringResource(R.string.installer_custom_saved_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (savedEntries.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.installer_custom_empty),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                }
-            }
-        }
-
-        if (lookupResults.isNotEmpty()) {
-            val headerText = stringResource(
-                R.string.installer_custom_candidates_title,
-                lastQuery ?: ""
-            )
-            Text(
-                text = headerText,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                lookupResults.forEach { entry ->
-                    val token = entry.token as? InstallerManager.Token.Component ?: return@forEach
-                    val flattened = token.componentName.flattenToString()
-                    val isSaved = flattened in savedComponents
-                    val isBuiltin = token.componentName in builtinComponents ||
-                        token.componentName.packageName == "com.google.android.packageinstaller"
-                    val badgeText = when {
-                        isSaved -> stringResource(R.string.installer_custom_saved_indicator)
-                        isBuiltin -> stringResource(R.string.installer_custom_builtin_indicator)
-                        else -> null
-                    }
-                    val supportingLines = buildList {
-                        entry.description?.takeIf { it.isNotBlank() }?.let { add(it) }
-                        entry.availability.reason?.let { add(context.getString(it)) }
-                        add(flattened)
-                    }
-                    ListItem(
-                        modifier = Modifier
-                            .alpha(if (isSaved || isBuiltin) 0.5f else 1f)
-                            .clickable(
-                                enabled = !isSaved && !isBuiltin && entry.availability.available
-                            ) {
-                                if (!isSaved && !isBuiltin) handleAdd(token.componentName)
-                            },
-                        headlineContent = {
-                            Column(
-                                verticalArrangement = Arrangement.spacedBy(4.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                if (badgeText != null) {
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        savedEntries.forEach { (component, entry) ->
+                            val isBuiltinSaved = component in builtinComponents ||
+                                component.packageName == "com.google.android.packageinstaller"
+                            val badgeText = when {
+                                isBuiltinSaved -> stringResource(R.string.installer_custom_builtin_indicator)
+                                component.flattenToString() in savedComponents -> stringResource(R.string.installer_custom_saved_indicator)
+                                else -> null
+                            }
+                            val supportingLines = buildList {
+                                entry.description?.takeIf { it.isNotBlank() }?.let { add(it) }
+                                entry.availability.reason?.let { add(context.getString(it)) }
+                                add(component.flattenToString())
+                            }
+                            ListItem(
+                                headlineContent = {
                                     Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(end = 4.dp),
-                                        horizontalArrangement = Arrangement.End
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        StatusBadge(badgeText)
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            val labelScrollState = rememberScrollState()
+                                            Text(
+                                                text = entry.label,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier
+                                                    .consumeHorizontalScroll(labelScrollState)
+                                                    .horizontalScroll(labelScrollState)
+                                            )
+                                        }
+                                        badgeText?.let {
+                                            StatusBadge(it)
+                                        }
+                                    }
+                                },
+                                supportingContent = {
+                                    supportingLines.forEach { line ->
+                                        Text(line, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                },
+                                leadingContent = entry.icon?.let { drawable ->
+                                    {
+                                        InstallerIcon(
+                                            drawable = drawable,
+                                            selected = false,
+                                            enabled = entry.availability.available
+                                        )
+                                    }
+                                },
+                                trailingContent = {
+                                    IconButton(onClick = { handleRemove(component) }) {
+                                        Icon(
+                                            Icons.Outlined.Delete,
+                                            contentDescription = stringResource(R.string.installer_custom_action_remove)
+                                        )
                                     }
                                 }
-                                Text(
-                                    text = entry.label,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.basicMarquee()
-                                )
-                            }
-                        },
-                        supportingContent = {
-                            supportingLines.forEach { line ->
-                                Text(line, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        },
-                        leadingContent = entry.icon?.let { drawable ->
-                            {
-                                InstallerIcon(
-                                    drawable = drawable,
-                                    selected = false,
-                                    enabled = entry.availability.available
-                                )
-                            }
-                        },
-                        trailingContent = {
-                            if (!isSaved && !isBuiltin) {
-                                IconButton(
-                                    onClick = { handleAdd(token.componentName) },
-                                    enabled = entry.availability.available
-                                ) {
-                                    Icon(
-                                        Icons.Outlined.Add,
-                                        contentDescription = stringResource(R.string.installer_custom_action_add)
-                                    )
-                                }
-                            }
+                            )
                         }
+                    }
+                }
+            }
+            InstallerTab.AutoSaved -> {
+                Text(
+                    text = stringResource(R.string.installer_custom_tab_auto_saved),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = stringResource(R.string.installer_custom_auto_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (autoSavedEntries.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.installer_custom_empty),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        autoSavedEntries.forEach { (component, entry) ->
+                            val supportingLines = buildList {
+                                entry.description?.takeIf { it.isNotBlank() }?.let { add(it) }
+                                entry.availability.reason?.let { add(context.getString(it)) }
+                                add(component.flattenToString())
+                            }
+                            ListItem(
+                                headlineContent = {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            val labelScrollState = rememberScrollState()
+                                            Text(
+                                                text = entry.label,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier
+                                                    .consumeHorizontalScroll(labelScrollState)
+                                                    .horizontalScroll(labelScrollState)
+                                            )
+                                        }
+                                        StatusBadge(stringResource(R.string.installer_custom_builtin_indicator))
+                                    }
+                                },
+                                supportingContent = {
+                                    supportingLines.forEach { line ->
+                                        Text(line, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                },
+                                leadingContent = entry.icon?.let { drawable ->
+                                    {
+                                        InstallerIcon(
+                                            drawable = drawable,
+                                            selected = false,
+                                            enabled = entry.availability.available
+                                        )
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+            InstallerTab.Discover -> {
+                OutlinedTextField(
+                    value = inputValue,
+                    onValueChange = { inputValue = it },
+                    label = { Text(stringResource(R.string.installer_custom_input_label)) },
+                    supportingText = { Text(stringResource(R.string.installer_custom_package_hint)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                FilledTonalButton(
+                    onClick = { handleLookup(trimmedInput) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(stringResource(R.string.installer_custom_lookup))
+                }
+
+                if (lookupResults.isNotEmpty()) {
+                    val headerText = stringResource(
+                        R.string.installer_custom_candidates_title,
+                        lastQuery ?: ""
+                    )
+                    Text(
+                        text = headerText,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        lookupResults.forEach { entry ->
+                            val token = entry.token as? InstallerManager.Token.Component ?: return@forEach
+                            val flattened = token.componentName.flattenToString()
+                            val isSaved = flattened in savedComponents
+                            val isBuiltin = token.componentName in builtinComponents ||
+                                token.componentName.packageName == "com.google.android.packageinstaller"
+                            val badgeText = when {
+                                isSaved -> stringResource(R.string.installer_custom_saved_indicator)
+                                isBuiltin -> stringResource(R.string.installer_custom_builtin_indicator)
+                                else -> null
+                            }
+                            val supportingLines = buildList {
+                                entry.description?.takeIf { it.isNotBlank() }?.let { add(it) }
+                                entry.availability.reason?.let { add(context.getString(it)) }
+                                add(token.componentName.flattenToString())
+                            }
+                            ListItem(
+                                headlineContent = {
+                                    Column(
+                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        badgeText?.let {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(end = 4.dp),
+                                                horizontalArrangement = Arrangement.End
+                                            ) {
+                                                StatusBadge(it)
+                                            }
+                                        }
+                                        val labelScrollState = rememberScrollState()
+                                        Text(
+                                            text = entry.label,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier
+                                                .consumeHorizontalScroll(labelScrollState)
+                                                .horizontalScroll(labelScrollState)
+                                        )
+                                    }
+                                },
+                                supportingContent = {
+                                    supportingLines.forEach { line ->
+                                        Text(line, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                },
+                                leadingContent = entry.icon?.let { drawable ->
+                                    {
+                                        InstallerIcon(
+                                            drawable = drawable,
+                                            selected = false,
+                                            enabled = entry.availability.available
+                                        )
+                                    }
+                                },
+                                trailingContent = {
+                                    if (!isSaved && !isBuiltin) {
+                                        IconButton(
+                                            onClick = { handleAdd(token.componentName) },
+                                            enabled = entry.availability.available
+                                        ) {
+                                            Icon(
+                                                Icons.Outlined.Add,
+                                                contentDescription = stringResource(R.string.installer_custom_action_add)
+                                            )
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                    }
+                } else if (lastQuery != null) {
+                    Text(
+                        text = stringResource(R.string.installer_custom_lookup_none, lastQuery!!),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
-        } else if (lastQuery != null) {
-            Text(
-                text = stringResource(R.string.installer_custom_lookup_none, lastQuery!!),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        }
+
+        TextButton(
+            onClick = onClose,
+            modifier = Modifier.align(Alignment.End)
+        ) {
+            Text(stringResource(R.string.installer_custom_close))
         }
     }
+}
+
+private enum class InstallerTab(val titleRes: Int) {
+    Saved(R.string.installer_custom_tab_saved),
+    AutoSaved(R.string.installer_custom_tab_auto_saved),
+    Discover(R.string.installer_custom_tab_discover)
 }
 
 @Composable

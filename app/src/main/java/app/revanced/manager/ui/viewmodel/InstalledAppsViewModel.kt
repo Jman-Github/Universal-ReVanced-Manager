@@ -7,12 +7,18 @@ import androidx.lifecycle.viewModelScope
 import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.data.room.apps.installed.InstallType
 import app.revanced.manager.data.room.apps.installed.InstalledApp
+import app.revanced.manager.data.room.profile.PatchProfilePayload
+import app.revanced.manager.domain.bundles.PatchBundleSource
 import app.revanced.manager.domain.installer.RootInstaller
 import app.revanced.manager.domain.installer.RootServiceException
 import app.revanced.manager.domain.repository.InstalledAppRepository
+import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.util.PM
+import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.mutableStateSetOf
+import app.revanced.manager.patcher.patch.PatchBundleInfo
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
@@ -20,6 +26,7 @@ import kotlinx.coroutines.withContext
 
 class InstalledAppsViewModel(
     private val installedAppsRepository: InstalledAppRepository,
+    private val patchBundleRepository: PatchBundleRepository,
     private val pm: PM,
     private val rootInstaller: RootInstaller,
     private val filesystem: Filesystem
@@ -29,6 +36,7 @@ class InstalledAppsViewModel(
     val packageInfoMap = mutableStateMapOf<String, PackageInfo?>()
     val selectedApps = mutableStateSetOf<String>()
     val missingPackages = mutableStateSetOf<String>()
+    val bundleSummaries = mutableStateMapOf<String, List<AppBundleSummary>>()
 
     init {
         viewModelScope.launch {
@@ -70,7 +78,42 @@ class InstalledAppsViewModel(
                 selectedApps.retainAll(selectablePackages)
             }
         }
+
+        viewModelScope.launch {
+            combine(
+                apps,
+                patchBundleRepository.bundleInfoFlow,
+                patchBundleRepository.sources
+            ) { installedApps, bundleInfo, sources ->
+                Triple(installedApps, bundleInfo, sources)
+            }.collect { (installedApps, bundleInfo, sources) ->
+                val sourceMap = sources.associateBy { it.uid }
+                val packageNames = installedApps.map { it.currentPackageName }.toSet()
+
+                installedApps.forEach { app ->
+                    if (app.installType != InstallType.SAVED) {
+                        bundleSummaries.remove(app.currentPackageName)
+                        return@forEach
+                    }
+                    val selection = loadAppliedPatches(app.currentPackageName)
+                    val summaries = buildBundleSummaries(app, selection, bundleInfo, sourceMap)
+                    if (summaries.isEmpty()) {
+                        bundleSummaries.remove(app.currentPackageName)
+                    } else {
+                        bundleSummaries[app.currentPackageName] = summaries
+                    }
+                }
+
+                val stale = bundleSummaries.keys - packageNames
+                stale.forEach { bundleSummaries.remove(it) }
+            }
+        }
     }
+
+    data class AppBundleSummary(
+        val title: String,
+        val version: String?
+    )
 
     fun toggleSelection(installedApp: InstalledApp) = viewModelScope.launch {
         val packageName = installedApp.currentPackageName
@@ -170,4 +213,50 @@ class InstalledAppsViewModel(
                 else -> pm.getPackageInfo(packageName)
             }
         }
+
+    private suspend fun loadAppliedPatches(packageName: String): PatchSelection =
+        withContext(Dispatchers.IO) { installedAppsRepository.getAppliedPatches(packageName) }
+
+    private fun buildBundleSummaries(
+        app: InstalledApp,
+        selection: PatchSelection,
+        bundleInfo: Map<Int, PatchBundleInfo.Global>,
+        sourceMap: Map<Int, PatchBundleSource>
+    ): List<AppBundleSummary> {
+        val payloadBundles = app.selectionPayload?.bundles.orEmpty()
+        val summaries = mutableListOf<AppBundleSummary>()
+        val processed = mutableSetOf<Int>()
+
+        selection.keys.forEach { uid ->
+            processed += uid
+            buildSummaryEntry(uid, payloadBundles, bundleInfo, sourceMap)?.let(summaries::add)
+        }
+
+        payloadBundles.forEach { bundle ->
+            if (bundle.bundleUid in processed) return@forEach
+            buildSummaryEntry(bundle.bundleUid, payloadBundles, bundleInfo, sourceMap)?.let(summaries::add)
+        }
+
+        return summaries
+    }
+
+    private fun buildSummaryEntry(
+        uid: Int,
+        payloadBundles: List<PatchProfilePayload.Bundle>,
+        bundleInfo: Map<Int, PatchBundleInfo.Global>,
+        sourceMap: Map<Int, PatchBundleSource>
+    ): AppBundleSummary? {
+        val info = bundleInfo[uid]
+        val source = sourceMap[uid]
+        val payloadBundle = payloadBundles.firstOrNull { it.bundleUid == uid }
+
+        val title = source?.displayTitle
+            ?: payloadBundle?.displayName
+            ?: payloadBundle?.sourceName
+            ?: info?.name
+            ?: return null
+
+        val version = payloadBundle?.version?.takeUnless { it.isBlank() } ?: info?.version
+        return AppBundleSummary(title = title, version = version)
+    }
 }

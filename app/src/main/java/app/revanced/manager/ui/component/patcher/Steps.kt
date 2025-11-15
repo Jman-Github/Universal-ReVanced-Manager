@@ -21,6 +21,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,9 +54,11 @@ fun Steps(
     category: StepCategory,
     steps: List<Step>,
     stepCount: Pair<Int, Int>? = null,
-    stepProgressProvider: StepProgressProvider
+    stepProgressProvider: StepProgressProvider,
+    autoCollapseCompleted: Boolean = false
 ) {
     var expanded by rememberSaveable { mutableStateOf(true) }
+    var autoCollapsed by rememberSaveable { mutableStateOf(false) }
 
     val categoryColor by animateColorAsState(
         if (expanded) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent,
@@ -73,6 +76,19 @@ fun Steps(
             steps.any { it.state == State.FAILED } -> State.FAILED
             steps.any { it.state == State.RUNNING } -> State.RUNNING
             else -> State.WAITING
+        }
+    }
+
+    LaunchedEffect(state) {
+        if (state != State.COMPLETED) {
+            autoCollapsed = false
+        }
+    }
+
+    LaunchedEffect(autoCollapseCompleted, state) {
+        if (autoCollapseCompleted && state == State.COMPLETED && !autoCollapsed) {
+            expanded = false
+            autoCollapsed = true
         }
     }
 

@@ -1,5 +1,6 @@
 package app.revanced.manager.ui.screen
 
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
 import androidx.compose.foundation.clickable
@@ -59,12 +60,14 @@ import app.revanced.manager.ui.viewmodel.InstalledAppInfoViewModel
 import app.revanced.manager.util.APK_MIMETYPE
 import app.revanced.manager.util.ExportNameFormatter
 import app.revanced.manager.util.PatchedAppExportData
+import app.revanced.manager.util.PatchSelection
+import app.revanced.manager.util.tag
 import org.koin.compose.koinInject
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun InstalledAppInfoScreen(
-    onPatchClick: (packageName: String) -> Unit,
+    onPatchClick: (packageName: String, selection: PatchSelection?) -> Unit,
     onBackClick: () -> Unit,
     viewModel: InstalledAppInfoViewModel
 ) {
@@ -79,43 +82,52 @@ fun InstalledAppInfoScreen(
     var showUniversalBlockedDialog by rememberSaveable { mutableStateOf(false) }
     val appliedSelection = viewModel.appliedPatches
     val isInstalledOnDevice = viewModel.isInstalledOnDevice
+    val selectionPayload = viewModel.installedApp?.selectionPayload
+    val savedBundleVersions = remember(selectionPayload) {
+        selectionPayload?.bundles.orEmpty().associate { it.bundleUid to it.version }
+    }
 
-    val appliedBundles = remember(appliedSelection, bundleInfo, bundleSources, context) {
+    val appliedBundles = remember(appliedSelection, bundleInfo, bundleSources, context, savedBundleVersions) {
         if (appliedSelection.isNullOrEmpty()) return@remember emptyList<AppliedPatchBundleUi>()
 
-        appliedSelection.entries.mapNotNull { (bundleUid, patches) ->
-            if (patches.isEmpty()) return@mapNotNull null
-            val patchNames = patches.toList().sorted()
-            val info = bundleInfo[bundleUid]
-            val source = bundleSources.firstOrNull { it.uid == bundleUid }
-            val fallbackName = if (bundleUid == 0)
-                context.getString(R.string.patches_name_default)
-            else
-                context.getString(R.string.patches_name_fallback)
+        runCatching {
+            appliedSelection.entries.mapNotNull { (bundleUid, patches) ->
+                if (patches.isEmpty()) return@mapNotNull null
+                val patchNames = patches.toList().sorted()
+                val info = bundleInfo[bundleUid]
+                val source = bundleSources.firstOrNull { it.uid == bundleUid }
+                val fallbackName = if (bundleUid == 0)
+                    context.getString(R.string.patches_name_default)
+                else
+                    context.getString(R.string.patches_name_fallback)
 
-            val title = source?.displayTitle
-                ?: info?.name
-                ?: "$fallbackName (#$bundleUid)"
+                val title = source?.displayTitle
+                    ?: info?.name
+                    ?: "$fallbackName (#$bundleUid)"
 
-            val patchInfos = info?.patches
-                ?.filter { it.name in patches }
-                ?.distinctBy { it.name }
-                ?.sortedBy { it.name }
-                ?: emptyList()
+                val patchInfos = info?.patches
+                    ?.filter { it.name in patches }
+                    ?.distinctBy { it.name }
+                    ?.sortedBy { it.name }
+                    ?: emptyList()
 
-            val missingNames = patchNames.filterNot { patchName ->
-                patchInfos.any { it.name == patchName }
-            }.distinct()
+                val missingNames = patchNames.filterNot { patchName ->
+                    patchInfos.any { it.name == patchName }
+                }.distinct()
 
-            AppliedPatchBundleUi(
-                uid = bundleUid,
-                title = title,
-                version = info?.version,
-                patchInfos = patchInfos,
-                fallbackNames = missingNames,
-                bundleAvailable = info != null
-            )
-        }.sortedBy { it.title }
+                AppliedPatchBundleUi(
+                    uid = bundleUid,
+                    title = title,
+                    version = savedBundleVersions[bundleUid]?.takeUnless { it.isNullOrBlank() } ?: info?.version,
+                    patchInfos = patchInfos,
+                    fallbackNames = missingNames,
+                    bundleAvailable = info != null
+                )
+            }.sortedBy { it.title }
+        }.getOrElse { error ->
+            Log.e(tag, "Failed to build applied bundle summary", error)
+            emptyList()
+        }
     }
 
     val globalUniversalPatchNames = remember(bundleInfo) {
@@ -283,7 +295,7 @@ fun InstalledAppInfoScreen(
                                 if (!allowUniversalPatches && (appliedBundlesContainUniversal || appliedSelectionContainsUniversal)) {
                                     showUniversalBlockedDialog = true
                                 } else {
-                                    onPatchClick(installedApp.originalPackageName)
+                                    onPatchClick(installedApp.originalPackageName, appliedSelection)
                                 }
                             },
                             enabled = viewModel.rootInstaller.hasRootAccess()
@@ -301,7 +313,7 @@ fun InstalledAppInfoScreen(
                             if (!allowUniversalPatches && (appliedBundlesContainUniversal || appliedSelectionContainsUniversal)) {
                                 showUniversalBlockedDialog = true
                             } else {
-                                onPatchClick(installedApp.originalPackageName)
+                                onPatchClick(installedApp.originalPackageName, appliedSelection)
                             }
                         }
                     )
@@ -395,7 +407,7 @@ fun InstalledAppInfoScreen(
                             if (!allowUniversalPatches && (appliedBundlesContainUniversal || appliedSelectionContainsUniversal)) {
                                 showUniversalBlockedDialog = true
                             } else {
-                                onPatchClick(installedApp.originalPackageName)
+                                onPatchClick(installedApp.originalPackageName, appliedSelection)
                             }
                         }
                     )

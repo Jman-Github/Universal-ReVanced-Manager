@@ -2,14 +2,11 @@ package app.revanced.manager.ui.screen
 
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.EaseInOut
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
@@ -24,6 +21,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
@@ -35,17 +34,22 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.ClearAll
+import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.LayersClear
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
+import androidx.compose.material.icons.automirrored.outlined.PlaylistAddCheck
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.UnfoldLess
 import androidx.compose.material.icons.outlined.UnfoldMore
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.outlined.Redo
+import androidx.compose.material.icons.outlined.Undo
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material.icons.outlined.SettingsBackupRestore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Badge
@@ -57,13 +61,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScrollableTabRow
-import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -71,6 +75,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -79,9 +84,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
@@ -109,6 +115,7 @@ import app.revanced.manager.ui.viewmodel.PatchesSelectorViewModel.Companion.SHOW
 import app.revanced.manager.util.Options
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.isScrollingUp
+import kotlinx.coroutines.flow.collectLatest
 import app.revanced.manager.util.transparentListItemColors
 import kotlinx.coroutines.launch
 
@@ -140,6 +147,7 @@ fun PatchesSelectorScreen(
     val showSaveButton by remember {
         derivedStateOf { viewModel.selectionIsValid(bundles) }
     }
+    val context = LocalContext.current
     val selectedBundleUids = remember { mutableStateListOf<Int>() }
     var showBundleDialog by rememberSaveable { mutableStateOf(false) }
     var showProfileNameDialog by rememberSaveable { mutableStateOf(false) }
@@ -159,6 +167,24 @@ fun PatchesSelectorScreen(
     val patchLazyListStates = remember(bundles) { List(bundles.size) { LazyListState() } }
     val dialogsOpen = showBundleDialog || showProfileNameDialog
     var actionsExpanded by rememberSaveable { mutableStateOf(false) }
+    var shouldRestoreActions by rememberSaveable { mutableStateOf(false) }
+    var showResetConfirmation by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(patchLazyListStates) {
+        snapshotFlow { patchLazyListStates.any { it.isScrollInProgress } }
+            .collectLatest { scrolling ->
+                when {
+                    scrolling && actionsExpanded -> {
+                        actionsExpanded = false
+                        shouldRestoreActions = true
+                    }
+
+                    !scrolling && shouldRestoreActions -> {
+                        actionsExpanded = true
+                        shouldRestoreActions = false
+                    }
+                }
+            }
+    }
 
     fun openProfileSaveDialog() {
         if (bundles.isEmpty() || isSavingProfile) return
@@ -311,9 +337,107 @@ fun PatchesSelectorScreen(
     }
 
     var showSelectionWarning by rememberSaveable { mutableStateOf(false) }
+    val missingPatchNames = viewModel.missingPatchNames
+    var showMissingPatchReminder by rememberSaveable(missingPatchNames) {
+        mutableStateOf(!missingPatchNames.isNullOrEmpty())
+    }
+    var pendingSelectionConfirmation by remember { mutableStateOf<SelectionConfirmation?>(null) }
 
     if (showSelectionWarning)
         SelectionWarningDialog(onDismiss = { showSelectionWarning = false })
+
+    if (showMissingPatchReminder && !missingPatchNames.isNullOrEmpty()) {
+        val reminderList = missingPatchNames.joinToString(separator = "\n• ", prefix = "• ")
+        AlertDialog(
+            onDismissRequest = { showMissingPatchReminder = false },
+            title = { Text(stringResource(R.string.patch_selector_missing_patch_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.patch_selector_missing_patch_message,
+                        reminderList
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showMissingPatchReminder = false }) {
+                    Text(stringResource(R.string.ok))
+                }
+            }
+        )
+    }
+    val disableActionConfirmations by viewModel.prefs.disablePatchSelectionConfirmations.getAsState()
+
+    fun requestConfirmation(@StringRes title: Int, message: String, onConfirm: () -> Unit) {
+        if (disableActionConfirmations) {
+            onConfirm()
+        } else {
+            pendingSelectionConfirmation = SelectionConfirmation(title, message, onConfirm)
+        }
+    }
+
+    if (showResetConfirmation && disableActionConfirmations) {
+        showResetConfirmation = false
+    }
+
+    if (showResetConfirmation) {
+        val profileNote = stringResource(R.string.patch_selection_reset_all_dialog_description)
+            .substringAfter("\n\n", "")
+            .trim()
+        val resetMessage = buildString {
+            append(stringResource(R.string.patch_selection_reset_dialog_message))
+            if (profileNote.isNotEmpty()) {
+                appendLine()
+                appendLine()
+                append(profileNote)
+            }
+        }
+
+        AlertDialogExtended(
+            onDismissRequest = { showResetConfirmation = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showResetConfirmation = false
+                        viewModel.reset()
+                    }
+                ) {
+                    Text(stringResource(R.string.reset))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetConfirmation = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+            icon = { Icon(Icons.Outlined.Restore, null) },
+            title = { Text(stringResource(R.string.patch_selection_reset_dialog_title)) },
+            text = { Text(resetMessage) }
+        )
+    }
+
+    if (!disableActionConfirmations) {
+        pendingSelectionConfirmation?.let { confirmation ->
+            AlertDialogExtended(
+                onDismissRequest = { pendingSelectionConfirmation = null },
+                confirmButton = {
+                    TextButton(onClick = {
+                        confirmation.onConfirm()
+                        pendingSelectionConfirmation = null
+                    }) {
+                        Text(stringResource(R.string.confirm))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingSelectionConfirmation = null }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                },
+                title = { Text(stringResource(confirmation.title)) },
+                text = { Text(confirmation.message) }
+            )
+        }
+    }
 
     fun LazyListScope.patchList(
         uid: Int,
@@ -459,107 +583,292 @@ fun PatchesSelectorScreen(
             }
         },
         floatingActionButton = {
-            if (!showSaveButton) return@Scaffold
+            if (!showSaveButton || searchExpanded) return@Scaffold
 
-            AnimatedVisibility(
-                visible = !searchExpanded,
-                enter = slideInHorizontally { it } + fadeIn(),
-                exit = slideOutHorizontally { it } + fadeOut()
+            val actionHorizontalSpacing = 4.dp
+            val actionVerticalSpacing = 8.dp
+            val sectionSpacing = 12.dp
+            val actionRightInset = actionHorizontalSpacing
+            val actionButtonModifier = Modifier.width(118.dp)
+
+            val toggleButton: @Composable (Boolean) -> Unit = { expanded ->
+                val toggleLabel = if (expanded) {
+                    R.string.patch_selection_toggle_collapse
+                } else {
+                    R.string.patch_selection_toggle_expand
+                }
+                SelectionActionButton(
+                    icon = if (expanded) Icons.Outlined.UnfoldLess else Icons.Outlined.UnfoldMore,
+                    contentDescription = toggleLabel,
+                    label = toggleLabel,
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    onClick = {
+                        shouldRestoreActions = false
+                        actionsExpanded = !expanded
+                    },
+                    modifier = actionButtonModifier
+                )
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(end = actionRightInset),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(sectionSpacing)
             ) {
-                Column(
-                    horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    SelectionActionButton(
-                        icon = if (actionsExpanded) Icons.Outlined.UnfoldLess else Icons.Outlined.UnfoldMore,
-                        contentDescription = if (actionsExpanded) R.string.patch_selection_toggle_collapse else R.string.patch_selection_toggle_expand,
-                        label = if (actionsExpanded) R.string.patch_selection_toggle_collapse else R.string.patch_selection_toggle_expand,
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                        onClick = { actionsExpanded = !actionsExpanded }
-                    )
-                    AnimatedVisibility(actionsExpanded) {
-                        Column(
-                            horizontalAlignment = Alignment.End,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                if (actionsExpanded) {
+                    val currentBundle = bundles.getOrNull(pagerState.currentPage)
+                    val currentBundleDisplayName =
+                        currentBundle?.let { bundleDisplayNames[it.uid] ?: it.name }
+                    val warningEnabled = viewModel.selectionWarningEnabled
+                    val actionRowModifier = Modifier.align(Alignment.End)
+                    val actionRowArrangement =
+                        Arrangement.spacedBy(actionHorizontalSpacing, Alignment.End)
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(actionVerticalSpacing)
+                    ) {
+                        Row(
+                            modifier = actionRowModifier,
+                            horizontalArrangement = actionRowArrangement,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             SelectionActionButton(
-                                icon = Icons.Outlined.ClearAll,
-                                contentDescription = R.string.deselect_all,
-                                label = R.string.patch_selection_button_label_all,
+                                icon = Icons.Outlined.Undo,
+                                contentDescription = R.string.patch_selection_button_label_undo_action,
+                                label = R.string.patch_selection_button_label_undo_action,
                                 containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                enabled = !viewModel.selectionWarningEnabled,
+                                onClick = { viewModel.undoAction() },
+                                enabled = viewModel.canUndo,
+                                modifier = actionButtonModifier
+                            )
+                            SelectionActionButton(
+                                icon = Icons.Outlined.Redo,
+                                contentDescription = R.string.patch_selection_button_label_redo_action,
+                                label = R.string.patch_selection_button_label_redo_action,
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                onClick = { viewModel.redoAction() },
+                                enabled = viewModel.canRedo,
+                                modifier = actionButtonModifier
+                            )
+                        }
+
+                        Row(
+                            modifier = actionRowModifier,
+                            horizontalArrangement = actionRowArrangement,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            SelectionActionButton(
+                                icon = Icons.AutoMirrored.Outlined.PlaylistAddCheck,
+                                contentDescription = R.string.patch_selection_button_label_select_bundle,
+                                label = R.string.patch_selection_button_label_select_bundle,
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                                 onClick = {
-                                    if (viewModel.selectionWarningEnabled) {
+                                    if (warningEnabled) {
                                         showSelectionWarning = true
                                     } else {
-                                        viewModel.deselectAll()
+                                        currentBundle?.let { bundle ->
+                                            val bundleName = currentBundleDisplayName ?: bundle.name
+                                            requestConfirmation(
+                                                title = R.string.patch_selection_confirm_select_bundle_title,
+                                                message = context.getString(
+                                                    R.string.patch_selection_confirm_select_bundle_message,
+                                                    bundleName
+                                                )
+                                            ) {
+                                                viewModel.selectBundle(
+                                                    bundle.uid,
+                                                    bundleName
+                                                )
+                                            }
+                                        }
                                     }
-                                }
+                                },
+                                enabled = currentBundle != null && !warningEnabled,
+                                modifier = actionButtonModifier
                             )
+                            SelectionActionButton(
+                                icon = Icons.Outlined.DoneAll,
+                                contentDescription = R.string.patch_selection_button_label_select_all,
+                                label = R.string.patch_selection_button_label_select_all,
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                onClick = {
+                                    if (warningEnabled) {
+                                        showSelectionWarning = true
+                                    } else {
+                                        requestConfirmation(
+                                            title = R.string.patch_selection_confirm_select_all_title,
+                                            message = context.getString(R.string.patch_selection_confirm_select_all_message),
+                                            onConfirm = viewModel::selectAll
+                                        )
+                                    }
+                                },
+                                enabled = bundles.isNotEmpty() && !warningEnabled,
+                                modifier = actionButtonModifier
+                            )
+                        }
+
+                        Row(
+                            modifier = actionRowModifier,
+                            horizontalArrangement = actionRowArrangement,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             SelectionActionButton(
                                 icon = Icons.Outlined.LayersClear,
                                 contentDescription = R.string.deselect_bundle,
                                 label = R.string.patch_selection_button_label_bundle,
                                 containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                enabled = !viewModel.selectionWarningEnabled,
                                 onClick = {
-                                    if (viewModel.selectionWarningEnabled) {
+                                    if (warningEnabled) {
                                         showSelectionWarning = true
                                     } else {
-                                        bundles.getOrNull(pagerState.currentPage)?.let { bundle ->
-                                            val displayName = bundleDisplayNames[bundle.uid] ?: bundle.name
-                                            viewModel.deselectBundle(bundle.uid, displayName)
+                                        currentBundle?.let { bundle ->
+                                            val bundleName = currentBundleDisplayName ?: bundle.name
+                                            requestConfirmation(
+                                                title = R.string.patch_selection_confirm_deselect_bundle_title,
+                                                message = context.getString(
+                                                    R.string.patch_selection_confirm_deselect_bundle_message,
+                                                    bundleName
+                                                )
+                                            ) {
+                                                viewModel.deselectBundle(
+                                                    bundle.uid,
+                                                    bundleName
+                                                )
+                                            }
                                         }
                                     }
                                 },
+                                enabled = currentBundle != null && !warningEnabled,
+                                modifier = actionButtonModifier
                             )
+                            SelectionActionButton(
+                                icon = Icons.Outlined.ClearAll,
+                                contentDescription = R.string.deselect_all,
+                                label = R.string.patch_selection_button_label_all,
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                onClick = {
+                                    if (warningEnabled) {
+                                        showSelectionWarning = true
+                                    } else {
+                                        requestConfirmation(
+                                            title = R.string.patch_selection_confirm_deselect_all_title,
+                                            message = context.getString(R.string.patch_selection_confirm_deselect_all_message),
+                                            onConfirm = viewModel::deselectAll
+                                        )
+                                    }
+                                },
+                                enabled = !warningEnabled,
+                                modifier = actionButtonModifier
+                            )
+                        }
 
+                        Row(
+                            modifier = actionRowModifier,
+                            horizontalArrangement = actionRowArrangement,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            SelectionActionButton(
+                                icon = Icons.Outlined.SettingsBackupRestore,
+                                contentDescription = R.string.patch_selection_button_label_reset_bundle,
+                                label = R.string.patch_selection_button_label_reset_bundle,
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                onClick = {
+                                    if (warningEnabled) {
+                                        showSelectionWarning = true
+                                    } else {
+                                        currentBundle?.let { bundle ->
+                                            val bundleName = currentBundleDisplayName ?: bundle.name
+                                            requestConfirmation(
+                                                title = R.string.patch_selection_confirm_bundle_defaults_title,
+                                                message = context.getString(
+                                                    R.string.patch_selection_confirm_bundle_defaults_message,
+                                                    bundleName
+                                                )
+                                            ) {
+                                                viewModel.resetBundleToDefaults(
+                                                    bundle.uid,
+                                                    bundleName
+                                                )
+                                            }
+                                        }
+                                    }
+                                },
+                                enabled = currentBundle != null && !warningEnabled,
+                                modifier = actionButtonModifier
+                            )
                             SelectionActionButton(
                                 icon = Icons.Outlined.Restore,
-                                contentDescription = R.string.reset,
+                                contentDescription = R.string.patch_selection_button_label_defaults,
                                 label = R.string.patch_selection_button_label_defaults,
                                 containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                onClick = viewModel::reset
+                                onClick = {
+                                    if (disableActionConfirmations) {
+                                        viewModel.reset()
+                                    } else {
+                                        showResetConfirmation = true
+                                    }
+                                },
+                                modifier = actionButtonModifier
                             )
+                        }
+
+                        Row(
+                            modifier = actionRowModifier,
+                            horizontalArrangement = actionRowArrangement,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             SelectionActionButton(
                                 icon = Icons.AutoMirrored.Outlined.PlaylistAdd,
                                 contentDescription = R.string.patch_profile_save_action,
                                 label = R.string.patch_profile_save_label,
                                 containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                                onClick = { if (!isSavingProfile) openProfileSaveDialog() },
                                 enabled = !isSavingProfile,
-                                onClick = { if (!isSavingProfile) openProfileSaveDialog() }
+                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = actionButtonModifier
                             )
+                            toggleButton(true)
                         }
                     }
-                    val saveButtonExpanded =
-                        patchLazyListStates.getOrNull(pagerState.currentPage)?.isScrollingUp ?: true
-                    val saveButtonText = stringResource(
-                        R.string.save_with_count,
-                        selectedPatchCount
-                    )
-
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                } else {
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.CenterEnd
                     ) {
-                        HapticExtendedFloatingActionButton(
-                            text = {
-                                Text(saveButtonText)
-                            },
-                            icon = {
-                                SaveFabIcon(
-                                    expanded = saveButtonExpanded,
-                                    count = selectedPatchCount,
-                                    contentDescription = saveButtonText
-                                )
-                            },
-                            expanded = saveButtonExpanded,
-                            onClick = {
-                                onSave(viewModel.getCustomSelection(), viewModel.getOptions())
-                            }
-                        )
+                        toggleButton(false)
                     }
+                }
+
+                val saveButtonExpanded =
+                    patchLazyListStates.getOrNull(pagerState.currentPage)?.isScrollingUp ?: true
+                val saveButtonText = stringResource(
+                    R.string.save_with_count,
+                    selectedPatchCount
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    HapticExtendedFloatingActionButton(
+                        text = { Text(saveButtonText) },
+                        icon = {
+                            SaveFabIcon(
+                                expanded = saveButtonExpanded,
+                                count = selectedPatchCount,
+                                contentDescription = saveButtonText
+                            )
+                        },
+                        expanded = saveButtonExpanded,
+                        onClick = {
+                            onSave(viewModel.getCustomSelection(), viewModel.getOptions())
+                        }
+                    )
                 }
             }
         }
@@ -922,8 +1231,6 @@ private fun PatchProfileNameDialog(
     )
 }
 
-private val SelectionActionLabelWidth: Dp = 120.dp
-
 @Composable
 private fun SelectionActionButton(
     icon: ImageVector,
@@ -932,43 +1239,59 @@ private fun SelectionActionButton(
     containerColor: Color,
     onClick: () -> Unit,
     enabled: Boolean = true,
-    contentColor: Color = MaterialTheme.colorScheme.onTertiaryContainer
+    contentColor: Color = MaterialTheme.colorScheme.onTertiaryContainer,
+    modifier: Modifier = Modifier
 ) {
+    val contentAlpha = if (enabled) 1f else 0.4f
     Column(
+        modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        SmallFloatingActionButton(
-            onClick = {
-                if (enabled) onClick()
-            },
-            containerColor = containerColor,
-            contentColor = contentColor,
-            modifier = Modifier.alpha(if (enabled) 1f else 0.4f)
-        ) {
-            Icon(icon, stringResource(contentDescription))
-        }
         Surface(
-            modifier = Modifier.width(SelectionActionLabelWidth),
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp).copy(alpha = 0.85f),
-            tonalElevation = 2.dp
+            onClick = { if (enabled) onClick() },
+            enabled = enabled,
+            color = containerColor,
+            contentColor = contentColor,
+            tonalElevation = 6.dp,
+            shadowElevation = 2.dp,
+            shape = RoundedCornerShape(18.dp),
+            modifier = Modifier
+                .size(52.dp)
+                .alpha(contentAlpha)
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 2.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = stringResource(label),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    icon,
+                    stringResource(contentDescription),
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp).copy(alpha = 0.85f),
+            shape = RoundedCornerShape(999.dp),
+            tonalElevation = 1.dp,
+            modifier = Modifier.alpha(contentAlpha)
+        ) {
+            Text(
+                text = stringResource(label),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .padding(horizontal = 10.dp, vertical = 2.dp)
+                    .width(IntrinsicSize.Max)
+            )
+        }
     }
 }
+
+private data class SelectionConfirmation(
+    @StringRes val title: Int,
+    val message: String,
+    val onConfirm: () -> Unit
+)
 
 @Composable
 fun ListHeader(

@@ -83,6 +83,7 @@ class MainActivity : ComponentActivity() {
             val dynamicColor by vm.prefs.dynamicColor.getAsState()
             val pureBlackTheme by vm.prefs.pureBlackTheme.getAsState()
             val customAccentColor by vm.prefs.customAccentColor.getAsState()
+            val customThemeColor by vm.prefs.customThemeColor.getAsState()
 
             EventEffect(vm.legacyImportActivityFlow) {
                 try {
@@ -95,7 +96,8 @@ class MainActivity : ComponentActivity() {
                 darkTheme = theme == Theme.SYSTEM && isSystemInDarkTheme() || theme == Theme.DARK,
                 dynamicColor = dynamicColor,
                 pureBlackTheme = pureBlackTheme,
-                accentColorHex = customAccentColor.takeUnless { it.isBlank() }
+                accentColorHex = customAccentColor.takeUnless { it.isBlank() },
+                themeColorHex = customThemeColor.takeUnless { it.isBlank() }
             ) {
                 ReVancedManager(vm)
             }
@@ -107,10 +109,10 @@ class MainActivity : ComponentActivity() {
 private fun ReVancedManager(vm: MainViewModel) {
     val navController = rememberNavController()
 
-    EventEffect(vm.appSelectFlow) { app ->
+    EventEffect(vm.appSelectFlow) { params ->
         navController.navigateComplex(
             SelectedApplicationInfo,
-            SelectedApplicationInfo.ViewModelParams(app)
+            params
         )
     }
 
@@ -158,7 +160,9 @@ private fun ReVancedManager(vm: MainViewModel) {
             val data = it.toRoute<InstalledApplicationInfo>()
 
             InstalledAppInfoScreen(
-                onPatchClick = vm::selectApp,
+                onPatchClick = { packageName, selection ->
+                    vm.selectApp(packageName, selection)
+                },
                 onBackClick = navController::popBackStack,
                 viewModel = koinViewModel { parametersOf(data.packageName) }
             )
@@ -173,16 +177,21 @@ private fun ReVancedManager(vm: MainViewModel) {
         }
 
         composable<Patcher> {
+            val params = it.getComplexArg<Patcher.ViewModelParams>()
             PatcherScreen(
-                onBackClick = {
-                    navController.navigate(route = Dashboard) {
-                        launchSingleTop = true
-                        popUpTo<Dashboard> {
-                            inclusive = false
-                        }
-                    }
+                onBackClick = navController::popBackStack,
+                onReviewSelection = { app, selection, options, missing ->
+                    navController.navigateComplex(
+                        SelectedApplicationInfo.PatchesSelector,
+                        SelectedApplicationInfo.PatchesSelector.ViewModelParams(
+                            app = app,
+                            currentSelection = selection,
+                            options = options,
+                            missingPatchNames = missing
+                        )
+                    )
                 },
-                viewModel = koinViewModel { parametersOf(it.getComplexArg<Patcher.ViewModelParams>()) }
+                viewModel = koinViewModel { parametersOf(params) }
             )
         }
 

@@ -59,7 +59,10 @@ import app.revanced.manager.ui.component.InstallerStatusDialog
 import app.revanced.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.revanced.manager.ui.component.patcher.Steps
 import app.revanced.manager.ui.model.StepCategory
+import app.revanced.manager.ui.model.SelectedApp
 import app.revanced.manager.ui.viewmodel.PatcherViewModel
+import app.revanced.manager.util.Options
+import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.util.APK_MIMETYPE
 import app.revanced.manager.util.ExportNameFormatter
@@ -72,6 +75,7 @@ import org.koin.compose.koinInject
 @Composable
 fun PatcherScreen(
     onBackClick: () -> Unit,
+    onReviewSelection: (SelectedApp, PatchSelection, Options, List<String>) -> Unit,
     viewModel: PatcherViewModel
 ) {
     fun onLeave() {
@@ -82,6 +86,7 @@ fun PatcherScreen(
     val context = LocalContext.current
     val prefs: PreferencesManager = koinInject()
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
+    val autoCollapsePatcherSteps by prefs.autoCollapsePatcherSteps.getAsState()
     val exportMetadata = viewModel.exportMetadata
     val fallbackExportMetadata = remember(viewModel.packageName, viewModel.version) {
         PatchedAppExportData(
@@ -129,7 +134,10 @@ fun PatcherScreen(
     if (showDismissConfirmationDialog) {
         ConfirmDialog(
             onDismiss = { showDismissConfirmationDialog = false },
-            onConfirm = ::onLeave,
+            onConfirm = {
+                showDismissConfirmationDialog = false
+                onLeave()
+            },
             title = stringResource(R.string.patcher_stop_confirm_title),
             description = stringResource(R.string.patcher_stop_confirm_description),
             icon = Icons.Outlined.Cancel
@@ -183,6 +191,46 @@ fun PatcherScreen(
             dismissButton = {
                 TextButton(onClick = viewModel::dismissMemoryAdjustmentDialog) {
                     Text(stringResource(R.string.patcher_memory_adjustment_dismiss))
+                }
+            }
+        )
+    }
+
+    viewModel.missingPatchDialog?.let { state ->
+        val patchList = state.patchNames.joinToString(separator = "\n• ", prefix = "• ")
+        AlertDialog(
+            onDismissRequest = viewModel::dismissMissingPatchDialog,
+            title = { Text(stringResource(R.string.patcher_missing_patch_title)) },
+            text = {
+                Text(
+                    text = stringResource(
+                        R.string.patcher_missing_patch_message,
+                        patchList
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val selection = viewModel.currentSelectionSnapshot()
+                        val options = viewModel.currentOptionsSnapshot()
+                        val patches = state.patchNames
+                        viewModel.dismissMissingPatchDialog()
+                        onReviewSelection(
+                            viewModel.currentSelectedApp,
+                            selection,
+                            options,
+                            patches
+                        )
+                        onBackClick()
+                    }
+                ) {
+                    Text(stringResource(R.string.patcher_missing_patch_review))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissMissingPatchDialog) {
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )
@@ -343,7 +391,8 @@ fun PatcherScreen(
                         category = category,
                         steps = steps,
                         stepCount = if (category == StepCategory.PATCHING) viewModel.patchesProgress else null,
-                        stepProgressProvider = viewModel
+                        stepProgressProvider = viewModel,
+                        autoCollapseCompleted = autoCollapsePatcherSteps
                     )
                 }
             }

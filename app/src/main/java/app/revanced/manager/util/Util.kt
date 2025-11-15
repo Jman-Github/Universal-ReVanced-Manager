@@ -3,6 +3,7 @@ package app.revanced.manager.util
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
+import android.text.format.DateUtils
 import android.util.Log
 import android.widget.Toast
 import androidx.annotation.MainThread
@@ -176,6 +177,15 @@ fun LocalDateTime.relativeTime(context: Context): String {
     } catch (e: IllegalArgumentException) {
         return context.getString(R.string.invalid_date)
     }
+}
+
+fun Long.relativeTime(context: Context): String {
+    if (this <= 0L) return context.getString(R.string.invalid_date)
+    return DateUtils.getRelativeTimeSpanString(
+        this,
+        System.currentTimeMillis(),
+        DateUtils.MINUTE_IN_MILLIS
+    ).toString()
 }
 
 private var transparentListItemColorsCached: ListItemColors? = null

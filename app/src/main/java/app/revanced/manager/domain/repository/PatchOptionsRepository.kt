@@ -7,11 +7,16 @@ import app.revanced.manager.data.room.options.OptionGroup
 import app.revanced.manager.patcher.patch.PatchInfo
 import app.revanced.manager.util.Options
 import app.revanced.manager.util.tag
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.map
 
 class PatchOptionsRepository(db: AppDatabase) {
     private val dao = db.optionDao()
+    private val resetEventsFlow = MutableSharedFlow<ResetEvent>(extraBufferCapacity = 4)
+    val resetEvents: SharedFlow<ResetEvent> = resetEventsFlow.asSharedFlow()
 
     private suspend fun getOrCreateGroup(bundleUid: Int, packageName: String) =
         dao.getGroupId(bundleUid, packageName) ?: OptionGroup(
@@ -76,7 +81,24 @@ class PatchOptionsRepository(db: AppDatabase) {
     fun getPackagesWithSavedOptions() =
         dao.getPackagesWithOptions().map(Iterable<String>::toSet).distinctUntilChanged()
 
-    suspend fun resetOptionsForPackage(packageName: String) = dao.resetOptionsForPackage(packageName)
-    suspend fun resetOptionsForPatchBundle(uid: Int) = dao.resetOptionsForPatchBundle(uid)
-    suspend fun reset() = dao.reset()
+    suspend fun resetOptionsForPackage(packageName: String) {
+        dao.resetOptionsForPackage(packageName)
+        resetEventsFlow.emit(ResetEvent.Package(packageName))
+    }
+
+    suspend fun resetOptionsForPatchBundle(uid: Int) {
+        dao.resetOptionsForPatchBundle(uid)
+        resetEventsFlow.emit(ResetEvent.Bundle(uid))
+    }
+
+    suspend fun reset() {
+        dao.reset()
+        resetEventsFlow.emit(ResetEvent.All)
+    }
+
+    sealed interface ResetEvent {
+        data object All : ResetEvent
+        data class Package(val packageName: String) : ResetEvent
+        data class Bundle(val bundleUid: Int) : ResetEvent
+    }
 }

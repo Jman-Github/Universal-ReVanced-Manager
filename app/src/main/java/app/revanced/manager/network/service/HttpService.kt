@@ -8,9 +8,11 @@ import app.revanced.manager.util.tag
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.HttpRequestBuilder
+import io.ktor.client.request.header
 import io.ktor.client.request.prepareGet
 import io.ktor.client.request.request
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.ByteReadChannel
@@ -20,6 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.io.FileOutputStream
 import java.io.OutputStream
 
 /**
@@ -88,8 +91,37 @@ class HttpService(
 
     suspend fun download(
         saveLocation: File,
+        resumeFrom: Long = 0,
         builder: HttpRequestBuilder.() -> Unit
-    ) = saveLocation.outputStream().use { streamTo(it, builder) }
+    ) {
+        http.prepareGet {
+            if (resumeFrom > 0) {
+                header(HttpHeaders.Range, "bytes=$resumeFrom-")
+            }
+            builder()
+        }.execute { httpResponse ->
+            if (httpResponse.status.isSuccess()) {
+                val channel: ByteReadChannel = httpResponse.body()
+                val append = resumeFrom > 0 && httpResponse.status == HttpStatusCode.PartialContent
+                if (resumeFrom > 0 && !append && saveLocation.exists()) {
+                    saveLocation.delete()
+                }
+                FileOutputStream(saveLocation, append).use { outputStream ->
+                    withContext(Dispatchers.IO) {
+                        while (!channel.isClosedForRead) {
+                            val packet = channel.readRemaining(DEFAULT_BUFFER_SIZE.toLong())
+                            while (packet.isNotEmpty) {
+                                val bytes = packet.readBytes()
+                                outputStream.write(bytes)
+                            }
+                        }
+                    }
+                }
+            } else {
+                throw HttpException(httpResponse.status)
+            }
+        }
+    }
 
     class HttpException(status: HttpStatusCode) : Exception("Failed to fetch: http status: $status")
 }

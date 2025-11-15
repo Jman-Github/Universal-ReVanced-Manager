@@ -17,7 +17,9 @@ import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.domain.repository.PatchSelectionRepository
 import app.revanced.manager.domain.repository.SerializedSelection
 import app.revanced.manager.ui.model.SelectedApp
+import app.revanced.manager.ui.model.navigation.SelectedApplicationInfo
 import app.revanced.manager.ui.theme.Theme
+import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.tag
 import app.revanced.manager.util.toast
 import kotlinx.coroutines.channels.Channel
@@ -37,7 +39,7 @@ class MainViewModel(
     val prefs: PreferencesManager,
     private val json: Json
 ) : ViewModel() {
-    private val appSelectChannel = Channel<SelectedApp>()
+    private val appSelectChannel = Channel<SelectedApplicationInfo.ViewModelParams>()
     val appSelectFlow = appSelectChannel.receiveAsFlow()
     private val legacyImportActivityChannel = Channel<Intent>()
     val legacyImportActivityFlow = legacyImportActivityChannel.receiveAsFlow()
@@ -61,13 +63,23 @@ class MainViewModel(
         )
     }
 
-    fun selectApp(app: SelectedApp) = viewModelScope.launch {
-        appSelectChannel.send(findDownloadedApp(app) ?: app)
+    fun selectApp(app: SelectedApp, patches: PatchSelection? = null) = viewModelScope.launch {
+        val resolved = findDownloadedApp(app) ?: app
+        appSelectChannel.send(
+            SelectedApplicationInfo.ViewModelParams(
+                app = resolved,
+                patches = patches
+            )
+        )
     }
 
-    fun selectApp(packageName: String) = viewModelScope.launch {
-        selectApp(SelectedApp.Search(packageName, suggestedVersion(packageName)))
+    fun selectApp(app: SelectedApp) = selectApp(app, null)
+
+    fun selectApp(packageName: String, patches: PatchSelection? = null) = viewModelScope.launch {
+        selectApp(SelectedApp.Search(packageName, suggestedVersion(packageName)), patches)
     }
+
+    fun selectApp(packageName: String) = selectApp(packageName, null)
 
     init {
         viewModelScope.launch {

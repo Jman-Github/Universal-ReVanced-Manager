@@ -3,7 +3,6 @@ package app.revanced.manager.ui.screen
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,14 +14,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material3.AlertDialog
@@ -66,6 +68,7 @@ import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
 import app.revanced.manager.ui.component.LoadingIndicator
 import app.revanced.manager.ui.component.NonSuggestedVersionDialog
+import app.revanced.manager.ui.component.SafeguardHintCard
 import app.revanced.manager.ui.component.SearchView
 import app.revanced.manager.ui.model.SelectedApp
 import app.revanced.manager.ui.viewmodel.AppSelectorViewModel
@@ -73,6 +76,7 @@ import app.revanced.manager.ui.viewmodel.BundleVersionSuggestion
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.util.APK_MIMETYPE
 import app.revanced.manager.util.EventEffect
+import app.revanced.manager.util.consumeHorizontalScroll
 import app.revanced.manager.util.transparentListItemColors
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -248,7 +252,7 @@ fun AppSelectorScreen(
                         },
                         supportingContent = {
                             val bundleSuggestions = bundleSuggestionsByApp[app.packageName].orEmpty()
-                            var expanded by remember { mutableStateOf(false) }
+                            var expanded by rememberSaveable(app.packageName) { mutableStateOf(false) }
                             var dialogBundleUid by remember { mutableStateOf<Int?>(null) }
 
                             LaunchedEffect(bundleRecommendationsEnabled) {
@@ -269,26 +273,18 @@ fun AppSelectorScreen(
                                     )
                                     TextButton(
                                         onClick = { expanded = !expanded },
-                                        enabled = bundleRecommendationsEnabled,
                                         modifier = Modifier.align(Alignment.Start),
                                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                                     ) {
                                         Icon(
-                                            imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                                            imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ChevronRight,
                                             contentDescription = null
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Text(
                                             text = toggleLabel,
-                                            style = MaterialTheme.typography.labelLarge
-                                        )
-                                    }
-
-                                    if (!bundleRecommendationsEnabled) {
-                                        Text(
-                                            text = stringResource(R.string.bundle_version_dialog_locked_hint),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            style = MaterialTheme.typography.labelLarge,
+                                            color = if (bundleRecommendationsEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
 
@@ -300,6 +296,14 @@ fun AppSelectorScreen(
                                             verticalArrangement = Arrangement.spacedBy(12.dp),
                                             horizontalAlignment = Alignment.CenterHorizontally
                                         ) {
+                                            if (!bundleRecommendationsEnabled) {
+                                                SafeguardHintCard(
+                                                    title = stringResource(R.string.bundle_version_dialog_locked_title),
+                                                    description = stringResource(R.string.bundle_version_dialog_locked_hint),
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+                                            }
+
                                             bundleSuggestions.forEach { suggestion ->
                                                 BundleSuggestionCard(
                                                     suggestion = suggestion,
@@ -439,12 +443,15 @@ private fun BundleSuggestionCard(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            val nameScrollState = rememberScrollState()
             Text(
                 suggestion.bundleName,
                 style = MaterialTheme.typography.titleMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.basicMarquee()
+                modifier = Modifier
+                    .consumeHorizontalScroll(nameScrollState)
+                    .horizontalScroll(nameScrollState)
             )
             val versionLabel = suggestion.recommendedVersion
                 ?.let { stringResource(R.string.version_label, it) }

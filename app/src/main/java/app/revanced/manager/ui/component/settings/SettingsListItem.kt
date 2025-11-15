@@ -32,6 +32,7 @@ fun SettingsListItem(
     modifier: Modifier = Modifier,
     overlineContent: @Composable (() -> Unit)? = null,
     supportingContent: String? = null,
+    supportingContentSlot: (@Composable (() -> Unit))? = null,
     leadingContent: @Composable (() -> Unit)? = null,
     trailingContent: @Composable (() -> Unit)? = null,
     colors: ListItemColors = ListItemDefaults.colors(),
@@ -47,6 +48,7 @@ fun SettingsListItem(
     modifier = modifier,
     overlineContent = overlineContent,
     supportingContent = supportingContent,
+    supportingContentSlot = supportingContentSlot,
     leadingContent = leadingContent,
     trailingContent = trailingContent,
     colors = colors,
@@ -60,6 +62,7 @@ fun SettingsListItem(
     modifier: Modifier = Modifier,
     overlineContent: @Composable (() -> Unit)? = null,
     supportingContent: String? = null,
+    supportingContentSlot: (@Composable (() -> Unit))? = null,
     leadingContent: @Composable (() -> Unit)? = null,
     trailingContent: @Composable (() -> Unit)? = null,
     colors: ListItemColors = ListItemDefaults.colors(),
@@ -70,12 +73,14 @@ fun SettingsListItem(
     modifier = modifier.then(Modifier.padding(horizontal = 8.dp)),
     overlineContent = overlineContent,
     supportingContent = {
-        if (supportingContent != null)
-            Text(
+        when {
+            supportingContentSlot != null -> supportingContentSlot()
+            supportingContent != null -> Text(
                 text = supportingContent,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.outline
             )
+        }
     },
     leadingContent = leadingContent,
     trailingContent = trailingContent,

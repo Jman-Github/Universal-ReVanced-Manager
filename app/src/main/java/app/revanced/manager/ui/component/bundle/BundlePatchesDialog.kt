@@ -5,6 +5,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -69,10 +70,10 @@ fun BundlePatchesDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(16.dp)
             ) {
-                items(
+                itemsIndexed(
                     items = patches,
-                    key = { it.name }
-                ) { patch ->
+                    key = { index, patch -> src.uid to (patch.name + "-" + index) }
+                ) { _, patch ->
                     var expandVersions by rememberSaveable(src.uid, patch.name, "versions") { mutableStateOf(false) }
                     var expandOptions by rememberSaveable(src.uid, patch.name, "options") { mutableStateOf(false) }
 

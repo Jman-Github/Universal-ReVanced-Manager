@@ -461,7 +461,7 @@ class InstallerManager(
         }
     }
 
-    private fun isComponentAvailable(componentName: ComponentName): Boolean {
+    fun isComponentAvailable(componentName: ComponentName): Boolean {
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(dummyUri, APK_MIME)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -488,7 +488,6 @@ class InstallerManager(
             PackageManager.MATCH_DEFAULT_ONLY
         ) ?: return null
         val activityInfo = resolveInfo.activityInfo ?: return null
-        if (!isInstallerCandidate(resolveInfo)) return null
         return ComponentName(activityInfo.packageName, activityInfo.name)
     }
 

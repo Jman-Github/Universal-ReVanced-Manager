@@ -1,5 +1,8 @@
 package app.revanced.manager.ui.component
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
@@ -16,6 +19,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
 
 @Composable
@@ -24,7 +28,9 @@ private inline fun <T> NumberInputDialog(
     name: String,
     crossinline onSubmit: (T?) -> Unit,
     crossinline validator: @DisallowComposableCalls (T) -> Boolean,
-    crossinline toNumberOrNull: @DisallowComposableCalls String.() -> T?
+    crossinline toNumberOrNull: @DisallowComposableCalls String.() -> T?,
+    neutralButtonLabel: String? = null,
+    noinline neutralValueProvider: (() -> T?)? = null,
 ) {
     var fieldValue by rememberSaveable {
         mutableStateOf(current?.toString().orEmpty())
@@ -40,35 +46,66 @@ private inline fun <T> NumberInputDialog(
         onDismissRequest = { onSubmit(null) },
         title = { Text(name) },
         text = {
-            OutlinedTextField(
-                value = fieldValue,
-                onValueChange = { fieldValue = it },
-                placeholder = {
-                    Text(stringResource(R.string.dialog_input_placeholder))
-                },
-                isError = validatorFailed,
-                supportingText = {
-                    if (validatorFailed) {
-                        Text(
-                            stringResource(R.string.input_dialog_value_invalid),
-                            modifier = Modifier.fillMaxWidth(),
-                            color = MaterialTheme.colorScheme.error
-                        )
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = fieldValue,
+                    onValueChange = { fieldValue = it },
+                    placeholder = {
+                        Text(stringResource(R.string.dialog_input_placeholder))
+                    },
+                    isError = validatorFailed,
+                    supportingText = {
+                        if (validatorFailed) {
+                            Text(
+                                stringResource(R.string.input_dialog_value_invalid),
+                                modifier = Modifier.fillMaxWidth(),
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
-                }
-            )
+                )
+            }
         },
         confirmButton = {
             TextButton(
                 onClick = { numberFieldValue?.let(onSubmit) },
                 enabled = numberFieldValue != null && !validatorFailed,
             ) {
-                Text(stringResource(R.string.save))
+                Text(
+                    text = stringResource(R.string.save),
+                    maxLines = 1,
+                    softWrap = false
+                )
             }
         },
         dismissButton = {
-            TextButton(onClick = { onSubmit(null) }) {
-                Text(stringResource(R.string.cancel))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val label = neutralButtonLabel
+                val provider = neutralValueProvider
+                if (label != null && provider != null) {
+                    TextButton(
+                        onClick = {
+                            provider()?.let { value ->
+                                fieldValue = value.toString()
+                            }
+                        }
+                    ) {
+                        Text(
+                            text = label,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+                TextButton(
+                    onClick = { onSubmit(null) }
+                ) {
+                    Text(
+                        text = stringResource(R.string.cancel),
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
             }
         },
     )
@@ -79,8 +116,10 @@ fun IntInputDialog(
     current: Int?,
     name: String,
     validator: (Int) -> Boolean = { true },
-    onSubmit: (Int?) -> Unit
-) = NumberInputDialog(current, name, onSubmit, validator, String::toIntOrNull)
+    onSubmit: (Int?) -> Unit,
+    neutralButtonLabel: String? = null,
+    neutralValueProvider: (() -> Int?)? = null
+) = NumberInputDialog(current, name, onSubmit, validator, String::toIntOrNull, neutralButtonLabel, neutralValueProvider)
 
 @Composable
 fun LongInputDialog(
