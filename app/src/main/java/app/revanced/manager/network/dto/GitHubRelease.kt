@@ -33,3 +33,43 @@ data class GitHubContributor(
     @SerialName("avatar_url")
     val avatarUrl: String,
 )
+
+@Serializable
+data class GitHubPull(
+    val url: String,
+    val head: GitHubPullHead
+)
+
+@Serializable
+data class GitHubPullHead(
+    val sha: String
+)
+
+@Serializable
+data class GitHubActionRuns(
+    @SerialName("workflow_runs")
+    val workflowRuns: List<GitHubActionRun> = emptyList()
+)
+
+@Serializable
+data class GitHubActionRun(
+    val id: String,
+    @SerialName("head_sha")
+    val headSha: String,
+    @SerialName("display_title")
+    val displayTitle: String
+)
+
+@Serializable
+data class GitHubActionRunArtifacts(
+    @SerialName("artifacts")
+    val artifacts: List<GitHubActionArtifact> = emptyList()
+)
+
+@Serializable
+data class GitHubActionArtifact(
+    @SerialName("archive_download_url")
+    val archiveDownloadUrl: String,
+    @SerialName("created_at")
+    val createdAt: String
+)
