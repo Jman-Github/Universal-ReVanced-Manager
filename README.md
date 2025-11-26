@@ -110,4 +110,3 @@ Universal ReVanced Manager is licensed under the GPLv3 license. Please see the [
 [tl;dr](https://www.tldrlegal.com/license/gnu-general-public-license-v3-gpl-3) you may copy, distribute and modify Universal ReVanced Manager as long as you track changes/dates in source files.
 Any modifications to Universal ReVanced Manager must also be made available under the GPL, along with build & install instructions.
 
-

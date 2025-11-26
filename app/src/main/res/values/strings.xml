@@ -187,7 +187,7 @@
     <string name="patch_selection_safeguard_description">Do not prevent selecting or deselecting patches and customization of options</string>
     <string name="patch_selection_safeguard_confirmation">Changing the selection of patches may cause unexpected issues.\n\nEnable anyways?</string>
     <string name="universal_patches_safeguard">Show &amp; allow using universal patches</string>
-    <string name="universal_patches_safeguard_description">Do not hide universal patches or prevent the using of them</string>
+    <string name="universal_patches_safeguard_description">Do not hide universal patches or prevent usage of them</string>
     <string name="universal_patches_profile_blocked_title">Universal patches disabled</string>
     <string name="universal_patches_profile_blocked_description">This patch profile contains universal patches. Enable “%1$s” in advanced settings to use it.</string>
     <string name="universal_patches_app_blocked_description">This app contains universal patches. Enable “%1$s” in advanced settings to continue.</string>
