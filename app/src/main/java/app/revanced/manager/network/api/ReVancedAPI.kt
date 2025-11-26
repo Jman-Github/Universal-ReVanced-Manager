@@ -1,6 +1,5 @@
 package app.revanced.manager.network.api
 
-import android.util.Log
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.network.dto.*
 import app.revanced.manager.network.service.HttpService
@@ -184,13 +183,13 @@ class ReVancedAPI(
         }
     }
 
-    suspend fun getPull(owner: String, repo: String, pullRequestNumber: String): ReVancedAsset {
+    suspend fun getAssetFromPullRequest(owner: String, repo: String, pullRequestNumber: String): ReVancedAsset {
         suspend fun getPullWithRun(
             pullRequestNumber: String,
             config: RepoConfig
         ): GitHubActionRun {
 
-            val pull = githubRequest<GitHubPull>(config, "pulls/$pullRequestNumber")
+            val pull = githubRequest<GitHubPullRequest>(config, "pulls/$pullRequestNumber")
                 .successOrThrow("PR #$pullRequestNumber")
 
             val targetSha = pull.head.sha
@@ -222,13 +221,14 @@ class ReVancedAPI(
 
         val currentRun = getPullWithRun(pullRequestNumber, config)
 
-        val artifact = githubRequest<GitHubActionRunArtifacts>(
+        val artifacts = githubRequest<GitHubActionRunArtifacts>(
             config,
             "actions/runs/${currentRun.id}/artifacts"
         )
             .successOrThrow("PR artifacts for PR #$pullRequestNumber")
             .artifacts
-            .first()
+
+        val artifact = artifacts.firstOrNull() ?: throw Exception("The lastest commit in this PR didn't have any artifacts. Did the GitHub action run correctly?")
 
         return ReVancedAsset(
             downloadUrl = artifact.archiveDownloadUrl,

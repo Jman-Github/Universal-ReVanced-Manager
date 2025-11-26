@@ -14,8 +14,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Android
+import androidx.compose.material.icons.outlined.Api
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Restore
+import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material3.*
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -24,9 +30,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -44,7 +54,12 @@ import app.revanced.manager.ui.component.settings.IntegerItem
 import app.revanced.manager.ui.component.settings.SafeguardBooleanItem
 import app.revanced.manager.ui.component.settings.SettingsListItem
 import app.revanced.manager.ui.viewmodel.AdvancedSettingsViewModel
-import app.revanced.manager.util.*
+import app.revanced.manager.util.ExportNameFormatter
+import app.revanced.manager.util.consumeHorizontalScroll
+import app.revanced.manager.util.openUrl
+import app.revanced.manager.util.toast
+import app.revanced.manager.util.transparentListItemColors
+import app.revanced.manager.util.withHapticFeedback
 import app.universal.revanced.manager.BuildConfig
 import app.universal.revanced.manager.R
 import com.google.accompanist.drawablepainter.rememberDrawablePainter
@@ -1396,6 +1411,17 @@ private fun GitHubPatDialog(
                         IconButton(onClick = { pat = "" }) {
                             Icon(Icons.Outlined.Delete, null)
                         }
+                    },
+                    visualTransformation = VisualTransformation { original ->
+                        val s = original.text
+                        val masked =
+                            if (s.length <= 5) s
+                            else s.take(5) + "•".repeat(s.length - 5)
+
+                        TransformedText(
+                            AnnotatedString(masked),
+                            OffsetMapping.Identity
+                        )
                     }
                 )
             }

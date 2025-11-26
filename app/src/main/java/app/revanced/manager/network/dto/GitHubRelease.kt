@@ -35,13 +35,13 @@ data class GitHubContributor(
 )
 
 @Serializable
-data class GitHubPull(
+data class GitHubPullRequest(
     val url: String,
-    val head: GitHubPullHead
+    val head: GitHubPullRequestHead
 )
 
 @Serializable
-data class GitHubPullHead(
+data class GitHubPullRequestHead(
     val sha: String
 )
 

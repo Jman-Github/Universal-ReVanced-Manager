@@ -4,7 +4,6 @@ import android.content.Context
 import app.universal.revanced.manager.BuildConfig
 import io.ktor.client.*
 import io.ktor.client.engine.okhttp.*
-import io.ktor.client.plugins.HttpRedirect
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.UserAgent
 import io.ktor.client.plugins.contentnegotiation.*
@@ -45,9 +44,6 @@ val httpModule = module {
         }
         install(UserAgent) {
             agent = "ReVanced-Manager/${BuildConfig.VERSION_CODE}"
-        }
-        install(HttpRedirect) {
-            checkHttpMethod = false
         }
     }
 

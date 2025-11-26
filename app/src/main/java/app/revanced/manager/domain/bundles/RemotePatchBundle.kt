@@ -6,12 +6,13 @@ import app.revanced.manager.network.api.ReVancedAPI
 import app.revanced.manager.network.dto.ReVancedAsset
 import app.revanced.manager.network.service.HttpService
 import app.revanced.manager.network.utils.getOrThrow
-import io.ktor.client.*
-import io.ktor.client.engine.okhttp.*
-import io.ktor.client.plugins.*
-import io.ktor.client.request.*
-import io.ktor.client.statement.*
-import io.ktor.utils.io.jvm.javaio.*
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.request.header
+import io.ktor.client.request.prepareGet
+import io.ktor.client.request.url
+import io.ktor.client.statement.bodyAsChannel
+import io.ktor.utils.io.jvm.javaio.toInputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -208,32 +209,31 @@ class GitHubPullRequestBundle(
             Triple(parts[3], parts[4], parts[6])
         }
 
-        api.getPull(owner, repo, prNumber)
+        api.getAssetFromPullRequest(owner, repo, prNumber)
     }
 
     override suspend fun download(info: ReVancedAsset) = withContext(Dispatchers.IO) {
-        println("Starting download")
         val prefs: PreferencesManager by inject()
 
-        HttpClient(OkHttp) {
+        val gitHubPat = prefs.gitHubPat.get().also {
+            if (it == "") throw RuntimeException("PAT is required.")
+        }
+
+        // Custom http client since the default client only accepts content type json
+        val customHttpClient = HttpClient(OkHttp) {
             engine {
                 config {
                     followRedirects(true)
                     followSslRedirects(true)
                 }
             }
-            install(HttpRedirect) {
-                checkHttpMethod = false
-            }
-        }.apply {
+        }
+
+        with(customHttpClient) {
             prepareGet {
                 url(info.downloadUrl)
 
-                prefs.gitHubPat.get().let {
-                    if (it == "") throw RuntimeException("PAT is required.")
-
-                    header("Authorization", "Bearer $it")
-                }
+                header("Authorization", "Bearer $gitHubPat")
             }.execute { httpResponse ->
                 patchBundleOutputStream().use { patchOutput ->
                     val zipInputStream = httpResponse.bodyAsChannel().toInputStream()
@@ -242,7 +242,6 @@ class GitHubPullRequestBundle(
                         while (entry != null) {
                             if (!entry.isDirectory && entry.name.endsWith(".rvp")) {
                                 zis.copyTo(patchOutput)
-                                println("Patches ok.")
                                 break
                             }
                             zis.closeEntry()
