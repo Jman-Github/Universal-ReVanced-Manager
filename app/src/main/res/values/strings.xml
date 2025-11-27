@@ -126,6 +126,8 @@
     <string name="updates_description">Check for updates and view changelog</string>
     <string name="downloads">Downloads</string>
     <string name="downloads_description">Downloader plugins and downloaded apps</string>
+    <string name="plugins_help_title">What is a downloader?</string>
+    <string name="plugins_help_description">A downloader is a plugin which allows URV to download stock APKs from various sources. The downloaded APKs will be shown in the bottom section. During the patching process, you can choose an already downloaded APKs or you can download it via a plugin.\n\nThe list of supported downloader plugins can be found</string>
     <string name="import_export">Import &amp; export</string>
     <string name="import_export_description">Keystore, patch options and selection</string>
     <string name="changelog">View changelogs</string>
@@ -339,7 +341,7 @@ Patch profiles are not affected.</string>
 
 Patch profiles are not affected.</string>
     <string name="patch_options_reset_all_description">Resets all patch options</string>
-    <string name="downloader_plugins">Plugins</string>
+    <string name="downloader_plugins">Downloader plugins</string>
     <string name="downloader_plugin_state_trusted">Trusted</string>
     <string name="downloader_plugin_state_failed">Failed to load. Click for more details</string>
     <string name="downloader_plugin_state_untrusted">Untrusted</string>
@@ -751,7 +753,7 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
 
     <string name="about_revanced_manager">About Universal ReVanced Manager</string>
     <string name="revanced_manager_description">The Universal ReVanced Manager (URV Manager) is a fork of the Official ReVanced Manager. Both applications use the ReVanced Patcher which allows you to download and patch apps with custom patches and manage the patching process. The unique features included in the Universal ReVanced Manager are patch bundle display names, support for importing any third party patch bundles, and much more. See a full list of unique features the Universal ReVanced Manager has to offer</string>
-    <string name="unique_features_label">here.</string>
+    <string name="here">here.</string>
     <string name="developer_options_enabled">Developer options enabled</string>
     <string name="developer_options_taps">%d taps remaining</string>
     <string name="developer_options_already_enabled">Developer options are already enabled</string>

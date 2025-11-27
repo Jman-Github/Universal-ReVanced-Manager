@@ -4,33 +4,16 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
 import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Save
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.rememberTopAppBarState
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
@@ -38,21 +21,15 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import app.universal.revanced.manager.R
 import app.revanced.manager.network.downloader.DownloaderPluginState
-import app.revanced.manager.ui.component.AppLabel
-import app.revanced.manager.ui.component.AppTopBar
-import app.revanced.manager.ui.component.ExceptionViewerDialog
-import app.revanced.manager.ui.component.GroupHeader
-import app.revanced.manager.ui.component.LazyColumnWithScrollbar
-import app.revanced.manager.ui.component.ConfirmDialog
+import app.revanced.manager.ui.component.*
 import app.revanced.manager.ui.component.haptics.HapticCheckbox
 import app.revanced.manager.ui.component.settings.SettingsListItem
 import app.revanced.manager.ui.viewmodel.DownloadsViewModel
 import app.revanced.manager.util.APK_MIMETYPE
+import app.universal.revanced.manager.R
 import org.koin.androidx.compose.koinViewModel
 import java.security.MessageDigest
-import kotlin.text.HexFormat
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalStdlibApi::class)
 @Composable
@@ -64,6 +41,7 @@ fun DownloadsSettingsScreen(
     val pluginStates by viewModel.downloaderPluginStates.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
     var showDeleteConfirmationDialog by rememberSaveable { mutableStateOf(false) }
+    var showHelpDialog by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
 
     val exportApkLauncher =
@@ -88,12 +66,32 @@ fun DownloadsSettingsScreen(
         )
     }
 
+    if (showHelpDialog) {
+        AlertDialog(
+            onDismissRequest = { showHelpDialog = false },
+            title = { Text(stringResource(R.string.plugins_help_title)) },
+            text = {
+                AnnotatedLinkText(
+                    text = stringResource(R.string.plugins_help_description),
+                    linkLabel = stringResource(R.string.here),
+                    url = "https://github.com/Jman-Github/Universal-ReVanced-Manager?tab=readme-ov-file#-supported-downloader-plugins",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showHelpDialog = false }) {
+                    Text(stringResource(R.string.ok))
+                }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             AppTopBar(
                 title = stringResource(R.string.downloads),
                 scrollBehavior = scrollBehavior,
                 onBackClick = onBackClick,
+                onHelpClick = { showHelpDialog = true },
                 actions = {
                     if (viewModel.appSelection.isNotEmpty()) {
                         IconButton(onClick = {
