@@ -110,14 +110,44 @@ To import patch bundles into Universal ReVanced Manager, use my [ReVanced Patch 
 [APKCombo Downloader](https://github.com/Aunali321/revanced-downloader-plugins) ✅  
 
 ## 🤝 Contributors
-##### <span style="display:inline-flex;align-items:center;gap:6px;"><img src="https://images.weserv.nl/?url=github.com%2Fbrosssh.png&h=28&w=28&fit=cover&mask=circle" alt="brosssh avatar" width="28" height="28" /> [brosssh](https://github.com/brosssh)</span>
-Multiple PRs, top contributor
-##### <span style="display:inline-flex;align-items:center;gap:6px;"><img src="https://images.weserv.nl/?url=github.com%2FTanakaLun.png&h=28&w=28&fit=cover&mask=circle" alt="TanakaLun avatar" width="28" height="28" /> [TanakaLun](https://github.com/TanakaLun)</span>
-Chinese localization
-##### <span style="display:inline-flex;align-items:center;gap:6px;"><img src="https://images.weserv.nl/?url=github.com%2Fann9cht.png&h=28&w=28&fit=cover&mask=circle" alt="ann9cht avatar" width="28" height="28" /> [ann9cht](https://github.com/ann9cht)</span>
-Vietnamese localization
-##### <span style="display:inline-flex;align-items:center;gap:6px;"><img src="https://images.weserv.nl/?url=github.com%2FKobeW50.png&h=28&w=28&fit=cover&mask=circle" alt="KobeW50 avatar" width="28" height="28" /> [KobeW50](https://github.com/KobeW50)</span>
-Proofreading strings & wording
+<table>
+  <tr>
+    <td style="vertical-align:middle;padding-right:8px;">
+      <img src="https://images.weserv.nl/?url=github.com%2Fbrosssh.png&h=36&w=36&fit=cover&mask=circle" alt="brosssh avatar" width="36" height="36" />
+    </td>
+    <td style="vertical-align:middle;">
+      <a href="https://github.com/brosssh">brosssh</a><br />
+      Multiple PRs, top contributor
+    </td>
+  </tr>
+  <tr>
+    <td style="vertical-align:middle;padding-right:8px;">
+      <img src="https://images.weserv.nl/?url=github.com%2FTanakaLun.png&h=36&w=36&fit=cover&mask=circle" alt="TanakaLun avatar" width="36" height="36" />
+    </td>
+    <td style="vertical-align:middle;">
+      <a href="https://github.com/TanakaLun">TanakaLun</a><br />
+      Chinese localization
+    </td>
+  </tr>
+  <tr>
+    <td style="vertical-align:middle;padding-right:8px;">
+      <img src="https://images.weserv.nl/?url=github.com%2Fann9cht.png&h=36&w=36&fit=cover&mask=circle" alt="ann9cht avatar" width="36" height="36" />
+    </td>
+    <td style="vertical-align:middle;">
+      <a href="https://github.com/ann9cht">ann9cht</a><br />
+      Vietnamese localization
+    </td>
+  </tr>
+  <tr>
+    <td style="vertical-align:middle;padding-right:8px;">
+      <img src="https://images.weserv.nl/?url=github.com%2FKobeW50.png&h=36&w=36&fit=cover&mask=circle" alt="KobeW50 avatar" width="36" height="36" />
+    </td>
+    <td style="vertical-align:middle;">
+      <a href="https://github.com/KobeW50">KobeW50</a><br />
+      Proofreading strings & wording
+    </td>
+  </tr>
+</table>
 
 ## ⚖️ License
 
