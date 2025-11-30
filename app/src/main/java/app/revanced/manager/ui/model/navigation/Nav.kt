@@ -14,7 +14,7 @@ interface ComplexParameter<T : Parcelable>
 object Dashboard
 
 @Serializable
-object AppSelector
+data class AppSelector(val autoStorage: Boolean = false, val autoStorageReturn: Boolean = false)
 
 @Serializable
 data class InstalledApplicationInfo(val packageName: String)
@@ -42,6 +42,7 @@ data object SelectedApplicationInfo : ComplexParameter<SelectedApplicationInfo.V
             val app: SelectedApp,
             val currentSelection: PatchSelection?,
             val options: @RawValue Options,
+            val preferredAppVersion: String? = null,
             val missingPatchNames: @RawValue List<String>? = null
         ) : Parcelable
     }

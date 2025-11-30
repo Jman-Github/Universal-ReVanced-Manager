@@ -37,18 +37,20 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.draw.clip
 import app.universal.revanced.manager.R
-import app.revanced.manager.data.platform.NetworkInfo
 import app.revanced.manager.domain.bundles.PatchBundleSource
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
+import app.revanced.manager.data.platform.NetworkInfo
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.domain.repository.PatchBundleRepository.DisplayNameUpdateResult
 import app.revanced.manager.ui.component.ConfirmDialog
 import app.revanced.manager.ui.component.TextInputDialog
-import app.revanced.manager.ui.component.bundle.extractGithubReleaseUrlFromDownload
-import app.revanced.manager.ui.component.bundle.initialGithubReleaseUrl
+import app.revanced.manager.ui.component.bundle.BundleLinksSheet
+import app.revanced.manager.ui.component.bundle.openBundleCatalogPage
+import app.revanced.manager.ui.component.bundle.openBundleReleasePage
 import app.revanced.manager.ui.component.haptics.HapticCheckbox
 import app.revanced.manager.util.consumeHorizontalScroll
+import app.revanced.manager.util.PatchListCatalog
 import app.revanced.manager.util.relativeTime
 import app.revanced.manager.util.simpleMessage
 import app.revanced.manager.util.toast
@@ -78,6 +80,10 @@ fun BundleItem(
     val networkInfo = koinInject<NetworkInfo>()
     val bundleRepo = koinInject<PatchBundleRepository>()
     val coroutineScope = rememberCoroutineScope()
+    val catalogUrl = remember(src) {
+        if (src.isDefault) PatchListCatalog.revancedCatalogUrl() else PatchListCatalog.resolveCatalogUrl(src)
+    }
+    var showLinkSheet by rememberSaveable { mutableStateOf(false) }
     var showRenameDialog by rememberSaveable { mutableStateOf(false) }
 
     if (viewBundleDialogPage) {
@@ -299,16 +305,7 @@ fun BundleItem(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 ActionIconButton(
-                    onClick = {
-                        coroutineScope.launch {
-                            openBundleReleasePage(
-                                src = src,
-                                networkInfo = networkInfo,
-                                context = context,
-                                uriHandler = uriHandler
-                            )
-                        }
-                    }
+                    onClick = { showLinkSheet = true }
                 ) {
                     Icon(
                         FontAwesomeIcons.Brands.Github,
@@ -336,6 +333,24 @@ fun BundleItem(
             }
         }
     }
+
+    if (showLinkSheet) {
+        BundleLinksSheet(
+            bundleTitle = bundleTitle,
+            catalogUrl = catalogUrl,
+            onReleaseClick = {
+                coroutineScope.launch {
+                    openBundleReleasePage(src, networkInfo, context, uriHandler)
+                }
+            },
+            onCatalogClick = {
+                coroutineScope.launch {
+                    openBundleCatalogPage(catalogUrl, context, uriHandler)
+                }
+            },
+            onDismissRequest = { showLinkSheet = false }
+        )
+    }
 }
 
 @Composable
@@ -348,49 +363,5 @@ private fun ActionIconButton(
         modifier = Modifier.size(40.dp)
     ) {
         content()
-    }
-}
-
-private suspend fun openBundleReleasePage(
-    src: PatchBundleSource,
-    networkInfo: NetworkInfo,
-    context: android.content.Context,
-    uriHandler: androidx.compose.ui.platform.UriHandler
-) {
-    val manifestSource = src.patchBundle?.manifestAttributes?.source
-    val cached = initialGithubReleaseUrl(src, manifestSource)
-    if (!cached.isNullOrBlank()) {
-        uriHandler.openUri(cached)
-        return
-    }
-
-    val remote = src.asRemoteOrNull
-    if (remote == null) {
-        context.toast(context.getString(R.string.bundle_release_page_unavailable))
-        return
-    }
-
-    if (!networkInfo.isConnected()) {
-        context.toast(context.getString(R.string.bundle_release_page_unavailable))
-        return
-    }
-
-    runCatching {
-        val asset = remote.fetchLatestReleaseInfo()
-        val url = extractGithubReleaseUrlFromDownload(asset.downloadUrl)
-            ?: asset.pageUrl?.takeUnless { it.isBlank() }
-            ?: extractGithubReleaseUrlFromDownload(remote.endpoint)
-        if (url.isNullOrBlank()) {
-            context.toast(context.getString(R.string.bundle_release_page_unavailable))
-        } else {
-            uriHandler.openUri(url)
-        }
-    }.onFailure { error ->
-        context.toast(
-            context.getString(
-                R.string.bundle_release_page_error,
-                error.simpleMessage().orEmpty()
-            )
-        )
     }
 }

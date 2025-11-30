@@ -348,8 +348,22 @@ fun InstalledAppInfoScreen(
                         onClick = { exportSavedLauncher.launch(exportFileName) }
                     )
 
+                    var showSavedUninstallDialog by rememberSaveable { mutableStateOf(false) }
+                    if (showSavedUninstallDialog) {
+                        ConfirmDialog(
+                            onDismiss = { showSavedUninstallDialog = false },
+                            onConfirm = {
+                                showSavedUninstallDialog = false
+                                viewModel.uninstallSavedInstallation()
+                            },
+                            title = stringResource(R.string.saved_app_uninstall_title),
+                            description = stringResource(R.string.saved_app_uninstall_description),
+                            icon = Icons.Outlined.Delete
+                        )
+                    }
+
                     val installText = if (isInstalledOnDevice) {
-                        stringResource(R.string.uninstall)
+                        stringResource(R.string.update_saved_app)
                     } else {
                         stringResource(R.string.install_saved_app)
                     }
@@ -357,12 +371,11 @@ fun InstalledAppInfoScreen(
                         icon = Icons.Outlined.InstallMobile,
                         text = installText,
                         onClick = {
-                            if (isInstalledOnDevice) {
-                                viewModel.uninstallSavedInstallation()
-                            } else {
-                                viewModel.installSavedApp()
-                            }
-                        }
+                            viewModel.installSavedApp()
+                        },
+                        onLongClick = if (isInstalledOnDevice) {
+                            { showSavedUninstallDialog = true }
+                        } else null
                     )
 
                     val deleteAction: () -> Unit = if (installedApp.installType == InstallType.SAVED) {

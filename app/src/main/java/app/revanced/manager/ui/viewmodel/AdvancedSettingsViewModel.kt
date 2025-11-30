@@ -29,6 +29,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import app.revanced.manager.ui.model.PatchSelectionActionKey
 
 class AdvancedSettingsViewModel(
     val prefs: PreferencesManager,
@@ -51,6 +52,11 @@ class AdvancedSettingsViewModel(
 
         prefs.api.update(value)
         patchBundleRepository.reloadApiBundles()
+    }
+
+    // PR #35: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35
+    fun setGitHubPat(value: String) = viewModelScope.launch(Dispatchers.Default) {
+        prefs.gitHubPat.update(value.trim())
     }
 
     fun exportDebugLogs(target: Uri) = viewModelScope.launch {
@@ -103,6 +109,12 @@ class AdvancedSettingsViewModel(
     fun resetPatchedAppExportFormat() = viewModelScope.launch(Dispatchers.Default) {
         prefs.patchedAppExportFormat.update(prefs.patchedAppExportFormat.default)
     }
+
+    fun setPatchSelectionActionOrder(order: List<PatchSelectionActionKey>) =
+        viewModelScope.launch(Dispatchers.Default) {
+            val serialized = order.joinToString(",") { it.storageId }
+            prefs.patchSelectionActionOrder.update(serialized)
+        }
 
     fun restoreOfficialBundle() = viewModelScope.launch(Dispatchers.Default) {
         val hasBundle = patchBundleRepository.sources.first().any { it.isDefault }

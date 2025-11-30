@@ -17,6 +17,7 @@ import app.revanced.manager.data.room.bundles.PatchBundleEntity
 import app.revanced.manager.data.room.bundles.PatchBundleProperties
 import app.revanced.manager.data.room.bundles.Source
 import app.revanced.manager.domain.bundles.APIPatchBundle
+import app.revanced.manager.domain.bundles.GitHubPullRequestBundle
 import app.revanced.manager.domain.bundles.JsonPatchBundle
 import app.revanced.manager.data.room.bundles.Source as SourceInfo
 import app.revanced.manager.domain.bundles.LocalPatchBundle
@@ -114,6 +115,32 @@ class PatchBundleRepository(
         bundleImportProgressFlow.value = progress
     }
 
+    suspend fun enforceOfficialOrderPreference() = dispatchAction("Enforce official order preference") { state ->
+        val storedOrder = prefs.officialBundleSortOrder.get()
+        if (storedOrder < 0) return@dispatchAction state
+        val entities = dao.all().sortedBy { entity -> entity.sortOrder }
+        val currentIndex = entities.indexOfFirst { entity -> entity.uid == DEFAULT_SOURCE_UID }
+        if (currentIndex == -1) return@dispatchAction state
+        val targetIndex = storedOrder.coerceIn(0, entities.lastIndex)
+        if (currentIndex == targetIndex) return@dispatchAction state
+
+        val adjusted = entities.toMutableList()
+        val defaultEntity = adjusted.removeAt(currentIndex)
+        adjusted.add(targetIndex, defaultEntity)
+        adjusted.forEachIndexed { index, entity ->
+            dao.updateSortOrder(entity.uid, index)
+        }
+        doReload()
+    }
+
+    suspend fun getOfficialBundleSortOrder(): Int? =
+        prefs.officialBundleSortOrder.get().takeIf { it >= 0 }
+
+    suspend fun setOfficialBundleSortOrder(order: Int?) {
+        val value = order?.takeIf { it >= 0 } ?: -1
+        prefs.officialBundleSortOrder.update(value)
+    }
+
     suspend fun snapshotSelection(selection: PatchSelection) =
         selection.toPayload(sources.first(), bundleInfoFlow.first())
 
@@ -131,9 +158,7 @@ class PatchBundleRepository(
      * Performs a reload. Do not call this outside of a store action.
      */
     private suspend fun doReload(): State {
-        val entities = loadFromDb().onEach {
-            Log.d(tag, "Bundle: $it")
-        }
+        val entities = loadEntitiesEnforcingOfficialOrder()
 
         val sources = entities.associate { it.uid to it.load() }.toMutableMap()
 
@@ -162,9 +187,22 @@ class PatchBundleRepository(
 
         val officialSource = sources[0]
         val officialDisplayName = "Official ReVanced Patches"
-        if (officialSource != null && officialSource.displayName != officialDisplayName) {
-            updateDb(officialSource.uid) { it.copy(displayName = officialDisplayName) }
-            sources[officialSource.uid] = officialSource.copy(displayName = officialDisplayName)
+        if (officialSource != null) {
+            val storedCustomName = prefs.officialBundleCustomDisplayName.get().takeIf { it.isNotBlank() }
+            val currentName = officialSource.displayName
+            when {
+                storedCustomName != null && currentName != storedCustomName -> {
+                    updateDb(officialSource.uid) { it.copy(displayName = storedCustomName) }
+                    sources[officialSource.uid] = officialSource.copy(displayName = storedCustomName)
+                }
+                storedCustomName == null && currentName.isNullOrBlank() -> {
+                    updateDb(officialSource.uid) { it.copy(displayName = officialDisplayName) }
+                    sources[officialSource.uid] = officialSource.copy(displayName = officialDisplayName)
+                }
+                storedCustomName == null && !currentName.isNullOrBlank() && currentName != officialDisplayName -> {
+                    prefs.officialBundleCustomDisplayName.update(currentName)
+                }
+            }
         }
 
         manualUpdateInfoFlow.update { current ->
@@ -186,7 +224,7 @@ class PatchBundleRepository(
         if (all.isEmpty()) {
             val shouldRestoreDefault = !prefs.officialBundleRemoved.get()
             if (shouldRestoreDefault) {
-                val default = defaultSource()
+                val default = createDefaultEntityWithStoredOrder()
                 dao.upsert(default)
                 return listOf(default)
             }
@@ -280,7 +318,65 @@ class PatchBundleRepository(
                 source.url.toString(),
                 autoUpdate,
             )
+            // PR #35: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35
+            is SourceInfo.GitHubPullRequest -> GitHubPullRequestBundle(
+                actualName,
+                uid,
+                normalizedDisplayName,
+                createdAt,
+                updatedAt,
+                versionHash,
+                null,
+                dir,
+                source.url.toString(),
+                autoUpdate
+            )
         }
+    }
+
+    private suspend fun loadEntitiesEnforcingOfficialOrder(): List<PatchBundleEntity> {
+        var entities = loadFromDb()
+        if (enforceOfficialSortOrderIfNeeded(entities)) {
+            entities = loadFromDb()
+        }
+        entities.forEach { Log.d(tag, "Bundle: $it") }
+        return entities
+    }
+
+    private suspend fun enforceOfficialSortOrderIfNeeded(entities: List<PatchBundleEntity>): Boolean {
+        if (entities.isEmpty()) return false
+        val ordered = entities.sortedBy { it.sortOrder }
+        val currentIndex = ordered.indexOfFirst { it.uid == DEFAULT_SOURCE_UID }
+        if (currentIndex == -1) return false
+
+        val desiredOrder = prefs.officialBundleSortOrder.get()
+        val currentOrder = currentIndex.coerceAtLeast(0)
+        if (desiredOrder < 0) {
+            prefs.officialBundleSortOrder.update(currentOrder)
+            return false
+        }
+
+        val targetIndex = desiredOrder.coerceIn(0, ordered.lastIndex)
+        if (currentIndex == targetIndex) {
+            prefs.officialBundleSortOrder.update(currentOrder)
+            return false
+        }
+
+        val reordered = ordered.toMutableList()
+        val defaultEntity = reordered.removeAt(currentIndex)
+        reordered.add(targetIndex, defaultEntity)
+
+        reordered.forEachIndexed { index, entity ->
+            dao.updateSortOrder(entity.uid, index)
+        }
+        prefs.officialBundleSortOrder.update(targetIndex)
+        return true
+    }
+
+    private suspend fun createDefaultEntityWithStoredOrder(): PatchBundleEntity {
+        val storedOrder = prefs.officialBundleSortOrder.get().takeIf { it >= 0 }
+        val base = defaultSource()
+        return storedOrder?.let { base.copy(sortOrder = it) } ?: base
     }
 
     private suspend fun nextSortOrder(): Int = (dao.maxSortOrder() ?: -1) + 1
@@ -377,6 +473,8 @@ class PatchBundleRepository(
             bundles.forEach {
                 if (it.isDefault) {
                     prefs.officialBundleRemoved.update(true)
+                    val storedOrder = dao.getProps(it.uid)?.sortOrder ?: 0
+                    prefs.officialBundleSortOrder.update(storedOrder.coerceAtLeast(0))
                 }
 
                 dao.remove(it.uid)
@@ -390,7 +488,7 @@ class PatchBundleRepository(
 
     suspend fun restoreDefaultBundle() = dispatchAction("Restore default bundle") {
         prefs.officialBundleRemoved.update(false)
-        dao.upsert(defaultSource())
+        dao.upsert(createDefaultEntityWithStoredOrder())
         doReload()
     }
 
@@ -443,6 +541,10 @@ class PatchBundleRepository(
                 val updated = src.copy(displayName = normalized)
                 state.copy(sources = state.sources.put(uid, updated))
             }
+        }
+
+        if (uid == DEFAULT_SOURCE_UID && result == DisplayNameUpdateResult.SUCCESS) {
+            prefs.officialBundleCustomDisplayName.update(normalized.orEmpty())
         }
 
         return result
@@ -547,7 +649,8 @@ class PatchBundleRepository(
     suspend fun createRemote(url: String, autoUpdate: Boolean, createdAt: Long? = null, updatedAt: Long? = null) =
         dispatchAction("Add bundle ($url)") { state ->
             val src = createEntity("", SourceInfo.from(url), autoUpdate, createdAt = createdAt, updatedAt = updatedAt).load() as RemotePatchBundle
-            update(src)
+            val allowUnsafeDownload = prefs.allowMeteredUpdates.get()
+            update(src, allowUnsafeNetwork = allowUnsafeDownload)
             state.copy(sources = state.sources.put(src.uid, src))
         }
 
@@ -576,9 +679,13 @@ class PatchBundleRepository(
         }
     }
 
-    suspend fun update(vararg sources: RemotePatchBundle, showToast: Boolean = false) {
+    suspend fun update(
+        vararg sources: RemotePatchBundle,
+        showToast: Boolean = false,
+        allowUnsafeNetwork: Boolean = false
+    ) {
         val uids = sources.map { it.uid }.toSet()
-        store.dispatch(Update(showToast = showToast) { it.uid in uids })
+        store.dispatch(Update(showToast = showToast, allowUnsafeNetwork = allowUnsafeNetwork) { it.uid in uids })
     }
 
     suspend fun redownloadRemoteBundles() = store.dispatch(Update(force = true))
@@ -606,8 +713,16 @@ class PatchBundleRepository(
             currentOrder.filterNotTo(this) { it in sanitized }
         }
 
+        if (finalOrder == currentOrder) {
+            return@dispatchAction state
+        }
+
         finalOrder.forEachIndexed { index, uid ->
             dao.updateSortOrder(uid, index)
+        }
+        val defaultIndex = finalOrder.indexOf(DEFAULT_SOURCE_UID)
+        if (defaultIndex != -1) {
+            prefs.officialBundleSortOrder.update(defaultIndex)
         }
 
         doReload()
@@ -616,6 +731,7 @@ class PatchBundleRepository(
     private inner class Update(
         private val force: Boolean = false,
         private val showToast: Boolean = false,
+        private val allowUnsafeNetwork: Boolean = false,
         private val predicate: (bundle: RemotePatchBundle) -> Boolean = { true },
     ) : Action<State> {
         private suspend fun toast(@StringRes id: Int, vararg args: Any?) =
@@ -627,7 +743,7 @@ class PatchBundleRepository(
             current: State
         ) = coroutineScope {
             val allowMeteredUpdates = prefs.allowMeteredUpdates.get()
-            if (!allowMeteredUpdates && !networkInfo.isSafe()) {
+            if (!allowUnsafeNetwork && !allowMeteredUpdates && !networkInfo.isSafe()) {
                 Log.d(tag, "Skipping update check because the network is down or metered.")
                 bundleUpdateProgressFlow.value = null
                 return@coroutineScope current

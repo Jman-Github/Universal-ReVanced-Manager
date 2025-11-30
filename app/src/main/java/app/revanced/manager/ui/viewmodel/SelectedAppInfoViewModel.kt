@@ -39,6 +39,8 @@ import app.revanced.manager.domain.repository.remapLocalBundles
 import app.revanced.manager.domain.repository.toConfiguration
 import app.revanced.manager.patcher.patch.PatchBundleInfo
 import app.revanced.manager.patcher.patch.PatchBundleInfo.Extensions.toPatchSelection
+import app.revanced.manager.patcher.split.SplitApkInspector
+import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.network.downloader.LoadedDownloaderPlugin
 import app.revanced.manager.network.downloader.ParceledDownloaderData
 import app.revanced.manager.patcher.patch.PatchBundleInfo.Extensions.requiredOptionsSet
@@ -105,7 +107,9 @@ class SelectedAppInfoViewModel(
     private val profileId = input.profileId
     private val requiresSourceSelection = input.requiresSourceSelection
     val sourceSelectionRequired get() = requiresSourceSelection
-    private val storageInputFile = File(filesystem.uiTempDir, "profile_input.apk").apply { delete() }
+    private val storageInputDir = filesystem.uiTempDir
+    private val splitWorkspace = filesystem.tempDir
+    private var preparedApkCleanup: (() -> Unit)? = null
     private val storageSelectionChannel = Channel<Unit>(Channel.CONFLATED)
     val requestStorageSelection = storageSelectionChannel.receiveAsFlow()
     private val _profileLaunchState = MutableStateFlow<ProfileLaunchState?>(null)
@@ -449,7 +453,6 @@ class SelectedAppInfoViewModel(
         val state = mutableStateOf<Options>(emptyMap())
 
         optionsLoadJob = viewModelScope.launch {
-            if (!persistConfiguration) return@launch // TODO: save options for patched apps.
             val bundlePatches = withContext(Dispatchers.Default) {
                 bundleRepository
                     .scopedBundleInfoFlow(packageName, input.app.version)
@@ -543,11 +546,19 @@ class SelectedAppInfoViewModel(
         }
     }
 
-    private fun loadLocalApk(uri: Uri): SelectedApp.Local? =
+    private suspend fun loadLocalApk(uri: Uri): SelectedApp.Local? =
         app.contentResolver.openInputStream(uri)?.use { stream ->
-            storageInputFile.delete()
+            storageInputDir.listFiles()
+                ?.filter { it.name.startsWith("profile_input.") }
+                ?.forEach(File::delete)
+            val extension = uri.lastPathSegment
+                ?.substringAfterLast('.', "")
+                ?.takeIf { it.isNotBlank() && it.length <= 10 && it.all { ch -> ch.isLetterOrDigit() } }
+                ?.lowercase(Locale.ROOT)
+                ?: "apk"
+            val storageInputFile = File(storageInputDir, "profile_input.$extension").apply { delete() }
             Files.copy(stream, storageInputFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
-            pm.getPackageInfo(storageInputFile)?.let { packageInfo ->
+            resolvePackageInfo(storageInputFile)?.let { packageInfo ->
                 SelectedApp.Local(
                     packageName = packageInfo.packageName,
                     version = packageInfo.versionName ?: "",
@@ -556,6 +567,18 @@ class SelectedAppInfoViewModel(
                 )
             }
         }
+
+    private suspend fun resolvePackageInfo(file: File): PackageInfo? {
+        if (!file.exists()) return null
+        if (!SplitApkPreparer.isSplitArchive(file)) return pm.getPackageInfo(file)
+
+        // For metadata/UI we only need the representative base split, not a full merge.
+        val representative = SplitApkInspector.extractRepresentativeApk(file, splitWorkspace) ?: return null
+        return pm.getPackageInfo(representative.file)?.also {
+            // Retain cleanup until the next resolution to keep label/icon loading working.
+            preparedApkCleanup = representative.cleanup
+        }
+    }
 
     fun selectDownloadedApp(downloadedApp: DownloadedApp) {
         cancelPluginAction()
@@ -638,19 +661,26 @@ class SelectedAppInfoViewModel(
                 val targetsAllVersions = preferredBundleAllVersionsFlow.value
                 val targetVersion =
                     if (targetsAllVersions) null else preferredBundleVersion ?: desiredVersion
-                withContext(Dispatchers.IO) {
+                val result = withContext(Dispatchers.IO) {
                     plugin.get(scope, packageName, targetVersion)
-                }?.let { (data, version) ->
-                    if (targetVersion != null && version != targetVersion) {
-                        app.toast(app.getString(R.string.downloader_invalid_version))
-                        return@launch
-                    }
-                    selectedApp = SelectedApp.Download(
-                        packageName,
-                        version,
-                        ParceledDownloaderData(plugin, data)
-                    )
-                } ?: app.toast(app.getString(R.string.downloader_app_not_found))
+                }
+                if (result == null) {
+                    app.toast(app.getString(R.string.downloader_app_not_found))
+                    return@launch
+                }
+
+                val (data, reportedVersion) = result
+                if (targetVersion != null && reportedVersion != null && reportedVersion != targetVersion) {
+                    app.toast(app.getString(R.string.downloader_invalid_version))
+                    return@launch
+                }
+
+                val resolvedVersion = reportedVersion ?: targetVersion
+                selectedApp = SelectedApp.Download(
+                    packageName,
+                    resolvedVersion,
+                    ParceledDownloaderData(plugin, data)
+                )
             } catch (e: UserInteractionException.Activity) {
                 app.toast(e.message!!)
             } catch (e: CancellationException) {
@@ -670,13 +700,59 @@ class SelectedAppInfoViewModel(
     }
 
     private fun invalidateSelectedAppInfo() = viewModelScope.launch {
+        // Defer cleanup of the previous prepared APK until after new metadata is resolved,
+        // so existing UI can keep reading the old label/icon without races.
+        val previousCleanup = preparedApkCleanup
+        preparedApkCleanup = null
+
         val info = when (val app = selectedApp) {
-            is SelectedApp.Local -> withContext(Dispatchers.IO) { pm.getPackageInfo(app.file) }
+            is SelectedApp.Local -> withContext(Dispatchers.IO) { resolvePackageInfo(app.file) }
             is SelectedApp.Installed -> withContext(Dispatchers.IO) { pm.getPackageInfo(app.packageName) }
+            is SelectedApp.Download, is SelectedApp.Search -> withContext(Dispatchers.IO) {
+                val version = app.version
+                val downloaded = when {
+                    version != null -> downloadedAppRepository.get(app.packageName, version)
+                        ?: downloadedAppRepository.getLatest(app.packageName)
+                    else -> downloadedAppRepository.getLatest(app.packageName)
+                }
+                downloaded?.let { resolvePackageInfo(downloadedAppRepository.getApkFileForApp(it)) }
+            }
             else -> null
         }
 
         selectedAppInfo = info
+        // Now that UI is updated to new info, we can safely clean up the old prepared APK.
+        previousCleanup?.invoke()
+
+        val current = selectedApp
+        val resolvedVersion = info?.versionName?.takeUnless(String::isNullOrBlank)
+        if (info != null) {
+            when (current) {
+                is SelectedApp.Local -> if (!current.resolved || current.packageName == current.file.nameWithoutExtension) {
+                    selectedApp = current.copy(
+                        packageName = info.packageName,
+                        version = resolvedVersion ?: current.version,
+                        resolved = true
+                    )
+                }
+
+                is SelectedApp.Download -> if (current.version.isNullOrBlank() || current.packageName == current.version) {
+                    selectedApp = current.copy(
+                        packageName = info.packageName,
+                        version = resolvedVersion ?: info.versionName
+                    )
+                }
+
+                is SelectedApp.Search -> if (current.version.isNullOrBlank()) {
+                    selectedApp = current.copy(
+                        packageName = info.packageName,
+                        version = resolvedVersion ?: info.versionName
+                    )
+                }
+
+                else -> Unit
+            }
+        }
     }
 
     fun getOptionsFiltered(bundles: List<PatchBundleInfo.Scoped>) = options.filtered(bundles)
@@ -687,6 +763,12 @@ class SelectedAppInfoViewModel(
             isSelected = { bundle, patch -> patch.name in patchSelection[bundle.uid]!! },
             optionsForPatch = { bundle, patch -> options[bundle.uid]?.get(patch.name) },
         )
+
+    override fun onCleared() {
+        super.onCleared()
+        preparedApkCleanup?.invoke()
+        preparedApkCleanup = null
+    }
 
     suspend fun getPatcherParams(): Patcher.ViewModelParams {
         selectionLoadJob?.join()

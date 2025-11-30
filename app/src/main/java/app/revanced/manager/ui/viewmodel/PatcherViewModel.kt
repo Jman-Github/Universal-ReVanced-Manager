@@ -45,6 +45,7 @@ import app.revanced.manager.patcher.logger.LogLevel
 import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.runtime.MemoryLimitConfig
 import app.revanced.manager.patcher.runtime.ProcessRuntime
+import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.patcher.worker.PatcherWorker
 import app.revanced.manager.plugin.downloader.PluginHostApi
 import app.revanced.manager.plugin.downloader.UserInteractionException
@@ -56,6 +57,7 @@ import app.revanced.manager.ui.model.SelectedApp
 import app.revanced.manager.ui.model.State
 import app.revanced.manager.ui.model.Step
 import app.revanced.manager.ui.model.StepCategory
+import app.revanced.manager.ui.model.StepId
 import app.revanced.manager.ui.model.StepProgressProvider
 import app.revanced.manager.ui.model.navigation.Patcher
 import app.revanced.manager.util.PM
@@ -165,9 +167,30 @@ class PatcherViewModel(
             bundleOptions.mapValues { (_, patchOptions) -> patchOptions.toMap() }.toMap()
         }.toMap()
 
-    fun dismissMissingPatchDialog() {
-        missingPatchDialog = null
+fun dismissMissingPatchWarning() {
+    missingPatchWarning = null
+}
+
+fun proceedAfterMissingPatchWarning() {
+    if (missingPatchWarning == null) return
+    viewModelScope.launch {
+        missingPatchWarning = null
+        startWorker()
     }
+}
+
+fun removeMissingPatchesAndStart() {
+    val warning = missingPatchWarning ?: return
+    viewModelScope.launch {
+        val scopedBundles = gatherScopedBundles()
+        val sanitizedSelection = sanitizeSelection(appliedSelection, scopedBundles)
+        val sanitizedOptions = sanitizeOptions(appliedOptions, scopedBundles)
+        appliedSelection = sanitizedSelection
+        appliedOptions = sanitizedOptions
+        missingPatchWarning = null
+        startWorker()
+    }
+}
 
     private var currentActivityRequest: Pair<CompletableDeferred<Boolean>, String>? by mutableStateOf(
         null
@@ -214,6 +237,9 @@ class PatcherViewModel(
     }
 
     private var inputFile: File? by savedStateHandle.saveableVar()
+    private var requiresSplitPreparation by savedStateHandle.saveableVar {
+        initialSplitRequirement(input.selectedApp)
+    }
     private val outputFile = tempDir.resolve("output.apk")
 
     private val logs by savedStateHandle.saveable<MutableList<Pair<LogLevel, String>>> { mutableListOf() }
@@ -252,16 +278,21 @@ class PatcherViewModel(
     var memoryAdjustmentDialog by mutableStateOf<MemoryAdjustmentDialogState?>(null)
         private set
 
-    data class MissingPatchDialogState(val patchNames: List<String>)
-    var missingPatchDialog by mutableStateOf<MissingPatchDialogState?>(null)
-        private set
+    data class MissingPatchWarningState(
+        val patchNames: List<String>
+    )
+var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
+    private set
 
-    private suspend fun collectSelectedBundleMetadata(): Pair<List<String>, List<String>> {
-        val globalBundles = patchBundleRepository.bundleInfoFlow.first()
-        val scopedBundles = patchBundleRepository.scopedBundleInfoFlow(
+    private suspend fun gatherScopedBundles(): Map<Int, PatchBundleInfo.Scoped> =
+        patchBundleRepository.scopedBundleInfoFlow(
             packageName,
             input.selectedApp.version
         ).first().associateBy { it.uid }
+
+    private suspend fun collectSelectedBundleMetadata(): Pair<List<String>, List<String>> {
+        val globalBundles = patchBundleRepository.bundleInfoFlow.first()
+        val scopedBundles = gatherScopedBundles()
         val sanitizedSelection = sanitizeSelection(appliedSelection, scopedBundles)
         val versions = mutableListOf<String>()
         val names = mutableListOf<String>()
@@ -311,7 +342,8 @@ class PatcherViewModel(
     val steps by savedStateHandle.saveable(saver = snapshotStateListSaver()) {
         generateSteps(
             app,
-            input.selectedApp
+            input.selectedApp,
+            requiresSplitPreparation
         ).toMutableStateList()
     }
     private var currentStepIndex = 0
@@ -334,12 +366,48 @@ class PatcherViewModel(
     private var forceKeepLocalInput = false
     private var awaitingPackageInstall: String? = null
 
-    private var patcherWorkerId: ParcelUuid by savedStateHandle.saveableVar {
-        ParcelUuid(launchWorker())
-    }
+    private var patcherWorkerId: ParcelUuid?
+        get() = savedStateHandle.get("patcher_worker_id")
+        set(value) {
+            if (value == null) {
+                savedStateHandle.remove<ParcelUuid>("patcher_worker_id")
+            } else {
+                savedStateHandle["patcher_worker_id"] = value
+            }
+        }
 
     init {
-        observeWorker(patcherWorkerId.uuid)
+        val existingId = patcherWorkerId?.uuid
+        if (existingId != null) {
+            observeWorker(existingId)
+        } else {
+            viewModelScope.launch {
+                runPreflightCheck()
+            }
+        }
+    }
+
+    private suspend fun runPreflightCheck() {
+        val scopedBundles = gatherScopedBundles()
+        val sanitizedSelection = sanitizeSelection(appliedSelection, scopedBundles)
+        val missing = mutableListOf<String>()
+        appliedSelection.forEach { (uid, patches) ->
+            val kept = sanitizedSelection[uid] ?: emptySet()
+            patches.filterNot { it in kept }.forEach { missing += it }
+        }
+        if (missing.isNotEmpty()) {
+            missingPatchWarning = MissingPatchWarningState(
+                patchNames = missing.distinct().sorted()
+            )
+        } else {
+            startWorker()
+        }
+    }
+
+    private fun startWorker() {
+        val workId = launchWorker()
+        patcherWorkerId = ParcelUuid(workId)
+        observeWorker(workId)
     }
 
     private suspend fun persistPatchedApp(
@@ -541,7 +609,7 @@ class PatcherViewModel(
     override fun onCleared() {
         super.onCleared()
         app.unregisterReceiver(installerBroadcastReceiver)
-        workManager.cancelWorkById(patcherWorkerId.uuid)
+        patcherWorkerId?.uuid?.let(workManager::cancelWorkById)
         pendingExternalInstall?.let(installerManager::cleanup)
         pendingExternalInstall = null
         externalInstallTimeoutJob?.cancel()
@@ -560,6 +628,7 @@ class PatcherViewModel(
         if (input.selectedApp is SelectedApp.Local && input.selectedApp.temporary) {
             inputFile?.takeIf { it.exists() }?.delete()
             inputFile = null
+            updateSplitStepRequirement(null)
         }
     }
 
@@ -1046,7 +1115,7 @@ class PatcherViewModel(
             onPatchCompleted = {
                 withContext(Dispatchers.Main) { completedPatchCount += 1 }
             },
-            setInputFile = { file ->
+            setInputFile = { file, needsSplit, merged ->
                 val storedFile = if (shouldPreserveInput) {
                     val existing = inputFile
                     if (existing?.exists() == true) {
@@ -1058,7 +1127,10 @@ class PatcherViewModel(
                     }
                 } else file
 
-                withContext(Dispatchers.Main) { inputFile = storedFile }
+                withContext(Dispatchers.Main) {
+                    inputFile = storedFile
+                    updateSplitStepRequirement(storedFile, needsSplit, merged)
+                }
             },
             handleStartActivityRequest = { plugin, intent ->
                 withContext(Dispatchers.Main) {
@@ -1115,6 +1187,7 @@ class PatcherViewModel(
                     if (input.selectedApp is SelectedApp.Local && input.selectedApp.temporary) {
                         inputFile?.takeIf { it.exists() }?.delete()
                         inputFile = null
+                        updateSplitStepRequirement(null)
                     }
                     refreshExportMetadata()
                     _patcherSucceeded.value = true
@@ -1158,17 +1231,7 @@ class PatcherViewModel(
             }
         }
 
-        val failureMessage = workInfo.outputData.getString(PatcherWorker.PROCESS_FAILURE_MESSAGE_KEY)
-        if (!failureMessage.isNullOrBlank()) {
-            val missing = MISSING_PATCH_REGEX.findAll(failureMessage)
-                .map { it.groupValues[1].trim() }
-                .filter { it.isNotEmpty() }
-                .distinct()
-                .toList()
-            if (missing.isNotEmpty()) {
-                missingPatchDialog = MissingPatchDialogState(missing)
-            }
-        }
+        // Missing patch issues are handled during preflight validation.
     }
 
     fun dismissMemoryAdjustmentDialog() {
@@ -1180,7 +1243,7 @@ class PatcherViewModel(
             memoryAdjustmentDialog = null
             handledFailureIds.clear()
             resetStateForRetry()
-            workManager.cancelWorkById(patcherWorkerId.uuid)
+            patcherWorkerId?.uuid?.let(workManager::cancelWorkById)
             val newId = launchWorker()
             patcherWorkerId = ParcelUuid(newId)
             observeWorker(newId)
@@ -1190,11 +1253,88 @@ class PatcherViewModel(
     private fun resetStateForRetry() {
         completedPatchCount = 0
         downloadProgress = null
-        val newSteps = generateSteps(app, input.selectedApp).toMutableStateList()
+        val newSteps = generateSteps(app, input.selectedApp, requiresSplitPreparation).toMutableStateList()
         steps.clear()
         steps.addAll(newSteps)
         currentStepIndex = newSteps.indexOfFirst { it.state == State.RUNNING }.takeIf { it >= 0 } ?: 0
         _patcherSucceeded.value = null
+    }
+
+    private fun initialSplitRequirement(selectedApp: SelectedApp): Boolean =
+        when (selectedApp) {
+            is SelectedApp.Local -> SplitApkPreparer.isSplitArchive(selectedApp.file)
+            else -> false
+        }
+
+    private fun updateSplitStepRequirement(
+        file: File?,
+        needsSplitOverride: Boolean? = null,
+        merged: Boolean = false
+    ) {
+        val needsSplit = needsSplitOverride
+            ?: merged
+            || file?.let(SplitApkPreparer::isSplitArchive) == true
+        when {
+            needsSplit && !requiresSplitPreparation -> {
+                requiresSplitPreparation = true
+                addSplitStep()
+            }
+
+            !needsSplit && requiresSplitPreparation -> {
+                requiresSplitPreparation = false
+                removeSplitStep()
+                return
+            }
+        }
+
+        if (needsSplit && merged) {
+            val index = steps.indexOfFirst { it.id == StepId.PREPARE_SPLIT_APK }
+            if (index >= 0) {
+                steps[index] = steps[index].copy(state = State.COMPLETED)
+                if (currentStepIndex == index && index < steps.lastIndex) {
+                    currentStepIndex++
+                    steps[currentStepIndex] = steps[currentStepIndex].copy(state = State.RUNNING)
+                }
+            }
+        }
+    }
+
+    private fun addSplitStep() {
+        if (steps.any { it.id == StepId.PREPARE_SPLIT_APK }) return
+
+        val loadIndex = steps.indexOfFirst { it.id == StepId.LOAD_PATCHES }
+        val insertIndex = when {
+            loadIndex >= 0 -> loadIndex + 1
+            else -> steps.indexOfFirst { it.id == StepId.READ_APK }.takeIf { it >= 0 } ?: steps.size
+        }
+        val state = if (insertIndex <= currentStepIndex) State.COMPLETED else State.WAITING
+
+        steps.add(insertIndex, buildSplitStep(app, state = state))
+
+        if (insertIndex <= currentStepIndex) {
+            currentStepIndex++
+        }
+    }
+
+    private fun removeSplitStep() {
+        val index = steps.indexOfFirst { it.id == StepId.PREPARE_SPLIT_APK }
+        if (index == -1) return
+
+        val removingCurrent = index == currentStepIndex
+        steps.removeAt(index)
+
+        when {
+            currentStepIndex > index -> currentStepIndex--
+            removingCurrent -> {
+                currentStepIndex = index.coerceAtMost(steps.lastIndex).coerceAtLeast(0)
+                if (steps.isNotEmpty()) {
+                    val current = steps[currentStepIndex]
+                    if (current.state == State.WAITING) {
+                        steps[currentStepIndex] = current.copy(state = State.RUNNING)
+                    }
+                }
+            }
+        }
     }
 
     private fun sanitizeSelection(
@@ -1233,7 +1373,6 @@ class PatcherViewModel(
         private const val SYSTEM_INSTALL_TIMEOUT_MS = 15_000L
         private const val EXTERNAL_INSTALL_TIMEOUT_MS = 25_000L
         private const val MEMORY_ADJUSTMENT_MB = 200
-        private val MISSING_PATCH_REGEX = Regex("Patch with name (.+?) does not exist")
 
         fun LogLevel.androidLog(msg: String) = when (this) {
             LogLevel.TRACE -> Log.v(TAG, msg)
@@ -1242,35 +1381,65 @@ class PatcherViewModel(
             LogLevel.ERROR -> Log.e(TAG, msg)
         }
 
-        fun generateSteps(context: Context, selectedApp: SelectedApp): List<Step> {
+        fun generateSteps(
+            context: Context,
+            selectedApp: SelectedApp,
+            splitStepActive: Boolean
+        ): List<Step> {
             val needsDownload =
                 selectedApp is SelectedApp.Download || selectedApp is SelectedApp.Search
 
             return listOfNotNull(
                 Step(
+                    id = StepId.DOWNLOAD_APK,
                     context.getString(R.string.download_apk),
                     StepCategory.PREPARING,
                     state = State.RUNNING,
                     progressKey = ProgressKey.DOWNLOAD,
                 ).takeIf { needsDownload },
                 Step(
+                    id = StepId.LOAD_PATCHES,
                     context.getString(R.string.patcher_step_load_patches),
                     StepCategory.PREPARING,
                     state = if (needsDownload) State.WAITING else State.RUNNING,
                 ),
+                buildSplitStep(context).takeIf { splitStepActive },
                 Step(
+                    id = StepId.READ_APK,
                     context.getString(R.string.patcher_step_unpack),
                     StepCategory.PREPARING
                 ),
 
                 Step(
+                    id = StepId.EXECUTE_PATCHES,
                     context.getString(R.string.execute_patches),
                     StepCategory.PATCHING
                 ),
 
-                Step(context.getString(R.string.patcher_step_write_patched), StepCategory.SAVING),
-                Step(context.getString(R.string.patcher_step_sign_apk), StepCategory.SAVING)
+                Step(
+                    id = StepId.WRITE_PATCHED_APK,
+                    name = context.getString(R.string.patcher_step_write_patched),
+                    category = StepCategory.SAVING
+                ),
+                Step(
+                    id = StepId.SIGN_PATCHED_APK,
+                    name = context.getString(R.string.patcher_step_sign_apk),
+                    category = StepCategory.SAVING
+                )
             )
         }
+
     }
 }
+
+private fun buildSplitStep(
+    context: Context,
+    state: State = State.WAITING,
+    message: String? = null
+) = Step(
+    id = StepId.PREPARE_SPLIT_APK,
+    name = context.getString(R.string.patcher_step_prepare_split_apk),
+    category = StepCategory.PREPARING,
+    state = state,
+    message = message
+)

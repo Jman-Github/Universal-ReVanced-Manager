@@ -34,6 +34,9 @@ fun AppLabel(
     LaunchedEffect(packageInfo) {
         label = withContext(Dispatchers.IO) {
             packageInfo?.applicationInfo?.loadLabel(context.packageManager)?.toString()
+                ?.takeIf { it.isNotBlank() && it != packageInfo.packageName }
+                ?: packageInfo?.applicationInfo?.nonLocalizedLabel?.toString()
+                ?.takeIf { it.isNotBlank() }
                 ?: defaultText
         }
     }

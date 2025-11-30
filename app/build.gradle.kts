@@ -1,5 +1,7 @@
 import io.github.z4kn4fein.semver.toVersion
 import kotlin.random.Random
+import org.gradle.api.file.DuplicatesStrategy
+import org.gradle.jvm.tasks.Jar
 
 plugins {
     alias(libs.plugins.android.application)
@@ -13,6 +15,17 @@ plugins {
 }
 
 val outputApkFileName = "universal-revanced-manager-$version.apk"
+
+val arscLib by configurations.creating
+
+val strippedArscLib by tasks.registering(Jar::class) {
+    archiveFileName.set("ARSCLib-android.jar")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    doFirst {
+        from(arscLib.resolve().map { zipTree(it) })
+    }
+    exclude("android/**", "org/xmlpull/**")
+}
 
 dependencies {
     // AndroidX Core
@@ -56,9 +69,12 @@ dependencies {
     annotationProcessor(libs.room.compiler)
     ksp(libs.room.compiler)
 
-    // ReVanced
+    // ReVanced (PR #39: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/39)
     implementation(libs.revanced.patcher)
     implementation(libs.revanced.library)
+    arscLib("io.github.reandroid:ARSCLib:1.3.8")
+    implementation(files(strippedArscLib))
+    implementation("androidx.documentfile:documentfile:1.0.1")
 
     // Downloader plugins
     implementation(project(":api"))
@@ -135,7 +151,7 @@ android {
         minSdk = 26
         targetSdk = 35
 
-        val versionStr = if (version == "unspecified") "1.5.0" else version.toString()
+        val versionStr = if (version == "unspecified") "1.5.1" else version.toString()
         versionName = versionStr
         versionCode = with(versionStr.toVersion()) {
             major * 10_000_000 +

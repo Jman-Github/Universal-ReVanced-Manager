@@ -54,7 +54,9 @@ Universal ReVanced Manager includes powerful features that the official ReVanced
 - 🧭 **Organize Bundles**: "Organize" button to manually reorder bundles; exports and imports keep the custom order
 
 ### 📦 App Patching Flow
+- ⚒️ **LisoUseInAIKyrios Patch Support**: Supports the [LisoUseInAIKyrios](https://github.com/LisoUseInAIKyrios/revanced-patches) patch bundle without needing computer, or another app
 - 🧠 **Downloaded App Source**: Added a "Downloaded apps" source in the select source screen when patching. If the manager has cached an APK from a downloader plugin, you can pick it directly from there. This option only appears when that app is available
+- 🧩 **Split APK Support**: `.apkm`, `.apks`, and `.xapk` file formats are automatically converted to the `.apk` format when patching. No need for outside tools
 - 🧹 **Advanced Native Library Stripping**: Optional advanced setting to strip unused native libraries (unsupported ABIs) from patched APKs during patching, helping reduce size
 - 💾 **Export = Auto-Save**: When you export a patched app to storage from the patching screen, the manager will now also automatically save that patched app under the "Apps" tab. Before, this only happened if you installed the patched app directly from that screen
 - 📲 **Installer Management**: A full installer management system with installer metadata, and configurable primary and fallback that applies everywhere across the app
@@ -76,9 +78,8 @@ Universal ReVanced Manager includes powerful features that the official ReVanced
 - 🧼 **Plugin Cleanup**: You can uninstall downloader plugins directly from inside the manager via the download settings page. No manual cleanup needed
 
 ### 🎨 Appearance & Theming
-- 🎯 **Accent Color Picker**: Appearance settings include an accent color picker so you can choose a custom theme color. This is in addition to Material You theming and the pure black theme
+- 🎯 **Enhanced Themeing**: Appearance settings include an accent color picker, theme color picker, color HEX code support, presets, and a live preview widget so you can choose a custom theme color and customize the app to your liking
 - ⚫ **Monochrome App Icons**: Support for Android monochrome icons
-- 🎛️ **Theme Color Pickers**: Teme color pickers with a live preview, plus manual HEX input for both accent and theme colors
 - ↔️ **Better Long Names**: Long labels use horizontal swipe instead of auto-sliding or wrapping
 
 ### 🌐 Network & Updates
@@ -88,6 +89,10 @@ Universal ReVanced Manager includes powerful features that the official ReVanced
 - 🧑‍💻 **Always-Visible Developer Options**: Developer Options are always available in Settings by default. No hidden or secret unlock flow
 
 - 📤 **Robust Import / Export**: Export and import your patch bundles, your patch profiles, and your app settings to and from JSON files for easy backup, sharing, or migration between devices
+
+### 🌍 Localization
+- (🇨🇳) **Simplified Chinese**: Simplified Chinese localization with a user-selectable language option in settings
+- (🇻🇳) **Vietnamese**: Vietnamese added as an additional app language option
 
 ## 🔽 Download
 
@@ -103,6 +108,16 @@ To import patch bundles into Universal ReVanced Manager, use my [ReVanced Patch 
 [ApkMirror Downloader](https://github.com/ReVanced/revanced-manager-downloaders) ✅  
 [APKPure Downloader](https://github.com/Aunali321/revanced-downloader-plugins) ✅  
 [APKCombo Downloader](https://github.com/Aunali321/revanced-downloader-plugins) ✅  
+
+## 🤝 Contributors
+##### <img src="https://github.com/brosssh.png" alt="brosssh avatar" width="28" height="28" style="border-radius:50%;vertical-align:middle;margin-right:6px;" /> [brosssh](https://github.com/brosssh)
+Multiple PRs, top contributor
+##### <img src="https://github.com/TanakaLun.png" alt="TanakaLun avatar" width="28" height="28" style="border-radius:50%;vertical-align:middle;margin-right:6px;" /> [TanakaLun](https://github.com/TanakaLun)
+Chineese localization
+##### <img src="https://github.com/ann9cht.png" alt="ann9cht avatar" width="28" height="28" style="border-radius:50%;vertical-align:middle;margin-right:6px;" /> [ann9cht](https://github.com/ann9cht)
+Vietnamese localization
+##### <img src="https://github.com/KobeW50.png" alt="KobeW50 avatar" width="28" height="28" style="border-radius:50%;vertical-align:middle;margin-right:6px;" /> [KobeW50](https://github.com/KobeW50)
+Proof strings & wording
 
 ## ⚖️ License
 

@@ -9,16 +9,27 @@ import app.revanced.manager.util.ExportNameFormatter
 import app.revanced.manager.util.isDebuggable
 import kotlinx.serialization.Serializable
 
+import app.revanced.manager.ui.model.PatchSelectionActionKey
+
 class PreferencesManager(
     context: Context
 ) : BasePreferencesManager(context, "settings") {
-    val dynamicColor = booleanPreference("dynamic_color", true)
+    companion object {
+        private val PATCH_ACTION_ORDER_DEFAULT =
+            PatchSelectionActionKey.DefaultOrder.joinToString(",") { it.storageId }
+    }
+    val dynamicColor = booleanPreference("dynamic_color", false)
     val pureBlackTheme = booleanPreference("pure_black_theme", false)
+    val themePresetSelectionEnabled = booleanPreference("theme_preset_selection_enabled", true)
+    val themePresetSelectionName = stringPreference("theme_preset_selection_name", "DEFAULT")
     val customAccentColor = stringPreference("custom_accent_color", "")
     val customThemeColor = stringPreference("custom_theme_color", "")
     val theme = enumPreference("theme", Theme.SYSTEM)
+    val appLanguage = stringPreference("app_language", "en")
 
     val api = stringPreference("api_url", "https://api.revanced.app")
+    // PR #35: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35
+    val gitHubPat = stringPreference("github_pat", "")
 
     val useProcessRuntime = booleanPreference("use_process_runtime", false)
     val stripUnusedNativeLibs = booleanPreference("strip_unused_native_libs", false)
@@ -28,9 +39,11 @@ class PreferencesManager(
         ExportNameFormatter.DEFAULT_TEMPLATE
     )
     val officialBundleRemoved = booleanPreference("official_bundle_removed", false)
+    val officialBundleSortOrder = intPreference("official_bundle_sort_order", -1)
+    val officialBundleCustomDisplayName = stringPreference("official_bundle_custom_display_name", "")
     val autoCollapsePatcherSteps = booleanPreference("auto_collapse_patcher_steps", false)
 
-    val allowMeteredUpdates = booleanPreference("allow_metered_updates", false)
+    val allowMeteredUpdates = booleanPreference("allow_metered_updates", true)
     val installerPrimary = stringPreference("installer_primary", InstallerPreferenceTokens.INTERNAL)
     val installerFallback = stringPreference("installer_fallback", InstallerPreferenceTokens.NONE)
     val installerCustomComponents = stringSetPreference("installer_custom_components", emptySet())
@@ -50,6 +63,9 @@ class PreferencesManager(
     val disableUniversalPatchCheck = booleanPreference("disable_patch_universal_check", true)
     val suggestedVersionSafeguard = booleanPreference("suggested_version_safeguard", true)
     val disablePatchSelectionConfirmations = booleanPreference("disable_patch_selection_confirmations", false)
+    val collapsePatchActionsOnSelection = booleanPreference("collapse_patch_actions_on_selection", true)
+    val patchSelectionActionOrder =
+        stringPreference("patch_selection_action_order", PATCH_ACTION_ORDER_DEFAULT)
 
     val acknowledgedDownloaderPlugins = stringSetPreference("acknowledged_downloader_plugins", emptySet())
 
@@ -59,13 +75,19 @@ class PreferencesManager(
         val pureBlackTheme: Boolean? = null,
         val customAccentColor: String? = null,
         val customThemeColor: String? = null,
+        val themePresetSelectionName: String? = null,
+        val themePresetSelectionEnabled: Boolean? = null,
         val stripUnusedNativeLibs: Boolean? = null,
         val theme: Theme? = null,
+        val appLanguage: String? = null,
         val api: String? = null,
+        val gitHubPat: String? = null,
         val useProcessRuntime: Boolean? = null,
         val patcherProcessMemoryLimit: Int? = null,
+        val autoCollapsePatcherSteps: Boolean? = null,
         val patchedAppExportFormat: String? = null,
         val officialBundleRemoved: Boolean? = null,
+        val officialBundleCustomDisplayName: String? = null,
         val allowMeteredUpdates: Boolean? = null,
         val installerPrimary: String? = null,
         val installerFallback: String? = null,
@@ -82,6 +104,8 @@ class PreferencesManager(
         val disableUniversalPatchCheck: Boolean? = null,
         val suggestedVersionSafeguard: Boolean? = null,
         val disablePatchSelectionConfirmations: Boolean? = null,
+        val collapsePatchActionsOnSelection: Boolean? = null,
+        val patchSelectionActionOrder: String? = null,
         val acknowledgedDownloaderPlugins: Set<String>? = null
     )
 
@@ -90,13 +114,19 @@ class PreferencesManager(
         pureBlackTheme = pureBlackTheme.get(),
         customAccentColor = customAccentColor.get(),
         customThemeColor = customThemeColor.get(),
+        themePresetSelectionName = themePresetSelectionName.get(),
+        themePresetSelectionEnabled = themePresetSelectionEnabled.get(),
         stripUnusedNativeLibs = stripUnusedNativeLibs.get(),
         theme = theme.get(),
+        appLanguage = appLanguage.get(),
         api = api.get(),
+        gitHubPat = gitHubPat.get(),
         useProcessRuntime = useProcessRuntime.get(),
         patcherProcessMemoryLimit = patcherProcessMemoryLimit.get(),
+        autoCollapsePatcherSteps = autoCollapsePatcherSteps.get(),
         patchedAppExportFormat = patchedAppExportFormat.get(),
         officialBundleRemoved = officialBundleRemoved.get(),
+        officialBundleCustomDisplayName = officialBundleCustomDisplayName.get(),
         allowMeteredUpdates = allowMeteredUpdates.get(),
         installerPrimary = installerPrimary.get(),
         installerFallback = installerFallback.get(),
@@ -113,6 +143,8 @@ class PreferencesManager(
         disableUniversalPatchCheck = disableUniversalPatchCheck.get(),
         suggestedVersionSafeguard = suggestedVersionSafeguard.get(),
         disablePatchSelectionConfirmations = disablePatchSelectionConfirmations.get(),
+        collapsePatchActionsOnSelection = collapsePatchActionsOnSelection.get(),
+        patchSelectionActionOrder = patchSelectionActionOrder.get(),
         acknowledgedDownloaderPlugins = acknowledgedDownloaderPlugins.get()
     )
 
@@ -121,13 +153,19 @@ class PreferencesManager(
         snapshot.pureBlackTheme?.let { pureBlackTheme.value = it }
         snapshot.customAccentColor?.let { customAccentColor.value = it }
         snapshot.customThemeColor?.let { customThemeColor.value = it }
+        snapshot.themePresetSelectionName?.let { themePresetSelectionName.value = it }
+        snapshot.themePresetSelectionEnabled?.let { themePresetSelectionEnabled.value = it }
         snapshot.stripUnusedNativeLibs?.let { stripUnusedNativeLibs.value = it }
         snapshot.theme?.let { theme.value = it }
+        snapshot.appLanguage?.let { appLanguage.value = it }
         snapshot.api?.let { api.value = it }
+        snapshot.gitHubPat?.let { gitHubPat.value = it }
         snapshot.useProcessRuntime?.let { useProcessRuntime.value = it }
         snapshot.patcherProcessMemoryLimit?.let { patcherProcessMemoryLimit.value = it }
+        snapshot.autoCollapsePatcherSteps?.let { autoCollapsePatcherSteps.value = it }
         snapshot.patchedAppExportFormat?.let { patchedAppExportFormat.value = it }
         snapshot.officialBundleRemoved?.let { officialBundleRemoved.value = it }
+        snapshot.officialBundleCustomDisplayName?.let { officialBundleCustomDisplayName.value = it }
         snapshot.allowMeteredUpdates?.let { allowMeteredUpdates.value = it }
         snapshot.installerPrimary?.let { installerPrimary.value = it }
         snapshot.installerFallback?.let { installerFallback.value = it }
@@ -146,6 +184,8 @@ class PreferencesManager(
         snapshot.disableUniversalPatchCheck?.let { disableUniversalPatchCheck.value = it }
         snapshot.suggestedVersionSafeguard?.let { suggestedVersionSafeguard.value = it }
         snapshot.disablePatchSelectionConfirmations?.let { disablePatchSelectionConfirmations.value = it }
+        snapshot.collapsePatchActionsOnSelection?.let { collapsePatchActionsOnSelection.value = it }
+        snapshot.patchSelectionActionOrder?.let { patchSelectionActionOrder.value = it }
         snapshot.acknowledgedDownloaderPlugins?.let { acknowledgedDownloaderPlugins.value = it }
     }
 

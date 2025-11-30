@@ -1,17 +1,13 @@
 package app.revanced.manager.network.api
 
-import app.universal.revanced.manager.BuildConfig
 import app.revanced.manager.domain.manager.PreferencesManager
-import app.revanced.manager.network.dto.GitHubAsset
-import app.revanced.manager.network.dto.GitHubContributor
-import app.revanced.manager.network.dto.GitHubRelease
-import app.revanced.manager.network.dto.ReVancedAsset
-import app.revanced.manager.network.dto.ReVancedContributor
-import app.revanced.manager.network.dto.ReVancedGitRepository
+import app.revanced.manager.network.dto.*
 import app.revanced.manager.network.service.HttpService
 import app.revanced.manager.network.utils.APIResponse
 import app.revanced.manager.network.utils.APIFailure
 import app.revanced.manager.network.utils.getOrNull
+import app.universal.revanced.manager.BuildConfig
+import io.ktor.client.request.header
 import io.ktor.client.request.url
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
@@ -68,7 +64,10 @@ class ReVancedAPI(
 
     private suspend inline fun <reified T> githubRequest(config: RepoConfig, path: String): APIResponse<T> {
         val normalizedPath = path.trimStart('/')
+        val pat = prefs.gitHubPat.get()
         return client.request {
+            // PR #35: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35
+            pat.takeIf { it.isNotBlank() }?.let { header("Authorization", "Bearer $it") }
             url("${config.apiBase}/$normalizedPath")
         }
     }
@@ -77,8 +76,9 @@ class ReVancedAPI(
 
     private suspend inline fun <reified T> apiRequest(route: String): APIResponse<T> {
         val normalizedRoute = route.trimStart('/')
+        val baseUrl = apiUrl()
         return client.request {
-            url("${apiUrl()}/v4/$normalizedRoute")
+            url("$baseUrl/v4/$normalizedRoute")
         }
     }
 
@@ -181,6 +181,71 @@ class ReVancedAPI(
             is APIResponse.Error -> APIResponse.Error(response.error)
             is APIResponse.Failure -> APIResponse.Failure(response.error)
         }
+    }
+
+    // PR #35: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35
+    suspend fun getAssetFromPullRequest(owner: String, repo: String, pullRequestNumber: String): ReVancedAsset {
+        suspend fun getPullWithRun(
+            pullRequestNumber: String,
+            config: RepoConfig
+        ): GitHubActionRun {
+            val pull = githubRequest<GitHubPullRequest>(config, "pulls/$pullRequestNumber")
+                .successOrThrow("PR #$pullRequestNumber")
+
+            val targetSha = pull.head.sha
+
+            var page = 1
+            while (true) {
+                val actionsRuns = githubRequest<GitHubActionRuns>(
+                    config,
+                    "actions/runs?per_page=100&page=$page"
+                ).successOrThrow("Workflow runs for PR #$pullRequestNumber (page $page)")
+
+                val match = actionsRuns.workflowRuns.firstOrNull { it.headSha == targetSha }
+                if (match != null) return match
+
+                if (actionsRuns.workflowRuns.isEmpty())
+                    throw Exception("No GitHub Actions run found for PR #$pullRequestNumber with SHA $targetSha")
+
+                page++
+            }
+        }
+
+        val config = RepoConfig(
+            owner = owner,
+            name = repo,
+            apiBase = "https://api.github.com/repos/$owner/$repo",
+            htmlUrl = "https://github.com/$owner/$repo"
+        )
+
+        val currentRun = getPullWithRun(pullRequestNumber, config)
+
+        val artifacts = githubRequest<GitHubActionRunArtifacts>(
+            config,
+            "actions/runs/${currentRun.id}/artifacts"
+        )
+            .successOrThrow("PR artifacts for PR #$pullRequestNumber")
+            .artifacts
+
+        val artifact = artifacts.firstOrNull()
+            ?: throw Exception("The lastest commit in this PR didn't have any artifacts. Did the GitHub action run correctly?")
+
+        return ReVancedAsset(
+            downloadUrl = artifact.archiveDownloadUrl,
+            createdAt = Instant.parse(artifact.createdAt).toLocalDateTime(TimeZone.UTC),
+            pageUrl = "${config.htmlUrl}/pull/$pullRequestNumber",
+            description = currentRun.displayTitle,
+            version = currentRun.headSha
+        )
+    }
+}
+
+// PR #35: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35
+fun <T> APIResponse<T>.successOrThrow(context: String): T {
+    return when (this) {
+        is APIResponse.Success -> data
+        is APIResponse.Error -> throw Exception("Failed fetching $context: ${error.message}", error)
+        is APIResponse.Failure -> throw Exception("Failed fetching $context: ${error.message}", error)
     }
 }
 

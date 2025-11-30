@@ -68,6 +68,7 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
         logger: Logger,
         onPatchCompleted: suspend () -> Unit,
         onProgress: ProgressEventHandler,
+        stripNativeLibs: Boolean,
     ) = coroutineScope {
         // Get the location of our own Apk.
         val managerBaseApk = pm.getPackageInfo(context.packageName)!!.applicationInfo!!.sourceDir
@@ -160,7 +161,8 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
                         selectedPatches[uid].orEmpty(),
                         options[uid].orEmpty()
                     )
-                }
+                },
+                stripNativeLibs = stripNativeLibs
             )
 
             binder.start(parameters, eventHandler)

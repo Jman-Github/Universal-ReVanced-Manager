@@ -24,6 +24,7 @@ import app.revanced.manager.data.room.apps.installed.InstallType
 import app.revanced.manager.domain.installer.RootInstaller
 import app.revanced.manager.domain.manager.KeystoreManager
 import app.revanced.manager.domain.manager.PreferencesManager
+import app.revanced.manager.domain.repository.DownloadResult
 import app.revanced.manager.domain.repository.DownloadedAppRepository
 import app.revanced.manager.domain.repository.DownloaderPluginRepository
 import app.revanced.manager.domain.repository.InstalledAppRepository
@@ -31,8 +32,10 @@ import app.revanced.manager.domain.worker.Worker
 import app.revanced.manager.domain.worker.WorkerRepository
 import app.revanced.manager.network.downloader.LoadedDownloaderPlugin
 import app.revanced.manager.patcher.logger.Logger
+import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.patcher.runtime.CoroutineRuntime
 import app.revanced.manager.patcher.runtime.ProcessRuntime
+import app.revanced.manager.patcher.util.NativeLibStripper
 import app.revanced.manager.plugin.downloader.GetScope
 import app.revanced.manager.plugin.downloader.PluginHostApi
 import app.revanced.manager.plugin.downloader.UserInteractionException
@@ -48,10 +51,6 @@ import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.io.File
-import java.util.zip.ZipEntry
-import java.util.zip.ZipInputStream
-import java.util.zip.ZipOutputStream
-import java.util.zip.ZipFile
 
 typealias ProgressEventHandler = (name: String?, state: State?, message: String?) -> Unit
 
@@ -79,7 +78,7 @@ class PatcherWorker(
         val onDownloadProgress: suspend (Pair<Long, Long?>?) -> Unit,
         val onPatchCompleted: suspend () -> Unit,
         val handleStartActivityRequest: suspend (LoadedDownloaderPlugin, Intent) -> ActivityResult,
-        val setInputFile: suspend (File) -> Unit,
+        val setInputFile: suspend (File, Boolean, Boolean) -> Unit,
         val onProgress: ProgressEventHandler
     ) {
         val packageName get() = input.packageName
@@ -176,14 +175,13 @@ class PatcherWorker(
                     !prefs.disablePatchVersionCompatCheck.get(),
                     onDownload = args.onDownloadProgress
                 ).also {
-                    args.setInputFile(it)
+                    args.setInputFile(it.file, it.needsSplit, it.merged)
                     updateProgress(state = State.COMPLETED) // Download APK
                 }
 
             val inputFile = when (val selectedApp = args.input) {
                 is SelectedApp.Download -> {
                     val (plugin, data) = downloaderPluginRepository.unwrapParceledData(selectedApp.data)
-
                     download(plugin, data)
                 }
 
@@ -221,15 +219,27 @@ class PatcherWorker(
                         } ?: throw Exception("App is not available.")
                 }
 
-                is SelectedApp.Local -> selectedApp.file.also { args.setInputFile(it) }
-                is SelectedApp.Installed -> File(pm.getPackageInfo(selectedApp.packageName)!!.applicationInfo!!.sourceDir)
-            }
+                is SelectedApp.Local -> {
+                    val needsSplit = SplitApkPreparer.isSplitArchive(selectedApp.file)
+                    args.setInputFile(selectedApp.file, needsSplit, false)
+                    DownloadResult(selectedApp.file, needsSplit)
+                }
+
+                is SelectedApp.Installed -> {
+                    val source = File(pm.getPackageInfo(selectedApp.packageName)!!.applicationInfo!!.sourceDir)
+                    args.setInputFile(source, false, false)
+                    DownloadResult(source, false)
+                }
+            }.file
 
             val runtime = if (prefs.useProcessRuntime.get()) {
                 ProcessRuntime(applicationContext)
             } else {
                 CoroutineRuntime(applicationContext)
             }
+
+            val stripNativeLibs = prefs.stripUnusedNativeLibs.get()
+            val inputIsSplitArchive = SplitApkPreparer.isSplitArchive(inputFile)
 
             runtime.execute(
                 inputFile.absolutePath,
@@ -239,11 +249,12 @@ class PatcherWorker(
                 args.options,
                 args.logger,
                 args.onPatchCompleted,
-                args.onProgress
+                args.onProgress,
+                stripNativeLibs
             )
 
-            if (prefs.stripUnusedNativeLibs.get()) {
-                stripUnusedNativeLibraries(patchedApk)
+            if (stripNativeLibs && !inputIsSplitArchive) {
+                NativeLibStripper.strip(patchedApk)
             }
 
             keystoreManager.sign(patchedApk, File(args.output))
@@ -298,112 +309,4 @@ class PatcherWorker(
         const val PROCESS_FAILURE_MESSAGE_KEY = "process_failure_message"
     }
 
-    private suspend fun stripUnusedNativeLibraries(apkFile: File) = withContext(Dispatchers.IO) {
-        val supportedAbis = Build.SUPPORTED_ABIS.filter { it.isNotBlank() }
-        if (supportedAbis.isEmpty()) return@withContext
-
-        val preferredAbi = determinePreferredAbi(apkFile, supportedAbis)
-        val allowedAbis = preferredAbi?.let { setOf(it) } ?: supportedAbis.toSet()
-
-        if (preferredAbi != null) {
-            Log.i(tag, "Preserving native libraries for ABI $preferredAbi".logFmt())
-        }
-
-        val tempFile = File(apkFile.parentFile, "${apkFile.nameWithoutExtension}-abi-stripped.apk")
-        var removedEntries = 0
-
-        ZipInputStream(apkFile.inputStream().buffered()).use { zis ->
-            ZipOutputStream(tempFile.outputStream().buffered()).use { zos ->
-                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                var entry = zis.nextEntry
-                while (entry != null) {
-                    val name = entry.name
-                    val keepEntry = shouldKeepZipEntry(name, allowedAbis)
-
-                    if (keepEntry) {
-                        val newEntry = cloneEntry(entry)
-                        zos.putNextEntry(newEntry)
-                        if (!entry.isDirectory) {
-                            while (true) {
-                                val read = zis.read(buffer)
-                                if (read == -1) break
-                                zos.write(buffer, 0, read)
-                            }
-                        }
-                        zos.closeEntry()
-                    } else if (!entry.isDirectory) {
-                        removedEntries++
-                    }
-
-                    zis.closeEntry()
-                    entry = zis.nextEntry
-                }
-            }
-        }
-
-        if (removedEntries > 0) {
-            if (!apkFile.delete()) {
-                Log.w(tag, "Failed to delete original APK before stripping ABIs".logFmt())
-            }
-            tempFile.copyTo(apkFile, overwrite = true)
-            tempFile.delete()
-            Log.i(tag, "Removed $removedEntries native library entries for unsupported ABIs".logFmt())
-        } else {
-            tempFile.delete()
-        }
-    }
-
-    private fun shouldKeepZipEntry(name: String, allowedAbis: Set<String>): Boolean {
-        val abi = extractAbiFromEntry(name) ?: return true
-        return abi in allowedAbis
-    }
-
-    private fun cloneEntry(entry: ZipEntry): ZipEntry {
-        val clone = ZipEntry(entry.name)
-        clone.time = entry.time
-        clone.comment = entry.comment
-        entry.extra?.let { clone.extra = it.copyOf() }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            try {
-                entry.creationTime?.let { clone.creationTime = it }
-                entry.lastAccessTime?.let { clone.lastAccessTime = it }
-                entry.lastModifiedTime?.let { clone.lastModifiedTime = it }
-            } catch (_: Exception) {
-                // Some builders may throw if the values are unavailable; ignore.
-            }
-        }
-
-        when (entry.method) {
-            ZipEntry.STORED -> {
-                clone.method = ZipEntry.STORED
-                if (entry.size >= 0) clone.size = entry.size
-                if (entry.compressedSize >= 0) clone.compressedSize = entry.compressedSize
-                clone.crc = entry.crc
-            }
-
-            ZipEntry.DEFLATED -> clone.method = ZipEntry.DEFLATED
-            else -> if (entry.method != -1) clone.method = entry.method
-        }
-
-        return clone
-    }
-
-    private fun extractAbiFromEntry(name: String): String? {
-        if (!name.startsWith("lib/")) return null
-        val secondSlash = name.indexOf('/', startIndex = 4)
-        if (secondSlash == -1) return null
-        return name.substring(4, secondSlash)
-    }
-
-    private fun determinePreferredAbi(apkFile: File, supportedAbis: List<String>): String? =
-        runCatching {
-            ZipFile(apkFile).use { zip ->
-                val abisInApk = zip.entries().asSequence()
-                    .map { it.name }
-                    .mapNotNull(::extractAbiFromEntry)
-                    .toSet()
-
-                supportedAbis.firstOrNull { it in abisInApk }
-            }
-        }.getOrNull()
 }

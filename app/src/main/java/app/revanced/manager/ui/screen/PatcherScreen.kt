@@ -12,9 +12,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -34,6 +36,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -196,46 +199,54 @@ fun PatcherScreen(
         )
     }
 
-    viewModel.missingPatchDialog?.let { state ->
-        val patchList = state.patchNames.joinToString(separator = "\n• ", prefix = "• ")
+    viewModel.missingPatchWarning?.let { state ->
         AlertDialog(
-            onDismissRequest = viewModel::dismissMissingPatchDialog,
+            onDismissRequest = {},
             title = { Text(stringResource(R.string.patcher_missing_patch_title)) },
             text = {
-                Text(
-                    text = stringResource(
-                        R.string.patcher_missing_patch_message,
-                        patchList
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        stringResource(
+                            R.string.patcher_preflight_missing_patch_message,
+                            buildString {
+                                append("• ")
+                                append(state.patchNames.joinToString(separator = "\n• "))
+                            }
+                        )
                     )
-                )
+                }
             },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        val selection = viewModel.currentSelectionSnapshot()
-                        val options = viewModel.currentOptionsSnapshot()
-                        val patches = state.patchNames
-                        viewModel.dismissMissingPatchDialog()
-                        onReviewSelection(
-                            viewModel.currentSelectedApp,
-                            selection,
-                            options,
-                            patches
-                        )
-                        onBackClick()
-                    }
-                ) {
-                    Text(stringResource(R.string.patcher_missing_patch_review))
+                TextButton(onClick = viewModel::removeMissingPatchesAndStart) {
+                    Text(stringResource(R.string.patcher_preflight_missing_patch_remove))
                 }
             },
             dismissButton = {
-                TextButton(onClick = viewModel::dismissMissingPatchDialog) {
-                    Text(stringResource(R.string.cancel))
+                Column(horizontalAlignment = Alignment.End) {
+                    TextButton(onClick = viewModel::proceedAfterMissingPatchWarning) {
+                        Text(stringResource(R.string.patcher_preflight_missing_patch_proceed))
+                    }
+                    TextButton(
+                        onClick = {
+                            val selection = viewModel.currentSelectionSnapshot()
+                            val options = viewModel.currentOptionsSnapshot()
+                            val patches = state.patchNames
+                            viewModel.dismissMissingPatchWarning()
+                            onReviewSelection(
+                                viewModel.currentSelectedApp,
+                                selection,
+                                options,
+                                patches
+                            )
+                            onBackClick()
+                        }
+                    ) {
+                        Text(stringResource(R.string.patcher_missing_patch_review))
+                    }
                 }
             }
         )
     }
-
     viewModel.installFailureMessage?.let { message ->
         AlertDialog(
             onDismissRequest = viewModel::dismissInstallFailureMessage,

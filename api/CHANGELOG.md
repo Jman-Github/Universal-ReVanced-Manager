@@ -1,3 +1,51 @@
+# v1.5.1 (2025-11-15)
+**Minimal changes & bug fixes**
+
+
+# Features
+
+- GitHub pull request integration — add patch bundles directly from GitHub pull request artifacts using a PAT, plus release/catalog links in bundle info https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35
+- Manager string localization (Chinese) - add Simplified Chinese strings and expose a user-selectable language toggle https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/33
+- Vietnamese localization (new app language option) https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/38
+- Revamped Settings > General theme presets: the System preset is now labeled "Follow system" (and is the default for new installs/resets), the Pure black option is simplified to "Pure black", every preset remains single-select so you can clear them to return to manual colors, Dynamic color is the only preset that blocks accent tweaks, and the preset description copy better explains how these toggles work https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/29
+- Renamed the dynamic theme to "Material You"
+- The GitHub icon buttons on each bundles info and widget now opens a bottom sheet with buttons for the release page and the patch-list catalog section (if available)
+- Network requests now retry and respect server Retry-After headers when hit with HTTP 429 errors to reduce failed downloads
+- Added an automatic "Merge split APK" step between loading patches and reading the APK so .apks, .apkm and .xapk archives are merged and patched without extra tools.
+- Patch selection action buttons now remain visible at all times (graying out when unavailable) and automatically collapse when you scroll or switch bundles
+- New Advanced setting lets you choose whether the patch selection action panel should auto-collapse after toggling patches
+- Added a option in settings underSettings > Advanced "Patch selection action buttons order" that lets you reorder the patch selection action buttons
+- Hold tap on the uninstall button on the app info page for saved patched apps to get the option to update the said app (install over the existing one). The uninstall button still remains
+- Add downloader help dialog explaining plugins and linking to supported list https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/37
+- Updated to Liso’s patcher v22 (backwards compatible with existing patch bundles too) https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/39
+- Moved the rearrange patch bundles button in the patch bundles tab to the top right, next to the settings gear
+- Remove the old "patch not does exist" error handling system and replaced it with a simple warning dialog that tells the user the issue, before the patching process begins
+
+
+# Bug fixes
+
+- Correctly display pure black theme option — pure black toggle only shows when the app is in dark mode or following a dark system theme https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/30
+- Typo — wording fixes for Theme color pickers and universal patches safeguard description https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/36
+- Preserve applied patch counts in app details when bundles are unavailable so patched apps no longer show 0 patches applied https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/31
+- Handle corrupted or empty pre-installed/remote patch bundles gracefully instead of crashing bundle loading https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/34
+- Fixed the custom installer manager sometimes showing the android package installer twice
+- Fixed occasional issues with importing patch bundles via remote
+- Fixed preinstalled patch bundle sometimes ignoring the user's custom order when restoring large bundle imports
+- Fixed patch profiles sub-options and values dialogs showing internal names instead of user friendly names when the patch bundle used no longer exists in the app
+- Patch selection screen buttons should now correctly align across different screen sizes
+- Fixed the preinstalled patch bundle resetting custom display names after restarting the app
+- Patch profiles now record an app version even when saved before an APK is provided (e.g., downloader-based patch flows)
+- Fixed the positioning and alignment of the patch selection menus action buttons on smaller screen sizes
+- Fixed the "Auto-collapse completed patcher steps" setting under Settings > Advanced not being included in manager setting exports
+- Fixed app sub option & value metadata not being reapplied/saved through the "Repatch" button on saved apps in the saved apps tab
+
+
+# Docs
+
+- Added the new unique features to the README.md that were added in this release
+- Added a contributors section giving credit to those who have ccontributed to this repository
+
+
 # v1.5.0 (2025-11-15)
 
 

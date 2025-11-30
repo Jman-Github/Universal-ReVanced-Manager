@@ -3,7 +3,6 @@ package app.revanced.manager
 import android.content.ActivityNotFoundException
 import android.os.Bundle
 import android.os.Parcelable
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -25,6 +24,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import androidx.appcompat.app.AppCompatActivity
 import app.revanced.manager.ui.model.navigation.AppSelector
 import app.revanced.manager.ui.model.navigation.ComplexParameter
 import app.revanced.manager.ui.model.navigation.Dashboard
@@ -63,7 +63,7 @@ import org.koin.androidx.compose.navigation.koinNavViewModel
 import org.koin.core.parameter.parametersOf
 import org.koin.androidx.viewmodel.ext.android.getViewModel as getActivityViewModel
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
     @ExperimentalAnimationApi
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -128,7 +128,10 @@ private fun ReVancedManager(vm: MainViewModel) {
             DashboardScreen(
                 onSettingsClick = { navController.navigate(Settings) },
                 onAppSelectorClick = {
-                    navController.navigate(AppSelector)
+                    navController.navigate(AppSelector())
+                },
+                onStorageSelectClick = {
+                    navController.navigate(AppSelector(autoStorage = true, autoStorageReturn = true))
                 },
                 onUpdateClick = {
                     navController.navigate(Update())
@@ -169,10 +172,13 @@ private fun ReVancedManager(vm: MainViewModel) {
         }
 
         composable<AppSelector> {
+            val args = it.toRoute<AppSelector>()
             AppSelectorScreen(
                 onSelect = vm::selectApp,
                 onStorageSelect = vm::selectApp,
-                onBackClick = navController::popBackStack
+                onBackClick = navController::popBackStack,
+                autoOpenStorage = args.autoStorage,
+                returnToDashboardOnStorage = args.autoStorageReturn
             )
         }
 
@@ -225,22 +231,32 @@ private fun ReVancedManager(vm: MainViewModel) {
                         }
                     },
                     onPatchSelectorClick = { app, patches, options ->
+                        val versionHint = viewModel.selectedAppInfo?.versionName?.takeUnless { it.isNullOrBlank() }
+                            ?: app.version?.takeUnless { it.isNullOrBlank() }
+                            ?: viewModel.preferredBundleVersion?.takeUnless { it.isNullOrBlank() }
+                            ?: viewModel.desiredVersion
                         navController.navigateComplex(
                             SelectedApplicationInfo.PatchesSelector,
                             SelectedApplicationInfo.PatchesSelector.ViewModelParams(
                                 app,
                                 patches,
-                                options
+                                options,
+                                preferredAppVersion = versionHint
                             )
                         )
                     },
                     onRequiredOptions = { app, patches, options ->
+                        val versionHint = viewModel.selectedAppInfo?.versionName?.takeUnless { it.isNullOrBlank() }
+                            ?: app.version?.takeUnless { it.isNullOrBlank() }
+                            ?: viewModel.preferredBundleVersion?.takeUnless { it.isNullOrBlank() }
+                            ?: viewModel.desiredVersion
                         navController.navigateComplex(
                             SelectedApplicationInfo.RequiredOptions,
                             SelectedApplicationInfo.PatchesSelector.ViewModelParams(
                                 app,
                                 patches,
-                                options
+                                options,
+                                preferredAppVersion = versionHint
                             )
                         )
                     },

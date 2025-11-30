@@ -7,11 +7,6 @@ import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandHorizontally
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -20,14 +15,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Apps
@@ -107,6 +99,7 @@ enum class DashboardPage(
 fun DashboardScreen(
     vm: DashboardViewModel = koinViewModel(),
     onAppSelectorClick: () -> Unit,
+    onStorageSelectClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onUpdateClick: () -> Unit,
     onDownloaderPluginClick: () -> Unit,
@@ -128,9 +121,6 @@ fun DashboardScreen(
     val androidContext = LocalContext.current
     val composableScope = rememberCoroutineScope()
     var showBundleOrderDialog by rememberSaveable { mutableStateOf(false) }
-    var bundleActionsExpanded by rememberSaveable { mutableStateOf(false) }
-    var restoreBundleActionsAfterScroll by remember { mutableStateOf(false) }
-    var isBundleListScrolling by remember { mutableStateOf(false) }
     val pagerState = rememberPagerState(
         initialPage = DashboardPage.DASHBOARD.ordinal,
         initialPageOffsetFraction = 0f
@@ -145,25 +135,9 @@ fun DashboardScreen(
         if (pagerState.currentPage != DashboardPage.BUNDLES.ordinal) {
             vm.cancelSourceSelection()
             showBundleOrderDialog = false
-            bundleActionsExpanded = false
-            restoreBundleActionsAfterScroll = false
-            isBundleListScrolling = false
         }
         if (pagerState.currentPage != DashboardPage.PROFILES.ordinal) {
             patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
-        }
-    }
-
-    LaunchedEffect(pagerState.currentPage, isBundleListScrolling) {
-        if (pagerState.currentPage != DashboardPage.BUNDLES.ordinal) return@LaunchedEffect
-        if (isBundleListScrolling) {
-            if (bundleActionsExpanded) {
-                restoreBundleActionsAfterScroll = true
-                bundleActionsExpanded = false
-            }
-        } else if (restoreBundleActionsAfterScroll) {
-            bundleActionsExpanded = true
-            restoreBundleActionsAfterScroll = false
         }
     }
 
@@ -200,19 +174,47 @@ fun DashboardScreen(
     }
 
     var showAndroid11Dialog by rememberSaveable { mutableStateOf(false) }
+    var pendingAppInputAction by remember { mutableStateOf<(() -> Unit)?>(null) }
     val installAppsPermissionLauncher =
         rememberLauncherForActivityResult(RequestInstallAppsContract) { granted ->
             showAndroid11Dialog = false
-            if (granted) onAppSelectorClick()
+            if (granted) {
+                (pendingAppInputAction ?: onAppSelectorClick)()
+                pendingAppInputAction = null
+            }
         }
     if (showAndroid11Dialog) Android11Dialog(
         onDismissRequest = {
             showAndroid11Dialog = false
+            pendingAppInputAction = null
         },
         onContinue = {
             installAppsPermissionLauncher.launch(androidContext.packageName)
         }
     )
+
+    fun attemptAppInput(action: () -> Unit) {
+        pendingAppInputAction = null
+        vm.cancelSourceSelection()
+        installedAppsViewModel.clearSelection()
+        patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
+
+        if (availablePatches < 1) {
+            androidContext.toast(androidContext.getString(R.string.no_patch_found))
+            composableScope.launch {
+                pagerState.animateScrollToPage(DashboardPage.BUNDLES.ordinal)
+            }
+            return
+        }
+
+        if (vm.android11BugActive) {
+            pendingAppInputAction = action
+            showAndroid11Dialog = true
+            return
+        }
+
+        action()
+    }
 
     var showDeleteSavedAppsDialog by rememberSaveable { mutableStateOf(false) }
     var showDeleteConfirmationDialog by rememberSaveable { mutableStateOf(false) }
@@ -353,6 +355,17 @@ fun DashboardScreen(
                                     }
                                 }
                             }
+                            if (pagerState.currentPage == DashboardPage.BUNDLES.ordinal && !bundlesSelectable) {
+                                IconButton(
+                                    onClick = {
+                                        installedAppsViewModel.clearSelection()
+                                        patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
+                                        showBundleOrderDialog = true
+                                    }
+                                ) {
+                                    Icon(Icons.Outlined.Sort, stringResource(R.string.bundle_reorder))
+                                }
+                            }
                             IconButton(onClick = onSettingsClick) {
                                 Icon(Icons.Outlined.Settings, stringResource(R.string.settings))
                             }
@@ -365,52 +378,30 @@ fun DashboardScreen(
         floatingActionButton = {
             when (pagerState.currentPage) {
                 DashboardPage.BUNDLES.ordinal -> {
-                    BundleActionsFabRow(
-                        expanded = bundleActionsExpanded,
-                        showSortButton = !bundlesSelectable,
-                        onToggle = {
-                            val next = !bundleActionsExpanded
-                            bundleActionsExpanded = next
-                            if (!next) restoreBundleActionsAfterScroll = false
-                        },
-                        onSortClick = {
-                            installedAppsViewModel.clearSelection()
-                            patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
-                            showBundleOrderDialog = true
-                        },
-                        onAddClick = {
-                            vm.cancelSourceSelection()
-                            installedAppsViewModel.clearSelection()
-                            patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
-                            showAddBundleDialog = true
-                        }
-                    )
-                }
-
-                DashboardPage.DASHBOARD.ordinal -> {
                     HapticFloatingActionButton(
                         onClick = {
                             vm.cancelSourceSelection()
                             installedAppsViewModel.clearSelection()
                             patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
-
-                            if (availablePatches < 1) {
-                                androidContext.toast(androidContext.getString(R.string.no_patch_found))
-                                composableScope.launch {
-                                    pagerState.animateScrollToPage(
-                                        DashboardPage.BUNDLES.ordinal
-                                    )
-                                }
-                                return@HapticFloatingActionButton
-                            }
-                            if (vm.android11BugActive) {
-                                showAndroid11Dialog = true
-                                return@HapticFloatingActionButton
-                            }
-
-                            onAppSelectorClick()
+                            showAddBundleDialog = true
                         }
                     ) { Icon(Icons.Default.Add, stringResource(R.string.add)) }
+                }
+
+                DashboardPage.DASHBOARD.ordinal -> {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        HapticFloatingActionButton(
+                            onClick = { attemptAppInput(onStorageSelectClick) }
+                        ) {
+                            Icon(Icons.Default.Storage, stringResource(R.string.select_from_storage))
+                        }
+                        HapticFloatingActionButton(
+                            onClick = { attemptAppInput(onAppSelectorClick) }
+                        ) { Icon(Icons.Default.Add, stringResource(R.string.add)) }
+                    }
                 }
 
                 else -> Unit
@@ -548,11 +539,7 @@ fun DashboardScreen(
                                 setSelectedSourceCount = { selectedSourceCount = it },
                                 showOrderDialog = showBundleOrderDialog,
                                 onDismissOrderDialog = { showBundleOrderDialog = false },
-                                onScrollStateChange = { isScrolling ->
-                                    if (pagerState.currentPage == DashboardPage.BUNDLES.ordinal) {
-                                        isBundleListScrolling = isScrolling
-                                    }
-                                }
+                                onScrollStateChange = {}
                             )
                         }
 
@@ -584,55 +571,6 @@ fun Notifications(
             activeNotifications.forEach { notification ->
                 notification()
             }
-        }
-    }
-}
-
-@Composable
-private fun BundleActionsFabRow(
-    expanded: Boolean,
-    showSortButton: Boolean,
-    onToggle: () -> Unit,
-    onSortClick: () -> Unit,
-    onAddClick: () -> Unit
-) {
-    val togglePeekOffset = 36.dp
-    val spacing = 12.dp
-    Box(contentAlignment = Alignment.CenterEnd) {
-        Row(
-            modifier = Modifier.padding(end = togglePeekOffset + spacing),
-            horizontalArrangement = Arrangement.spacedBy(spacing),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            AnimatedVisibility(
-                visible = expanded,
-                enter = fadeIn() + expandHorizontally(expandFrom = Alignment.End),
-                exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.End)
-            ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(spacing)) {
-                    if (showSortButton) {
-                        HapticFloatingActionButton(onClick = onSortClick) {
-                            Icon(Icons.Outlined.Sort, stringResource(R.string.bundle_reorder))
-                        }
-                    }
-                    HapticFloatingActionButton(onClick = onAddClick) {
-                        Icon(Icons.Default.Add, stringResource(R.string.add))
-                    }
-                }
-            }
-        }
-        HapticFloatingActionButton(
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .offset(x = togglePeekOffset),
-            onClick = onToggle
-        ) {
-            Icon(
-                imageVector = if (expanded) Icons.AutoMirrored.Filled.KeyboardArrowRight else Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                contentDescription = stringResource(
-                    if (expanded) R.string.bundle_actions_collapse else R.string.bundle_actions_expand
-                )
-            )
         }
     }
 }

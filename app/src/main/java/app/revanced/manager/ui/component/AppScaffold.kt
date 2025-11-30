@@ -4,17 +4,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.TopAppBarScrollBehavior
-import androidx.compose.material3.rememberTopAppBarState
-import androidx.compose.material3.surfaceColorAtElevation
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -56,7 +47,8 @@ fun AppTopBar(
     },
     actions: @Composable (RowScope.() -> Unit) = {},
     scrollBehavior: TopAppBarScrollBehavior? = null,
-    applyContainerColor: Boolean = false
+    applyContainerColor: Boolean = false,
+    onHelpClick: (() -> Unit)? = null // From PR #37: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/37
 ) {
     val containerColor = if (applyContainerColor) {
         MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp)
@@ -74,7 +66,18 @@ fun AppTopBar(
                 }
             }
         },
-        actions = actions,
+        actions = {
+            // From PR #37: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/37
+            if (onHelpClick != null) {
+                IconButton(onClick = onHelpClick) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.HelpOutline,
+                        contentDescription = stringResource(R.string.help)
+                    )
+                }
+            }
+            actions()
+        },
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = containerColor
         )
@@ -95,7 +98,8 @@ fun AppTopBar(
     },
     actions: @Composable (RowScope.() -> Unit) = {},
     scrollBehavior: TopAppBarScrollBehavior? = null,
-    applyContainerColor: Boolean = false
+    applyContainerColor: Boolean = false,
+    onHelpClick: (() -> Unit)? = null // From PR #37: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/37
 ) {
     val containerColor = if (applyContainerColor) {
         MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp)
@@ -113,7 +117,18 @@ fun AppTopBar(
                 }
             }
         },
-        actions = actions,
+        actions = {
+            // From PR #37: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/37
+            if (onHelpClick != null) {
+                IconButton(onClick = onHelpClick) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.HelpOutline,
+                        contentDescription = stringResource(R.string.help)
+                    )
+                }
+            }
+            actions()
+        },
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = containerColor
         )

@@ -104,7 +104,11 @@ class InstalledAppInfoViewModel(
                 remappedPayload
             )
         }
-        remappedSelection
+        if (remappedSelection.isNotEmpty()) return@withContext remappedSelection
+
+        payload.bundles.associate { bundle ->
+            bundle.bundleUid to bundle.patches.filter { it.isNotBlank() }.toSet()
+        }.filterValues { it.isNotEmpty() }
     }
 
     fun launch() {

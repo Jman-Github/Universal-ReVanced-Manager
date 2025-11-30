@@ -82,6 +82,10 @@
     <string name="bundle_release_page">Open release page</string>
     <string name="bundle_release_page_unavailable">Release page is not available for this bundle</string>
     <string name="bundle_release_page_error">Could not open release page: %s</string>
+    <string name="bundle_links_title">Links for %1$s</string>
+    <string name="bundle_link_release">GitHub release</string>
+    <string name="bundle_link_catalog">Patch list catalog</string>
+    <string name="bundle_catalog_unavailable">Patch list catalog unavailable</string>
     <string name="show_suggested_versions">Show suggested versions</string>
     <string name="hide_suggested_versions">Hide suggested versions</string>
     <string name="show_other_versions">Show other versions</string>
@@ -126,6 +130,9 @@
     <string name="updates_description">Check for updates and view changelog</string>
     <string name="downloads">Downloads</string>
     <string name="downloads_description">Downloader plugins and downloaded apps</string>
+    <!-- From PR #37: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/37 -->
+    <string name="plugins_help_title">What is a downloader?</string>
+    <string name="plugins_help_description">A downloader is a plugin which allows URV to download stock APKs from various sources. The downloaded APKs will be shown in the bottom section. During the patching process, you can choose an already downloaded APKs or you can download it via a plugin.\n\nThe list of supported downloader plugins can be found</string>
     <string name="import_export">Import &amp; export</string>
     <string name="import_export_description">Keystore, patch options and selection</string>
     <string name="changelog">View changelogs</string>
@@ -160,19 +167,19 @@
     <string name="theme_preview_title">Theme preview</string>
     <string name="theme_preview_description">Updates instantly when changing theme settings</string>
     <string name="theme_presets">Theme presets</string>
-    <string name="theme_presets_description">Quick switches for the most popular looks</string>
-    <string name="theme_preset_default">Default</string>
-    <string name="theme_preset_amoled">Pure black</string>
+    <string name="theme_presets_description">Pick how the app follows system, light, dark, Material You, or pure black</string>
+    <string name="theme_preset_default">Follow system</string>
     <string name="theme_preset_sunset">Sunset</string>
     <string name="theme_preset_forest">Forest</string>
     <string name="theme_preset_ocean">Ocean</string>
     <string name="theme_preset_midnight">Midnight</string>
+    <string name="theme_preset_amoled">Pure black</string>
     <string name="theme_preset_dynamic">Material You</string>
     <string name="theme_reset">Reset all theme settings</string>
     <string name="color_channel_red">Red</string>
     <string name="color_channel_green">Green</string>
     <string name="color_channel_blue">Blue</string>
-    <string name="pure_black_theme">Pure black theme</string>
+    <string name="pure_black_theme">Pure black</string>
     <string name="pure_black_theme_description">Use pure black backgrounds for dark theme</string>
     <string name="theme">Theme</string>
     <string name="theme_description">Choose between light or dark theme</string>
@@ -187,7 +194,8 @@
     <string name="patch_selection_safeguard_description">Do not prevent selecting or deselecting patches and customization of options</string>
     <string name="patch_selection_safeguard_confirmation">Changing the selection of patches may cause unexpected issues.\n\nEnable anyways?</string>
     <string name="universal_patches_safeguard">Show &amp; allow using universal patches</string>
-    <string name="universal_patches_safeguard_description">Do not hide universal patches or prevent the using of them</string>
+    <!-- PR #36: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/36 -->
+    <string name="universal_patches_safeguard_description">Do not hide universal patches or prevent usage of them</string>
     <string name="universal_patches_profile_blocked_title">Universal patches disabled</string>
     <string name="universal_patches_profile_blocked_description">This patch profile contains universal patches. Enable “%1$s” in advanced settings to use it.</string>
     <string name="universal_patches_app_blocked_description">This app contains universal patches. Enable “%1$s” in advanced settings to continue.</string>
@@ -293,6 +301,16 @@
     <string name="disable_patch_selection_confirmations">Disable action confirmations</string>
     <string name="disable_patch_selection_confirmations_description">Skip confirmation dialogs for patch selection actions</string>
     <string name="disable_patch_selection_confirmations_warning">Disabling confirmations may cause unintended bulk changes.</string>
+    <string name="patch_selection_collapse_on_toggle">Collapse actions after toggling patches</string>
+    <string name="patch_selection_collapse_on_toggle_description">Automatically hide the patch selection action buttons whenever you select or deselect a patch</string>
+    <string name="patch_selection_action_order_title">Patch selection action buttons order</string>
+    <string name="patch_selection_action_order_description">Choose the layout order for the patch selection action buttons</string>
+    <string name="patch_selection_action_order_dialog_title">Reorder patch actions</string>
+    <string name="patch_selection_action_order_dialog_description">Move the entries to change how the patch selection action buttons are displayed. The preview updates live.</string>
+    <string name="patch_selection_action_order_preview_label">Preview</string>
+    <string name="patch_selection_action_order_reset">Reset to default order</string>
+    <string name="patch_selection_action_move_up">Move up</string>
+    <string name="patch_selection_action_move_down">Move down</string>
     <string name="patch_selection_confirm_deselect_bundle_title">Deselect bundle?</string>
     <string name="patch_selection_confirm_deselect_bundle_message">Deselect all patches selected from %1$s?</string>
     <string name="patch_selection_confirm_deselect_all_title">Deselect all patches?</string>
@@ -394,7 +412,7 @@ Patch profiles are not affected.</string>
 Recommended for this device: %1$d MB.</string>
     <string name="reset_to_recommended">Reset to recommended</string>
     <string name="patcher_auto_collapse_steps">Auto-collapse completed patcher steps</string>
-    <string name="patcher_auto_collapse_steps_description">Automatically collapse each patcher progress widget after all of its steps finish.</string>
+    <string name="patcher_auto_collapse_steps_description">Automatically collapse each patcher progress widget after all of its steps finish</string>
     <string name="patch_bundle_rename">Rename patch bundle</string>
     <string name="patch_profile_view_options">View options</string>
     <string name="patch_profile_patch_options_title">Options for %1$s</string>
@@ -445,6 +463,19 @@ Recommended for this device: %1$d MB.</string>
     <string name="api_url_dialog_warning">Universal ReVanced Manager connects to the API to download patches and updates. Make sure that you trust it.</string>
     <string name="api_url_dialog_save">Set</string>
     <string name="api_url_dialog_reset">Reset API URL</string>
+    <!-- PR #35: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35 -->
+    <string name="github_pat">GitHub PAT</string>
+    <string name="github_pat_description">GitHub Personal Access Token needed for GitHub integration</string>
+    <string name="set_github_pat_dialog_title">Set GitHub PAT</string>
+    <string name="set_github_pat_dialog_description">Set a GitHub Personal Access Token in order to be able to add Pull Requests as external sources. Create a PAT with scope public_repo</string>
+    <string name="language_settings">Language</string>
+    <string name="app_language">App language</string>
+    <string name="language_dialog_title">Choose app language</string>
+    <string name="language_option_system">Use device language</string>
+    <string name="language_option_english">English</string>
+    <string name="language_option_chinese_simplified">Chinese (Simplified)</string>
+    <!-- From PR #38: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/38 -->
+    <string name="language_option_vietnamese">Vietnamese</string>
     <string name="device">Device</string>
     <string name="device_android_version">Android version</string>
     <string name="device_model">Model</string>
@@ -520,9 +551,11 @@ Recommended for this device: %1$d MB.</string>
     <string name="patcher_memory_adjustment_retry">Try again</string>
     <string name="patcher_memory_adjustment_dismiss">Dismiss</string>
     <string name="patcher_missing_patch_title">Patch selection needs attention</string>
-    <string name="patcher_missing_patch_message">Patching failed because the following patches were not found in the current bundle:
+    <string name="patcher_preflight_missing_patch_message">The following patches aren’t available in the current bundle:
 %1$s
-Reopen the selection and reselect them (or choose replacements) before retrying.</string>
+You can remove them automatically, adjust the selection, or continue anyway.</string>
+    <string name="patcher_preflight_missing_patch_remove">Remove missing patches</string>
+    <string name="patcher_preflight_missing_patch_proceed">Proceed anyway</string>
     <string name="patcher_missing_patch_review">Review selection</string>
     <string name="patch_selector_missing_patch_title">Re-select missing patches</string>
     <string name="patch_selector_missing_patch_message">These patches need to be reselected:
@@ -681,9 +714,12 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="delete_saved_entry_description">This will remove the saved app entry and its saved APK. The app will remain installed.</string>
     <string name="saved_app_launch_unavailable">Install the app before opening it.</string>
     <string name="install_saved_app">Install</string>
+    <string name="update_saved_app">Update</string>
     <string name="installing_saved_app">Installing saved app…</string>
     <string name="saved_app_install_success">Installed saved app</string>
     <string name="saved_app_install_failed">Failed to install saved app</string>
+    <string name="saved_app_uninstall_title">Uninstall installed copy?</string>
+    <string name="saved_app_uninstall_description">This removes the installed version only. Your saved APK stays intact.</string>
     <string name="saved_app_install_missing">Saved APK not found</string>
     <string name="delete_saved_copy">Delete saved copy</string>
     <string name="sign_fail">Failed to sign APK: %s</string>
@@ -693,6 +729,8 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
 
     <string name="patcher_step_group_preparing">Preparing</string>
     <string name="patcher_step_load_patches">Load patches</string>
+    <string name="patcher_step_prepare_split_apk">Merge split APK</string>
+    <string name="patcher_step_merge_not_required">No split merge required</string>
     <string name="patcher_step_unpack">Read APK file</string>
     <string name="patcher_step_group_patching">Patching</string>
     <string name="patcher_step_group_saving">Saving</string>
@@ -752,6 +790,8 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="about_revanced_manager">About Universal ReVanced Manager</string>
     <string name="revanced_manager_description">The Universal ReVanced Manager (URV Manager) is a fork of the Official ReVanced Manager. Both applications use the ReVanced Patcher which allows you to download and patch apps with custom patches and manage the patching process. The unique features included in the Universal ReVanced Manager are patch bundle display names, support for importing any third party patch bundles, and much more. See a full list of unique features the Universal ReVanced Manager has to offer</string>
     <string name="unique_features_label">here.</string>
+    <!-- From PR #37: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/37 -->
+    <string name="here">here.</string>
     <string name="developer_options_enabled">Developer options enabled</string>
     <string name="developer_options_taps">%d taps remaining</string>
     <string name="developer_options_already_enabled">Developer options are already enabled</string>

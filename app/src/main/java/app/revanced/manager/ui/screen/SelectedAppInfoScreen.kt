@@ -78,7 +78,7 @@ import app.revanced.manager.ui.viewmodel.SelectedAppInfoViewModel
 import app.revanced.manager.ui.viewmodel.BundleRecommendationDetail
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
-import app.revanced.manager.util.APK_MIMETYPE
+import app.revanced.manager.util.APK_FILE_MIME_TYPES
 import app.revanced.manager.util.EventEffect
 import app.revanced.manager.util.Options
 import app.revanced.manager.util.PatchSelection
@@ -126,11 +126,11 @@ fun SelectedAppInfoScreen(
         launcher.launch(intent)
     }
     val storagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent(),
+        contract = ActivityResultContracts.OpenDocument(),
         onResult = vm::handleStorageResult
     )
     EventEffect(flow = vm.requestStorageSelection) {
-        storagePickerLauncher.launch(APK_MIMETYPE)
+        storagePickerLauncher.launch(APK_FILE_MIME_TYPES)
     }
     val composableScope = rememberCoroutineScope()
 

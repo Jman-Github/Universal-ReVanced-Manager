@@ -490,7 +490,7 @@ fun PatchProfilesScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     data.entries.forEach { entry ->
                         Text(
-                            text = "${entry.label}: ${entry.value}",
+                            text = "${entry.label}: ${entry.displayValue}",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
