@@ -4,7 +4,7 @@
 
 # Features
 
-- GitHub pull request integration — add patch bundles directly from GitHub pull request artifacts using a PAT, plus release/catalog links in bundle info https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35
+- GitHub pull request integration - add patch bundles directly from GitHub pull request artifacts using a PAT, plus release/catalog links in bundle info https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35
 - Manager string localization (Chinese) - add Simplified Chinese strings and expose a user-selectable language toggle https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/33
 - Vietnamese localization (new app language option) https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/38
 - Revamped Settings > General theme presets: the System preset is now labeled "Follow system" (and is the default for new installs/resets), the Pure black option is simplified to "Pure black", every preset remains single-select so you can clear them to return to manual colors, Dynamic color is the only preset that blocks accent tweaks, and the preset description copy better explains how these toggles work https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/29
@@ -14,7 +14,7 @@
 - Added an automatic "Merge split APK" step between loading patches and reading the APK so .apks, .apkm and .xapk archives are merged and patched without extra tools.
 - Patch selection action buttons now remain visible at all times (graying out when unavailable) and automatically collapse when you scroll or switch bundles
 - New Advanced setting lets you choose whether the patch selection action panel should auto-collapse after toggling patches
-- Added a option in settings underSettings > Advanced "Patch selection action buttons order" that lets you reorder the patch selection action buttons
+- Added a option in settings under Settings > Advanced "Patch selection action buttons order" that lets you reorder the patch selection action buttons
 - Hold tap on the uninstall button on the app info page for saved patched apps to get the option to update the said app (install over the existing one). The uninstall button still remains
 - Add downloader help dialog explaining plugins and linking to supported list https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/37
 - Updated to Liso’s patcher v22 (backwards compatible with existing patch bundles too) https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/39
@@ -24,16 +24,16 @@
 
 # Bug fixes
 
-- Correctly display pure black theme option — pure black toggle only shows when the app is in dark mode or following a dark system theme https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/30
-- Typo — wording fixes for Theme color pickers and universal patches safeguard description https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/36
+- Correctly display pure black theme option - pure black toggle only shows when the app is in dark mode or following a dark system theme https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/30
+- Typo - wording fixes for Theme color pickers and universal patches safeguard description https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/36
 - Preserve applied patch counts in app details when bundles are unavailable so patched apps no longer show 0 patches applied https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/31
 - Handle corrupted or empty pre-installed/remote patch bundles gracefully instead of crashing bundle loading https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/34
 - Fixed the custom installer manager sometimes showing the android package installer twice
 - Fixed occasional issues with importing patch bundles via remote
-- Fixed preinstalled patch bundle sometimes ignoring the user's custom order when restoring large bundle imports
-- Fixed patch profiles sub-options and values dialogs showing internal names instead of user friendly names when the patch bundle used no longer exists in the app
+- Fixed pre-installed patch bundle sometimes ignoring the user's custom order when restoring large bundle imports
+- Fixed patch profiles sub-options and values dialogs showing internal names instead of user-friendly names when the patch bundle used no longer exists in the app
 - Patch selection screen buttons should now correctly align across different screen sizes
-- Fixed the preinstalled patch bundle resetting custom display names after restarting the app
+- Fixed the pre-installed patch bundle, resetting custom display names after restarting the app
 - Patch profiles now record an app version even when saved before an APK is provided (e.g., downloader-based patch flows)
 - Fixed the positioning and alignment of the patch selection menus action buttons on smaller screen sizes
 - Fixed the "Auto-collapse completed patcher steps" setting under Settings > Advanced not being included in manager setting exports
@@ -43,71 +43,7 @@
 # Docs
 
 - Added the new unique features to the README.md that were added in this release
-- Added a contributors section giving credit to those who have ccontributed to this repository
-
-
-# v1.5.0 (2025-11-15)
-
-
-# Features
-
-- Added a GitHub button in the top right corner next to the delete button in the "Patch bundles" tab on a bundles information page that links the user to the release page of the said patch bundle's repository
-- Added a select all patches, and select all patches per bundle action buttons on the patch selection page
-- Added a reset default per bundle (resets to default patch selection for the bundle you have selected) action button on the patch selection page
-- Added a confirmation popup when tapping any of the action buttons on the patch selection page (with a setting toggle in Settings > Advanced to turn these popups off)
-- Updated the "This version" filter on the patch selection page to be deselected by default when the "Disable version compatibility check" setting is toggled on, and/or when the "Require suggested app version" setting is toggled off (both in Settings > Advanced)
-- Tightened the gaps between the action menu buttons and adjusted placement on the patch selection page
-- Made slight adjustments to the app icon
-- Added support for monochrome app icons https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/25
-- Added a "Redo action" and "Undo action" action buttons on the patch selection page
-- Added a progress bar with a percentage for patch bundle updates. update checks, and imports
-- Unified the design of the manager download banner and the new patch bundle update banner so they both use the same themed card under the top bar
-- Installer manager dialog is now a tabbed bottom sheet with separate "Saved", "Auto saved" and "Discover" lists, plus inline action icons
-- Patch bundle list entries now use card layouts with a dedicated action column so GitHub/update/delete controls no longer crowd the metadata
-- Patch profiles tab now mirrors the new patch bundle cards, with rounded metadata blocks, inline action chips, and the scrollbar layout
-- Added an "Organize" button beside the patch bundle add action so bundles can be reordered manually, and exports/imports now keep that custom order
-- Patch Bundles tab action buttons now collapse behind an arrow control, remember their state, and auto-hide while you scroll
-- "Patcher process memeory limit" in Settings > Advanced now includes a "Reset to recommended" button which sets the limit back to 700
-- Patch bundles enforce unique names to avoid duplicates in the list
-- Made saved patched apps metadata partially persist even if the patch bundle used to patch the app is no longer available
-- The "Apps" tab now uses the same rounded card layout as Patch Profiles and Patch Bundles so saved patched apps share the updated UI
-- The "Official ReVanced Patches" bundle (pre-installed bundle) now saves to patch bundle exports (it's order state, auto updating toggle status, pre-release toggle status, deletion status, display name, etc)
-- Patch bundles with auto updating toggled off will now display a note under the patch bundles metadata informing the user the bundle has an update available
-- Copying the log on the patching screen now includes all logs, include ones before the patching process begins (such as loading the patches, and reading the APK file)
-- When patching fails because a selected patch no longer exists in the current bundle, the manager now shows a detailed dialog explaining the issue and sends you back to patch selection with the missing patches highlighted so you can reselect them quickly
-- The patcher screens progress/step expandable widget now auto collapse once their steps are completed. Toggle this off/on in Settings > Advanced > "Auto-collapse completed patcher steps"
-- Added a pencil icon next to each patch bundles name on the patch bundles tab to allow quick access to edit the display names
-- Now under "Show more" on patch profiles it shows the patch sub option selections and values
-- Clarified where and what settings to toggle for the "Show suggested versions" safeguard notice to disappear and to be able to use the bundle-specific versions feature
-- Patch bundle cards now surface "Created" and "Updated" timestamps, and exports/imports preserve those timestamps so custom bundles keep accurate metadata
-- Patch profiles now track their creation time, keep it when exporting/importing, and display the friendly timestamp on each profile card
-- All exports initiated from Settings > Import & export (patch bundles, profiles, settings, selections, etc.) now default to files prefixed with `urv_` for easier identification
-- Appearance settings now present the System/Light/Dark choices styled like the mew accent presets, plus there is a new theme color pickers along with a live preview widget. The accent color picker and theme color pickers also have the option to manually enter hex codes now
-- The "Show suggested versions" safeguard notice is now rendered as a card with a title so it no longer feels like a loose block of text under the expandable section. It is also collapsed by default and expandable even when the safeguard settings prevent the use of it
-- Long names throughout the app (bundle cards, segmented buttons, tabs, etc.) now use horizontal swipes instead of auto-sliding/multiple lines so they stay still until you drag them
-
-
-# Bug fixes
-
-- Fixed the reset patch options & selections in Settings > Import & export not actually reseting anything
-- Fixed patch bundle cards showing a rectangular press/hover state instead of respecting the rounded shape
-- Fixed manual-only bundle update notices triggering on startup even when auto update is disabled or no update is available
-- Fixed patcher crashes caused by oversized memory limits when selecting APKs by clamping the process heap to safe device values
-- Fixed the status bar using the wrong app icon https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/24
-- Fixed "Auto saved" labels being added to manually adeded installers through the custom installer menu
-- Fixed patch bunlde delete confirmations not using the bundle display name
-- Fixed incompatible patches still being hidden even after toggling on "Disable patch version compatibility check" https://github.com/ReVanced/revanced-manager/issues/2444
-- Fixed patch bundle and applied patch lists crashing when duplicate patch names were present https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/27
-- Fixed custom installers added by the user not being saved/set as primary/fallback installers for some users https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/26
-- Fixed crash that sometimes occurs when going back and forth between the patch selection menu and tapping the select patches button on the app info screen
-- Fixed crash that sometimes occurs when tapping the "Select from storage" option at the top of the screen on the "Select an app" page
-
-
-# Docs
-
-- Added the app icon at the top of the READMME.md
-- Added the new unique features to the README.md that were added in this release
-- Added our telegram link to the README.md
+- Added a contributors section giving credit to those who have contributed to this repository
 
 
 # v1.4.0 (2025-11-07)

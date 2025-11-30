@@ -35,7 +35,7 @@ Universal ReVanced Manager (URV Manager) is an application that uses [ReVanced P
 Universal ReVanced Manager includes powerful features that the official ReVanced Manager does not:
 
 ### 🔄 Patch Bundles & Customization
-- 💉 **Third-Party Patch Support**: Import any third party API v4 patch bundle you want (including popular ones like inotia00's or anddea's) which the official ReVanced Manager does not support
+- 💉 **Third-Party Patch Support**: Import any third-party API v4 patch bundle you want (including popular ones like inotia00's or anddea's), which the official ReVanced Manager does not support
 - 🛠️ **Custom Bundle Names**: Set a custom display name for any imported patch bundle so you can tell them apart at a glance
 - 🙂 **Smarter Patch Selection**:
   - Global deselect all button  
@@ -54,7 +54,7 @@ Universal ReVanced Manager includes powerful features that the official ReVanced
 - 🧭 **Organize Bundles**: "Organize" button to manually reorder bundles; exports and imports keep the custom order
 
 ### 📦 App Patching Flow
-- ⚒️ **LisoUseInAIKyrios Patch Support**: Supports the [LisoUseInAIKyrios](https://github.com/LisoUseInAIKyrios/revanced-patches) patch bundle without needing computer, or another app
+- ⚒️ **LisoUseInAIKyrios Patch Support**: Supports the [LisoUseInAIKyrios](https://github.com/LisoUseInAIKyrios/revanced-patches) patch bundle without needing a computer or another app
 - 🧠 **Downloaded App Source**: Added a "Downloaded apps" source in the select source screen when patching. If the manager has cached an APK from a downloader plugin, you can pick it directly from there. This option only appears when that app is available
 - 🧩 **Split APK Support**: `.apkm`, `.apks`, and `.xapk` file formats are automatically converted to the `.apk` format when patching. No need for outside tools
 - 🧹 **Advanced Native Library Stripping**: Optional advanced setting to strip unused native libraries (unsupported ABIs) from patched APKs during patching, helping reduce size
@@ -71,14 +71,14 @@ Universal ReVanced Manager includes powerful features that the official ReVanced
   - Metadata display for each installer
   - Configurable primary and fallback installers
   - Shizuku installer option for silent installs when Shizuku or Sui is available
-  - Advanced settings support saving custom installer packages with package-name lookup and autocomplete, plus dedicated management for third party installers
+  - Advanced settings support saving custom installer packages with package-name lookup and autocomplete, plus dedicated management for third-party installers
 
 ### 📥 Downloader & Storage Management
 - 📂 **Cached Downloads Management**: The manager can now keep multiple downloaded apps (from downloader plugins) inside the downloader settings. You can also export any of these APKs to your device storage whenever you want
 - 🧼 **Plugin Cleanup**: You can uninstall downloader plugins directly from inside the manager via the download settings page. No manual cleanup needed
 
 ### 🎨 Appearance & Theming
-- 🎯 **Enhanced Themeing**: Appearance settings include an accent color picker, theme color picker, color HEX code support, presets, and a live preview widget so you can choose a custom theme color and customize the app to your liking
+- 🎯 **Enhanced Theming**: Appearance settings include an accent color picker, theme color picker, color HEX code support, presets, and a live preview widget so you can choose a custom theme color and customize the app to your liking
 - ⚫ **Monochrome App Icons**: Support for Android monochrome icons
 - ↔️ **Better Long Names**: Long labels use horizontal swipe instead of auto-sliding or wrapping
 
@@ -113,15 +113,16 @@ To import patch bundles into Universal ReVanced Manager, use my [ReVanced Patch 
 ##### <img src="https://github.com/brosssh.png" alt="brosssh avatar" width="28" height="28" style="border-radius:50%;vertical-align:middle;margin-right:6px;" /> [brosssh](https://github.com/brosssh)
 Multiple PRs, top contributor
 ##### <img src="https://github.com/TanakaLun.png" alt="TanakaLun avatar" width="28" height="28" style="border-radius:50%;vertical-align:middle;margin-right:6px;" /> [TanakaLun](https://github.com/TanakaLun)
-Chineese localization
+Chinese localization
 ##### <img src="https://github.com/ann9cht.png" alt="ann9cht avatar" width="28" height="28" style="border-radius:50%;vertical-align:middle;margin-right:6px;" /> [ann9cht](https://github.com/ann9cht)
 Vietnamese localization
 ##### <img src="https://github.com/KobeW50.png" alt="KobeW50 avatar" width="28" height="28" style="border-radius:50%;vertical-align:middle;margin-right:6px;" /> [KobeW50](https://github.com/KobeW50)
-Proof strings & wording
+Proofreading strings & wording
 
 ## ⚖️ License
 
 Universal ReVanced Manager is licensed under the GPLv3 license. Please see the [license file](https://github.com/Jman-Github/universal-revanced-manager/blob/main/LICENSE) for more information.
 [tl;dr](https://www.tldrlegal.com/license/gnu-general-public-license-v3-gpl-3) you may copy, distribute and modify Universal ReVanced Manager as long as you track changes/dates in source files.
 Any modifications to Universal ReVanced Manager must also be made available under the GPL, along with build & install instructions.
+
 
