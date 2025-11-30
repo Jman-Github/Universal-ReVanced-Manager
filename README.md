@@ -110,13 +110,13 @@ To import patch bundles into Universal ReVanced Manager, use my [ReVanced Patch 
 [APKCombo Downloader](https://github.com/Aunali321/revanced-downloader-plugins) ✅  
 
 ## 🤝 Contributors
-##### <img src="https://github.com/brosssh.png" alt="brosssh avatar" width="28" height="28" style="border-radius:50%;vertical-align:middle;margin-right:6px;" /> [brosssh](https://github.com/brosssh)
+##### <img src="https://images.weserv.nl/?url=github.com%2Fbrosssh.png&h=28&w=28&fit=cover&mask=circle" alt="brosssh avatar" width="28" height="28" style="vertical-align:middle;margin-right:6px;" /> [brosssh](https://github.com/brosssh)
 Multiple PRs, top contributor
-##### <img src="https://github.com/TanakaLun.png" alt="TanakaLun avatar" width="28" height="28" style="border-radius:50%;vertical-align:middle;margin-right:6px;" /> [TanakaLun](https://github.com/TanakaLun)
+##### <img src="https://images.weserv.nl/?url=github.com%2FTanakaLun.png&h=28&w=28&fit=cover&mask=circle" alt="TanakaLun avatar" width="28" height="28" style="vertical-align:middle;margin-right:6px;" /> [TanakaLun](https://github.com/TanakaLun)
 Chinese localization
-##### <img src="https://github.com/ann9cht.png" alt="ann9cht avatar" width="28" height="28" style="border-radius:50%;vertical-align:middle;margin-right:6px;" /> [ann9cht](https://github.com/ann9cht)
+##### <img src="https://images.weserv.nl/?url=github.com%2Fann9cht.png&h=28&w=28&fit=cover&mask=circle" alt="ann9cht avatar" width="28" height="28" style="vertical-align:middle;margin-right:6px;" /> [ann9cht](https://github.com/ann9cht)
 Vietnamese localization
-##### <img src="https://github.com/KobeW50.png" alt="KobeW50 avatar" width="28" height="28" style="border-radius:50%;vertical-align:middle;margin-right:6px;" /> [KobeW50](https://github.com/KobeW50)
+##### <img src="https://images.weserv.nl/?url=github.com%2FKobeW50.png&h=28&w=28&fit=cover&mask=circle" alt="KobeW50 avatar" width="28" height="28" style="vertical-align:middle;margin-right:6px;" /> [KobeW50](https://github.com/KobeW50)
 Proofreading strings & wording
 
 ## ⚖️ License
