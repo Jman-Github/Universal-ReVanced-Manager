@@ -2,7 +2,7 @@
 <resources>
     <string name="app_name">Universal ReVanced Manager</string>
     <string name="main_top_title">URV Manager</string>
-    <string name="patcher">Patcher</string>
+    <string name="patcher">패처</string>
     <string name="patches">패치</string>
     <string name="patch_bundles">패치 번들</string>
     <string name="patch_bundle">패치 번들</string>
@@ -385,17 +385,17 @@
     <string name="dark">어두운</string>
     <string name="appearance">레이아웃</string>
     <string name="downloaded_apps">다운로드된 앱</string>
-    <string name="process_runtime">다른 프로세스에서 Patcher 실행 (실험 기능)</string>
-    <string name="process_runtime_description">더 빠를 수 있고 Patcher에 더 많은 메모리가 사용할 수 있습니다</string>
+    <string name="process_runtime">다른 프로세스에서 패처 실행 (실험 기능)</string>
+    <string name="process_runtime_description">더 빠를 수 있고 패처에 더 많은 메모리가 사용할 수 있습니다</string>
     <string name="strip_unused_libs">사용되지 않는 기본 라이브러리 삭제</string>
     <string name="strip_unused_libs_description">패치된 앱에서 지원되지 않는 CPU 아키텍처에 대한 기본 라이브러리를 삭제합니다</string>
-    <string name="process_runtime_memory_limit">Patcher 프로세스 메모리 제한</string>
-    <string name="process_runtime_memory_limit_description">Patcher 프로세스가 사용할 수 있는 최대 메모리 용량을 지정할 수 있습니다 (메가바이트)</string>
-    <string name="process_runtime_memory_limit_description_detailed">Patcher 프로세스에서 사용할 수 있는 최대 메모리 용량을 지정할 수 있습니다 (메가바이트). 
+    <string name="process_runtime_memory_limit">패처 프로세스 메모리 제한</string>
+    <string name="process_runtime_memory_limit_description">패처 프로세스가 사용할 수 있는 최대 메모리 용량을 지정할 수 있습니다 (메가바이트)</string>
+    <string name="process_runtime_memory_limit_description_detailed">패처 프로세스에서 사용할 수 있는 최대 메모리 용량을 지정할 수 있습니다 (메가바이트). 
 이 기기에 권장된 메모리 용량: %1$d MB.</string>
     <string name="reset_to_recommended">권장값으로 초기화</string>
-    <string name="patcher_auto_collapse_steps">완료된 Patcher 단계 자동 접기</string>
-    <string name="patcher_auto_collapse_steps_description">모든 단계가 완료된 후에 각 Patcher 진행 위젯을 자동으로 접습니다</string>
+    <string name="patcher_auto_collapse_steps">완료된 패처 단계 자동 접기</string>
+    <string name="patcher_auto_collapse_steps_description">모든 단계가 완료된 후에 각 패처 진행 위젯을 자동으로 접습니다</string>
     <string name="patch_bundle_rename">패치 번들 이름 변경</string>
     <string name="patch_profile_view_options">옵션 보기</string>
     <string name="patch_profile_patch_options_title">%1$s 옵션</string>
@@ -528,10 +528,10 @@
     <string name="patch_profile_bundle_change_uid_invalid">유효한 숫자 UID를 입력하세요.</string>
     <string name="patch_profile_bundle_change_uid_success">번들 UID를 %1$d 로 업데이트하였습니다.</string>
     <string name="patch_profile_bundle_change_uid_not_found">UID가 %1$d 인 로컬 패치 번들을 찾을 수 없습니다.</string>
-    <string name="patcher_process_exit_message">Patcher 프로세스를 코드 %1$d 로 종료하였습니다.</string>
-    <string name="patcher_memory_adjustment_title">Patcher의 메모리가 부족합니다</string>
-    <string name="patcher_memory_adjustment_message_reduced">실험용 Patcher 프로세스가 메모리 부족으로 중지되었습니다. 즉시 다시 시도할 수 있도록 메모리 제한을 %1$d MB에서 %2$d MB로 줄였습니다.</string>
-    <string name="patcher_memory_adjustment_message_no_change">실험용 Patcher 프로세서가 메모리 부족으로 중지되었지만 메모리 제한이 이미 %1$dMB에 도달했습니다. 고급 설정에서 메모리 제한을 더 낮추거나 실험 모드를 비활성화한 후에 다시 시도하세요.</string>
+    <string name="patcher_process_exit_message">패처 프로세스를 코드 %1$d 로 종료하였습니다.</string>
+    <string name="patcher_memory_adjustment_title">패처의 메모리가 부족합니다</string>
+    <string name="patcher_memory_adjustment_message_reduced">실험용 패처 프로세스가 메모리 부족으로 중지되었습니다. 즉시 다시 시도할 수 있도록 메모리 제한을 %1$d MB에서 %2$d MB로 줄였습니다.</string>
+    <string name="patcher_memory_adjustment_message_no_change">실험용 패처 프로세서가 메모리 부족으로 중지되었지만 메모리 제한이 이미 %1$dMB에 도달했습니다. 고급 설정에서 메모리 제한을 더 낮추거나 실험 모드를 비활성화한 후에 다시 시도하세요.</string>
     <string name="patcher_memory_adjustment_retry">다시 시도</string>
     <string name="patcher_memory_adjustment_dismiss">닫기</string>
     <string name="patcher_missing_patch_title">패치 선택에는 주의가 필요합니다</string>
@@ -711,18 +711,18 @@
     <string name="patcher_step_write_patched">패치된 APK 파일을 작성하였습니다</string>
     <string name="patcher_step_sign_apk">패치된 APK 파일에 서명하였습니다</string>
     <string name="patcher_notification_title">패치 진행하는 중 …</string>
-    <string name="patcher_notification_text">탭하여 Patcher로 돌아가기</string>
-    <string name="patcher_stop_confirm_title">Patcher 중지</string>
-    <string name="patcher_stop_confirm_description">Patch 프로세스를 중지하시겠습니까?</string>
+    <string name="patcher_notification_text">탭하여 패처로 돌아가기</string>
+    <string name="patcher_stop_confirm_title">패처 중지</string>
+    <string name="patcher_stop_confirm_description">패처 프로세스를 중지하시겠습니까?</string>
     <string name="patcher_install_in_progress">설치가 진행 중입니다. 잠시만 기다리세요</string>
     <string name="execute_patches">패치를 실행하는 중</string>
     <string name="executing_patch">%s 실행하는 중</string>
     <string name="failed_to_execute_patch">%s 을 실행할 수 없습니다</string>
-    <string name="save_patched_app_dialog_title">Patcher를 종료하시겠습니까?</string>
-    <string name="save_patched_app_dialog_message">Patcher를 종료하려고 합니다. 패치된 앱은 나중에 사용할 수 있도록 저장하지 않으면 손실됩니다.</string>
+    <string name="save_patched_app_dialog_title">패처를 종료하시겠습니까?</string>
+    <string name="save_patched_app_dialog_message">패처를 종료하려고 합니다. 패치된 앱은 나중에 사용할 수 있도록 저장하지 않으면 손실됩니다.</string>
     <string name="save_patched_app_dialog_save">패치된 앱 저장</string>
     <string name="save_patched_app_dialog_leave">저장하지 않고 종료</string>
-    <string name="save_patched_app_dialog_cancel">Patcher에 머무르기</string>
+    <string name="save_patched_app_dialog_cancel">패처에 머무르기</string>
     <string name="save_patched_app_dialog_hint_save">나중에 패치된 APK를 설치할 수 있도록 앱 탭에서 계속 접근 가능하게 유지합니다.</string>
     <string name="save_patched_app_dialog_hint_leave">패치된 APK를 폐기하고 이전 화면으로 돌아갑니다.</string>
     <string name="patched_app_saved_toast">패치된 앱을 나중을 위해 저장하였습니다</string>
@@ -758,7 +758,7 @@
     <string name="patches_delete_single_dialog_description">\"%s\"를 삭제하시겠습니까?</string>
     <string name="patches_delete_multiple_dialog_description">선택된 패치를 삭제하시겠습니까?</string>
     <string name="about_revanced_manager">Universal ReVanced Manager 정보</string>
-    <string name="revanced_manager_description">Universal ReVanced Manager(URV Manager)는 공식 ReVanced Manager의 포크 버전입니다. 두 애플리케이션 모두 ReVanced Patcher를 사용하며, 이를 통해 사용자 정의 패치로 앱을 다운로드 및 패치하고 패치 과정을 관리할 수 있습니다. Universal ReVanced Manager에 포함된 고유 기능으로는 패치 번들 표시 이름, 서드파티 패치 번들 가져오기 지원 등이 있습니다. Universal ReVanced Manager가 제공하는 고유 기능의 모든 목록을 확인하세요</string>
+    <string name="revanced_manager_description">Universal ReVanced Manager(URV Manager)는 공식 ReVanced Manager의 포크 버전입니다. 두 애플리케이션 모두 ReVanced 패처를 사용하며, 이를 통해 사용자 정의 패치로 앱을 다운로드 및 패치하고 패치 과정을 관리할 수 있습니다. Universal ReVanced Manager에 포함된 고유 기능으로는 패치 번들 표시 이름, 서드파티 패치 번들 가져오기 지원 등이 있습니다. Universal ReVanced Manager가 제공하는 고유 기능의 모든 목록을 확인하세요</string>
     <string name="unique_features_label">여기.</string>
     <!-- From PR #37: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/37 -->
     <string name="here">여기.</string>
