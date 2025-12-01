@@ -458,6 +458,7 @@
     <string name="language_option_chinese_simplified">중국어 (간체)</string>
     <!-- From PR #38: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/38 -->
     <string name="language_option_vietnamese">베트남어</string>
+    <string name="language_option_korean">한국어</string>
     <string name="device">기기</string>
     <string name="device_android_version">Android 버전</string>
     <string name="device_model">모델</string>
