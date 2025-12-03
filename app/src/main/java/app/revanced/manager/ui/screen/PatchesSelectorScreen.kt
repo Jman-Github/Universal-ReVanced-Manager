@@ -163,6 +163,44 @@ fun PatchesSelectorScreen(
     var pendingProfileName by rememberSaveable { mutableStateOf("") }
     var selectedProfileId by rememberSaveable { mutableStateOf<Int?>(null) }
     var isSavingProfile by remember { mutableStateOf(false) }
+    data class ProfileVersionConflict(
+        val profileId: Int,
+        val profileName: String,
+        val existingVersion: String?,
+        val newVersion: String?
+    )
+    var versionConflict by remember { mutableStateOf<ProfileVersionConflict?>(null) }
+    suspend fun saveProfileAndClose(
+        name: String,
+        bundles: Set<Int>,
+        existingProfileId: Int?,
+        appVersionOverride: String?,
+        keepExistingVersion: Boolean = false,
+        existingProfileVersion: String? = null
+    ) {
+        isSavingProfile = true
+        val success = try {
+            viewModel.savePatchProfile(
+                name,
+                bundles,
+                existingProfileId,
+                appVersionOverride,
+                keepExistingProfileVersion = keepExistingVersion,
+                existingProfileVersion = existingProfileVersion
+            )
+        } finally {
+            isSavingProfile = false
+        }
+        if (success) {
+            showProfileNameDialog = false
+            showBundleDialog = false
+            pendingProfileName = ""
+            selectedBundleUids.clear()
+            selectedProfileId = null
+        }
+    }
+    fun String.asVersionLabel(): String =
+        if (startsWith("v", ignoreCase = true)) this else "v$this"
 
     val defaultPatchSelectionCount by viewModel.defaultSelectionCount
         .collectAsStateWithLifecycle(initialValue = 0)
@@ -265,7 +303,7 @@ fun PatchesSelectorScreen(
 
     if (viewModel.compatibleVersions.isNotEmpty())
         IncompatiblePatchDialog(
-            appVersion = viewModel.appVersion ?: stringResource(R.string.any_version),
+            appVersion = viewModel.currentAppVersion ?: stringResource(R.string.any_version),
             compatibleVersions = viewModel.compatibleVersions,
             onDismissRequest = viewModel::dismissDialogs
         )
@@ -274,7 +312,7 @@ fun PatchesSelectorScreen(
     }
     if (showIncompatiblePatchesDialog)
         IncompatiblePatchesDialog(
-            appVersion = viewModel.appVersion ?: stringResource(R.string.any_version),
+            appVersion = viewModel.currentAppVersion ?: stringResource(R.string.any_version),
             onDismissRequest = { showIncompatiblePatchesDialog = false }
         )
 
@@ -335,24 +373,89 @@ fun PatchesSelectorScreen(
             onConfirm = {
                 if (pendingProfileName.isBlank() || isSavingProfile) return@PatchProfileNameDialog
                 composableScope.launch {
-                    isSavingProfile = true
-                    val success = try {
-                        viewModel.savePatchProfile(
-                            pendingProfileName.trim(),
-                            selectedBundleUids.toSet(),
-                            selectedProfileId
-                        )
-                    } finally {
-                        isSavingProfile = false
+                    val selectedId = selectedProfileId
+                    val targetProfile = selectedId?.let { id -> profiles.firstOrNull { it.uid == id } }
+                    if (selectedId != null && targetProfile != null) {
+                        val resolvedVersion = viewModel.previewResolvedAppVersion(selectedBundleUids.toSet())
+                        if (resolvedVersion != targetProfile.appVersion) {
+                            versionConflict = ProfileVersionConflict(
+                                profileId = selectedId,
+                                profileName = targetProfile.name,
+                                existingVersion = targetProfile.appVersion,
+                                newVersion = resolvedVersion
+                            )
+                            return@launch
+                        }
                     }
-                    if (success) {
-                        showProfileNameDialog = false
-                        showBundleDialog = false
-                        pendingProfileName = ""
-                        selectedBundleUids.clear()
-                        selectedProfileId = null
-                    }
+                    saveProfileAndClose(
+                        name = pendingProfileName.trim(),
+                        bundles = selectedBundleUids.toSet(),
+                        existingProfileId = selectedId,
+                        appVersionOverride = null,
+                        keepExistingVersion = selectedId != null,
+                        existingProfileVersion = targetProfile?.appVersion
+                    )
                 }
+            }
+        )
+    }
+
+    versionConflict?.let { conflict ->
+        val existingLabel = conflict.existingVersion?.asVersionLabel()
+            ?: stringResource(R.string.bundle_version_all_versions)
+        val newLabel = conflict.newVersion?.asVersionLabel()
+            ?: stringResource(R.string.bundle_version_all_versions)
+        AlertDialog(
+            onDismissRequest = { if (!isSavingProfile) versionConflict = null },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (isSavingProfile) return@TextButton
+                        composableScope.launch {
+                            saveProfileAndClose(
+                                name = pendingProfileName.trim(),
+                                bundles = selectedBundleUids.toSet(),
+                                existingProfileId = conflict.profileId,
+                                appVersionOverride = conflict.newVersion,
+                                keepExistingVersion = false,
+                                existingProfileVersion = conflict.existingVersion
+                            )
+                            versionConflict = null
+                        }
+                    }
+                ) {
+                    Text(stringResource(R.string.patch_profile_version_conflict_use_new))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        if (isSavingProfile) return@TextButton
+                        composableScope.launch {
+                            saveProfileAndClose(
+                                name = pendingProfileName.trim(),
+                                bundles = selectedBundleUids.toSet(),
+                                existingProfileId = conflict.profileId,
+                                appVersionOverride = conflict.existingVersion,
+                                keepExistingVersion = true,
+                                existingProfileVersion = conflict.existingVersion
+                            )
+                            versionConflict = null
+                        }
+                    }
+                ) {
+                    Text(stringResource(R.string.patch_profile_version_conflict_keep_existing))
+                }
+            },
+            title = { Text(stringResource(R.string.patch_profile_version_conflict_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.patch_profile_version_conflict_message,
+                        existingLabel,
+                        newLabel
+                    )
+                )
             }
         )
     }

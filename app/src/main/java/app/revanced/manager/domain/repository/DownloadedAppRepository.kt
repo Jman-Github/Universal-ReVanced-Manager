@@ -44,6 +44,24 @@ class DownloadedAppRepository(
     fun getApkFileForApp(app: DownloadedApp): File =
         getApkFileForDir(dir.resolve(app.directory))
 
+    suspend fun getPreparedApkFile(app: DownloadedApp, stripNativeLibs: Boolean = false): File {
+        val source = getApkFileForApp(app)
+        val preparation = SplitApkPreparer.prepareIfNeeded(
+            source = source,
+            workspace = splitWorkspace,
+            stripNativeLibs = stripNativeLibs
+        )
+        return try {
+            if (preparation.merged) {
+                // Always persist merged split back to the cached download so exports/selections use the intact APK.
+                preparation.file.copyTo(source, overwrite = true)
+            }
+            source
+        } finally {
+            preparation.cleanup()
+        }
+    }
+
     private fun getApkFileForDir(directory: File) = directory.listFiles()!!.first()
 
     suspend fun download(

@@ -474,6 +474,8 @@ Recommended for this device: %1$d MB.</string>
     <string name="language_option_system">Use device language</string>
     <string name="language_option_english">English</string>
     <string name="language_option_chinese_simplified">Chinese (Simplified)</string>
+    <!-- From PR #42: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/42 -->
+    <string name="language_option_korean">Korean</string>
     <!-- From PR #38: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/38 -->
     <string name="language_option_vietnamese">Vietnamese</string>
     <string name="device">Device</string>
@@ -528,6 +530,19 @@ Recommended for this device: %1$d MB.</string>
     <string name="patch_profile_save_failed_toast">Failed to save patch profile</string>
     <string name="patch_profile_rename">Rename</string>
     <string name="patch_profile_rename_title">Rename patch profile</string>
+    <string name="patch_profile_version_override_action">Patch profile version settings</string>
+    <string name="patch_profile_version_override_title">Version settings for "%1$s"</string>
+    <string name="patch_profile_version_override_message">Set a specific app version to store with this profile, or target all versions.</string>
+    <string name="patch_profile_version_override_label">App version</string>
+    <string name="patch_profile_version_override_hint">e.g. 18.27.35</string>
+    <string name="patch_profile_version_override_all_versions">Use all versions</string>
+    <string name="patch_profile_version_override_saved_toast">Profile version updated</string>
+    <string name="patch_profile_version_override_failed_toast">Failed to update profile version</string>
+    <string name="patch_profile_version_override_set_to_all">No version entered, saved as "%1$s"</string>
+    <string name="patch_profile_version_conflict_title">Keep version override?</string>
+    <string name="patch_profile_version_conflict_message">Current version: %1$s\nIncoming version: %2$s\nWhich should be saved to this profile?</string>
+    <string name="patch_profile_version_conflict_use_new">Use incoming version</string>
+    <string name="patch_profile_version_conflict_keep_existing">Keep existing version</string>
     <string name="patch_profile_empty_state">Save a configuration from the patch selection screen to see it here.</string>
     <string name="patch_profile_missing_bundles_toast">Some bundles in this profile are not available and will be skipped.</string>
     <string name="patch_profile_changed_patches_toast">Some patches or options in this profile no longer match the bundle and were skipped.</string>
@@ -643,6 +658,8 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="installer_fallback_description">Used automatically when the primary installer is unavailable.</string>
     <string name="installer_internal_name">System installer</string>
     <string name="installer_internal_description">Use the Android package installer</string>
+    <string name="installer_auto_saved_name">Rooted mount installer</string>
+    <string name="installer_auto_saved_description">Mounts the patched APK over the installed app (root required).</string>
     <string name="installer_shizuku_name">Shizuku</string>
     <string name="installer_shizuku_description">Install silently using Shizuku or Sui.</string>
     <string name="installer_option_none">No fallback</string>

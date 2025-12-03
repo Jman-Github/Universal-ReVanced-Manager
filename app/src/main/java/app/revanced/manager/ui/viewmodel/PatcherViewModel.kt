@@ -918,7 +918,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 performInstall(installTypeFor(plan.target))
             }
 
-            is InstallerManager.InstallPlan.Root -> {
+            is InstallerManager.InstallPlan.Mount -> {
                 pendingExternalInstall?.let(installerManager::cleanup)
                 pendingExternalInstall = null
                 externalInstallTimeoutJob?.cancel()
@@ -1041,7 +1041,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                         app.toast(app.getString(R.string.reinstall_app_fail, e.simpleMessage()))
                     }
                 }
-                is InstallerManager.InstallPlan.Root -> {
+                is InstallerManager.InstallPlan.Mount -> {
                     pendingExternalInstall?.let(installerManager::cleanup)
                     pendingExternalInstall = null
                     externalInstallTimeoutJob?.cancel()

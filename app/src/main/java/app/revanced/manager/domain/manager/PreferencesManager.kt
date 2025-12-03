@@ -194,7 +194,8 @@ class PreferencesManager(
 object InstallerPreferenceTokens {
     const val INTERNAL = ":internal:"
     const val SYSTEM = ":system:"
-    const val ROOT = ":root:"
+    const val ROOT = ":root:" // Legacy value, mapped to AUTO_SAVED.
+    const val AUTO_SAVED = ":auto_saved:"
     const val SHIZUKU = ":shizuku:"
     const val NONE = ":none:"
 }

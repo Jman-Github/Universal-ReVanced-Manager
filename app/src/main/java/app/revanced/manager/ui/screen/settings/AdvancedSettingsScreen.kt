@@ -251,7 +251,7 @@ fun AdvancedSettingsScreen(
                 }
                 val ensured = if (
                     token == InstallerManager.Token.Internal ||
-                    token == InstallerManager.Token.Root ||
+                    token == InstallerManager.Token.AutoSaved ||
                     (token == InstallerManager.Token.None && includeNone) ||
                     normalized.any { tokensEqual(it.token, token) }
                 ) {
@@ -336,7 +336,7 @@ fun AdvancedSettingsScreen(
             ): (@Composable () -> Unit)? = when (entry.token) {
                 InstallerManager.Token.Internal,
                 InstallerManager.Token.None,
-                InstallerManager.Token.Root -> null
+                InstallerManager.Token.AutoSaved -> null
                 InstallerManager.Token.Shizuku,
                 is InstallerManager.Token.Component -> entry.icon?.let { drawable ->
                     {
@@ -1183,12 +1183,20 @@ private fun CustomInstallerContent(
     val trimmedInput = remember(inputValue) { inputValue.trim() }
     var selectedTab by rememberSaveable { mutableStateOf(InstallerTab.Saved) }
     val scrollState = rememberScrollState()
-    val autoSavedEntries = remember(builtinComponents, installTarget) {
-        builtinComponents.mapNotNull { component ->
-            installerManager.describeEntry(InstallerManager.Token.Component(component), installTarget)
-                ?.let { component to it }
-        }.sortedBy { (_, entry) -> entry.label.lowercase() }
-    }
+            val autoSavedEntries = remember(builtinComponents, installTarget) {
+                buildList {
+                    // Built-in system installers discovered automatically.
+                    addAll(
+                        builtinComponents.mapNotNull { component ->
+                            installerManager.describeEntry(InstallerManager.Token.Component(component), installTarget)
+                                ?.let { component to it }
+                        }
+                    )
+                    // Add mount installer as an auto-saved option.
+                    installerManager.describeEntry(InstallerManager.Token.AutoSaved, installTarget)
+                        ?.let { add(null to it) }
+                }.sortedBy { (_, entry) -> entry.label.lowercase() }
+            }
 
     fun handleLookup(packageName: String) {
         coroutineScope.launch {
@@ -1396,7 +1404,7 @@ private fun CustomInstallerContent(
                             val supportingLines = buildList {
                                 entry.description?.takeIf { it.isNotBlank() }?.let { add(it) }
                                 entry.availability.reason?.let { add(context.getString(it)) }
-                                add(component.flattenToString())
+                                component?.flattenToString()?.let { add(it) }
                             }
                             ListItem(
                                 headlineContent = {

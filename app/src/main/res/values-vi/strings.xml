@@ -484,6 +484,32 @@
     <string name="patch_profile_save_failed_toast">Không thể lưu cấu hình vá</string>
     <string name="patch_profile_rename">Đổi tên</string>
     <string name="patch_profile_rename_title">Đổi tên cấu hình vá</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_override_action">Patch profile version settings</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_override_title">Version settings for "%1$s"</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_override_message">Set a specific app version to store with this profile, or target all versions.</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_override_label">App version</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_override_hint">e.g. 18.27.35</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_override_all_versions">Use all versions</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_override_saved_toast">Profile version updated</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_override_failed_toast">Failed to update profile version</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_override_set_to_all">No version entered, saved as "%1$s"</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_conflict_title">Keep version override?</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_conflict_message">Current version: %1$s\nIncoming version: %2$s\nWhich should be saved to this profile?</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_conflict_use_new">Use incoming version</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_conflict_keep_existing">Keep existing version</string>
     <string name="patch_profile_empty_state">Lưu cấu hình từ màn hình chọn bản vá để xem chúng ở đây.</string>
     <string name="patch_profile_missing_bundles_toast">Một số gói trong cấu hình này có thể không còn tồn tại và sẽ bị bỏ qua.</string>
     <string name="patch_profile_changed_patches_toast">Một số bản vá và tùy chọn trong cấu hình này không còn khớp với gói và đã bị bỏ qua.</string>
@@ -593,6 +619,9 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="installer_fallback_description">Được tự động khi trình cài đặt chính không có sẵn.</string>
     <string name="installer_internal_name">Trình cài đặt hệ thống</string>
     <string name="installer_internal_description">Dùng trình cài đặt gói của Android</string>
+    <!-- TODO: Translate "Rooted mount installer" and its description -->
+    <string name="installer_auto_saved_name">Rooted mount installer</string>
+    <string name="installer_auto_saved_description">Mounts the patched APK over the installed app (root required).</string>
     <string name="installer_shizuku_name">Shizuku</string>
     <string name="installer_shizuku_description">Cài ẩn bằng Shizuku hoặc Sui.</string>
     <string name="installer_option_none">Không có</string>

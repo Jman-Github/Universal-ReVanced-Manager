@@ -41,6 +41,7 @@ class InstallerManager(
         val entries = mutableListOf<Entry>()
 
         entryFor(Token.Internal, target)?.let(entries::add)
+        entryFor(Token.AutoSaved, target)?.let(entries::add)
         entryFor(Token.Shizuku, target)?.let(entries::add)
 
         val activityEntries = queryInstallerActivities()
@@ -80,7 +81,8 @@ class InstallerManager(
 
     fun parseToken(value: String?): Token {
         val token = when (value) {
-            InstallerPreferenceTokens.ROOT,
+            InstallerPreferenceTokens.AUTO_SAVED,
+            InstallerPreferenceTokens.ROOT -> Token.AutoSaved
             InstallerPreferenceTokens.SYSTEM -> Token.Internal
             InstallerPreferenceTokens.NONE -> Token.None
             InstallerPreferenceTokens.SHIZUKU -> Token.Shizuku
@@ -95,7 +97,7 @@ class InstallerManager(
 
     fun tokenToPreference(token: Token): String = when (token) {
         Token.Internal -> InstallerPreferenceTokens.INTERNAL
-        Token.Root -> InstallerPreferenceTokens.INTERNAL
+        Token.AutoSaved -> InstallerPreferenceTokens.AUTO_SAVED
         Token.None -> InstallerPreferenceTokens.NONE
         Token.Shizuku -> InstallerPreferenceTokens.SHIZUKU
         is Token.Component -> token.componentName.flattenToString()
@@ -300,8 +302,8 @@ class InstallerManager(
         return when (token) {
             Token.Internal -> InstallPlan.Internal(target)
             Token.None -> null
-            Token.Root -> if (availabilityFor(Token.Root, target).available) {
-                InstallPlan.Root(target)
+            Token.AutoSaved -> if (availabilityFor(Token.AutoSaved, target).available) {
+                InstallPlan.Mount(target)
             } else null
 
             Token.Shizuku -> if (availabilityFor(Token.Shizuku, target).available) {
@@ -379,6 +381,14 @@ class InstallerManager(
             icon = null
         )
 
+        Token.AutoSaved -> Entry(
+            token = Token.AutoSaved,
+            label = app.getString(R.string.installer_auto_saved_name),
+            description = app.getString(R.string.installer_auto_saved_description),
+            availability = availabilityFor(Token.AutoSaved, target),
+            icon = null
+        )
+
         Token.Shizuku -> Entry(
             token = Token.Shizuku,
             label = app.getString(R.string.installer_shizuku_name),
@@ -397,8 +407,6 @@ class InstallerManager(
                 icon = loadInstallerIcon(token.componentName)
             )
         }
-
-        Token.Root -> null
     }
 
     private fun copyToShareDir(source: File): File {
@@ -441,7 +449,7 @@ class InstallerManager(
         Token.Internal -> Availability(true)
         Token.None -> Availability(true)
 
-        Token.Root -> if (!target.supportsRoot) {
+        Token.AutoSaved -> if (!target.supportsRoot) {
             Availability(false, R.string.installer_status_not_supported)
         } else if (!rootInstaller.hasRootAccess()) {
             Availability(false, R.string.installer_status_requires_root)
@@ -539,7 +547,7 @@ class InstallerManager(
 
     sealed class Token {
         object Internal : Token()
-        object Root : Token()
+        object AutoSaved : Token()
         object Shizuku : Token()
         object None : Token()
         data class Component(val componentName: ComponentName) : Token()
@@ -547,7 +555,7 @@ class InstallerManager(
 
     sealed class InstallPlan {
         data class Internal(val target: InstallTarget) : InstallPlan()
-        data class Root(val target: InstallTarget) : InstallPlan()
+        data class Mount(val target: InstallTarget) : InstallPlan()
         data class Shizuku(val target: InstallTarget) : InstallPlan()
         data class External(
             val target: InstallTarget,
@@ -603,7 +611,7 @@ class InstallerManager(
 
 private fun InstallerManager.Token.describe(): String = when (this) {
     InstallerManager.Token.Internal -> "Internal"
-    InstallerManager.Token.Root -> "Root"
+    InstallerManager.Token.AutoSaved -> "AutoSaved"
     InstallerManager.Token.Shizuku -> "Shizuku"
     InstallerManager.Token.None -> "None"
     is InstallerManager.Token.Component -> "Component(${componentName.flattenToString()})"

@@ -187,13 +187,23 @@ private fun ReVancedManager(vm: MainViewModel) {
             PatcherScreen(
                 onBackClick = navController::popBackStack,
                 onReviewSelection = { app, selection, options, missing ->
+                    val appWithVersion = when (app) {
+                        is SelectedApp.Search -> app.copy(version = app.version ?: params.selectedApp.version)
+                        is SelectedApp.Download -> if (app.version.isNullOrBlank()) app.copy(version = params.selectedApp.version) else app
+                        else -> app
+                    }
                     navController.navigateComplex(
                         SelectedApplicationInfo.PatchesSelector,
                         SelectedApplicationInfo.PatchesSelector.ViewModelParams(
-                            app = app,
+                            app = appWithVersion,
                             currentSelection = selection,
                             options = options,
-                            missingPatchNames = missing
+                            missingPatchNames = missing,
+                            preferredAppVersion = app.version,
+                            preferredBundleVersion = null,
+                            preferredBundleUid = selection.keys.firstOrNull(),
+                            preferredBundleOverride = null,
+                            preferredBundleTargetsAllVersions = false
                         )
                     )
                 },
@@ -235,13 +245,22 @@ private fun ReVancedManager(vm: MainViewModel) {
                             ?: app.version?.takeUnless { it.isNullOrBlank() }
                             ?: viewModel.preferredBundleVersion?.takeUnless { it.isNullOrBlank() }
                             ?: viewModel.desiredVersion
+                        val appWithVersion = when (app) {
+                            is SelectedApp.Search -> app.copy(version = versionHint)
+                            is SelectedApp.Download -> if (app.version.isNullOrBlank()) app.copy(version = versionHint) else app
+                            else -> app
+                        }
                         navController.navigateComplex(
                             SelectedApplicationInfo.PatchesSelector,
                             SelectedApplicationInfo.PatchesSelector.ViewModelParams(
-                                app,
+                                appWithVersion,
                                 patches,
                                 options,
-                                preferredAppVersion = versionHint
+                                preferredAppVersion = versionHint,
+                                preferredBundleVersion = viewModel.preferredBundleVersion,
+                                preferredBundleUid = viewModel.selectedBundleUidFlow.value,
+                                preferredBundleOverride = viewModel.selectedBundleVersionOverrideFlow.value,
+                                preferredBundleTargetsAllVersions = viewModel.preferredBundleTargetsAllVersionsFlow.value
                             )
                         )
                     },
@@ -250,13 +269,22 @@ private fun ReVancedManager(vm: MainViewModel) {
                             ?: app.version?.takeUnless { it.isNullOrBlank() }
                             ?: viewModel.preferredBundleVersion?.takeUnless { it.isNullOrBlank() }
                             ?: viewModel.desiredVersion
+                        val appWithVersion = when (app) {
+                            is SelectedApp.Search -> app.copy(version = versionHint)
+                            is SelectedApp.Download -> if (app.version.isNullOrBlank()) app.copy(version = versionHint) else app
+                            else -> app
+                        }
                         navController.navigateComplex(
                             SelectedApplicationInfo.RequiredOptions,
                             SelectedApplicationInfo.PatchesSelector.ViewModelParams(
-                                app,
+                                appWithVersion,
                                 patches,
                                 options,
-                                preferredAppVersion = versionHint
+                                preferredAppVersion = versionHint,
+                                preferredBundleVersion = viewModel.preferredBundleVersion,
+                                preferredBundleUid = viewModel.selectedBundleUidFlow.value,
+                                preferredBundleOverride = viewModel.selectedBundleVersionOverrideFlow.value,
+                                preferredBundleTargetsAllVersions = viewModel.preferredBundleTargetsAllVersionsFlow.value
                             )
                         )
                     },
