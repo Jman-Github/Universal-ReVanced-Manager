@@ -931,6 +931,12 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <!-- Needs translation -->
     <string name="set_github_pat_dialog_description">Set a GitHub Personal Access Token in order to be able to add Pull Requests as external sources. Create a PAT with scope public_repo</string>
     <!-- Needs translation -->
+    <string name="include_github_pat_in_exports_label">Include in settings export</string>
+    <!-- Needs translation -->
+    <string name="include_github_pat_in_exports_supporting">Adds this PAT to exported manager settings</string>
+    <!-- Needs translation -->
+    <string name="include_github_pat_in_exports_warning">Do not share your PAT. If you include it in a settings export, keep that file private because it contains the token.</string>
+    <!-- Needs translation -->
     <string name="plugins_help_title">What is a downloader?</string>
     <!-- Needs translation -->
     <string name="plugins_help_description">A downloader is a plugin which allows URV to download stock APKs from various sources. The downloaded APKs will be shown in the bottom section. During the patching process, you can choose an already downloaded APKs or you can download it via a plugin.\n\nThe list of supported downloader plugins can be found</string>

@@ -56,6 +56,7 @@ import androidx.compose.material.icons.outlined.SettingsBackupRestore
 import androidx.compose.material.icons.outlined.UnfoldLess
 import androidx.compose.material.icons.outlined.Undo
 import androidx.compose.material.icons.outlined.VpnKey
+import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -72,6 +73,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -192,6 +194,7 @@ fun AdvancedSettingsScreen(
 
             val apiUrl by viewModel.prefs.api.getAsState()
             val gitHubPat by viewModel.prefs.gitHubPat.getAsState()
+            val includeGitHubPatInExports by viewModel.prefs.includeGitHubPatInExports.getAsState()
             var showApiUrlDialog by rememberSaveable { mutableStateOf(false) }
             var showGitHubPatDialog by rememberSaveable { mutableStateOf(false) }
 
@@ -208,9 +211,11 @@ fun AdvancedSettingsScreen(
             if (showGitHubPatDialog) {
                 GitHubPatDialog(
                     currentPat = gitHubPat,
-                    onSubmit = {
+                    currentIncludeInExport = includeGitHubPatInExports,
+                    onSubmit = { pat, includePat ->
                         showGitHubPatDialog = false
-                        viewModel.setGitHubPat(it)
+                        viewModel.setGitHubPat(pat)
+                        viewModel.setIncludeGitHubPatInExports(includePat)
                     },
                     onDismiss = { showGitHubPatDialog = false }
                 )
@@ -1826,10 +1831,13 @@ private fun APIUrlDialog(currentUrl: String, defaultUrl: String, onSubmit: (Stri
 @Composable
 private fun GitHubPatDialog(
     currentPat: String,
-    onSubmit: (String) -> Unit,
+    currentIncludeInExport: Boolean,
+    onSubmit: (String, Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     var pat by rememberSaveable(currentPat) { mutableStateOf(currentPat) }
+    var includePatInExport by rememberSaveable(currentIncludeInExport) { mutableStateOf(currentIncludeInExport) }
+    var showIncludeWarning by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val description = stringResource(R.string.set_github_pat_dialog_description)
     val hereLabel = stringResource(R.string.here)
@@ -1856,7 +1864,7 @@ private fun GitHubPatDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = { onSubmit(pat) }) {
+            TextButton(onClick = { onSubmit(pat, includePatInExport) }) {
                 Text(stringResource(R.string.save))
             }
         },
@@ -1902,7 +1910,70 @@ private fun GitHubPatDialog(
                         TransformedText(AnnotatedString(masked), OffsetMapping.Identity)
                     }
                 )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.include_github_pat_in_exports_label),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = stringResource(R.string.include_github_pat_in_exports_supporting),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = includePatInExport,
+                        onCheckedChange = { checked ->
+                            if (checked) {
+                                showIncludeWarning = true
+                            } else {
+                                includePatInExport = false
+                            }
+                        }
+                    )
+                }
             }
         }
     )
+
+    if (showIncludeWarning) {
+        AlertDialog(
+            onDismissRequest = { showIncludeWarning = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        includePatInExport = true
+                        showIncludeWarning = false
+                    }
+                ) {
+                    Text(stringResource(R.string.confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showIncludeWarning = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+            icon = { Icon(Icons.Outlined.Warning, null) },
+            title = { Text(stringResource(R.string.warning)) },
+            text = {
+                Text(
+                    text = stringResource(R.string.include_github_pat_in_exports_warning),
+                    modifier = Modifier.fillMaxWidth(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
+        )
+    }
 }

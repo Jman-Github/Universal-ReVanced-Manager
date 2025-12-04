@@ -856,4 +856,18 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="export">Xuất</string>
     <string name="confirm">Xác nhận</string>
     <string name="saved_app_install_cancelled">Đã huỷ cài đặt</string>
+    <!-- Translation needed -->
+    <string name="github_pat">GitHub PAT</string>
+    <!-- Translation needed -->
+    <string name="github_pat_description">GitHub Personal Access Token needed for GitHub integration</string>
+    <!-- Translation needed -->
+    <string name="set_github_pat_dialog_title">Set GitHub PAT</string>
+    <!-- Translation needed -->
+    <string name="set_github_pat_dialog_description">Set a GitHub Personal Access Token in order to be able to add Pull Requests as external sources. Create a PAT with scope public_repo</string>
+    <!-- Translation needed -->
+    <string name="include_github_pat_in_exports_label">Include in settings export</string>
+    <!-- Translation needed -->
+    <string name="include_github_pat_in_exports_supporting">Adds this PAT to exported manager settings</string>
+    <!-- Translation needed -->
+    <string name="include_github_pat_in_exports_warning">Do not share your PAT. If you include it in a settings export, keep that file private because it contains the token.</string>
 </resources>

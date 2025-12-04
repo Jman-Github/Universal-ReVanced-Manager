@@ -30,6 +30,7 @@ class PreferencesManager(
     val api = stringPreference("api_url", "https://api.revanced.app")
     // PR #35: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35
     val gitHubPat = stringPreference("github_pat", "")
+    val includeGitHubPatInExports = booleanPreference("include_github_pat_in_exports", false)
 
     val useProcessRuntime = booleanPreference("use_process_runtime", false)
     val stripUnusedNativeLibs = booleanPreference("strip_unused_native_libs", false)
@@ -82,6 +83,7 @@ class PreferencesManager(
         val appLanguage: String? = null,
         val api: String? = null,
         val gitHubPat: String? = null,
+        val includeGitHubPatInExports: Boolean? = null,
         val useProcessRuntime: Boolean? = null,
         val patcherProcessMemoryLimit: Int? = null,
         val autoCollapsePatcherSteps: Boolean? = null,
@@ -120,7 +122,8 @@ class PreferencesManager(
         theme = theme.get(),
         appLanguage = appLanguage.get(),
         api = api.get(),
-        gitHubPat = gitHubPat.get(),
+        gitHubPat = gitHubPat.get().takeIf { includeGitHubPatInExports.get() },
+        includeGitHubPatInExports = includeGitHubPatInExports.get(),
         useProcessRuntime = useProcessRuntime.get(),
         patcherProcessMemoryLimit = patcherProcessMemoryLimit.get(),
         autoCollapsePatcherSteps = autoCollapsePatcherSteps.get(),
@@ -160,6 +163,7 @@ class PreferencesManager(
         snapshot.appLanguage?.let { appLanguage.value = it }
         snapshot.api?.let { api.value = it }
         snapshot.gitHubPat?.let { gitHubPat.value = it }
+        snapshot.includeGitHubPatInExports?.let { includeGitHubPatInExports.value = it }
         snapshot.useProcessRuntime?.let { useProcessRuntime.value = it }
         snapshot.patcherProcessMemoryLimit?.let { patcherProcessMemoryLimit.value = it }
         snapshot.autoCollapsePatcherSteps?.let { autoCollapsePatcherSteps.value = it }

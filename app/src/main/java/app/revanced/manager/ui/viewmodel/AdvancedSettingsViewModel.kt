@@ -59,6 +59,10 @@ class AdvancedSettingsViewModel(
         prefs.gitHubPat.update(value.trim())
     }
 
+    fun setIncludeGitHubPatInExports(enabled: Boolean) = viewModelScope.launch(Dispatchers.Default) {
+        prefs.includeGitHubPatInExports.update(enabled)
+    }
+
     fun exportDebugLogs(target: Uri) = viewModelScope.launch {
         val exitCode = try {
             withContext(Dispatchers.IO) {

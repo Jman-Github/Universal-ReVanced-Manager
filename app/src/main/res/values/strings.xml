@@ -468,6 +468,9 @@ Recommended for this device: %1$d MB.</string>
     <string name="github_pat_description">GitHub Personal Access Token needed for GitHub integration</string>
     <string name="set_github_pat_dialog_title">Set GitHub PAT</string>
     <string name="set_github_pat_dialog_description">Set a GitHub Personal Access Token in order to be able to add Pull Requests as external sources. Create a PAT with scope public_repo</string>
+    <string name="include_github_pat_in_exports_label">Include in settings export</string>
+    <string name="include_github_pat_in_exports_supporting">Adds this PAT to exported manager settings</string>
+    <string name="include_github_pat_in_exports_warning">Do not share your PAT. If you include it in a settings export, keep that file private because it contains the token.</string>
     <string name="language_settings">Language</string>
     <string name="app_language">App language</string>
     <string name="language_dialog_title">Choose app language</string>

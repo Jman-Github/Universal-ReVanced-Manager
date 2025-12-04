@@ -451,6 +451,12 @@
     <string name="github_pat_description">GitHub Integration을 위하여 GitHub Personal Access Token이 필요합니다</string>
     <string name="set_github_pat_dialog_title">GitHub PAT 설정</string>
     <string name="set_github_pat_dialog_description">Pull Requests를 외부 소스로 추가할 수 있도록 GitHub Personal Access Token을 설정할 수 있습니다. 범위가 public_repo인 PAT를 생성하세요</string>
+    <!-- Translation needed -->
+    <string name="include_github_pat_in_exports_label">Include in settings export</string>
+    <!-- Translation needed -->
+    <string name="include_github_pat_in_exports_supporting">Adds this PAT to exported manager settings</string>
+    <!-- Translation needed -->
+    <string name="include_github_pat_in_exports_warning">Do not share your PAT. If you include it in a settings export, keep that file private because it contains the token.</string>
     <string name="language_settings">언어</string>
     <string name="app_language">앱 언어</string>
     <string name="language_dialog_title">앱 언어를 선택하세요</string>
