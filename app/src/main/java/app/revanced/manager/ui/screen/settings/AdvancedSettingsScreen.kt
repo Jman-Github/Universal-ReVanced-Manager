@@ -112,6 +112,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
@@ -725,13 +726,28 @@ fun AdvancedSettingsScreen(
             }
 
             GroupHeader(stringResource(R.string.app_exporting))
-            val exportFormatSummary = buildString {
-                appendLine(stringResource(R.string.export_name_format_description))
-                append(stringResource(R.string.export_name_format_current, exportFormat))
-            }.trimEnd()
             SettingsListItem(
                 headlineContent = stringResource(R.string.export_name_format),
-                supportingContent = exportFormatSummary,
+                supportingContentSlot = {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = stringResource(R.string.export_name_format_description),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Text(
+                                text = stringResource(R.string.export_name_format_current, exportFormat),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { showExportFormatDialog = true }
@@ -1690,11 +1706,23 @@ private fun InstallerSelectionDialog(
                             }
                             if (lines.isNotEmpty() || showShizukuAction) {
                                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    if (lines.isNotEmpty()) {
-                                        lines.forEach { line ->
+                                    lines.firstOrNull()?.let { desc ->
+                                        Text(
+                                            desc,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    lines.getOrNull(1)?.let { status ->
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = MaterialTheme.colorScheme.surfaceVariant,
+                                            tonalElevation = 1.dp
+                                        ) {
                                             Text(
-                                                line,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                text = status,
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = MaterialTheme.colorScheme.onSurface
                                             )
                                         }
                                     }
