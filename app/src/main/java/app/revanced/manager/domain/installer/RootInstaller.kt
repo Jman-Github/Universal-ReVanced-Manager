@@ -200,8 +200,12 @@ class RootInstaller(
         if (isAppMounted(packageName))
             unmount(packageName)
 
-        remoteFS.getFile("$modulesPath/$packageName-revanced").deleteRecursively()
-            .also { if (!it) throw Exception("Failed to delete files") }
+        val moduleDir = remoteFS.getFile("$modulesPath/$packageName-revanced")
+        if (!moduleDir.exists()) return
+
+        moduleDir.deleteRecursively().also { deleted ->
+            if (!deleted) throw Exception("Failed to delete files")
+        }
     }
 
     companion object {
