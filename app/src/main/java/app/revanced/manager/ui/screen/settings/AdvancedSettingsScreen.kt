@@ -422,7 +422,8 @@ fun AdvancedSettingsScreen(
                         }
                         installerDialogTarget = null
                     },
-                    onOpenShizuku = installerManager::openShizukuApp
+                    onOpenShizuku = installerManager::openShizukuApp,
+                    stripRootNote = true
                 )
             }
 
@@ -737,7 +738,7 @@ fun AdvancedSettingsScreen(
                         )
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant
+                            color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
                         ) {
                             Text(
                                 text = stringResource(R.string.export_name_format_current, exportFormat),
@@ -1601,7 +1602,8 @@ private fun InstallerSelectionDialog(
     blockedToken: InstallerManager.Token?,
     onDismiss: () -> Unit,
     onConfirm: (InstallerManager.Token) -> Unit,
-    onOpenShizuku: (() -> Boolean)? = null
+    onOpenShizuku: (() -> Boolean)? = null,
+    stripRootNote: Boolean = false
 ) {
     val context = LocalContext.current
     val shizukuPromptReasons = remember {
@@ -1701,7 +1703,13 @@ private fun InstallerSelectionDialog(
                         },
                         supportingContent = {
                             val lines = buildList {
-                                option.description?.takeIf { it.isNotBlank() }?.let { add(it) }
+                                val desc = option.description?.let { text ->
+                                    if (stripRootNote && option.token == InstallerManager.Token.AutoSaved) {
+                                        val stripped = text.substringBefore(" (root required", text)
+                                        stripped.trimEnd('.', ' ')
+                                    } else text
+                                }
+                                desc?.takeIf { it.isNotBlank() }?.let { add(it) }
                                 option.availability.reason?.let { add(stringResource(it)) }
                             }
                             if (lines.isNotEmpty() || showShizukuAction) {
@@ -1715,8 +1723,8 @@ private fun InstallerSelectionDialog(
                                     lines.getOrNull(1)?.let { status ->
                                         Surface(
                                             shape = RoundedCornerShape(8.dp),
-                                            color = MaterialTheme.colorScheme.surfaceVariant,
-                                            tonalElevation = 1.dp
+                                            color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+                                            tonalElevation = 0.dp
                                         ) {
                                             Text(
                                                 text = status,
