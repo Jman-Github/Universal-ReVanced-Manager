@@ -72,6 +72,11 @@ class InstalledAppInfoViewModel(
         private set
     var hasSavedCopy by mutableStateOf(false)
         private set
+    var mountWarning: MountWarningState? by mutableStateOf(null)
+        private set
+
+    val primaryInstallerIsMount: Boolean
+        get() = installerManager.getPrimaryToken() == InstallerManager.Token.AutoSaved
 
     init {
         viewModelScope.launch {
@@ -83,6 +88,41 @@ class InstalledAppInfoViewModel(
                 appliedPatches = resolveAppliedSelection(app)
             }
         }
+    }
+
+    fun showMountWarning(action: MountWarningAction, reason: MountWarningReason) {
+        mountWarning = MountWarningState(action, reason)
+    }
+
+    fun clearMountWarning() {
+        mountWarning = null
+    }
+
+    fun performMountWarningAction() {
+        when (val warning = mountWarning) {
+            null -> Unit
+            else -> when (warning.reason) {
+                MountWarningReason.PRIMARY_IS_MOUNT_FOR_NON_MOUNT_APP -> when (warning.action) {
+                    MountWarningAction.INSTALL,
+                    MountWarningAction.UPDATE -> installSavedApp()
+                    MountWarningAction.UNINSTALL -> {
+                        val app = installedApp
+                        if (app?.installType == InstallType.MOUNT || isMounted) {
+                            mountOrUnmount()
+                        } else {
+                            uninstallSavedInstallation()
+                        }
+                    }
+                }
+
+                MountWarningReason.PRIMARY_NOT_MOUNT_FOR_MOUNT_APP -> when (warning.action) {
+                    MountWarningAction.INSTALL,
+                    MountWarningAction.UPDATE -> installSavedApp()
+                    MountWarningAction.UNINSTALL -> uninstallSavedInstallation()
+                }
+            }
+        }
+        mountWarning = null
     }
 
     private suspend fun resolveAppliedSelection(app: InstalledApp) = withContext(Dispatchers.IO) {
@@ -550,7 +590,23 @@ class InstalledAppInfoViewModel(
         externalInstallTimeoutJob = null
     }
 
-    companion object {
+companion object {
         private const val EXTERNAL_INSTALL_TIMEOUT_MS = 60_000L
     }
 }
+
+enum class MountWarningAction {
+    INSTALL,
+    UPDATE,
+    UNINSTALL
+}
+
+enum class MountWarningReason {
+    PRIMARY_IS_MOUNT_FOR_NON_MOUNT_APP,
+    PRIMARY_NOT_MOUNT_FOR_MOUNT_APP
+}
+
+data class MountWarningState(
+    val action: MountWarningAction,
+    val reason: MountWarningReason
+)

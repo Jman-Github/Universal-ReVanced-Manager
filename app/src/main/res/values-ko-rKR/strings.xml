@@ -901,4 +901,21 @@
     <string name="export">내보내기</string>
     <string name="confirm">확인</string>
     <string name="saved_app_install_cancelled">설치를 취소하였습니다</string>
+    <!-- Translation needed -->
+    <string name="installer_mount_warning_title">Rooted mount installer selected</string>
+    <!-- Translation needed -->
+    <string name="installer_mount_warning_install">Your primary installer is set to the rooted mount installer. This saved app was not installed using mount.</string>
+    <!-- Translation needed -->
+    <string name="installer_mount_warning_update">Your primary installer is set to the rooted mount installer. This saved app was not installed using mount.</string>
+    <!-- Translation needed -->
+    <string name="installer_mount_warning_uninstall">Your primary installer is set to the rooted mount installer. This saved app was not installed using mount.</string>
+    <!-- Translation needed -->
+    <string name="installer_mount_mismatch_title">Rooted mount installer not selected</string>
+    <!-- Translation needed -->
+    <string name="installer_mount_mismatch_install">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, or install normally instead.</string>
+    <!-- Translation needed -->
+    <string name="installer_mount_mismatch_update">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, or update normally instead.</string>
+    <!-- Translation needed -->
+    <string name="installer_mount_mismatch_uninstall">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, or uninstall normally instead.</string>
 </resources>
+

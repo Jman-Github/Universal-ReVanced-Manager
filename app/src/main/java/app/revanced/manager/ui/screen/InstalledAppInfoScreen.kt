@@ -57,6 +57,8 @@ import app.revanced.manager.ui.component.SegmentedButton
 import app.revanced.manager.ui.component.ConfirmDialog
 import app.revanced.manager.ui.component.settings.SettingsListItem
 import app.revanced.manager.ui.viewmodel.InstalledAppInfoViewModel
+import app.revanced.manager.ui.viewmodel.MountWarningAction
+import app.revanced.manager.ui.viewmodel.MountWarningReason
 import app.revanced.manager.util.APK_MIMETYPE
 import app.revanced.manager.util.ExportNameFormatter
 import app.revanced.manager.util.PatchedAppExportData
@@ -207,6 +209,53 @@ fun InstalledAppInfoScreen(
         )
     }
 
+    val mountWarning = viewModel.mountWarning
+    if (mountWarning != null) {
+        val (descriptionRes, titleRes) = when (mountWarning.reason) {
+            MountWarningReason.PRIMARY_IS_MOUNT_FOR_NON_MOUNT_APP ->
+                when (mountWarning.action) {
+                    MountWarningAction.INSTALL -> R.string.installer_mount_warning_install
+                    MountWarningAction.UPDATE -> R.string.installer_mount_warning_update
+                    MountWarningAction.UNINSTALL -> R.string.installer_mount_warning_uninstall
+                } to R.string.installer_mount_warning_title
+
+            MountWarningReason.PRIMARY_NOT_MOUNT_FOR_MOUNT_APP ->
+                when (mountWarning.action) {
+                    MountWarningAction.INSTALL -> R.string.installer_mount_mismatch_install
+                    MountWarningAction.UPDATE -> R.string.installer_mount_mismatch_update
+                    MountWarningAction.UNINSTALL -> R.string.installer_mount_mismatch_uninstall
+                } to R.string.installer_mount_mismatch_title
+        }
+
+        val actionLabel = when (mountWarning.action) {
+            MountWarningAction.INSTALL -> stringResource(R.string.install_saved_app)
+            MountWarningAction.UPDATE -> stringResource(R.string.update_saved_app)
+            MountWarningAction.UNINSTALL -> stringResource(R.string.uninstall)
+        }
+
+        AlertDialog(
+            onDismissRequest = viewModel::clearMountWarning,
+            confirmButton = {
+                TextButton(onClick = viewModel::performMountWarningAction) {
+                    Text(actionLabel)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::clearMountWarning) {
+                    Text(stringResource(R.string.ok))
+                }
+            },
+            title = { Text(stringResource(titleRes)) },
+            text = {
+                Text(
+                    text = stringResource(descriptionRes),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        )
+    }
+
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
 
     Scaffold(
@@ -285,7 +334,14 @@ fun InstalledAppInfoScreen(
                         SegmentedButton(
                             icon = Icons.Outlined.Circle,
                             text = if (viewModel.isMounted) stringResource(R.string.unmount) else stringResource(R.string.mount),
-                            onClick = viewModel::mountOrUnmount,
+                            onClick = {
+                                if (!viewModel.primaryInstallerIsMount) {
+                                    val action = if (viewModel.isMounted) MountWarningAction.UNINSTALL else MountWarningAction.INSTALL
+                                    viewModel.showMountWarning(action, MountWarningReason.PRIMARY_NOT_MOUNT_FOR_MOUNT_APP)
+                                } else {
+                                    viewModel.mountOrUnmount()
+                                }
+                            },
                             enabled = viewModel.rootInstaller.hasRootAccess()
                         )
                         SegmentedButton(
@@ -379,7 +435,8 @@ fun InstalledAppInfoScreen(
 
                     val isMountInstall = installedApp.installType == InstallType.MOUNT
                     val installText = when {
-                        isMountInstall -> stringResource(R.string.remount_saved_app)
+                        isMountInstall && viewModel.isMounted -> stringResource(R.string.remount_saved_app)
+                        isMountInstall -> stringResource(R.string.mount)
                         isInstalledOnDevice -> stringResource(R.string.update_saved_app)
                         else -> stringResource(R.string.install_saved_app)
                     }
@@ -387,12 +444,31 @@ fun InstalledAppInfoScreen(
                         icon = Icons.Outlined.InstallMobile,
                         text = installText,
                         onClick = {
-                            if (isMountInstall) viewModel.remountSavedInstallation() else viewModel.installSavedApp()
+                            if (viewModel.primaryInstallerIsMount && !isMountInstall) {
+                                val action = if (isInstalledOnDevice) {
+                                    MountWarningAction.UPDATE
+                                } else MountWarningAction.INSTALL
+                                viewModel.showMountWarning(action, MountWarningReason.PRIMARY_IS_MOUNT_FOR_NON_MOUNT_APP)
+                            } else if (isMountInstall) {
+                                if (!viewModel.primaryInstallerIsMount) {
+                                    val action = if (viewModel.isMounted) MountWarningAction.UPDATE else MountWarningAction.INSTALL
+                                    viewModel.showMountWarning(action, MountWarningReason.PRIMARY_NOT_MOUNT_FOR_MOUNT_APP)
+                                } else {
+                                    if (viewModel.isMounted) viewModel.remountSavedInstallation() else viewModel.mountOrUnmount()
+                                }
+                            } else {
+                                viewModel.installSavedApp()
+                            }
                         },
                         onLongClick = if (isInstalledOnDevice) {
                             {
-                                if (isMountInstall) showSavedUninstallDialog = true
-                                else showSavedUninstallDialog = true
+                                if (viewModel.primaryInstallerIsMount && !isMountInstall) {
+                                    viewModel.showMountWarning(MountWarningAction.UNINSTALL, MountWarningReason.PRIMARY_IS_MOUNT_FOR_NON_MOUNT_APP)
+                                } else if (isMountInstall && !viewModel.primaryInstallerIsMount) {
+                                    viewModel.showMountWarning(MountWarningAction.UNINSTALL, MountWarningReason.PRIMARY_NOT_MOUNT_FOR_MOUNT_APP)
+                                } else {
+                                    showSavedUninstallDialog = true
+                                }
                             }
                         } else null
                     )
