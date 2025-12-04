@@ -918,10 +918,16 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="patcher_step_merge_not_required">No split merge required</string>
     <!-- Needs translation -->
     <string name="update_saved_app">Update</string>
+    <!-- Translation needed -->
+    <string name="remount_saved_app">Remount</string>
     <!-- Needs translation -->
     <string name="saved_app_uninstall_title">Uninstall installed copy?</string>
+    <!-- Translation needed -->
+    <string name="saved_app_unmount_title">Unmount installed copy?</string>
     <!-- Needs translation -->
     <string name="saved_app_uninstall_description">This removes the installed version only. Your saved APK stays intact.</string>
+    <!-- Translation needed -->
+    <string name="saved_app_unmount_description">This unmounts the patched APK. Your saved APK stays intact.</string>
     <!-- Needs translation -->
     <string name="github_pat">GitHub PAT</string>
     <!-- Needs translation -->

@@ -693,9 +693,17 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="delete_saved_entry_description">Thao tác này sẽ xoá mục ứng dụng và APK đã lưu. Còn ứng dụng vẫn sẽ được cài đặt trên máy.</string>
     <string name="saved_app_launch_unavailable">Cài ứng dụng trước khi mở.</string>
     <string name="install_saved_app">Cài đặt</string>
+    <!-- Translation needed -->
+    <string name="update_saved_app">Update</string>
+    <!-- Translation needed -->
+    <string name="remount_saved_app">Remount</string>
     <string name="installing_saved_app">Đang cài đặt ứng dụng đã lưu…</string>
     <string name="saved_app_install_success">Đang cài đặt ứng dụng đã lưu</string>
     <string name="saved_app_install_failed">Không thể cài ứng dụng đã lưu</string>
+    <!-- Translation needed -->
+    <string name="saved_app_unmount_title">Unmount installed copy?</string>
+    <!-- Translation needed -->
+    <string name="saved_app_unmount_description">This unmounts the patched APK. Your saved APK stays intact.</string>
     <string name="saved_app_install_missing">Không tìm thấy APK đã lưu</string>
     <string name="delete_saved_copy">Xoá bản sao đã lưu</string>
     <string name="sign_fail">Ký APK thất bại: %s</string>

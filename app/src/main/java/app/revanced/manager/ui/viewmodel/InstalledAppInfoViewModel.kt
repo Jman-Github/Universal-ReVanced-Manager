@@ -254,6 +254,19 @@ class InstalledAppInfoViewModel(
         pm.uninstallPackage(app.currentPackageName)
     }
 
+    fun remountSavedInstallation() = viewModelScope.launch {
+        val pkgName = installedApp?.currentPackageName ?: return@launch
+        try {
+            rootInstaller.unmount(pkgName)
+            rootInstaller.mount(pkgName)
+        } catch (e: Exception) {
+            context.toast(context.getString(R.string.failed_to_mount, e.simpleMessage()))
+            Log.e(tag, "Failed to remount", e)
+        } finally {
+            isMounted = rootInstaller.isAppMounted(pkgName)
+        }
+    }
+
     fun mountOrUnmount() = viewModelScope.launch {
         val pkgName = installedApp?.currentPackageName ?: return@launch
         try {

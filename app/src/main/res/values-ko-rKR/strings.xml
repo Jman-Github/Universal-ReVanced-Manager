@@ -724,11 +724,17 @@
     <string name="delete_saved_entry_title">저장된 앱 항목 삭제</string>
     <string name="delete_saved_entry_description">저장된 앱 항목과 저장된 APK을 삭제합니다. 앱은 설치된 상태로 유지됩니다.</string>
     <string name="saved_app_launch_unavailable">열기 전에 앱을 설치하세요.</string>
-    <string name="install_saved_app">설치</string>
+        <string name="install_saved_app">설치</string>
     <string name="update_saved_app">업데이트</string>
-    <string name="installing_saved_app">저장된 앱을 설치하는 중 ...</string>
-    <string name="saved_app_install_success">저장된 앱을 설치하였습니다</string>
+    <!-- Translation needed -->
+    <string name="remount_saved_app">Remount</string>
+    <string name="installing_saved_app">저장된 앱을 설치하는 중입니다.</string>
+    <string name="saved_app_install_success">저장된 앱을 설치했습니다</string>
     <string name="saved_app_install_failed">저장된 앱을 설치할 수 없습니다</string>
+    <!-- Translation needed -->
+    <string name="saved_app_unmount_title">Unmount installed copy?</string>
+    <!-- Translation needed -->
+    <string name="saved_app_unmount_description">This unmounts the patched APK. Your saved APK stays intact.</string>
     <string name="saved_app_uninstall_title">저장된 사본을 삭제하시겠습니까?</string>
     <string name="saved_app_uninstall_description">설치된 버전만 제거합니다. 저장된 APK는 그대로 유지됩니다.</string>
     <string name="saved_app_install_missing">저장된 APK를 찾을 수 없습니다</string>

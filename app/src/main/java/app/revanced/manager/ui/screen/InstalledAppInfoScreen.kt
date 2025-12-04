@@ -350,31 +350,50 @@ fun InstalledAppInfoScreen(
 
                     var showSavedUninstallDialog by rememberSaveable { mutableStateOf(false) }
                     if (showSavedUninstallDialog) {
+                        val isMountInstall = installedApp.installType == InstallType.MOUNT
+                        val confirmTitle = if (isMountInstall) {
+                            stringResource(R.string.saved_app_unmount_title)
+                        } else {
+                            stringResource(R.string.saved_app_uninstall_title)
+                        }
+                        val confirmDescription = if (isMountInstall) {
+                            stringResource(R.string.saved_app_unmount_description)
+                        } else {
+                            stringResource(R.string.saved_app_uninstall_description)
+                        }
                         ConfirmDialog(
                             onDismiss = { showSavedUninstallDialog = false },
                             onConfirm = {
                                 showSavedUninstallDialog = false
-                                viewModel.uninstallSavedInstallation()
+                                if (isMountInstall && viewModel.isMounted) {
+                                    viewModel.mountOrUnmount()
+                                } else if (!isMountInstall) {
+                                    viewModel.uninstallSavedInstallation()
+                                }
                             },
-                            title = stringResource(R.string.saved_app_uninstall_title),
-                            description = stringResource(R.string.saved_app_uninstall_description),
+                            title = confirmTitle,
+                            description = confirmDescription,
                             icon = Icons.Outlined.Delete
                         )
                     }
 
-                    val installText = if (isInstalledOnDevice) {
-                        stringResource(R.string.update_saved_app)
-                    } else {
-                        stringResource(R.string.install_saved_app)
+                    val isMountInstall = installedApp.installType == InstallType.MOUNT
+                    val installText = when {
+                        isMountInstall -> stringResource(R.string.remount_saved_app)
+                        isInstalledOnDevice -> stringResource(R.string.update_saved_app)
+                        else -> stringResource(R.string.install_saved_app)
                     }
                     SegmentedButton(
                         icon = Icons.Outlined.InstallMobile,
                         text = installText,
                         onClick = {
-                            viewModel.installSavedApp()
+                            if (isMountInstall) viewModel.remountSavedInstallation() else viewModel.installSavedApp()
                         },
                         onLongClick = if (isInstalledOnDevice) {
-                            { showSavedUninstallDialog = true }
+                            {
+                                if (isMountInstall) showSavedUninstallDialog = true
+                                else showSavedUninstallDialog = true
+                            }
                         } else null
                     )
 

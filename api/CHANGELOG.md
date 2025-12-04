@@ -8,6 +8,7 @@
 - Added Korean manager string localization https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/42
 - Split APKs now save in Settings > Downloads as merged APks https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/41
 - Gave the GitHub PAT entry in Settings > Advanced the ability to be saved through the manager settings exports. This is a toggable feature and is not on by default
+- Updated the "Uninstall" button to "Unmount" and the "Update" button to "Remount" for saved patched apps in the "Apps" tab for apps installed by the rooted mount installer
 
 
 # Bug fixes

@@ -734,12 +734,15 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="delete_saved_entry_description">This will remove the saved app entry and its saved APK. The app will remain installed.</string>
     <string name="saved_app_launch_unavailable">Install the app before opening it.</string>
     <string name="install_saved_app">Install</string>
+    <string name="remount_saved_app">Remount</string>
     <string name="update_saved_app">Update</string>
     <string name="installing_saved_app">Installing saved app…</string>
     <string name="saved_app_install_success">Installed saved app</string>
     <string name="saved_app_install_failed">Failed to install saved app</string>
     <string name="saved_app_uninstall_title">Uninstall installed copy?</string>
+    <string name="saved_app_unmount_title">Unmount installed copy?</string>
     <string name="saved_app_uninstall_description">This removes the installed version only. Your saved APK stays intact.</string>
+    <string name="saved_app_unmount_description">This unmounts the patched APK. Your saved APK stays intact.</string>
     <string name="saved_app_install_missing">Saved APK not found</string>
     <string name="delete_saved_copy">Delete saved copy</string>
     <string name="sign_fail">Failed to sign APK: %s</string>
