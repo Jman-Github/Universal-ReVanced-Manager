@@ -318,7 +318,12 @@ class InstallerManager(
                     val uri = InstallerFileProvider.buildUri(app, shared)
                     val intent = Intent(Intent.ACTION_VIEW).apply {
                         setDataAndType(uri, APK_MIME)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                        addFlags(
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
+                                Intent.FLAG_GRANT_PREFIX_URI_PERMISSION or
+                                Intent.FLAG_ACTIVITY_NEW_TASK
+                        )
                         clipData = ClipData.newRawUri("APK", uri)
                         putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
                         putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, app.packageName)
@@ -327,7 +332,9 @@ class InstallerManager(
                     app.grantUriPermission(
                         token.componentName.packageName,
                         uri,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                            Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
+                            Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
                     )
                     InstallPlan.External(
                         target = target,

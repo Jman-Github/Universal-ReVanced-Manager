@@ -81,6 +81,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.time.withTimeout
 import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
@@ -111,6 +112,7 @@ class PatcherViewModel(
     private val savedStateHandle: SavedStateHandle = get()
 
     private var pendingExternalInstall: InstallerManager.InstallPlan.External? = null
+    private var externalInstallBaseline: Pair<Long?, Long?>? = null
     private var externalInstallTimeoutJob: Job? = null
 
 
@@ -148,6 +150,7 @@ class PatcherViewModel(
             awaitingPackageInstall = null
             externalInstallTimeoutJob?.cancel()
             externalInstallTimeoutJob = null
+            externalInstallBaseline = null
         }
     }
     private var savedPatchedApp by savedStateHandle.saveableVar { false }
@@ -225,6 +228,40 @@ fun removeMissingPatchesAndStart() {
                 packageInstallerStatus = null
                 val message = timeoutMessage?.invoke() ?: app.getString(R.string.install_timeout_message)
                 showInstallFailure(message)
+            }
+        }
+    }
+
+    private fun monitorExternalInstall(plan: InstallerManager.InstallPlan.External) {
+        externalInstallTimeoutJob?.cancel()
+        externalInstallTimeoutJob = viewModelScope.launch {
+            val timeoutAt = System.currentTimeMillis() + EXTERNAL_INSTALL_TIMEOUT_MS
+            while (isActive) {
+                if (pendingExternalInstall != plan || installStatus !is InstallCompletionStatus.InProgress) return@launch
+
+                val currentInfo = pm.getPackageInfo(plan.expectedPackage)
+                if (currentInfo != null) {
+                    val baseline = externalInstallBaseline
+                    val versionChanged = baseline?.first?.let { pm.getVersionCode(currentInfo) != it } ?: true
+                    val updateTimeChanged = baseline?.second?.let { currentInfo.lastUpdateTime > it } ?: true
+                    if (versionChanged || updateTimeChanged) {
+                        handleExternalInstallSuccess(plan.expectedPackage)
+                        return@launch
+                    }
+                }
+
+                if (currentInfo != null && externalInstallBaseline == null) {
+                    handleExternalInstallSuccess(plan.expectedPackage)
+                    return@launch
+                }
+
+                val remaining = timeoutAt - System.currentTimeMillis()
+                if (remaining <= 0L) break
+                delay(INSTALL_MONITOR_POLL_MS)
+            }
+
+            if (pendingExternalInstall == plan && installStatus is InstallCompletionStatus.InProgress) {
+                showInstallFailure(app.getString(R.string.installer_external_timeout, plan.installerLabel))
             }
         }
     }
@@ -950,6 +987,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         externalInstallTimeoutJob = null
 
         pendingExternalInstall = plan
+        externalInstallBaseline = pm.getPackageInfo(plan.expectedPackage)?.let { info ->
+            pm.getVersionCode(info) to info.lastUpdateTime
+        }
         updateInstallingState(true)
         installStatus = InstallCompletionStatus.InProgress
 
@@ -970,7 +1010,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             return
         }
 
-        scheduleInstallTimeout(plan.expectedPackage, EXTERNAL_INSTALL_TIMEOUT_MS)
+        monitorExternalInstall(plan)
     }
 
     private fun handleExternalInstallSuccess(packageName: String) {
@@ -980,6 +1020,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         pendingExternalInstall = null
         externalInstallTimeoutJob?.cancel()
         externalInstallTimeoutJob = null
+        externalInstallBaseline = null
         installerManager.cleanup(plan)
         updateInstallingState(false)
         installStatus = InstallCompletionStatus.Success(packageName)
@@ -1372,6 +1413,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         const val TAG = "ReVanced Patcher"
         private const val SYSTEM_INSTALL_TIMEOUT_MS = 15_000L
         private const val EXTERNAL_INSTALL_TIMEOUT_MS = 25_000L
+        private const val INSTALL_MONITOR_POLL_MS = 500L
         private const val MEMORY_ADJUSTMENT_MB = 200
 
         fun LogLevel.androidLog(msg: String) = when (this) {
