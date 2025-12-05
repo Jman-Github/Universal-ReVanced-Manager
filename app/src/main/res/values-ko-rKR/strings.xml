@@ -788,7 +788,7 @@
     <string name="patches_delete_single_dialog_description">\"%s\"를 삭제하시겠습니까?</string>
     <string name="patches_delete_multiple_dialog_description">선택된 패치를 삭제하시겠습니까?</string>
     <string name="about_revanced_manager">Universal ReVanced Manager 정보</string>
-    <string name="revanced_manager_description">Universal ReVanced Manager(URV Manager)는 공식 ReVanced Manager의 포크 버전입니다. 두 애플리케이션 모두 ReVanced Patcher를 사용하며, 이를 통해 사용자 정의 패치로 앱을 다운로드 및 패치하고 패치 과정을 관리할 수 있습니다. Universal ReVanced Manager에 포함된 고유 기능으로는 패치 번들 표시 이름, 서드파티 패치 번들 가져오기 지원 등이 있습니다. Universal ReVanced Manager가 제공하는 고유 기능의 모든 목록을 확인하세요</string>
+    <string name="revanced_manager_description">Universal ReVanced Manager(URV Manager)는 공식 ReVanced Manager의 포크 버전입니다. 두 애플리케이션 모두 ReVanced 패처를 사용하며, 이를 통해 사용자 정의 패치로 앱을 다운로드 및 패치하고 패치 과정을 관리할 수 있습니다. Universal ReVanced Manager에 포함된 고유 기능으로는 패치 번들 표시 이름, 서드파티 패치 번들 가져오기 지원 등이 있습니다. Universal ReVanced Manager가 제공하는 고유 기능의 모든 목록을 확인하세요</string>
     <string name="unique_features_label">여기.</string>
     <!-- From PR #37: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/37 -->
     <string name="here">여기.</string>
