@@ -599,6 +599,7 @@
     <string name="default_install">기본</string>
     <string name="mount_install">마운트</string>
     <string name="mounted">마운트됨</string>
+    <string name="unmounted">마운트 해제됨</string>
     <string name="not_mounted">마운트되지 않음</string>
     <string name="mount">마운트</string>
     <string name="unmount">마운트 해제</string>
@@ -696,6 +697,9 @@
     <string name="installer_external_launched">%1$s 을 여는 중 …</string>
     <string name="installer_external_timeout">%1$s 에서 설치를 확인하지 못하였습니다. 다른 앱을 확인하고 다시 시도하세요.</string>
     <string name="installer_external_success">%1$s 이 설치 성공을 보고하였습니다.</string>
+    <string name="installing_ellipsis">설치하는 중 ...</string>
+    <string name="mounting_ellipsis">마운트하는 중 ...</string>
+    <string name="unmounting">마운트 해제하는 중 ...</string>
     <string name="install_app">설치하기</string>
     <string name="install_app_success">앱을 설치하였습니다</string>
     <string name="install_app_fail_title">설치할 수 없습니다</string>
@@ -788,7 +792,7 @@
     <string name="patches_delete_single_dialog_description">\"%s\"를 삭제하시겠습니까?</string>
     <string name="patches_delete_multiple_dialog_description">선택된 패치를 삭제하시겠습니까?</string>
     <string name="about_revanced_manager">Universal ReVanced Manager 정보</string>
-    <string name="revanced_manager_description">Universal ReVanced Manager(URV Manager)는 공식 ReVanced Manager의 포크 버전입니다. 두 애플리케이션 모두 ReVanced 패처를 사용하며, 이를 통해 사용자 정의 패치로 앱을 다운로드 및 패치하고 패치 과정을 관리할 수 있습니다. Universal ReVanced Manager에 포함된 고유 기능으로는 패치 번들 표시 이름, 서드파티 패치 번들 가져오기 지원 등이 있습니다. Universal ReVanced Manager가 제공하는 고유 기능의 모든 목록을 확인하세요</string>
+    <string name="revanced_manager_description">Universal ReVanced Manager(URV Manager)는 공식 ReVanced Manager의 포크 버전입니다. 두 애플리케이션 모두 ReVanced Patcher를 사용하며, 이를 통해 사용자 정의 패치로 앱을 다운로드 및 패치하고 패치 과정을 관리할 수 있습니다. Universal ReVanced Manager에 포함된 고유 기능으로는 패치 번들 표시 이름, 서드파티 패치 번들 가져오기 지원 등이 있습니다. Universal ReVanced Manager가 제공하는 고유 기능의 모든 목록을 확인하세요</string>
     <string name="unique_features_label">여기.</string>
     <!-- From PR #37: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/37 -->
     <string name="here">여기.</string>
