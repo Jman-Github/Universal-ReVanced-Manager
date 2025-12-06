@@ -269,9 +269,22 @@ fun PatcherScreen(
             }
 
             is PatcherViewModel.InstallCompletionStatus.Success -> {
-                LaunchedEffect(status) {
-                    viewModel.clearInstallStatus()
-                }
+                AlertDialog(
+                    onDismissRequest = viewModel::clearInstallStatus,
+                    confirmButton = {
+                        TextButton(onClick = viewModel::clearInstallStatus) {
+                            Text(stringResource(R.string.ok))
+                        }
+                    },
+                    title = { Text(stringResource(R.string.install_app_success)) },
+                    text = {
+                        Text(
+                            text = status.packageName?.let {
+                                stringResource(R.string.install_app_success) + "\n\n" + it
+                            } ?: stringResource(R.string.install_app_success)
+                        )
+                    }
+                )
             }
 
             is PatcherViewModel.InstallCompletionStatus.Failure -> {

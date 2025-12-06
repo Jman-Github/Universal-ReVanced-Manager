@@ -433,8 +433,8 @@ class InstallerManager(
 
     private fun buildSequence(target: InstallTarget): List<Token> {
         val tokens = mutableListOf<Token>()
-        val primary = parseToken(prefs.installerPrimary.getBlocking())
-        val fallback = parseToken(prefs.installerFallback.getBlocking())
+        val primary = getPrimaryToken()
+        val fallback = getFallbackToken()
 
         fun add(token: Token) {
             if (token == Token.None) return
@@ -447,7 +447,7 @@ class InstallerManager(
 
         if (Token.Internal !in tokens) add(Token.Internal)
 
-        add(fallback)
+        if (fallback != primary) add(fallback)
 
         return tokens
     }
