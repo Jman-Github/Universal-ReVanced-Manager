@@ -157,6 +157,8 @@ class PatcherWorker(
         val patchedApk = fs.tempDir.resolve("patched.apk")
 
         return try {
+            val startTime = System.currentTimeMillis()
+
             if (args.input is SelectedApp.Installed) {
                 installedAppRepository.get(args.packageName)?.let {
                     if (it.installType == InstallType.MOUNT) {
@@ -240,6 +242,14 @@ class PatcherWorker(
 
             val stripNativeLibs = prefs.stripUnusedNativeLibs.get()
             val inputIsSplitArchive = SplitApkPreparer.isSplitArchive(inputFile)
+            val selectedCount = args.selectedPatches.values.sumOf { it.size }
+
+            args.logger.info(
+                "Patching started at ${System.currentTimeMillis()} " +
+                        "pkg=${args.packageName} version=${args.input.version} " +
+                        "input=${inputFile.absolutePath} size=${inputFile.length()} " +
+                        "split=$inputIsSplitArchive patches=$selectedCount"
+            )
 
             runtime.execute(
                 inputFile.absolutePath,
@@ -259,6 +269,16 @@ class PatcherWorker(
 
             keystoreManager.sign(patchedApk, File(args.output))
             updateProgress(state = State.COMPLETED) // Signing
+
+            val elapsed = System.currentTimeMillis() - startTime
+            val rt = Runtime.getRuntime()
+            val usedMem = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024)
+            val totalMem = rt.totalMemory() / (1024 * 1024)
+
+            args.logger.info(
+                "Patching succeeded: output=${args.output} size=${File(args.output).length()} " +
+                        "elapsed=${elapsed}ms memory=${usedMem}MB/${totalMem}MB"
+            )
 
             Log.i(tag, "Patching succeeded".logFmt())
             Result.success()

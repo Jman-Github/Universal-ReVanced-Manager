@@ -56,6 +56,7 @@ import androidx.compose.material.icons.outlined.SettingsBackupRestore
 import androidx.compose.material.icons.outlined.UnfoldLess
 import androidx.compose.material.icons.outlined.Undo
 import androidx.compose.material.icons.outlined.VpnKey
+import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -72,6 +73,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -110,6 +112,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
@@ -192,6 +195,7 @@ fun AdvancedSettingsScreen(
 
             val apiUrl by viewModel.prefs.api.getAsState()
             val gitHubPat by viewModel.prefs.gitHubPat.getAsState()
+            val includeGitHubPatInExports by viewModel.prefs.includeGitHubPatInExports.getAsState()
             var showApiUrlDialog by rememberSaveable { mutableStateOf(false) }
             var showGitHubPatDialog by rememberSaveable { mutableStateOf(false) }
 
@@ -208,9 +212,11 @@ fun AdvancedSettingsScreen(
             if (showGitHubPatDialog) {
                 GitHubPatDialog(
                     currentPat = gitHubPat,
-                    onSubmit = {
+                    currentIncludeInExport = includeGitHubPatInExports,
+                    onSubmit = { pat, includePat ->
                         showGitHubPatDialog = false
-                        viewModel.setGitHubPat(it)
+                        viewModel.setGitHubPat(pat)
+                        viewModel.setIncludeGitHubPatInExports(includePat)
                     },
                     onDismiss = { showGitHubPatDialog = false }
                 )
@@ -251,7 +257,7 @@ fun AdvancedSettingsScreen(
                 }
                 val ensured = if (
                     token == InstallerManager.Token.Internal ||
-                    token == InstallerManager.Token.Root ||
+                    token == InstallerManager.Token.AutoSaved ||
                     (token == InstallerManager.Token.None && includeNone) ||
                     normalized.any { tokensEqual(it.token, token) }
                 ) {
@@ -336,7 +342,7 @@ fun AdvancedSettingsScreen(
             ): (@Composable () -> Unit)? = when (entry.token) {
                 InstallerManager.Token.Internal,
                 InstallerManager.Token.None,
-                InstallerManager.Token.Root -> null
+                InstallerManager.Token.AutoSaved -> null
                 InstallerManager.Token.Shizuku,
                 is InstallerManager.Token.Component -> entry.icon?.let { drawable ->
                     {
@@ -416,7 +422,8 @@ fun AdvancedSettingsScreen(
                         }
                         installerDialogTarget = null
                     },
-                    onOpenShizuku = installerManager::openShizukuApp
+                    onOpenShizuku = installerManager::openShizukuApp,
+                    stripRootNote = true
                 )
             }
 
@@ -720,13 +727,28 @@ fun AdvancedSettingsScreen(
             }
 
             GroupHeader(stringResource(R.string.app_exporting))
-            val exportFormatSummary = buildString {
-                appendLine(stringResource(R.string.export_name_format_description))
-                append(stringResource(R.string.export_name_format_current, exportFormat))
-            }.trimEnd()
             SettingsListItem(
                 headlineContent = stringResource(R.string.export_name_format),
-                supportingContent = exportFormatSummary,
+                supportingContentSlot = {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = stringResource(R.string.export_name_format_description),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.export_name_format_current, exportFormat),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { showExportFormatDialog = true }
@@ -1183,12 +1205,20 @@ private fun CustomInstallerContent(
     val trimmedInput = remember(inputValue) { inputValue.trim() }
     var selectedTab by rememberSaveable { mutableStateOf(InstallerTab.Saved) }
     val scrollState = rememberScrollState()
-    val autoSavedEntries = remember(builtinComponents, installTarget) {
-        builtinComponents.mapNotNull { component ->
-            installerManager.describeEntry(InstallerManager.Token.Component(component), installTarget)
-                ?.let { component to it }
-        }.sortedBy { (_, entry) -> entry.label.lowercase() }
-    }
+            val autoSavedEntries = remember(builtinComponents, installTarget) {
+                buildList {
+                    // Built-in system installers discovered automatically.
+                    addAll(
+                        builtinComponents.mapNotNull { component ->
+                            installerManager.describeEntry(InstallerManager.Token.Component(component), installTarget)
+                                ?.let { component to it }
+                        }
+                    )
+                    // Add mount installer as an auto-saved option.
+                    installerManager.describeEntry(InstallerManager.Token.AutoSaved, installTarget)
+                        ?.let { add(null to it) }
+                }.sortedBy { (_, entry) -> entry.label.lowercase() }
+            }
 
     fun handleLookup(packageName: String) {
         coroutineScope.launch {
@@ -1396,7 +1426,7 @@ private fun CustomInstallerContent(
                             val supportingLines = buildList {
                                 entry.description?.takeIf { it.isNotBlank() }?.let { add(it) }
                                 entry.availability.reason?.let { add(context.getString(it)) }
-                                add(component.flattenToString())
+                                component?.flattenToString()?.let { add(it) }
                             }
                             ListItem(
                                 headlineContent = {
@@ -1572,7 +1602,8 @@ private fun InstallerSelectionDialog(
     blockedToken: InstallerManager.Token?,
     onDismiss: () -> Unit,
     onConfirm: (InstallerManager.Token) -> Unit,
-    onOpenShizuku: (() -> Boolean)? = null
+    onOpenShizuku: (() -> Boolean)? = null,
+    stripRootNote: Boolean = false
 ) {
     val context = LocalContext.current
     val shizukuPromptReasons = remember {
@@ -1672,16 +1703,34 @@ private fun InstallerSelectionDialog(
                         },
                         supportingContent = {
                             val lines = buildList {
-                                option.description?.takeIf { it.isNotBlank() }?.let { add(it) }
+                                val desc = option.description?.let { text ->
+                                    if (stripRootNote && option.token == InstallerManager.Token.AutoSaved) {
+                                        val stripped = text.substringBefore(" (root required", text)
+                                        stripped.trimEnd('.', ' ')
+                                    } else text
+                                }
+                                desc?.takeIf { it.isNotBlank() }?.let { add(it) }
                                 option.availability.reason?.let { add(stringResource(it)) }
                             }
                             if (lines.isNotEmpty() || showShizukuAction) {
                                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    if (lines.isNotEmpty()) {
-                                        lines.forEach { line ->
+                                    lines.firstOrNull()?.let { desc ->
+                                        Text(
+                                            desc,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    lines.getOrNull(1)?.let { status ->
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+                                            tonalElevation = 0.dp
+                                        ) {
                                             Text(
-                                                line,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                text = status,
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = MaterialTheme.colorScheme.onSurface
                                             )
                                         }
                                     }
@@ -1818,10 +1867,13 @@ private fun APIUrlDialog(currentUrl: String, defaultUrl: String, onSubmit: (Stri
 @Composable
 private fun GitHubPatDialog(
     currentPat: String,
-    onSubmit: (String) -> Unit,
+    currentIncludeInExport: Boolean,
+    onSubmit: (String, Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     var pat by rememberSaveable(currentPat) { mutableStateOf(currentPat) }
+    var includePatInExport by rememberSaveable(currentIncludeInExport) { mutableStateOf(currentIncludeInExport) }
+    var showIncludeWarning by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val description = stringResource(R.string.set_github_pat_dialog_description)
     val hereLabel = stringResource(R.string.here)
@@ -1848,7 +1900,7 @@ private fun GitHubPatDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = { onSubmit(pat) }) {
+            TextButton(onClick = { onSubmit(pat, includePatInExport) }) {
                 Text(stringResource(R.string.save))
             }
         },
@@ -1894,7 +1946,70 @@ private fun GitHubPatDialog(
                         TransformedText(AnnotatedString(masked), OffsetMapping.Identity)
                     }
                 )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.include_github_pat_in_exports_label),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = stringResource(R.string.include_github_pat_in_exports_supporting),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = includePatInExport,
+                        onCheckedChange = { checked ->
+                            if (checked) {
+                                showIncludeWarning = true
+                            } else {
+                                includePatInExport = false
+                            }
+                        }
+                    )
+                }
             }
         }
     )
+
+    if (showIncludeWarning) {
+        AlertDialog(
+            onDismissRequest = { showIncludeWarning = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        includePatInExport = true
+                        showIncludeWarning = false
+                    }
+                ) {
+                    Text(stringResource(R.string.confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showIncludeWarning = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+            icon = { Icon(Icons.Outlined.Warning, null) },
+            title = { Text(stringResource(R.string.warning)) },
+            text = {
+                Text(
+                    text = stringResource(R.string.include_github_pat_in_exports_warning),
+                    modifier = Modifier.fillMaxWidth(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
+        )
+    }
 }

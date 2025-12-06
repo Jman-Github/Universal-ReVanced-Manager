@@ -117,6 +117,21 @@ fun SelectedAppInfoScreen(
     val bundleRecommendationsEnabled = allowIncompatiblePatches && !suggestedVersionSafeguard
     val patches = vm.getPatches(bundles, allowIncompatiblePatches)
     val selectedPatchCount = patches.values.sumOf { it.size }
+    val downloadedApps by vm.downloadedApps.collectAsStateWithLifecycle(emptyList())
+    val resolveNavigationVersion: (SelectedApp) -> SelectedApp = remember(downloadedApps, vm.selectedAppInfo, vm.selectedApp) {
+        { app ->
+            val versionOverride = vm.selectedAppInfo?.versionName?.takeUnless { it.isNullOrBlank() }
+                ?: app.version?.takeUnless { it.isNullOrBlank() }
+                ?: downloadedApps.firstOrNull()?.version?.takeUnless { it.isNullOrBlank() }
+            if (versionOverride.isNullOrBlank()) return@remember app
+            when (app) {
+                is SelectedApp.Download -> app.copy(version = versionOverride)
+                is SelectedApp.Search -> app.copy(version = versionOverride)
+                is SelectedApp.Local -> app.copy(version = versionOverride)
+                is SelectedApp.Installed -> app.copy(version = versionOverride)
+            }
+        }
+    }
 
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult(),
@@ -135,7 +150,6 @@ fun SelectedAppInfoScreen(
     val composableScope = rememberCoroutineScope()
 
     val error by vm.errorFlow.collectAsStateWithLifecycle(null)
-    val downloadedApps by vm.downloadedApps.collectAsStateWithLifecycle(emptyList())
     val profileLaunchState by vm.profileLaunchState.collectAsStateWithLifecycle(null)
 
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
@@ -146,7 +160,7 @@ fun SelectedAppInfoScreen(
         val appSource = vm.selectedApp
         if (appSource is SelectedApp.Search) return@LaunchedEffect
         vm.markProfileAutoLaunchConsumed()
-        onPatchSelectorClick(appSource, launchState.selection, launchState.options)
+        onPatchSelectorClick(resolveNavigationVersion(appSource), launchState.selection, launchState.options)
     }
 
     Scaffold(
@@ -254,7 +268,7 @@ fun SelectedAppInfoScreen(
                     composableScope.launch {
                         val optionsSnapshot = vm.awaitOptions()
                         onPatchSelectorClick(
-                            vm.selectedApp,
+                            resolveNavigationVersion(vm.selectedApp),
                             vm.getCustomPatches(
                                 bundles,
                                 allowIncompatiblePatches

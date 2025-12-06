@@ -38,6 +38,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.first
 import java.io.File
@@ -48,6 +49,8 @@ import org.koin.core.component.inject
 class InstalledAppInfoViewModel(
     packageName: String
 ) : ViewModel(), KoinComponent {
+    enum class MountOperation { UNMOUNTING, MOUNTING }
+
     private val context: Application by inject()
     private val pm: PM by inject()
     private val installedAppRepository: InstalledAppRepository by inject()
@@ -58,6 +61,7 @@ class InstalledAppInfoViewModel(
     private val filesystem: Filesystem by inject()
     private var pendingExternalInstall: InstallerManager.InstallPlan.External? = null
     private var externalInstallTimeoutJob: Job? = null
+    private var installProgressToastJob: Job? = null
 
     lateinit var onBackClick: () -> Unit
 
@@ -72,6 +76,15 @@ class InstalledAppInfoViewModel(
         private set
     var hasSavedCopy by mutableStateOf(false)
         private set
+    var mountOperation: MountOperation? by mutableStateOf(null)
+        private set
+    var mountWarning: MountWarningState? by mutableStateOf(null)
+        private set
+    var installResult: InstallResult? by mutableStateOf(null)
+        private set
+
+    val primaryInstallerIsMount: Boolean
+        get() = installerManager.getPrimaryToken() == InstallerManager.Token.AutoSaved
 
     init {
         viewModelScope.launch {
@@ -83,6 +96,41 @@ class InstalledAppInfoViewModel(
                 appliedPatches = resolveAppliedSelection(app)
             }
         }
+    }
+
+    fun showMountWarning(action: MountWarningAction, reason: MountWarningReason) {
+        mountWarning = MountWarningState(action, reason)
+    }
+
+    fun clearMountWarning() {
+        mountWarning = null
+    }
+
+    fun performMountWarningAction() {
+        when (val warning = mountWarning) {
+            null -> Unit
+            else -> when (warning.reason) {
+                MountWarningReason.PRIMARY_IS_MOUNT_FOR_NON_MOUNT_APP -> when (warning.action) {
+                    MountWarningAction.INSTALL,
+                    MountWarningAction.UPDATE -> installSavedApp()
+                    MountWarningAction.UNINSTALL -> {
+                        val app = installedApp
+                        if (app?.installType == InstallType.MOUNT || isMounted) {
+                            mountOrUnmount()
+                        } else {
+                            uninstallSavedInstallation()
+                        }
+                    }
+                }
+
+                MountWarningReason.PRIMARY_NOT_MOUNT_FOR_MOUNT_APP -> when (warning.action) {
+                    MountWarningAction.INSTALL,
+                    MountWarningAction.UPDATE -> installSavedApp()
+                    MountWarningAction.UNINSTALL -> uninstallSavedInstallation()
+                }
+            }
+        }
+        mountWarning = null
     }
 
     private suspend fun resolveAppliedSelection(app: InstalledApp) = withContext(Dispatchers.IO) {
@@ -120,20 +168,44 @@ class InstalledAppInfoViewModel(
         }
     }
 
+    private fun markInstallSuccess(message: String) {
+        stopInstallProgressToasts()
+        installResult = InstallResult.Success(message)
+    }
+
+    private fun markInstallFailure(message: String) {
+        stopInstallProgressToasts()
+        installResult = InstallResult.Failure(message)
+    }
+
+    private fun startInstallProgressToasts() {
+        if (installProgressToastJob?.isActive == true) return
+        installProgressToastJob = viewModelScope.launch {
+            while (isActive) {
+                context.toast(context.getString(R.string.installing_ellipsis))
+                delay(INSTALL_PROGRESS_TOAST_INTERVAL_MS)
+            }
+        }
+    }
+
+    private fun stopInstallProgressToasts() {
+        installProgressToastJob?.cancel()
+        installProgressToastJob = null
+    }
+
     fun installSavedApp() = viewModelScope.launch {
         val app = installedApp ?: return@launch
 
         val apk = savedApkFile(app)
         if (apk == null) {
-            context.toast(context.getString(R.string.saved_app_install_missing))
+            markInstallFailure(context.getString(R.string.saved_app_install_missing))
             return@launch
         }
 
         pendingExternalInstall?.let(installerManager::cleanup)
         pendingExternalInstall = null
         externalInstallTimeoutJob?.cancel()
-
-        context.toast(context.getString(R.string.installing_saved_app))
+        startInstallProgressToasts()
         val plan = installerManager.resolvePlan(
             InstallerManager.InstallTarget.SAVED_APP,
             apk,
@@ -149,14 +221,15 @@ class InstalledAppInfoViewModel(
                 }.isSuccess
 
                 if (!success) {
-                    context.toast(context.getString(R.string.saved_app_install_failed))
+                    markInstallFailure(context.getString(R.string.saved_app_install_failed))
                 } else {
                     viewModelScope.launch { refreshAppState(app) }
                     isMounted = false
+                    markInstallSuccess(context.getString(R.string.saved_app_install_success))
                 }
             }
 
-            is InstallerManager.InstallPlan.Root -> {
+            is InstallerManager.InstallPlan.Mount -> {
                 try {
                     val packageInfo = pm.getPackageInfo(apk)
                         ?: throw Exception("Failed to load application info")
@@ -174,10 +247,10 @@ class InstalledAppInfoViewModel(
 
                     refreshAppState(app)
                     isMounted = rootInstaller.isAppMounted(app.currentPackageName)
-                    context.toast(context.getString(R.string.saved_app_install_success))
+                    markInstallSuccess(context.getString(R.string.saved_app_install_success))
                 } catch (e: Exception) {
                     Log.e(tag, "Failed to install saved app with root", e)
-                    context.toast(context.getString(R.string.saved_app_install_failed))
+                    markInstallFailure(context.getString(R.string.saved_app_install_failed))
                 }
             }
 
@@ -186,14 +259,14 @@ class InstalledAppInfoViewModel(
                     shizukuInstaller.install(apk, app.currentPackageName)
                     refreshAppState(app)
                     isMounted = false
-                    context.toast(context.getString(R.string.saved_app_install_success))
+                    markInstallSuccess(context.getString(R.string.saved_app_install_success))
                 } catch (error: ShizukuInstaller.InstallerOperationException) {
                     val message = error.message ?: context.getString(R.string.installer_hint_generic)
                     Log.e(tag, "Failed to install saved app with Shizuku", error)
-                    context.toast(context.getString(R.string.install_app_fail, message))
+                    markInstallFailure(context.getString(R.string.install_app_fail, message))
                 } catch (error: Exception) {
                     Log.e(tag, "Failed to install saved app with Shizuku", error)
-                    context.toast(context.getString(R.string.install_app_fail, error.simpleMessage()))
+                    markInstallFailure(context.getString(R.string.install_app_fail, error.simpleMessage().orEmpty()))
                 }
             }
 
@@ -206,14 +279,14 @@ class InstalledAppInfoViewModel(
         externalInstallTimeoutJob?.cancel()
 
         pendingExternalInstall = plan
+        startInstallProgressToasts()
         try {
             ContextCompat.startActivity(context, plan.intent, null)
-            context.toast(context.getString(R.string.installer_external_launched, plan.installerLabel))
         } catch (error: ActivityNotFoundException) {
             installerManager.cleanup(plan)
             pendingExternalInstall = null
             externalInstallTimeoutJob = null
-            context.toast(context.getString(R.string.install_app_fail, error.simpleMessage()))
+            markInstallFailure(context.getString(R.string.install_app_fail, error.simpleMessage()))
             return
         }
 
@@ -222,7 +295,7 @@ class InstalledAppInfoViewModel(
             if (pendingExternalInstall == plan) {
                 installerManager.cleanup(plan)
                 pendingExternalInstall = null
-                context.toast(context.getString(R.string.installer_external_timeout, plan.installerLabel))
+                markInstallFailure(context.getString(R.string.installer_external_timeout, plan.installerLabel))
                 externalInstallTimeoutJob = null
             }
         }
@@ -241,7 +314,7 @@ class InstalledAppInfoViewModel(
             InstallerManager.InstallTarget.SAVED_APP -> {
                 val app = installedApp ?: return
                 viewModelScope.launch { refreshAppState(app) }
-                context.toast(context.getString(R.string.installer_external_success, plan.installerLabel))
+                markInstallSuccess(context.getString(R.string.installer_external_success, plan.installerLabel))
             }
 
             else -> Unit
@@ -254,13 +327,50 @@ class InstalledAppInfoViewModel(
         pm.uninstallPackage(app.currentPackageName)
     }
 
+    fun remountSavedInstallation() = viewModelScope.launch {
+        val pkgName = installedApp?.currentPackageName ?: return@launch
+        // Reflect state immediately while the remount sequence runs.
+        mountOperation = MountOperation.UNMOUNTING
+        isMounted = false
+        try {
+            context.toast(context.getString(R.string.unmounting))
+            rootInstaller.unmount(pkgName)
+            context.toast(context.getString(R.string.unmounted))
+            mountOperation = MountOperation.MOUNTING
+            context.toast(context.getString(R.string.mounting_ellipsis))
+            rootInstaller.mount(pkgName)
+            isMounted = rootInstaller.isAppMounted(pkgName)
+            context.toast(context.getString(R.string.mounted))
+        } catch (e: Exception) {
+            context.toast(context.getString(R.string.failed_to_mount, e.simpleMessage()))
+            Log.e(tag, "Failed to remount", e)
+        } finally {
+            if (mountOperation == MountOperation.UNMOUNTING) {
+                isMounted = false
+            }
+            if (mountOperation == MountOperation.MOUNTING) {
+                isMounted = rootInstaller.isAppMounted(pkgName)
+            }
+            mountOperation = null
+        }
+    }
+
     fun mountOrUnmount() = viewModelScope.launch {
         val pkgName = installedApp?.currentPackageName ?: return@launch
         try {
-            if (isMounted)
+            if (isMounted) {
+                mountOperation = MountOperation.UNMOUNTING
+                context.toast(context.getString(R.string.unmounting))
                 rootInstaller.unmount(pkgName)
-            else
+                isMounted = false
+                context.toast(context.getString(R.string.unmounted))
+            } else {
+                mountOperation = MountOperation.MOUNTING
+                context.toast(context.getString(R.string.mounting_ellipsis))
                 rootInstaller.mount(pkgName)
+                isMounted = rootInstaller.isAppMounted(pkgName)
+                context.toast(context.getString(R.string.mounted))
+            }
         } catch (e: Exception) {
             if (isMounted) {
                 context.toast(context.getString(R.string.failed_to_unmount, e.simpleMessage()))
@@ -270,7 +380,7 @@ class InstalledAppInfoViewModel(
                 Log.e(tag, "Failed to mount", e)
             }
         } finally {
-            isMounted = rootInstaller.isAppMounted(pkgName)
+            mountOperation = null
         }
     }
 
@@ -354,8 +464,11 @@ class InstalledAppInfoViewModel(
 
     private fun savedApkFile(app: InstalledApp? = this.installedApp): File? {
         val target = app ?: return null
-        val file = filesystem.getPatchedAppFile(target.currentPackageName, target.version)
-        return if (file.exists()) file else null
+        val candidates = listOf(
+            filesystem.getPatchedAppFile(target.currentPackageName, target.version),
+            filesystem.getPatchedAppFile(target.originalPackageName, target.version)
+        ).distinct()
+        return candidates.firstOrNull { it.exists() }
     }
 
     private suspend fun refreshAppState(app: InstalledApp) {
@@ -415,18 +528,14 @@ class InstalledAppInfoViewModel(
                     when (status) {
                         PackageInstaller.STATUS_SUCCESS -> {
                             viewModelScope.launch { refreshAppState(currentApp) }
-                            this@InstalledAppInfoViewModel.context.toast(
-                                this@InstalledAppInfoViewModel.context.getString(
-                                    R.string.saved_app_install_success
-                                )
-                            )
+                            markInstallSuccess(this@InstalledAppInfoViewModel.context.getString(R.string.saved_app_install_success))
                         }
 
                         PackageInstaller.STATUS_FAILURE_ABORTED -> Unit
 
                         else -> {
                             val reason = installerManager.formatFailureHint(status, statusMessage)
-                            this@InstalledAppInfoViewModel.context.toast(
+                            markInstallFailure(
                                 this@InstalledAppInfoViewModel.context.getString(
                                     R.string.install_app_fail,
                                     reason ?: statusMessage ?: status.toString()
@@ -535,9 +644,36 @@ class InstalledAppInfoViewModel(
         pendingExternalInstall = null
         externalInstallTimeoutJob?.cancel()
         externalInstallTimeoutJob = null
+        stopInstallProgressToasts()
+    }
+
+    fun clearInstallResult() {
+        installResult = null
     }
 
     companion object {
         private const val EXTERNAL_INSTALL_TIMEOUT_MS = 60_000L
+        private const val INSTALL_PROGRESS_TOAST_INTERVAL_MS = 2500L
     }
+}
+
+enum class MountWarningAction {
+    INSTALL,
+    UPDATE,
+    UNINSTALL
+}
+
+enum class MountWarningReason {
+    PRIMARY_IS_MOUNT_FOR_NON_MOUNT_APP,
+    PRIMARY_NOT_MOUNT_FOR_MOUNT_APP
+}
+
+data class MountWarningState(
+    val action: MountWarningAction,
+    val reason: MountWarningReason
+)
+
+sealed class InstallResult {
+    data class Success(val message: String) : InstallResult()
+    data class Failure(val message: String) : InstallResult()
 }

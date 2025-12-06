@@ -468,12 +468,17 @@ Recommended for this device: %1$d MB.</string>
     <string name="github_pat_description">GitHub Personal Access Token needed for GitHub integration</string>
     <string name="set_github_pat_dialog_title">Set GitHub PAT</string>
     <string name="set_github_pat_dialog_description">Set a GitHub Personal Access Token in order to be able to add Pull Requests as external sources. Create a PAT with scope public_repo</string>
+    <string name="include_github_pat_in_exports_label">Include in settings export</string>
+    <string name="include_github_pat_in_exports_supporting">Adds this PAT to exported manager settings</string>
+    <string name="include_github_pat_in_exports_warning">Do not share your PAT. If you include it in a settings export, keep that file private because it contains the token.</string>
     <string name="language_settings">Language</string>
     <string name="app_language">App language</string>
     <string name="language_dialog_title">Choose app language</string>
     <string name="language_option_system">Use device language</string>
     <string name="language_option_english">English</string>
     <string name="language_option_chinese_simplified">Chinese (Simplified)</string>
+    <!-- From PR #42: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/42 -->
+    <string name="language_option_korean">Korean</string>
     <!-- From PR #38: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/38 -->
     <string name="language_option_vietnamese">Vietnamese</string>
     <string name="device">Device</string>
@@ -528,6 +533,19 @@ Recommended for this device: %1$d MB.</string>
     <string name="patch_profile_save_failed_toast">Failed to save patch profile</string>
     <string name="patch_profile_rename">Rename</string>
     <string name="patch_profile_rename_title">Rename patch profile</string>
+    <string name="patch_profile_version_override_action">Patch profile version settings</string>
+    <string name="patch_profile_version_override_title">Version settings for "%1$s"</string>
+    <string name="patch_profile_version_override_message">Set a specific app version to store with this profile, or target all versions.</string>
+    <string name="patch_profile_version_override_label">App version</string>
+    <string name="patch_profile_version_override_hint">e.g. 18.27.35</string>
+    <string name="patch_profile_version_override_all_versions">Use all versions</string>
+    <string name="patch_profile_version_override_saved_toast">Profile version updated</string>
+    <string name="patch_profile_version_override_failed_toast">Failed to update profile version</string>
+    <string name="patch_profile_version_override_set_to_all">No version entered, saved as "%1$s"</string>
+    <string name="patch_profile_version_conflict_title">Keep version override?</string>
+    <string name="patch_profile_version_conflict_message">Current version: %1$s\nIncoming version: %2$s\nWhich should be saved to this profile?</string>
+    <string name="patch_profile_version_conflict_use_new">Use incoming version</string>
+    <string name="patch_profile_version_conflict_keep_existing">Keep existing version</string>
     <string name="patch_profile_empty_state">Save a configuration from the patch selection screen to see it here.</string>
     <string name="patch_profile_missing_bundles_toast">Some bundles in this profile are not available and will be skipped.</string>
     <string name="patch_profile_changed_patches_toast">Some patches or options in this profile no longer match the bundle and were skipped.</string>
@@ -601,6 +619,7 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="default_install">Default</string>
     <string name="mount_install">Mount</string>
     <string name="mounted">Mounted</string>
+    <string name="unmounted">Unmounted</string>
     <string name="not_mounted">Not mounted</string>
     <string name="mount">Mount</string>
     <string name="unmount">Unmount</string>
@@ -643,6 +662,8 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="installer_fallback_description">Used automatically when the primary installer is unavailable.</string>
     <string name="installer_internal_name">System installer</string>
     <string name="installer_internal_description">Use the Android package installer</string>
+    <string name="installer_auto_saved_name">Rooted mount installer</string>
+    <string name="installer_auto_saved_description">Mounts the patched APK over the installed app (root required).</string>
     <string name="installer_shizuku_name">Shizuku</string>
     <string name="installer_shizuku_description">Install silently using Shizuku or Sui.</string>
     <string name="installer_option_none">No fallback</string>
@@ -652,6 +673,14 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="installer_status_shizuku_not_installed">Install Shizuku or Sui to use this option.</string>
     <string name="installer_status_shizuku_not_running">Start Shizuku or Sui and try again.</string>
     <string name="installer_status_shizuku_permission">Grant Shizuku permission to Universal ReVanced Manager from the Shizuku app.</string>
+    <string name="installer_mount_warning_title">Rooted mount installer selected</string>
+    <string name="installer_mount_warning_install">Your primary installer is set to the rooted mount installer. This saved app was not installed using mount.</string>
+    <string name="installer_mount_warning_update">Your primary installer is set to the rooted mount installer. This saved app was not installed using mount.</string>
+    <string name="installer_mount_warning_uninstall">Your primary installer is set to the rooted mount installer. This saved app was not installed using mount.</string>
+    <string name="installer_mount_mismatch_title">Rooted mount installer not selected</string>
+    <string name="installer_mount_mismatch_install">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, or install normally instead.</string>
+    <string name="installer_mount_mismatch_update">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, or update normally instead.</string>
+    <string name="installer_mount_mismatch_uninstall">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, or uninstall normally instead.</string>
     <string name="installer_status_shizuku_unsupported">The installed Shizuku version is not supported.</string>
     <string name="installer_action_open_shizuku">Open Shizuku</string>
     <string name="installer_shizuku_launch_failed">Unable to open Shizuku. Launch it manually and try again.</string>
@@ -694,6 +723,9 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="installer_external_launched">Opening %1$s…</string>
     <string name="installer_external_timeout">%1$s did not confirm the installation. Check the other app and try again.</string>
     <string name="installer_external_success">%1$s reported a successful installation.</string>
+    <string name="installing_ellipsis">Installing…</string>
+    <string name="mounting_ellipsis">Mounting…</string>
+    <string name="unmounting">Unmounting…</string>
     <string name="install_app">Install</string>
     <string name="install_app_success">App installed</string>
     <string name="install_app_fail_title">Installation failed</string>
@@ -714,12 +746,15 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="delete_saved_entry_description">This will remove the saved app entry and its saved APK. The app will remain installed.</string>
     <string name="saved_app_launch_unavailable">Install the app before opening it.</string>
     <string name="install_saved_app">Install</string>
+    <string name="remount_saved_app">Remount</string>
     <string name="update_saved_app">Update</string>
     <string name="installing_saved_app">Installing saved app…</string>
     <string name="saved_app_install_success">Installed saved app</string>
     <string name="saved_app_install_failed">Failed to install saved app</string>
     <string name="saved_app_uninstall_title">Uninstall installed copy?</string>
+    <string name="saved_app_unmount_title">Unmount installed copy?</string>
     <string name="saved_app_uninstall_description">This removes the installed version only. Your saved APK stays intact.</string>
+    <string name="saved_app_unmount_description">This unmounts the patched APK. Your saved APK stays intact.</string>
     <string name="saved_app_install_missing">Saved APK not found</string>
     <string name="delete_saved_copy">Delete saved copy</string>
     <string name="sign_fail">Failed to sign APK: %s</string>

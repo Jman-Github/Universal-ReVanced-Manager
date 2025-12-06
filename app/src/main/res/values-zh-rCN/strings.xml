@@ -526,6 +526,32 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="patch_profile_save_failed_toast">保存补丁配置文件失败</string>
     <string name="patch_profile_rename">重命名</string>
     <string name="patch_profile_rename_title">重命名补丁配置文件</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_override_action">Patch profile version settings</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_override_title">Version settings for "%1$s"</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_override_message">Set a specific app version to store with this profile, or target all versions.</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_override_label">App version</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_override_hint">e.g. 18.27.35</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_override_all_versions">Use all versions</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_override_saved_toast">Profile version updated</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_override_failed_toast">Failed to update profile version</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_override_set_to_all">No version entered, saved as "%1$s"</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_conflict_title">Keep version override?</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_conflict_message">Current version: %1$s\nIncoming version: %2$s\nWhich should be saved to this profile?</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_conflict_use_new">Use incoming version</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_conflict_keep_existing">Keep existing version</string>
     <string name="patch_profile_empty_state">从补丁选择屏幕保存配置后，将在此处看到它。</string>
     <string name="patch_profile_missing_bundles_toast">此配置文件中的某些包不可用，将被跳过。</string>
     <string name="patch_profile_changed_patches_toast">此配置文件中的某些补丁或选项不再与包匹配，已被跳过。</string>
@@ -634,6 +660,9 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="installer_fallback_description">当主要安装程序不可用时自动使用。</string>
     <string name="installer_internal_name">系统安装程序</string>
     <string name="installer_internal_description">使用 Android 包安装程序</string>
+    <!-- TODO: Translate "Rooted mount installer" and its description -->
+    <string name="installer_auto_saved_name">Rooted mount installer</string>
+    <string name="installer_auto_saved_description">Mounts the patched APK over the installed app (root required).</string>
     <string name="installer_shizuku_name">Shizuku</string>
     <string name="installer_shizuku_description">使用 Shizuku 或 Sui 静默安装。</string>
     <string name="installer_option_none">无备用</string>
@@ -889,10 +918,16 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="patcher_step_merge_not_required">No split merge required</string>
     <!-- Needs translation -->
     <string name="update_saved_app">Update</string>
+    <!-- Translation needed -->
+    <string name="remount_saved_app">Remount</string>
     <!-- Needs translation -->
     <string name="saved_app_uninstall_title">Uninstall installed copy?</string>
+    <!-- Translation needed -->
+    <string name="saved_app_unmount_title">Unmount installed copy?</string>
     <!-- Needs translation -->
     <string name="saved_app_uninstall_description">This removes the installed version only. Your saved APK stays intact.</string>
+    <!-- Translation needed -->
+    <string name="saved_app_unmount_description">This unmounts the patched APK. Your saved APK stays intact.</string>
     <!-- Needs translation -->
     <string name="github_pat">GitHub PAT</string>
     <!-- Needs translation -->
@@ -902,9 +937,36 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <!-- Needs translation -->
     <string name="set_github_pat_dialog_description">Set a GitHub Personal Access Token in order to be able to add Pull Requests as external sources. Create a PAT with scope public_repo</string>
     <!-- Needs translation -->
+    <string name="include_github_pat_in_exports_label">Include in settings export</string>
+    <!-- Needs translation -->
+    <string name="include_github_pat_in_exports_supporting">Adds this PAT to exported manager settings</string>
+    <!-- Needs translation -->
+    <string name="include_github_pat_in_exports_warning">Do not share your PAT. If you include it in a settings export, keep that file private because it contains the token.</string>
+    <!-- Needs translation -->
     <string name="plugins_help_title">What is a downloader?</string>
     <!-- Needs translation -->
     <string name="plugins_help_description">A downloader is a plugin which allows URV to download stock APKs from various sources. The downloaded APKs will be shown in the bottom section. During the patching process, you can choose an already downloaded APKs or you can download it via a plugin.\n\nThe list of supported downloader plugins can be found</string>
     <!-- Needs translation -->
     <string name="here">here.</string>
+    <!-- Needs translation -->
+    <string name="installer_mount_warning_title">Rooted mount installer selected</string>
+    <!-- Needs translation -->
+    <string name="installer_mount_warning_install">Your primary installer is set to the rooted mount installer. This saved app was not installed using mount.</string>
+    <!-- Needs translation -->
+    <string name="installer_mount_warning_update">Your primary installer is set to the rooted mount installer. This saved app was not installed using mount.</string>
+    <!-- Needs translation -->
+    <string name="installer_mount_warning_uninstall">Your primary installer is set to the rooted mount installer. This saved app was not installed using mount.</string>
+    <!-- Needs translation -->
+    <string name="installer_mount_mismatch_title">Rooted mount installer not selected</string>
+    <!-- Needs translation -->
+    <string name="installer_mount_mismatch_install">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, or install normally instead.</string>
+    <!-- Needs translation -->
+    <string name="installer_mount_mismatch_update">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, or update normally instead.</string>
+    <!-- Needs translation -->
+    <string name="installer_mount_mismatch_uninstall">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, or uninstall normally instead.</string>
+    <!-- Needs translation -->
+    <string name="installing_ellipsis">Installing…</string>
+    <!-- Translation needed -->
+    <string name="mounting_ellipsis">Mounting…</string>
 </resources>
+

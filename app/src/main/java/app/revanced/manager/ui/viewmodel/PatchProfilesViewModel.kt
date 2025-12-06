@@ -98,6 +98,12 @@ class PatchProfilesViewModel(
         FAILED
     }
 
+    enum class VersionUpdateResult {
+        SUCCESS,
+        PROFILE_NOT_FOUND,
+        FAILED
+    }
+
     val selectedProfiles = mutableStateSetOf<Int>()
 
     val profiles = combine(
@@ -305,6 +311,26 @@ class PatchProfilesViewModel(
             }
         }
     }
+
+    suspend fun updateProfileVersion(profileId: Int, version: String?): VersionUpdateResult =
+        withContext(Dispatchers.Default) {
+            val profile = patchProfileRepository.getProfile(profileId)
+                ?: return@withContext VersionUpdateResult.PROFILE_NOT_FOUND
+            val sanitized = version?.trim()?.takeUnless { it.isBlank() }
+            return@withContext try {
+                val updated = patchProfileRepository.updateProfile(
+                    uid = profileId,
+                    packageName = profile.packageName,
+                    appVersion = sanitized,
+                    name = profile.name,
+                    payload = profile.payload
+                )
+                if (updated != null) VersionUpdateResult.SUCCESS else VersionUpdateResult.FAILED
+            } catch (t: Exception) {
+                Log.e(tag, "Failed to update patch profile version", t)
+                VersionUpdateResult.FAILED
+            }
+        }
 
     suspend fun changeLocalBundleUid(
         profileId: Int,

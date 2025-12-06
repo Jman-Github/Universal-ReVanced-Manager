@@ -44,8 +44,10 @@ import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.network.downloader.LoadedDownloaderPlugin
 import app.revanced.manager.network.downloader.ParceledDownloaderData
 import app.revanced.manager.patcher.patch.PatchBundleInfo.Extensions.requiredOptionsSet
+import app.revanced.manager.plugin.downloader.DownloadUrl
 import app.revanced.manager.plugin.downloader.GetScope
 import app.revanced.manager.plugin.downloader.PluginHostApi
+import app.revanced.manager.plugin.downloader.Package as DownloaderPackage
 import app.revanced.manager.plugin.downloader.UserInteractionException
 import app.revanced.manager.ui.model.SelectedApp
 import app.revanced.manager.ui.model.navigation.Patcher
@@ -78,6 +80,9 @@ import kotlinx.parcelize.Parcelize
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLDecoder
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.Locale
@@ -585,7 +590,7 @@ class SelectedAppInfoViewModel(
         viewModelScope.launch {
             val result = runCatching {
                 val apkFile = withContext(Dispatchers.IO) {
-                    downloadedAppRepository.getApkFileForApp(downloadedApp)
+                    downloadedAppRepository.getPreparedApkFile(downloadedApp)
                 }
                 withContext(Dispatchers.IO) {
                     downloadedAppRepository.get(
@@ -625,6 +630,24 @@ class SelectedAppInfoViewModel(
             savedStateHandle["preferred_bundle_uid"] = bundleUid
             savedStateHandle["preferred_bundle_override"] = versionOverride
             savedStateHandle["preferred_bundle_all_versions"] = targetsAllVersions
+        }
+
+        // Keep the selected app version in sync when no APK has been chosen yet (Search/download flows).
+        val targetVersion = if (targetsAllVersions) null else versionOverride ?: preferredBundleVersion
+        when (val current = selectedApp) {
+            is SelectedApp.Search -> {
+                if (current.version != targetVersion) {
+                    selectedApp = current.copy(version = targetVersion ?: desiredVersion)
+                }
+            }
+
+            is SelectedApp.Download -> {
+                if (current.version.isNullOrBlank() || current.version != targetVersion) {
+                    selectedApp = current.copy(version = targetVersion ?: desiredVersion)
+                }
+            }
+
+            else -> Unit
         }
     }
 
@@ -670,12 +693,16 @@ class SelectedAppInfoViewModel(
                 }
 
                 val (data, reportedVersion) = result
-                if (targetVersion != null && reportedVersion != null && reportedVersion != targetVersion) {
-                    app.toast(app.getString(R.string.downloader_invalid_version))
-                    return@launch
-                }
 
-                val resolvedVersion = reportedVersion ?: targetVersion
+                val derivedVersion = resolveVersionFromDownloaderData(plugin, data, targetVersion)
+                val resolvedVersion = when {
+                    derivedVersion != null && !looksLikeVersionCode(derivedVersion) -> derivedVersion
+                    targetVersion != null && !looksLikeVersionCode(targetVersion) -> targetVersion
+                    else -> preferredBundleVersion ?: desiredVersion
+                }
+                if (targetVersion != null && resolvedVersion != targetVersion) {
+                    Log.d(TAG, "Downloader provided $targetVersion, resolved version=$resolvedVersion")
+                }
                 selectedApp = SelectedApp.Download(
                     packageName,
                     resolvedVersion,
@@ -715,7 +742,7 @@ class SelectedAppInfoViewModel(
                         ?: downloadedAppRepository.getLatest(app.packageName)
                     else -> downloadedAppRepository.getLatest(app.packageName)
                 }
-                downloaded?.let { resolvePackageInfo(downloadedAppRepository.getApkFileForApp(it)) }
+                downloaded?.let { resolvePackageInfo(downloadedAppRepository.getPreparedApkFile(it)) }
             }
             else -> null
         }
@@ -869,6 +896,177 @@ class SelectedAppInfoViewModel(
         val versions: Set<String>
     )
 
+    private suspend fun resolveVersionFromDownloaderData(
+        plugin: LoadedDownloaderPlugin,
+        data: Parcelable,
+        targetVersion: String?
+    ): String? = when (data) {
+        is DownloaderPackage -> sanitizeVersionString(data.version)
+        is DownloadUrl -> resolveVersionFromDownloadUrl(data, sanitizeVersionString(targetVersion) ?: targetVersion)
+        else -> {
+            Log.d(TAG, "Unhandled downloader data type from ${plugin.packageName}: ${data::class.java.simpleName}")
+            null
+        }
+    }
+
+    private suspend fun resolveVersionFromDownloadUrl(
+        downloadUrl: DownloadUrl,
+        targetVersion: String?
+    ): String? = withContext(Dispatchers.IO) {
+        val probe = runCatching { probeDownloadUrl(downloadUrl) }.getOrNull()
+        val candidates = buildList {
+            probe?.filename?.let(::add)
+            probe?.finalUrl?.let(::add)
+            add(downloadUrl.url)
+            sanitizeVersionString(targetVersion)?.let(::add)
+        }
+
+        candidates.firstNotNullOfOrNull { candidate ->
+            candidate?.let(::extractVersionCandidate)
+        }
+    }
+
+    private data class ProbeResult(val finalUrl: String, val filename: String?)
+
+    private fun probeDownloadUrl(downloadUrl: DownloadUrl): ProbeResult {
+        var currentUrl = downloadUrl.url
+        var filename: String? = null
+
+        repeat(4) {
+            val connection = (URL(currentUrl).openConnection() as HttpURLConnection).apply {
+                instanceFollowRedirects = false
+                requestMethod = "HEAD"
+                connectTimeout = 10_000
+                readTimeout = 10_000
+                useCaches = false
+                doInput = true
+                downloadUrl.headers.forEach(::setRequestProperty)
+            }
+
+            connection.connect()
+            connection.getHeaderField("Content-Disposition")?.let { disposition ->
+                parseFilename(disposition)?.let { resolved -> filename = resolved }
+            }
+
+            val code = runCatching { connection.responseCode }.getOrDefault(-1)
+            val location = connection.getHeaderField("Location")
+
+            if (code in 300..399 && !location.isNullOrBlank()) {
+                currentUrl = URL(URL(currentUrl), location).toString()
+                return@repeat
+            }
+
+            if (filename.isNullOrBlank()) {
+                filename = connection.url.path.substringAfterLast('/').takeIf { it.isNotBlank() }
+            }
+
+            return ProbeResult(currentUrl, filename)
+        }
+
+        return ProbeResult(currentUrl, filename)
+    }
+
+    private fun parseFilename(contentDisposition: String): String? {
+        contentDisposition.split(';').forEach { part ->
+            val trimmed = part.trim()
+            if (trimmed.startsWith("filename", ignoreCase = true)) {
+                val value = trimmed.substringAfter('=').trim().trim('"')
+                if (value.isNotBlank()) return value
+            }
+        }
+        return null
+    }
+
+    private fun extractVersionCandidate(raw: String): String? {
+        val decoded = runCatching { URLDecoder.decode(raw, "UTF-8") }.getOrDefault(raw)
+        // Strip build metadata / query markers that occasionally leak into filenames or URLs.
+        val cleaned = decoded
+            .substringBefore('$')
+            .trimEnd('-', '_', '.', '+')
+        if (cleaned.isBlank()) return null
+        val qualifiedPattern = Regex(
+            """\d+(?:[._-]\d+){1,5}(?:[._-](?:release|beta|alpha|rc|build)[A-Za-z0-9.]*)?""",
+            RegexOption.IGNORE_CASE
+        )
+        val numericPattern = Regex("""\d+(?:[._-]\d+){1,5}""")
+        val matches = (qualifiedPattern.findAll(cleaned) + numericPattern.findAll(cleaned))
+            .map { it.value }
+            .distinct()
+            .toList()
+        if (matches.isEmpty()) return null
+
+        val best = matches
+            .map { it to scoreVersionCandidate(it) }
+            .maxWithOrNull(
+                compareBy<Pair<String, Int>> { it.second }
+                    .thenBy { it.first.length } // prefer shorter strings
+                    .thenBy { leadingNumber(it.first) } // prefer smaller leading number
+            )?.first ?: return null
+        var normalized = best
+            .trim('.', '-', '_')
+            .replace("_", ".")
+            .replace(Regex("(?<=\\d)-(\\d)")) { ".$1" }
+        normalized = trimBuildMetadata(normalized)
+        if (normalized.isBlank()) return null
+        if (!normalized.first().isDigit()) return null
+        if (!normalized.contains('.')) return null
+        val firstNumeric = leadingNumber(normalized)
+        val hasQualifier = hasQualifier(normalized)
+        val dotCount = normalized.count { it == '.' }
+        if (firstNumeric > 200000 && !hasQualifier && dotCount <= 1) return null
+        return normalized
+    }
+
+    private fun sanitizeVersionString(raw: String?): String? {
+        val trimmed = raw?.trim().orEmpty()
+        if (trimmed.isBlank()) return null
+        extractVersionCandidate(trimmed)?.let { return it }
+        val withoutPrefix = trimmed.removePrefix("v").trim()
+        return withoutPrefix.takeIf { it.isNotBlank() && withoutPrefix.first().isDigit() }
+    }
+
+    private fun scoreVersionCandidate(candidate: String): Int {
+        var score = 0
+        val hasQualifier = hasQualifier(candidate)
+        val parts = candidate.split('.', '-', '_').filter { it.isNotBlank() }
+        val firstPart = parts.firstOrNull() ?: ""
+        val firstNumeric = firstPart.toIntOrNull() ?: 0
+
+        if (hasQualifier) score += 10
+        if (parts.size >= 3) score += 6
+        if (parts.size >= 4) score += 2
+        if (firstPart.length <= 4) score += 4
+        if (firstNumeric in 1..9999) score += 2
+        if (candidate.length <= 20) score += 2
+
+        // Penalize likely version codes (very large leading number with few segments and no qualifier)
+        if (firstPart.length >= 6 && !hasQualifier) score -= 8
+        if (firstNumeric > 200000 && !hasQualifier) score -= 6
+        if (parts.size <= 2 && !hasQualifier) score -= 3
+
+        return score
+    }
+
+    private fun trimBuildMetadata(value: String): String {
+        return value.substringBefore('$').trim('.', '-', '_')
+    }
+
+    private fun leadingNumber(candidate: String): Int {
+        val first = candidate.split('.', '-', '_').firstOrNull()?.trim() ?: return Int.MAX_VALUE
+        return first.toIntOrNull() ?: Int.MAX_VALUE
+    }
+
+    private fun hasQualifier(candidate: String): Boolean =
+        candidate.contains(Regex("(release|beta|alpha|rc|build)", RegexOption.IGNORE_CASE))
+
+    private fun looksLikeVersionCode(value: String): Boolean {
+        val numericOnly = value.all { it.isDigit() || it == '.' }
+        val first = value.split('.', '-', '_').firstOrNull()?.trim().orEmpty()
+        val firstNum = first.toLongOrNull() ?: return false
+        val dotCount = value.count { it == '.' }
+        return numericOnly && firstNum > 200000 && dotCount <= 1
+    }
+
     private companion object {
         private val TAG = SelectedAppInfoViewModel::class.java.simpleName ?: "SelectedAppInfoViewModel"
         /**
@@ -938,5 +1136,3 @@ private fun PatchBundleInfo.Scoped.withoutUniversalPatches(): PatchBundleInfo.Sc
         universal = emptyList()
     )
 }
-
-

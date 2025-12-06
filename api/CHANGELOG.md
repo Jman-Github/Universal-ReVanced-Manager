@@ -1,3 +1,27 @@
+# v1.6.0 (TBD)
+
+
+# Features
+
+- Enhanced patcher log export with comprehensive information including timestamps, app metadata, split APK merging details, patching summary, and memory usage information
+- Patch profiles now include a gear menu to set version overrides (or choose "All versions") per profile
+- Added Korean manager string localization https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/42
+- Split APKs now save in Settings > Downloads as merged APks https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/41
+- Gave the GitHub PAT entry in Settings > Advanced the ability to be saved through the manager settings exports. This is a toggable feature and is not on by default
+- Updated the "Uninstall" button to "Unmount" and the "Update" button to "Remount" for saved patched apps in the "Apps" tab for apps installed by the rooted mount installer
+
+
+# Bug fixes
+
+- Fixed patch profiles not saving the selected app version when the APK is provided by a downloader plugin
+
+
+# Docs
+
+- Added the new unique features to the README.md that were added in this release
+- Added a new contributor to the "Contributors" section
+
+
 # v1.5.1 (2025-11-15)
 **Minimal changes & bug fixes**
 
