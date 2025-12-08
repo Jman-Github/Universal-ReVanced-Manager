@@ -2,7 +2,7 @@
 <resources>
     <string name="app_name">Universal ReVanced Manager</string>
     <string name="main_top_title">URV Manager</string>
-    <string name="patcher">Patcher</string>
+    <string name="patcher">パッチャー</string>
     <string name="patches">パッチ</string>
     <string name="patch_bundles">パッチバンドル</string>
     <string name="patch_bundle">パッチバンドル</string>
