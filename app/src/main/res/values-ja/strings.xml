@@ -222,12 +222,12 @@
     <string name="import_patch_selection_fail">パッチ選択をインポートできませんでした: %s</string>
     <string name="import_patch_selection_success">パッチ選択をインポートしました</string>
     <string name="import_patch_bundles">パッチバンドルのインポート</string>
-    <string name="import_patch_bundles_description">JSON ファイルからリモート パッチバンドルを復元</string>
+    <string name="import_patch_bundles_description">JSON ファイルからリモートパッチバンドルを復元</string>
     <string name="import_patch_bundles_fail">パッチバンドルをインポートできませんでした: %s</string>
     <string name="import_patch_bundles_in_progress">インポート中...</string>
-    <string name="import_patch_bundles_success">%d 個の パッチバンドルをインポートしました</string>
-    <string name="import_patch_bundles_updated">%d 個の パッチバンドルを更新しました</string>
-    <string name="import_patch_bundles_none">新しい パッチバンドルはインポートされませんでした</string>
+    <string name="import_patch_bundles_success">%d 個のパッチバンドルをインポートしました</string>
+    <string name="import_patch_bundles_updated">%d 個のパッチバンドルを更新しました</string>
+    <string name="import_patch_bundles_none">新しいパッチバンドルはインポートされませんでした</string>
     <string name="import_patch_bundles_banner_title">パッチバンドルをインポート中</string>
     <string name="import_patch_bundles_banner_subtitle">%1$d / %2$d 処理完了</string>
     <string name="import_patch_profiles">パッチプロファイルのインポート</string>
@@ -326,12 +326,12 @@
     <string name="patch_profile_save_label">プロファイルを保存</string>
     <string name="patch_selection_toggle_expand">アクションを表示</string>
     <string name="patch_selection_toggle_collapse">アクションを隠す</string>
-    <string name="patch_selection_reset_all">パッチ選択をグローバルリセット</string>
+    <string name="patch_selection_reset_all">パッチ選択をすべてリセット</string>
     <string name="patch_selection_reset_all_dialog_description">すべてのパッチ選択をリセットしようとしています。各パッチを手動で再選択する必要があります。
 
 パッチプロファイルには影響しません。</string>
     <string name="patch_selection_reset_all_description">すべてのパッチ選択をリセット</string>
-    <string name="patch_selection_reset_dialog_title">パッチのデフォルトをリセットしますか？</string>
+    <string name="patch_selection_reset_dialog_title">パッチのデフォルト設定をリセットしますか？</string>
     <string name="patch_selection_reset_dialog_message">これにより、パッチの選択とオプションが推奨のデフォルト設定に戻ります。</string>
     <string name="patch_selection_reset_package">アプリのパッチ選択をリセット</string>
     <string name="patch_selection_reset_package_dialog_description">アプリ「%s」のパッチ選択をリセットしようとしています。各パッチを手動で再選択する必要があります。
@@ -417,12 +417,12 @@
     <string name="patch_bundle_rename">パッチバンドルの名前変更</string>
     <string name="patch_profile_view_options">オプションを表示</string>
     <string name="patch_profile_patch_options_title">%1$s のオプション</string>
-    <string name="restore_official_bundle">プリインストールの Official ReVanced パッチバンドルを復元</string>
-    <string name="restore_official_bundle_description_missing">プリインストールされている Official ReVanced パッチバンドルを再インストール</string>
-    <string name="restore_official_bundle_description_installed">プリインストールの Official ReVanced パッチバンドルは現在インストールされています</string>
-    <string name="restore_official_bundle_success">Official ReVanced パッチバンドルを復元しました</string>
-    <string name="restore_official_bundle_failed">Official ReVanced パッチバンドルの復元に失敗しました: %1$s</string>
-    <string name="restore_official_bundle_already">Official ReVanced パッチバンドルはすでにインストールされています</string>
+    <string name="restore_official_bundle">プリインストールの Official ReVancedパッチバンドルを復元</string>
+    <string name="restore_official_bundle_description_missing">プリインストールされている Official ReVancedパッチバンドルを再インストール</string>
+    <string name="restore_official_bundle_description_installed">プリインストールの Official ReVancedパッチバンドルは現在インストールされています</string>
+    <string name="restore_official_bundle_success">Official ReVancedパッチバンドルを復元しました</string>
+    <string name="restore_official_bundle_failed">Official ReVancedパッチバンドルの復元に失敗しました: %1$s</string>
+    <string name="restore_official_bundle_already">Official ReVancedパッチバンドルはすでにインストールされています</string>
 
     <string name="app_exporting">アプリのエクスポート</string>
     <string name="export_name_format">エクスポートファイル名の形式</string>
@@ -444,9 +444,9 @@
     <string name="export_name_variable_app_version">アプリバージョン</string>
     <string name="export_name_variable_app_version_description">アプリのバージョン名に置き換えられます。</string>
     <string name="export_name_variable_patches_version">パッチバージョン</string>
-    <string name="export_name_variable_patches_version_description">適用された パッチバンドルバージョンに置き換えられます。</string>
+    <string name="export_name_variable_patches_version_description">適用されたパッチバンドルバージョンに置き換えられます。</string>
     <string name="export_name_variable_bundle_names">パッチバンドル名</string>
-    <string name="export_name_variable_bundle_names_description">適用された パッチバンドル名に置き換えられます。</string>
+    <string name="export_name_variable_bundle_names_description">適用されたパッチバンドル名に置き換えられます。</string>
     <string name="export_name_variable_manager_version">Manager バージョン</string>
     <string name="export_name_variable_manager_version_description">Manager のバージョンに置き換えられます。</string>
     <string name="export_name_variable_timestamp">タイムスタンプ</string>
@@ -483,7 +483,7 @@
     <string name="device_architectures">CPU アーキテクチャ</string>
     <string name="device_memory_limit">メモリ制限</string>
     <string name="device_memory_limit_format">%1$dMB (通常) - %2$dMB (大)</string>
-    <string name="patches_force_download">すべての パッチバンドルを強制ダウンロード</string>
+    <string name="patches_force_download">すべてのパッチバンドルを強制ダウンロード</string>
     <string name="patches_reset">パッチバンドルをリセット</string>
     <string name="patching">パッチ適用中</string>
     <string name="signing">署名中</string>
@@ -502,7 +502,7 @@
     <string name="patches_replace_fail">パッチのインポートに失敗しました: %s</string>
     <string name="no_patched_apps_found">パッチ済みアプリが見つかりません</string>
     <string name="tap_on_patches">パッチをタップして詳細情報を取得</string>
-    <string name="patches_selected">%s 個の パッチバンドルを選択済み</string>
+    <string name="patches_selected">%s 個のパッチバンドルを選択済み</string>
     <string name="patch_profiles_selected">%1$d 個のパッチプロファイルを選択済み</string>
     <string name="selected_apps_count">%1$d 個のアプリを選択済み</string>
     <string name="selected_apps_delete_dialog_description">選択したアプリを Manager から削除しますか？デバイスにインストールされているアプリはそのまま残ります。</string>
@@ -516,8 +516,8 @@
     <string name="selection_warning_description">デフォルトのパッチ選択とオプションを使用することをお勧めします。変更すると予期しない問題が発生する可能性があります。\n\nパッチを切り替える前に、詳細設定で「パッチ選択とオプションの変更を許可」をオンにする必要があります。</string>
     <string name="patch_profile_save_action">パッチプロファイルを保存</string>
     <string name="patch_profile_select_bundles_title">パッチバンドルを選択</string>
-    <string name="patch_profile_select_bundles_description">このプロファイルに含める パッチバンドルを選択してください。</string>
-    <string name="patch_profile_select_bundles_empty">保存可能な パッチバンドルがありません。</string>
+    <string name="patch_profile_select_bundles_description">このプロファイルに含めるパッチバンドルを選択してください。</string>
+    <string name="patch_profile_select_bundles_empty">保存可能なパッチバンドルがありません。</string>
     <string name="patch_profile_name_title">パッチプロファイルの名前</string>
     <string name="patch_profile_name_description">このパッチプロファイルの名前を入力するか、以下から選択して更新してください</string>
     <string name="patch_profile_update_existing_title">既存のプロファイルを更新</string>
@@ -544,7 +544,7 @@
     <string name="patch_profile_bundle_change_uid_title">%1$s の UID を変更</string>
     <string name="patch_profile_bundle_change_uid_invalid">有効な数値の UID を入力してください。</string>
     <string name="patch_profile_bundle_change_uid_success">バンドル UID を %1$d に更新しました。</string>
-    <string name="patch_profile_bundle_change_uid_not_found">UID %1$d のローカル パッチバンドルが見つかりません。</string>
+    <string name="patch_profile_bundle_change_uid_not_found">UID %1$d のローカルパッチバンドルが見つかりません。</string>
     <string name="patcher_process_exit_message">Patcher プロセスはコード %1$d で終了しました。</string>
     <string name="patcher_memory_adjustment_title">Patcher がメモリ不足になりました</string>
     <string name="patcher_memory_adjustment_message_reduced">実験的な Patcher プロセスはメモリ不足のため停止しました。すぐに再試行できるように、メモリ制限を %1$d MB から %2$d MB に下げました。</string>
@@ -600,7 +600,7 @@
     <string name="patch_bundles_used">使用された Patch Bundle</string>
     <string name="applied_patches_empty">このアプリに記録されたパッチはありません</string>
     <string name="applied_patches_bundle_missing">バンドルメタデータが利用できません。保存されたパッチ名を表示しています。</string>
-    <string name="no_patch_bundles_tracked">このアプリに記録された パッチバンドルはありません</string>
+    <string name="no_patch_bundles_tracked">このアプリに記録されたパッチバンドルはありません</string>
     <string name="default_install">デフォルト</string>
     <string name="mount_install">マウント</string>
     <string name="mounted">マウント済み</string>
@@ -788,10 +788,10 @@
     <string name="patches_view_any_version">任意のバージョン</string>
     <string name="patches_view_any_package">任意のパッケージ</string>
     <string name="patches_delete_single_dialog_description">本当に「%s」を削除しますか？</string>
-    <string name="patches_delete_multiple_dialog_description">本当に選択した パッチバンドルを削除しますか？</string>
+    <string name="patches_delete_multiple_dialog_description">本当に選択したパッチバンドルを削除しますか？</string>
 
     <string name="about_revanced_manager">Universal ReVanced Manager について</string>
-    <string name="revanced_manager_description">Universal ReVanced Manager (URV Manager) は、Official ReVanced Manager のフォーク（派生版）です。両方のアプリケーションは ReVanced Patcher を使用しており、カスタムパッチを使用してアプリをダウンロードおよびパッチ適用し、パッチ適用プロセスを管理できます。Universal ReVanced Manager に含まれる独自の機能には、パッチバンドルの表示名、サードパーティ製 パッチバンドルのインポートのサポートなどがあります。Universal ReVanced Manager が提供する独自の機能の完全なリストは</string>
+    <string name="revanced_manager_description">Universal ReVanced Manager (URV Manager) は、Official ReVanced Manager のフォーク（派生版）です。両方のアプリケーションは ReVanced Patcher を使用しており、カスタムパッチを使用してアプリをダウンロードおよびパッチ適用し、パッチ適用プロセスを管理できます。Universal ReVanced Manager に含まれる独自の機能には、パッチバンドルの表示名、サードパーティ製パッチバンドルのインポートのサポートなどがあります。Universal ReVanced Manager が提供する独自の機能の完全なリストは</string>
     <string name="unique_features_label">こちら。</string>
     <!-- From PR #37: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/37 -->
     <string name="here">こちら。</string>
@@ -851,9 +851,9 @@
     <string name="select_deselect_all">すべて選択または選択解除</string>
     <string name="deselect_all">すべて選択解除</string>
     <string name="deselect_bundle">現在のバンドルを選択解除</string>
-    <string name="select_patches_type_dialog_description">URL またはローカルファイルから新しい パッチバンドルを追加</string>
-    <string name="local_patches_description">ローカルストレージから パッチバンドルを追加します。</string>
-    <string name="remote_patches_description">URL から パッチバンドルを追加します。パッチバンドルは自動的に更新できます。</string>
+    <string name="select_patches_type_dialog_description">URL またはローカルファイルから新しいパッチバンドルを追加</string>
+    <string name="local_patches_description">ローカルストレージからパッチバンドルを追加します。</string>
+    <string name="remote_patches_description">URL からパッチバンドルを追加します。パッチバンドルは自動的に更新できます。</string>
     <string name="recommended">推奨</string>
 
     <string name="installation_failed_dialog_title">インストール失敗</string>
