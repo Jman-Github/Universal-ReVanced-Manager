@@ -478,7 +478,7 @@
     <string name="storage">ストレージ</string>
     <string name="no_patch_found">パッチが見つかりません。パッチを確認してください</string>
     <string name="tab_apps">アプリ</string>
-    <string name="tab_patches">Patch Bundle</string>
+    <string name="tab_patches">パッチバンドル</string>
     <string name="tab_profiles">パッチプロファイル</string>
     <string name="delete">削除</string>
     <string name="refresh">更新</string>
@@ -585,7 +585,7 @@
     <string name="original_package_name">元のパッケージ名</string>
     <string name="applied_patches">適用されたパッチ</string>
     <string name="view_applied_patches">適用されたパッチを表示</string>
-    <string name="patch_bundles_used">使用された Patch Bundle</string>
+    <string name="patch_bundles_used">使用された パッチバンドル</string>
     <string name="applied_patches_empty">このアプリに記録されたパッチはありません</string>
     <string name="applied_patches_bundle_missing">バンドルメタデータが利用できません。保存されたパッチ名を表示しています。</string>
     <string name="no_patch_bundles_tracked">このアプリに記録されたパッチバンドルはありません</string>
