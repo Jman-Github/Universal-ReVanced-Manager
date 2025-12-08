@@ -4,8 +4,8 @@
     <string name="main_top_title">URV Manager</string>
     <string name="patcher">Patcher</string>
     <string name="patches">パッチ</string>
-    <string name="patch_bundles">Patch Bundle</string>
-    <string name="patch_bundle">Patch Bundle</string>
+    <string name="patch_bundles">パッチバンドル</string>
+    <string name="patch_bundle">パッチバンドル</string>
     <string name="cli">CLI</string>
     <string name="manager">Manager</string>
 
