@@ -51,7 +51,7 @@
     <string name="app_source_dialog_option_auto_unavailable">利用可能なプラグインがありません</string>
     <string name="app_source_dialog_option_storage">ストレージ</string>
     <string name="app_source_dialog_option_storage_description">ローカルストレージから APK を選択します</string>
-    <string name="app_source_dialog_option_installed_no_root">マウントされたアプリは、ルートアクセスがないと再度パッチを適用できません</string>
+    <string name="app_source_dialog_option_installed_no_root">マウントされたアプリには、ルートアクセスがないと再度パッチを適用できません</string>
     <string name="app_source_dialog_option_installed_version_not_suggested">バージョン %s は推奨バージョンと一致しません</string>
     <string name="bundle_version_item">バンドルの推奨設定</string>
     <string name="bundle_version_item_description_default">デフォルトの推奨設定を使用中</string>
@@ -99,7 +99,7 @@
     <string name="bundle_version_dialog_selected_indicator_inline">%1$s (選択済み)</string>
     <string name="bundle_version_dialog_other_title">サポートされている別のバージョンを選択:</string>
     <string name="bundle_version_dialog_locked_title">バージョンセーフガードが有効です</string>
-    <string name="bundle_version_dialog_locked_hint">「設定」&gt;「詳細設定」&gt;「セーフガード」へ移動し、「推奨アプリバージョンを必須にする」（オフにする）と「バージョン互換性チェックを無効化」（オンにする）の両方を設定して、バンドル固有のバージョンを選択してください。</string>
+    <string name="bundle_version_dialog_locked_hint">「設定」&gt;「詳細設定」&gt;「セーフガード」に移動し、「推奨アプリバージョンを必須にする」をオフ、「バージョン互換性チェックを無効化」をオンにすると、バンドル固有のバージョンを選択できるようになります。</string>
 
     <string name="patch_item_description">アプリケーションへのパッチ適用を開始</string>
     <string name="patch_selector_item">パッチを選択</string>
@@ -215,7 +215,7 @@
     <string name="export_keystore_success">キーストアをエクスポートしました</string>
     <string name="regenerate_keystore">キーストアの再生成</string>
     <string name="regenerate_keystore_description">新しいキーストアを生成</string>
-    <string name="regenerate_keystore_dialog_description">パッチ適用プロセス中に Manager が使用するキーストアを再生成しようとしています。\n\nこのソースから以前にインストールされたアプリを更新することはできなくなります。</string>
+    <string name="regenerate_keystore_dialog_description">パッチ適用プロセス中にマネージャーが使用するキーストアを再生成しようとしています。\n\nこのソースから以前にインストールされたアプリを更新することはできなくなります。</string>
     <string name="regenerate_keystore_success">キーストアが正常に置き換えられました</string>
     <string name="import_patch_selection">パッチ選択のインポート</string>
     <string name="import_patch_selection_description">JSON ファイルからパッチの選択状態をインポート</string>
@@ -246,7 +246,7 @@
     <string name="export_patch_selection_fail">パッチ選択をエクスポートできませんでした: %s</string>
     <string name="export_patch_selection_success">パッチ選択をエクスポートしました</string>
     <string name="export_patch_bundles">パッチバンドルのエクスポート</string>
-    <string name="export_patch_bundles_description">インポートされたリモートパッチバンドルをJSONファイルに保存</string>
+    <string name="export_patch_bundles_description">インポートされたリモートパッチバンドルを JSON ファイルに保存</string>
     <string name="export_patch_bundles_fail">パッチバンドルをエクスポートできませんでした: %s</string>
     <string name="export_patch_bundles_empty">エクスポートするパッチバンドルがありません</string>
     <string name="export_patch_bundles_success">%d 個のパッチバンドルをエクスポートしました</string>
@@ -293,12 +293,12 @@
     <string name="patch_selection_button_label_redo_action">やり直し</string>
     <string name="patch_selection_history_undo">%1$s を元に戻しました</string>
     <string name="patch_selection_history_redo">%1$s をやり直しました</string>
-    <string name="patch_selection_action_all_defaults">すべてのデフォルト</string>
+    <string name="patch_selection_action_all_defaults">すべてをデフォルトに戻す</string>
     <string name="patch_selection_action_deselect_all">すべて選択解除</string>
     <string name="patch_selection_action_select_all">すべて選択</string>
     <string name="patch_selection_action_select_bundle">バンドル「%1$s」を選択</string>
     <string name="patch_selection_action_deselect_bundle">バンドル「%1$s」を選択解除</string>
-    <string name="patch_selection_action_bundle_defaults">「%1$s」のバンドルデフォルト</string>
+    <string name="patch_selection_action_bundle_defaults">「%1$s」のデフォルトに戻す</string>
     <string name="disable_patch_selection_confirmations">アクションの確認を無効化</string>
     <string name="disable_patch_selection_confirmations_description">パッチ選択アクションの確認ダイアログをスキップする</string>
     <string name="disable_patch_selection_confirmations_warning">確認を無効にすると、意図しない一括変更が発生する可能性があります。</string>
@@ -327,36 +327,24 @@
     <string name="patch_selection_toggle_expand">アクションを表示</string>
     <string name="patch_selection_toggle_collapse">アクションを隠す</string>
     <string name="patch_selection_reset_all">パッチ選択をすべてリセット</string>
-    <string name="patch_selection_reset_all_dialog_description">すべてのパッチ選択をリセットしようとしています。各パッチを手動で再選択する必要があります。
-
-パッチプロファイルには影響しません。</string>
+    <string name="patch_selection_reset_all_dialog_description">すべてのパッチ選択をリセットしようとしています。各パッチを手動で再選択する必要があります。パッチプロファイルには影響しません。</string>
     <string name="patch_selection_reset_all_description">すべてのパッチ選択をリセット</string>
     <string name="patch_selection_reset_dialog_title">パッチのデフォルト設定をリセットしますか？</string>
     <string name="patch_selection_reset_dialog_message">これにより、パッチの選択とオプションが推奨のデフォルト設定に戻ります。</string>
     <string name="patch_selection_reset_package">アプリのパッチ選択をリセット</string>
-    <string name="patch_selection_reset_package_dialog_description">アプリ「%s」のパッチ選択をリセットしようとしています。各パッチを手動で再選択する必要があります。
-
-パッチプロファイルには影響しません。</string>
+    <string name="patch_selection_reset_package_dialog_description">アプリ「%s」のパッチ選択をリセットしようとしています。各パッチを手動で再選択する必要があります。パッチプロファイルには影響しません。</string>
     <string name="patch_selection_reset_package_description">単一アプリのパッチ選択をリセット</string>
     <string name="patch_selection_reset_patches">パッチ選択をリセット（単一）</string>
-    <string name="patch_selection_reset_patches_dialog_description">「%s」のパッチ選択をリセットしようとしています。各パッチを手動で再選択する必要があります。
-
-パッチプロファイルには影響しません。</string>
+    <string name="patch_selection_reset_patches_dialog_description">「%s」のパッチ選択をリセットしようとしています。各パッチを手動で再選択する必要があります。パッチプロファイルには影響しません。</string>
     <string name="patch_selection_reset_patches_description">特定のパッチコレクションの選択状態をリセット</string>
     <string name="patch_options_reset_package">アプリのパッチオプションをリセット</string>
-    <string name="patch_options_reset_package_dialog_description">アプリ「%s」のパッチオプションをリセットしようとしています。各オプションを再度適用する必要があります。
-
-パッチプロファイルには影響しません。</string>
+    <string name="patch_options_reset_package_dialog_description">アプリ「%s」のパッチオプションをリセットしようとしています。各オプションを再度適用する必要があります。パッチプロファイルには影響しません。</string>
     <string name="patch_options_reset_package_description">単一アプリのパッチオプションをリセット</string>
     <string name="patch_options_reset_patches">パッチオプションをリセット（単一）</string>
-    <string name="patch_options_reset_patches_dialog_description">「%s」のパッチオプションをリセットしようとしています。各オプションを再度適用する必要があります。
-
-パッチプロファイルには影響しません。</string>
+    <string name="patch_options_reset_patches_dialog_description">「%s」のパッチオプションをリセットしようとしています。各オプションを再度適用する必要があります。パッチプロファイルには影響しません。</string>
     <string name="patch_options_reset_patches_description">特定のパッチコレクションのオプションをリセット</string>
-    <string name="patch_options_reset_all">パッチオプションをグローバルリセット</string>
-    <string name="patch_options_reset_all_dialog_description">すべてのパッチオプションをリセットしようとしています。各オプションを再度適用する必要があります。
-
-パッチプロファイルには影響しません。</string>
+    <string name="patch_options_reset_all">すべてのパッチオプションをリセット</string>
+    <string name="patch_options_reset_all_dialog_description">すべてのパッチオプションをリセットしようとしています。各オプションを再度適用する必要があります。パッチプロファイルには影響しません。</string>
     <string name="patch_options_reset_all_description">すべてのパッチオプションをリセット</string>
     <string name="downloader_plugins">プラグイン</string>
     <string name="downloader_plugin_state_trusted">信頼済み</string>
@@ -417,12 +405,12 @@
     <string name="patch_bundle_rename">パッチバンドルの名前変更</string>
     <string name="patch_profile_view_options">オプションを表示</string>
     <string name="patch_profile_patch_options_title">%1$s のオプション</string>
-    <string name="restore_official_bundle">プリインストールの Official ReVancedパッチバンドルを復元</string>
-    <string name="restore_official_bundle_description_missing">プリインストールされている Official ReVancedパッチバンドルを再インストール</string>
-    <string name="restore_official_bundle_description_installed">プリインストールの Official ReVancedパッチバンドルは現在インストールされています</string>
-    <string name="restore_official_bundle_success">Official ReVancedパッチバンドルを復元しました</string>
-    <string name="restore_official_bundle_failed">Official ReVancedパッチバンドルの復元に失敗しました: %1$s</string>
-    <string name="restore_official_bundle_already">Official ReVancedパッチバンドルはすでにインストールされています</string>
+    <string name="restore_official_bundle">プリインストールの Official ReVanced パッチバンドルを復元</string>
+    <string name="restore_official_bundle_description_missing">プリインストールされている Official ReVanced パッチバンドルを再インストール</string>
+    <string name="restore_official_bundle_description_installed">プリインストールの Official ReVanced パッチバンドルは現在インストールされています</string>
+    <string name="restore_official_bundle_success">Official ReVanced パッチバンドルを復元しました</string>
+    <string name="restore_official_bundle_failed">Official ReVanced パッチバンドルの復元に失敗しました: %1$s</string>
+    <string name="restore_official_bundle_already">Official ReVanced パッチバンドルはすでにインストールされています</string>
 
     <string name="app_exporting">アプリのエクスポート</string>
     <string name="export_name_format">エクスポートファイル名の形式</string>
@@ -482,7 +470,7 @@
     <string name="device_model">モデル</string>
     <string name="device_architectures">CPU アーキテクチャ</string>
     <string name="device_memory_limit">メモリ制限</string>
-    <string name="device_memory_limit_format">%1$dMB (通常) - %2$dMB (大)</string>
+    <string name="device_memory_limit_format">%1$d MB (通常) 〜 %2$d MB (大)</string>
     <string name="patches_force_download">すべてのパッチバンドルを強制ダウンロード</string>
     <string name="patches_reset">パッチバンドルをリセット</string>
     <string name="patching">パッチ適用中</string>
@@ -494,7 +482,7 @@
     <string name="tab_profiles">パッチプロファイル</string>
     <string name="delete">削除</string>
     <string name="refresh">更新</string>
-    <string name="continue_anyways">とにかく続行</string>
+    <string name="continue_anyways">それでも続行</string>
     <string name="download_another_version">別のバージョンをダウンロード</string>
     <string name="download_app">アプリをダウンロード</string>
     <string name="download_apk">APK ファイルをダウンロード</string>
@@ -505,7 +493,7 @@
     <string name="patches_selected">%s 個のパッチバンドルを選択済み</string>
     <string name="patch_profiles_selected">%1$d 個のパッチプロファイルを選択済み</string>
     <string name="selected_apps_count">%1$d 個のアプリを選択済み</string>
-    <string name="selected_apps_delete_dialog_description">選択したアプリを Manager から削除しますか？デバイスにインストールされているアプリはそのまま残ります。</string>
+    <string name="selected_apps_delete_dialog_description">選択したアプリをマネージャーから削除しますか？デバイスにインストールされているアプリはそのまま残ります。</string>
     <string name="incompatible_patches">互換性のないパッチ</string>
     <string name="universal_patches">ユニバーサルパッチ</string>
     <string name="patch_selection_reset_toast">パッチの選択とオプションは推奨のデフォルト設定にリセットされました</string>
@@ -808,7 +796,7 @@
     <string name="manual_update_check_description">手動でアップデートを確認する</string>
     <string name="patches_and_manager">パッチバンドルと Manager</string>
     <string name="update_on_metered_connections">従量制接続での更新</string>
-    <string name="update_on_metered_connections_description">従量制ネットワーク経由でのパッチと Manager の更新を許可する</string>
+    <string name="update_on_metered_connections_description">従量制ネットワーク経由でのパッチとマネージャーの更新を許可する</string>
     <string name="update_checking_manager">起動時にアップデートを確認</string>
     <string name="update_checking_manager_description">アプリケーション起動時に Universal ReVanced Manager の新しいバージョンを確認する</string>
     <string name="manager_prereleases">プレリリースを使用</string>
