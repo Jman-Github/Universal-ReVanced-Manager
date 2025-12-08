@@ -882,4 +882,40 @@
     <string name="export">エクスポート</string>
     <string name="confirm">確認</string>
     <string name="saved_app_install_cancelled">インストールはキャンセルされました</string>
+    
+    <string name="include_github_pat_in_exports_label">設定のエクスポートに含める</string>
+    <string name="include_github_pat_in_exports_supporting">このPATをエクスポートするマネージャー設定に追加します</string>
+    <string name="include_github_pat_in_exports_warning">PATを共有しないでください。設定のエクスポートに含める場合、トークンが含まれているため、そのファイルは非公開のままにしてください。</string>
+    <!-- From PR #42: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/42 -->
+    <string name="language_option_korean">韓国語</string>
+    <string name="patch_profile_version_override_action">パッチプロファイルのバージョン設定</string>
+    <string name="patch_profile_version_override_title">"%1$s" のバージョン設定</string>
+    <string name="patch_profile_version_override_message">このプロファイルに関連付ける特定のアプリバージョンを設定するか、すべてのバージョンを対象にします。</string>
+    <string name="patch_profile_version_override_label">アプリバージョン</string>
+    <string name="patch_profile_version_override_hint">例: 18.27.35</string>
+    <string name="patch_profile_version_override_all_versions">すべてのバージョンを使用</string>
+    <string name="patch_profile_version_override_saved_toast">プロファイルのバージョンを更新しました</string>
+    <string name="patch_profile_version_override_failed_toast">プロファイルのバージョン更新に失敗しました</string>
+    <string name="patch_profile_version_override_set_to_all">バージョンが入力されていません。"%1$s" として保存されました</string>
+    <string name="patch_profile_version_conflict_title">バージョン上書きを維持しますか？</string>
+    <string name="patch_profile_version_conflict_message">現在のバージョン: %1$s\nインポートされるバージョン: %2$s\nどちらをこのプロファイルに保存しますか？</string>
+    <string name="patch_profile_version_conflict_use_new">インポートされるバージョンを使用</string>
+    <string name="patch_profile_version_conflict_keep_existing">既存のバージョンを維持</string>
+    <string name="unmounted">マウント解除済み</string>
+    <string name="installer_auto_saved_name">ルートマウントインストーラー</string>
+    <string name="installer_auto_saved_description">パッチ適用済みAPKをインストール済みアプリの上にマウントします（ルート権限が必要）。</string>
+    <string name="installer_mount_warning_title">ルートマウントインストーラーが選択されています</string>
+    <string name="installer_mount_warning_install">プライマリインストーラーがルートマウントインストーラーに設定されています。この保存済みアプリはマウントを使用してインストールされていません。</string>
+    <string name="installer_mount_warning_update">プライマリインストーラーがルートマウントインストーラーに設定されています。この保存済みアプリはマウントを使用してインストールされていません。</string>
+    <string name="installer_mount_warning_uninstall">プライマリインストーラーがルートマウントインストーラーに設定されています。この保存済みアプリはマウントを使用してインストールされていません。</string>
+    <string name="installer_mount_mismatch_title">ルートマウントインストーラーが選択されていません</string>
+    <string name="installer_mount_mismatch_install">このアプリはルートマウントインストーラーを使用してインストールされました。マウント操作を使用するにはプライマリインストーラーを戻すか、代わりに通常インストールしてください。</string>
+    <string name="installer_mount_mismatch_update">このアプリはルートマウントインストーラーを使用してインストールされました。マウント操作を使用するにはプライマリインストーラーを戻すか、代わりに通常更新してください。</string>
+    <string name="installer_mount_mismatch_uninstall">このアプリはルートマウントインストーラーを使用してインストールされました。マウント操作を使用するにはプライマリインストーラーを戻すか、代わりに通常アンインストールしてください。</string>
+    <string name="installing_ellipsis">インストール中…</string>
+    <string name="mounting_ellipsis">マウント中…</string>
+    <string name="unmounting">マウント解除中…</string>
+    <string name="remount_saved_app">再マウント</string>
+    <string name="saved_app_unmount_title">インストール済みコピーをマウント解除しますか？</string>
+    <string name="saved_app_unmount_description">これによりパッチ適用済みAPKのマウントが解除されます。保存済みAPKはそのまま残ります。</string>
 </resources>
