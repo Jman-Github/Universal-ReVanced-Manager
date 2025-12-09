@@ -1,5 +1,4 @@
 <resources>
-    <!-- PR #33: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/33 -->
     <string name="app_name">Universal ReVanced Manager</string>
     <string name="main_top_title">URV管理器</string>
     <string name="patcher">修补程序</string>
@@ -122,7 +121,7 @@
     <string name="auto_updates_dialog_note">这些设置以后可以更改。</string>
 
     <string name="general">通用</string>
-    <string name="general_description">主题，动态颜色</string>
+    <string name="general_description">主题，动态取色</string>
     <string name="updates">更新</string>
     <string name="updates_description">检查更新并查看更新日志</string>
     <string name="downloads">下载</string>
@@ -142,7 +141,7 @@
 
     <string name="contributors">贡献者</string>
     <string name="contributors_description">查看 ReVanced 的贡献者</string>
-    <string name="dynamic_color">动态颜色</string>
+    <string name="dynamic_color">动态取色</string>
     <string name="dynamic_color_description">使颜色适应壁纸</string>
     <string name="accent_color">强调色</string>
     <string name="accent_color_description">为应用选择自定义强调色</string>
@@ -290,25 +289,25 @@
     <string name="disable_patch_selection_confirmations">禁用操作确认</string>
     <string name="disable_patch_selection_confirmations_description">跳过补丁选择操作的确认对话框</string>
     <string name="disable_patch_selection_confirmations_warning">禁用确认可能导致意外的批量更改。</string>
-    <!-- Needs translation -->
+
     <string name="patch_selection_collapse_on_toggle">Collapse actions after toggling patches</string>
-    <!-- Needs translation -->
+
     <string name="patch_selection_collapse_on_toggle_description">Automatically hide the patch selection action buttons whenever you select or deselect a patch</string>
-    <!-- Needs translation -->
+
     <string name="patch_selection_action_order_title">Patch selection action buttons order</string>
-    <!-- Needs translation -->
+
     <string name="patch_selection_action_order_description">Choose the layout order for the patch selection action buttons</string>
-    <!-- Needs translation -->
+
     <string name="patch_selection_action_order_dialog_title">Reorder patch actions</string>
-    <!-- Needs translation -->
+
     <string name="patch_selection_action_order_dialog_description">Move the entries to change how the patch selection action buttons are displayed. The preview updates live.</string>
-    <!-- Needs translation -->
+
     <string name="patch_selection_action_order_preview_label">Preview</string>
-    <!-- Needs translation -->
+
     <string name="patch_selection_action_order_reset">Reset to default order</string>
-    <!-- Needs translation -->
+
     <string name="patch_selection_action_move_up">Move up</string>
-    <!-- Needs translation -->
+
     <string name="patch_selection_action_move_down">Move down</string>
     <string name="patch_selection_confirm_deselect_bundle_title">取消选择包？</string>
     <string name="patch_selection_confirm_deselect_bundle_message">取消选择 %1$s 中所有已选择的补丁？</string>
@@ -455,24 +454,24 @@
     <string name="language_option_system">跟随设备语言</string>
     <string name="language_option_english">英语</string>
     <string name="language_option_chinese_simplified">简体中文</string>
-    <!-- Needs translation -->
+
     <string name="language_option_vietnamese">Vietnamese</string>
-    <!-- Needs translation -->
+
     <string name="patcher_preflight_missing_patch_message">The following patches aren’t available in the current bundle:
 %1$s
 You can remove them automatically, adjust the selection, or continue anyway.</string>
-    <!-- Needs translation -->
+
     <string name="patcher_preflight_missing_patch_remove">Remove missing patches</string>
-    <!-- Needs translation -->
+
     <string name="patcher_preflight_missing_patch_proceed">Proceed anyway</string>
 
-    <!-- Needs translation -->
+
     <string name="theme_preset_sunset">Sunset</string>
-    <!-- Needs translation -->
+
     <string name="theme_preset_forest">Forest</string>
-    <!-- Needs translation -->
+
     <string name="theme_preset_ocean">Ocean</string>
-    <!-- Needs translation -->
+
     <string name="theme_preset_midnight">Midnight</string>
     <string name="device">设备</string>
     <string name="device_android_version">Android 版本</string>
@@ -875,36 +874,20 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="export">导出</string>
     <string name="confirm">确认</string>
     <string name="saved_app_install_cancelled">安装已取消</string>
-    <!-- Needs translation -->
-    <string name="bundle_links_title">Links for %1$s</string>
-    <!-- Needs translation -->
+    <string name="bundle_links_title">%1$s 的链接</string>
     <string name="bundle_link_release">GitHub release</string>
-    <!-- Needs translation -->
-    <string name="bundle_link_catalog">Patch list catalog</string>
-    <!-- Needs translation -->
-    <string name="bundle_catalog_unavailable">Patch list catalog unavailable</string>
-    <!-- Needs translation -->
-    <string name="patcher_step_prepare_split_apk">Merge split APK</string>
-    <!-- Needs translation -->
-    <string name="patcher_step_merge_not_required">No split merge required</string>
-    <!-- Needs translation -->
-    <string name="update_saved_app">Update</string>
-    <!-- Needs translation -->
-    <string name="saved_app_uninstall_title">Uninstall installed copy?</string>
-    <!-- Needs translation -->
-    <string name="saved_app_uninstall_description">This removes the installed version only. Your saved APK stays intact.</string>
-    <!-- Needs translation -->
-    <string name="github_pat">GitHub PAT</string>
-    <!-- Needs translation -->
-    <string name="github_pat_description">GitHub Personal Access Token needed for GitHub integration</string>
-    <!-- Needs translation -->
-    <string name="set_github_pat_dialog_title">Set GitHub PAT</string>
-    <!-- Needs translation -->
-    <string name="set_github_pat_dialog_description">Set a GitHub Personal Access Token in order to be able to add Pull Requests as external sources. Create a PAT with scope public_repo</string>
-    <!-- Needs translation -->
-    <string name="plugins_help_title">What is a downloader?</string>
-    <!-- Needs translation -->
-    <string name="plugins_help_description">A downloader is a plugin which allows URV to download stock APKs from various sources. The downloaded APKs will be shown in the bottom section. During the patching process, you can choose an already downloaded APKs or you can download it via a plugin.\n\nThe list of supported downloader plugins can be found</string>
-    <!-- Needs translation -->
-    <string name="here">here.</string>
+    <string name="bundle_link_catalog">补丁列表目录</string>
+    <string name="bundle_catalog_unavailable">补丁列表目录不可用</string>
+    <string name="patcher_step_prepare_split_apk">合并拆分APK</string>
+    <string name="patcher_step_merge_not_required">没有需要合并的拆分包</string>
+    <string name="update_saved_app">更新</string>
+    <string name="saved_app_uninstall_title">卸载已安装的副本?</string>
+    <string name="saved_app_uninstall_description">此操作只会删除已安装的版本，您保存的APK文件将保持不变。</string>
+    <string name="github_pat">GitHub访问令牌</string>
+    <string name="github_pat_description">GitHub集成需要GitHub个人访问令牌</string>
+    <string name="set_github_pat_dialog_title">设置GitHub访问令牌</string>
+    <string name="set_github_pat_dialog_description">设置GitHub个人访问令牌 (PAT) 以便能够将Pull Request添加为外部来源。创建作用域为public_repo的PAT。</string>
+    <string name="plugins_help_title">什么是下载器?</string>
+    <string name="plugins_help_description">下载器是一个插件，它允许 URV 从各种来源下载官方 APK 文件。下载的 APK 文件将显示在底部区域。在修补过程中，您可以选择已下载的 APK 文件，也可以通过插件下载。\n\n支持的下载器插件列表请参见此处。</string>
+    <string name="here">此处</string>
 </resources>
