@@ -289,26 +289,16 @@
     <string name="disable_patch_selection_confirmations">禁用操作确认</string>
     <string name="disable_patch_selection_confirmations_description">跳过补丁选择操作的确认对话框</string>
     <string name="disable_patch_selection_confirmations_warning">禁用确认可能导致意外的批量更改。</string>
-
-    <string name="patch_selection_collapse_on_toggle">Collapse actions after toggling patches</string>
-
-    <string name="patch_selection_collapse_on_toggle_description">Automatically hide the patch selection action buttons whenever you select or deselect a patch</string>
-
-    <string name="patch_selection_action_order_title">Patch selection action buttons order</string>
-
-    <string name="patch_selection_action_order_description">Choose the layout order for the patch selection action buttons</string>
-
-    <string name="patch_selection_action_order_dialog_title">Reorder patch actions</string>
-
-    <string name="patch_selection_action_order_dialog_description">Move the entries to change how the patch selection action buttons are displayed. The preview updates live.</string>
-
-    <string name="patch_selection_action_order_preview_label">Preview</string>
-
-    <string name="patch_selection_action_order_reset">Reset to default order</string>
-
-    <string name="patch_selection_action_move_up">Move up</string>
-
-    <string name="patch_selection_action_move_down">Move down</string>
+    <string name="patch_selection_collapse_on_toggle">切换补丁后折叠操作</string>
+    <string name="patch_selection_collapse_on_toggle_description">选择或取消选择补丁时，自动隐藏补丁选择操作按钮。</string>
+    <string name="patch_selection_action_order_title">补丁选择操作按钮顺序</string>
+    <string name="patch_selection_action_order_description">选择补丁选择操作按钮的布局顺序</string>
+    <string name="patch_selection_action_order_dialog_title">重新排序补丁操作</string>
+    <string name="patch_selection_action_order_dialog_description">移动这些条目即可更改补丁选择操作按钮的显示方式。预览会实时更新。</string>
+    <string name="patch_selection_action_order_preview_label">预览</string>
+    <string name="patch_selection_action_order_reset">重置为默认顺序</string>
+    <string name="patch_selection_action_move_up">向上</string>
+    <string name="patch_selection_action_move_down">向下</string>
     <string name="patch_selection_confirm_deselect_bundle_title">取消选择包？</string>
     <string name="patch_selection_confirm_deselect_bundle_message">取消选择 %1$s 中所有已选择的补丁？</string>
     <string name="patch_selection_confirm_deselect_all_title">取消选择所有补丁？</string>
