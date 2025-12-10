@@ -581,7 +581,16 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="applied_patches_bundle_missing">Dữ liệu metadata của gói không có sẵn. Đang hiện tên các bản vá đã lưu.</string>
     <string name="no_patch_bundles_tracked">Chưa có gói vá nào cho ứng dụng này</string>
     <string name="default_install">Mặc định</string>
-    <string name="mount_install">Gắn kết</string>
+    <!-- Translation needed -->
+    <string name="mount_install">Rooted mount installer</string>
+    <!-- Translation needed -->
+    <string name="install_type_custom_installer">Custom installer</string>
+    <!-- Translation needed -->
+    <string name="install_type_system_installer">System installer</string>
+    <!-- Translation needed -->
+    <string name="install_type_mount_label">Rooted mount installer</string>
+    <!-- Translation needed -->
+    <string name="install_type_shizuku_label">Shizuku</string>
     <string name="mounted">Đã gắn kết</string>
     <string name="not_mounted">Không gắn kết</string>
     <string name="mount">Gắn kết</string>
@@ -619,8 +628,9 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="installer_fallback_description">Được tự động khi trình cài đặt chính không có sẵn.</string>
     <string name="installer_internal_name">Trình cài đặt hệ thống</string>
     <string name="installer_internal_description">Dùng trình cài đặt gói của Android</string>
-    <!-- TODO: Translate "Rooted mount installer" and its description -->
+    <!-- Translation needed -->
     <string name="installer_auto_saved_name">Rooted mount installer</string>
+    <!-- Translation needed -->
     <string name="installer_auto_saved_description">Mounts the patched APK over the installed app (root required).</string>
     <string name="installer_shizuku_name">Shizuku</string>
     <string name="installer_shizuku_description">Cài ẩn bằng Shizuku hoặc Sui.</string>
@@ -674,9 +684,15 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="installer_external_timeout">%1$s không xác nhận cài đặt. Kiểm tra ứng dụng khác và thử lại.</string>
     <string name="installer_external_success">%1$s báo đã cài đặt thành công.</string>
     <string name="install_app">Cài đặt</string>
-    <string name="install_app_success">Đã cài đặt ứng dụng</string>
+    <!-- Translation needed -->
+    <string name="install_app_success">Installed successfully</string>
     <string name="install_app_fail_title">Không thể cài đặt</string>
-    <string name="install_app_fail">Cài đặt ứng dụng thất bại: %s</string>
+    <!-- Translation needed -->
+    <string name="install_app_fail">Failed to install app: %s</string>
+    <!-- Translation needed -->
+    <string name="mount_app_fail_title">Mount failed</string>
+    <!-- Translation needed -->
+    <string name="mount_app_fail">Failed to mount app: %1$s</string>
     <string name="install_timeout_message">Cài đặt không thành công. Kiểm tra hộp thoại cài đặt hệ thống và thử lại.</string>
     <string name="reinstall_app_fail">Cài đặt lại ứng dụng thất bại: %s</string>
     <string name="uninstall_app_fail">Gỡ cài đặt ứng dụng thất bại: %s</string>
@@ -721,7 +737,16 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="patcher_notification_text">Chạm để quay trở lại trình vá</string>
     <string name="patcher_stop_confirm_title">Ngừng vá</string>
     <string name="patcher_stop_confirm_description">Bạn có chắc chắn muốn ngừng tiến trình vá không?</string>
+    <!-- Translation needed -->
+    <!-- Translation needed -->`n    <string name="patcher_install_in_progress_title">Installation in progress</string>
     <string name="patcher_install_in_progress">Quá trình cài đặt đang diễn ra. Vui lòng đợi</string>
+    <!-- Translation needed -->
+    <!-- Translation needed -->`n    <string name="patcher_install_in_progress_leave">Leave anyway</string>
+    <!-- Translation needed -->`n    <string name="patcher_install_in_progress_stay">Stay here</string>
+    <!-- Translation needed -->
+    <!-- Translation needed -->`n    <string name="patcher_mount_in_progress_title">Mount in progress</string>
+    <!-- Translation needed -->
+    <!-- Translation needed -->`n    <string name="patcher_mount_in_progress">Mount is in progress. Please wait</string>
     <string name="execute_patches">Thực thi các bản vá</string>
     <string name="executing_patch">Thực thi %s</string>
     <string name="failed_to_execute_patch">Không thể thực thi %s</string>
@@ -888,14 +913,61 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="installer_mount_warning_uninstall">Your primary installer is set to the rooted mount installer. This saved app was not installed using mount.</string>
     <!-- Translation needed -->
     <string name="installer_mount_mismatch_title">Rooted mount installer not selected</string>
-    <!-- Translation needed -->
-    <string name="installer_mount_mismatch_install">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, or install normally instead.</string>
-    <!-- Translation needed -->
-    <string name="installer_mount_mismatch_update">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, or update normally instead.</string>
-    <!-- Translation needed -->
-    <string name="installer_mount_mismatch_uninstall">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, or uninstall normally instead.</string>
+    <!-- Needs translation -->
+    <string name="installer_mount_mismatch_install">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, then mount.</string>
+    <!-- Needs translation -->
+    <string name="installer_mount_mismatch_update">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, then remount.</string>
+    <!-- Needs translation -->
+    <string name="installer_mount_mismatch_uninstall">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, then unmount.</string>
     <!-- Translation needed -->
     <string name="installing_ellipsis">Installing…</string>
     <!-- Translation needed -->
     <string name="mounting_ellipsis">Mounting…</string>
+    <!-- Translation needed -->
+    <string name="bundle_links_title">Links for %1$s</string>
+    <!-- Translation needed -->
+    <string name="bundle_link_release">GitHub release</string>
+    <!-- Translation needed -->
+    <string name="bundle_link_catalog">Patch list catalog</string>
+    <!-- Translation needed -->
+    <string name="bundle_catalog_unavailable">Patch list catalog unavailable</string>
+    <!-- Translation needed -->
+    <string name="plugins_help_title">What is a downloader?</string>
+    <!-- Translation needed -->
+    <string name="plugins_help_description">A downloader is a plugin which allows URV to download stock APKs from various sources. The downloaded APKs will be shown in the bottom section. During the patching process, you can choose an already downloaded APKs or you can download it via a plugin.\n\nThe list of supported downloader plugins can be found</string>
+    <!-- Translation needed -->
+    <string name="language_settings">Language</string>
+    <!-- Translation needed -->
+    <string name="app_language">App language</string>
+    <!-- Translation needed -->
+    <string name="language_dialog_title">Choose app language</string>
+    <!-- Translation needed -->
+    <string name="language_option_system">Use device language</string>
+    <!-- Translation needed -->
+    <string name="language_option_english">English</string>
+    <!-- Translation needed -->
+    <string name="language_option_chinese_simplified">Chinese (Simplified)</string>
+    <!-- Translation needed -->
+    <string name="language_option_korean">Korean</string>
+    <!-- Translation needed -->
+    <string name="language_option_vietnamese">Vietnamese</string>
+    <!-- Translation needed -->
+    <string name="unmounted">Unmounted</string>
+    <!-- Translation needed -->
+    <string name="unmounting">Unmounting…</string>
+    <!-- Translation needed -->
+    <string name="saved_app_uninstall_title">Uninstall installed copy?</string>
+    <!-- Translation needed -->
+    <string name="saved_app_uninstall_description">This removes the installed version only. Your saved APK stays intact.</string>
+    <!-- Translation needed -->
+    <string name="patcher_step_prepare_split_apk">Merge split APK</string>
+    <!-- Translation needed -->
+    <string name="patcher_step_merge_not_required">No split merge required</string>
+    <!-- Translation needed -->
+    <string name="here">here.</string>
+    <!-- Translation needed -->
+    <string name="mount_version_mismatch_title">Mount failed</string>
+    <!-- Translation needed -->
+    <string name="mount_version_mismatch_message">Stock app version (%2$s) does not match patched app version (%1$s). Mount the matching stock version, then try again.</string>
 </resources>
+

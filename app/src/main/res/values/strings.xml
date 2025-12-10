@@ -617,12 +617,17 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="applied_patches_bundle_missing">Bundle metadata unavailable. Showing saved patch names.</string>
     <string name="no_patch_bundles_tracked">No patch bundles recorded for this app</string>
     <string name="default_install">Default</string>
-    <string name="mount_install">Mount</string>
+    <string name="mount_install">Rooted mount installer</string>
     <string name="mounted">Mounted</string>
     <string name="unmounted">Unmounted</string>
+    <string name="install_type_custom_installer">Custom installer</string>
+    <string name="install_type_system_installer">System installer</string>
+    <string name="install_type_mount_label">Rooted mount installer</string>
+    <string name="install_type_shizuku_label">Shizuku</string>
     <string name="not_mounted">Not mounted</string>
     <string name="mount">Mount</string>
     <string name="unmount">Unmount</string>
+    <string name="unmount_confirm_description">Do you want to unmount the app?</string>
     <string name="saved_install">Saved</string>
     <string name="failed_to_mount">Failed to mount: %s</string>
     <string name="failed_to_unmount">Failed to unmount: %s</string>
@@ -678,9 +683,11 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="installer_mount_warning_update">Your primary installer is set to the rooted mount installer. This saved app was not installed using mount.</string>
     <string name="installer_mount_warning_uninstall">Your primary installer is set to the rooted mount installer. This saved app was not installed using mount.</string>
     <string name="installer_mount_mismatch_title">Rooted mount installer not selected</string>
-    <string name="installer_mount_mismatch_install">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, or install normally instead.</string>
-    <string name="installer_mount_mismatch_update">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, or update normally instead.</string>
-    <string name="installer_mount_mismatch_uninstall">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, or uninstall normally instead.</string>
+    <string name="installer_mount_mismatch_install">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, then mount.</string>
+    <string name="installer_mount_mismatch_update">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, then remount.</string>
+    <string name="installer_mount_mismatch_uninstall">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, then unmount.</string>
+    <string name="mount_version_mismatch_title">Mount failed</string>
+    <string name="mount_version_mismatch_message">Stock app version (%2$s) does not match patched app version (%1$s). Mount the matching stock version, then try again.</string>
     <string name="installer_status_shizuku_unsupported">The installed Shizuku version is not supported.</string>
     <string name="installer_action_open_shizuku">Open Shizuku</string>
     <string name="installer_shizuku_launch_failed">Unable to open Shizuku. Launch it manually and try again.</string>
@@ -727,9 +734,11 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="mounting_ellipsis">Mounting…</string>
     <string name="unmounting">Unmounting…</string>
     <string name="install_app">Install</string>
-    <string name="install_app_success">App installed</string>
+    <string name="install_app_success">Installed successfully</string>
     <string name="install_app_fail_title">Installation failed</string>
     <string name="install_app_fail">Failed to install app: %s</string>
+    <string name="mount_app_fail_title">Mount failed</string>
+    <string name="mount_app_fail">Failed to mount app: %1$s</string>
     <string name="install_timeout_message">Installation did not finish. Check the system installer dialog and try again.</string>
     <string name="reinstall_app_fail">Failed to reinstall app: %s</string>
     <string name="uninstall_app_fail">Failed to uninstall app: %s</string>
@@ -775,7 +784,12 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="patcher_notification_text">Tap to return to the patcher</string>
     <string name="patcher_stop_confirm_title">Stop patcher</string>
     <string name="patcher_stop_confirm_description">Are you sure you want to stop the patching process?</string>
+    <string name="patcher_install_in_progress_title">Installation in progress</string>
     <string name="patcher_install_in_progress">Installation is in progress. Please wait</string>
+    <string name="patcher_install_in_progress_leave">Leave anyway</string>
+    <string name="patcher_install_in_progress_stay">Stay here</string>
+    <string name="patcher_mount_in_progress_title">Mount in progress</string>
+    <string name="patcher_mount_in_progress">Mount is in progress. Please wait</string>
     <string name="execute_patches">Execute patches</string>
     <string name="executing_patch">Execute %s</string>
     <string name="failed_to_execute_patch">Failed to execute %s</string>
@@ -927,3 +941,5 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="confirm">Confirm</string>
     <string name="saved_app_install_cancelled">Installation cancelled</string>
 </resources>
+
+

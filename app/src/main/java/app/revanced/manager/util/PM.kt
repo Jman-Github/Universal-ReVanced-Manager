@@ -131,7 +131,10 @@ class PM(
         return pkgInfo
     }
 
-    fun PackageInfo.label() = this.applicationInfo!!.loadLabel(app.packageManager).toString()
+    fun PackageInfo.label(): String {
+        val raw = this.applicationInfo!!.loadLabel(app.packageManager).toString()
+        return cleanLabel(raw, this.packageName)
+    }
 
     fun getVersionCode(packageInfo: PackageInfo) = PackageInfoCompat.getLongVersionCode(packageInfo)
 
@@ -190,6 +193,18 @@ class PM(
                 setRequestUpdateOwnership(true)
             setInstallReason(PackageManager.INSTALL_REASON_USER)
         }
+
+    private fun cleanLabel(raw: String, packageName: String): String {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) return trimmed
+        // If the label contains the package name or a dotted class, strip to the last segment.
+        val hasDots = trimmed.contains('.')
+        val pkgMatch = packageName.isNotEmpty() && (trimmed.startsWith(packageName) || trimmed.contains(packageName))
+        val base = if (hasDots || pkgMatch) trimmed.substringAfterLast('.') else trimmed
+        val withoutSuffix = base.removeSuffix("Application")
+        val candidate = withoutSuffix.ifBlank { base }
+        return candidate.ifBlank { trimmed }
+    }
 
     private val Context.installIntentSender
         get() = PendingIntent.getService(

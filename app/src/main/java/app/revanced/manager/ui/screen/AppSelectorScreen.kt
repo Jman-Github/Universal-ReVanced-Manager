@@ -105,12 +105,23 @@ fun AppSelectorScreen(
 
     val pickApkLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            uri?.let(vm::handleStorageResult)
+            if (uri != null) {
+                vm.handleStorageResult(uri)
+            } else if (returnToDashboardOnStorage) {
+                onBackClick()
+            }
         }
+    val quickStorageOnly = autoOpenStorage && returnToDashboardOnStorage
     LaunchedEffect(autoOpenStorage) {
         if (autoOpenStorage) {
             pickApkLauncher.launch(APK_FILE_MIME_TYPES)
         }
+    }
+
+    if (quickStorageOnly) {
+        // Skip rendering the selector UI; just trigger the picker and wait for result/back navigation.
+        androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize())
+        return
     }
 
     val suggestedVersions by vm.suggestedAppVersions.collectAsStateWithLifecycle(emptyMap())

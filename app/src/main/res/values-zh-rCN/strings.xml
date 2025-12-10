@@ -616,7 +616,16 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="applied_patches_bundle_missing">包元数据不可用。显示保存的补丁名称。</string>
     <string name="no_patch_bundles_tracked">此应用无补丁包记录</string>
     <string name="default_install">默认</string>
-    <string name="mount_install">挂载</string>
+    <!-- Translation needed -->
+    <string name="mount_install">Rooted mount installer</string>
+    <!-- Translation needed -->
+    <string name="install_type_custom_installer">Custom installer</string>
+    <!-- Translation needed -->
+    <string name="install_type_system_installer">System installer</string>
+    <!-- Translation needed -->
+    <string name="install_type_mount_label">Rooted mount installer</string>
+    <!-- Translation needed -->
+    <string name="install_type_shizuku_label">Shizuku</string>
     <string name="mounted">已挂载</string>
     <string name="not_mounted">未挂载</string>
     <string name="mount">挂载</string>
@@ -660,8 +669,9 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="installer_fallback_description">当主要安装程序不可用时自动使用。</string>
     <string name="installer_internal_name">系统安装程序</string>
     <string name="installer_internal_description">使用 Android 包安装程序</string>
-    <!-- TODO: Translate "Rooted mount installer" and its description -->
+    <!-- Translation needed -->
     <string name="installer_auto_saved_name">Rooted mount installer</string>
+    <!-- Translation needed -->
     <string name="installer_auto_saved_description">Mounts the patched APK over the installed app (root required).</string>
     <string name="installer_shizuku_name">Shizuku</string>
     <string name="installer_shizuku_description">使用 Shizuku 或 Sui 静默安装。</string>
@@ -715,9 +725,15 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="installer_external_timeout">%1$s 未确认安装。请检查其他应用并重试。</string>
     <string name="installer_external_success">%1$s 报告安装成功。</string>
     <string name="install_app">安装</string>
-    <string name="install_app_success">应用已安装</string>
+    <!-- Translation needed -->
+    <string name="install_app_success">Installed successfully</string>
     <string name="install_app_fail_title">安装失败</string>
-    <string name="install_app_fail">安装应用失败：%s</string>
+    <!-- Translation needed -->
+    <string name="install_app_fail">Failed to install app: %s</string>
+    <!-- Translation needed -->
+    <string name="mount_app_fail_title">Mount failed</string>
+    <!-- Translation needed -->
+    <string name="mount_app_fail">Failed to mount app: %1$s</string>
     <string name="install_timeout_message">安装未完成。请检查系统安装程序对话框并重试。</string>
     <string name="reinstall_app_fail">重新安装应用失败：%s</string>
     <string name="uninstall_app_fail">卸载应用失败：%s</string>
@@ -755,7 +771,16 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="patcher_notification_text">点击返回修补程序</string>
     <string name="patcher_stop_confirm_title">停止修补程序</string>
     <string name="patcher_stop_confirm_description">您确定要停止修补过程吗？</string>
+    <!-- Translation needed -->
+    <!-- Translation needed -->`n    <string name="patcher_install_in_progress_title">Installation in progress</string>
     <string name="patcher_install_in_progress">正在安装，请稍候</string>
+    <!-- Translation needed -->
+    <!-- Translation needed -->`n    <string name="patcher_install_in_progress_leave">Leave anyway</string>
+    <!-- Translation needed -->`n    <string name="patcher_install_in_progress_stay">Stay here</string>
+    <!-- Translation needed -->
+    <!-- Translation needed -->`n    <string name="patcher_mount_in_progress_title">Mount in progress</string>
+    <!-- Translation needed -->
+    <!-- Translation needed -->`n    <string name="patcher_mount_in_progress">Mount is in progress. Please wait</string>
     <string name="execute_patches">执行补丁</string>
     <string name="executing_patch">正在执行 %s</string>
     <string name="failed_to_execute_patch">执行 %s 失败</string>
@@ -959,14 +984,24 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <!-- Needs translation -->
     <string name="installer_mount_mismatch_title">Rooted mount installer not selected</string>
     <!-- Needs translation -->
-    <string name="installer_mount_mismatch_install">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, or install normally instead.</string>
+    <string name="installer_mount_mismatch_install">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, then mount.</string>
     <!-- Needs translation -->
-    <string name="installer_mount_mismatch_update">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, or update normally instead.</string>
+    <string name="installer_mount_mismatch_update">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, then remount.</string>
     <!-- Needs translation -->
-    <string name="installer_mount_mismatch_uninstall">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, or uninstall normally instead.</string>
+    <string name="installer_mount_mismatch_uninstall">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, then unmount.</string>
     <!-- Needs translation -->
     <string name="installing_ellipsis">Installing…</string>
     <!-- Translation needed -->
     <string name="mounting_ellipsis">Mounting…</string>
+    <!-- Translation needed -->
+    <string name="language_option_korean">Korean</string>
+    <!-- Translation needed -->
+    <string name="unmounted">Unmounted</string>
+    <!-- Translation needed -->
+    <string name="unmounting">Unmounting…</string>
+    <!-- Translation needed -->
+    <string name="mount_version_mismatch_title">Mount failed</string>
+    <!-- Translation needed -->
+    <string name="mount_version_mismatch_message">Stock app version (%2$s) does not match patched app version (%1$s). Mount the matching stock version, then try again.</string>
 </resources>
 

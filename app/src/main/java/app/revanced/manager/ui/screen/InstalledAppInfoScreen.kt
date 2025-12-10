@@ -44,9 +44,11 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.revanced.manager.R
 import app.revanced.manager.data.room.apps.installed.InstallType
+import app.revanced.manager.domain.installer.InstallerManager
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.ui.component.AppInfo
@@ -84,6 +86,7 @@ fun InstalledAppInfoScreen(
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
     var showAppliedPatchesDialog by rememberSaveable { mutableStateOf(false) }
     var showUniversalBlockedDialog by rememberSaveable { mutableStateOf(false) }
+    var showLeaveInstallDialog by rememberSaveable { mutableStateOf(false) }
     val appliedSelection = viewModel.appliedPatches
     val isInstalledOnDevice = viewModel.isInstalledOnDevice
     val selectionPayload = viewModel.installedApp?.selectionPayload
@@ -229,6 +232,19 @@ fun InstalledAppInfoScreen(
         )
     }
 
+    viewModel.mountVersionMismatchMessage?.let { message ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissMountVersionMismatch,
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissMountVersionMismatch) {
+                    Text(stringResource(R.string.ok))
+                }
+            },
+            title = { Text(stringResource(R.string.mount_version_mismatch_title)) },
+            text = { Text(message) }
+        )
+    }
+
     val mountWarning = viewModel.mountWarning
     if (mountWarning != null) {
         val (descriptionRes, titleRes) = when (mountWarning.reason) {
@@ -272,11 +288,16 @@ fun InstalledAppInfoScreen(
             AppTopBar(
                 title = stringResource(R.string.app_info),
                 scrollBehavior = scrollBehavior,
-                onBackClick = onBackClick
+                onBackClick = {
+                    if (viewModel.isInstalling) showLeaveInstallDialog = true else onBackClick()
+                }
             )
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
     ) { paddingValues ->
+        BackHandler {
+            if (viewModel.isInstalling) showLeaveInstallDialog = true else onBackClick()
+        }
         ColumnWithScrollbar(
             modifier = Modifier
                 .fillMaxSize()
@@ -284,12 +305,9 @@ fun InstalledAppInfoScreen(
         ) {
             val installedApp = viewModel.installedApp ?: return@ColumnWithScrollbar
 
-            val fallbackLabel = viewModel.appInfo?.applicationInfo?.loadLabel(context.packageManager)?.toString()
-                ?: viewModel.installedApp?.currentPackageName?.substringAfterLast('.')
-
             AppInfo(
                 appInfo = viewModel.appInfo,
-                placeholderLabel = fallbackLabel
+                placeholderLabel = null
             ) {
                 Text(installedApp.version, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
 
@@ -331,7 +349,6 @@ fun InstalledAppInfoScreen(
     val exportFileName = remember(exportMetadata, exportFormat) {
         ExportNameFormatter.format(exportFormat, exportMetadata)
     }
-
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(2.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -353,12 +370,39 @@ fun InstalledAppInfoScreen(
         }
 
         when (installType) {
-            InstallType.DEFAULT -> {
-                SegmentedButton(
-                    icon = Icons.Outlined.Delete,
-                    text = stringResource(R.string.uninstall),
-                    onClick = viewModel::uninstall
-                )
+            InstallType.DEFAULT,
+            InstallType.CUSTOM,
+            InstallType.SHIZUKU -> {
+                if (viewModel.hasSavedCopy) {
+                    val installAction: () -> Unit = {
+                        if (viewModel.primaryInstallerIsMount && installType != InstallType.MOUNT) {
+                            val action = if (isInstalledOnDevice) MountWarningAction.UPDATE else MountWarningAction.INSTALL
+                            viewModel.showMountWarning(action, MountWarningReason.PRIMARY_IS_MOUNT_FOR_NON_MOUNT_APP)
+                        } else {
+                            viewModel.installSavedApp()
+                        }
+                    }
+
+                    SegmentedButton(
+                        icon = if (isInstalledOnDevice) Icons.Outlined.Update else Icons.Outlined.InstallMobile,
+                        text = if (isInstalledOnDevice) stringResource(R.string.update) else stringResource(R.string.install_saved_app),
+                        onClick = installAction,
+                        onLongClick = if (isInstalledOnDevice) viewModel::uninstall else null
+                    )
+                    SegmentedButton(
+                        icon = Icons.Outlined.Save,
+                        text = stringResource(R.string.export),
+                        onClick = { exportSavedLauncher.launch(exportFileName) }
+                    )
+                } else {
+                    if (isInstalledOnDevice) {
+                        SegmentedButton(
+                            icon = Icons.Outlined.Delete,
+                            text = stringResource(R.string.uninstall),
+                            onClick = viewModel::uninstall
+                        )
+                    }
+                }
                 SegmentedButton(
                     icon = Icons.Outlined.Update,
                     text = stringResource(R.string.repatch),
@@ -370,9 +414,44 @@ fun InstalledAppInfoScreen(
                         }
                     }
                 )
+                if (viewModel.hasSavedCopy) {
+                    var showDeleteConfirmation by rememberSaveable { mutableStateOf(false) }
+                    if (showDeleteConfirmation) {
+                        ConfirmDialog(
+                            onDismiss = { showDeleteConfirmation = false },
+                            onConfirm = {
+                                showDeleteConfirmation = false
+                                viewModel.deleteSavedEntry()
+                            },
+                            title = stringResource(R.string.delete_saved_entry_title),
+                            description = stringResource(R.string.delete_saved_entry_description),
+                            icon = Icons.Outlined.Delete
+                        )
+                    }
+                    SegmentedButton(
+                        icon = Icons.Outlined.Delete,
+                        text = stringResource(R.string.delete),
+                        onClick = { showDeleteConfirmation = true }
+                    )
+                }
             }
 
             InstallType.MOUNT -> {
+                var showUnmountConfirmation by rememberSaveable { mutableStateOf(false) }
+
+                if (showUnmountConfirmation) {
+                    ConfirmDialog(
+                        onDismiss = { showUnmountConfirmation = false },
+                        onConfirm = {
+                            showUnmountConfirmation = false
+                            viewModel.unmountSavedInstallation()
+                        },
+                        title = stringResource(R.string.unmount),
+                        description = stringResource(R.string.unmount_confirm_description),
+                        icon = Icons.Outlined.Circle
+                    )
+                }
+
                 SegmentedButton(
                     icon = Icons.Outlined.SettingsBackupRestore,
                     text = if (viewModel.isMounted) stringResource(R.string.remount_saved_app) else stringResource(R.string.mount),
@@ -396,33 +475,16 @@ fun InstalledAppInfoScreen(
                                 Toast
                                     .makeText(context, rootRequiredText, Toast.LENGTH_SHORT)
                                     .show()
-                            } else if (!viewModel.primaryInstallerIsMount) {
-                                viewModel.showMountWarning(MountWarningAction.UNINSTALL, MountWarningReason.PRIMARY_NOT_MOUNT_FOR_MOUNT_APP)
                             } else {
-                                viewModel.mountOrUnmount()
+                                if (!viewModel.primaryInstallerIsMount) {
+                                    viewModel.showMountWarning(MountWarningAction.UNINSTALL, MountWarningReason.PRIMARY_NOT_MOUNT_FOR_MOUNT_APP)
+                                } else {
+                                    showUnmountConfirmation = true
+                                }
                             }
                         }
                     } else null
                 )
-                if (viewModel.isMounted) {
-                    SegmentedButton(
-                        icon = Icons.Outlined.Circle,
-                        text = stringResource(R.string.unmount),
-                        onClick = {
-                            if (!hasRoot) {
-                                Toast
-                                    .makeText(context, rootRequiredText, Toast.LENGTH_SHORT)
-                                    .show()
-                                return@SegmentedButton
-                            }
-                            if (!viewModel.primaryInstallerIsMount) {
-                                viewModel.showMountWarning(MountWarningAction.UNINSTALL, MountWarningReason.PRIMARY_NOT_MOUNT_FOR_MOUNT_APP)
-                            } else {
-                                viewModel.mountOrUnmount()
-                            }
-                        }
-                    )
-                }
                 SegmentedButton(
                     icon = Icons.Outlined.Save,
                     text = stringResource(R.string.export),
@@ -438,6 +500,24 @@ fun InstalledAppInfoScreen(
                             onPatchClick(installedApp.originalPackageName, appliedSelection)
                         }
                     }
+                )
+                var showDeleteConfirmation by rememberSaveable { mutableStateOf(false) }
+                if (showDeleteConfirmation) {
+                    ConfirmDialog(
+                        onDismiss = { showDeleteConfirmation = false },
+                        onConfirm = {
+                            showDeleteConfirmation = false
+                            viewModel.deleteSavedEntry()
+                        },
+                        title = stringResource(R.string.delete_saved_entry_title),
+                        description = stringResource(R.string.delete_saved_entry_description),
+                        icon = Icons.Outlined.Delete
+                    )
+                }
+                SegmentedButton(
+                    icon = Icons.Outlined.Delete,
+                    text = stringResource(R.string.delete),
+                    onClick = { showDeleteConfirmation = true }
                 )
             }
 
@@ -570,7 +650,18 @@ fun InstalledAppInfoScreen(
 
                 SettingsListItem(
                     headlineContent = stringResource(R.string.install_type),
-                    supportingContent = stringResource(installedApp.installType.stringResource)
+                    supportingContent = when (installedApp.installType) {
+            InstallType.MOUNT -> stringResource(R.string.install_type_mount_label)
+            InstallType.SHIZUKU -> stringResource(R.string.install_type_shizuku_label)
+            InstallType.DEFAULT, InstallType.CUSTOM -> when (viewModel.primaryInstallerToken) {
+                InstallerManager.Token.Internal -> stringResource(R.string.install_type_system_installer)
+                InstallerManager.Token.AutoSaved -> stringResource(R.string.install_type_mount_label)
+                is InstallerManager.Token.Component,
+                InstallerManager.Token.Shizuku,
+                InstallerManager.Token.None -> stringResource(R.string.install_type_custom_installer)
+                        }
+                        InstallType.SAVED -> stringResource(installedApp.installType.stringResource)
+                    }
                 )
 
                 val bundleSummaryText = when {
@@ -584,6 +675,36 @@ fun InstalledAppInfoScreen(
                 )
             }
         }
+    }
+
+    if (showLeaveInstallDialog) {
+        AlertDialog(
+            onDismissRequest = { showLeaveInstallDialog = false },
+            title = { Text(stringResource(R.string.patcher_install_in_progress_title)) },
+            text = {
+                Text(
+                    stringResource(R.string.patcher_install_in_progress),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showLeaveInstallDialog = false
+                        viewModel.cancelOngoingInstall()
+                        onBackClick()
+                    }
+                ) {
+                    Text(stringResource(R.string.patcher_install_in_progress_leave))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLeaveInstallDialog = false }) {
+                    Text(stringResource(R.string.patcher_install_in_progress_stay))
+                }
+            }
+        )
     }
 }
 

@@ -9,11 +9,19 @@
 - Split APKs now save in Settings > Downloads as merged APks https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/41
 - Gave the GitHub PAT entry in Settings > Advanced the ability to be saved through the manager settings exports. This is a toggable feature and is not on by default
 - Updated the "Uninstall" button to "Unmount" and the "Update" button to "Remount" for saved patched apps in the "Apps" tab for apps installed by the rooted mount installer
+- Added ability for users with root to mount patched apps by changing your primary installer to "Rooted mount installer" https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/40
+- Added a button to the installation in progress dialog on the patcher screen allowing the user to "Leave anyway" and not wait for the installer to finish or timeout/fail
+- Added a "External installer", "Rooted mount installer", "System installer" and "Shizuku" installation types to the app info page for saved patched apps in the "Apps" tab
+- Added a confirmation dialog when tapping the back button during a install on the "App info" page for saved patched apps in the "Apps" tab
 
 
 # Bug fixes
 
 - Fixed patch profiles not saving the selected app version when the APK is provided by a downloader plugin
+- Fixed metadata issues with saved patched apps that would sometimes occur
+- Fixed issues with InstallerX Revived's silent installer and the manager not detecting a install and timing out instead (if the install made by InstallerX Revived fails, the manager cannot detect the failure. Either wait for the installer to timeout, or exit the patcher screen by pressing "Leave anyway" on the dialog) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/43
+- Fixed the select from storage page not graying out non .apk, .apks, .apkm, or .xapk
+- Changed the supported downloader plugins URLs to Brosssh's fork (which has released builds for all plugins)
 
 
 # Docs

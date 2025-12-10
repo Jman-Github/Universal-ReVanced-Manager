@@ -76,10 +76,14 @@ import app.revanced.manager.ui.component.bundle.ImportPatchBundleDialog
 import app.revanced.manager.ui.component.haptics.HapticFloatingActionButton
 import app.revanced.manager.ui.component.haptics.HapticTab
 import app.revanced.manager.ui.viewmodel.DashboardViewModel
+import app.revanced.manager.ui.model.SelectedApp
 import app.revanced.manager.ui.viewmodel.PatchProfileLaunchData
 import app.revanced.manager.ui.viewmodel.PatchProfilesViewModel
 import app.revanced.manager.ui.viewmodel.InstalledAppsViewModel
+import app.revanced.manager.ui.viewmodel.AppSelectorViewModel
 import app.revanced.manager.util.RequestInstallAppsContract
+import app.revanced.manager.util.APK_FILE_MIME_TYPES
+import app.revanced.manager.util.EventEffect
 import app.revanced.manager.util.toast
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
@@ -99,7 +103,7 @@ enum class DashboardPage(
 fun DashboardScreen(
     vm: DashboardViewModel = koinViewModel(),
     onAppSelectorClick: () -> Unit,
-    onStorageSelectClick: () -> Unit,
+    onStorageSelect: (SelectedApp.Local) -> Unit,
     onSettingsClick: () -> Unit,
     onUpdateClick: () -> Unit,
     onDownloaderPluginClick: () -> Unit,
@@ -116,6 +120,14 @@ fun DashboardScreen(
     val showNewDownloaderPluginsNotification by vm.newDownloaderPluginsAvailable.collectAsStateWithLifecycle(
         false
     )
+    val storageVm: AppSelectorViewModel = koinViewModel()
+    EventEffect(flow = storageVm.storageSelectionFlow) { selected ->
+        onStorageSelect(selected)
+    }
+    val storagePickerLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            uri?.let(storageVm::handleStorageResult)
+        }
     val bundleUpdateProgress by vm.bundleUpdateProgress.collectAsStateWithLifecycle(null)
     val bundleImportProgress by vm.bundleImportProgress.collectAsStateWithLifecycle(null)
     val androidContext = LocalContext.current
@@ -394,7 +406,7 @@ fun DashboardScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         HapticFloatingActionButton(
-                            onClick = { attemptAppInput(onStorageSelectClick) }
+                            onClick = { attemptAppInput { storagePickerLauncher.launch(APK_FILE_MIME_TYPES) } }
                         ) {
                             Icon(Icons.Default.Storage, stringResource(R.string.select_from_storage))
                         }

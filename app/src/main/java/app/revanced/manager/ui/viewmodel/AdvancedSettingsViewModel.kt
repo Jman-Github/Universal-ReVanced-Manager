@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import app.universal.revanced.manager.R
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
 import app.revanced.manager.domain.installer.InstallerManager
+import app.revanced.manager.domain.installer.RootInstaller
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.manager.hideInstallerComponent
 import app.revanced.manager.domain.manager.showInstallerComponent
@@ -35,7 +36,8 @@ class AdvancedSettingsViewModel(
     val prefs: PreferencesManager,
     private val app: Application,
     private val patchBundleRepository: PatchBundleRepository,
-    private val installerManager: InstallerManager
+    private val installerManager: InstallerManager,
+    private val rootInstaller: RootInstaller
 ) : ViewModel() {
     val hasOfficialBundle = patchBundleRepository.sources
         .map { sources -> sources.any { it.isDefault } }
@@ -91,6 +93,10 @@ class AdvancedSettingsViewModel(
     }
 
     fun setPrimaryInstaller(token: InstallerManager.Token) = viewModelScope.launch(Dispatchers.Default) {
+        if (token == InstallerManager.Token.AutoSaved) {
+            // Request/verify root in background when user explicitly selects the rooted mount installer.
+            runCatching { withContext(Dispatchers.IO) { rootInstaller.hasRootAccess() } }
+        }
         installerManager.updatePrimaryToken(token)
         val fallback = installerManager.getFallbackToken()
         if (fallback != InstallerManager.Token.None && tokensEqual(fallback, token)) {
@@ -99,6 +105,9 @@ class AdvancedSettingsViewModel(
     }
 
     fun setFallbackInstaller(token: InstallerManager.Token) = viewModelScope.launch(Dispatchers.Default) {
+        if (token == InstallerManager.Token.AutoSaved) {
+            runCatching { withContext(Dispatchers.IO) { rootInstaller.hasRootAccess() } }
+        }
         val primary = installerManager.getPrimaryToken()
         val target = if (token != InstallerManager.Token.None && tokensEqual(primary, token)) {
             InstallerManager.Token.None

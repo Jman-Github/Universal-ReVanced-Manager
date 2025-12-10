@@ -859,7 +859,8 @@ private fun AppSourceSelectorDialog(
                             meta?.installType == InstallType.MOUNT && !hasRoot -> false to stringResource(
                                 R.string.app_source_dialog_option_installed_no_root
                             )
-                            meta?.installType == InstallType.DEFAULT -> false to stringResource(R.string.already_patched)
+                            meta?.installType == InstallType.DEFAULT || meta?.installType == InstallType.CUSTOM ->
+                                false to stringResource(R.string.already_patched)
                             requiredVersion != null && app.version != requiredVersion -> false to stringResource(
                                 R.string.app_source_dialog_option_installed_version_not_suggested,
                                 app.version

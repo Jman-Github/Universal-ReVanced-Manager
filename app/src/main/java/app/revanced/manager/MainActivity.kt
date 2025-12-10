@@ -130,9 +130,7 @@ private fun ReVancedManager(vm: MainViewModel) {
                 onAppSelectorClick = {
                     navController.navigate(AppSelector())
                 },
-                onStorageSelectClick = {
-                    navController.navigate(AppSelector(autoStorage = true, autoStorageReturn = true))
-                },
+                onStorageSelect = { saved -> vm.selectApp(saved) },
                 onUpdateClick = {
                     navController.navigate(Update())
                 },

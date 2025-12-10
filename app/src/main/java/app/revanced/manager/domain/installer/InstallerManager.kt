@@ -40,9 +40,9 @@ class InstallerManager(
     fun listEntries(target: InstallTarget, includeNone: Boolean): List<Entry> {
         val entries = mutableListOf<Entry>()
 
-        entryFor(Token.Internal, target)?.let(entries::add)
-        entryFor(Token.AutoSaved, target)?.let(entries::add)
-        entryFor(Token.Shizuku, target)?.let(entries::add)
+        entryFor(Token.Internal, target, checkRoot = false)?.let(entries::add)
+        entryFor(Token.AutoSaved, target, checkRoot = false)?.let(entries::add)
+        entryFor(Token.Shizuku, target, checkRoot = false)?.let(entries::add)
 
         val activityEntries = queryInstallerActivities()
             .filter(::isInstallerCandidate)
@@ -53,7 +53,7 @@ class InstallerManager(
                 if (isExcludedDuplicate(component.packageName, info.loadLabel(packageManager)?.toString() ?: info.activityInfo.packageName)) {
                     return@mapNotNull null
                 }
-                entryFor(Token.Component(component), target)
+                entryFor(Token.Component(component), target, checkRoot = false)
             }
             .sortedBy { it.label.lowercase() }
 
@@ -61,7 +61,7 @@ class InstallerManager(
 
         val customEntries = readCustomInstallerTokens()
             .mapNotNull { token ->
-                entryFor(token, target)
+                entryFor(token, target, checkRoot = false)
             }
             .filterNot { customEntry ->
                 entries.any { tokensEqual(it.token, customEntry.token) }
@@ -71,7 +71,7 @@ class InstallerManager(
         entries += customEntries
 
         if (includeNone) {
-            entryFor(Token.None, target)?.let(entries::add)
+            entryFor(Token.None, target, checkRoot = false)?.let(entries::add)
         }
 
         return entries
@@ -198,7 +198,7 @@ class InstallerManager(
         val entries = resolveInfos
             .mapNotNull { info ->
                 val component = ComponentName(info.activityInfo.packageName, info.activityInfo.name)
-                entryFor(Token.Component(component), target)
+                entryFor(Token.Component(component), target, checkRoot = false)
             }
             .sortedBy { it.label.lowercase() }
 
@@ -206,7 +206,7 @@ class InstallerManager(
 
         return readCustomInstallerTokens()
             .filter { it.componentName.packageName.equals(normalized, ignoreCase = true) }
-            .mapNotNull { entryFor(it, target) }
+            .mapNotNull { entryFor(it, target, checkRoot = false) }
     }
 
     fun searchInstallerEntries(
@@ -224,7 +224,7 @@ class InstallerManager(
         val customTokens = readCustomInstallerTokens()
         if (normalized.isEmpty()) {
             customTokens.forEach { token ->
-                entryFor(token, target)?.let(::add)
+                entryFor(token, target, checkRoot = false)?.let(::add)
             }
             return results.values.sortedBy { it.label.lowercase() }
         }
@@ -232,7 +232,7 @@ class InstallerManager(
         val lower = normalized.lowercase()
 
         customTokens.forEach { token ->
-            val entry = entryFor(token, target) ?: return@forEach
+            val entry = entryFor(token, target, checkRoot = false) ?: return@forEach
             val packageMatch = token.componentName.packageName.contains(lower, ignoreCase = true)
             val classMatch = token.componentName.className.contains(lower, ignoreCase = true)
             val labelMatch = entry.label.contains(lower, ignoreCase = true)
@@ -243,7 +243,7 @@ class InstallerManager(
             .filter(::isInstallerCandidate)
             .forEach { info ->
                 val component = ComponentName(info.activityInfo.packageName, info.activityInfo.name)
-                val entry = entryFor(Token.Component(component), target) ?: return@forEach
+                val entry = entryFor(Token.Component(component), target, checkRoot = false) ?: return@forEach
                 val label = entry.label.lowercase()
                 val description = entry.description?.lowercase().orEmpty()
                 val packageMatch = component.packageName.contains(lower, ignoreCase = true)
@@ -283,7 +283,6 @@ class InstallerManager(
         runCatching {
             app.revokeUriPermission(plan.uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        plan.sharedFile.delete()
     }
 
     private fun readCustomInstallerTokens(): List<Token.Component> =
@@ -371,7 +370,7 @@ class InstallerManager(
             activityInfo.loadLabel(packageManager)?.toString() ?: componentName.packageName
         }.getOrDefault(componentName.packageName)
 
-    private fun entryFor(token: Token, target: InstallTarget): Entry? = when (token) {
+    private fun entryFor(token: Token, target: InstallTarget, checkRoot: Boolean = true): Entry? = when (token) {
         Token.Internal -> Entry(
             token = Token.Internal,
             label = app.getString(R.string.installer_internal_name),
@@ -392,7 +391,7 @@ class InstallerManager(
             token = Token.AutoSaved,
             label = app.getString(R.string.installer_auto_saved_name),
             description = app.getString(R.string.installer_auto_saved_description),
-            availability = availabilityFor(Token.AutoSaved, target),
+            availability = availabilityFor(Token.AutoSaved, target, checkRoot),
             icon = null
         )
 
@@ -400,12 +399,12 @@ class InstallerManager(
             token = Token.Shizuku,
             label = app.getString(R.string.installer_shizuku_name),
             description = app.getString(R.string.installer_shizuku_description),
-            availability = availabilityFor(Token.Shizuku, target),
+            availability = availabilityFor(Token.Shizuku, target, checkRoot),
             icon = if (shizukuInstaller.isInstalled()) loadInstallerIcon(ShizukuInstaller.PACKAGE_NAME) else null
         )
 
         is Token.Component -> {
-            val availability = availabilityFor(token, target)
+            val availability = availabilityFor(token, target, checkRoot)
             Entry(
                 token = token,
                 label = resolveLabel(token.componentName),
@@ -452,13 +451,13 @@ class InstallerManager(
         return tokens
     }
 
-    private fun availabilityFor(token: Token, target: InstallTarget): Availability = when (token) {
+    private fun availabilityFor(token: Token, target: InstallTarget, checkRoot: Boolean = true): Availability = when (token) {
         Token.Internal -> Availability(true)
         Token.None -> Availability(true)
 
         Token.AutoSaved -> if (!target.supportsRoot) {
             Availability(false, R.string.installer_status_not_supported)
-        } else if (!rootInstaller.hasRootAccess()) {
+        } else if (checkRoot && !rootInstaller.hasRootAccess()) {
             Availability(false, R.string.installer_status_requires_root)
         } else Availability(true)
 

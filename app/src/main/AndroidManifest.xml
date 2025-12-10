@@ -75,7 +75,7 @@
         <provider
             android:name="app.revanced.manager.domain.installer.InstallerFileProvider"
             android:authorities="${applicationId}.installerfileprovider"
-            android:exported="false"
+            android:exported="true"
             android:grantUriPermissions="true" />
 
         <provider

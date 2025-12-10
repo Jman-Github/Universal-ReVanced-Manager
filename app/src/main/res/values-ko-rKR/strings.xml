@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- From PR #42: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/42 -->
 <resources>
     <string name="app_name">Universal ReVanced Manager</string>
     <string name="main_top_title">URV Manager</string>
@@ -451,21 +450,19 @@
     <string name="github_pat_description">GitHub Integration을 위하여 GitHub Personal Access Token이 필요합니다</string>
     <string name="set_github_pat_dialog_title">GitHub PAT 설정</string>
     <string name="set_github_pat_dialog_description">Pull Requests를 외부 소스로 추가할 수 있도록 GitHub Personal Access Token을 설정할 수 있습니다. 범위가 public_repo인 PAT를 생성하세요</string>
-    <!-- Translation needed -->
-    <string name="include_github_pat_in_exports_label">Include in settings export</string>
-    <!-- Translation needed -->
-    <string name="include_github_pat_in_exports_supporting">Adds this PAT to exported manager settings</string>
-    <!-- Translation needed -->
-    <string name="include_github_pat_in_exports_warning">Do not share your PAT. If you include it in a settings export, keep that file private because it contains the token.</string>
+    <string name="include_github_pat_in_exports_label">설정 내보내기에 포함</string>
+    <string name="include_github_pat_in_exports_supporting">내보낼 매니저 설정에 이 PAT를 추가합니다</string>
+    <string name="include_github_pat_in_exports_warning">PAT를 공유하지 마세요. 설정 내보내기에 포함되는 경우에는 토큰이 포함되어 있으므로 해당 파일을 비공개로 유지하세요.</string>
     <string name="language_settings">언어</string>
     <string name="app_language">앱 언어</string>
     <string name="language_dialog_title">앱 언어를 선택하세요</string>
     <string name="language_option_system">기기 언어 사용</string>
     <string name="language_option_english">영어</string>
     <string name="language_option_chinese_simplified">중국어 (간체)</string>
+    <!-- From PR #42: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/42 -->
+    <string name="language_option_korean">한국어</string>
     <!-- From PR #38: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/38 -->
     <string name="language_option_vietnamese">베트남어</string>
-    <string name="language_option_korean">한국어</string>
     <string name="device">기기</string>
     <string name="device_android_version">Android 버전</string>
     <string name="device_model">모델</string>
@@ -519,32 +516,19 @@
     <string name="patch_profile_save_failed_toast">패치 프로필을 저장할 수 없습니다</string>
     <string name="patch_profile_rename">이름 변경</string>
     <string name="patch_profile_rename_title">패치 프로필 이름 변경</string>
-    <!-- Translation needed -->
-    <string name="patch_profile_version_override_action">Patch profile version settings</string>
-    <!-- Translation needed -->
-    <string name="patch_profile_version_override_title">Version settings for "%1$s"</string>
-    <!-- Translation needed -->
-    <string name="patch_profile_version_override_message">Set a specific app version to store with this profile, or target all versions.</string>
-    <!-- Translation needed -->
-    <string name="patch_profile_version_override_label">App version</string>
-    <!-- Translation needed -->
-    <string name="patch_profile_version_override_hint">e.g. 18.27.35</string>
-    <!-- Translation needed -->
-    <string name="patch_profile_version_override_all_versions">Use all versions</string>
-    <!-- Translation needed -->
-    <string name="patch_profile_version_override_saved_toast">Profile version updated</string>
-    <!-- Translation needed -->
-    <string name="patch_profile_version_override_failed_toast">Failed to update profile version</string>
-    <!-- Translation needed -->
-    <string name="patch_profile_version_override_set_to_all">No version entered, saved as "%1$s"</string>
-    <!-- Translation needed -->
-    <string name="patch_profile_version_conflict_title">Keep version override?</string>
-    <!-- Translation needed -->
-    <string name="patch_profile_version_conflict_message">Current version: %1$s\nIncoming version: %2$s\nWhich should be saved to this profile?</string>
-    <!-- Translation needed -->
-    <string name="patch_profile_version_conflict_use_new">Use incoming version</string>
-    <!-- Translation needed -->
-    <string name="patch_profile_version_conflict_keep_existing">Keep existing version</string>
+    <string name="patch_profile_version_override_action">패치 프로필 버전 설정</string>
+    <string name="patch_profile_version_override_title">\"%1$s\" 버전 설정</string>
+    <string name="patch_profile_version_override_message">프로필과 함께 저장될 특정 앱 버전을 설정하거나 모든 버전을 대상으로 지정합니다.</string>
+    <string name="patch_profile_version_override_label">앱 버전</string>
+    <string name="patch_profile_version_override_hint">예) 18.27.35</string>
+    <string name="patch_profile_version_override_all_versions">모든 버전 사용</string>
+    <string name="patch_profile_version_override_saved_toast">프로필 버전을 업데이트하였습니다</string>
+    <string name="patch_profile_version_override_failed_toast">프로필 버전을 업데이트할 수 없습니다</string>
+    <string name="patch_profile_version_override_set_to_all">입력된 버전이 없으므로 \"%1$s\"로 저장하였습니다</string>
+    <string name="patch_profile_version_conflict_title">버전 재정의를 유지하시겠습니까?</string>
+    <string name="patch_profile_version_conflict_message">현재 버전: %1$s\n수신 버전: %2$s\n이 프로필에 무엇을 저장해야 합니까?</string>
+    <string name="patch_profile_version_conflict_use_new">수신 버전 사용</string>
+    <string name="patch_profile_version_conflict_keep_existing">기존 버전 사용</string>
     <string name="patch_profile_empty_state">패치 선택 화면에서 구성을 저장하면 여기에서 확인할 수 있습니다.</string>
     <string name="patch_profile_missing_bundles_toast">이 프로필의 일부 번들을 사용할 수 없으므로 건너뜁니다.</string>
     <string name="patch_profile_changed_patches_toast">이 프로필의 일부 패치 또는 옵션이 더 이상 번들과 일치하지 않아서 건너뜁니다.</string>
@@ -613,8 +597,18 @@
     <string name="applied_patches_bundle_missing">번들 메타데이터를 사용할 수 없습니다. 저장된 패치 이름을 표시합니다.</string>
     <string name="no_patch_bundles_tracked">이 앱에 대한 기록된 패치 번들이 없습니다</string>
     <string name="default_install">기본</string>
-    <string name="mount_install">마운트</string>
+    <!-- Translation needed -->
+    <string name="mount_install">Rooted mount installer</string>
+    <!-- Translation needed -->
+    <string name="install_type_custom_installer">Custom installer</string>
+    <!-- Translation needed -->
+    <string name="install_type_system_installer">System installer</string>
+    <!-- Translation needed -->
+    <string name="install_type_mount_label">Rooted mount installer</string>
+    <!-- Translation needed -->
+    <string name="install_type_shizuku_label">Shizuku</string>
     <string name="mounted">마운트됨</string>
+    <string name="unmounted">마운트 해제됨</string>
     <string name="not_mounted">마운트되지 않음</string>
     <string name="mount">마운트</string>
     <string name="unmount">마운트 해제</string>
@@ -651,9 +645,8 @@
     <string name="installer_fallback_description">기본 설치 프로그램을 사용할 수 없을 경우에 자동으로 사용됩니다.</string>
     <string name="installer_internal_name">시스템 설치 프로그램</string>
     <string name="installer_internal_description">Android 패키지 설치 프로그램를 사용합니다</string>
-    <!-- TODO: Translate "Rooted mount installer" and its description -->
-    <string name="installer_auto_saved_name">Rooted mount installer</string>
-    <string name="installer_auto_saved_description">Mounts the patched APK over the installed app (root required).</string>
+    <string name="installer_auto_saved_name">루팅된 마운트 설치 프로그램</string>
+    <string name="installer_auto_saved_description">설치된 앱 위에 패치된 APK를 마운트합니다(루트 권한이 요구됨).</string>
     <string name="installer_shizuku_name">Shizuku</string>
     <string name="installer_shizuku_description">Shizuku 또는 Sui를 사용하여 자동으로 설치합니다.</string>
     <string name="installer_option_none">대체 없음</string>
@@ -663,6 +656,14 @@
     <string name="installer_status_shizuku_not_installed">이 옵션을 사용하려면 Shizuku 또는 Sui를 설치하세요.</string>
     <string name="installer_status_shizuku_not_running">Shizuku 또는 Sui 을 시작하고 다시 시도하세요.</string>
     <string name="installer_status_shizuku_permission">Shizuku 앱에서 Universal ReVanced Manager에 Shizuku 권한을 부여하세요.</string>
+    <string name="installer_mount_warning_title">루팅된 마운트 설치 프로그램을 선택하였습니다</string>
+    <string name="installer_mount_warning_install">기본 설치 프로그램이 루팅된 마운트 설치 프로그램으로 설정되어 있습니다. 이 저장된 앱은 마운트를 사용하여 설치되지 않았습니다.</string>
+    <string name="installer_mount_warning_update">기본 설치 프로그램이 루팅된 마운트 설치 프로그램으로 설정되어 있습니다. 이 저장된 앱은 마운트를 사용하여 설치되지 않았습니다.</string>
+    <string name="installer_mount_warning_uninstall">기본 설치 프로그램이 루팅된 마운트 설치 프로그램으로 설정되어 있습니다. 이 저장된 앱은 마운트를 사용하여 설치되지 않았습니다.</string>
+    <string name="installer_mount_mismatch_title">루팅된 마운트 설치 프로그램이 선택되어 있지 않았습니다</string>
+    <string name="installer_mount_mismatch_install">이 앱은 루팅된 마운트 설치 프로그램을 사용하여 설치되었습니다. 마운트 작업을 사용하도록 기본 설치 프로그램을 다시 전환하거나, 대신 정상적으로 설치하십시오.</string>
+    <string name="installer_mount_mismatch_update">이 앱은 루팅된 마운트 설치 프로그램을 사용하여 설치되었습니다. 마운트 작업을 사용하도록 기본 설치 프로그램을 다시 전환하거나, 대신 정상적으로 업데이트하십시오.</string>
+    <string name="installer_mount_mismatch_uninstall">이 앱은 루팅된 마운트 설치 프로그램을 사용하여 설치되었습니다. 마운트 작업을 사용하도록 기본 설치 프로그램을 다시 전환하거나, 대신 정상적으로 삭제하십시오.</string>
     <string name="installer_status_shizuku_unsupported">설치된 Shizuku 버전은 지원되지 않습니다.</string>
     <string name="installer_action_open_shizuku">Shizuku 열기</string>
     <string name="installer_shizuku_launch_failed">Shizuku를 열 수 없습니다. 수동으로 실행한 후 다시 시도하세요.</string>
@@ -705,12 +706,12 @@
     <string name="installer_external_launched">%1$s 을 여는 중 …</string>
     <string name="installer_external_timeout">%1$s 에서 설치를 확인하지 못하였습니다. 다른 앱을 확인하고 다시 시도하세요.</string>
     <string name="installer_external_success">%1$s 이 설치 성공을 보고하였습니다.</string>
-    <!-- Translation needed -->
-    <string name="installing_ellipsis">Installing…</string>
-    <!-- Translation needed -->
-    <string name="mounting_ellipsis">Mounting…</string>
+    <string name="installing_ellipsis">설치하는 중 ...</string>
+    <string name="mounting_ellipsis">마운트하는 중 ...</string>
+    <string name="unmounting">마운트 해제하는 중 ...</string>`r`n    <!-- Translation needed -->`r`n    <string name="unmount_confirm_description">Do you want to unmount the app?</string>
     <string name="install_app">설치하기</string>
-    <string name="install_app_success">앱을 설치하였습니다</string>
+    <!-- Translation needed -->
+    <string name="install_app_success">Installed successfully</string>
     <string name="install_app_fail_title">설치할 수 없습니다</string>
     <string name="install_app_fail">앱을 설치할 수 없습니다: %s</string>
     <string name="install_timeout_message">설치가 완료되지 않았습니다. 시스템 설치 프로그램 다이얼로그를 확인하고 다시 시도하세요.</string>
@@ -728,19 +729,16 @@
     <string name="delete_saved_entry_title">저장된 앱 항목 삭제</string>
     <string name="delete_saved_entry_description">저장된 앱 항목과 저장된 APK을 삭제합니다. 앱은 설치된 상태로 유지됩니다.</string>
     <string name="saved_app_launch_unavailable">열기 전에 앱을 설치하세요.</string>
-        <string name="install_saved_app">설치</string>
+    <string name="install_saved_app">설치</string>
+    <string name="remount_saved_app">다시 마운트</string>
     <string name="update_saved_app">업데이트</string>
-    <!-- Translation needed -->
-    <string name="remount_saved_app">Remount</string>
-    <string name="installing_saved_app">저장된 앱을 설치하는 중입니다.</string>
-    <string name="saved_app_install_success">저장된 앱을 설치했습니다</string>
+    <string name="installing_saved_app">저장된 앱을 설치하는 중 ...</string>
+    <string name="saved_app_install_success">저장된 앱을 설치하였습니다</string>
     <string name="saved_app_install_failed">저장된 앱을 설치할 수 없습니다</string>
-    <!-- Translation needed -->
-    <string name="saved_app_unmount_title">Unmount installed copy?</string>
-    <!-- Translation needed -->
-    <string name="saved_app_unmount_description">This unmounts the patched APK. Your saved APK stays intact.</string>
     <string name="saved_app_uninstall_title">저장된 사본을 삭제하시겠습니까?</string>
+    <string name="saved_app_unmount_title">설치된 사본을 마운트 해제하시겠습니까?</string>
     <string name="saved_app_uninstall_description">설치된 버전만 제거합니다. 저장된 APK는 그대로 유지됩니다.</string>
+    <string name="saved_app_unmount_description">패치된 APK를 마운트 해제합니다. 저장된 APK는 그대로 유지됩니다.</string>
     <string name="saved_app_install_missing">저장된 APK를 찾을 수 없습니다</string>
     <string name="delete_saved_copy">저장된 사본을 삭제하였습니다</string>
     <string name="sign_fail">APK 서명을 할 수 없습니다: %s</string>
@@ -759,7 +757,7 @@
     <string name="patcher_notification_title">패치 진행하는 중 …</string>
     <string name="patcher_notification_text">탭하여 패처로 돌아가기</string>
     <string name="patcher_stop_confirm_title">패처 중지</string>
-    <string name="patcher_stop_confirm_description">패처 프로세스를 중지하시겠습니까?</string>
+    <string name="patcher_stop_confirm_description">패치 프로세스를 중지하시겠습니까?</string>
     <string name="patcher_install_in_progress">설치가 진행 중입니다. 잠시만 기다리세요</string>
     <string name="execute_patches">패치를 실행하는 중</string>
     <string name="executing_patch">%s 실행하는 중</string>
@@ -804,7 +802,7 @@
     <string name="patches_delete_single_dialog_description">\"%s\"를 삭제하시겠습니까?</string>
     <string name="patches_delete_multiple_dialog_description">선택된 패치를 삭제하시겠습니까?</string>
     <string name="about_revanced_manager">Universal ReVanced Manager 정보</string>
-    <string name="revanced_manager_description">Universal ReVanced Manager(URV Manager)는 공식 ReVanced Manager의 포크 버전입니다. 두 애플리케이션 모두 ReVanced 패처를 사용하며, 이를 통해 사용자 정의 패치로 앱을 다운로드 및 패치하고 패치 과정을 관리할 수 있습니다. Universal ReVanced Manager에 포함된 고유 기능으로는 패치 번들 표시 이름, 서드파티 패치 번들 가져오기 지원 등이 있습니다. Universal ReVanced Manager가 제공하는 고유 기능의 모든 목록을 확인하세요</string>
+    <string name="revanced_manager_description">Universal ReVanced Manager(URV Manager)는 공식 ReVanced Manager의 포크 버전입니다. 두 애플리케이션 모두 ReVanced Patcher를 사용하며, 이를 통해 사용자 정의 패치로 앱을 다운로드 및 패치하고 패치 과정을 관리할 수 있습니다. Universal ReVanced Manager에 포함된 고유 기능으로는 패치 번들 표시 이름, 서드파티 패치 번들 가져오기 지원 등이 있습니다. Universal ReVanced Manager가 제공하는 고유 기능의 모든 목록을 확인하세요</string>
     <string name="unique_features_label">여기.</string>
     <!-- From PR #37: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/37 -->
     <string name="here">여기.</string>
@@ -906,21 +904,22 @@
     <string name="confirm">확인</string>
     <string name="saved_app_install_cancelled">설치를 취소하였습니다</string>
     <!-- Translation needed -->
-    <string name="installer_mount_warning_title">Rooted mount installer selected</string>
+    <string name="mount_app_fail_title">Mount failed</string>
     <!-- Translation needed -->
-    <string name="installer_mount_warning_install">Your primary installer is set to the rooted mount installer. This saved app was not installed using mount.</string>
+    <string name="mount_app_fail">Failed to mount app: %1$s</string>
     <!-- Translation needed -->
-    <string name="installer_mount_warning_update">Your primary installer is set to the rooted mount installer. This saved app was not installed using mount.</string>
+    <string name="patcher_install_in_progress_title">Installation in progress</string>
     <!-- Translation needed -->
-    <string name="installer_mount_warning_uninstall">Your primary installer is set to the rooted mount installer. This saved app was not installed using mount.</string>
+    <string name="patcher_install_in_progress_leave">Leave anyway</string>
     <!-- Translation needed -->
-    <string name="installer_mount_mismatch_title">Rooted mount installer not selected</string>
+    <string name="patcher_install_in_progress_stay">Stay here</string>
     <!-- Translation needed -->
-    <string name="installer_mount_mismatch_install">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, or install normally instead.</string>
+    <string name="patcher_mount_in_progress_title">Mount in progress</string>
     <!-- Translation needed -->
-    <string name="installer_mount_mismatch_update">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, or update normally instead.</string>
+    <string name="patcher_mount_in_progress">Mount is in progress. Please wait</string>
     <!-- Translation needed -->
-    <string name="installer_mount_mismatch_uninstall">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, or uninstall normally instead.</string>
+    <string name="mount_version_mismatch_title">Mount failed</string>
+    <!-- Translation needed -->
+    <string name="mount_version_mismatch_message">Stock app version (%2$s) does not match patched app version (%1$s). Mount the matching stock version, then try again.</string>
 </resources>
-
 
