@@ -712,7 +712,7 @@
     <string name="install_app_fail_title">설치할 수 없습니다</string>
     <string name="install_app_fail">앱을 설치할 수 없습니다: %s</string>
     <string name="mount_app_fail_title">마운트할 수 없습니다</string>
-    <string name="mount_app_fail">앱을 마운트할 수 없습니디: %1$s</string>
+    <string name="mount_app_fail">앱을 마운트할 수 없습니다: %1$s</string>
     <string name="install_timeout_message">설치가 완료되지 않았습니다. 시스템 설치 프로그램 다이얼로그를 확인하고 다시 시도하세요.</string>
     <string name="reinstall_app_fail">앱을 다시 설치할 수 없습니다: %s</string>
     <string name="uninstall_app_fail">앱을 제거할 수 없습니다: %s</string>
@@ -761,8 +761,8 @@
     <string name="patcher_install_in_progress">설치가 진행 중입니다. 잠시만 기다리세요</string>
     <string name="patcher_install_in_progress_leave">나가기</string>
     <string name="patcher_install_in_progress_stay">머무르기</string>
-    <string name="patcher_mount_in_progress_title">마운트가 진행중 입니다</string>
-    <string name="patcher_mount_in_progress">마운트가 진행중 입니다. 잠시만 기다리세요</string>
+    <string name="patcher_mount_in_progress_title">마운트가 진행 중입니다</string>
+    <string name="patcher_mount_in_progress">마운트가 진행 중입니다. 잠시만 기다리세요</string>
     <string name="execute_patches">패치를 실행하는 중</string>
     <string name="executing_patch">%s 실행하는 중</string>
     <string name="failed_to_execute_patch">%s 을 실행할 수 없습니다</string>
