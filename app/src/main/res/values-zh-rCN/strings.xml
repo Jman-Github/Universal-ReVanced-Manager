@@ -971,6 +971,12 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="plugins_help_title">What is a downloader?</string>
     <!-- Needs translation -->
     <string name="plugins_help_description">A downloader is a plugin which allows URV to download stock APKs from various sources. The downloaded APKs will be shown in the bottom section. During the patching process, you can choose an already downloaded APKs or you can download it via a plugin.\n\nThe list of supported downloader plugins can be found</string>
+    <!-- Translation needed -->
+    <string name="download_settings">Download settings</string>
+    <!-- Translation needed -->
+    <string name="downloader_auto_save_title">Automatically save downloaded APKs</string>
+    <!-- Translation needed -->
+    <string name="downloader_auto_save_description">Keep APKs downloaded through plugins for reuse. Disable to delete them after patching.</string>
     <!-- Needs translation -->
     <string name="here">here.</string>
     <!-- Needs translation -->
