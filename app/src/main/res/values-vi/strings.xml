@@ -15,6 +15,14 @@
     <string name="dashboard">Tổng quan</string>
     <string name="settings">Cài đặt</string>
     <string name="select_app">Chọn ứng dụng</string>
+    <!-- Translation needed -->
+    <string name="app_filter_title">Filter apps</string>
+    <!-- Translation needed -->
+    <string name="app_filter_installed_only">Installed only</string>
+    <!-- Translation needed -->
+    <string name="app_filter_patches_available">Patches available</string>
+    <!-- Translation needed -->
+    <string name="app_filter_no_results">No apps match your filters.</string>
     <string name="patches_count_selected">Đã chọn %1$d/%2$d</string>
     <string name="new_downloader_plugins_notification">Tiện ích tải xuống đã sẵn sàng.\nNhấn vào đây để cấu hình.</string>
     <string name="unsupported_architecture_warning">Kiến trúc thiết bị này không được hỗ trợ vá và khả năng cao sẽ thất bại.</string>

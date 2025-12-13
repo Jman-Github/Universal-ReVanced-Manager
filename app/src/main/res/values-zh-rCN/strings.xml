@@ -18,6 +18,14 @@
     <string name="dashboard">仪表盘</string>
     <string name="settings">设置</string>
     <string name="select_app">选择一个应用</string>
+    <!-- Translation needed -->
+    <string name="app_filter_title">Filter apps</string>
+    <!-- Translation needed -->
+    <string name="app_filter_installed_only">Installed only</string>
+    <!-- Translation needed -->
+    <string name="app_filter_patches_available">Patches available</string>
+    <!-- Translation needed -->
+    <string name="app_filter_no_results">No apps match your filters.</string>
     <string name="patches_count_selected">已选择 %1$d/%2$d</string>
 
     <string name="new_downloader_plugins_notification">有新的下载器插件可用。点击此处进行配置。</string>

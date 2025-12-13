@@ -17,6 +17,10 @@
     <string name="dashboard">Dashboard</string>
     <string name="settings">Settings</string>
     <string name="select_app">Select an app</string>
+    <string name="app_filter_title">Filter apps</string>
+    <string name="app_filter_installed_only">Installed only</string>
+    <string name="app_filter_patches_available">Patches available</string>
+    <string name="app_filter_no_results">No apps match your filters.</string>
     <string name="patches_count_selected">%1$d/%2$d selected</string>
 
     <string name="new_downloader_plugins_notification">New downloader plugins available. Click here to configure them.</string>
@@ -945,4 +949,3 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="confirm">Confirm</string>
     <string name="saved_app_install_cancelled">Installation cancelled</string>
 </resources>
-

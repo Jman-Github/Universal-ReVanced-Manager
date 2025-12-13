@@ -22,11 +22,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.ExpandLess
-import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
@@ -38,6 +39,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -80,6 +83,7 @@ import app.revanced.manager.util.consumeHorizontalScroll
 import app.revanced.manager.util.transparentListItemColors
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -129,15 +133,25 @@ fun AppSelectorScreen(
 
     var filterText by rememberSaveable { mutableStateOf("") }
     var search by rememberSaveable { mutableStateOf(false) }
+    var filterInstalledOnly by rememberSaveable { mutableStateOf(false) }
+    var filterPatchesAvailable by rememberSaveable { mutableStateOf(false) }
+    var showFilterMenu by rememberSaveable { mutableStateOf(false) }
 
     val appList by vm.appList.collectAsStateWithLifecycle(initialValue = emptyList())
-    val filteredAppList = remember(appList, filterText) {
-        appList.filter { app ->
-            (vm.loadLabel(app.packageInfo)).contains(
-                filterText,
+    val filteredAppList = remember(appList, filterText, filterInstalledOnly, filterPatchesAvailable) {
+        appList
+            .asSequence()
+            .filter { app ->
+                if (filterInstalledOnly && app.packageInfo == null) return@filter false
+                if (filterPatchesAvailable && (app.patches ?: 0) <= 0) return@filter false
                 true
-            ) or app.packageName.contains(filterText, true)
-        }
+            }
+            .filter { app ->
+                if (filterText.isBlank()) return@filter true
+                (vm.loadLabel(app.packageInfo)).contains(filterText, true) ||
+                    app.packageName.contains(filterText, true)
+            }
+            .toList()
     }
 
     vm.nonSuggestedVersionDialogSubject?.let {
@@ -154,7 +168,7 @@ fun AppSelectorScreen(
             onActiveChange = { search = it },
             placeholder = { Text(stringResource(R.string.search_apps)) }
         ) {
-            if (appList.isNotEmpty() && filterText.isNotEmpty()) {
+            if (filteredAppList.isNotEmpty() && filterText.isNotEmpty()) {
                 LazyColumnWithScrollbar(modifier = Modifier.fillMaxSize()) {
                     items(
                         items = filteredAppList,
@@ -171,9 +185,9 @@ fun AppSelectorScreen(
                                     Modifier.size(36.dp)
                                 )
                             },
-                            headlineContent = { AppLabel(app.packageInfo) },
+                            headlineContent = { AppLabel(app.packageInfo, defaultText = app.packageName) },
                             supportingContent = { Text(app.packageName) },
-                            trailingContent = app.patches?.let {
+                            trailingContent = app.patches?.takeIf { it > 0 }?.let {
                                 {
                                     Text(
                                         pluralStringResource(
@@ -219,6 +233,43 @@ fun AppSelectorScreen(
                 scrollBehavior = scrollBehavior,
                 onBackClick = onBackClick,
                 actions = {
+                    Box {
+                        val filterTint =
+                            if (filterInstalledOnly || filterPatchesAvailable) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurface
+                        IconButton(onClick = { showFilterMenu = true }) {
+                            Icon(
+                                imageVector = Icons.Outlined.FilterList,
+                                contentDescription = stringResource(R.string.app_filter_title),
+                                tint = filterTint
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showFilterMenu,
+                            onDismissRequest = { showFilterMenu = false }
+                        ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.app_filter_installed_only)) },
+                            trailingIcon = {
+                                if (filterInstalledOnly) Icon(Icons.Filled.Check, null)
+                            },
+                            onClick = {
+                                filterInstalledOnly = !filterInstalledOnly
+                                showFilterMenu = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.app_filter_patches_available)) },
+                            trailingIcon = {
+                                if (filterPatchesAvailable) Icon(Icons.Filled.Check, null)
+                            },
+                            onClick = {
+                                filterPatchesAvailable = !filterPatchesAvailable
+                                showFilterMenu = false
+                            }
+                        )
+                    }
+                    }
                     IconButton(onClick = { search = true }) {
                         Icon(Icons.Outlined.Search, stringResource(R.string.search))
                     }
@@ -257,7 +308,7 @@ fun AppSelectorScreen(
 
             if (appList.isNotEmpty()) {
                 items(
-                    items = appList,
+                    items = filteredAppList,
                     key = { it.packageName }
                 ) { app ->
                     ListItem(
@@ -360,7 +411,7 @@ fun AppSelectorScreen(
                                 }
                             }
                         },
-                        trailingContent = app.patches?.let {
+                        trailingContent = app.patches?.takeIf { it > 0 }?.let {
                             {
                                 Text(
                                     pluralStringResource(
@@ -373,6 +424,29 @@ fun AppSelectorScreen(
                         }
                     )
 
+                }
+                if (appList.isNotEmpty() && filteredAppList.isEmpty()) {
+                    item(key = "app-selector-empty") {
+                        Column(
+                            modifier = Modifier
+                                .fillParentMaxSize()
+                                .padding(32.dp),
+                            verticalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Search,
+                                contentDescription = null,
+                                modifier = Modifier.size(64.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = stringResource(R.string.app_filter_no_results),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             } else {
                 item {

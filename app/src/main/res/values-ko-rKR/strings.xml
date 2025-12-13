@@ -15,6 +15,14 @@
     <string name="dashboard">대시보드</string>
     <string name="settings">설정</string>
     <string name="select_app">앱 선택하기</string>
+    <!-- Translation needed -->
+    <string name="app_filter_title">Filter apps</string>
+    <!-- Translation needed -->
+    <string name="app_filter_installed_only">Installed only</string>
+    <!-- Translation needed -->
+    <string name="app_filter_patches_available">Patches available</string>
+    <!-- Translation needed -->
+    <string name="app_filter_no_results">No apps match your filters.</string>
     <string name="patches_count_selected">%1$d/%2$d 을 선택하였습니다</string>
     <string name="new_downloader_plugins_notification">새로운 다운로더 플러그인을 사용할 수 있습니다. 탭하여 구성하세요.</string>
     <string name="unsupported_architecture_warning">이 기기 아키텍처에 대한 패치는 지원되지 않으며 실패할 가능성이 높습니다.</string>
