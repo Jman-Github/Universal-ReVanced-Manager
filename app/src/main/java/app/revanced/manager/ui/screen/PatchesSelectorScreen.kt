@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -95,6 +94,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import java.util.Locale
 import app.universal.revanced.manager.R
 import app.revanced.manager.patcher.patch.Option
 import app.revanced.manager.patcher.patch.PatchBundleInfo
@@ -234,6 +234,11 @@ fun PatchesSelectorScreen(
     val dialogsOpen = showBundleDialog || showProfileNameDialog
     var actionsExpanded by rememberSaveable { mutableStateOf(false) }
     var showResetConfirmation by rememberSaveable { mutableStateOf(false) }
+    var sortAlphabetically by rememberSaveable { mutableStateOf(false) }
+    var sortSettingsMode by rememberSaveable { mutableStateOf(PatchSortSettingsMode.None.name) }
+    val resolvedSortSettingsMode = remember(sortSettingsMode) {
+        PatchSortSettingsMode.values().firstOrNull { it.name == sortSettingsMode } ?: PatchSortSettingsMode.None
+    }
     LaunchedEffect(patchLazyListStates) {
         snapshotFlow { patchLazyListStates.any { it.isScrollInProgress } }
             .collectLatest { scrolling ->
@@ -300,6 +305,51 @@ fun PatchesSelectorScreen(
                             label = { Text(stringResource(R.string.universal)) },
                         )
                     }
+                }
+
+                Spacer(modifier = Modifier.size(0.dp, 10.dp))
+
+                Text(
+                    text = stringResource(R.string.patch_selector_sheet_filter_sort_title),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+
+                FlowRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    CheckedFilterChip(
+                        selected = sortAlphabetically,
+                        onClick = { sortAlphabetically = !sortAlphabetically },
+                        label = { Text(stringResource(R.string.patch_selector_sheet_filter_sort_alphabetical)) }
+                    )
+
+                    CheckedFilterChip(
+                        selected = resolvedSortSettingsMode == PatchSortSettingsMode.HasSettings,
+                        onClick = {
+                            sortSettingsMode = if (resolvedSortSettingsMode == PatchSortSettingsMode.HasSettings) {
+                                PatchSortSettingsMode.None.name
+                            } else {
+                                PatchSortSettingsMode.HasSettings.name
+                            }
+                        },
+                        label = { Text(stringResource(R.string.patch_selector_sheet_filter_sort_has_settings)) }
+                    )
+
+                    CheckedFilterChip(
+                        selected = resolvedSortSettingsMode == PatchSortSettingsMode.NoSettings,
+                        onClick = {
+                            sortSettingsMode = if (resolvedSortSettingsMode == PatchSortSettingsMode.NoSettings) {
+                                PatchSortSettingsMode.None.name
+                            } else {
+                                PatchSortSettingsMode.NoSettings.name
+                            }
+                        },
+                        label = { Text(stringResource(R.string.patch_selector_sheet_filter_sort_no_settings)) }
+                    )
                 }
             }
         }
@@ -576,6 +626,21 @@ fun PatchesSelectorScreen(
         header: (@Composable () -> Unit)? = null
     ) {
         if (patches.isNotEmpty() && visible) {
+            fun PatchInfo.sortNameKey(): String = name.lowercase(Locale.ROOT)
+            fun PatchInfo.hasSettings(): Boolean = options?.isNotEmpty() == true
+
+            val filteredPatches = when (resolvedSortSettingsMode) {
+                PatchSortSettingsMode.HasSettings -> patches.filter { it.hasSettings() }
+                PatchSortSettingsMode.NoSettings -> patches.filterNot { it.hasSettings() }
+                PatchSortSettingsMode.None -> patches
+            }
+
+            val sortedPatches = if (sortAlphabetically) {
+                filteredPatches.sortedBy { it.sortNameKey() }
+            } else {
+                filteredPatches
+            }
+
             header?.let {
                 item(contentType = 0) {
                     it()
@@ -583,7 +648,7 @@ fun PatchesSelectorScreen(
             }
 
             items(
-                items = patches,
+                items = sortedPatches,
                 key = { it.name },
                 contentType = { 1 }
             ) { patch ->
@@ -745,11 +810,9 @@ fun PatchesSelectorScreen(
                         val currentBundle = bundles.getOrNull(pagerState.currentPage)
                         val currentBundleDisplayName = currentBundle?.let { bundleDisplayNames[it.uid] ?: it.name }
                         val warningEnabled = viewModel.selectionWarningEnabled
-                        val actionRowModifier = Modifier
-                            .width(IntrinsicSize.Min)
-                            .wrapContentWidth(Alignment.End)
-                        val actionRowArrangement =
-                            Arrangement.spacedBy(actionHorizontalSpacing, Alignment.End)
+                        val actionRowWidth = actionButtonWidth * 2 + actionHorizontalSpacing
+                        val actionRowModifier = Modifier.width(actionRowWidth)
+                        val actionRowArrangement = Arrangement.spacedBy(actionHorizontalSpacing)
 
                         val baseSpecs = visibleActionKeys.mapNotNull { key ->
                             when (key) {
@@ -920,7 +983,14 @@ fun PatchesSelectorScreen(
                             actionsExpanded = !actionsExpanded
                         }
 
-                        val actionSpecs = if (actionsExpanded) baseSpecs else emptyList()
+                        val actionSpecs = if (actionsExpanded && baseSpecs.size % 2 == 1) {
+                            baseSpecs + toggleSpec
+                        } else if (actionsExpanded) {
+                            baseSpecs
+                        } else {
+                            emptyList()
+                        }
+                        val showSeparateToggleRow = !actionsExpanded || baseSpecs.size % 2 == 0
                         val columnCount = 2
                         val actionRowCount = ceil(actionSpecs.size / columnCount.toFloat()).toInt()
 
@@ -955,21 +1025,23 @@ fun PatchesSelectorScreen(
                                 }
                             }
 
-                            Row(
-                                modifier = actionRowModifier,
-                                horizontalArrangement = actionRowArrangement,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Spacer(modifier = actionButtonModifier)
-                                SelectionActionButton(
-                                    icon = toggleSpec.icon,
-                                    contentDescription = toggleSpec.contentDescription,
-                                    label = toggleSpec.label,
-                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                    onClick = toggleSpec.onClick,
-                                    enabled = toggleSpec.enabled,
-                                    modifier = actionButtonModifier
-                                )
+                            if (showSeparateToggleRow) {
+                                Row(
+                                    modifier = actionRowModifier,
+                                    horizontalArrangement = actionRowArrangement,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Spacer(modifier = actionButtonModifier)
+                                    SelectionActionButton(
+                                        icon = toggleSpec.icon,
+                                        contentDescription = toggleSpec.contentDescription,
+                                        label = toggleSpec.label,
+                                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                        onClick = toggleSpec.onClick,
+                                        enabled = toggleSpec.enabled,
+                                        modifier = actionButtonModifier
+                                    )
+                                }
                             }
                         }
                     }
@@ -1438,6 +1510,12 @@ private data class SelectionConfirmation(
     val onConfirm: () -> Unit
 )
 
+private enum class PatchSortSettingsMode {
+    None,
+    HasSettings,
+    NoSettings
+}
+
 @Composable
 fun ListHeader(
     title: String,
@@ -1563,4 +1641,3 @@ private fun OptionsDialog(
         }
     }
 }
-

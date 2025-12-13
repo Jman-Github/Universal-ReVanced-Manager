@@ -15,7 +15,8 @@
 - Added a "External installer", "Rooted mount installer", "System installer" and "Shizuku" installation types to the app info page for saved patched apps in the "Apps" tab
 - Added a confirmation dialog when tapping the back button during a install on the "App info" page for saved patched apps in the "Apps" tab
 - Removed the "Default" app selection page filter and replaced it with a "Installed only" and "Patches available" filter, along with making them multiselectable
-- Added new options under "Ptach selection buttons order" in Settings > Advanced which allows the user to hide patch selection page action buttons
+- Added new options under "Ptach selection buttons order" in Settings > Advanced which allows the user to hide patch selection page action buttons https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/54
+- Added 3 new filters to the patch selection page, being a "Alphabetical", a "Has settings" and "No settings" https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/50
 
 
 # Bug fixes

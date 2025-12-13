@@ -664,6 +664,14 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
 
     <string name="patch_selector_sheet_filter_title">筛选</string>
     <string name="patch_selector_sheet_filter_compat_title">兼容性</string>
+    <!-- Translation needed -->
+    <string name="patch_selector_sheet_filter_sort_title">Sorting</string>
+    <!-- Translation needed -->
+    <string name="patch_selector_sheet_filter_sort_alphabetical">Alphabetical</string>
+    <!-- Translation needed -->
+    <string name="patch_selector_sheet_filter_sort_has_settings">Has settings</string>
+    <!-- Translation needed -->
+    <string name="patch_selector_sheet_filter_sort_no_settings">No settings</string>
 
     <string name="string_option_menu_description">更多选项</string>
     <string name="option_preset_custom_value">自定义值</string>
