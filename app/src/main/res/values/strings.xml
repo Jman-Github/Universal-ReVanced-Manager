@@ -733,6 +733,7 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="installer_external_launched">Opening %1$s…</string>
     <string name="installer_external_timeout">%1$s did not confirm the installation. Check the other app and try again.</string>
     <string name="installer_external_success">%1$s reported a successful installation.</string>
+    <string name="installer_external_finished_no_change">%1$s finished without installing the app. Check the installer for an error message and try again.</string>
     <string name="installing_ellipsis">Installing…</string>
     <string name="mounting_ellipsis">Mounting…</string>
     <string name="unmounting">Unmounting…</string>
@@ -944,5 +945,4 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="confirm">Confirm</string>
     <string name="saved_app_install_cancelled">Installation cancelled</string>
 </resources>
-
 

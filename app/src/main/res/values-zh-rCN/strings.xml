@@ -724,6 +724,8 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="installer_external_launched">正在打开 %1$s…</string>
     <string name="installer_external_timeout">%1$s 未确认安装。请检查其他应用并重试。</string>
     <string name="installer_external_success">%1$s 报告安装成功。</string>
+    <!-- Translation needed -->
+    <string name="installer_external_finished_no_change">%1$s finished without installing the app. Check the installer for an error message and try again.</string>
     <string name="install_app">安装</string>
     <!-- Translation needed -->
     <string name="install_app_success">Installed successfully</string>
@@ -1010,4 +1012,3 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <!-- Translation needed -->
     <string name="mount_version_mismatch_message">Stock app version (%2$s) does not match patched app version (%1$s). Mount the matching stock version, then try again.</string>
 </resources>
-

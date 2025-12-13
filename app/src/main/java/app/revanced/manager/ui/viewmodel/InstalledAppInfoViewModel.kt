@@ -8,8 +8,12 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageInfo
 import android.content.pm.PackageInstaller
+import android.content.pm.PackageManager
+import android.content.pm.Signature
 import android.net.Uri
+import android.os.Build
 import android.util.Log
+import androidx.activity.result.ActivityResult
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -34,11 +38,14 @@ import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.simpleMessage
 import app.revanced.manager.util.tag
 import app.revanced.manager.util.toast
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.first
 import java.io.File
@@ -59,11 +66,17 @@ class InstalledAppInfoViewModel(
     private val installerManager: InstallerManager by inject()
     private val shizukuInstaller: ShizukuInstaller by inject()
     private val filesystem: Filesystem by inject()
+    private var launchedActivity: CompletableDeferred<ActivityResult>? = null
+    private val launchActivityChannel = Channel<Intent>()
+    val launchActivityFlow = launchActivityChannel.receiveAsFlow()
+    private var expectedInstallSignature: ByteArray? = null
+    private var baselineInstallSignature: ByteArray? = null
     private var pendingExternalInstall: InstallerManager.InstallPlan.External? = null
     private var externalInstallTimeoutJob: Job? = null
     private var internalInstallTimeoutJob: Job? = null
     private var externalInstallBaseline: Pair<Long?, Long?>? = null
     private var externalInstallStartTime: Long? = null
+    private var externalPackageWasPresentAtStart: Boolean = false
     private var installProgressToastJob: Job? = null
     private var pendingInternalInstallPackage: String? = null
     var isInstalling by mutableStateOf(false)
@@ -270,6 +283,10 @@ class InstalledAppInfoViewModel(
         }
     }
 
+    fun handleActivityResult(result: ActivityResult) {
+        launchedActivity?.complete(result)
+    }
+
     fun installSavedApp() = viewModelScope.launch {
         val app = installedApp ?: return@launch
 
@@ -379,24 +396,57 @@ class InstalledAppInfoViewModel(
         }
     }
 
-    private fun launchExternalInstaller(plan: InstallerManager.InstallPlan.External) {
+    private suspend fun launchExternalInstaller(plan: InstallerManager.InstallPlan.External) {
         pendingExternalInstall?.let(installerManager::cleanup)
         externalInstallTimeoutJob?.cancel()
         internalInstallTimeoutJob?.cancel()
 
         pendingExternalInstall = plan
         externalInstallStartTime = System.currentTimeMillis()
-        externalInstallBaseline = pm.getPackageInfo(plan.expectedPackage)?.let { info ->
+        val baselineInfo = pm.getPackageInfo(plan.expectedPackage)
+        externalPackageWasPresentAtStart = baselineInfo != null
+        externalInstallBaseline = baselineInfo?.let { info ->
             pm.getVersionCode(info) to info.lastUpdateTime
         }
+        baselineInstallSignature = readInstalledSignatureBytes(plan.expectedPackage)
+        expectedInstallSignature = readArchiveSignatureBytes(plan.sharedFile)
         // Ensure the staged APK still exists; if not, fail fast.
         if (!plan.sharedFile.exists()) {
             installerManager.cleanup(plan)
             pendingExternalInstall = null
+            externalPackageWasPresentAtStart = false
             markInstallFailure(context.getString(R.string.install_app_fail, context.getString(R.string.saved_app_install_missing)))
             return
         }
         startInstallProgressToasts()
+        if (isInstallerX(plan) && launchedActivity == null) {
+            val activityDeferred = CompletableDeferred<ActivityResult>()
+            launchedActivity = activityDeferred
+            val launchIntent = Intent(plan.intent).apply { removeFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+            launchActivityChannel.send(launchIntent)
+            monitorExternalInstall(plan)
+            viewModelScope.launch {
+                try {
+                    activityDeferred.await()
+                    delay(EXTERNAL_INSTALLER_RESULT_GRACE_MS)
+                    if (pendingExternalInstall != plan) return@launch
+                    val deadline = System.currentTimeMillis() + EXTERNAL_INSTALLER_POST_CLOSE_TIMEOUT_MS
+                    while (pendingExternalInstall == plan && System.currentTimeMillis() < deadline) {
+                        if (tryHandleExternalInstallSuccess(plan)) return@launch
+                        delay(INSTALL_MONITOR_POLL_MS)
+                    }
+                    if (pendingExternalInstall != plan) return@launch
+                    finishExternalInstallFailure(
+                        plan,
+                        context.getString(R.string.installer_external_finished_no_change, plan.installerLabel)
+                    )
+                } finally {
+                    if (launchedActivity === activityDeferred) launchedActivity = null
+                }
+            }
+            return
+        }
+
         try {
             ContextCompat.startActivity(context, plan.intent, null)
         } catch (error: ActivityNotFoundException) {
@@ -406,6 +456,9 @@ class InstalledAppInfoViewModel(
             externalInstallBaseline = null
             internalInstallTimeoutJob = null
             externalInstallStartTime = null
+            externalPackageWasPresentAtStart = false
+            expectedInstallSignature = null
+            baselineInstallSignature = null
             markInstallFailure(context.getString(R.string.install_app_fail, error.simpleMessage()))
             return
         }
@@ -413,25 +466,90 @@ class InstalledAppInfoViewModel(
         monitorExternalInstall(plan)
     }
 
+    private fun finishExternalInstallFailure(plan: InstallerManager.InstallPlan.External, message: String) {
+        if (pendingExternalInstall != plan) return
+        installerManager.cleanup(plan)
+        pendingExternalInstall = null
+        externalInstallTimeoutJob?.cancel()
+        externalInstallTimeoutJob = null
+        externalInstallBaseline = null
+        externalInstallStartTime = null
+        externalPackageWasPresentAtStart = false
+        expectedInstallSignature = null
+        baselineInstallSignature = null
+        markInstallFailure(message)
+    }
+
+    private fun tryHandleExternalInstallSuccess(plan: InstallerManager.InstallPlan.External): Boolean {
+        val info = pm.getPackageInfo(plan.expectedPackage)
+        val baseline = externalInstallBaseline
+        val updatedSinceStart = info?.let { isUpdatedSinceBaseline(it, baseline, externalInstallStartTime) } ?: false
+        val signatureChangedToExpected =
+            shouldTreatAsInstalledBySignature(plan.expectedPackage, externalPackageWasPresentAtStart)
+        if (info != null && (updatedSinceStart || signatureChangedToExpected)) {
+            handleExternalInstallSuccess(plan.expectedPackage)
+            return true
+        }
+        return false
+    }
+
+    private fun shouldTreatAsInstalledBySignature(packageName: String, packageWasPresentAtStart: Boolean): Boolean {
+        val expected = expectedInstallSignature ?: return false
+        val current = readInstalledSignatureBytes(packageName) ?: return false
+        if (!current.contentEquals(expected)) return false
+        val baseline = baselineInstallSignature
+        if (packageWasPresentAtStart && baseline == null) return false
+        return baseline == null || !baseline.contentEquals(current)
+    }
+
+    private fun readInstalledSignatureBytes(packageName: String): ByteArray? = runCatching {
+        pm.getSignature(packageName).toByteArray()
+    }.getOrNull()
+
+    private fun readArchiveSignatureBytes(file: File): ByteArray? = runCatching {
+        @Suppress("DEPRECATION")
+        val flags = PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.GET_SIGNATURES
+        @Suppress("DEPRECATION")
+        val pkgInfo = context.packageManager.getPackageArchiveInfo(file.absolutePath, flags) ?: return null
+
+        val signature: Signature? =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                pkgInfo.signingInfo?.apkContentsSigners?.firstOrNull()
+                    ?: pkgInfo.signatures?.firstOrNull()
+            } else {
+                pkgInfo.signatures?.firstOrNull()
+            }
+
+        signature?.toByteArray()
+    }.getOrNull()
+
+    private fun isInstallerX(plan: InstallerManager.InstallPlan.External): Boolean {
+        fun normalize(value: String): String = value.lowercase().filter { it.isLetterOrDigit() }
+        val label = normalize(plan.installerLabel)
+        val tokenPkg = (plan.token as? InstallerManager.Token.Component)?.componentName?.packageName.orEmpty()
+        val componentPkg = plan.intent.component?.packageName.orEmpty()
+        val pkg = normalize(if (tokenPkg.isNotBlank()) tokenPkg else componentPkg)
+        return "installerx" in label || "installerx" in pkg || pkg.startsWith("comrosaninstaller")
+    }
+
     private fun monitorExternalInstall(plan: InstallerManager.InstallPlan.External) {
         externalInstallTimeoutJob?.cancel()
         externalInstallTimeoutJob = viewModelScope.launch {
             val timeoutAt = System.currentTimeMillis() + EXTERNAL_INSTALL_TIMEOUT_MS
-            var presentSeen = false
             while (isActive) {
                 if (pendingExternalInstall != plan) return@launch
 
                 val info = pm.getPackageInfo(plan.expectedPackage)
                 if (info != null) {
-                    presentSeen = true
                     val baseline = externalInstallBaseline
                     val updatedSinceStart = isUpdatedSinceBaseline(
                         info,
                         baseline,
                         externalInstallStartTime
                     )
-                    val baselineMissing = baseline == null
-                    if (updatedSinceStart || baselineMissing) {
+                    val signatureChangedToExpected =
+                        shouldTreatAsInstalledBySignature(plan.expectedPackage, externalPackageWasPresentAtStart)
+                    if (updatedSinceStart || signatureChangedToExpected) {
                         handleExternalInstallSuccess(plan.expectedPackage)
                         return@launch
                     }
@@ -449,16 +567,19 @@ class InstalledAppInfoViewModel(
                 val updatedSinceStart = info?.let {
                     isUpdatedSinceBaseline(it, baseline, startTime)
                 } ?: false
+                val signatureChangedToExpected =
+                    shouldTreatAsInstalledBySignature(plan.expectedPackage, externalPackageWasPresentAtStart)
 
                 installerManager.cleanup(plan)
                 pendingExternalInstall = null
                 externalInstallBaseline = null
                 externalInstallStartTime = null
                 internalInstallTimeoutJob = null
+                externalPackageWasPresentAtStart = false
+                expectedInstallSignature = null
+                baselineInstallSignature = null
 
-                if (info != null && (baseline == null || updatedSinceStart)) {
-                    handleExternalInstallSuccess(plan.expectedPackage)
-                } else if (presentSeen && updatedSinceStart) {
+                if (info != null && (updatedSinceStart || signatureChangedToExpected)) {
                     handleExternalInstallSuccess(plan.expectedPackage)
                 } else {
                     markInstallFailure(context.getString(R.string.installer_external_timeout, plan.installerLabel))
@@ -478,6 +599,9 @@ class InstalledAppInfoViewModel(
         externalInstallTimeoutJob = null
         externalInstallBaseline = null
         externalInstallStartTime = null
+        externalPackageWasPresentAtStart = false
+        expectedInstallSignature = null
+        baselineInstallSignature = null
         installerManager.cleanup(plan)
 
         when (plan.target) {
@@ -508,7 +632,7 @@ class InstalledAppInfoViewModel(
         val timestampChanged = baseUpdated != null && updated > baseUpdated
         val started = startTime ?: 0L
         val updatedSinceStart = updated >= started && started > 0L
-        return baseline == null || versionChanged || timestampChanged || updatedSinceStart
+        return versionChanged || timestampChanged || updatedSinceStart
     }
 
     fun uninstallSavedInstallation() = viewModelScope.launch {
@@ -878,12 +1002,15 @@ class InstalledAppInfoViewModel(
         context.unregisterReceiver(uninstallBroadcastReceiver)
         pendingExternalInstall?.let(installerManager::cleanup)
         pendingExternalInstall = null
+        launchedActivity = null
         internalInstallTimeoutJob?.cancel()
         externalInstallTimeoutJob?.cancel()
         externalInstallTimeoutJob = null
         internalInstallTimeoutJob = null
         externalInstallBaseline = null
         externalInstallStartTime = null
+        expectedInstallSignature = null
+        baselineInstallSignature = null
         stopInstallProgressToasts()
     }
 
@@ -893,6 +1020,8 @@ class InstalledAppInfoViewModel(
 
     companion object {
         private const val EXTERNAL_INSTALL_TIMEOUT_MS = 60_000L
+        private const val EXTERNAL_INSTALLER_RESULT_GRACE_MS = 1500L
+        private const val EXTERNAL_INSTALLER_POST_CLOSE_TIMEOUT_MS = 30_000L
         private const val INSTALL_MONITOR_POLL_MS = 1000L
         private const val INSTALL_PROGRESS_TOAST_INTERVAL_MS = 2500L
     }

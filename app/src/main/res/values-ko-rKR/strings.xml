@@ -712,9 +712,13 @@
     <string name="installer_external_launched">%1$s 을 여는 중 …</string>
     <string name="installer_external_timeout">%1$s 에서 설치를 확인하지 못하였습니다. 다른 앱을 확인하고 다시 시도하세요.</string>
     <string name="installer_external_success">%1$s 이 설치 성공을 보고하였습니다.</string>
+    <!-- Translation needed -->
+    <string name="installer_external_finished_no_change">%1$s finished without installing the app. Check the installer for an error message and try again.</string>
     <string name="installing_ellipsis">설치하는 중 ...</string>
     <string name="mounting_ellipsis">마운트하는 중 ...</string>
-    <string name="unmounting">마운트 해제하는 중 ...</string>`r`n    <!-- Translation needed -->`r`n    <string name="unmount_confirm_description">Do you want to unmount the app?</string>
+    <string name="unmounting">마운트 해제하는 중 ...</string>
+    <!-- Translation needed -->
+    <string name="unmount_confirm_description">Do you want to unmount the app?</string>
     <string name="install_app">설치하기</string>
     <!-- Translation needed -->
     <string name="install_app_success">Installed successfully</string>
@@ -928,4 +932,3 @@
     <!-- Translation needed -->
     <string name="mount_version_mismatch_message">Stock app version (%2$s) does not match patched app version (%1$s). Mount the matching stock version, then try again.</string>
 </resources>
-
