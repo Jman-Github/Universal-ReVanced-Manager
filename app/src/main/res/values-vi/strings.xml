@@ -294,6 +294,12 @@
     <!-- Needs translation -->
     <string name="patch_selection_action_order_description">Choose the layout order for the patch selection action buttons</string>
     <!-- Needs translation -->
+    <string name="patch_selection_action_visibility_title">Hide patch selection action buttons</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_action_visibility_description">Choose which patch selection action buttons are shown</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_action_visibility_reset">Show all action buttons</string>
+    <!-- Needs translation -->
     <string name="patch_selection_action_order_dialog_title">Reorder patch actions</string>
     <!-- Needs translation -->
     <string name="patch_selection_action_order_dialog_description">Move the entries to change how the patch selection action buttons are displayed. The preview updates live.</string>

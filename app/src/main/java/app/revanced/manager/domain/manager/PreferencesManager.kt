@@ -67,6 +67,8 @@ class PreferencesManager(
     val collapsePatchActionsOnSelection = booleanPreference("collapse_patch_actions_on_selection", true)
     val patchSelectionActionOrder =
         stringPreference("patch_selection_action_order", PATCH_ACTION_ORDER_DEFAULT)
+    val patchSelectionHiddenActions =
+        stringSetPreference("patch_selection_hidden_actions", emptySet())
 
     val acknowledgedDownloaderPlugins = stringSetPreference("acknowledged_downloader_plugins", emptySet())
     val autoSaveDownloaderApks = booleanPreference("auto_save_downloader_apks", true)
@@ -109,6 +111,7 @@ class PreferencesManager(
         val disablePatchSelectionConfirmations: Boolean? = null,
         val collapsePatchActionsOnSelection: Boolean? = null,
         val patchSelectionActionOrder: String? = null,
+        val patchSelectionHiddenActions: Set<String>? = null,
         val acknowledgedDownloaderPlugins: Set<String>? = null,
         val autoSaveDownloaderApks: Boolean? = null
     )
@@ -150,6 +153,7 @@ class PreferencesManager(
         disablePatchSelectionConfirmations = disablePatchSelectionConfirmations.get(),
         collapsePatchActionsOnSelection = collapsePatchActionsOnSelection.get(),
         patchSelectionActionOrder = patchSelectionActionOrder.get(),
+        patchSelectionHiddenActions = patchSelectionHiddenActions.get(),
         acknowledgedDownloaderPlugins = acknowledgedDownloaderPlugins.get(),
         autoSaveDownloaderApks = autoSaveDownloaderApks.get()
     )
@@ -193,6 +197,7 @@ class PreferencesManager(
         snapshot.disablePatchSelectionConfirmations?.let { disablePatchSelectionConfirmations.value = it }
         snapshot.collapsePatchActionsOnSelection?.let { collapsePatchActionsOnSelection.value = it }
         snapshot.patchSelectionActionOrder?.let { patchSelectionActionOrder.value = it }
+        snapshot.patchSelectionHiddenActions?.let { patchSelectionHiddenActions.value = it }
         snapshot.acknowledgedDownloaderPlugins?.let { acknowledgedDownloaderPlugins.value = it }
         snapshot.autoSaveDownloaderApks?.let { autoSaveDownloaderApks.value = it }
     }

@@ -150,11 +150,15 @@ fun PatchesSelectorScreen(
     }
     var showBottomSheet by rememberSaveable { mutableStateOf(false) }
     val actionOrderPref by viewModel.prefs.patchSelectionActionOrder.getAsState()
+    val hiddenActionsPref by viewModel.prefs.patchSelectionHiddenActions.getAsState()
     val orderedActionKeys = remember(actionOrderPref) {
         val parsed = actionOrderPref
             .split(',')
             .mapNotNull { PatchSelectionActionKey.fromStorageId(it.trim()) }
         PatchSelectionActionKey.ensureComplete(parsed)
+    }
+    val visibleActionKeys = remember(orderedActionKeys, hiddenActionsPref) {
+        orderedActionKeys.filterNot { it.storageId in hiddenActionsPref }
     }
     val context = LocalContext.current
     val selectedBundleUids = remember { mutableStateListOf<Int>() }
@@ -747,7 +751,7 @@ fun PatchesSelectorScreen(
                         val actionRowArrangement =
                             Arrangement.spacedBy(actionHorizontalSpacing, Alignment.End)
 
-                        val baseSpecs = orderedActionKeys.mapNotNull { key ->
+                        val baseSpecs = visibleActionKeys.mapNotNull { key ->
                             when (key) {
                                     PatchSelectionActionKey.UNDO -> PatchActionSpec(
                                         key = key,
@@ -916,16 +920,16 @@ fun PatchesSelectorScreen(
                             actionsExpanded = !actionsExpanded
                         }
 
-                        val visibleSpecs = if (actionsExpanded) baseSpecs + toggleSpec else listOf(toggleSpec)
-                        val columnCount = if (actionsExpanded) 2 else 1
-                        val rowCount = ceil(visibleSpecs.size / columnCount.toFloat()).toInt().coerceAtLeast(1)
+                        val actionSpecs = if (actionsExpanded) baseSpecs else emptyList()
+                        val columnCount = 2
+                        val actionRowCount = ceil(actionSpecs.size / columnCount.toFloat()).toInt()
 
                         Column(
                             modifier = Modifier.wrapContentWidth(Alignment.End),
                             horizontalAlignment = Alignment.End,
                             verticalArrangement = Arrangement.spacedBy(actionVerticalSpacing)
                         ) {
-                            repeat(rowCount) { rowIndex ->
+                            repeat(actionRowCount) { rowIndex ->
                                 Row(
                                     modifier = actionRowModifier,
                                     horizontalArrangement = actionRowArrangement,
@@ -933,7 +937,7 @@ fun PatchesSelectorScreen(
                                 ) {
                                     repeat(columnCount) { columnIndex ->
                                         val specIndex = rowIndex * columnCount + columnIndex
-                                        val spec = visibleSpecs.getOrNull(specIndex)
+                                        val spec = actionSpecs.getOrNull(specIndex)
                                         if (spec != null) {
                                             SelectionActionButton(
                                                 icon = spec.icon,
@@ -949,6 +953,23 @@ fun PatchesSelectorScreen(
                                         }
                                     }
                                 }
+                            }
+
+                            Row(
+                                modifier = actionRowModifier,
+                                horizontalArrangement = actionRowArrangement,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Spacer(modifier = actionButtonModifier)
+                                SelectionActionButton(
+                                    icon = toggleSpec.icon,
+                                    contentDescription = toggleSpec.contentDescription,
+                                    label = toggleSpec.label,
+                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                    onClick = toggleSpec.onClick,
+                                    enabled = toggleSpec.enabled,
+                                    modifier = actionButtonModifier
+                                )
                             }
                         }
                     }
@@ -1542,6 +1563,4 @@ private fun OptionsDialog(
         }
     }
 }
-
-
 

@@ -129,6 +129,11 @@ class AdvancedSettingsViewModel(
             prefs.patchSelectionActionOrder.update(serialized)
         }
 
+    fun setPatchSelectionHiddenActions(hidden: Set<String>) =
+        viewModelScope.launch(Dispatchers.Default) {
+            prefs.patchSelectionHiddenActions.update(hidden)
+        }
+
     fun restoreOfficialBundle() = viewModelScope.launch(Dispatchers.Default) {
         val hasBundle = patchBundleRepository.sources.first().any { it.isDefault }
         if (hasBundle) {

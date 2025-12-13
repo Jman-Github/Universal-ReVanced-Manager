@@ -55,6 +55,7 @@ import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.SettingsBackupRestore
 import androidx.compose.material.icons.outlined.UnfoldLess
 import androidx.compose.material.icons.outlined.Undo
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.AlertDialog
@@ -521,6 +522,7 @@ fun AdvancedSettingsScreen(
                 description = R.string.patch_selection_collapse_on_toggle_description,
             )
             val actionOrderPref by viewModel.prefs.patchSelectionActionOrder.getAsState()
+            val hiddenActionsPref by viewModel.prefs.patchSelectionHiddenActions.getAsState()
             val actionOrderList = remember(actionOrderPref) {
                 val parsed = actionOrderPref
                     .split(',')
@@ -632,6 +634,7 @@ fun AdvancedSettingsScreen(
                             }
                             PatchSelectionActionPreview(
                                 order = workingOrder,
+                                hiddenActions = hiddenActionsPref,
                                 centerContent = true,
                                 reorderable = true,
                                 draggingKey = draggingKey,
@@ -698,6 +701,7 @@ fun AdvancedSettingsScreen(
                                 SelectionActionPreviewButton(
                                     icon = previewIconForAction(activeKey),
                                     label = stringResource(activeKey.labelRes),
+                                    hidden = activeKey.storageId in hiddenActionsPref,
                                     width = 132.dp,
                                     floating = true,
                                     reorderable = false,
@@ -712,15 +716,114 @@ fun AdvancedSettingsScreen(
                                 )
                             }
                         }
-                        TextButton(
-                            onClick = {
-                                workingOrder.clear()
-                                workingOrder.addAll(PatchSelectionActionKey.DefaultOrder)
-                                viewModel.setPatchSelectionActionOrder(PatchSelectionActionKey.DefaultOrder)
-                            },
-                            modifier = Modifier.align(Alignment.End)
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(stringResource(R.string.patch_selection_action_order_reset))
+                            Text(
+                                text = stringResource(R.string.patch_selection_action_visibility_title),
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Text(
+                                text = stringResource(R.string.patch_selection_action_visibility_description),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                PatchSelectionActionKey.values()
+                                    .toList()
+                                    .chunked(2)
+                                    .forEach { keys ->
+                                        if (keys.size == 1) {
+                                            val key = keys.first()
+                                            val visible = key.storageId !in hiddenActionsPref
+                                            val setVisible: (Boolean) -> Unit = { isVisible ->
+                                                val updated = hiddenActionsPref.toMutableSet()
+                                                if (isVisible) updated.remove(key.storageId) else updated.add(key.storageId)
+                                                viewModel.setPatchSelectionHiddenActions(updated)
+                                            }
+
+                                            Box(modifier = Modifier.fillMaxWidth()) {
+                                                Row(
+                                                    modifier = Modifier
+                                                        .align(Alignment.Center)
+                                                        .fillMaxWidth(0.5f)
+                                                        .clip(RoundedCornerShape(12.dp))
+                                                        .clickable { setVisible(!visible) }
+                                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        text = stringResource(key.labelRes),
+                                                        modifier = Modifier.weight(1f),
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        maxLines = 1
+                                                    )
+                                                    Switch(
+                                                        checked = visible,
+                                                        onCheckedChange = setVisible
+                                                    )
+                                                }
+                                            }
+                                        } else {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                            ) {
+                                                keys.forEach { key ->
+                                                    val visible = key.storageId !in hiddenActionsPref
+                                                    val setVisible: (Boolean) -> Unit = { isVisible ->
+                                                        val updated = hiddenActionsPref.toMutableSet()
+                                                        if (isVisible) updated.remove(key.storageId) else updated.add(key.storageId)
+                                                        viewModel.setPatchSelectionHiddenActions(updated)
+                                                    }
+
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .weight(1f)
+                                                            .clip(RoundedCornerShape(12.dp))
+                                                            .clickable { setVisible(!visible) }
+                                                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Text(
+                                                            text = stringResource(key.labelRes),
+                                                            modifier = Modifier.weight(1f),
+                                                            style = MaterialTheme.typography.bodyMedium,
+                                                            maxLines = 1
+                                                        )
+                                                        Switch(
+                                                            checked = visible,
+                                                            onCheckedChange = setVisible
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                TextButton(
+                                    onClick = { viewModel.setPatchSelectionHiddenActions(emptySet()) }
+                                ) {
+                                    Text(stringResource(R.string.patch_selection_action_visibility_reset))
+                                }
+                                TextButton(
+                                    onClick = {
+                                        workingOrder.clear()
+                                        workingOrder.addAll(PatchSelectionActionKey.DefaultOrder)
+                                        viewModel.setPatchSelectionActionOrder(PatchSelectionActionKey.DefaultOrder)
+                                    }
+                                ) {
+                                    Text(stringResource(R.string.patch_selection_action_order_reset))
+                                }
+                            }
                         }
                     }
                 }
@@ -799,6 +902,7 @@ private enum class InstallerDialogTarget {
 @Composable
 private fun PatchSelectionActionPreview(
     order: List<PatchSelectionActionKey>,
+    hiddenActions: Set<String> = emptySet(),
     modifier: Modifier = Modifier,
     centerContent: Boolean = false,
     reorderable: Boolean = false,
@@ -831,6 +935,7 @@ private fun PatchSelectionActionPreview(
                     SelectionActionPreviewButton(
                         icon = previewIconForAction(key),
                         label = stringResource(key.labelRes),
+                        hidden = key.storageId in hiddenActions,
                         width = buttonWidth,
                         dragging = draggingKey == key,
                         highlighted = highlightKey == key,
@@ -881,6 +986,7 @@ private fun PatchSelectionActionPreview(
 private fun SelectionActionPreviewButton(
     icon: ImageVector,
     label: String,
+    hidden: Boolean = false,
     width: Dp,
     modifier: Modifier = Modifier,
     dragging: Boolean = false,
@@ -933,6 +1039,7 @@ private fun SelectionActionPreviewButton(
                         shadowElevation = 24f
                     }
                     ghost -> alpha = 0.1f
+                    hidden -> alpha = 0.55f
                 }
             }
             .then(dragModifier),
@@ -947,8 +1054,35 @@ private fun SelectionActionPreviewButton(
             shape = RoundedCornerShape(18.dp),
             modifier = Modifier.size(52.dp)
         ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
+            Box(modifier = Modifier.fillMaxSize()) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .size(20.dp)
+                )
+
+                if (hidden) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceColorAtElevation(6.dp).copy(alpha = 0.9f),
+                        shape = RoundedCornerShape(999.dp),
+                        tonalElevation = 2.dp,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(4.dp)
+                            .size(18.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Outlined.VisibilityOff,
+                                contentDescription = null,
+                                modifier = Modifier.size(12.dp),
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
             }
         }
         Surface(

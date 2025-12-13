@@ -309,6 +309,9 @@
     <string name="patch_selection_collapse_on_toggle_description">Automatically hide the patch selection action buttons whenever you select or deselect a patch</string>
     <string name="patch_selection_action_order_title">Patch selection action buttons order</string>
     <string name="patch_selection_action_order_description">Choose the layout order for the patch selection action buttons</string>
+    <string name="patch_selection_action_visibility_title">Hide patch selection action buttons</string>
+    <string name="patch_selection_action_visibility_description">Choose which patch selection action buttons are shown</string>
+    <string name="patch_selection_action_visibility_reset">Show all action buttons</string>
     <string name="patch_selection_action_order_dialog_title">Reorder patch actions</string>
     <string name="patch_selection_action_order_dialog_description">Move the entries to change how the patch selection action buttons are displayed. The preview updates live.</string>
     <string name="patch_selection_action_order_preview_label">Preview</string>

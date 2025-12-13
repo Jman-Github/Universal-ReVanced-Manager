@@ -304,6 +304,12 @@
     <string name="patch_selection_collapse_on_toggle_description">패치를 선택하거나 선택 해제할 때마다 패치 선택 동작 버튼을 자동으로 숨깁니다</string>
     <string name="patch_selection_action_order_title">패치 선택 동작 버튼 순서</string>
     <string name="patch_selection_action_order_description">패치 선택 동작 버튼에 대한 레이아웃 순서를 선택하세요</string>
+    <!-- Translation needed -->
+    <string name="patch_selection_action_visibility_title">Hide patch selection action buttons</string>
+    <!-- Translation needed -->
+    <string name="patch_selection_action_visibility_description">Choose which patch selection action buttons are shown</string>
+    <!-- Translation needed -->
+    <string name="patch_selection_action_visibility_reset">Show all action buttons</string>
     <string name="patch_selection_action_order_dialog_title">패치 동작 다시 정렬</string>
     <string name="patch_selection_action_order_dialog_description">항목을 이동하여 패치 선택 동작 버튼이 표시되는 방식을 변경하세요. 미리보기는 실시간으로 업데이트됩니다.</string>
     <string name="patch_selection_action_order_preview_label">미리보기</string>
