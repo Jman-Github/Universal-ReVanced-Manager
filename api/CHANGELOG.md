@@ -14,9 +14,9 @@
 - Added a button to the installation in progress dialog on the patcher screen allowing the user to "Leave anyway" and not wait for the installer to finish or timeout/fail
 - Added a "External installer", "Rooted mount installer", "System installer" and "Shizuku" installation types to the app info page for saved patched apps in the "Apps" tab
 - Added a confirmation dialog when tapping the back button during a install on the "App info" page for saved patched apps in the "Apps" tab
-- Removed the "Default" app selection page filter and replaced it with a "Installed only" and "Patches available" filter, along with making them multiselectable
-- Added new options under "Ptach selection buttons order" in Settings > Advanced which allows the user to hide patch selection page action buttons https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/54
-- Added 3 new filters to the patch selection page, being a "Alphabetical", a "Has settings" and "No settings" https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/50
+- Removed the "Default" app selection page filter and replaced it with a "Installed only" and "Patches available" filter, along with making them multiselectable https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/54
+- Added new options under "Ptach selection buttons order" in Settings > Advanced which allows the user to hide patch selection page action buttons
+- Added 3 new filters to the patch selection page, being "Alphabetical", "Has settings" and "No settings" https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/50
 
 
 # Bug fixes
@@ -26,6 +26,7 @@
 - Fixed issues with InstallerX Revived's silent installer and the manager not detecting a install and timing out instead (if the install made by InstallerX Revived fails, the manager cannot detect the failure. Either wait for the installer to timeout, or exit the patcher screen by pressing "Leave anyway" on the dialog) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/43
 - Fixed the select from storage page not graying out non .apk, .apks, .apkm, or .xapk
 - Changed the supported downloader plugins URLs to Brosssh's fork (which has released builds for all plugins)
+- Fixed installer selection resetting to the system installer when a third‑party installer (such as InstallerX Revived) is set as the device’s default APK handler https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/26
 
 
 # Docs

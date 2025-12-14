@@ -6,6 +6,7 @@ import android.content.ClipData
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.ActivityInfo
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
 import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
@@ -494,14 +495,32 @@ class InstallerManager(
         )
 
     private fun resolveDefaultInstallerComponent(): ComponentName? {
-        val resolveInfo = packageManager.resolveActivity(
-            Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(dummyUri, APK_MIME)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            },
-            PackageManager.MATCH_DEFAULT_ONLY
-        ) ?: return null
-        val activityInfo = resolveInfo.activityInfo ?: return null
+        fun isSystemApp(packageName: String): Boolean {
+            val info = runCatching { packageManager.getApplicationInfo(packageName, 0) }.getOrNull()
+                ?: return false
+            val flags = ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP
+            return info.flags and flags != 0
+        }
+
+        val candidates = queryInstallerActivities()
+            .filter(::isInstallerCandidate)
+            .filter { isSystemApp(it.activityInfo.packageName) }
+
+        if (candidates.isEmpty()) return null
+
+        val preferredPackages = listOf(
+            "com.google.android.packageinstaller",
+            "com.android.packageinstaller"
+        )
+
+        val chosen = preferredPackages.firstNotNullOfOrNull { pkg ->
+            candidates.firstOrNull { it.activityInfo.packageName == pkg }
+        } ?: candidates.firstOrNull { info ->
+            info.loadLabel(packageManager)?.toString()
+                ?.equals(AOSP_INSTALLER_LABEL, ignoreCase = true) == true
+        } ?: candidates.first()
+
+        val activityInfo = chosen.activityInfo
         return ComponentName(activityInfo.packageName, activityInfo.name)
     }
 
