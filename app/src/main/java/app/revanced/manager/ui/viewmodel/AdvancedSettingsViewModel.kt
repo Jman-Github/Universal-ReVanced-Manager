@@ -175,15 +175,30 @@ class AdvancedSettingsViewModel(
         val removed = installerManager.removeCustomInstaller(component)
         if (removed) {
             prefs.hideInstallerComponent(component)
+            val removedPackage = component.packageName
+            val currentPrimary = installerManager.getPrimaryToken()
+            val currentFallback = installerManager.getFallbackToken()
+            val primaryMatchesRemoved =
+                currentPrimary is InstallerManager.Token.Component &&
+                    currentPrimary.componentName.packageName == removedPackage
+            val fallbackMatchesRemoved =
+                currentFallback is InstallerManager.Token.Component &&
+                    currentFallback.componentName.packageName == removedPackage
+
+            if (primaryMatchesRemoved) {
+                installerManager.updatePrimaryToken(InstallerManager.Token.Internal)
+            }
+            if (fallbackMatchesRemoved) {
+                installerManager.updateFallbackToken(InstallerManager.Token.None)
+            }
+
             val componentAvailable = installerManager.isComponentAvailable(component)
             if (!componentAvailable) {
-                val currentPrimary = installerManager.getPrimaryToken()
                 if (currentPrimary is InstallerManager.Token.Component &&
                     currentPrimary.componentName == component
                 ) {
                     installerManager.updatePrimaryToken(InstallerManager.Token.Internal)
                 }
-                val currentFallback = installerManager.getFallbackToken()
                 if (currentFallback is InstallerManager.Token.Component &&
                     currentFallback.componentName == component
                 ) {

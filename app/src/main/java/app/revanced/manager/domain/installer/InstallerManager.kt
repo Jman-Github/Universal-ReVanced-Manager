@@ -37,8 +37,14 @@ class InstallerManager(
     private val dummyUri: Uri = InstallerFileProvider.buildUri(app, "dummy.apk")
     private val defaultInstallerComponent: ComponentName? by lazy { resolveDefaultInstallerComponent() }
     private val defaultInstallerPackage: String? get() = defaultInstallerComponent?.packageName
+    private val hiddenInstallerPackages: Set<String>
+        get() = prefs.installerHiddenComponents.getBlocking()
+            .mapNotNull(ComponentName::unflattenFromString)
+            .map { it.packageName }
+            .toSet()
 
     fun listEntries(target: InstallTarget, includeNone: Boolean): List<Entry> {
+        val hiddenPackages = hiddenInstallerPackages
         val entries = mutableListOf<Entry>()
 
         entryFor(Token.Internal, target, checkRoot = false)?.let(entries::add)
@@ -51,6 +57,7 @@ class InstallerManager(
             .mapNotNull { info ->
                 val component = ComponentName(info.activityInfo.packageName, info.activityInfo.name)
                 if (isDefaultComponent(component)) return@mapNotNull null
+                if (component.packageName in hiddenPackages) return@mapNotNull null
                 if (isExcludedDuplicate(component.packageName, info.loadLabel(packageManager)?.toString() ?: info.activityInfo.packageName)) {
                     return@mapNotNull null
                 }
@@ -63,6 +70,10 @@ class InstallerManager(
         val customEntries = readCustomInstallerTokens()
             .mapNotNull { token ->
                 entryFor(token, target, checkRoot = false)
+            }
+            .filterNot { entry ->
+                val componentToken = entry.token as? Token.Component ?: return@filterNot false
+                componentToken.componentName.packageName in hiddenPackages
             }
             .filterNot { customEntry ->
                 entries.any { tokensEqual(it.token, customEntry.token) }
