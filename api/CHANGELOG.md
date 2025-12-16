@@ -17,6 +17,7 @@
 - Removed the "Default" app selection page filter and replaced it with a "Installed only" and "Patches available" filter, along with making them multiselectable https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/54
 - Added new options under "Ptach selection buttons order" in Settings > Advanced which allows the user to hide patch selection page action buttons
 - Added 3 new filters to the patch selection page, being "Alphabetical", "Has settings" and "No settings" https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/50
+- Patch bundle importing/updating now shows real-time per-bundle progress (download bytes/total & phases)
 
 
 # Bug fixes

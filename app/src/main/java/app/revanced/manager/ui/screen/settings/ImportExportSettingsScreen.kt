@@ -1,5 +1,6 @@
 package app.revanced.manager.ui.screen.settings
 
+import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
@@ -56,6 +57,7 @@ import app.revanced.manager.ui.viewmodel.ResetDialogState
 import app.revanced.manager.util.JSON_MIMETYPE
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.uiSafe
+import app.revanced.manager.domain.repository.PatchBundleRepository.BundleImportPhase
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
@@ -179,13 +181,39 @@ fun ImportExportSettingsScreen(
             selectorDialog?.invoke()
 
             importProgress?.let { progress ->
+                val subtitleParts = buildList {
+                    add(
+                        stringResource(
+                            R.string.import_patch_bundles_banner_subtitle,
+                            progress.processed,
+                            progress.total
+                        )
+                    )
+                    val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList
+                    val phaseText = when (progress.phase) {
+                        BundleImportPhase.Processing -> "Processing"
+                        BundleImportPhase.Downloading -> "Downloading"
+                        BundleImportPhase.Finalizing -> "Finalizing"
+                    }
+                    val detail = buildString {
+                        append(phaseText)
+                        append(": ")
+                        append(name)
+                        if (progress.phase == BundleImportPhase.Downloading) {
+                            append(" (")
+                            append(Formatter.formatShortFileSize(context, progress.bytesRead))
+                            progress.bytesTotal?.takeIf { it > 0L }?.let { total ->
+                                append("/")
+                                append(Formatter.formatShortFileSize(context, total))
+                            }
+                            append(")")
+                        }
+                    }
+                    add(detail)
+                }
                 DownloadProgressBanner(
                     title = stringResource(R.string.import_patch_bundles_banner_title),
-                    subtitle = stringResource(
-                        R.string.import_patch_bundles_banner_subtitle,
-                        progress.processed,
-                        progress.total
-                    ),
+                    subtitle = subtitleParts.joinToString(" • "),
                     progress = progress.ratio,
                     modifier = Modifier
                         .fillMaxWidth()

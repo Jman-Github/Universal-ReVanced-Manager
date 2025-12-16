@@ -24,6 +24,7 @@ sealed class PatchBundleSource(
     protected val directory: File
 ) {
     protected val patchesFile = directory.resolve("patches.jar")
+    internal val patchesJarFile: File get() = patchesFile
 
     val state = runCatching {
         when {
