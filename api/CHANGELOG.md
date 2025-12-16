@@ -30,6 +30,7 @@
 - Fixed installer selection resetting to the system installer when a third-party installer (such as InstallerX Revived) is set as the device's default APK handler https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/26
 - Fixed manually added custom installers not being removed from the installer selection menus sometimes after the user removes them from their saved custom installers
 - Fixed patch bundle imports/updates sometimes crashing or hanging (empty bundles, PR artifacts missing `.rvp`, and stuck "0/1" updates) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/55
+- Mitigated false "Installation failed" reports when Play Protect scanning delays installs (if a timeout dialog still appears, but it installs successfully, the successful install will supersede the false dialog) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/48
 
 
 # Docs

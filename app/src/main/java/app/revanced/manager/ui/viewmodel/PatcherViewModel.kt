@@ -126,6 +126,7 @@ class PatcherViewModel(
     private var baselineInstallSignature: ByteArray? = null
     private var internalInstallBaseline: Pair<Long?, Long?>? = null
     private var internalInstallMonitorJob: Job? = null
+    private var postTimeoutGraceJob: Job? = null
     private var installProgressToastJob: Job? = null
     private var installProgressToast: Toast? = null
 
@@ -180,6 +181,8 @@ class PatcherViewModel(
             expectedInstallSignature = null
             baselineInstallSignature = null
         } else {
+            postTimeoutGraceJob?.cancel()
+            postTimeoutGraceJob = null
             startInstallProgressToasts()
             suppressFailureAfterSuccess = false
         }
@@ -280,11 +283,69 @@ fun removeMissingPatchesAndStart() {
             delay(durationMs)
             if (installStatus is InstallCompletionStatus.InProgress) {
                 logger.trace("install timeout for $packageName")
+                val baselineSnapshot = internalInstallBaseline ?: externalInstallBaseline
+                val startTimeSnapshot = externalInstallStartTime
+                val expectedSignatureSnapshot = expectedInstallSignature
+                val baselineSignatureSnapshot = baselineInstallSignature
+                val packageWasPresentAtStartSnapshot = externalPackageWasPresentAtStart
+                val installTypeSnapshot = pendingExternalInstall
+                    ?.takeIf { it.expectedPackage == packageName }
+                    ?.let { plan ->
+                        if (plan.token is InstallerManager.Token.Component) InstallType.CUSTOM else InstallType.DEFAULT
+                    }
+                    ?: activeInstallType
+                    ?: InstallType.DEFAULT
+
                 packageInstallerStatus = null
                 if (!tryMarkInstallIfPresent(packageName)) {
                     val message = timeoutMessage?.invoke() ?: app.getString(R.string.install_timeout_message)
                     showInstallFailure(message)
+                    startPostTimeoutGraceWatch(
+                        packageName = packageName,
+                        installType = installTypeSnapshot,
+                        baseline = baselineSnapshot,
+                        startTimeMs = startTimeSnapshot,
+                        expectedSignature = expectedSignatureSnapshot,
+                        baselineSignature = baselineSignatureSnapshot,
+                        packageWasPresentAtStart = packageWasPresentAtStartSnapshot
+                    )
                 }
+            }
+        }
+    }
+
+    private fun startPostTimeoutGraceWatch(
+        packageName: String,
+        installType: InstallType,
+        baseline: Pair<Long?, Long?>?,
+        startTimeMs: Long?,
+        expectedSignature: ByteArray?,
+        baselineSignature: ByteArray?,
+        packageWasPresentAtStart: Boolean
+    ) {
+        postTimeoutGraceJob?.cancel()
+        postTimeoutGraceJob = viewModelScope.launch {
+            val deadline = System.currentTimeMillis() + POST_TIMEOUT_GRACE_MS
+            while (isActive && System.currentTimeMillis() < deadline) {
+                val info = pm.getPackageInfo(packageName)
+                if (info != null) {
+                    val updated = isUpdatedSinceBaseline(info, baseline, startTimeMs)
+                    val signatureChangedToExpected = if (expectedSignature != null) {
+                        val current = readInstalledSignatureBytes(packageName)
+                        current != null &&
+                            current.contentEquals(expectedSignature) &&
+                            (!packageWasPresentAtStart || baselineSignature != null) &&
+                            (baselineSignature == null || !baselineSignature.contentEquals(current))
+                    } else {
+                        false
+                    }
+
+                    if (updated || signatureChangedToExpected) {
+                        forceMarkInstallSuccess(packageName, installType)
+                        return@launch
+                    }
+                }
+                delay(INSTALL_MONITOR_POLL_MS)
             }
         }
     }
@@ -351,6 +412,8 @@ fun removeMissingPatchesAndStart() {
     private fun forceMarkInstallSuccess(packageName: String, installType: InstallType = InstallType.DEFAULT) {
         if (installStatus is InstallCompletionStatus.Success) return
         suppressFailureAfterSuccess = true
+        postTimeoutGraceJob?.cancel()
+        postTimeoutGraceJob = null
         pendingExternalInstall?.let(installerManager::cleanup)
         pendingExternalInstall = null
         externalInstallTimeoutJob?.cancel()
@@ -1058,6 +1121,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             updateInstallingState(true)
             installStatus = InstallCompletionStatus.InProgress
 
+            Log.d(TAG, "performInstall(type=$installType, outputExists=${outputFile.exists()}, output=${outputFile.absolutePath})")
             val currentPackageInfo = pm.getPackageInfo(outputFile)
                 ?: throw Exception("Failed to load application info")
 
@@ -1066,8 +1130,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             if (existingPackageInfo != null) {
                 // Check if the app version is less than the installed version
                 if (pm.getVersionCode(currentPackageInfo) < pm.getVersionCode(existingPackageInfo)) {
-                    // Exit if the selected app version is less than the installed version
-                    packageInstallerStatus = PackageInstaller.STATUS_FAILURE_CONFLICT
+                    val hint = installerManager.formatFailureHint(PackageInstaller.STATUS_FAILURE_CONFLICT, null)
+                        ?: app.getString(R.string.installer_hint_conflict)
+                    showInstallFailure(app.getString(R.string.install_app_fail, hint))
                     return
                 }
             }
@@ -1086,6 +1151,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     }
                     awaitingPackageInstall = currentPackageInfo.packageName
                     try {
+                        Log.d(TAG, "Starting PackageInstaller session for ${currentPackageInfo.packageName}")
                         pm.installApp(listOf(outputFile))
                         pmInstallStarted = true
                         installStatus = InstallCompletionStatus.InProgress
@@ -1129,8 +1195,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                         if (existingPackageInfo == null) {
                             // If the app is not installed, check if the output file is a base apk
                             if (currentPackageInfo.splitNames.isNotEmpty()) {
-                                // Exit if there is no base APK package
-                                packageInstallerStatus = PackageInstaller.STATUS_FAILURE_INVALID
+                                val hint =
+                                    installerManager.formatFailureHint(PackageInstaller.STATUS_FAILURE_INVALID, null)
+                                        ?: app.getString(R.string.installer_hint_invalid)
+                                showInstallFailure(app.getString(R.string.install_app_fail, hint))
                                 return
                             }
                         }
@@ -1201,7 +1269,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             val existingPackageInfo = pm.getPackageInfo(currentPackageInfo.packageName)
             if (existingPackageInfo != null) {
                 if (pm.getVersionCode(currentPackageInfo) < pm.getVersionCode(existingPackageInfo)) {
-                    packageInstallerStatus = PackageInstaller.STATUS_FAILURE_CONFLICT
+                    val hint = installerManager.formatFailureHint(PackageInstaller.STATUS_FAILURE_CONFLICT, null)
+                        ?: app.getString(R.string.installer_hint_conflict)
+                    showInstallFailure(app.getString(R.string.install_app_fail, hint))
                     return
                 }
             }
@@ -1256,6 +1326,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
 
     private suspend fun executeInstallPlan(plan: InstallerManager.InstallPlan) {
+        Log.d(TAG, "executeInstallPlan(plan=${plan::class.java.simpleName})")
         when (plan) {
             is InstallerManager.InstallPlan.Internal -> {
                 pendingExternalInstall?.let(installerManager::cleanup)
@@ -1418,14 +1489,26 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     override fun install() {
         if (isInstalling) return
         viewModelScope.launch {
-            val expectedPackage = pm.getPackageInfo(outputFile)?.packageName ?: packageName
-            val plan = installerManager.resolvePlan(
-                InstallerManager.InstallTarget.PATCHER,
-                outputFile,
-                expectedPackage,
-                null
-            )
-            executeInstallPlan(plan)
+            runCatching {
+                val expectedPackage = pm.getPackageInfo(outputFile)?.packageName ?: packageName
+                Log.d(TAG, "install() requested, expected=$expectedPackage, outputExists=${outputFile.exists()}")
+                val plan = installerManager.resolvePlan(
+                    InstallerManager.InstallTarget.PATCHER,
+                    outputFile,
+                    expectedPackage,
+                    null
+                )
+                Log.d(TAG, "install() resolved plan=${plan::class.java.simpleName}")
+                executeInstallPlan(plan)
+            }.onFailure { error ->
+                Log.e(TAG, "install() failed to start", error)
+                showInstallFailure(
+                    app.getString(
+                        R.string.install_app_fail,
+                        error.simpleMessage() ?: error.javaClass.simpleName.orEmpty()
+                    )
+                )
+            }
         }
     }
 
@@ -1800,8 +1883,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private companion object {
         const val TAG = "ReVanced Patcher"
-        private const val SYSTEM_INSTALL_TIMEOUT_MS = 15_000L
+        private const val SYSTEM_INSTALL_TIMEOUT_MS = 60_000L
         private const val EXTERNAL_INSTALL_TIMEOUT_MS = 60_000L
+        private const val POST_TIMEOUT_GRACE_MS = 5_000L
         private const val EXTERNAL_INSTALLER_RESULT_GRACE_MS = 1500L
         private const val EXTERNAL_INSTALLER_POST_CLOSE_TIMEOUT_MS = 30_000L
         private const val INSTALL_MONITOR_POLL_MS = 500L

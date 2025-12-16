@@ -61,6 +61,13 @@
         <service android:name="app.revanced.manager.service.InstallService" />
         <service android:name="app.revanced.manager.service.UninstallService" />
 
+        <receiver
+            android:name="app.revanced.manager.receiver.InstallReceiver"
+            android:exported="false" />
+        <receiver
+            android:name="app.revanced.manager.receiver.UninstallReceiver"
+            android:exported="false" />
+
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="specialUse"
