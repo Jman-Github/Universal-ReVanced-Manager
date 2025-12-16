@@ -8,6 +8,7 @@ import app.revanced.manager.network.service.HttpService
 import app.revanced.manager.network.utils.getOrThrow
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.header
 import io.ktor.client.request.prepareGet
 import io.ktor.client.request.url
@@ -22,6 +23,7 @@ import kotlinx.datetime.toInstant
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.io.File
+import java.io.IOException
 import java.util.zip.ZipInputStream
 
 data class PatchBundleDownloadResult(
@@ -63,10 +65,16 @@ sealed class RemotePatchBundle(
 
     // PR #35: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35
     protected open suspend fun download(info: ReVancedAsset) = withContext(Dispatchers.IO) {
-        patchBundleOutputStream().use {
-            http.streamTo(it) {
-                url(info.downloadUrl)
+        try {
+            patchBundleOutputStream().use {
+                http.streamTo(it) {
+                    url(info.downloadUrl)
+                }
             }
+            requireNonEmptyPatchesFile("Downloading patch bundle")
+        } catch (t: Throwable) {
+            runCatching { patchesFile.delete() }
+            throw t
         }
 
         PatchBundleDownloadResult(
@@ -227,27 +235,44 @@ class GitHubPullRequestBundle(
                     followSslRedirects(true)
                 }
             }
+            install(HttpTimeout) {
+                connectTimeoutMillis = 10_000
+                socketTimeoutMillis = 10_000
+                requestTimeoutMillis = 5 * 60_000
+            }
         }
 
-        with(customHttpClient) {
-            prepareGet {
-                url(info.downloadUrl)
-                header("Authorization", "Bearer $gitHubPat")
-            }.execute { httpResponse ->
-                patchBundleOutputStream().use { patchOutput ->
-                    ZipInputStream(httpResponse.bodyAsChannel().toInputStream()).use { zis ->
-                        var entry = zis.nextEntry
-                        while (entry != null) {
-                            if (!entry.isDirectory && entry.name.endsWith(".rvp")) {
-                                zis.copyTo(patchOutput)
-                                break
+        try {
+            with(customHttpClient) {
+                prepareGet {
+                    url(info.downloadUrl)
+                    header("Authorization", "Bearer $gitHubPat")
+                }.execute { httpResponse ->
+                    patchBundleOutputStream().use { patchOutput ->
+                        ZipInputStream(httpResponse.bodyAsChannel().toInputStream()).use { zis ->
+                            var copiedBytes = 0L
+                            var entry = zis.nextEntry
+                            while (entry != null) {
+                                if (!entry.isDirectory && entry.name.endsWith(".rvp")) {
+                                    copiedBytes = zis.copyTo(patchOutput)
+                                    break
+                                }
+                                zis.closeEntry()
+                                entry = zis.nextEntry
                             }
-                            zis.closeEntry()
-                            entry = zis.nextEntry
+                            if (copiedBytes <= 0L) {
+                                throw IOException("No .rvp file found in the pull request artifact.")
+                            }
                         }
                     }
                 }
             }
+            requireNonEmptyPatchesFile("Downloading patch bundle")
+        } catch (t: Throwable) {
+            runCatching { patchesFile.delete() }
+            throw t
+        } finally {
+            runCatching { customHttpClient.close() }
         }
 
         PatchBundleDownloadResult(

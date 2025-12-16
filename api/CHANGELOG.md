@@ -26,7 +26,9 @@
 - Fixed issues with InstallerX Revived's silent installer and the manager not detecting a install and timing out instead (if the install made by InstallerX Revived fails, the manager cannot detect the failure. Either wait for the installer to timeout, or exit the patcher screen by pressing "Leave anyway" on the dialog) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/43
 - Fixed the select from storage page not graying out non .apk, .apks, .apkm, or .xapk
 - Changed the supported downloader plugins URLs to Brosssh's fork (which has released builds for all plugins)
-- Fixed installer selection resetting to the system installer when a third‑party installer (such as InstallerX Revived) is set as the device’s default APK handler https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/26
+- Fixed installer selection resetting to the system installer when a third-party installer (such as InstallerX Revived) is set as the device's default APK handler https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/26
+- Fixed manually added custom installers not being removed from the installer selection menus sometimes after the user removes them from their saved custom installers
+- Fixed patch bundle imports/updates sometimes crashing or hanging (empty bundles, PR artifacts missing `.rvp`, and stuck "0/1" updates) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/55
 
 
 # Docs
