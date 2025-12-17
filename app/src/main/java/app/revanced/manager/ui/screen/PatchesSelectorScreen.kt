@@ -10,6 +10,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +29,7 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -45,6 +47,7 @@ import androidx.compose.material.icons.automirrored.outlined.PlaylistAddCheck
 import androidx.compose.material.icons.automirrored.outlined.Redo
 import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.UnfoldLess
 import androidx.compose.material.icons.outlined.UnfoldMore
 import androidx.compose.material.icons.outlined.Restore
@@ -83,16 +86,27 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.util.Locale
 import app.universal.revanced.manager.R
@@ -119,6 +133,7 @@ import app.revanced.manager.ui.viewmodel.PatchesSelectorViewModel.Companion.SHOW
 import app.revanced.manager.util.Options
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.isScrollingUp
+import app.revanced.manager.util.toast
 import kotlinx.coroutines.flow.collectLatest
 import app.revanced.manager.util.transparentListItemColors
 import kotlinx.coroutines.launch
@@ -682,13 +697,177 @@ fun PatchesSelectorScreen(
         }
     }
 
+    val currentBundle = bundles.getOrNull(pagerState.currentPage)
+    val currentBundleDisplayName = currentBundle?.let { bundleDisplayNames[it.uid] ?: it.name }
+    val warningEnabled = viewModel.selectionWarningEnabled
+
+    val actionSpecs = visibleActionKeys.mapNotNull { key ->
+        when (key) {
+            PatchSelectionActionKey.UNDO -> PatchActionSpec(
+                key = key,
+                icon = Icons.AutoMirrored.Outlined.Undo,
+                contentDescription = R.string.patch_selection_button_label_undo_action,
+                label = R.string.patch_selection_button_label_undo_action,
+                enabled = viewModel.canUndo,
+                onClick = viewModel::undoAction
+            )
+
+            PatchSelectionActionKey.REDO -> PatchActionSpec(
+                key = key,
+                icon = Icons.AutoMirrored.Outlined.Redo,
+                contentDescription = R.string.patch_selection_button_label_redo_action,
+                label = R.string.patch_selection_button_label_redo_action,
+                enabled = viewModel.canRedo,
+                onClick = viewModel::redoAction
+            )
+
+            PatchSelectionActionKey.SELECT_BUNDLE -> PatchActionSpec(
+                key = key,
+                icon = Icons.AutoMirrored.Outlined.PlaylistAddCheck,
+                contentDescription = R.string.patch_selection_button_label_select_bundle,
+                label = R.string.patch_selection_button_label_select_bundle,
+                enabled = currentBundle != null
+            ) spec@{
+                if (warningEnabled) {
+                    showSelectionWarning = true
+                    return@spec
+                }
+                val bundle = currentBundle ?: return@spec
+                val bundleName = currentBundleDisplayName ?: bundle.name
+                requestConfirmation(
+                    title = R.string.patch_selection_confirm_select_bundle_title,
+                    message = context.getString(
+                        R.string.patch_selection_confirm_select_bundle_message,
+                        bundleName
+                    )
+                ) {
+                    viewModel.selectBundle(bundle.uid, bundleName)
+                }
+            }
+
+            PatchSelectionActionKey.SELECT_ALL -> PatchActionSpec(
+                key = key,
+                icon = Icons.Outlined.DoneAll,
+                contentDescription = R.string.patch_selection_button_label_select_all,
+                label = R.string.patch_selection_button_label_select_all,
+                enabled = bundles.isNotEmpty()
+            ) {
+                if (warningEnabled) {
+                    showSelectionWarning = true
+                } else {
+                    requestConfirmation(
+                        title = R.string.patch_selection_confirm_select_all_title,
+                        message = context.getString(R.string.patch_selection_confirm_select_all_message),
+                        onConfirm = viewModel::selectAll
+                    )
+                }
+            }
+
+            PatchSelectionActionKey.DESELECT_BUNDLE -> PatchActionSpec(
+                key = key,
+                icon = Icons.Outlined.LayersClear,
+                contentDescription = R.string.deselect_bundle,
+                label = R.string.patch_selection_button_label_bundle,
+                enabled = currentBundle != null && currentBundleHasSelection
+            ) spec@{
+                if (warningEnabled) {
+                    showSelectionWarning = true
+                    return@spec
+                }
+                val bundle = currentBundle ?: return@spec
+                val bundleName = currentBundleDisplayName ?: bundle.name
+                requestConfirmation(
+                    title = R.string.patch_selection_confirm_deselect_bundle_title,
+                    message = context.getString(
+                        R.string.patch_selection_confirm_deselect_bundle_message,
+                        bundleName
+                    )
+                ) {
+                    viewModel.deselectBundle(bundle.uid, bundleName)
+                }
+            }
+
+            PatchSelectionActionKey.DESELECT_ALL -> PatchActionSpec(
+                key = key,
+                icon = Icons.Outlined.ClearAll,
+                contentDescription = R.string.deselect_all,
+                label = R.string.patch_selection_button_label_all,
+                enabled = hasAnySelection
+            ) {
+                if (warningEnabled) {
+                    showSelectionWarning = true
+                } else {
+                    requestConfirmation(
+                        title = R.string.patch_selection_confirm_deselect_all_title,
+                        message = context.getString(R.string.patch_selection_confirm_deselect_all_message),
+                        onConfirm = viewModel::deselectAll
+                    )
+                }
+            }
+
+            PatchSelectionActionKey.BUNDLE_DEFAULTS -> PatchActionSpec(
+                key = key,
+                icon = Icons.Outlined.SettingsBackupRestore,
+                contentDescription = R.string.patch_selection_button_label_reset_bundle,
+                label = R.string.patch_selection_button_label_reset_bundle,
+                enabled = currentBundle != null
+            ) spec@{
+                if (warningEnabled) {
+                    showSelectionWarning = true
+                    return@spec
+                }
+                val bundle = currentBundle ?: return@spec
+                val bundleName = currentBundleDisplayName ?: bundle.name
+                requestConfirmation(
+                    title = R.string.patch_selection_confirm_bundle_defaults_title,
+                    message = context.getString(
+                        R.string.patch_selection_confirm_bundle_defaults_message,
+                        bundleName
+                    )
+                ) {
+                    viewModel.resetBundleToDefaults(bundle.uid, bundleName)
+                }
+            }
+
+            PatchSelectionActionKey.ALL_DEFAULTS -> PatchActionSpec(
+                key = key,
+                icon = Icons.Outlined.Restore,
+                contentDescription = R.string.patch_selection_button_label_defaults,
+                label = R.string.patch_selection_button_label_defaults,
+                enabled = true
+            ) {
+                if (disableActionConfirmations) {
+                    viewModel.reset()
+                } else {
+                    showResetConfirmation = true
+                }
+            }
+
+            PatchSelectionActionKey.SAVE_PROFILE -> PatchActionSpec(
+                key = key,
+                icon = Icons.AutoMirrored.Outlined.PlaylistAdd,
+                contentDescription = R.string.patch_profile_save_action,
+                label = R.string.patch_profile_save_label,
+                enabled = !isSavingProfile
+            ) {
+                if (!isSavingProfile) openProfileSaveDialog()
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             SearchBar(
                 query = query,
                 onQueryChange = setQuery,
                 expanded = searchExpanded && !dialogsOpen,
-                onExpandedChange = { if (!dialogsOpen) setSearchExpanded(it) },
+                onExpandedChange = { expanded ->
+                    if (dialogsOpen) return@SearchBar
+                    if (expanded) {
+                        actionsExpanded = false
+                    }
+                    setSearchExpanded(expanded)
+                },
                 placeholder = {
                     Text(stringResource(R.string.search_patches))
                 },
@@ -731,11 +910,64 @@ fun PatchesSelectorScreen(
                                 )
                             }
                         } else {
-                            IconButton(onClick = { showBottomSheet = true }) {
-                                Icon(
-                                    imageVector = Icons.Outlined.FilterList,
-                                    contentDescription = stringResource(R.string.more)
-                                )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box {
+                                    val toggleLabel = if (actionsExpanded) {
+                                        R.string.patch_selection_toggle_collapse
+                                    } else {
+                                        R.string.patch_selection_toggle_expand
+                                    }
+                                    IconButton(onClick = {
+                                        if (visibleActionKeys.isEmpty()) {
+                                            actionsExpanded = false
+                                            context.toast(
+                                                context.getString(R.string.patch_selection_all_actions_hidden_toast)
+                                            )
+                                            return@IconButton
+                                        }
+                                        actionsExpanded = !actionsExpanded
+                                    }) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.MoreHoriz,
+                                            contentDescription = stringResource(toggleLabel)
+                                        )
+                                    }
+                                    if (actionsExpanded) {
+                                        val density = LocalDensity.current
+                                        val marginPx = remember(density) { with(density) { 8.dp.roundToPx() } }
+                                        val glowRadiusPx = remember(density) { with(density) { 220.dp.toPx() } }
+
+                                        Popup(
+                                            popupPositionProvider = remember(marginPx) {
+                                                PatchSelectionActionsPopupPositionProvider(marginPx = marginPx)
+                                            },
+                                            onDismissRequest = { actionsExpanded = false },
+                                            properties = PopupProperties(
+                                                focusable = true,
+                                                dismissOnBackPress = true,
+                                                dismissOnClickOutside = true
+                                            )
+                                        ) {
+                                            PatchSelectionActionsPopup(
+                                                actionSpecs = actionSpecs,
+                                                glowRadiusPx = glowRadiusPx,
+                                                onActionClick = { spec ->
+                                                    spec.onClick()
+                                                    actionsExpanded = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                                IconButton(onClick = {
+                                    actionsExpanded = false
+                                    showBottomSheet = true
+                                }) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.FilterList,
+                                        contentDescription = stringResource(R.string.more)
+                                    )
+                                }
                             }
                         }
                     }
@@ -784,12 +1016,6 @@ fun PatchesSelectorScreen(
         floatingActionButton = {
             if (searchExpanded) return@Scaffold
 
-            val actionHorizontalSpacing = 6.dp
-            val actionVerticalSpacing = 8.dp
-            val sectionSpacing = 12.dp
-            val actionButtonWidth = 132.dp
-            val actionButtonModifier = Modifier.width(actionButtonWidth)
-
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -800,252 +1026,9 @@ fun PatchesSelectorScreen(
                     modifier = Modifier
                         .wrapContentWidth(Alignment.End)
                         .padding(horizontal = 4.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(sectionSpacing),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                     horizontalAlignment = Alignment.End
                 ) {
-                    Box(
-                        modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = Alignment.CenterEnd
-                    ) {
-                        val currentBundle = bundles.getOrNull(pagerState.currentPage)
-                        val currentBundleDisplayName = currentBundle?.let { bundleDisplayNames[it.uid] ?: it.name }
-                        val warningEnabled = viewModel.selectionWarningEnabled
-                        val actionRowWidth = actionButtonWidth * 2 + actionHorizontalSpacing
-                        val actionRowModifier = Modifier.width(actionRowWidth)
-                        val actionRowArrangement = Arrangement.spacedBy(actionHorizontalSpacing)
-
-                        val baseSpecs = visibleActionKeys.mapNotNull { key ->
-                            when (key) {
-                                    PatchSelectionActionKey.UNDO -> PatchActionSpec(
-                                        key = key,
-                                        icon = Icons.AutoMirrored.Outlined.Undo,
-                                    contentDescription = R.string.patch_selection_button_label_undo_action,
-                                    label = R.string.patch_selection_button_label_undo_action,
-                                    enabled = viewModel.canUndo,
-                                    onClick = viewModel::undoAction
-                                )
-
-                                    PatchSelectionActionKey.REDO -> PatchActionSpec(
-                                        key = key,
-                                        icon = Icons.AutoMirrored.Outlined.Redo,
-                                    contentDescription = R.string.patch_selection_button_label_redo_action,
-                                    label = R.string.patch_selection_button_label_redo_action,
-                                    enabled = viewModel.canRedo,
-                                    onClick = viewModel::redoAction
-                                )
-
-                                PatchSelectionActionKey.SELECT_BUNDLE -> PatchActionSpec(
-                                    key = key,
-                                    icon = Icons.AutoMirrored.Outlined.PlaylistAddCheck,
-                                    contentDescription = R.string.patch_selection_button_label_select_bundle,
-                                    label = R.string.patch_selection_button_label_select_bundle,
-                                    enabled = currentBundle != null
-                                ) spec@{
-                                    if (warningEnabled) {
-                                        showSelectionWarning = true
-                                        return@spec
-                                    }
-                                    val bundle = currentBundle ?: return@spec
-                                    val bundleName = currentBundleDisplayName ?: bundle.name
-                                    requestConfirmation(
-                                        title = R.string.patch_selection_confirm_select_bundle_title,
-                                        message = context.getString(
-                                            R.string.patch_selection_confirm_select_bundle_message,
-                                            bundleName
-                                        )
-                                    ) {
-                                        viewModel.selectBundle(bundle.uid, bundleName)
-                                    }
-                                }
-
-                                PatchSelectionActionKey.SELECT_ALL -> PatchActionSpec(
-                                    key = key,
-                                    icon = Icons.Outlined.DoneAll,
-                                    contentDescription = R.string.patch_selection_button_label_select_all,
-                                    label = R.string.patch_selection_button_label_select_all,
-                                    enabled = bundles.isNotEmpty()
-                                ) {
-                                    if (warningEnabled) {
-                                        showSelectionWarning = true
-                                    } else {
-                                        requestConfirmation(
-                                            title = R.string.patch_selection_confirm_select_all_title,
-                                            message = context.getString(R.string.patch_selection_confirm_select_all_message),
-                                            onConfirm = viewModel::selectAll
-                                        )
-                                    }
-                                }
-
-                                PatchSelectionActionKey.DESELECT_BUNDLE -> PatchActionSpec(
-                                    key = key,
-                                    icon = Icons.Outlined.LayersClear,
-                                    contentDescription = R.string.deselect_bundle,
-                                    label = R.string.patch_selection_button_label_bundle,
-                                    enabled = currentBundle != null && currentBundleHasSelection
-                                ) spec@{
-                                    if (warningEnabled) {
-                                        showSelectionWarning = true
-                                        return@spec
-                                    }
-                                    val bundle = currentBundle ?: return@spec
-                                    val bundleName = currentBundleDisplayName ?: bundle.name
-                                    requestConfirmation(
-                                        title = R.string.patch_selection_confirm_deselect_bundle_title,
-                                        message = context.getString(
-                                            R.string.patch_selection_confirm_deselect_bundle_message,
-                                            bundleName
-                                        )
-                                    ) {
-                                        viewModel.deselectBundle(bundle.uid, bundleName)
-                                    }
-                                }
-
-                                PatchSelectionActionKey.DESELECT_ALL -> PatchActionSpec(
-                                    key = key,
-                                    icon = Icons.Outlined.ClearAll,
-                                    contentDescription = R.string.deselect_all,
-                                    label = R.string.patch_selection_button_label_all,
-                                    enabled = hasAnySelection
-                                ) {
-                                    if (warningEnabled) {
-                                        showSelectionWarning = true
-                                    } else {
-                                        requestConfirmation(
-                                            title = R.string.patch_selection_confirm_deselect_all_title,
-                                            message = context.getString(R.string.patch_selection_confirm_deselect_all_message),
-                                            onConfirm = viewModel::deselectAll
-                                        )
-                                    }
-                                }
-
-                                PatchSelectionActionKey.BUNDLE_DEFAULTS -> PatchActionSpec(
-                                    key = key,
-                                    icon = Icons.Outlined.SettingsBackupRestore,
-                                    contentDescription = R.string.patch_selection_button_label_reset_bundle,
-                                    label = R.string.patch_selection_button_label_reset_bundle,
-                                    enabled = currentBundle != null
-                                ) spec@{
-                                    if (warningEnabled) {
-                                        showSelectionWarning = true
-                                        return@spec
-                                    }
-                                    val bundle = currentBundle ?: return@spec
-                                    val bundleName = currentBundleDisplayName ?: bundle.name
-                                    requestConfirmation(
-                                        title = R.string.patch_selection_confirm_bundle_defaults_title,
-                                        message = context.getString(
-                                            R.string.patch_selection_confirm_bundle_defaults_message,
-                                            bundleName
-                                        )
-                                    ) {
-                                        viewModel.resetBundleToDefaults(bundle.uid, bundleName)
-                                    }
-                                }
-
-                                PatchSelectionActionKey.ALL_DEFAULTS -> PatchActionSpec(
-                                    key = key,
-                                    icon = Icons.Outlined.Restore,
-                                    contentDescription = R.string.patch_selection_button_label_defaults,
-                                    label = R.string.patch_selection_button_label_defaults,
-                                    enabled = true
-                                ) {
-                                    if (disableActionConfirmations) {
-                                        viewModel.reset()
-                                    } else {
-                                        showResetConfirmation = true
-                                    }
-                                }
-
-                                PatchSelectionActionKey.SAVE_PROFILE -> PatchActionSpec(
-                                    key = key,
-                                    icon = Icons.AutoMirrored.Outlined.PlaylistAdd,
-                                    contentDescription = R.string.patch_profile_save_action,
-                                    label = R.string.patch_profile_save_label,
-                                    enabled = !isSavingProfile
-                                ) {
-                                    if (!isSavingProfile) openProfileSaveDialog()
-                                }
-                            }
-                        }
-
-                        val toggleLabel = if (actionsExpanded) {
-                            R.string.patch_selection_toggle_collapse
-                        } else {
-                            R.string.patch_selection_toggle_expand
-                        }
-                        val toggleSpec = PatchActionSpec(
-                            key = null,
-                            icon = if (actionsExpanded) Icons.Outlined.UnfoldLess else Icons.Outlined.UnfoldMore,
-                            contentDescription = toggleLabel,
-                            label = toggleLabel,
-                            enabled = true
-                        ) {
-                            actionsExpanded = !actionsExpanded
-                        }
-
-                        val actionSpecs = if (actionsExpanded && baseSpecs.size % 2 == 1) {
-                            baseSpecs + toggleSpec
-                        } else if (actionsExpanded) {
-                            baseSpecs
-                        } else {
-                            emptyList()
-                        }
-                        val showSeparateToggleRow = !actionsExpanded || baseSpecs.size % 2 == 0
-                        val columnCount = 2
-                        val actionRowCount = ceil(actionSpecs.size / columnCount.toFloat()).toInt()
-
-                        Column(
-                            modifier = Modifier.wrapContentWidth(Alignment.End),
-                            horizontalAlignment = Alignment.End,
-                            verticalArrangement = Arrangement.spacedBy(actionVerticalSpacing)
-                        ) {
-                            repeat(actionRowCount) { rowIndex ->
-                                Row(
-                                    modifier = actionRowModifier,
-                                    horizontalArrangement = actionRowArrangement,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    repeat(columnCount) { columnIndex ->
-                                        val specIndex = rowIndex * columnCount + columnIndex
-                                        val spec = actionSpecs.getOrNull(specIndex)
-                                        if (spec != null) {
-                                            SelectionActionButton(
-                                                icon = spec.icon,
-                                                contentDescription = spec.contentDescription,
-                                                label = spec.label,
-                                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                                onClick = spec.onClick,
-                                                enabled = spec.enabled,
-                                                modifier = actionButtonModifier
-                                            )
-                                        } else {
-                                            Spacer(modifier = actionButtonModifier)
-                                        }
-                                    }
-                                }
-                            }
-
-                            if (showSeparateToggleRow) {
-                                Row(
-                                    modifier = actionRowModifier,
-                                    horizontalArrangement = actionRowArrangement,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Spacer(modifier = actionButtonModifier)
-                                    SelectionActionButton(
-                                        icon = toggleSpec.icon,
-                                        contentDescription = toggleSpec.contentDescription,
-                                        label = toggleSpec.label,
-                                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                        onClick = toggleSpec.onClick,
-                                        enabled = toggleSpec.enabled,
-                                        modifier = actionButtonModifier
-                                    )
-                                }
-                            }
-                        }
-                    }
-
                     val saveButtonExpanded =
                         patchLazyListStates.getOrNull(pagerState.currentPage)?.isScrollingUp ?: true
                     val saveButtonText = stringResource(
@@ -1444,6 +1427,152 @@ private data class PatchActionSpec(
     val enabled: Boolean,
     val onClick: () -> Unit
 )
+
+@Composable
+private fun PatchSelectionActionChip(
+    spec: PatchActionSpec,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val contentAlpha = if (spec.enabled) 1f else 0.4f
+    Surface(
+        onClick = { if (spec.enabled) onClick() },
+        enabled = spec.enabled,
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+        tonalElevation = 4.dp,
+        shadowElevation = 1.dp,
+        shape = RoundedCornerShape(999.dp),
+        modifier = modifier.alpha(contentAlpha)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(
+                imageVector = spec.icon,
+                contentDescription = stringResource(spec.contentDescription),
+                modifier = Modifier.size(16.dp)
+            )
+            Text(
+                text = stringResource(spec.label),
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+private class PatchSelectionActionsPopupPositionProvider(
+    private val marginPx: Int
+) : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize
+    ): IntOffset {
+        val desiredX = when (layoutDirection) {
+            LayoutDirection.Ltr -> anchorBounds.right - popupContentSize.width
+            LayoutDirection.Rtl -> anchorBounds.left
+        }
+        val x = desiredX.coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0))
+
+        val yBelow = anchorBounds.bottom + marginPx
+        val yAbove = anchorBounds.top - popupContentSize.height - marginPx
+        val y = when {
+            yBelow + popupContentSize.height <= windowSize.height -> yBelow
+            yAbove >= 0 -> yAbove
+            else -> (windowSize.height - popupContentSize.height).coerceAtLeast(0)
+        }
+
+        return IntOffset(x, y)
+    }
+}
+
+@Composable
+private fun PatchSelectionActionsPopup(
+    actionSpecs: List<PatchActionSpec>,
+    glowRadiusPx: Float,
+    onActionClick: (PatchActionSpec) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val splitIndex = (actionSpecs.size + 1) / 2
+    val firstRow = remember(actionSpecs) { actionSpecs.take(splitIndex) }
+    val secondRow = remember(actionSpecs) { actionSpecs.drop(splitIndex) }
+
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+        tonalElevation = 0.dp,
+        shadowElevation = 6.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f)),
+        modifier = modifier.widthIn(max = 520.dp)
+    ) {
+        Box {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .blur(26.dp)
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                                Color.Transparent
+                            ),
+                            radius = glowRadiusPx
+                        )
+                    )
+            )
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.22f))
+            )
+
+            Column(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalAlignment = Alignment.End
+            ) {
+                ActionChipRow(
+                    specs = firstRow,
+                    onActionClick = onActionClick
+                )
+                if (secondRow.isNotEmpty()) {
+                    ActionChipRow(
+                        specs = secondRow,
+                        onActionClick = onActionClick
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ActionChipRow(
+    specs: List<PatchActionSpec>,
+    onActionClick: (PatchActionSpec) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    LazyRow(
+        modifier = modifier.fillMaxWidth(),
+        reverseLayout = true,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        items(
+            items = specs.asReversed(),
+            key = { spec -> spec.key?.storageId ?: "label:${spec.label}" }
+        ) { spec ->
+            PatchSelectionActionChip(
+                spec = spec,
+                onClick = { onActionClick(spec) }
+            )
+        }
+    }
+}
 
 @Composable
 private fun SelectionActionButton(

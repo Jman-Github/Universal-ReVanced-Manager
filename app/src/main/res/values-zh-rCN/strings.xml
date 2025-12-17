@@ -279,6 +279,8 @@
     <string name="patch_selection_select_all_empty_toast">没有可用的补丁供选择</string>
     <string name="patch_selection_selected_bundle_toast">已选择 %s 中的所有补丁</string>
     <string name="patch_selection_select_bundle_empty_toast">%s 中没有可选择的补丁</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_all_actions_hidden_toast">All action buttons are hidden, enable at least one in settings</string>
     <string name="patch_selection_reset_bundle_toast">已重置 %s 的默认值</string>
     <string name="patch_selection_button_label_all">取消全选</string>
     <string name="patch_selection_button_label_bundle">取消选择包</string>

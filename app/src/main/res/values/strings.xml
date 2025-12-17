@@ -286,6 +286,7 @@
     <string name="patch_selection_select_all_empty_toast">No patches available to select</string>
     <string name="patch_selection_selected_bundle_toast">Selected all patches in %s</string>
     <string name="patch_selection_select_bundle_empty_toast">No selectable patches in %s</string>
+    <string name="patch_selection_all_actions_hidden_toast">All action buttons are hidden, enable at least one in settings</string>
     <string name="patch_selection_reset_bundle_toast">Reset defaults for %s</string>
     <string name="patch_selection_button_label_all">Deselect all</string>
     <string name="patch_selection_button_label_bundle">Deselect bundle</string>
