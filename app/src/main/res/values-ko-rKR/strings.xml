@@ -15,14 +15,10 @@
     <string name="dashboard">대시보드</string>
     <string name="settings">설정</string>
     <string name="select_app">앱 선택하기</string>
-    <!-- Translation needed -->
-    <string name="app_filter_title">Filter apps</string>
-    <!-- Translation needed -->
-    <string name="app_filter_installed_only">Installed only</string>
-    <!-- Translation needed -->
-    <string name="app_filter_patches_available">Patches available</string>
-    <!-- Translation needed -->
-    <string name="app_filter_no_results">No apps match your filters.</string>
+    <string name="app_filter_title">앱 필터링</string>
+    <string name="app_filter_installed_only">설치된 앱만</string>
+    <string name="app_filter_patches_available">사용 가능한 패치</string>
+    <string name="app_filter_no_results">필터와 일치하는 앱이 없습니다.</string>
     <string name="patches_count_selected">%1$d/%2$d 을 선택하였습니다</string>
     <string name="new_downloader_plugins_notification">새로운 다운로더 플러그인을 사용할 수 있습니다. 탭하여 구성하세요.</string>
     <string name="unsupported_architecture_warning">이 기기 아키텍처에 대한 패치는 지원되지 않으며 실패할 가능성이 높습니다.</string>
@@ -126,12 +122,6 @@
     <!-- From PR #37: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/37 -->
     <string name="plugins_help_title">다운로더란 무엇인가요?</string>
     <string name="plugins_help_description">다운로더는 URV가 다양한 출처에서 순정 APK를 다운로드할 수 있게 해주는 플러그인입니다. 다운로드된 APK는 하단 섹션에 표시됩니다. 패치 과정에서 이미 다운로드된 APK를 선택하거나 플러그인을 통해 다운로드할 수 있습니다.\n\n지원되는 다운로더 플러그인 목록을 확인할 수 있습니다</string>
-    <!-- Translation needed -->
-    <string name="download_settings">Download settings</string>
-    <!-- Translation needed -->
-    <string name="downloader_auto_save_title">Automatically save downloaded APKs</string>
-    <!-- Translation needed -->
-    <string name="downloader_auto_save_description">Keep APKs downloaded through plugins for reuse. Disable to delete them after patching.</string>
     <string name="import_export">가져오기 및 내보내기</string>
     <string name="import_export_description">키스토어, 패치 옵션 그리고 선택목록을 설정할 수 있습니다</string>
     <string name="changelog">변경 사항 보기</string>
@@ -281,8 +271,6 @@
     <string name="patch_selection_select_all_empty_toast">선택할 수 있는 패치가 없습니다</string>
     <string name="patch_selection_selected_bundle_toast">%s 에서 모든 패치를 선택하였습니다</string>
     <string name="patch_selection_select_bundle_empty_toast">%s 에서 선택할 수 있는 패치가 없습니다</string>
-    <!-- Needs translation -->
-    <string name="patch_selection_all_actions_hidden_toast">All action buttons are hidden, enable at least one in settings</string>
     <string name="patch_selection_reset_bundle_toast">%s 에 대한 기본값을 초기화하였습니다</string>
     <string name="patch_selection_button_label_all">모두 선택 해제</string>
     <string name="patch_selection_button_label_bundle">번들 선택 해제</string>
@@ -306,12 +294,9 @@
     <string name="patch_selection_collapse_on_toggle_description">패치를 선택하거나 선택 해제할 때마다 패치 선택 동작 버튼을 자동으로 숨깁니다</string>
     <string name="patch_selection_action_order_title">패치 선택 동작 버튼 순서</string>
     <string name="patch_selection_action_order_description">패치 선택 동작 버튼에 대한 레이아웃 순서를 선택하세요</string>
-    <!-- Translation needed -->
-    <string name="patch_selection_action_visibility_title">Hide patch selection action buttons</string>
-    <!-- Translation needed -->
-    <string name="patch_selection_action_visibility_description">Choose which patch selection action buttons are shown</string>
-    <!-- Translation needed -->
-    <string name="patch_selection_action_visibility_reset">Show all action buttons</string>
+    <string name="patch_selection_action_visibility_title">패치 선택 동작 버튼 숨기기</string>
+    <string name="patch_selection_action_visibility_description">표시할 패치 선택 액션 버튼을 선택하세요</string>
+    <string name="patch_selection_action_visibility_reset">모든 동작 버튼 표시</string>
     <string name="patch_selection_action_order_dialog_title">패치 동작 다시 정렬</string>
     <string name="patch_selection_action_order_dialog_description">항목을 이동하여 패치 선택 동작 버튼이 표시되는 방식을 변경하세요. 미리보기는 실시간으로 업데이트됩니다.</string>
     <string name="patch_selection_action_order_preview_label">미리보기</string>
@@ -364,6 +349,9 @@
 
 패치 프로필은 영향을 받지 않습니다.</string>
     <string name="patch_options_reset_all_description">모든 패치 옵션을 초기화합니다</string>
+    <string name="download_settings">다운로드 설정</string>
+    <string name="downloader_auto_save_title">다운로드된 APK 자동 저장</string>
+    <string name="downloader_auto_save_description">플러그인을 통해 다운로드된 APK를 다시 사용할 수 있도록 보관합니다. 패치 후에 삭제하려면 비활성화하세요.</string>
     <string name="downloader_plugins">플러그인</string>
     <string name="downloader_plugin_state_trusted">신뢰함</string>
     <string name="downloader_plugin_state_failed">로드할 수 없습니다. 자세한 내용을 보려면 탭하세요</string>
@@ -619,21 +607,17 @@
     <string name="applied_patches_bundle_missing">번들 메타데이터를 사용할 수 없습니다. 저장된 패치 이름을 표시합니다.</string>
     <string name="no_patch_bundles_tracked">이 앱에 대한 기록된 패치 번들이 없습니다</string>
     <string name="default_install">기본</string>
-    <!-- Translation needed -->
-    <string name="mount_install">Rooted mount installer</string>
-    <!-- Translation needed -->
-    <string name="install_type_custom_installer">Custom installer</string>
-    <!-- Translation needed -->
-    <string name="install_type_system_installer">System installer</string>
-    <!-- Translation needed -->
-    <string name="install_type_mount_label">Rooted mount installer</string>
-    <!-- Translation needed -->
-    <string name="install_type_shizuku_label">Shizuku</string>
+    <string name="mount_install">루팅된 마운트 설치 프로그램</string>
     <string name="mounted">마운트됨</string>
     <string name="unmounted">마운트 해제됨</string>
+    <string name="install_type_custom_installer">사용자 정의 설치 프로그램</string>
+    <string name="install_type_system_installer">시스템 설치 프로그램</string>
+    <string name="install_type_mount_label">루팅된 마운트 설치 프로그램</string>
+    <string name="install_type_shizuku_label">Shizuku</string>
     <string name="not_mounted">마운트되지 않음</string>
     <string name="mount">마운트</string>
     <string name="unmount">마운트 해제</string>
+    <string name="unmount_confirm_description">앱을 마운트 해제하시겠습니까?</string>
     <string name="saved_install">저장하였습니다</string>
     <string name="failed_to_mount">마운트를 할 수 없습니다: %s</string>
     <string name="failed_to_unmount">마운트를 해제할 수 없습니다: %s</string>
@@ -652,14 +636,10 @@
     <string name="already_patched">이미 패치됨</string>
     <string name="patch_selector_sheet_filter_title">필터</string>
     <string name="patch_selector_sheet_filter_compat_title">호환성</string>
-    <!-- Translation needed -->
-    <string name="patch_selector_sheet_filter_sort_title">Sorting</string>
-    <!-- Translation needed -->
-    <string name="patch_selector_sheet_filter_sort_alphabetical">Alphabetical</string>
-    <!-- Translation needed -->
-    <string name="patch_selector_sheet_filter_sort_has_settings">Has settings</string>
-    <!-- Translation needed -->
-    <string name="patch_selector_sheet_filter_sort_no_settings">No settings</string>
+    <string name="patch_selector_sheet_filter_sort_title">정렬</string>
+    <string name="patch_selector_sheet_filter_sort_alphabetical">알파벳순</string>
+    <string name="patch_selector_sheet_filter_sort_has_settings">설정 있음</string>
+    <string name="patch_selector_sheet_filter_sort_no_settings">설정 없음</string>
     <string name="string_option_menu_description">더 많은 옵션</string>
     <string name="option_preset_custom_value">사용자 정의 값</string>
     <string name="path_selector">기기 저장소에서 선택</string>
@@ -691,9 +671,11 @@
     <string name="installer_mount_warning_update">기본 설치 프로그램이 루팅된 마운트 설치 프로그램으로 설정되어 있습니다. 이 저장된 앱은 마운트를 사용하여 설치되지 않았습니다.</string>
     <string name="installer_mount_warning_uninstall">기본 설치 프로그램이 루팅된 마운트 설치 프로그램으로 설정되어 있습니다. 이 저장된 앱은 마운트를 사용하여 설치되지 않았습니다.</string>
     <string name="installer_mount_mismatch_title">루팅된 마운트 설치 프로그램이 선택되어 있지 않았습니다</string>
-    <string name="installer_mount_mismatch_install">이 앱은 루팅된 마운트 설치 프로그램을 사용하여 설치되었습니다. 마운트 작업을 사용하도록 기본 설치 프로그램을 다시 전환하거나, 대신 정상적으로 설치하십시오.</string>
-    <string name="installer_mount_mismatch_update">이 앱은 루팅된 마운트 설치 프로그램을 사용하여 설치되었습니다. 마운트 작업을 사용하도록 기본 설치 프로그램을 다시 전환하거나, 대신 정상적으로 업데이트하십시오.</string>
-    <string name="installer_mount_mismatch_uninstall">이 앱은 루팅된 마운트 설치 프로그램을 사용하여 설치되었습니다. 마운트 작업을 사용하도록 기본 설치 프로그램을 다시 전환하거나, 대신 정상적으로 삭제하십시오.</string>
+    <string name="installer_mount_mismatch_install">이 앱은 루팅된 마운트 설치 프로그램을 사용하여 설치되었습니다. 기본 설치 프로그램을 마운트 작업을 사용하도록 다시 전환한 다음에 마운트하세요.</string>
+    <string name="installer_mount_mismatch_update">이 앱은 루팅된 마운트 설치 프로그램을 사용하여 설치되었습니다. 기본 설치 프로그램을 마운트 작업을 사용하도록 다시 전환한 다음에 마운트하세요.</string>
+    <string name="installer_mount_mismatch_uninstall">이 앱은 루팅된 마운트 설치 프로그램을 사용하여 설치되었습니다. 기본 설치 프로그램을 마운트 작업을 사용하도록 다시 전환한 다음에 마운트하세요.</string>
+    <string name="mount_version_mismatch_title">마운트할 수 없습니다</string>
+    <string name="mount_version_mismatch_message">순정 앱 버전(%2$s)이 패치된 앱 버전(%1$s)과 일치하지 않습니다. 일치하는 순정 버전을 마운트한 다음에 다시 시도하세요.</string>
     <string name="installer_status_shizuku_unsupported">설치된 Shizuku 버전은 지원되지 않습니다.</string>
     <string name="installer_action_open_shizuku">Shizuku 열기</string>
     <string name="installer_shizuku_launch_failed">Shizuku를 열 수 없습니다. 수동으로 실행한 후 다시 시도하세요.</string>
@@ -736,18 +718,16 @@
     <string name="installer_external_launched">%1$s 을 여는 중 …</string>
     <string name="installer_external_timeout">%1$s 에서 설치를 확인하지 못하였습니다. 다른 앱을 확인하고 다시 시도하세요.</string>
     <string name="installer_external_success">%1$s 이 설치 성공을 보고하였습니다.</string>
-    <!-- Translation needed -->
-    <string name="installer_external_finished_no_change">%1$s finished without installing the app. Check the installer for an error message and try again.</string>
+    <string name="installer_external_finished_no_change">%1$s 는 앱을 설치하지 않고 완료되었습니다. 설치 프로그램에서 오류 메시지를 확인하고 다시 시도하십시오.</string>
     <string name="installing_ellipsis">설치하는 중 ...</string>
     <string name="mounting_ellipsis">마운트하는 중 ...</string>
     <string name="unmounting">마운트 해제하는 중 ...</string>
-    <!-- Translation needed -->
-    <string name="unmount_confirm_description">Do you want to unmount the app?</string>
     <string name="install_app">설치하기</string>
-    <!-- Translation needed -->
-    <string name="install_app_success">Installed successfully</string>
+    <string name="install_app_success">성공적으로 설치히였습니다</string>
     <string name="install_app_fail_title">설치할 수 없습니다</string>
     <string name="install_app_fail">앱을 설치할 수 없습니다: %s</string>
+    <string name="mount_app_fail_title">마운트할 수 없습니다</string>
+    <string name="mount_app_fail">앱을 마운트할 수 없습니디: %1$s</string>
     <string name="install_timeout_message">설치가 완료되지 않았습니다. 시스템 설치 프로그램 다이얼로그를 확인하고 다시 시도하세요.</string>
     <string name="reinstall_app_fail">앱을 다시 설치할 수 없습니다: %s</string>
     <string name="uninstall_app_fail">앱을 제거할 수 없습니다: %s</string>
@@ -792,7 +772,12 @@
     <string name="patcher_notification_text">탭하여 패처로 돌아가기</string>
     <string name="patcher_stop_confirm_title">패처 중지</string>
     <string name="patcher_stop_confirm_description">패치 프로세스를 중지하시겠습니까?</string>
+    <string name="patcher_install_in_progress_title">설치가 진행 중입니다</string>
     <string name="patcher_install_in_progress">설치가 진행 중입니다. 잠시만 기다리세요</string>
+    <string name="patcher_install_in_progress_leave">나가기</string>
+    <string name="patcher_install_in_progress_stay">머무르기</string>
+    <string name="patcher_mount_in_progress_title">마운트가 진행중 입니다</string>
+    <string name="patcher_mount_in_progress">마운트가 진행중 입니다. 잠시만 기다리세요</string>
     <string name="execute_patches">패치를 실행하는 중</string>
     <string name="executing_patch">%s 실행하는 중</string>
     <string name="failed_to_execute_patch">%s 을 실행할 수 없습니다</string>
@@ -937,22 +922,4 @@
     <string name="export">내보내기</string>
     <string name="confirm">확인</string>
     <string name="saved_app_install_cancelled">설치를 취소하였습니다</string>
-    <!-- Translation needed -->
-    <string name="mount_app_fail_title">Mount failed</string>
-    <!-- Translation needed -->
-    <string name="mount_app_fail">Failed to mount app: %1$s</string>
-    <!-- Translation needed -->
-    <string name="patcher_install_in_progress_title">Installation in progress</string>
-    <!-- Translation needed -->
-    <string name="patcher_install_in_progress_leave">Leave anyway</string>
-    <!-- Translation needed -->
-    <string name="patcher_install_in_progress_stay">Stay here</string>
-    <!-- Translation needed -->
-    <string name="patcher_mount_in_progress_title">Mount in progress</string>
-    <!-- Translation needed -->
-    <string name="patcher_mount_in_progress">Mount is in progress. Please wait</string>
-    <!-- Translation needed -->
-    <string name="mount_version_mismatch_title">Mount failed</string>
-    <!-- Translation needed -->
-    <string name="mount_version_mismatch_message">Stock app version (%2$s) does not match patched app version (%1$s). Mount the matching stock version, then try again.</string>
 </resources>
