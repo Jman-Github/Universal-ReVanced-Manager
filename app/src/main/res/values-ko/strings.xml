@@ -243,8 +243,8 @@
     <string name="bundle_type_remote">원격</string>
     <string name="bundle_type_local">기기</string>
     <string name="bundle_type_preinstalled">미리 설치됨</string>
-    <string name="bundle_created_at">%1$s 에 생성됨</string>
-    <string name="bundle_updated_at">%1$s 에 업데이트됨</string>
+    <string name="bundle_created_at">%1$s에 생성됨</string>
+    <string name="bundle_updated_at">%1$s에 업데이트됨</string>
     <string name="bundle_changelog">변경 사항</string>
     <string name="bundle_view_changelog">최신 변경 사항을 볼 수 있습니다</string>
     <string name="bundle_changelog_error">변경 사항을 로드할 수 없습니다:%s</string>
@@ -548,7 +548,7 @@
     <string name="patch_profile_launch_error">이 패치 프로필을 열 수 없습니다.</string>
     <string name="patch_profile_show_more">더보기</string>
     <string name="patch_profile_show_less">덜보기</string>
-    <string name="patch_profile_created_at">%1$s 에 생성됨</string>
+    <string name="patch_profile_created_at">%1$s에 생성됨</string>
     <string name="patch_profile_bundle_header">%1$s • %2$s</string>
     <string name="patch_profile_bundle_unavailable_suffix">%1$s (사용할 수 없음)</string>
     <string name="patch_profile_bundle_uid_label">UID: %1$d</string>
