@@ -20,6 +20,7 @@
 - Patch bundle importing/updating now shows real-time per-bundle progress (download bytes/total & phases)
 - Redesigned the patch selection pages action buttons so they are displayed horizontally from under the search bar to reduce clutter, and are now opened from a three dot button in the top right corner
 - Redesigned Settings to M3 Expressive https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/46
+- Added Japanese manager string localization https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/51
 
 
 # Bug fixes
