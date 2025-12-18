@@ -1,3 +1,15 @@
+# v1.6.0 (2025-12-19)
+
+
+# Features
+
+
+
+# Bug fixes
+
+- Fixed `.xapk`, `.apkm` and `.apks` file types not being selectable from the select from storage screen(s) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/63
+
+
 # v1.6.0 (2025-12-17)
 
 
