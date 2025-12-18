@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Universal ReVanced Manager</string>
-    <string name="main_top_title">Universal ReVanced Manager</string>
+    <string name="main_top_title">URV Manager</string>
     <string name="patcher">Trình vá</string>
     <string name="patches">Bản vá</string>
     <string name="patch_bundles">Gói vá</string>
@@ -15,6 +15,10 @@
     <string name="dashboard">Tổng quan</string>
     <string name="settings">Cài đặt</string>
     <string name="select_app">Chọn ứng dụng</string>
+    <string name="app_filter_title">Lọc ứng dụng</string>
+    <string name="app_filter_installed_only">Chỉ ứng dụng đã cài</string>
+    <string name="app_filter_patches_available">Bản vá có sẵn</string>
+    <string name="app_filter_no_results">Không có ứng dụng nào phù hợp với bộ lọc.</string>
     <string name="patches_count_selected">Đã chọn %1$d/%2$d</string>
     <string name="new_downloader_plugins_notification">Tiện ích tải xuống đã sẵn sàng.\nNhấn vào đây để cấu hình.</string>
     <string name="unsupported_architecture_warning">Kiến trúc thiết bị này không được hỗ trợ vá và khả năng cao sẽ thất bại.</string>
@@ -61,9 +65,9 @@
     <string name="bundle_update_manual_available_with_version">Đã có bản cập nhật: %1$s</string>
     <string name="bundle_update_progress">Đã xử lý %1$d/%2$d gói</string>
     <string name="bundle_update_banner_title">Đang cập nhật gói vá</string>
-    <string name="bundle_reorder">Tác giả gói</string>
-    <string name="bundle_reorder_title">Tác giả gói vá</string>
-    <string name="bundle_reorder_description">Kéo để sắp xếp các gói trong danh sách và menu chọn bản vá.</string>
+    <string name="bundle_reorder">Sắp xếp các gói</string>
+    <string name="bundle_reorder_title">Sắp xếp gói vá</string>
+    <string name="bundle_reorder_description">Ấn giữ và kéo để sắp xếp các gói trong danh sách và menu chọn bản vá.</string>
     <string name="bundle_reorder_move_up">Chuyển gói lên</string>
     <string name="bundle_reorder_move_down">Chuyển gói xuống</string>
     <string name="bundle_actions_expand">Hiện thao tác gói</string>
@@ -73,6 +77,10 @@
     <string name="bundle_release_page">Mở trang phát hành</string>
     <string name="bundle_release_page_unavailable">Không có trang phát hành cho gói vá này</string>
     <string name="bundle_release_page_error">Không thể mở trang phát hành: %s</string>
+    <string name="bundle_links_title">Liên kết cho %1$s</string>
+    <string name="bundle_link_release">Phiên bản phát hành trên GitHub</string>
+    <string name="bundle_link_catalog">Danh mục danh sách bản vá</string>
+    <string name="bundle_catalog_unavailable">Không có danh mục danh sách bản vá</string>
     <string name="show_suggested_versions">Hiện phiên bản đề xuất</string>
     <string name="hide_suggested_versions">Ẩn phiên bản đề xuất</string>
     <string name="show_other_versions">Hiện phiên bản khác</string>
@@ -111,6 +119,9 @@
     <string name="updates_description">Kiểm tra cập nhật và nhật ký thay đổi</string>
     <string name="downloads">Tải xuống</string>
     <string name="downloads_description">Tiện ích tải xuống và ứng dụng đã tải</string>
+    <!-- From PR #37: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/37 -->
+    <string name="plugins_help_title">Trình tải xuống là gì?</string>
+    <string name="plugins_help_description">Trình tải xuống là một tiện ích giúp URV tải các APK gốc từ nhiều nguồn khác nhau. Những APK này sẽ xuất hiện ở phần bên dưới. Trước khi vá, bạn hoàn toàn có thể chọn chúng trong mục chọn nguồn hoặc tải APK mới bằng tiện ích.\\n\\nDanh sách trình tải xuống có thể tìm thấy</string>
     <string name="import_export">Xuất &amp; Nhập</string>
     <string name="import_export_description">Kho khoá, lựa chọn và tùy chọn bản vá</string>
     <string name="changelog">Xem nhật ký thay đổi</string>
@@ -144,13 +155,13 @@
     <string name="theme_preview_title">Xem trước chủ đề</string>
     <string name="theme_preview_description">Cập nhật ngay khi đổi cài đặt chủ đề</string>
     <string name="theme_presets">Chủ đề có sẵn</string>
-    <string name="theme_presets_description">Chuyển nhanh sang giao diện phổ biến nhất</string>
-    <string name="theme_preset_default">Mặc định</string>
-    <string name="theme_preset_amoled">Đen tuyền</string>
+    <string name="theme_presets_description">Chọn cách ứng dụng hiển thị: theo hệ thống, sáng, tối, cá nhân hóa, hoặc đen tuyền</string>
+    <string name="theme_preset_default">Theo hệ thống</string>
     <string name="theme_preset_sunset">Hoàng hôn</string>
     <string name="theme_preset_forest">Rừng</string>
     <string name="theme_preset_ocean">Biển</string>
     <string name="theme_preset_midnight">Đêm đen</string>
+    <string name="theme_preset_amoled">Đen tuyền</string>
     <string name="theme_preset_dynamic">Cá nhân hóa</string>
     <string name="theme_reset">Đặt lại toàn bộ cài đặt chủ đề</string>
     <string name="color_channel_red">Đỏ</string>
@@ -162,7 +173,7 @@
     <string name="theme_description">Chọn giữa chủ đề sáng và tối.</string>
     <string name="safeguards">Bảo vệ</string>
     <string name="patch_compat_check">Tắt kiểm tra tương thích phiên bản</string>
-    <string name="patch_compat_check_description">Bỏ qua giới hạn tương thích khi chọn bản vá</string>
+    <string name="patch_compat_check_description">Bỏ qua giới hạn tương thích khi chọn bản vá.</string>
     <string name="patch_compat_check_confirmation">Chọn các bản vá không tương thích có thể khiến ứng dụng bị hỏng.\n\nBạn vẫn muốn tiếp tục?</string>
     <string name="suggested_version_safeguard">Yêu cầu phiên bản ứng dụng được đề xuất</string>
     <string name="suggested_version_safeguard_description">Bắt buộc chọn phiên bản ứng dụng được đề xuất.</string>
@@ -171,6 +182,7 @@
     <string name="patch_selection_safeguard_description">Không chặn chọn hoặc bỏ chọn bản vá cũng như các tùy chỉnh.</string>
     <string name="patch_selection_safeguard_confirmation">Chọn bản vá khác mặc định có thể phát sinh các sự cố không mong muốn.\n\nBạn vẫn muốn tiếp tục?</string>
     <string name="universal_patches_safeguard">Hiện và cho dùng bản vá phổ quát</string>
+    <!-- PR #36: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/36 -->
     <string name="universal_patches_safeguard_description">Không ẩn hay ngăn chặn dùng các bản vá phổ quát.</string>
     <string name="universal_patches_profile_blocked_title">Đã tắt bản vá phổ quát</string>
     <string name="universal_patches_profile_blocked_description">Cấu hình vá này chứa các bản vá phổ quát. Bật “%1$s” trong cài đặt nâng cao để dùng.</string>
@@ -233,7 +245,7 @@
     <string name="bundle_created_at">Tạo %1$s</string>
     <string name="bundle_updated_at">Cập nhật %1$s</string>
     <string name="bundle_changelog">Nhật ký thay đổi</string>
-    <string name="bundle_view_changelog">Xem nhật ký thay đổi mới nhất</string>
+    <string name="bundle_view_changelog">Xem những thay đổi mới nhất</string>
     <string name="bundle_changelog_error">Không thể tải nhật ký thay đổi: %s</string>
     <string name="bundle_changelog_retry">Thử lại</string>
     <string name="bundle_changelog_empty">Không có nhật ký thay đổi</string>
@@ -258,6 +270,8 @@
     <string name="patch_selection_select_all_empty_toast">Không có bản vá nào để chọn</string>
     <string name="patch_selection_selected_bundle_toast">Đã chọn tất cả bản vá trong %s</string>
     <string name="patch_selection_select_bundle_empty_toast">Không có bản vá nào để chọn trong %s</string>
+    <!-- Translation needed -->
+    <string name="patch_selection_all_actions_hidden_toast">All action buttons are hidden, enable at least one in settings</string>
     <string name="patch_selection_reset_bundle_toast">Đặt về mặc định cho %s</string>
     <string name="patch_selection_button_label_all">Bỏ chọn tất cả</string>
     <string name="patch_selection_button_label_bundle">Bỏ chọn gói</string>
@@ -275,28 +289,21 @@
     <string name="patch_selection_action_deselect_bundle">bỏ chọn gói \"%1$s\"</string>
     <string name="patch_selection_action_bundle_defaults">mặc định của gói cho “%1$s”</string>
     <string name="disable_patch_selection_confirmations">Tắt xác nhận thao tác</string>
-    <string name="disable_patch_selection_confirmations_description">Bỏ qua hộp thoại xác nhận mỗi khi chọn trong bảng thao tác</string>
+    <string name="disable_patch_selection_confirmations_description">Bỏ qua hộp thoại xác nhận mỗi khi chọn trong bảng thao tác.</string>
     <string name="disable_patch_selection_confirmations_warning">Tắt xác nhận cũng có thể gây ra hàng loạt thay đổi ngoài ý muốn.</string>
-    <!-- Needs translation -->
-    <string name="patch_selection_collapse_on_toggle">Collapse actions after toggling patches</string>
-    <!-- Needs translation -->
-    <string name="patch_selection_collapse_on_toggle_description">Automatically hide the patch selection action buttons whenever you select or deselect a patch</string>
-    <!-- Needs translation -->
-    <string name="patch_selection_action_order_title">Patch selection action buttons order</string>
-    <!-- Needs translation -->
-    <string name="patch_selection_action_order_description">Choose the layout order for the patch selection action buttons</string>
-    <!-- Needs translation -->
-    <string name="patch_selection_action_order_dialog_title">Reorder patch actions</string>
-    <!-- Needs translation -->
-    <string name="patch_selection_action_order_dialog_description">Move the entries to change how the patch selection action buttons are displayed. The preview updates live.</string>
-    <!-- Needs translation -->
-    <string name="patch_selection_action_order_preview_label">Preview</string>
-    <!-- Needs translation -->
-    <string name="patch_selection_action_order_reset">Reset to default order</string>
-    <!-- Needs translation -->
-    <string name="patch_selection_action_move_up">Move up</string>
-    <!-- Needs translation -->
-    <string name="patch_selection_action_move_down">Move down</string>
+    <string name="patch_selection_collapse_on_toggle">Thu gọn bảng thao tác sau khi chọn hoặc bỏ chọn bản vá</string>
+    <string name="patch_selection_collapse_on_toggle_description">Tự động ẩn bảng thao tác trong màn hình chọn bản vá mỗi khi bạn chọn hoặc bỏ chọn bản vá.</string>
+    <string name="patch_selection_action_order_title">Thứ tự các nút thao tác</string>
+    <string name="patch_selection_action_order_description">Chọn thứ tự hiển thị các nút thao tác chọn bản vá</string>
+    <string name="patch_selection_action_visibility_title">Ẩn nút thao tác chọn bản vá</string>
+    <string name="patch_selection_action_visibility_description">Chọn các nút thao tác chọn bản vá sẽ hiển thị.</string>
+    <string name="patch_selection_action_visibility_reset">Hiện toàn bộ nút thao tác</string>
+    <string name="patch_selection_action_order_dialog_title">Sắp xếp lại các nút thao tác</string>
+    <string name="patch_selection_action_order_dialog_description">Kéo các mục để thay đổi cách hiển thị các nút thao tác trong màn hình chọn bản vá. Xem trước ngay.</string>
+    <string name="patch_selection_action_order_preview_label">Xem trước</string>
+    <string name="patch_selection_action_order_reset">Đặt lại về mặc định</string>
+    <string name="patch_selection_action_move_up">Chuyển lên</string>
+    <string name="patch_selection_action_move_down">Chuyển xuống</string>
     <string name="patch_selection_confirm_deselect_bundle_title">Bỏ chọn gói?</string>
     <string name="patch_selection_confirm_deselect_bundle_message">Bỏ chọn tất cả bản vá đã chọn từ %1$s?</string>
     <string name="patch_selection_confirm_deselect_all_title">Bỏ chọn tất cả bản vá?</string>
@@ -331,6 +338,9 @@
     <string name="patch_options_reset_all">Đặt lại tùy chọn bản vá toàn cục</string>
     <string name="patch_options_reset_all_dialog_description">Bạn sắp đặt lại toàn bộ tùy chọn bản vá. Bạn sẽ phải áp dụng lại từng tùy chọn một lần nữa.\n\nCấu hình vá không bị ảnh hưởng.</string>
     <string name="patch_options_reset_all_description">Đặt lại toàn bộ tuỳ chọn bản vá</string>
+    <string name="download_settings">Cài đặt tải xuống</string>
+    <string name="downloader_auto_save_title">Tự động lưu APK đã tải</string>
+    <string name="downloader_auto_save_description">Giữ các APK đã tải bằng tiện ích tải xuống. Tắt cài đặt này để xóa chúng sau khi vá.</string>
     <string name="downloader_plugins">Tiện ích</string>
     <string name="downloader_plugin_state_trusted">Đáng tin cậy</string>
     <string name="downloader_plugin_state_failed">Không thể tải được. Nhấn để biết thêm chi tiết</string>
@@ -375,9 +385,9 @@
     <string name="appearance">Giao diện</string>
     <string name="downloaded_apps">Ứng dụng đã tải</string>
     <string name="process_runtime">Chạy trình vá trong một tiến trình riêng (thử nghiệm)</string>
-    <string name="process_runtime_description">Cách này nhanh hơn vì cho phép trình vá sử dụng nhiều bộ nhớ hơn</string>
+    <string name="process_runtime_description">Cách này nhanh hơn vì cho phép trình vá sử dụng nhiều bộ nhớ hơn.</string>
     <string name="strip_unused_libs">Xóa thư viện gốc không dùng tới</string>
-    <string name="strip_unused_libs_description">Xóa thư viện gốc cho kiến trúc CPU không được hỗ trợ từ ứng dụng đã vá</string>
+    <string name="strip_unused_libs_description">Xóa thư viện gốc cho kiến trúc CPU không được hỗ trợ từ ứng dụng đã vá.</string>
     <string name="process_runtime_memory_limit">Giới hạn bộ nhớ cho tiến trình vá</string>
     <string name="process_runtime_memory_limit_description">Nhập dung lượng bộ nhớ tối đa mà tiến trình vá sử dụng (tính bằng megabyte).</string>
     <string name="process_runtime_memory_limit_description_detailed">Nhập dung lượng bộ nhớ tối đa mà tiến trình vá sử dụng (tính bằng megabyte).\nĐề xuất cho thiết bị này: %1$d MB.</string>
@@ -432,6 +442,25 @@
     <string name="api_url_dialog_warning">Universal ReVanced Manager sẽ kết nối với API để tải xuống các bản vá và cập nhật. Hãy chắc chắn rằng bạn có thể tin tưởng nó.</string>
     <string name="api_url_dialog_save">Đặt</string>
     <string name="api_url_dialog_reset">Đặt lại URL của API</string>
+    <!-- PR #35: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35 -->
+    <string name="github_pat">GitHub PAT</string>
+    <string name="github_pat_description">Cần GitHub Personal Access Token để sử dụng GitHub integration</string>
+    <string name="set_github_pat_dialog_title">Thiết lập GitHub PAT</string>
+    <string name="set_github_pat_dialog_description">Thiết lập GitHub Personal Access Token để có thể thêm Pull Request làm nguồn bên ngoài. Hãy tạo một PAT với quyền public_repo</string>
+    <string name="include_github_pat_in_exports_label">Kèm theo khi xuất cài đặt</string>
+    <string name="include_github_pat_in_exports_supporting">Thêm PAT khi xuất cài đặt trình quản lý</string>
+    <string name="include_github_pat_in_exports_warning">Tuyệt đối không chia sẻ PAT vì chúng chứa token.</string>
+    <string name="language_settings">Ngôn ngữ</string>
+    <string name="app_language">Ngôn ngữ ứng dụng</string>
+    <string name="language_dialog_title">Chọn ngôn ngữ</string>
+    <string name="language_option_system">Theo ngôn ngữ hệ thống</string>
+    <string name="language_option_english">Tiếng Anh</string>
+    <string name="language_option_chinese_simplified">Tiếng Trung (giản thể)</string>
+    <!-- From PR #42: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/42 -->
+    <string name="language_option_korean">Tiếng Hàn</string>
+    <!-- From PR #38: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/38 -->
+    <string name="language_option_vietnamese">Tiếng Việt (dịch bởi ann9cht)</string>
+    <string name="language_option_japanese">Tiếng Nhật</string>
     <string name="device">Thiết bị</string>
     <string name="device_android_version">Phiên bản Android</string>
     <string name="device_model">Mẫu</string>
@@ -474,9 +503,9 @@
     <string name="patch_profile_select_bundles_description">Chọn gói vá để đưa cấu hình này vào.</string>
     <string name="patch_profile_select_bundles_empty">Không có gói vá nào có sẵn để lưu.</string>
     <string name="patch_profile_name_title">Tên cấu hình vá</string>
-    <string name="patch_profile_name_description">Nhập tên cấu hình vá hoặc chọn một cấu hình bên dưới để cập nhật</string>
+    <string name="patch_profile_name_description">Nhập tên để tạo cấu hình vá mới hoặc chọn một cấu hình đã lưu để cập nhật chúng.</string>
     <string name="patch_profile_update_existing_title">Cập nhật cấu hình hiện có</string>
-    <string name="patch_profile_update_existing_description">Chạm vào một cấu hình đã lưu để ghi đè lên, hoặc bỏ trống để tạo cấu hình mới.</string>
+    <string name="patch_profile_update_existing_description">Chạm vào một cấu hình bên dưới để ghi đè lên.</string>
     <string name="patch_profile_name_hint">Tên cấu hình</string>
     <string name="patch_profile_saved_toast">Đã lưu cấu hình vá %1$s</string>
     <string name="patch_profile_duplicate_toast">Cấu hình vá %1$s đã tồn tại cho ứng dụng này rồi</string>
@@ -484,6 +513,19 @@
     <string name="patch_profile_save_failed_toast">Không thể lưu cấu hình vá</string>
     <string name="patch_profile_rename">Đổi tên</string>
     <string name="patch_profile_rename_title">Đổi tên cấu hình vá</string>
+    <string name="patch_profile_version_override_action">Phiên bản áp dụng cho cấu hình vá</string>
+    <string name="patch_profile_version_override_title">Phiên bản áp dụng cho \"%1$s\"</string>
+    <string name="patch_profile_version_override_message">Nhập một phiên bản cụ thể để áp dụng cấu hình này, nếu bỏ trống, mặc định là tất cả phiên bản.</string>
+    <string name="patch_profile_version_override_label">Phiên bản ứng dụng</string>
+    <string name="patch_profile_version_override_hint">vd. 18.27.35</string>
+    <string name="patch_profile_version_override_all_versions">Dùng tất cả phiên bản</string>
+    <string name="patch_profile_version_override_saved_toast">Đã cập nhật phiên bản cấu hình</string>
+    <string name="patch_profile_version_override_failed_toast">Không thể cập nhật phiên bản cấu hình</string>
+    <string name="patch_profile_version_override_set_to_all">Bạn chưa nhập phiên bản, lưu thành \"%1$s\"</string>
+    <string name="patch_profile_version_conflict_title">Ghi đè?</string>
+    <string name="patch_profile_version_conflict_message">Phiên bản hiện tại: %1$s\nPhiên bản mới: %2$s\nBạn muốn lưu phiên bản nào cho cấu hình này?</string>
+    <string name="patch_profile_version_conflict_use_new">Dùng phiên bản mới</string>
+    <string name="patch_profile_version_conflict_keep_existing">Giữ phiên bản hiện tại</string>
     <string name="patch_profile_empty_state">Lưu cấu hình từ màn hình chọn bản vá để xem chúng ở đây.</string>
     <string name="patch_profile_missing_bundles_toast">Một số gói trong cấu hình này có thể không còn tồn tại và sẽ bị bỏ qua.</string>
     <string name="patch_profile_changed_patches_toast">Một số bản vá và tùy chọn trong cấu hình này không còn khớp với gói và đã bị bỏ qua.</string>
@@ -507,25 +549,20 @@
     <string name="patcher_memory_adjustment_retry">Thử lại</string>
     <string name="patcher_memory_adjustment_dismiss">Bỏ qua</string>
     <string name="patcher_missing_patch_title">Cần kiểm tra lựa chọn bản vá</string>
-    <!-- Needs translation -->
-    <string name="patcher_preflight_missing_patch_message">The following patches aren’t available in the current bundle:
+    <string name="patcher_preflight_missing_patch_message">Các bản vá dưới đây hiện không còn trong gói hiện tại:
 %1$s
-You can remove them automatically, adjust the selection, or continue anyway.</string>
-    <!-- Needs translation -->
-    <string name="patcher_preflight_missing_patch_remove">Remove missing patches</string>
-    <!-- Needs translation -->
-    <string name="patcher_preflight_missing_patch_proceed">Proceed anyway</string>
+Bạn có thể tự xóa chúng, điều chỉnh lựa chọn, hoặc cứ tiếp tục.</string>
+    <string name="patcher_preflight_missing_patch_remove">Xóa các bản vá bị thiếu</string>
+    <string name="patcher_preflight_missing_patch_proceed">Vẫn tiếp tục</string>
     <string name="patcher_missing_patch_review">Xem lại lựa chọn</string>
     <string name="patch_selector_missing_patch_title">Chọn lại bản vá bị thiếu</string>
     <string name="patch_selector_missing_patch_message">Các bản vá dưới đây cần chọn lại:\n%1$s\nBật lại chúng (hoặc chọn bản vá thay thế) và thử vá lại.</string>
     <string name="delete_profile_confirmation">Xóa %1$s?</string>
     <string name="patch_profile_delete_multiple_dialog_description">Xóa cấu hình vá đã chọn?</string>
     <plurals name="patch_profile_bundle_patch_count">
-        <item quantity="one">%d bản vá</item>
         <item quantity="other">%d bản vá</item>
     </plurals>
     <plurals name="patch_profile_bundle_count">
-        <item quantity="one">%d gói</item>
         <item quantity="other">%d gói</item>
     </plurals>
     <string name="universal_patch_warning_description">Các bản vá phổ quát được thiết kế để hoạt động với tất cả ứng dụng nên không ổn định như các bản vá dành riêng cho các ứng dụng cụ thể. Bạn có thể gặp phải sự cố trong khi sử dụng chúng.\n\nHãy bật tùy chọn \"Hiện và cho dùng bản vá phổ quát\" trong cài đặt nâng cao trước khi sử dụng.</string>
@@ -557,9 +594,15 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="default_install">Mặc định</string>
     <string name="mount_install">Gắn kết</string>
     <string name="mounted">Đã gắn kết</string>
+    <string name="unmounted">Chưa gắn kết</string>
+    <string name="install_type_custom_installer">Trình cài đặt tuỳ chỉnh</string>
+    <string name="install_type_system_installer">Trình cài đặt hệ thống</string>
+    <string name="install_type_mount_label">Trình cài đặt gắn kết bằng root</string>
+    <string name="install_type_shizuku_label">Shizuku</string>
     <string name="not_mounted">Không gắn kết</string>
     <string name="mount">Gắn kết</string>
     <string name="unmount">Gỡ gắn kết</string>
+    <string name="unmount_confirm_description">Bạn có muốn gỡ gắn kết ứng dụng?</string>
     <string name="saved_install">Đã lưu</string>
     <string name="failed_to_mount">Gắn kết thất bại: %s</string>
     <string name="failed_to_unmount">Gỡ gắn kết thất bại: %s</string>
@@ -578,6 +621,10 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="already_patched">Đã vá</string>
     <string name="patch_selector_sheet_filter_title">Bộ lọc</string>
     <string name="patch_selector_sheet_filter_compat_title">Khả năng tương thích</string>
+    <string name="patch_selector_sheet_filter_sort_title">Sắp xếp</string>
+    <string name="patch_selector_sheet_filter_sort_alphabetical">A - Z</string>
+    <string name="patch_selector_sheet_filter_sort_has_settings">Có cài đặt</string>
+    <string name="patch_selector_sheet_filter_sort_no_settings">Không có cài đặt</string>
     <string name="string_option_menu_description">Nhiều tuỳ chọn hơn</string>
     <string name="option_preset_custom_value">Giá trị tuỳ chỉnh</string>
     <string name="path_selector">Chọn từ bộ nhớ trong</string>
@@ -593,6 +640,8 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="installer_fallback_description">Được tự động khi trình cài đặt chính không có sẵn.</string>
     <string name="installer_internal_name">Trình cài đặt hệ thống</string>
     <string name="installer_internal_description">Dùng trình cài đặt gói của Android</string>
+    <string name="installer_auto_saved_name">Trình cài đặt gắn kết bằng root</string>
+    <string name="installer_auto_saved_description">Gắn APK đã vá lên ứng dụng đang cài đặt (yêu cầu quyền root).</string>
     <string name="installer_shizuku_name">Shizuku</string>
     <string name="installer_shizuku_description">Cài ẩn bằng Shizuku hoặc Sui.</string>
     <string name="installer_option_none">Không có</string>
@@ -602,6 +651,16 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="installer_status_shizuku_not_installed">Cài Shizuku hoặc Sui để dùng tuỳ chọn này.</string>
     <string name="installer_status_shizuku_not_running">Chạy Shizuku hoặc Sui và thử lại.</string>
     <string name="installer_status_shizuku_permission">Cấp quyền Shizuku cho Universal ReVanced Manager trong ứng dụng Shizuku.</string>
+    <string name="installer_mount_warning_title">Đã chọn trình cài đặt gắn kết bằng root</string>
+    <string name="installer_mount_warning_install">Bạn đang chọn trình cài đặt gắn kết bằng root làm mặc định, nhưng ứng dụng đã lưu này không được cài theo cách đó.</string>
+    <string name="installer_mount_warning_update">Bạn đang chọn trình cài đặt gắn kết bằng root làm mặc định, nhưng ứng dụng đã lưu này không được cài theo cách đó.</string>
+    <string name="installer_mount_warning_uninstall">Bạn đang chọn trình cài đặt gắn kết bằng root làm mặc định, nhưng ứng dụng đã lưu này không được cài theo cách đó.</string>
+    <string name="installer_mount_mismatch_title">Chưa chọn trình cài đặt gắn kết bằng root</string>
+    <string name="installer_mount_mismatch_install">Ứng dụng này được cài qua trình cài đặt gắn kết bằng root. Hãy chuyển trình cài đặt chính sang chế độ gắn kết, rồi gắn lại.</string>
+    <string name="installer_mount_mismatch_update">Ứng dụng này được cài qua trình cài đặt gắn kết bằng root. Hãy chuyển trình cài đặt chính sang chế độ gắn kết, rồi gắn lại.</string>
+    <string name="installer_mount_mismatch_uninstall">Ứng dụng này được cài qua trình cài đặt gắn kết bằng root. Hãy chuyển trình cài đặt chính sang chế độ gắn kết, rồi gỡ gắn lại.</string>
+    <string name="mount_version_mismatch_title">Không thể gắn</string>
+    <string name="mount_version_mismatch_message">Phiển bản ứng dụng gốc (%2$s) không khớp với phiên bản ứng dụng đã vá (%1$s). Hãy gắn kết đúng phiên bản ứng dụng gốc tương ứng rồi thử lại.</string>
     <string name="installer_status_shizuku_unsupported">Phiên bản Shizuku đã cài không được hỗ trợ.</string>
     <string name="installer_action_open_shizuku">Mở Shizuku</string>
     <string name="installer_shizuku_launch_failed">Không thể mở Shizuku. Hãy tự mở Shizuku và thử lại.</string>
@@ -644,10 +703,16 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="installer_external_launched">Đang mở %1$s…</string>
     <string name="installer_external_timeout">%1$s không xác nhận cài đặt. Kiểm tra ứng dụng khác và thử lại.</string>
     <string name="installer_external_success">%1$s báo đã cài đặt thành công.</string>
+    <string name="installer_external_finished_no_change">%1$s đã hoàn tất nhưng không cài đặt. Hãy kiểm tra trình cài đặt để xem thông báo lỗi và thử lại.</string>
+    <string name="installing_ellipsis">Đang cài…</string>
+    <string name="mounting_ellipsis">Đang gắn…</string>
+    <string name="unmounting">Đang gỡ gắn…</string>
     <string name="install_app">Cài đặt</string>
     <string name="install_app_success">Đã cài đặt ứng dụng</string>
     <string name="install_app_fail_title">Không thể cài đặt</string>
     <string name="install_app_fail">Cài đặt ứng dụng thất bại: %s</string>
+    <string name="mount_app_fail_title">Không thể gắn</string>
+    <string name="mount_app_fail">Không thể gắn ứng dụng: %1$s</string>
     <string name="install_timeout_message">Cài đặt không thành công. Kiểm tra hộp thoại cài đặt hệ thống và thử lại.</string>
     <string name="reinstall_app_fail">Cài đặt lại ứng dụng thất bại: %s</string>
     <string name="uninstall_app_fail">Gỡ cài đặt ứng dụng thất bại: %s</string>
@@ -660,13 +725,19 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="saved_app_copy_removed_toast">Đã xoá bản sao đã lưu</string>
     <string name="delete_saved_app_title">Xoá ứng dụng đã lưu</string>
     <string name="delete_saved_app_description">Thao tác này sẽ xoá mục ứng dụng và APK đã lưu trữ.</string>
-    <string name="delete_saved_entry_title">Xoá mục ứng dụng đã lưu</string>
-    <string name="delete_saved_entry_description">Thao tác này sẽ xoá mục ứng dụng và APK đã lưu. Còn ứng dụng vẫn sẽ được cài đặt trên máy.</string>
+    <string name="delete_saved_entry_title">Xóa APK đã lưu</string>
+    <string name="delete_saved_entry_description">Thao tác này sẽ xoá APK đã lưu. Còn ứng dụng vẫn được cài đặt trên máy.</string>
     <string name="saved_app_launch_unavailable">Cài ứng dụng trước khi mở.</string>
     <string name="install_saved_app">Cài đặt</string>
+    <string name="remount_saved_app">Gắn lại</string>
+    <string name="update_saved_app">Cập nhật</string>
     <string name="installing_saved_app">Đang cài đặt ứng dụng đã lưu…</string>
     <string name="saved_app_install_success">Đang cài đặt ứng dụng đã lưu</string>
     <string name="saved_app_install_failed">Không thể cài ứng dụng đã lưu</string>
+    <string name="saved_app_uninstall_title">Gỡ bản đã cài?</string>
+    <string name="saved_app_unmount_title">Gỡ gắn bản đã cài?</string>
+    <string name="saved_app_uninstall_description">Chỉ xoá phiên bản đã cài. APK bạn đã lưu vẫn còn.</string>
+    <string name="saved_app_unmount_description">Thao tác này sẽ gỡ gắn APK đã vá, APK đã lưu không bị ảnh hưởng.</string>
     <string name="saved_app_install_missing">Không tìm thấy APK đã lưu</string>
     <string name="delete_saved_copy">Xoá bản sao đã lưu</string>
     <string name="sign_fail">Ký APK thất bại: %s</string>
@@ -675,6 +746,8 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="select_install_type">Chọn kiểu cài đặt</string>
     <string name="patcher_step_group_preparing">Chuẩn bị</string>
     <string name="patcher_step_load_patches">Tải bản vá</string>
+    <string name="patcher_step_prepare_split_apk">Ghép APK phân tách</string>
+    <string name="patcher_step_merge_not_required">Không cần ghép APK phân tách</string>
     <string name="patcher_step_unpack">Đọc APK</string>
     <string name="patcher_step_group_patching">Vá</string>
     <string name="patcher_step_group_saving">Lưu</string>
@@ -684,7 +757,12 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="patcher_notification_text">Chạm để quay trở lại trình vá</string>
     <string name="patcher_stop_confirm_title">Ngừng vá</string>
     <string name="patcher_stop_confirm_description">Bạn có chắc chắn muốn ngừng tiến trình vá không?</string>
+    <string name="patcher_install_in_progress_title">Quá trình cài đặt đang diễn ra</string>
     <string name="patcher_install_in_progress">Quá trình cài đặt đang diễn ra. Vui lòng đợi</string>
+    <string name="patcher_install_in_progress_leave">Vẫn rời</string>
+    <string name="patcher_install_in_progress_stay">Ở lại</string>
+    <string name="patcher_mount_in_progress_title">Quá trình gắn kết đang diễn ra</string>
+    <string name="patcher_mount_in_progress">Quá trình gắn kết đang diễn ra. Vui lòng đợi</string>
     <string name="execute_patches">Thực thi các bản vá</string>
     <string name="executing_patch">Thực thi %s</string>
     <string name="failed_to_execute_patch">Không thể thực thi %s</string>
@@ -729,7 +807,9 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="patches_delete_multiple_dialog_description">Bạn có chắc muốn xóa các gói vá đã chọn không?</string>
     <string name="about_revanced_manager">Giới thiệu về Universal ReVanced Manager</string>
     <string name="revanced_manager_description">Universal ReVanced Manager (URV Manager) là một nhánh của ReVanced Manager. Cả hai đều dùng ReVanced Patcher, cho phép bạn tải và vá ứng dụng bằng các bản vá tuỳ chỉnh, cũng như quản lý quá trình vá một cách dễ dàng. Những tính năng độc đáo của Universal ReVanced Manager bao gồm: đặt tên tên gói vá, hỗ trợ nhập bất kỳ gói vá bên thứ ba nào, và nhiều hơn nữa. Xem danh sách đầy đủ các tính năng độc đáo mà Universal ReVanced Manager cung cấp</string>
-    <string name="unique_features_label">tại đây.</string>
+    <string name="unique_features_label">ở đây.</string>
+    <!-- From PR #37: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/37 -->
+    <string name="here">ở đây.</string>
     <string name="developer_options_enabled">Đã kích hoạt chế độ nhà phát triển</string>
     <string name="developer_options_taps">Chạm thêm %d lần nữa</string>
     <string name="developer_options_already_enabled">Chế độ nhà phát triển đã được kích hoạt rồi!</string>

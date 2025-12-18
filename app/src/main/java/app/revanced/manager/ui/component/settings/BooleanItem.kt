@@ -8,7 +8,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import app.revanced.manager.domain.manager.base.Preference
-import app.revanced.manager.ui.component.haptics.HapticSwitch
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -38,14 +37,14 @@ fun BooleanItem(
     onValueChange: (Boolean) -> Unit,
     @StringRes headline: Int,
     @StringRes description: Int
-) = SettingsListItem(
+) = ExpressiveSettingsItem(
     modifier = Modifier
         .clickable { onValueChange(!value) }
         .then(modifier),
     headlineContent = stringResource(headline),
     supportingContent = stringResource(description),
     trailingContent = {
-        HapticSwitch(
+        ExpressiveSettingsSwitch(
             checked = value,
             onCheckedChange = onValueChange,
         )

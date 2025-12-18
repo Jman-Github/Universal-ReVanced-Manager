@@ -21,6 +21,8 @@ import app.revanced.manager.domain.bundles.GitHubPullRequestBundle
 import app.revanced.manager.domain.bundles.JsonPatchBundle
 import app.revanced.manager.data.room.bundles.Source as SourceInfo
 import app.revanced.manager.domain.bundles.LocalPatchBundle
+import app.revanced.manager.domain.bundles.PatchBundleDownloadProgress
+import app.revanced.manager.domain.bundles.PatchBundleDownloadResult
 import app.revanced.manager.domain.bundles.RemotePatchBundle
 import app.revanced.manager.domain.bundles.PatchBundleSource
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
@@ -36,15 +38,18 @@ import kotlinx.collections.immutable.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.InputStream
@@ -52,6 +57,8 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
+import java.net.URI
+import java.net.URISyntaxException
 import java.util.Locale
 import kotlin.collections.LinkedHashSet
 import kotlin.collections.joinToString
@@ -67,7 +74,8 @@ class PatchBundleRepository(
     private val dao = db.patchBundleDao()
     private val bundlesDir = app.getDir("patch_bundles", Context.MODE_PRIVATE)
 
-    private val store = Store(CoroutineScope(Dispatchers.Default), State())
+    private val scope = CoroutineScope(Dispatchers.Default)
+    private val store = Store(scope, State())
 
     val sources = store.state.map { it.sources.values.toList() }
     val bundles = store.state.map {
@@ -111,8 +119,85 @@ class PatchBundleRepository(
     private val bundleImportProgressFlow = MutableStateFlow<ImportProgress?>(null)
     val bundleImportProgress: StateFlow<ImportProgress?> = bundleImportProgressFlow.asStateFlow()
 
+    private var bundleImportAutoClearJob: Job? = null
+
     fun setBundleImportProgress(progress: ImportProgress?) {
         bundleImportProgressFlow.value = progress
+        bundleImportAutoClearJob?.cancel()
+        if (progress == null) return
+
+        val isDownloadComplete = progress.bytesTotal?.takeIf { it > 0L }?.let { total ->
+            progress.bytesRead >= total
+        } ?: false
+
+        val isDone = progress.processed >= progress.total &&
+            (progress.phase != BundleImportPhase.Downloading || isDownloadComplete)
+
+        if (!isDone) return
+
+        bundleImportAutoClearJob = scope.launch {
+            delay(1_000)
+            val current = bundleImportProgressFlow.value ?: return@launch
+            val currentDownloadComplete = current.bytesTotal?.takeIf { it > 0L }?.let { total ->
+                current.bytesRead >= total
+            } ?: false
+            val currentDone = current.processed >= current.total &&
+                (current.phase != BundleImportPhase.Downloading || currentDownloadComplete)
+            if (currentDone) {
+                bundleImportProgressFlow.value = null
+            }
+        }
+    }
+
+    private fun progressLabelFor(bundle: RemotePatchBundle): String {
+        val explicitDisplayName = bundle.displayName?.trim().takeUnless { it.isNullOrBlank() }
+        if (explicitDisplayName != null) return explicitDisplayName
+
+        val unnamed = app.getString(R.string.patches_name_fallback)
+        if (bundle.name == unnamed) {
+            guessNameFromEndpoint(bundle.endpoint)?.let { return it }
+        }
+        return bundle.name
+    }
+
+    private fun guessNameFromEndpoint(endpoint: String): String? {
+        val uri = try {
+            URI(endpoint)
+        } catch (_: URISyntaxException) {
+            return null
+        }
+        val host = uri.host?.lowercase(Locale.US) ?: return null
+        val segments = uri.path?.trim('/')?.split('/')?.filter { it.isNotBlank() }.orEmpty()
+
+        // Prefer a segment containing "bundle" (case-insensitive), e.g. ".../piko-latest-patches-bundle.json".
+        val bundleCandidates = segments.filter { it.contains("bundle", ignoreCase = true) }
+        val chosen = bundleCandidates
+            .lastOrNull { seg ->
+                val normalized = seg.lowercase(Locale.US)
+                normalized !in setOf("bundle", "bundles")
+            }
+            ?: bundleCandidates.lastOrNull()
+
+        if (chosen != null) {
+            val withoutExt = chosen.replace(Regex("\\.[A-Za-z0-9]+$"), "")
+            val normalized = withoutExt
+                .replace(Regex("[._\\-]+"), " ")
+                .replace(Regex("\\s+"), " ")
+                .trim()
+                .lowercase(Locale.US)
+
+            if (normalized.isNotBlank()) {
+                return normalized.replaceFirstChar { c -> c.titlecase(Locale.US) }
+            }
+        }
+
+        // Fallbacks for common GitHub URL patterns.
+        if (segments.isEmpty()) return host
+        return when {
+            host == "github.com" && segments.size >= 2 -> segments[1]
+            host == "api.github.com" && segments.size >= 3 && segments[0] == "repos" -> segments[2]
+            else -> host
+        }
     }
 
     suspend fun enforceOfficialOrderPreference() = dispatchAction("Enforce official order preference") { state ->
@@ -646,11 +731,23 @@ class PatchBundleRepository(
         return if (raw != 0) raw else 1
     }
 
-    suspend fun createRemote(url: String, autoUpdate: Boolean, createdAt: Long? = null, updatedAt: Long? = null) =
+    suspend fun createRemote(
+        url: String,
+        autoUpdate: Boolean,
+        createdAt: Long? = null,
+        updatedAt: Long? = null,
+        onProgress: PatchBundleDownloadProgress? = null,
+    ) =
         dispatchAction("Add bundle ($url)") { state ->
             val src = createEntity("", SourceInfo.from(url), autoUpdate, createdAt = createdAt, updatedAt = updatedAt).load() as RemotePatchBundle
             val allowUnsafeDownload = prefs.allowMeteredUpdates.get()
-            update(src, allowUnsafeNetwork = allowUnsafeDownload)
+            update(
+                src,
+                allowUnsafeNetwork = allowUnsafeDownload,
+                onPerBundleProgress = { bundle, bytesRead, bytesTotal ->
+                    if (bundle.uid == src.uid) onProgress?.invoke(bytesRead, bytesTotal)
+                }
+            )
             state.copy(sources = state.sources.put(src.uid, src))
         }
 
@@ -682,10 +779,17 @@ class PatchBundleRepository(
     suspend fun update(
         vararg sources: RemotePatchBundle,
         showToast: Boolean = false,
-        allowUnsafeNetwork: Boolean = false
+        allowUnsafeNetwork: Boolean = false,
+        onPerBundleProgress: ((bundle: RemotePatchBundle, bytesRead: Long, bytesTotal: Long?) -> Unit)? = null,
     ) {
         val uids = sources.map { it.uid }.toSet()
-        store.dispatch(Update(showToast = showToast, allowUnsafeNetwork = allowUnsafeNetwork) { it.uid in uids })
+        store.dispatch(
+            Update(
+                showToast = showToast,
+                allowUnsafeNetwork = allowUnsafeNetwork,
+                onPerBundleProgress = onPerBundleProgress,
+            ) { it.uid in uids }
+        )
     }
 
     suspend fun redownloadRemoteBundles() = store.dispatch(Update(force = true))
@@ -732,6 +836,7 @@ class PatchBundleRepository(
         private val force: Boolean = false,
         private val showToast: Boolean = false,
         private val allowUnsafeNetwork: Boolean = false,
+        private val onPerBundleProgress: ((bundle: RemotePatchBundle, bytesRead: Long, bytesTotal: Long?) -> Unit)? = null,
         private val predicate: (bundle: RemotePatchBundle) -> Boolean = { true },
     ) : Action<State> {
         private suspend fun toast(@StringRes id: Int, vararg args: Any?) =
@@ -761,33 +866,68 @@ class PatchBundleRepository(
 
             bundleUpdateProgressFlow.value = BundleUpdateProgress(
                 total = targets.size,
-                completed = 0
+                completed = 0,
+                phase = BundleUpdatePhase.Checking,
             )
 
             val updated = try {
-                targets
-                    .map { bundle ->
-                        async {
-                            Log.d(tag, "Updating patch bundle: ${bundle.name}")
+                val results = LinkedHashMap<RemotePatchBundle, PatchBundleDownloadResult>()
+                var completed = 0
 
-                            val result = with(bundle) {
-                                if (force) downloadLatest() else update()
-                            }
+                for (bundle in targets) {
+                    Log.d(tag, "Updating patch bundle: ${bundle.name}")
 
-                            bundleUpdateProgressFlow.update { progress ->
-                                progress?.copy(
-                                    completed = (progress.completed + 1).coerceAtMost(progress.total)
-                                )
-                            }
+                    bundleUpdateProgressFlow.value = BundleUpdateProgress(
+                        total = targets.size,
+                        completed = completed,
+                        currentBundleName = progressLabelFor(bundle),
+                        phase = BundleUpdatePhase.Checking,
+                        bytesRead = 0L,
+                        bytesTotal = null,
+                    )
 
-                            if (result == null) return@async null
+                    val onProgress: PatchBundleDownloadProgress = { bytesRead, bytesTotal ->
+                        bundleUpdateProgressFlow.update { progress ->
+                            progress?.copy(
+                                currentBundleName = progressLabelFor(bundle),
+                                phase = BundleUpdatePhase.Downloading,
+                                bytesRead = bytesRead,
+                                bytesTotal = bytesTotal,
+                            )
+                        }
+                        onPerBundleProgress?.invoke(bundle, bytesRead, bytesTotal)
+                    }
 
-                            bundle to result
+                    val result = with(bundle) {
+                        if (force) downloadLatest(onProgress) else update(onProgress)
+                    }
+
+                    val downloadedName = runCatching {
+                        PatchBundle(bundle.patchesJarFile.absolutePath).manifestAttributes?.name
+                    }.getOrNull()?.trim().takeUnless { it.isNullOrBlank() }
+                    if (downloadedName != null) {
+                        bundleUpdateProgressFlow.update { progress ->
+                            progress?.copy(currentBundleName = downloadedName)
                         }
                     }
-                    .awaitAll()
-                    .filterNotNull()
-                    .toMap()
+
+                    completed = (completed + 1).coerceAtMost(targets.size)
+                    bundleUpdateProgressFlow.update { progress ->
+                        progress?.copy(
+                            completed = completed,
+                            currentBundleName = downloadedName ?: progressLabelFor(bundle),
+                            phase = BundleUpdatePhase.Finalizing,
+                            bytesRead = 0L,
+                            bytesTotal = null,
+                        )
+                    }
+
+                    if (result != null) {
+                        results[bundle] = result
+                    }
+                }
+
+                results
             } finally {
                 bundleUpdateProgressFlow.value = null
             }
@@ -797,7 +937,9 @@ class PatchBundleRepository(
             }
 
             updated.forEach { (src, downloadResult) ->
-                val name = src.patchBundle?.manifestAttributes?.name ?: src.name
+                val name = runCatching {
+                    PatchBundle(src.patchesJarFile.absolutePath).manifestAttributes?.name
+                }.getOrNull()?.trim().takeUnless { it.isNullOrBlank() } ?: src.name
                 val now = System.currentTimeMillis()
 
                 updateDb(src.uid) {
@@ -916,14 +1058,42 @@ class PatchBundleRepository(
     data class BundleUpdateProgress(
         val total: Int,
         val completed: Int,
+        val currentBundleName: String? = null,
+        val phase: BundleUpdatePhase = BundleUpdatePhase.Checking,
+        val bytesRead: Long = 0L,
+        val bytesTotal: Long? = null,
     )
+
+    enum class BundleUpdatePhase {
+        Checking,
+        Downloading,
+        Finalizing,
+    }
 
     data class ImportProgress(
         val processed: Int,
-        val total: Int
+        val total: Int,
+        val currentBundleName: String? = null,
+        val phase: BundleImportPhase = BundleImportPhase.Processing,
+        val bytesRead: Long = 0L,
+        val bytesTotal: Long? = null,
     ) {
-        val ratio: Float
-            get() = processed.coerceAtLeast(0).toFloat() / total.coerceAtLeast(1)
+        val ratio: Float?
+            get() {
+                val safeTotal = total.coerceAtLeast(1)
+                val base = processed.coerceAtLeast(0).toFloat() / safeTotal
+                if (phase != BundleImportPhase.Downloading) return base.coerceIn(0f, 1f)
+
+                val totalBytes = bytesTotal?.takeIf { it > 0L } ?: return null
+                val perBundleFraction = (bytesRead.toFloat() / totalBytes).coerceIn(0f, 1f)
+                return (base + (perBundleFraction / safeTotal)).coerceIn(0f, 1f)
+            }
+    }
+
+    enum class BundleImportPhase {
+        Processing,
+        Downloading,
+        Finalizing,
     }
 
     data class ManualBundleUpdateInfo(
