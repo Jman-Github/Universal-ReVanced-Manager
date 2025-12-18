@@ -19,7 +19,7 @@
     <string name="app_filter_installed_only">설치된 앱만</string>
     <string name="app_filter_patches_available">사용 가능한 패치</string>
     <string name="app_filter_no_results">필터와 일치하는 앱이 없습니다.</string>
-    <string name="patches_count_selected">%1$d/%2$d 을 선택하였습니다</string>
+    <string name="patches_count_selected">%1$d/%2$d 개를 선택하였습니다</string>
     <string name="new_downloader_plugins_notification">새로운 다운로더 플러그인을 사용할 수 있습니다. 설정하려면 여기를 탭하세요.</string>
     <string name="unsupported_architecture_warning">이 기기 아키텍처에 대한 패치는 지원되지 않으므로 실패할 가능성이 높습니다.</string>
     <string name="import_">가져오기</string>
@@ -63,7 +63,7 @@
     <string name="bundle_version_other_heading">그 외 권장 버전</string>
     <string name="bundle_update_manual_available">업데이트 사용 가능</string>
     <string name="bundle_update_manual_available_with_version">업데이트 사용 가능: %1$s</string>
-    <string name="bundle_update_progress">%1$d/%2$d 번들이 처리됨</string>
+    <string name="bundle_update_progress">%1$d/%2$d 개의 번들이 처리됨</string>
     <string name="bundle_update_banner_title">패치 번들 업데이트하는 중</string>
     <string name="bundle_reorder">번들 정리</string>
     <string name="bundle_reorder_title">패치 번들 정리</string>
