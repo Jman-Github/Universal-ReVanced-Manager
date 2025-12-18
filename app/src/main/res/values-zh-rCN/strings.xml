@@ -456,10 +456,9 @@
     <string name="language_option_chinese_simplified">简体中文</string>
 
     <string name="language_option_vietnamese">Vietnamese</string>
+    <string name="language_option_japanese">日语</string>
 
-    <string name="patcher_preflight_missing_patch_message">The following patches aren’t available in the current bundle:
-%1$s
-You can remove them automatically, adjust the selection, or continue anyway.</string>
+    <string name="patcher_preflight_missing_patch_message">The following patches aren\'t available in the current bundle:\n%1$s\nYou can remove them automatically, adjust the selection, or continue anyway.</string>
 
     <string name="patcher_preflight_missing_patch_remove">Remove missing patches</string>
 

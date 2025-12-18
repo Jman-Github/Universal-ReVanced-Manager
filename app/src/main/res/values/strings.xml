@@ -492,6 +492,7 @@ Recommended for this device: %1$d MB.</string>
     <string name="language_option_korean">Korean</string>
     <!-- From PR #38: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/38 -->
     <string name="language_option_vietnamese">Vietnamese</string>
+    <string name="language_option_japanese">Japanese</string>
     <string name="device">Device</string>
     <string name="device_android_version">Android version</string>
     <string name="device_model">Model</string>

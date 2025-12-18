@@ -72,6 +72,7 @@ Universal ReVanced Manager includes powerful features that the official ReVanced
   - Configurable primary and fallback installers
   - Shizuku installer option for silent installs when Shizuku or Sui is available
   - Advanced settings support saving custom installer packages with package-name lookup and autocomplete, plus dedicated management for third-party installers
+  - App mounting support for rooted users (rooted mount installer)
 
 ### 📥 Downloader & Storage Management
 - 📂 **Cached Downloads Management**: The manager can now keep multiple downloaded apps (from downloader plugins) inside the downloader settings. You can also export any of these APKs to your device storage whenever you want
@@ -91,8 +92,10 @@ Universal ReVanced Manager includes powerful features that the official ReVanced
 - 📤 **Robust Import / Export**: Export and import your patch bundles, your patch profiles, and your app settings to and from JSON files for easy backup, sharing, or migration between devices
 
 ### 🌍 Localization
-- (🇨🇳) **Simplified Chinese**: Simplified Chinese localization with a user-selectable language option in settings
-- (🇻🇳) **Vietnamese**: Vietnamese added as an additional app language option
+- **Simplified Chinese (zh-CN)**: User-selectable language option in settings
+- **Vietnamese (vi)**: User-selectable language option in settings
+- **Korean (ko)**: User-selectable language option in settings
+- **Japanese (ja)**: User-selectable language option in settings
 
 ## 🔽 Download
 
@@ -154,6 +157,15 @@ To import patch bundles into Universal ReVanced Manager, use my [ReVanced Patch 
     <td style="vertical-align:middle;">
       <a href="https://github.com/BlackGold8282">BlackGold8282</a><br />
       Korean localization
+    </td>
+  </tr>
+  <tr>
+    <td style="vertical-align:middle;padding-right:8px;">
+      <img src="https://images.weserv.nl/?url=github.com%2FYuzuMikan404.png&h=36&w=36&fit=cover&mask=circle" alt="YuzuMikan404 avatar" width="36" height="36" />
+    </td>
+    <td style="vertical-align:middle;">
+      <a href="https://github.com/YuzuMikan404">YuzuMikan404</a><br />
+      Japanese localization
     </td>
   </tr>
 </table>

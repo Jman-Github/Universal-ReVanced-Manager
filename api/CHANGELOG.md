@@ -1,4 +1,4 @@
-# v1.6.0 (TBD)
+# v1.6.0 (2025-12-17)
 
 
 # Features
@@ -6,16 +6,16 @@
 - Enhanced patcher log export with comprehensive information including timestamps, app metadata, split APK merging details, patching summary, and memory usage information
 - Patch profiles now include a gear menu to set version overrides (or choose "All versions") per profile
 - Added Korean manager string localization https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/42
-- Split APKs now save in Settings > Downloads as merged APks https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/41
+- Split APKs now save in Settings > Downloads as merged APKs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/41
 - Added a toggle in Settings > Downloads to disable automatically saving APKs fetched via downloader plugins
-- Gave the GitHub PAT entry in Settings > Advanced the ability to be saved through the manager settings exports. This is a toggable feature and is not on by default
+- Gave the GitHub PAT entry in Settings > Advanced the ability to be saved through the manager settings exports. This is a toggleable feature and is not on by default
 - Updated the "Uninstall" button to "Unmount" and the "Update" button to "Remount" for saved patched apps in the "Apps" tab for apps installed by the rooted mount installer
 - Added ability for users with root to mount patched apps by changing your primary installer to "Rooted mount installer" https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/40
 - Added a button to the installation in progress dialog on the patcher screen allowing the user to "Leave anyway" and not wait for the installer to finish or timeout/fail
 - Added a "External installer", "Rooted mount installer", "System installer" and "Shizuku" installation types to the app info page for saved patched apps in the "Apps" tab
-- Added a confirmation dialog when tapping the back button during a install on the "App info" page for saved patched apps in the "Apps" tab
+- Added a confirmation dialog when tapping the back button during an install on the "App info" page for saved patched apps in the "Apps" tab
 - Removed the "Default" app selection page filter and replaced it with a "Installed only" and "Patches available" filter, along with making them multiselectable https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/54
-- Added new options under "Ptach selection buttons order" in Settings > Advanced which allows the user to hide patch selection page action buttons
+- Added new options under "Patch selection buttons order" in Settings > Advanced which allows the user to hide patch selection page action buttons
 - Added 3 new filters to the patch selection page, being "Alphabetical", "Has settings" and "No settings" https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/50
 - Patch bundle importing/updating now shows real-time per-bundle progress (download bytes/total & phases)
 - Redesigned the patch selection pages action buttons so they are displayed horizontally from under the search bar to reduce clutter, and are now opened from a three dot button in the top right corner
@@ -26,7 +26,7 @@
 
 - Fixed patch profiles not saving the selected app version when the APK is provided by a downloader plugin
 - Fixed metadata issues with saved patched apps that would sometimes occur
-- Fixed issues with InstallerX Revived's silent installer and the manager not detecting a install and timing out instead (if the install made by InstallerX Revived fails, the manager cannot detect the failure. Either wait for the installer to timeout, or exit the patcher screen by pressing "Leave anyway" on the dialog) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/43
+- Fixed issues with InstallerX Revived's silent installer and the manager not detecting an install and timing out instead (if the install made by InstallerX Revived fails, the manager cannot detect the failure. Either wait for the installer to timeout, or exit the patcher screen by pressing "Leave anyway" on the dialog) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/43
 - Fixed the select from storage page not graying out non .apk, .apks, .apkm, or .xapk
 - Changed the supported downloader plugins URLs to Brosssh's fork (which has released builds for all plugins)
 - Fixed installer selection resetting to the system installer when a third-party installer (such as InstallerX Revived) is set as the device's default APK handler https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/26
@@ -158,9 +158,9 @@
 # Features
 
 - Added the ability to uninstall downloader plugins from inside the manager via the downloads settings page
-- Upstream with Official ReVanced Mananger
+- Upstream with Official ReVanced Manager
   - Add pure black theme
-  - Correct grammer mistakes
+  - Correct grammar mistakes
   - Prevent back presses during installation
 - Added an advanced option to strip unused native libraries (unsupported ABIs) from patched APKs during the patching process (https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/7)
 - Added support for the manager to store multiple downloaded apps (ones downloaded through the downloader plugins) in the downloads settings & the ability to export the app to your devices storage
@@ -170,7 +170,7 @@
 - Added an accent color picker in appearance settings so users can choose a custom theme color (in addition to Material You and pure black)
 - Added a confirmation popup when tapping the back button on the patching screen after the app has been successfully patched confirming the user wants to leave the screen. It also includes a option to save the patched app for later (saves it to the "Apps" tab) on the popup
 - Added the ability to see the applied patches of a patched APK in the "Apps" tab, and the patch bundle(s) used
-- Added the "View changelog" button to the chanelog viewer in settings
+- Added the "View changelog" button to the changelog viewer in settings
 - Added the ability to delete saved patched apps in the "Apps" tab (this will not uninstall them from your device)
 - Removed redundant "View changelog" button at the top of the changelog screen popup
 
@@ -188,7 +188,7 @@
 # Features
 
 - Added a changelog log section in remote/URL imported patch bundles information that shows the latest GitHub release changelog for said bundle
-- Added a note on each patch bunlde on whether they where imported via remote, or local (remote is via URL and local is via a file on your device)
+- Added a note on each patch bundle on whether they were imported via remote, or local (remote is via URL and local is via a file on your device)
 - Removed reduntant bundle counter on patches profile tab (there were two counters)
 
 
@@ -210,12 +210,12 @@
 - Added a copy patch bundle URL button in patch bundle options
 - Added the ability to export and import the managers settings from/to a JSON file (this only includes settings, not patch bundles, patch options, patch selections, etc)
 - Adjusted the placement of the patch selection menu action buttons to be go vertically instead of horizontally
-- Upstrean with the Official ReVanced Manager `dev` branch
+- Upstream with the Official ReVanced Manager `dev` branch
 
 
 # Bug fixes
 
-- UI being cut off in patch bundle selection menus for reseting patch selection & options
+- UI being cut off in patch bundle selection menus for resetting patch selection & options
 
 
 # v1.1.1 (2025-10-20)
@@ -240,11 +240,11 @@
 
 - Added patch bundle exporting and importing support
 - Added a deselect all per-bundle button in patch selection menu (the global deselect all button now has a different icon)
-- Permentalty enabled "Developer Options" in setings (removed the hidden flow to unlock them)
+- Permanently enabled "Developer Options" in settings (removed the hidden flow to unlock them)
 - Added an toggle in settings for updating the manager and patch bundles on metered connections
 - Re-added the manager changelog app functions, screens, and buttons
 - Added labels to the global patch deselection, per-bundle patch deselection, and reset to default buttons in the patch selection screen
-- Renamed parts of the app from "Patch" or "Patches" to "Patch Bundle" to help with termonalogy clarity
+- Renamed parts of the app from "Patch" or "Patches" to "Patch Bundle" to help with terminology clarity
 
 
 # v1.0.0 (2025-10-13)

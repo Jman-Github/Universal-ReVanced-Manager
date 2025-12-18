@@ -110,7 +110,8 @@ fun GeneralSettingsScreen(
             // From PR #38: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/38
             LanguageOption("vi", R.string.language_option_vietnamese),
             // From PR #42: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/42
-            LanguageOption("ko", R.string.language_option_korean)
+            LanguageOption("ko", R.string.language_option_korean),
+            LanguageOption("ja", R.string.language_option_japanese)
         )
     }
 

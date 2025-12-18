@@ -460,6 +460,7 @@
     <string name="language_option_korean">Tiếng Hàn</string>
     <!-- From PR #38: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/38 -->
     <string name="language_option_vietnamese">Tiếng Việt (dịch bởi ann9cht)</string>
+    <string name="language_option_japanese">Tiếng Nhật</string>
     <string name="device">Thiết bị</string>
     <string name="device_android_version">Phiên bản Android</string>
     <string name="device_model">Mẫu</string>

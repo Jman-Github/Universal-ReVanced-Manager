@@ -19,6 +19,7 @@
     <string name="settings">設定</string>
     <string name="select_app">アプリを選択</string>
     <string name="patches_count_selected">%1$d/%2$d 選択済み</string>
+    <string name="language_option_japanese">日本語</string>
 
     <string name="new_downloader_plugins_notification">新しいダウンローダープラグインが利用可能です。ここをクリックして設定してください。</string>
     <string name="unsupported_architecture_warning">このデバイスアーキテクチャでのパッチ適用はサポートされておらず、失敗する可能性が高いです。</string>
