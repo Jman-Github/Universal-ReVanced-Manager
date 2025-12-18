@@ -30,6 +30,7 @@ class PreferencesManager(
     val api = stringPreference("api_url", "https://api.revanced.app")
     // PR #35: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35
     val gitHubPat = stringPreference("github_pat", "")
+    val includeGitHubPatInExports = booleanPreference("include_github_pat_in_exports", false)
 
     val useProcessRuntime = booleanPreference("use_process_runtime", false)
     val stripUnusedNativeLibs = booleanPreference("strip_unused_native_libs", false)
@@ -66,8 +67,11 @@ class PreferencesManager(
     val collapsePatchActionsOnSelection = booleanPreference("collapse_patch_actions_on_selection", true)
     val patchSelectionActionOrder =
         stringPreference("patch_selection_action_order", PATCH_ACTION_ORDER_DEFAULT)
+    val patchSelectionHiddenActions =
+        stringSetPreference("patch_selection_hidden_actions", emptySet())
 
     val acknowledgedDownloaderPlugins = stringSetPreference("acknowledged_downloader_plugins", emptySet())
+    val autoSaveDownloaderApks = booleanPreference("auto_save_downloader_apks", true)
 
     @Serializable
     data class SettingsSnapshot(
@@ -82,6 +86,7 @@ class PreferencesManager(
         val appLanguage: String? = null,
         val api: String? = null,
         val gitHubPat: String? = null,
+        val includeGitHubPatInExports: Boolean? = null,
         val useProcessRuntime: Boolean? = null,
         val patcherProcessMemoryLimit: Int? = null,
         val autoCollapsePatcherSteps: Boolean? = null,
@@ -106,7 +111,9 @@ class PreferencesManager(
         val disablePatchSelectionConfirmations: Boolean? = null,
         val collapsePatchActionsOnSelection: Boolean? = null,
         val patchSelectionActionOrder: String? = null,
-        val acknowledgedDownloaderPlugins: Set<String>? = null
+        val patchSelectionHiddenActions: Set<String>? = null,
+        val acknowledgedDownloaderPlugins: Set<String>? = null,
+        val autoSaveDownloaderApks: Boolean? = null
     )
 
     suspend fun exportSettings() = SettingsSnapshot(
@@ -120,7 +127,8 @@ class PreferencesManager(
         theme = theme.get(),
         appLanguage = appLanguage.get(),
         api = api.get(),
-        gitHubPat = gitHubPat.get(),
+        gitHubPat = gitHubPat.get().takeIf { includeGitHubPatInExports.get() },
+        includeGitHubPatInExports = includeGitHubPatInExports.get(),
         useProcessRuntime = useProcessRuntime.get(),
         patcherProcessMemoryLimit = patcherProcessMemoryLimit.get(),
         autoCollapsePatcherSteps = autoCollapsePatcherSteps.get(),
@@ -145,7 +153,9 @@ class PreferencesManager(
         disablePatchSelectionConfirmations = disablePatchSelectionConfirmations.get(),
         collapsePatchActionsOnSelection = collapsePatchActionsOnSelection.get(),
         patchSelectionActionOrder = patchSelectionActionOrder.get(),
-        acknowledgedDownloaderPlugins = acknowledgedDownloaderPlugins.get()
+        patchSelectionHiddenActions = patchSelectionHiddenActions.get(),
+        acknowledgedDownloaderPlugins = acknowledgedDownloaderPlugins.get(),
+        autoSaveDownloaderApks = autoSaveDownloaderApks.get()
     )
 
     suspend fun importSettings(snapshot: SettingsSnapshot) = edit {
@@ -160,6 +170,7 @@ class PreferencesManager(
         snapshot.appLanguage?.let { appLanguage.value = it }
         snapshot.api?.let { api.value = it }
         snapshot.gitHubPat?.let { gitHubPat.value = it }
+        snapshot.includeGitHubPatInExports?.let { includeGitHubPatInExports.value = it }
         snapshot.useProcessRuntime?.let { useProcessRuntime.value = it }
         snapshot.patcherProcessMemoryLimit?.let { patcherProcessMemoryLimit.value = it }
         snapshot.autoCollapsePatcherSteps?.let { autoCollapsePatcherSteps.value = it }
@@ -186,7 +197,9 @@ class PreferencesManager(
         snapshot.disablePatchSelectionConfirmations?.let { disablePatchSelectionConfirmations.value = it }
         snapshot.collapsePatchActionsOnSelection?.let { collapsePatchActionsOnSelection.value = it }
         snapshot.patchSelectionActionOrder?.let { patchSelectionActionOrder.value = it }
+        snapshot.patchSelectionHiddenActions?.let { patchSelectionHiddenActions.value = it }
         snapshot.acknowledgedDownloaderPlugins?.let { acknowledgedDownloaderPlugins.value = it }
+        snapshot.autoSaveDownloaderApks?.let { autoSaveDownloaderApks.value = it }
     }
 
 }
@@ -194,7 +207,8 @@ class PreferencesManager(
 object InstallerPreferenceTokens {
     const val INTERNAL = ":internal:"
     const val SYSTEM = ":system:"
-    const val ROOT = ":root:"
+    const val ROOT = ":root:" // Legacy value, mapped to AUTO_SAVED.
+    const val AUTO_SAVED = ":auto_saved:"
     const val SHIZUKU = ":shizuku:"
     const val NONE = ":none:"
 }

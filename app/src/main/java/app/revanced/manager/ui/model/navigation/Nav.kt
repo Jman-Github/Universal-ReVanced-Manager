@@ -43,7 +43,11 @@ data object SelectedApplicationInfo : ComplexParameter<SelectedApplicationInfo.V
             val currentSelection: PatchSelection?,
             val options: @RawValue Options,
             val preferredAppVersion: String? = null,
-            val missingPatchNames: @RawValue List<String>? = null
+            val missingPatchNames: @RawValue List<String>? = null,
+            val preferredBundleVersion: String? = null,
+            val preferredBundleUid: Int? = null,
+            val preferredBundleOverride: String? = null,
+            val preferredBundleTargetsAllVersions: Boolean = false
         ) : Parcelable
     }
 

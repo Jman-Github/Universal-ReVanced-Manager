@@ -339,18 +339,69 @@ class ImportExportViewModel(
                             var processed = 0
 
                             for (snapshot in exportFile.bundles) {
-                                processed += 1
-                                patchBundleRepository.setBundleImportProgress(
-                                    PatchBundleRepository.ImportProgress(processed, total)
-                                )
                                 val endpoint = snapshot.endpoint.trim()
+                                val displayName = snapshot.displayName?.trim().takeUnless { it.isNullOrBlank() }
+                                val snapshotName = snapshot.name.trim().takeUnless { it.isBlank() }
+                                val bundleLabel = (displayName ?: snapshotName)
+                                    ?.takeUnless { it == app.getString(R.string.patches_name_fallback) }
+                                    ?: runCatching {
+                                        val uri = java.net.URI(endpoint)
+                                        val segments = uri.path?.trim('/')?.split('/')?.filter { it.isNotBlank() }.orEmpty()
+                                        val candidates = segments.filter { it.contains("bundle", ignoreCase = true) }
+                                        val chosen = candidates.lastOrNull { seg ->
+                                            val normalized = seg.lowercase(java.util.Locale.US)
+                                            normalized !in setOf("bundle", "bundles")
+                                        } ?: candidates.lastOrNull()
+                                        if (chosen == null) return@runCatching uri.host ?: endpoint
+
+                                        val withoutExt = chosen.replace(Regex("\\.[A-Za-z0-9]+$"), "")
+                                        val normalized = withoutExt
+                                            .replace(Regex("[._\\-]+"), " ")
+                                            .replace(Regex("\\s+"), " ")
+                                            .trim()
+                                            .lowercase(java.util.Locale.US)
+                                        if (normalized.isBlank()) return@runCatching uri.host ?: endpoint
+
+                                        normalized.replaceFirstChar { c -> c.titlecase(java.util.Locale.US) }
+                                    }.getOrNull()
+                                    ?: endpoint
+
+                                fun setImportProgress(
+                                    phase: PatchBundleRepository.BundleImportPhase,
+                                    bytesRead: Long = 0L,
+                                    bytesTotal: Long? = null,
+                                ) {
+                                    patchBundleRepository.setBundleImportProgress(
+                                        PatchBundleRepository.ImportProgress(
+                                            processed = processed,
+                                            total = total,
+                                            currentBundleName = bundleLabel.takeIf { it.isNotBlank() },
+                                            phase = phase,
+                                            bytesRead = bytesRead,
+                                            bytesTotal = bytesTotal,
+                                        )
+                                    )
+                                }
+
+                                fun finishImportItem() {
+                                    processed += 1
+                                    patchBundleRepository.setBundleImportProgress(
+                                        PatchBundleRepository.ImportProgress(processed, total)
+                                    )
+                                }
+
+                                setImportProgress(PatchBundleRepository.BundleImportPhase.Processing)
                                 if (endpoint.equals(SourceInfo.API.SENTINEL, true)) {
                                     officialSnapshot = snapshot
                                     shouldRemoveOfficial = false
                                     hasOfficialSnapshot = true
+                                    finishImportItem()
                                     continue
                                 }
-                                if (endpoint.isBlank()) continue
+                                if (endpoint.isBlank()) {
+                                    finishImportItem()
+                                    continue
+                                }
 
                                 val targetDisplayName =
                                     snapshot.displayName?.takeUnless { it.isBlank() }
@@ -380,21 +431,32 @@ class ImportExportViewModel(
                                         changed = true
                                     }
                                     if (changed) updatedCount += 1
+                                    finishImportItem()
                                     continue
                                 }
 
                                 try {
+                                    setImportProgress(PatchBundleRepository.BundleImportPhase.Downloading)
                                     patchBundleRepository.createRemote(
                                         endpoint,
                                         snapshot.autoUpdate,
                                         createdAt = snapshot.createdAt,
-                                        updatedAt = snapshot.updatedAt
+                                        updatedAt = snapshot.updatedAt,
+                                        onProgress = { bytesRead, bytesTotal ->
+                                            setImportProgress(
+                                                phase = PatchBundleRepository.BundleImportPhase.Downloading,
+                                                bytesRead = bytesRead,
+                                                bytesTotal = bytesTotal,
+                                            )
+                                        },
                                     )
                                 } catch (error: Exception) {
                                     Log.e(tag, "Failed to import patch bundle $endpoint", error)
+                                    finishImportItem()
                                     continue
                                 }
 
+                                setImportProgress(PatchBundleRepository.BundleImportPhase.Finalizing)
                                 val created = patchBundleRepository.sources
                                     .map { sources -> sources.mapNotNull { it.asRemoteOrNull } }
                                     .first { sources -> sources.any { it.endpoint == endpoint } }
@@ -411,6 +473,8 @@ class ImportExportViewModel(
                                         created.setAutoUpdate(snapshot.autoUpdate)
                                     }
                                 }
+
+                                finishImportItem()
                             }
 
                             officialSnapshot?.let { snapshot ->

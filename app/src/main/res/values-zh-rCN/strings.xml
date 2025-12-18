@@ -17,6 +17,14 @@
     <string name="dashboard">仪表盘</string>
     <string name="settings">设置</string>
     <string name="select_app">选择一个应用</string>
+    <!-- Translation needed -->
+    <string name="app_filter_title">Filter apps</string>
+    <!-- Translation needed -->
+    <string name="app_filter_installed_only">Installed only</string>
+    <!-- Translation needed -->
+    <string name="app_filter_patches_available">Patches available</string>
+    <!-- Translation needed -->
+    <string name="app_filter_no_results">No apps match your filters.</string>
     <string name="patches_count_selected">已选择 %1$d/%2$d</string>
 
     <string name="new_downloader_plugins_notification">有新的下载器插件可用。点击此处进行配置。</string>
@@ -270,6 +278,8 @@
     <string name="patch_selection_select_all_empty_toast">没有可用的补丁供选择</string>
     <string name="patch_selection_selected_bundle_toast">已选择 %s 中的所有补丁</string>
     <string name="patch_selection_select_bundle_empty_toast">%s 中没有可选择的补丁</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_all_actions_hidden_toast">All action buttons are hidden, enable at least one in settings</string>
     <string name="patch_selection_reset_bundle_toast">已重置 %s 的默认值</string>
     <string name="patch_selection_button_label_all">取消全选</string>
     <string name="patch_selection_button_label_bundle">取消选择包</string>
@@ -515,6 +525,32 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="patch_profile_save_failed_toast">保存补丁配置文件失败</string>
     <string name="patch_profile_rename">重命名</string>
     <string name="patch_profile_rename_title">重命名补丁配置文件</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_override_action">Patch profile version settings</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_override_title">Version settings for "%1$s"</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_override_message">Set a specific app version to store with this profile, or target all versions.</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_override_label">App version</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_override_hint">e.g. 18.27.35</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_override_all_versions">Use all versions</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_override_saved_toast">Profile version updated</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_override_failed_toast">Failed to update profile version</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_override_set_to_all">No version entered, saved as "%1$s"</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_conflict_title">Keep version override?</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_conflict_message">Current version: %1$s\nIncoming version: %2$s\nWhich should be saved to this profile?</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_conflict_use_new">Use incoming version</string>
+    <!-- Translation needed -->
+    <string name="patch_profile_version_conflict_keep_existing">Keep existing version</string>
     <string name="patch_profile_empty_state">从补丁选择屏幕保存配置后，将在此处看到它。</string>
     <string name="patch_profile_missing_bundles_toast">此配置文件中的某些包不可用，将被跳过。</string>
     <string name="patch_profile_changed_patches_toast">此配置文件中的某些补丁或选项不再与包匹配，已被跳过。</string>
@@ -579,7 +615,16 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="applied_patches_bundle_missing">包元数据不可用。显示保存的补丁名称。</string>
     <string name="no_patch_bundles_tracked">此应用无补丁包记录</string>
     <string name="default_install">默认</string>
-    <string name="mount_install">挂载</string>
+    <!-- Translation needed -->
+    <string name="mount_install">Rooted mount installer</string>
+    <!-- Translation needed -->
+    <string name="install_type_custom_installer">Custom installer</string>
+    <!-- Translation needed -->
+    <string name="install_type_system_installer">System installer</string>
+    <!-- Translation needed -->
+    <string name="install_type_mount_label">Rooted mount installer</string>
+    <!-- Translation needed -->
+    <string name="install_type_shizuku_label">Shizuku</string>
     <string name="mounted">已挂载</string>
     <string name="not_mounted">未挂载</string>
     <string name="mount">挂载</string>
@@ -604,6 +649,14 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
 
     <string name="patch_selector_sheet_filter_title">筛选</string>
     <string name="patch_selector_sheet_filter_compat_title">兼容性</string>
+    <!-- Translation needed -->
+    <string name="patch_selector_sheet_filter_sort_title">Sorting</string>
+    <!-- Translation needed -->
+    <string name="patch_selector_sheet_filter_sort_alphabetical">Alphabetical</string>
+    <!-- Translation needed -->
+    <string name="patch_selector_sheet_filter_sort_has_settings">Has settings</string>
+    <!-- Translation needed -->
+    <string name="patch_selector_sheet_filter_sort_no_settings">No settings</string>
 
     <string name="string_option_menu_description">更多选项</string>
     <string name="option_preset_custom_value">自定义值</string>
@@ -623,6 +676,10 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="installer_fallback_description">当主要安装程序不可用时自动使用。</string>
     <string name="installer_internal_name">系统安装程序</string>
     <string name="installer_internal_description">使用 Android 包安装程序</string>
+    <!-- Translation needed -->
+    <string name="installer_auto_saved_name">Rooted mount installer</string>
+    <!-- Translation needed -->
+    <string name="installer_auto_saved_description">Mounts the patched APK over the installed app (root required).</string>
     <string name="installer_shizuku_name">Shizuku</string>
     <string name="installer_shizuku_description">使用 Shizuku 或 Sui 静默安装。</string>
     <string name="installer_option_none">无备用</string>
@@ -674,10 +731,18 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="installer_external_launched">正在打开 %1$s…</string>
     <string name="installer_external_timeout">%1$s 未确认安装。请检查其他应用并重试。</string>
     <string name="installer_external_success">%1$s 报告安装成功。</string>
+    <!-- Translation needed -->
+    <string name="installer_external_finished_no_change">%1$s finished without installing the app. Check the installer for an error message and try again.</string>
     <string name="install_app">安装</string>
-    <string name="install_app_success">应用已安装</string>
+    <!-- Translation needed -->
+    <string name="install_app_success">Installed successfully</string>
     <string name="install_app_fail_title">安装失败</string>
-    <string name="install_app_fail">安装应用失败：%s</string>
+    <!-- Translation needed -->
+    <string name="install_app_fail">Failed to install app: %s</string>
+    <!-- Translation needed -->
+    <string name="mount_app_fail_title">Mount failed</string>
+    <!-- Translation needed -->
+    <string name="mount_app_fail">Failed to mount app: %1$s</string>
     <string name="install_timeout_message">安装未完成。请检查系统安装程序对话框并重试。</string>
     <string name="reinstall_app_fail">重新安装应用失败：%s</string>
     <string name="uninstall_app_fail">卸载应用失败：%s</string>
@@ -715,7 +780,16 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="patcher_notification_text">点击返回修补程序</string>
     <string name="patcher_stop_confirm_title">停止修补程序</string>
     <string name="patcher_stop_confirm_description">您确定要停止修补过程吗？</string>
+    <!-- Translation needed -->
+    <!-- Translation needed -->`n    <string name="patcher_install_in_progress_title">Installation in progress</string>
     <string name="patcher_install_in_progress">正在安装，请稍候</string>
+    <!-- Translation needed -->
+    <!-- Translation needed -->`n    <string name="patcher_install_in_progress_leave">Leave anyway</string>
+    <!-- Translation needed -->`n    <string name="patcher_install_in_progress_stay">Stay here</string>
+    <!-- Translation needed -->
+    <!-- Translation needed -->`n    <string name="patcher_mount_in_progress_title">Mount in progress</string>
+    <!-- Translation needed -->
+    <!-- Translation needed -->`n    <string name="patcher_mount_in_progress">Mount is in progress. Please wait</string>
     <string name="execute_patches">执行补丁</string>
     <string name="executing_patch">正在执行 %s</string>
     <string name="failed_to_execute_patch">执行 %s 失败</string>

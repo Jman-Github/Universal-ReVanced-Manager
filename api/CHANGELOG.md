@@ -1,3 +1,47 @@
+# v1.6.0 (TBD)
+
+
+# Features
+
+- Enhanced patcher log export with comprehensive information including timestamps, app metadata, split APK merging details, patching summary, and memory usage information
+- Patch profiles now include a gear menu to set version overrides (or choose "All versions") per profile
+- Added Korean manager string localization https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/42
+- Split APKs now save in Settings > Downloads as merged APks https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/41
+- Added a toggle in Settings > Downloads to disable automatically saving APKs fetched via downloader plugins
+- Gave the GitHub PAT entry in Settings > Advanced the ability to be saved through the manager settings exports. This is a toggable feature and is not on by default
+- Updated the "Uninstall" button to "Unmount" and the "Update" button to "Remount" for saved patched apps in the "Apps" tab for apps installed by the rooted mount installer
+- Added ability for users with root to mount patched apps by changing your primary installer to "Rooted mount installer" https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/40
+- Added a button to the installation in progress dialog on the patcher screen allowing the user to "Leave anyway" and not wait for the installer to finish or timeout/fail
+- Added a "External installer", "Rooted mount installer", "System installer" and "Shizuku" installation types to the app info page for saved patched apps in the "Apps" tab
+- Added a confirmation dialog when tapping the back button during a install on the "App info" page for saved patched apps in the "Apps" tab
+- Removed the "Default" app selection page filter and replaced it with a "Installed only" and "Patches available" filter, along with making them multiselectable https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/54
+- Added new options under "Ptach selection buttons order" in Settings > Advanced which allows the user to hide patch selection page action buttons
+- Added 3 new filters to the patch selection page, being "Alphabetical", "Has settings" and "No settings" https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/50
+- Patch bundle importing/updating now shows real-time per-bundle progress (download bytes/total & phases)
+- Redesigned the patch selection pages action buttons so they are displayed horizontally from under the search bar to reduce clutter, and are now opened from a three dot button in the top right corner
+- Redesigned Settings to M3 Expressive https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/46
+
+
+# Bug fixes
+
+- Fixed patch profiles not saving the selected app version when the APK is provided by a downloader plugin
+- Fixed metadata issues with saved patched apps that would sometimes occur
+- Fixed issues with InstallerX Revived's silent installer and the manager not detecting a install and timing out instead (if the install made by InstallerX Revived fails, the manager cannot detect the failure. Either wait for the installer to timeout, or exit the patcher screen by pressing "Leave anyway" on the dialog) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/43
+- Fixed the select from storage page not graying out non .apk, .apks, .apkm, or .xapk
+- Changed the supported downloader plugins URLs to Brosssh's fork (which has released builds for all plugins)
+- Fixed installer selection resetting to the system installer when a third-party installer (such as InstallerX Revived) is set as the device's default APK handler https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/26
+- Fixed manually added custom installers not being removed from the installer selection menus sometimes after the user removes them from their saved custom installers
+- Fixed patch bundle imports/updates sometimes crashing or hanging (empty bundles, PR artifacts missing `.rvp`, and stuck "0/1" updates) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/55
+- Mitigated false "Installation failed" reports when Play Protect scanning delays installs (if a timeout dialog still appears, but it installs successfully, the successful install will supersede the false dialog) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/48
+- Fixed Pure Black theme preset toggle from getting stuck in a disabled state
+
+
+# Docs
+
+- Added the new unique features to the README.md that were added in this release
+- Added a new contributor to the "Contributors" section
+
+
 # v1.5.1 (2025-11-15)
 **Minimal changes & bug fixes**
 
