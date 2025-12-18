@@ -51,7 +51,9 @@ import app.revanced.manager.ui.component.GroupHeader
 import app.revanced.manager.ui.component.PasswordField
 import app.revanced.manager.ui.component.bundle.BundleSelector
 import app.revanced.manager.ui.component.settings.ExpandableSettingListItem
-import app.revanced.manager.ui.component.settings.SettingsListItem
+import app.revanced.manager.ui.component.settings.ExpressiveSettingsCard
+import app.revanced.manager.ui.component.settings.ExpressiveSettingsDivider
+import app.revanced.manager.ui.component.settings.ExpressiveSettingsItem
 import app.revanced.manager.ui.viewmodel.ImportExportViewModel
 import app.revanced.manager.ui.viewmodel.ResetDialogState
 import app.revanced.manager.util.JSON_MIMETYPE
@@ -222,95 +224,114 @@ fun ImportExportSettingsScreen(
             }
 
             GroupHeader(stringResource(R.string.import_))
-            GroupItem(
-                onClick = {
-                    importKeystoreLauncher.launch("*/*")
-                },
-                headline = R.string.import_keystore,
-                description = R.string.import_keystore_description
-            )
-            GroupItem(
-                onClick = vm::importSelection,
-                headline = R.string.import_patch_selection,
-                description = R.string.import_patch_selection_description
-            )
-
-            GroupItem(
-                onClick = {
-                    importBundlesLauncher.launch(JSON_MIMETYPE)
-                },
-                headline = R.string.import_patch_bundles,
-                description = R.string.import_patch_bundles_description
-            )
-            GroupItem(
-                onClick = {
-                    importProfilesLauncher.launch(JSON_MIMETYPE)
-                },
-                headline = R.string.import_patch_profiles,
-                description = R.string.import_patch_profiles_description
-            )
-            GroupItem(
-                onClick = {
-                    importSettingsLauncher.launch(JSON_MIMETYPE)
-                },
-                headline = R.string.import_manager_settings,
-                description = R.string.import_manager_settings_description
-            )
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                GroupItem(
+                    onClick = {
+                        importKeystoreLauncher.launch("*/*")
+                    },
+                    headline = R.string.import_keystore,
+                    description = R.string.import_keystore_description
+                )
+                ExpressiveSettingsDivider()
+                GroupItem(
+                    onClick = vm::importSelection,
+                    headline = R.string.import_patch_selection,
+                    description = R.string.import_patch_selection_description
+                )
+                ExpressiveSettingsDivider()
+                GroupItem(
+                    onClick = {
+                        importBundlesLauncher.launch(JSON_MIMETYPE)
+                    },
+                    headline = R.string.import_patch_bundles,
+                    description = R.string.import_patch_bundles_description
+                )
+                ExpressiveSettingsDivider()
+                GroupItem(
+                    onClick = {
+                        importProfilesLauncher.launch(JSON_MIMETYPE)
+                    },
+                    headline = R.string.import_patch_profiles,
+                    description = R.string.import_patch_profiles_description
+                )
+                ExpressiveSettingsDivider()
+                GroupItem(
+                    onClick = {
+                        importSettingsLauncher.launch(JSON_MIMETYPE)
+                    },
+                    headline = R.string.import_manager_settings,
+                    description = R.string.import_manager_settings_description
+                )
+            }
 
             GroupHeader(stringResource(R.string.export))
-            GroupItem(
-                onClick = {
-                    if (!vm.canExport()) {
-                        context.toast(context.getString(R.string.export_keystore_unavailable))
-                        return@GroupItem
-                    }
-                    exportKeystoreLauncher.launch("Manager.keystore")
-                },
-                headline = R.string.export_keystore,
-                description = R.string.export_keystore_description
-            )
-            GroupItem(
-                onClick = vm::exportSelection,
-                headline = R.string.export_patch_selection,
-                description = R.string.export_patch_selection_description
-            )
-            GroupItem(
-                onClick = {
-                    exportBundlesLauncher.launch("urv_patch_bundles.json")
-                },
-                headline = R.string.export_patch_bundles,
-                description = R.string.export_patch_bundles_description
-            )
-            GroupItem(
-                onClick = {
-                    exportProfilesLauncher.launch("urv_patch_profiles.json")
-                },
-                headline = R.string.export_patch_profiles,
-                description = R.string.export_patch_profiles_description
-            )
-            GroupItem(
-                onClick = {
-                    exportSettingsLauncher.launch("urv_settings.json")
-                },
-                headline = R.string.export_manager_settings,
-                description = R.string.export_manager_settings_description
-            )
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                GroupItem(
+                    onClick = {
+                        if (!vm.canExport()) {
+                            context.toast(context.getString(R.string.export_keystore_unavailable))
+                            return@GroupItem
+                        }
+                        exportKeystoreLauncher.launch("Manager.keystore")
+                    },
+                    headline = R.string.export_keystore,
+                    description = R.string.export_keystore_description
+                )
+                ExpressiveSettingsDivider()
+                GroupItem(
+                    onClick = vm::exportSelection,
+                    headline = R.string.export_patch_selection,
+                    description = R.string.export_patch_selection_description
+                )
+                ExpressiveSettingsDivider()
+                GroupItem(
+                    onClick = {
+                        exportBundlesLauncher.launch("urv_patch_bundles.json")
+                    },
+                    headline = R.string.export_patch_bundles,
+                    description = R.string.export_patch_bundles_description
+                )
+                ExpressiveSettingsDivider()
+                GroupItem(
+                    onClick = {
+                        exportProfilesLauncher.launch("urv_patch_profiles.json")
+                    },
+                    headline = R.string.export_patch_profiles,
+                    description = R.string.export_patch_profiles_description
+                )
+                ExpressiveSettingsDivider()
+                GroupItem(
+                    onClick = {
+                        exportSettingsLauncher.launch("urv_settings.json")
+                    },
+                    headline = R.string.export_manager_settings,
+                    description = R.string.export_manager_settings_description
+                )
+            }
 
             GroupHeader(stringResource(R.string.reset))
-            GroupItem(
-                onClick = {
-                    vm.resetDialogState = ResetDialogState.Keystore {
-                        vm.regenerateKeystore()
-                    }
-                },
-                headline = R.string.regenerate_keystore,
-                description = R.string.regenerate_keystore_description
-            )
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                GroupItem(
+                    onClick = {
+                        vm.resetDialogState = ResetDialogState.Keystore {
+                            vm.regenerateKeystore()
+                        }
+                    },
+                    headline = R.string.regenerate_keystore,
+                    description = R.string.regenerate_keystore_description
+                )
+                ExpressiveSettingsDivider()
 
-            ExpandableSettingListItem(
-                headlineContent = stringResource(R.string.reset_patch_selection),
-                supportingContent = stringResource(R.string.reset_patch_selection_description),
-                expandableContent = {
+                ExpandableSettingListItem(
+                    headlineContent = stringResource(R.string.reset_patch_selection),
+                    supportingContent = stringResource(R.string.reset_patch_selection_description),
+                    expandableContent = {
                     GroupItem(
                         onClick = {
                             vm.resetDialogState = ResetDialogState.PatchSelectionAll {
@@ -360,13 +381,15 @@ fun ImportExportSettingsScreen(
                             description = R.string.patch_selection_reset_patches_description
                         )
                     }
-                }
-            )
+                    }
+                )
 
-            ExpandableSettingListItem(
-                headlineContent = stringResource(R.string.reset_patch_options),
-                supportingContent = stringResource(R.string.reset_patch_options_description),
-                expandableContent = {
+                ExpressiveSettingsDivider()
+
+                ExpandableSettingListItem(
+                    headlineContent = stringResource(R.string.reset_patch_options),
+                    supportingContent = stringResource(R.string.reset_patch_options_description),
+                    expandableContent = {
                     GroupItem(
                         onClick = {
                             vm.resetDialogState = ResetDialogState.PatchOptionsAll {
@@ -416,8 +439,9 @@ fun ImportExportSettingsScreen(
                             description = R.string.patch_options_reset_patches_description,
                         )
                     }
-                }
-            )
+                    }
+                )
+            }
         }
     }
 }
@@ -487,11 +511,11 @@ private fun GroupItem(
     @StringRes description: Int? = null,
     supportingContent: (@Composable () -> Unit)? = null
 ) {
-    SettingsListItem(
-        modifier = Modifier.clickable { onClick() },
+    ExpressiveSettingsItem(
         headlineContent = stringResource(headline),
         supportingContent = description?.let { stringResource(it) },
-        supportingContentSlot = supportingContent
+        supportingContentSlot = supportingContent,
+        onClick = onClick
     )
 }
 

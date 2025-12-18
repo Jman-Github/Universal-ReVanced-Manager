@@ -155,7 +155,10 @@ import app.revanced.manager.ui.component.settings.BooleanItem
 import app.revanced.manager.patcher.runtime.MemoryLimitConfig
 import app.revanced.manager.ui.component.settings.IntegerItem
 import app.revanced.manager.ui.component.settings.SafeguardBooleanItem
-import app.revanced.manager.ui.component.settings.SettingsListItem
+import app.revanced.manager.ui.component.settings.ExpressiveSettingsCard
+import app.revanced.manager.ui.component.settings.ExpressiveSettingsDivider
+import app.revanced.manager.ui.component.settings.ExpressiveSettingsItem
+import app.revanced.manager.ui.component.settings.ExpressiveSettingsSwitch
 import app.revanced.manager.domain.installer.InstallerManager
 import app.revanced.manager.ui.viewmodel.AdvancedSettingsViewModel
 import app.revanced.manager.util.ExportNameFormatter
@@ -244,18 +247,22 @@ fun AdvancedSettingsScreen(
                     onDismiss = { showGitHubPatDialog = false }
                 )
             }
-            SettingsListItem(
-                headlineContent = stringResource(R.string.api_url),
-                supportingContent = stringResource(R.string.api_url_description),
-                modifier = Modifier.clickable {
-                    showApiUrlDialog = true
-                }
-            )
-            SettingsListItem(
-                headlineContent = stringResource(R.string.github_pat),
-                supportingContent = stringResource(R.string.github_pat_description),
-                modifier = Modifier.clickable { showGitHubPatDialog = true }
-            )
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+            ) {
+                ExpressiveSettingsItem(
+                    headlineContent = stringResource(R.string.api_url),
+                    supportingContent = stringResource(R.string.api_url_description),
+                    onClick = { showApiUrlDialog = true }
+                )
+                ExpressiveSettingsDivider()
+                ExpressiveSettingsItem(
+                    headlineContent = stringResource(R.string.github_pat),
+                    supportingContent = stringResource(R.string.github_pat_description),
+                    onClick = { showGitHubPatDialog = true }
+                )
+            }
 
             val installTarget = InstallerManager.InstallTarget.PATCHER
             val primaryPreference by viewModel.prefs.installerPrimary.getAsState()
@@ -381,24 +388,30 @@ fun AdvancedSettingsScreen(
             val primaryLeadingContent = installerLeadingContent(primaryEntry, primaryEntry.token == primaryToken)
             val fallbackLeadingContent = installerLeadingContent(fallbackEntry, fallbackEntry.token == fallbackToken)
 
-            SettingsListItem(
-                headlineContent = stringResource(R.string.installer_primary_title),
-                supportingContent = primarySupporting,
-                modifier = Modifier.clickable { installerDialogTarget = InstallerDialogTarget.Primary },
-                leadingContent = primaryLeadingContent
-            )
-            SettingsListItem(
-                headlineContent = stringResource(R.string.installer_fallback_title),
-                supportingContent = fallbackSupporting,
-                modifier = Modifier.clickable { installerDialogTarget = InstallerDialogTarget.Fallback },
-                leadingContent = fallbackLeadingContent
-            )
-
-            SettingsListItem(
-                headlineContent = stringResource(R.string.installer_custom_manage_title),
-                supportingContent = stringResource(R.string.installer_custom_manage_description),
-                modifier = Modifier.clickable { showCustomInstallerDialog = true }
-            )
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+            ) {
+                ExpressiveSettingsItem(
+                    headlineContent = stringResource(R.string.installer_primary_title),
+                    supportingContent = primarySupporting,
+                    leadingContent = primaryLeadingContent,
+                    onClick = { installerDialogTarget = InstallerDialogTarget.Primary }
+                )
+                ExpressiveSettingsDivider()
+                ExpressiveSettingsItem(
+                    headlineContent = stringResource(R.string.installer_fallback_title),
+                    supportingContent = fallbackSupporting,
+                    leadingContent = fallbackLeadingContent,
+                    onClick = { installerDialogTarget = InstallerDialogTarget.Fallback }
+                )
+                ExpressiveSettingsDivider()
+                ExpressiveSettingsItem(
+                    headlineContent = stringResource(R.string.installer_custom_manage_title),
+                    supportingContent = stringResource(R.string.installer_custom_manage_description),
+                    onClick = { showCustomInstallerDialog = true }
+                )
+            }
 
             if (showCustomInstallerDialog) {
                 CustomInstallerManagerDialog(
@@ -451,54 +464,56 @@ fun AdvancedSettingsScreen(
             }
 
             GroupHeader(stringResource(R.string.safeguards))
-            SafeguardBooleanItem(
-                preference = viewModel.prefs.disablePatchVersionCompatCheck,
-                coroutineScope = viewModel.viewModelScope,
-                headline = R.string.patch_compat_check,
-                description = R.string.patch_compat_check_description,
-                confirmationText = R.string.patch_compat_check_confirmation
-            )
-            SafeguardBooleanItem(
-                preference = viewModel.prefs.suggestedVersionSafeguard,
-                coroutineScope = viewModel.viewModelScope,
-                headline = R.string.suggested_version_safeguard,
-                description = R.string.suggested_version_safeguard_description,
-                confirmationText = R.string.suggested_version_safeguard_confirmation
-            )
-            SafeguardBooleanItem(
-                preference = viewModel.prefs.disableSelectionWarning,
-                coroutineScope = viewModel.viewModelScope,
-                headline = R.string.patch_selection_safeguard,
-                description = R.string.patch_selection_safeguard_description,
-                confirmationText = R.string.patch_selection_safeguard_confirmation
-            )
-            SafeguardBooleanItem(
-                preference = viewModel.prefs.disablePatchSelectionConfirmations,
-                coroutineScope = viewModel.viewModelScope,
-                headline = R.string.disable_patch_selection_confirmations,
-                description = R.string.disable_patch_selection_confirmations_description,
-                confirmationText = R.string.disable_patch_selection_confirmations_warning
-            )
-            BooleanItem(
-                preference = viewModel.prefs.disableUniversalPatchCheck,
-                coroutineScope = viewModel.viewModelScope,
-                headline = R.string.universal_patches_safeguard,
-                description = R.string.universal_patches_safeguard_description,
-            )
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+            ) {
+                SafeguardBooleanItem(
+                    preference = viewModel.prefs.disablePatchVersionCompatCheck,
+                    coroutineScope = viewModel.viewModelScope,
+                    headline = R.string.patch_compat_check,
+                    description = R.string.patch_compat_check_description,
+                    confirmationText = R.string.patch_compat_check_confirmation
+                )
+                ExpressiveSettingsDivider()
+                SafeguardBooleanItem(
+                    preference = viewModel.prefs.suggestedVersionSafeguard,
+                    coroutineScope = viewModel.viewModelScope,
+                    headline = R.string.suggested_version_safeguard,
+                    description = R.string.suggested_version_safeguard_description,
+                    confirmationText = R.string.suggested_version_safeguard_confirmation
+                )
+                ExpressiveSettingsDivider()
+                SafeguardBooleanItem(
+                    preference = viewModel.prefs.disableSelectionWarning,
+                    coroutineScope = viewModel.viewModelScope,
+                    headline = R.string.patch_selection_safeguard,
+                    description = R.string.patch_selection_safeguard_description,
+                    confirmationText = R.string.patch_selection_safeguard_confirmation
+                )
+                ExpressiveSettingsDivider()
+                SafeguardBooleanItem(
+                    preference = viewModel.prefs.disablePatchSelectionConfirmations,
+                    coroutineScope = viewModel.viewModelScope,
+                    headline = R.string.disable_patch_selection_confirmations,
+                    description = R.string.disable_patch_selection_confirmations_description,
+                    confirmationText = R.string.disable_patch_selection_confirmations_warning
+                )
+                ExpressiveSettingsDivider()
+                BooleanItem(
+                    preference = viewModel.prefs.disableUniversalPatchCheck,
+                    coroutineScope = viewModel.viewModelScope,
+                    headline = R.string.universal_patches_safeguard,
+                    description = R.string.universal_patches_safeguard_description,
+                )
+                ExpressiveSettingsDivider()
 
-            val restoreDescription = if (hasOfficialBundle) {
-                stringResource(R.string.restore_official_bundle_description_installed)
-            } else {
-                stringResource(R.string.restore_official_bundle_description_missing)
-            }
-            val restoreModifier = if (hasOfficialBundle) Modifier else Modifier.clickable {
-                viewModel.restoreOfficialBundle()
-            }
-            SettingsListItem(
-                headlineContent = stringResource(R.string.restore_official_bundle),
-                supportingContent = restoreDescription,
-                modifier = restoreModifier,
-                trailingContent = if (hasOfficialBundle) {
+                val restoreDescription = if (hasOfficialBundle) {
+                    stringResource(R.string.restore_official_bundle_description_installed)
+                } else {
+                    stringResource(R.string.restore_official_bundle_description_missing)
+                }
+                val installedTrailingContent: (@Composable () -> Unit)? = if (hasOfficialBundle) {
                     {
                         Text(
                             text = stringResource(R.string.installed),
@@ -507,42 +522,58 @@ fun AdvancedSettingsScreen(
                         )
                     }
                 } else null
-            )
+                ExpressiveSettingsItem(
+                    headlineContent = stringResource(R.string.restore_official_bundle),
+                    supportingContent = restoreDescription,
+                    trailingContent = installedTrailingContent,
+                    enabled = !hasOfficialBundle,
+                    onClick = if (hasOfficialBundle) null else ({ viewModel.restoreOfficialBundle() })
+                )
+            }
 
             GroupHeader(stringResource(R.string.patcher))
-            BooleanItem(
-                preference = viewModel.prefs.stripUnusedNativeLibs,
-                coroutineScope = viewModel.viewModelScope,
-                headline = R.string.strip_unused_libs,
-                description = R.string.strip_unused_libs_description,
-            )
-            BooleanItem(
-                preference = viewModel.prefs.useProcessRuntime,
-                coroutineScope = viewModel.viewModelScope,
-                headline = R.string.process_runtime,
-                description = R.string.process_runtime_description,
-            )
-            val recommendedProcessLimit = remember { 700 }
-            IntegerItem(
-                preference = viewModel.prefs.patcherProcessMemoryLimit,
-                coroutineScope = viewModel.viewModelScope,
-                headline = R.string.process_runtime_memory_limit,
-                description = R.string.process_runtime_memory_limit_description,
-                neutralButtonLabel = stringResource(R.string.reset_to_recommended),
-                neutralValueProvider = { recommendedProcessLimit }
-            )
-            BooleanItem(
-                preference = viewModel.prefs.autoCollapsePatcherSteps,
-                coroutineScope = viewModel.viewModelScope,
-                headline = R.string.patcher_auto_collapse_steps,
-                description = R.string.patcher_auto_collapse_steps_description,
-            )
-            BooleanItem(
-                preference = viewModel.prefs.collapsePatchActionsOnSelection,
-                coroutineScope = viewModel.viewModelScope,
-                headline = R.string.patch_selection_collapse_on_toggle,
-                description = R.string.patch_selection_collapse_on_toggle_description,
-            )
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+            ) {
+                BooleanItem(
+                    preference = viewModel.prefs.stripUnusedNativeLibs,
+                    coroutineScope = viewModel.viewModelScope,
+                    headline = R.string.strip_unused_libs,
+                    description = R.string.strip_unused_libs_description,
+                )
+                ExpressiveSettingsDivider()
+                BooleanItem(
+                    preference = viewModel.prefs.useProcessRuntime,
+                    coroutineScope = viewModel.viewModelScope,
+                    headline = R.string.process_runtime,
+                    description = R.string.process_runtime_description,
+                )
+                ExpressiveSettingsDivider()
+                val recommendedProcessLimit = remember { 700 }
+                IntegerItem(
+                    preference = viewModel.prefs.patcherProcessMemoryLimit,
+                    coroutineScope = viewModel.viewModelScope,
+                    headline = R.string.process_runtime_memory_limit,
+                    description = R.string.process_runtime_memory_limit_description,
+                    neutralButtonLabel = stringResource(R.string.reset_to_recommended),
+                    neutralValueProvider = { recommendedProcessLimit }
+                )
+                ExpressiveSettingsDivider()
+                BooleanItem(
+                    preference = viewModel.prefs.autoCollapsePatcherSteps,
+                    coroutineScope = viewModel.viewModelScope,
+                    headline = R.string.patcher_auto_collapse_steps,
+                    description = R.string.patcher_auto_collapse_steps_description,
+                )
+                ExpressiveSettingsDivider()
+                BooleanItem(
+                    preference = viewModel.prefs.collapsePatchActionsOnSelection,
+                    coroutineScope = viewModel.viewModelScope,
+                    headline = R.string.patch_selection_collapse_on_toggle,
+                    description = R.string.patch_selection_collapse_on_toggle_description,
+                )
+            }
             val actionOrderPref by viewModel.prefs.patchSelectionActionOrder.getAsState()
             val hiddenActionsPref by viewModel.prefs.patchSelectionHiddenActions.getAsState()
             val actionOrderList = remember(actionOrderPref) {
@@ -600,54 +631,33 @@ fun AdvancedSettingsScreen(
                     }
             }
 
-            Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+            ExpressiveSettingsCard(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { actionsExpanded = !actionsExpanded }
-                            .padding(horizontal = 8.dp, vertical = 6.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(
-                                text = stringResource(R.string.patch_selection_action_order_title),
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            Text(
-                                text = stringResource(R.string.patch_selection_action_order_description),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                ExpressiveSettingsItem(
+                    headlineContent = stringResource(R.string.patch_selection_action_order_title),
+                    supportingContent = stringResource(R.string.patch_selection_action_order_description),
+                    trailingContent = {
                         Icon(
                             imageVector = if (actionsExpanded) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
                             contentDescription = null
                         )
-                    }
+                    },
+                    onClick = { actionsExpanded = !actionsExpanded }
+                )
 
-                    if (actionsExpanded) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .onGloballyPositioned { previewOrigin = it.positionInRoot() },
-                            contentAlignment = Alignment.Center
-                        ) {
+                if (actionsExpanded) {
+                    ExpressiveSettingsDivider()
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                            .onGloballyPositioned { previewOrigin = it.positionInRoot() },
+                        contentAlignment = Alignment.Center
+                    ) {
                             val firstRowState = rememberLazyListState()
                             val secondRowState = rememberLazyListState()
                             var popupBounds by remember { mutableStateOf<Rect?>(null) }
@@ -872,7 +882,9 @@ fun AdvancedSettingsScreen(
                         }
                         Column(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
                         ) {
                             Text(
                                 text = stringResource(R.string.patch_selection_action_visibility_title),
@@ -914,7 +926,7 @@ fun AdvancedSettingsScreen(
                                                         style = MaterialTheme.typography.bodyMedium,
                                                         maxLines = 1
                                                     )
-                                                    Switch(
+                                                    ExpressiveSettingsSwitch(
                                                         checked = visible,
                                                         onCheckedChange = setVisible
                                                     )
@@ -947,7 +959,7 @@ fun AdvancedSettingsScreen(
                                                             style = MaterialTheme.typography.bodyMedium,
                                                             maxLines = 1
                                                         )
-                                                        Switch(
+                                                        ExpressiveSettingsSwitch(
                                                             checked = visible,
                                                             onCheckedChange = setVisible
                                                         )
@@ -960,7 +972,7 @@ fun AdvancedSettingsScreen(
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 TextButton(
@@ -978,48 +990,55 @@ fun AdvancedSettingsScreen(
                                     Text(stringResource(R.string.patch_selection_action_order_reset))
                                 }
                             }
-                        }
                     }
                 }
             }
 
             GroupHeader(stringResource(R.string.app_exporting))
-            SettingsListItem(
-                headlineContent = stringResource(R.string.export_name_format),
-                supportingContentSlot = {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            text = stringResource(R.string.export_name_format_description),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
-                        ) {
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+            ) {
+                ExpressiveSettingsItem(
+                    headlineContent = stringResource(R.string.export_name_format),
+                    supportingContentSlot = {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(
-                                text = stringResource(R.string.export_name_format_current, exportFormat),
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
-                                color = MaterialTheme.colorScheme.onSurface
+                                text = stringResource(R.string.export_name_format_description),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.export_name_format_current, exportFormat),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
                         }
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { showExportFormatDialog = true }
-            )
+                    },
+                    onClick = { showExportFormatDialog = true }
+                )
+            }
 
             GroupHeader(stringResource(R.string.debugging))
             val exportDebugLogsLauncher =
                 rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) {
                     it?.let(viewModel::exportDebugLogs)
                 }
-            SettingsListItem(
-                headlineContent = stringResource(R.string.debug_logs_export),
-                modifier = Modifier.clickable { exportDebugLogsLauncher.launch(viewModel.debugLogFileName) }
-            )
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+            ) {
+                ExpressiveSettingsItem(
+                    headlineContent = stringResource(R.string.debug_logs_export),
+                    onClick = { exportDebugLogsLauncher.launch(viewModel.debugLogFileName) }
+                )
+                ExpressiveSettingsDivider()
             val clipboard = remember { context.getSystemService<ClipboardManager>()!! }
             val deviceContent = """
                     Version: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})
@@ -1029,21 +1048,22 @@ fun AdvancedSettingsScreen(
                     Supported Archs: ${Build.SUPPORTED_ABIS.joinToString(", ")}
                     Memory limit: $memoryLimit
                 """.trimIndent()
-            SettingsListItem(
-                modifier = Modifier.combinedClickable(
-                    onClick = { },
-                    onLongClickLabel = stringResource(R.string.copy_to_clipboard),
-                    onLongClick = {
-                        clipboard.setPrimaryClip(
-                            ClipData.newPlainText("Device Information", deviceContent)
-                        )
+                ExpressiveSettingsItem(
+                    modifier = Modifier.combinedClickable(
+                        onClick = { },
+                        onLongClickLabel = stringResource(R.string.copy_to_clipboard),
+                        onLongClick = {
+                            clipboard.setPrimaryClip(
+                                ClipData.newPlainText("Device Information", deviceContent)
+                            )
 
-                        context.toast(context.getString(R.string.toast_copied_to_clipboard))
-                    }.withHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                ),
-                headlineContent = stringResource(R.string.about_device),
-                supportingContent = deviceContent
-            )
+                            context.toast(context.getString(R.string.toast_copied_to_clipboard))
+                        }.withHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                    ),
+                    headlineContent = stringResource(R.string.about_device),
+                    supportingContent = deviceContent
+                )
+            }
         }
     }
 }

@@ -14,10 +14,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
@@ -35,6 +33,9 @@ import androidx.compose.ui.unit.dp
 import app.revanced.manager.ui.component.AnnotatedLinkText // From PR #37: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/37
 import androidx.compose.ui.graphics.vector.ImageVector
 import app.revanced.manager.ui.component.AppTopBar
+import app.revanced.manager.ui.component.settings.ExpressiveSettingsCard
+import app.revanced.manager.ui.component.settings.ExpressiveSettingsDivider
+import app.revanced.manager.ui.component.settings.ExpressiveSettingsItem
 import app.revanced.manager.ui.model.navigation.Settings
 import app.revanced.manager.ui.viewmodel.AboutViewModel.Companion.getSocialIcon
 import app.revanced.manager.util.openUrl
@@ -124,31 +125,31 @@ fun AboutSettingsScreen(
                     .fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                githubButtons.forEach { (icon, text, onClick) ->
-                    FilledTonalButton(
-                        onClick = onClick,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                icon,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(
-                                text,
-                                style = MaterialTheme.typography.labelLarge
-                            )
+                ExpressiveSettingsCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+                ) {
+                    githubButtons.forEachIndexed { index, (icon, text, onClick) ->
+                        ExpressiveSettingsItem(
+                            headlineContent = text,
+                            leadingContent = {
+                                Icon(
+                                    icon,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            },
+                            onClick = onClick
+                        )
+                        if (index != githubButtons.lastIndex) {
+                            ExpressiveSettingsDivider()
                         }
                     }
                 }
             }
-            OutlinedCard(
+            ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
