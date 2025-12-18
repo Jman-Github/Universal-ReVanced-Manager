@@ -16,8 +16,8 @@ import android.os.Build
 import android.os.Parcelable
 import androidx.compose.runtime.Immutable
 import app.revanced.manager.domain.repository.PatchBundleRepository
-import app.revanced.manager.service.InstallService
-import app.revanced.manager.service.UninstallService
+import app.revanced.manager.receiver.InstallReceiver
+import app.revanced.manager.receiver.UninstallReceiver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -131,7 +131,10 @@ class PM(
         return pkgInfo
     }
 
-    fun PackageInfo.label() = this.applicationInfo!!.loadLabel(app.packageManager).toString()
+    fun PackageInfo.label(): String {
+        val raw = this.applicationInfo!!.loadLabel(app.packageManager).toString()
+        return cleanLabel(raw, this.packageName)
+    }
 
     fun getVersionCode(packageInfo: PackageInfo) = PackageInfoCompat.getLongVersionCode(packageInfo)
 
@@ -191,19 +194,31 @@ class PM(
             setInstallReason(PackageManager.INSTALL_REASON_USER)
         }
 
+    private fun cleanLabel(raw: String, packageName: String): String {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) return trimmed
+        // If the label contains the package name or a dotted class, strip to the last segment.
+        val hasDots = trimmed.contains('.')
+        val pkgMatch = packageName.isNotEmpty() && (trimmed.startsWith(packageName) || trimmed.contains(packageName))
+        val base = if (hasDots || pkgMatch) trimmed.substringAfterLast('.') else trimmed
+        val withoutSuffix = base.removeSuffix("Application")
+        val candidate = withoutSuffix.ifBlank { base }
+        return candidate.ifBlank { trimmed }
+    }
+
     private val Context.installIntentSender
-        get() = PendingIntent.getService(
+        get() = PendingIntent.getBroadcast(
             this,
             0,
-            Intent(this, InstallService::class.java),
-            intentFlags
+            Intent(this, InstallReceiver::class.java),
+            intentFlags or PendingIntent.FLAG_UPDATE_CURRENT
         ).intentSender
 
     private val Context.uninstallIntentSender
-        get() = PendingIntent.getService(
+        get() = PendingIntent.getBroadcast(
             this,
             0,
-            Intent(this, UninstallService::class.java),
-            intentFlags
+            Intent(this, UninstallReceiver::class.java),
+            intentFlags or PendingIntent.FLAG_UPDATE_CURRENT
         ).intentSender
 }

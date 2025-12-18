@@ -155,8 +155,12 @@ class PatcherWorker(
             args.onProgress(name, state, message)
 
         val patchedApk = fs.tempDir.resolve("patched.apk")
+        var downloadCleanup: (() -> Unit)? = null
 
         return try {
+            val startTime = System.currentTimeMillis()
+            val autoSaveDownloads = prefs.autoSaveDownloaderApks.get()
+
             if (args.input is SelectedApp.Installed) {
                 installedAppRepository.get(args.packageName)?.let {
                     if (it.installType == InstallType.MOUNT) {
@@ -173,13 +177,14 @@ class PatcherWorker(
                     args.input.version,
                     prefs.suggestedVersionSafeguard.get(),
                     !prefs.disablePatchVersionCompatCheck.get(),
-                    onDownload = args.onDownloadProgress
+                    onDownload = args.onDownloadProgress,
+                    persistDownload = autoSaveDownloads
                 ).also {
                     args.setInputFile(it.file, it.needsSplit, it.merged)
                     updateProgress(state = State.COMPLETED) // Download APK
                 }
 
-            val inputFile = when (val selectedApp = args.input) {
+            val downloadResult = when (val selectedApp = args.input) {
                 is SelectedApp.Download -> {
                     val (plugin, data) = downloaderPluginRepository.unwrapParceledData(selectedApp.data)
                     download(plugin, data)
@@ -230,7 +235,9 @@ class PatcherWorker(
                     args.setInputFile(source, false, false)
                     DownloadResult(source, false)
                 }
-            }.file
+            }
+            downloadCleanup = downloadResult.cleanup
+            val inputFile = downloadResult.file
 
             val runtime = if (prefs.useProcessRuntime.get()) {
                 ProcessRuntime(applicationContext)
@@ -240,6 +247,14 @@ class PatcherWorker(
 
             val stripNativeLibs = prefs.stripUnusedNativeLibs.get()
             val inputIsSplitArchive = SplitApkPreparer.isSplitArchive(inputFile)
+            val selectedCount = args.selectedPatches.values.sumOf { it.size }
+
+            args.logger.info(
+                "Patching started at ${System.currentTimeMillis()} " +
+                        "pkg=${args.packageName} version=${args.input.version} " +
+                        "input=${inputFile.absolutePath} size=${inputFile.length()} " +
+                        "split=$inputIsSplitArchive patches=$selectedCount"
+            )
 
             runtime.execute(
                 inputFile.absolutePath,
@@ -259,6 +274,16 @@ class PatcherWorker(
 
             keystoreManager.sign(patchedApk, File(args.output))
             updateProgress(state = State.COMPLETED) // Signing
+
+            val elapsed = System.currentTimeMillis() - startTime
+            val rt = Runtime.getRuntime()
+            val usedMem = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024)
+            val totalMem = rt.totalMemory() / (1024 * 1024)
+
+            args.logger.info(
+                "Patching succeeded: output=${args.output} size=${File(args.output).length()} " +
+                        "elapsed=${elapsed}ms memory=${usedMem}MB/${totalMem}MB"
+            )
 
             Log.i(tag, "Patching succeeded".logFmt())
             Result.success()
@@ -298,6 +323,7 @@ class PatcherWorker(
             )
         } finally {
             patchedApk.delete()
+            downloadCleanup?.invoke()
         }
     }
 

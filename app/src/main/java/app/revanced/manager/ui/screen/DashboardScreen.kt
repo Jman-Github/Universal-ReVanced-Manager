@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import android.text.format.Formatter
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -76,10 +77,16 @@ import app.revanced.manager.ui.component.bundle.ImportPatchBundleDialog
 import app.revanced.manager.ui.component.haptics.HapticFloatingActionButton
 import app.revanced.manager.ui.component.haptics.HapticTab
 import app.revanced.manager.ui.viewmodel.DashboardViewModel
+import app.revanced.manager.ui.model.SelectedApp
 import app.revanced.manager.ui.viewmodel.PatchProfileLaunchData
 import app.revanced.manager.ui.viewmodel.PatchProfilesViewModel
+import app.revanced.manager.domain.repository.PatchBundleRepository.BundleUpdatePhase
+import app.revanced.manager.domain.repository.PatchBundleRepository.BundleImportPhase
 import app.revanced.manager.ui.viewmodel.InstalledAppsViewModel
+import app.revanced.manager.ui.viewmodel.AppSelectorViewModel
 import app.revanced.manager.util.RequestInstallAppsContract
+import app.revanced.manager.util.APK_FILE_MIME_TYPES
+import app.revanced.manager.util.EventEffect
 import app.revanced.manager.util.toast
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
@@ -99,7 +106,7 @@ enum class DashboardPage(
 fun DashboardScreen(
     vm: DashboardViewModel = koinViewModel(),
     onAppSelectorClick: () -> Unit,
-    onStorageSelectClick: () -> Unit,
+    onStorageSelect: (SelectedApp.Local) -> Unit,
     onSettingsClick: () -> Unit,
     onUpdateClick: () -> Unit,
     onDownloaderPluginClick: () -> Unit,
@@ -116,6 +123,14 @@ fun DashboardScreen(
     val showNewDownloaderPluginsNotification by vm.newDownloaderPluginsAvailable.collectAsStateWithLifecycle(
         false
     )
+    val storageVm: AppSelectorViewModel = koinViewModel()
+    EventEffect(flow = storageVm.storageSelectionFlow) { selected ->
+        onStorageSelect(selected)
+    }
+    val storagePickerLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            uri?.let(storageVm::handleStorageResult)
+        }
     val bundleUpdateProgress by vm.bundleUpdateProgress.collectAsStateWithLifecycle(null)
     val bundleImportProgress by vm.bundleImportProgress.collectAsStateWithLifecycle(null)
     val androidContext = LocalContext.current
@@ -394,7 +409,7 @@ fun DashboardScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         HapticFloatingActionButton(
-                            onClick = { attemptAppInput(onStorageSelectClick) }
+                            onClick = { attemptAppInput { storagePickerLauncher.launch(APK_FILE_MIME_TYPES) } }
                         ) {
                             Icon(Icons.Default.Storage, stringResource(R.string.select_from_storage))
                         }
@@ -410,13 +425,40 @@ fun DashboardScreen(
     ) { paddingValues ->
         Column(Modifier.padding(paddingValues)) {
             bundleImportProgress?.let { progress ->
+                val context = LocalContext.current
+                val subtitleParts = buildList {
+                    add(
+                        stringResource(
+                            R.string.import_patch_bundles_banner_subtitle,
+                            progress.processed,
+                            progress.total
+                        )
+                    )
+                    val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList
+                    val phaseText = when (progress.phase) {
+                        BundleImportPhase.Processing -> "Processing"
+                        BundleImportPhase.Downloading -> "Downloading"
+                        BundleImportPhase.Finalizing -> "Finalizing"
+                    }
+                    val detail = buildString {
+                        append(phaseText)
+                        append(": ")
+                        append(name)
+                        if (progress.phase == BundleImportPhase.Downloading) {
+                            append(" (")
+                            append(Formatter.formatShortFileSize(context, progress.bytesRead))
+                            progress.bytesTotal?.takeIf { it > 0L }?.let { total ->
+                                append("/")
+                                append(Formatter.formatShortFileSize(context, total))
+                            }
+                            append(")")
+                        }
+                    }
+                    add(detail)
+                }
                 DownloadProgressBanner(
                     title = stringResource(R.string.import_patch_bundles_banner_title),
-                    subtitle = stringResource(
-                        R.string.import_patch_bundles_banner_subtitle,
-                        progress.processed,
-                        progress.total
-                    ),
+                    subtitle = subtitleParts.joinToString(" • "),
                     progress = progress.ratio,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -425,15 +467,54 @@ fun DashboardScreen(
             }
             if (bundleImportProgress == null) {
                 bundleUpdateProgress?.let { progress ->
-                    val progressFraction =
-                        if (progress.total == 0) 0f else progress.completed.toFloat() / progress.total
+                    val context = LocalContext.current
+                    val perBundleFraction = progress.bytesTotal
+                        ?.takeIf { it > 0L }
+                        ?.let { total -> (progress.bytesRead.toFloat() / total).coerceIn(0f, 1f) }
+
+                    val progressFraction: Float? = when {
+                        progress.total == 0 -> 0f
+                        progress.phase == BundleUpdatePhase.Downloading && perBundleFraction == null -> null
+                        progress.phase == BundleUpdatePhase.Downloading && perBundleFraction != null ->
+                            ((progress.completed.toFloat() + perBundleFraction) / progress.total).coerceIn(0f, 1f)
+
+                        else -> (progress.completed.toFloat() / progress.total).coerceIn(0f, 1f)
+                    }
+
+                    val subtitleParts = buildList {
+                        add(
+                            stringResource(
+                                R.string.bundle_update_progress,
+                                progress.completed,
+                                progress.total
+                            )
+                        )
+                        val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList
+                        val phaseText = when (progress.phase) {
+                            BundleUpdatePhase.Checking -> "Checking"
+                            BundleUpdatePhase.Downloading -> "Downloading"
+                            BundleUpdatePhase.Finalizing -> "Finalizing"
+                        }
+
+                        val detail = buildString {
+                            append(phaseText)
+                            append(": ")
+                            append(name)
+                            if (progress.phase == BundleUpdatePhase.Downloading && progress.bytesRead > 0L) {
+                                append(" (")
+                                append(Formatter.formatShortFileSize(context, progress.bytesRead))
+                                progress.bytesTotal?.takeIf { it > 0L }?.let { total ->
+                                    append("/")
+                                    append(Formatter.formatShortFileSize(context, total))
+                                }
+                                append(")")
+                            }
+                        }
+                        add(detail)
+                    }
                     DownloadProgressBanner(
                         title = stringResource(R.string.bundle_update_banner_title),
-                        subtitle = stringResource(
-                            R.string.bundle_update_progress,
-                            progress.completed,
-                            progress.total
-                        ),
+                        subtitle = subtitleParts.joinToString(" • "),
                         progress = progressFraction,
                         modifier = Modifier
                             .fillMaxWidth()

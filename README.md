@@ -104,10 +104,10 @@ To import patch bundles into Universal ReVanced Manager, use my [ReVanced Patch 
 
 ## 🔌 Supported Downloader Plugins
 
-[Play Store Downloader](https://github.com/ReVanced/revanced-manager-downloaders) ❌  
-[ApkMirror Downloader](https://github.com/ReVanced/revanced-manager-downloaders) ✅  
-[APKPure Downloader](https://github.com/Aunali321/revanced-downloader-plugins) ✅  
-[APKCombo Downloader](https://github.com/Aunali321/revanced-downloader-plugins) ✅  
+[Play Store Downloader](https://github.com/brosssh/revanced-manager-downloaders) ❌  
+[ApkMirror Downloader](https://github.com/brosssh/revanced-manager-downloaders) ✅  
+[APKPure Downloader](https://github.com/brosssh/revanced-manager-downloaders) ✅  
+[APKCombo Downloader](https://github.com/brosssh/revanced-manager-downloaders) ✅  
 
 ## 🤝 Contributors
 <table>
@@ -145,6 +145,15 @@ To import patch bundles into Universal ReVanced Manager, use my [ReVanced Patch 
     <td style="vertical-align:middle;">
       <a href="https://github.com/KobeW50">KobeW50</a><br />
       Proofreading strings & wording
+    </td>
+  </tr>
+  <tr>
+    <td style="vertical-align:middle;padding-right:8px;">
+      <img src="https://images.weserv.nl/?url=github.com/BlackGold8282.png&h=36&w=36&fit=cover&mask=circle" alt="BlackGold8282 avatar" width="36" height="36" />
+    </td>
+    <td style="vertical-align:middle;">
+      <a href="https://github.com/BlackGold8282">BlackGold8282</a><br />
+      Korean localization
     </td>
   </tr>
 </table>

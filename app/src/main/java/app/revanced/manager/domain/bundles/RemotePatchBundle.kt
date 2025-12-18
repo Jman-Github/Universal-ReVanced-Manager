@@ -8,6 +8,7 @@ import app.revanced.manager.network.service.HttpService
 import app.revanced.manager.network.utils.getOrThrow
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.request.header
 import io.ktor.client.request.prepareGet
 import io.ktor.client.request.url
@@ -22,12 +23,15 @@ import kotlinx.datetime.toInstant
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.io.File
+import java.io.IOException
 import java.util.zip.ZipInputStream
 
 data class PatchBundleDownloadResult(
     val versionSignature: String,
     val assetCreatedAtMillis: Long?
 )
+
+typealias PatchBundleDownloadProgress = (bytesRead: Long, bytesTotal: Long?) -> Unit
 
 sealed class RemotePatchBundle(
     name: String,
@@ -62,32 +66,43 @@ sealed class RemotePatchBundle(
     ): RemotePatchBundle = copy(error, name, displayName, createdAt, updatedAt, this.autoUpdate)
 
     // PR #35: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35
-    protected open suspend fun download(info: ReVancedAsset) = withContext(Dispatchers.IO) {
-        patchBundleOutputStream().use {
-            http.streamTo(it) {
-                url(info.downloadUrl)
+    protected open suspend fun download(info: ReVancedAsset, onProgress: PatchBundleDownloadProgress? = null) =
+        withContext(Dispatchers.IO) {
+            try {
+                patchBundleOutputStream().use {
+                    http.streamTo(
+                        outputStream = it,
+                        builder = { url(info.downloadUrl) },
+                        onProgress = onProgress
+                    )
+                }
+                requireNonEmptyPatchesFile("Downloading patch bundle")
+            } catch (t: Throwable) {
+                runCatching { patchesFile.delete() }
+                throw t
             }
-        }
 
-        PatchBundleDownloadResult(
-            versionSignature = info.version,
-            assetCreatedAtMillis = runCatching {
-                info.createdAt.toInstant(TimeZone.UTC).toEpochMilliseconds()
-            }.getOrNull()
-        )
-    }
+            PatchBundleDownloadResult(
+                versionSignature = info.version,
+                assetCreatedAtMillis = runCatching {
+                    info.createdAt.toInstant(TimeZone.UTC).toEpochMilliseconds()
+                }.getOrNull()
+            )
+        }
 
     /**
      * Downloads the latest version regardless if there is a new update available.
      */
-    suspend fun ActionContext.downloadLatest(): PatchBundleDownloadResult = download(getLatestInfo())
+    suspend fun ActionContext.downloadLatest(onProgress: PatchBundleDownloadProgress? = null): PatchBundleDownloadResult =
+        download(getLatestInfo(), onProgress)
 
-    suspend fun ActionContext.update(): PatchBundleDownloadResult? = withContext(Dispatchers.IO) {
+    suspend fun ActionContext.update(onProgress: PatchBundleDownloadProgress? = null): PatchBundleDownloadResult? =
+        withContext(Dispatchers.IO) {
         val info = getLatestInfo()
         if (hasInstalled() && info.version == installedVersionSignatureInternal)
             return@withContext null
 
-        download(info)
+        download(info, onProgress)
     }
 
     suspend fun fetchLatestReleaseInfo(): ReVancedAsset {
@@ -214,7 +229,7 @@ class GitHubPullRequestBundle(
         api.getAssetFromPullRequest(owner, repo, prNumber)
     }
 
-    override suspend fun download(info: ReVancedAsset) = withContext(Dispatchers.IO) {
+    override suspend fun download(info: ReVancedAsset, onProgress: PatchBundleDownloadProgress?) = withContext(Dispatchers.IO) {
         val prefs: PreferencesManager by inject()
         val gitHubPat = prefs.gitHubPat.get().also {
             if (it.isBlank()) throw RuntimeException("PAT is required.")
@@ -227,27 +242,63 @@ class GitHubPullRequestBundle(
                     followSslRedirects(true)
                 }
             }
+            install(HttpTimeout) {
+                connectTimeoutMillis = 10_000
+                socketTimeoutMillis = 10_000
+                requestTimeoutMillis = 5 * 60_000
+            }
         }
 
-        with(customHttpClient) {
-            prepareGet {
-                url(info.downloadUrl)
-                header("Authorization", "Bearer $gitHubPat")
-            }.execute { httpResponse ->
-                patchBundleOutputStream().use { patchOutput ->
-                    ZipInputStream(httpResponse.bodyAsChannel().toInputStream()).use { zis ->
-                        var entry = zis.nextEntry
-                        while (entry != null) {
-                            if (!entry.isDirectory && entry.name.endsWith(".rvp")) {
-                                zis.copyTo(patchOutput)
-                                break
+        try {
+            with(customHttpClient) {
+                prepareGet {
+                    url(info.downloadUrl)
+                    header("Authorization", "Bearer $gitHubPat")
+                }.execute { httpResponse ->
+                    patchBundleOutputStream().use { patchOutput ->
+                        ZipInputStream(httpResponse.bodyAsChannel().toInputStream()).use { zis ->
+                            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                            var copiedBytes = 0L
+                            var lastReportedBytes = 0L
+                            var lastReportedAt = 0L
+                            var extractedTotal: Long? = null
+
+                            var entry = zis.nextEntry
+                            while (entry != null) {
+                                if (!entry.isDirectory && entry.name.endsWith(".rvp")) {
+                                    extractedTotal = entry.size.takeIf { it > 0 }
+                                    while (true) {
+                                        val read = zis.read(buffer)
+                                        if (read == -1) break
+                                        patchOutput.write(buffer, 0, read)
+                                        copiedBytes += read.toLong()
+                                        val now = System.currentTimeMillis()
+                                        if (copiedBytes - lastReportedBytes >= 64 * 1024 || now - lastReportedAt >= 200) {
+                                            lastReportedBytes = copiedBytes
+                                            lastReportedAt = now
+                                            onProgress?.invoke(copiedBytes, extractedTotal)
+                                        }
+                                    }
+                                    break
+                                }
+                                zis.closeEntry()
+                                entry = zis.nextEntry
                             }
-                            zis.closeEntry()
-                            entry = zis.nextEntry
+
+                            if (copiedBytes <= 0L) {
+                                throw IOException("No .rvp file found in the pull request artifact.")
+                            }
+                            onProgress?.invoke(copiedBytes, extractedTotal)
                         }
                     }
                 }
             }
+            requireNonEmptyPatchesFile("Downloading patch bundle")
+        } catch (t: Throwable) {
+            runCatching { patchesFile.delete() }
+            throw t
+        } finally {
+            runCatching { customHttpClient.close() }
         }
 
         PatchBundleDownloadResult(

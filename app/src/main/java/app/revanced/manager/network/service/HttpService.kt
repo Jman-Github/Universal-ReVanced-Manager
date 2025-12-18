@@ -26,6 +26,7 @@ import kotlinx.serialization.json.Json
 import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStream
+import kotlin.math.abs
 
 /**
  * @author Aliucord Authors, DiamondMiner88
@@ -84,7 +85,8 @@ class HttpService(
 
     suspend fun streamTo(
         outputStream: OutputStream,
-        builder: HttpRequestBuilder.() -> Unit
+        builder: HttpRequestBuilder.() -> Unit,
+        onProgress: ((bytesRead: Long, contentLength: Long?) -> Unit)? = null
     ) {
         try {
             runWith429Retry("streamTo") {
@@ -94,15 +96,31 @@ class HttpService(
                             throw TooManyRequestsException(httpResponse.retryAfterMillis())
                         }
                         httpResponse.status.isSuccess() -> {
+                            val contentLength = httpResponse.headers[HttpHeaders.ContentLength]?.toLongOrNull()
                             val channel: ByteReadChannel = httpResponse.body()
                             withContext(Dispatchers.IO) {
+                                var bytesRead = 0L
+                                var lastReportedBytes = 0L
+                                var lastReportedAt = 0L
+                                fun reportProgress(force: Boolean = false) {
+                                    if (onProgress == null) return
+                                    val now = System.currentTimeMillis()
+                                    val byteDelta = abs(bytesRead - lastReportedBytes)
+                                    if (!force && byteDelta < 64 * 1024 && now - lastReportedAt < 200) return
+                                    lastReportedBytes = bytesRead
+                                    lastReportedAt = now
+                                    onProgress(bytesRead, contentLength)
+                                }
                                 while (!channel.isClosedForRead) {
                                     val packet = channel.readRemaining(DEFAULT_BUFFER_SIZE.toLong())
                                     while (packet.isNotEmpty) {
                                         val bytes = packet.readBytes()
                                         outputStream.write(bytes)
+                                        bytesRead += bytes.size.toLong()
+                                        reportProgress()
                                     }
                                 }
+                                reportProgress(force = true)
                             }
                         }
                         else -> throw HttpException(httpResponse.status)

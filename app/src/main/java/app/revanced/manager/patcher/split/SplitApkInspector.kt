@@ -49,6 +49,7 @@ object SplitApkInspector {
                 when {
                     "base" in lower -> 0
                     "main" in lower || "master" in lower -> 1
+                    lower.startsWith("config") -> 99
                     else -> 2
                 }
             }.thenBy { it.name.length }

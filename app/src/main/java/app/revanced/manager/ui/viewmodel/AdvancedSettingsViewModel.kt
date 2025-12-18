@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import app.universal.revanced.manager.R
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
 import app.revanced.manager.domain.installer.InstallerManager
+import app.revanced.manager.domain.installer.RootInstaller
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.manager.hideInstallerComponent
 import app.revanced.manager.domain.manager.showInstallerComponent
@@ -35,7 +36,8 @@ class AdvancedSettingsViewModel(
     val prefs: PreferencesManager,
     private val app: Application,
     private val patchBundleRepository: PatchBundleRepository,
-    private val installerManager: InstallerManager
+    private val installerManager: InstallerManager,
+    private val rootInstaller: RootInstaller
 ) : ViewModel() {
     val hasOfficialBundle = patchBundleRepository.sources
         .map { sources -> sources.any { it.isDefault } }
@@ -57,6 +59,10 @@ class AdvancedSettingsViewModel(
     // PR #35: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35
     fun setGitHubPat(value: String) = viewModelScope.launch(Dispatchers.Default) {
         prefs.gitHubPat.update(value.trim())
+    }
+
+    fun setIncludeGitHubPatInExports(enabled: Boolean) = viewModelScope.launch(Dispatchers.Default) {
+        prefs.includeGitHubPatInExports.update(enabled)
     }
 
     fun exportDebugLogs(target: Uri) = viewModelScope.launch {
@@ -87,6 +93,10 @@ class AdvancedSettingsViewModel(
     }
 
     fun setPrimaryInstaller(token: InstallerManager.Token) = viewModelScope.launch(Dispatchers.Default) {
+        if (token == InstallerManager.Token.AutoSaved) {
+            // Request/verify root in background when user explicitly selects the rooted mount installer.
+            runCatching { withContext(Dispatchers.IO) { rootInstaller.hasRootAccess() } }
+        }
         installerManager.updatePrimaryToken(token)
         val fallback = installerManager.getFallbackToken()
         if (fallback != InstallerManager.Token.None && tokensEqual(fallback, token)) {
@@ -95,6 +105,9 @@ class AdvancedSettingsViewModel(
     }
 
     fun setFallbackInstaller(token: InstallerManager.Token) = viewModelScope.launch(Dispatchers.Default) {
+        if (token == InstallerManager.Token.AutoSaved) {
+            runCatching { withContext(Dispatchers.IO) { rootInstaller.hasRootAccess() } }
+        }
         val primary = installerManager.getPrimaryToken()
         val target = if (token != InstallerManager.Token.None && tokensEqual(primary, token)) {
             InstallerManager.Token.None
@@ -114,6 +127,11 @@ class AdvancedSettingsViewModel(
         viewModelScope.launch(Dispatchers.Default) {
             val serialized = order.joinToString(",") { it.storageId }
             prefs.patchSelectionActionOrder.update(serialized)
+        }
+
+    fun setPatchSelectionHiddenActions(hidden: Set<String>) =
+        viewModelScope.launch(Dispatchers.Default) {
+            prefs.patchSelectionHiddenActions.update(hidden)
         }
 
     fun restoreOfficialBundle() = viewModelScope.launch(Dispatchers.Default) {
@@ -157,15 +175,30 @@ class AdvancedSettingsViewModel(
         val removed = installerManager.removeCustomInstaller(component)
         if (removed) {
             prefs.hideInstallerComponent(component)
+            val removedPackage = component.packageName
+            val currentPrimary = installerManager.getPrimaryToken()
+            val currentFallback = installerManager.getFallbackToken()
+            val primaryMatchesRemoved =
+                currentPrimary is InstallerManager.Token.Component &&
+                    currentPrimary.componentName.packageName == removedPackage
+            val fallbackMatchesRemoved =
+                currentFallback is InstallerManager.Token.Component &&
+                    currentFallback.componentName.packageName == removedPackage
+
+            if (primaryMatchesRemoved) {
+                installerManager.updatePrimaryToken(InstallerManager.Token.Internal)
+            }
+            if (fallbackMatchesRemoved) {
+                installerManager.updateFallbackToken(InstallerManager.Token.None)
+            }
+
             val componentAvailable = installerManager.isComponentAvailable(component)
             if (!componentAvailable) {
-                val currentPrimary = installerManager.getPrimaryToken()
                 if (currentPrimary is InstallerManager.Token.Component &&
                     currentPrimary.componentName == component
                 ) {
                     installerManager.updatePrimaryToken(InstallerManager.Token.Internal)
                 }
-                val currentFallback = installerManager.getFallbackToken()
                 if (currentFallback is InstallerManager.Token.Component &&
                     currentFallback.componentName == component
                 ) {

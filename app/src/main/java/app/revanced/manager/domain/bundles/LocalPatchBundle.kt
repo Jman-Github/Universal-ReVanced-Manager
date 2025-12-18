@@ -20,6 +20,7 @@ class LocalPatchBundle(
             patchBundleOutputStream().use { outputStream ->
                 patches.copyTo(outputStream)
             }
+            requireNonEmptyPatchesFile("Importing patch bundle")
         }
     }
 

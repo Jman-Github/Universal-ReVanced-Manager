@@ -38,8 +38,11 @@ object SplitApkPreparer {
         val mergedApk = workingDir.resolve("${source.nameWithoutExtension}-merged.apk")
 
         return try {
-            logger.info("Preparing split APK bundle from ${source.name}")
-            extractSplitEntries(source, modulesDir)
+            val sourceSize = source.length()
+            logger.info("Preparing split APK bundle from ${source.name} (size=${sourceSize} bytes)")
+            val entries = extractSplitEntries(source, modulesDir)
+            logger.info("Found ${entries.size} split modules: ${entries.joinToString { it.name }}")
+            logger.info("Module sizes: ${entries.joinToString { "${it.name}=${it.file.length()} bytes" }}")
 
             val module = Merger.merge(modulesDir.toPath())
             module.use {
@@ -52,7 +55,12 @@ object SplitApkPreparer {
                 NativeLibStripper.strip(mergedApk)
             }
 
-            logger.info("Split APK merged to ${mergedApk.absolutePath}")
+            persistMergedIfDownloaded(source, mergedApk, logger)
+
+            logger.info(
+                "Split APK merged to ${mergedApk.absolutePath} " +
+                        "(modules=${entries.size}, mergedSize=${mergedApk.length()} bytes)"
+            )
             PreparationResult(
                 file = mergedApk,
                 merged = true
@@ -74,8 +82,11 @@ object SplitApkPreparer {
             }
         }.getOrDefault(false)
 
-    private suspend fun extractSplitEntries(source: File, targetDir: File) =
+    private data class ExtractedModule(val name: String, val file: File)
+
+    private suspend fun extractSplitEntries(source: File, targetDir: File): List<ExtractedModule> =
         withContext(Dispatchers.IO) {
+            val extracted = mutableListOf<ExtractedModule>()
             ZipFile(source).use { zip ->
                 val apkEntries = zip.entries().asSequence()
                     .filterNot { it.isDirectory }
@@ -94,8 +105,10 @@ object SplitApkPreparer {
                             input.copyTo(output)
                         }
                     }
+                    extracted += ExtractedModule(destination.name, destination)
                 }
             }
+            extracted
         }
 
     data class PreparationResult(
@@ -103,6 +116,20 @@ object SplitApkPreparer {
         val merged: Boolean,
         val cleanup: () -> Unit = {}
     )
+
+    private fun persistMergedIfDownloaded(source: File, merged: File, logger: Logger) {
+        // Only persist back to the downloads cache when the original input lives in our downloaded-apps dir.
+        val downloadsRoot = source.parentFile?.parentFile
+        val isDownloadedApp = downloadsRoot?.name?.startsWith("app_downloaded-apps") == true
+        if (!isDownloadedApp) return
+
+        runCatching {
+            merged.copyTo(source, overwrite = true)
+            logger.info("Persisted merged split APK back to downloads cache: ${source.absolutePath}")
+        }.onFailure { error ->
+            logger.warn("Failed to persist merged split APK to downloads cache: ${error.message}")
+        }
+    }
 
     private object defaultLogger : Logger() {
         override fun log(level: LogLevel, message: String) {
