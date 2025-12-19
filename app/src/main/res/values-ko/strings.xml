@@ -326,25 +326,25 @@
     <string name="patch_selection_reset_dialog_title">패치 기본값으로 초기화?</string>
     <string name="patch_selection_reset_dialog_message">패치 선택목록 및 옵션을 기본값으로 복원하시겠습니까?</string>
     <string name="patch_selection_reset_package">앱 패치 선택목록 초기화</string>
-    <string name="patch_selection_reset_package_dialog_description">\"%s\" 앱에 대한 패치 선택목록을 초기화합니다. 개별적으로 패치를 수동으로 다시 선택해야 합니다.
+    <string name="patch_selection_reset_package_dialog_description">\"%s\"에 대한 패치 선택목록을 초기화합니다. 개별적으로 패치를 수동으로 다시 선택해야 합니다.
 
 패치 프로필은 영향을 받지 않습니다.</string>
     <string name="patch_selection_reset_package_description">단일 앱에 대한 패치 선택목록을 초기화합니다.</string>
-    <string name="patch_selection_reset_patches">패치 선택목록 초기화 (단일)</string>
+    <string name="patch_selection_reset_patches">번들 패치 선택목록 초기화</string>
     <string name="patch_selection_reset_patches_dialog_description">\"%s\"에 대한 패치 선택목록을 초기화합니다. 개별적으로 패치를 수동으로 다시 선택해야 합니다.
 
 패치 프로필은 영향을 받지 않습니다.</string>
-    <string name="patch_selection_reset_patches_description">특정 패치 모음에 대한 패치 선택목록을 초기화합니다.</string>
+    <string name="patch_selection_reset_patches_description">단일 패치 번들에 대한 패치 선택목록을 초기화합니다.</string>
     <string name="patch_options_reset_package">앱 패치 옵션 초기화</string>
-    <string name="patch_options_reset_package_dialog_description">\"%s\" 앱에 대한 패치 옵션을 초기화합니다. 개별적으로 옵션을 다시 적용해야 합니다.
+    <string name="patch_options_reset_package_dialog_description">\"%s\"에 대한 패치 옵션을 초기화합니다. 개별적으로 옵션을 다시 적용해야 합니다.
 
 패치 프로필은 영향을 받지 않습니다.</string>
     <string name="patch_options_reset_package_description">단일 앱에 대한 패치 옵션을 초기화합니다</string>
-    <string name="patch_options_reset_patches">패치 옵션 초기화 (단일)</string>
+    <string name="patch_options_reset_patches">번들 패치 옵션 초기화</string>
     <string name="patch_options_reset_patches_dialog_description">\"%s\"에 대한 패치 옵션을 초기화합니다. 개별적으로 옵션을 다시 적용해야 합니다.
 
 패치 프로필은 영향을 받지 않습니다.</string>
-    <string name="patch_options_reset_patches_description">특정 패치 번들에 대한 패치 옵션을 초기화합니다</string>
+    <string name="patch_options_reset_patches_description">단일 패치 번들에 대한 패치 옵션을 초기화합니다</string>
     <string name="patch_options_reset_all">모든 패치 옵션 초기화</string>
     <string name="patch_options_reset_all_dialog_description">모든 패치 옵션을 초기화하려고 합니다. 개별적으로 옵션을 다시 적용해야 합니다.
 
@@ -480,7 +480,7 @@
     <string name="device_model">모델</string>
     <string name="device_architectures">CPU 아키텍처</string>
     <string name="device_memory_limit">메모리 제한</string>
-    <string name="device_memory_limit_format">%1$dMB (일반) - %2$dMB (대용)</string>
+    <string name="device_memory_limit_format">%1$d MB (일반) - %2$d MB (대용)</string>
     <string name="patches_force_download">모든 패치 번들 강제 다운로드</string>
     <string name="patches_reset">패치 번들 초기화</string>
     <string name="patching">패치</string>
@@ -859,9 +859,9 @@
     <string name="empty">비어있음</string>
     <string name="installing_message">요청 메시지가 표시되면 <b>업데이트</b>를 탭하세요.\n업데이트가 진행되면 Universal ReVanced Manager가 종료됩니다.</string>
     <string name="just_now">방금</string>
-    <string name="minutes_ago">%s 분 전</string>
-    <string name="hours_ago">%s 시간 전</string>
-    <string name="days_ago">%s 일 전</string>
+    <string name="minutes_ago">%s분 전</string>
+    <string name="hours_ago">%s시간 전</string>
+    <string name="days_ago">%s일 전</string>
     <string name="invalid_date">잘못된 날짜</string>
     <string name="disable_battery_optimization">배터리 최적화 비활성화</string>
     <string name="input_dialog_value_invalid">잘못된 값</string>
