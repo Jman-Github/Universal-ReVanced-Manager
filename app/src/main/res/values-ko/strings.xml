@@ -51,7 +51,7 @@
     <string name="bundle_version_item_description_default">기본 추천을 사용합니다</string>
     <string name="bundle_version_item_description_selected">%1$s (%2$s) 을 사용합니다</string>
     <string name="bundle_version_dialog_title">번들 추천 선택하기</string>
-    <string name="bundle_version_dialog_description">APK를 다운로드할 때 사용할 번들 추천을 선택하세요.</string>
+    <string name="bundle_version_dialog_description">APK를 다운로드할 때 사용될 번들 추천을 선택하세요.</string>
     <string name="bundle_version_dialog_default">기본 추천 선택하기</string>
     <string name="bundle_version_dialog_default_subtitle">가장 일반적인 호환 버전을 자동으로 선택합니다.</string>
     <string name="bundle_version_dialog_option_subtitle">%1$s 버전 사용하기</string>
@@ -689,7 +689,7 @@
     <string name="installer_custom_auto_note">설치 프로그램이 자동으로 감지되어 기본 및 대체 설치 프로그램 선택 메뉴에 추가되었습니다.</string>
     <string name="installer_custom_tab_discover">검색</string>
     <string name="installer_custom_close">닫기</string>
-    <string name="installer_custom_manage_description">기본 또는 대체 설치 프로그램으로 사용할 서드파티 설치 프로그램 액티비티를 저장합니다</string>
+    <string name="installer_custom_manage_description">기본 또는 대체 설치 프로그램으로 사용될 서드파티 설치 프로그램 액티비티를 저장합니다</string>
     <string name="installer_custom_input_label">패키지 이름</string>
     <string name="installer_custom_package_hint">설치 프로그램 액티비티를 검색하려면 패키지 이름을 입력하고 \"설치 프로그램 찾기\"를 탭하세요</string>
     <string name="installer_custom_lookup">설치 프로그램 찾기</string>
@@ -822,8 +822,8 @@
     <string name="patches_view_any_package">모든 패키지</string>
     <string name="patches_delete_single_dialog_description">\"%s\"를 삭제하시겠습니까?</string>
     <string name="patches_delete_multiple_dialog_description">선택된 패치를 삭제하시겠습니까?</string>
-    <string name="about_revanced_manager">Universal ReVanced Manager 정보</string>
-    <string name="revanced_manager_description">Universal ReVanced Manager (URV Manager)는 공식 ReVanced Manager의 포크 버전입니다. 두 애플리케이션 모두 ReVanced 패처를 사용하며, 이를 통하여 사용자 정의 패치로 앱을 다운로드 및 패치하고 패치 과정을 관리할 수 있습니다. Universal ReVanced Manager에 포함된 고유 기능으로는 패치 번들 표시 이름, 서드파티 패치 번들 가져오기 지원 등이 있습니다. Universal ReVanced Manager가 제공하는 고유 기능의 모든 목록을 확인하세요.</string>
+    <string name="about_revanced_manager">URV Manager에 대한 정보</string>
+    <string name="revanced_manager_description">URV Manager (Universal ReVanced Manager)는 공식 ReVanced Manager의 포크 버전입니다. 두 애플리케이션 모두 ReVanced 패처를 사용하며, 이를 통하여 사용자 정의 패치로 앱을 다운로드 및 패치하고 패치 과정을 관리할 수 있습니다. Universal ReVanced Manager에 포함된 고유 기능으로는 패치 번들 표시 이름, 서드파티 패치 번들 가져오기 지원 등이 있습니다. Universal ReVanced Manager가 제공하는 고유 기능의 모든 목록을 확인하세요.</string>
     <string name="unique_features_label">자세한 정보를 보려면 여기를 탭하세요.</string>
     <!-- From PR #37: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/37 -->
     <string name="here">자세한 정보를 보려면 여기를 탭하세요.</string>
