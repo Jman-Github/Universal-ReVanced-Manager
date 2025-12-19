@@ -5,10 +5,10 @@
         <item quantity="other">%d 개의 패치</item>
     </plurals>
     <plurals name="patches_executed">
-        <item quantity="one">%d 개의 패치가 실행됨</item>
-        <item quantity="other">%d 개의 패치가 실행됨</item>
+        <item quantity="one">%d 개의 패치를 실행하였습니다</item>
+        <item quantity="other">%d 개의 패치를 실행하였습니다</item>
     </plurals>
     <plurals name="selected_count">
-        <item quantity="other">%d 개가 선택됨</item>
+        <item quantity="other">%d 개를 선택하였습니다</item>
     </plurals>
 </resources>
