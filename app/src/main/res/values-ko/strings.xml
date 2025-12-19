@@ -120,7 +120,7 @@
     <string name="downloads">다운로드</string>
     <string name="downloads_description">다운로더 플러그인 및 다운로드된 앱을 설정할 수 있습니다</string>
     <!-- From PR #37: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/37 -->
-    <string name="plugins_help_title">다운로더란 무엇인가요?</string>
+    <string name="plugins_help_title">다운로더란?</string>
     <string name="plugins_help_description">다운로더는 URV가 다양한 출처에서 순정 APK를 다운로드할 수 있게 해주는 플러그인입니다. 다운로드된 APK는 하단 섹션에 표시됩니다. 패치 과정에서 이미 다운로드된 APK를 선택하거나 플러그인을 통해 APK를 다운로드할 수 있습니다.\n\n지원되는 다운로더 플러그인 목록을 확인할 수 있습니다.</string>
     <string name="import_export">가져오기 및 내보내기</string>
     <string name="import_export_description">키스토어, 패치 옵션 그리고 선택목록을 설정할 수 있습니다</string>
@@ -493,9 +493,9 @@
     <string name="delete">삭제하기</string>
     <string name="refresh">새로고침</string>
     <string name="continue_anyways">계속</string>
-    <string name="download_another_version">다른 버전 다운로드</string>
-    <string name="download_app">앱 다운로드</string>
-    <string name="download_apk">APK 파일 다운로드</string>
+    <string name="download_another_version">다른 버전을 다운로드하는 중</string>
+    <string name="download_app">앱을 다운로드하는 중</string>
+    <string name="download_apk">APK 파일을 다운로드하는 중</string>
     <string name="patches_download_fail">패치를 다운로드할 수 없습니다: %s</string>
     <string name="patches_replace_fail">패치를 가져올 수 없습니다: %s</string>
     <string name="no_patched_apps_found">패치된 앱을 찾을 수 없습니다</string>
