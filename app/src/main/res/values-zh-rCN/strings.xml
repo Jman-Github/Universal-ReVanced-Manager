@@ -745,6 +745,10 @@
     <string name="install_app_fail_title">安装失败</string>
     <!-- Translation needed -->
     <string name="install_app_fail">Failed to install app: %s</string>
+    <!-- Needs translation -->
+    <string name="install_app_fail_missing_stock">Missing original APK for mount install.</string>
+    <!-- Needs translation -->
+    <string name="mount_split_not_supported">Rooted mount installer does not support split APKs. Use system installer instead.</string>
     <!-- Translation needed -->
     <string name="mount_app_fail_title">Mount failed</string>
     <!-- Translation needed -->

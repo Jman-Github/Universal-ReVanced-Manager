@@ -410,19 +410,19 @@ class InstalledAppInfoViewModel(
 
             is InstallerManager.InstallPlan.Mount -> {
                 try {
-                    val packageInfo = pm.getPackageInfo(apk)
-                        ?: throw Exception("Failed to load application info")
-                    val versionName = packageInfo.versionName ?: ""
-                    val label = with(pm) { packageInfo.label() }
-                    val stockVersion = pm.getPackageInfo(app.originalPackageName)?.versionName
-                    if (stockVersion != null && stockVersion != versionName) {
-                        mountVersionMismatchMessage = context.getString(
-                            R.string.mount_version_mismatch_message,
-                            versionName,
-                            stockVersion
-                        )
+                    if (!isInstalledOnDevice) {
+                        stopInstallProgressToasts()
+                        mountVersionMismatchMessage = context.getString(R.string.install_app_fail_missing_stock)
                         return@launch
                     }
+                    val packageInfo = pm.getPackageInfo(apk)
+                        ?: throw Exception("Failed to load application info")
+                    if (packageInfo.splitNames.isNotEmpty()) {
+                        mountVersionMismatchMessage = context.getString(R.string.mount_split_not_supported)
+                        return@launch
+                    }
+                    val versionName = packageInfo.versionName ?: ""
+                    val label = with(pm) { packageInfo.label() }
 
                     rootInstaller.install(
                         patchedAPK = apk,
@@ -729,15 +729,6 @@ class InstalledAppInfoViewModel(
     fun remountSavedInstallation() = viewModelScope.launch {
         val pkgName = installedApp?.currentPackageName ?: return@launch
         val app = installedApp ?: return@launch
-        val stockVersion = pm.getPackageInfo(app.originalPackageName)?.versionName
-        if (stockVersion != null && stockVersion != app.version) {
-            mountVersionMismatchMessage = context.getString(
-                R.string.mount_version_mismatch_message,
-                app.version,
-                stockVersion
-            )
-            return@launch
-        }
         // Reflect state immediately while the remount sequence runs.
         mountOperation = MountOperation.UNMOUNTING
         isMounted = false
@@ -788,15 +779,6 @@ class InstalledAppInfoViewModel(
                 isMounted = false
                 context.toast(context.getString(R.string.unmounted))
             } else {
-                val stockVersion = pm.getPackageInfo(app.originalPackageName)?.versionName
-                if (stockVersion != null && stockVersion != app.version) {
-                    mountVersionMismatchMessage = context.getString(
-                        R.string.mount_version_mismatch_message,
-                        app.version,
-                        stockVersion
-                    )
-                    return@launch
-                }
                 mountOperation = MountOperation.MOUNTING
                 context.toast(context.getString(R.string.mounting_ellipsis))
                 rootInstaller.mount(pkgName)

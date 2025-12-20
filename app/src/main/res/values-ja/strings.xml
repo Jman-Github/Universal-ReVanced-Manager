@@ -690,6 +690,10 @@
     <string name="install_app_success">アプリをインストールしました</string>
     <string name="install_app_fail_title">インストール失敗</string>
     <string name="install_app_fail">アプリのインストールに失敗しました: %s</string>
+    <!-- Needs translation -->
+    <string name="install_app_fail_missing_stock">Missing original APK for mount install.</string>
+    <!-- Needs translation -->
+    <string name="mount_split_not_supported">Rooted mount installer does not support split APKs. Use system installer instead.</string>
     <string name="install_timeout_message">インストールが完了しませんでした。システムインストーラーのダイアログを確認して再試行してください。</string>
     <!-- Needs translation -->
     <string name="uninstall_timeout_message">Uninstallation did not finish. Check the uninstall dialog and try again.</string>

@@ -1333,17 +1333,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                             packageInfo.label()
                         }
                         val patchedVersion = packageInfo.versionName ?: ""
-                        val stockVersion = pm.getPackageInfo(packageName)?.versionName
-                        if (stockVersion != null && stockVersion != patchedVersion) {
-                            showInstallFailure(
-                                app.getString(
-                                    R.string.mount_version_mismatch_message,
-                                    patchedVersion,
-                                    stockVersion
-                                )
-                            )
-                            return
-                        }
 
                         // Check for base APK, first check if the app is already installed
                         if (existingPackageInfo == null) {
@@ -1355,16 +1344,32 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                                 showInstallFailure(app.getString(R.string.install_app_fail, hint))
                                 return
                             }
+                            // If the original input is a split APK, bail out because mount cannot install splits.
+                            val inputInfo = inputFile?.let(pm::getPackageInfo)
+                            if (inputInfo?.splitNames?.isNotEmpty() == true) {
+                                showInstallFailure(app.getString(R.string.mount_split_not_supported))
+                                return
+                            }
                         }
 
                         val inputVersion = input.selectedApp.version
                             ?: inputFile?.let(pm::getPackageInfo)?.versionName
                             ?: throw Exception("Failed to determine input APK version")
 
+                        // Only reinstall stock when the app is not currently installed.
+                        val stockForMount = if (existingPackageInfo == null) {
+                            inputFile ?: run {
+                                showInstallFailure(app.getString(R.string.install_app_fail, "Missing original APK for mount install"))
+                                return
+                            }
+                        } else {
+                            null
+                        }
+
                         // Install as root
                         rootInstaller.install(
                             outputFile,
-                            inputFile,
+                            stockForMount,
                             packageName,
                             inputVersion,
                             label
@@ -2032,10 +2037,22 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         bundles: Map<Int, PatchBundleInfo.Scoped>
     ): PatchSelection = buildMap {
         selection.forEach { (uid, patches) ->
-            val bundle = bundles[uid] ?: return@forEach
+            val bundle = bundles[uid]
+            if (bundle == null) {
+                // Keep unknown bundles so applied patches stay visible even if the source is missing.
+                if (patches.isNotEmpty()) put(uid, patches.toSet())
+                return@forEach
+            }
+
             val valid = bundle.patches.map { it.name }.toSet()
             val kept = patches.filter { it in valid }.toSet()
-            if (kept.isNotEmpty()) put(uid, kept)
+            if (kept.isNotEmpty()) {
+                put(uid, kept)
+            } else if (patches.isNotEmpty()) {
+                // If everything was filtered out by compatibility, still keep the original set so
+                // the app info screen can show the applied bundle/patch names.
+                put(uid, patches.toSet())
+            }
         }
     }
 

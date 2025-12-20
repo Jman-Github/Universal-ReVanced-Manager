@@ -718,6 +718,10 @@ Bạn có thể tự xóa chúng, điều chỉnh lựa chọn, hoặc cứ ti�
     <string name="install_app_success">Đã cài đặt ứng dụng</string>
     <string name="install_app_fail_title">Không thể cài đặt</string>
     <string name="install_app_fail">Cài đặt ứng dụng thất bại: %s</string>
+    <!-- Needs translation -->
+    <string name="install_app_fail_missing_stock">Missing original APK for mount install.</string>
+    <!-- Needs translation -->
+    <string name="mount_split_not_supported">Rooted mount installer does not support split APKs. Use system installer instead.</string>
     <string name="mount_app_fail_title">Không thể gắn</string>
     <string name="mount_app_fail">Không thể gắn ứng dụng: %1$s</string>
     <string name="install_timeout_message">Cài đặt không thành công. Kiểm tra hộp thoại cài đặt hệ thống và thử lại.</string>

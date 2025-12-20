@@ -4,12 +4,13 @@
 # Features
 
 - Added a dialog that appears for apps with mismatched signatures https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/61
-
+- Added a split APK not support guard for the Rooted mount installer
 
 # Bug fixes
 
 - Fixed `.xapk`, `.apkm` and `.apks` file types not being selectable from the select from storage screen(s) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/63
 - Fixed an occasional crash that occurred with some users when opening the app and quickly going to the app selection page and opening a "Show suggested versions" expandable
+- Fixed instability of Rooted mount installer
 
 
 # v1.6.0 (2025-12-17)

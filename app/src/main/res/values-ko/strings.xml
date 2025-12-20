@@ -734,6 +734,10 @@
     <string name="install_app_success">성공적으로 설치히였습니다</string>
     <string name="install_app_fail_title">설치할 수 없습니다</string>
     <string name="install_app_fail">앱을 설치할 수 없습니다: %s</string>
+    <!-- Needs translation -->
+    <string name="install_app_fail_missing_stock">Missing original APK for mount install.</string>
+    <!-- Needs translation -->
+    <string name="mount_split_not_supported">Rooted mount installer does not support split APKs. Use system installer instead.</string>
     <string name="mount_app_fail_title">마운트할 수 없습니다</string>
     <string name="mount_app_fail">앱을 마운트할 수 없습니디: %1$s</string>
     <string name="install_timeout_message">설치가 완료되지 않았습니다. 시스템 설치 프로그램 다이얼로그를 확인하고 다시 시도하세요.</string>
