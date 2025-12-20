@@ -482,20 +482,17 @@ class SelectedAppInfoViewModel(
         return options
     }
 
-    private var selectionState: SelectionState by savedStateHandle.saveable {
-        if (input.patches != null)
-            return@saveable mutableStateOf(SelectionState.Customized(input.patches))
-
-        val selection: MutableState<SelectionState> = mutableStateOf(SelectionState.Default)
-
-        // Try to get the previous selection if customization is enabled.
-        selectionLoadJob = viewModelScope.launch {
-            val previous = selectionRepository.getSelection(packageName)
-            if (previous.values.sumOf { it.size } == 0) return@launch
-            selection.value = SelectionState.Customized(previous)
+    private var selectionState: SelectionState by mutableStateOf(
+        if (input.patches != null) SelectionState.Customized(input.patches) else SelectionState.Default
+    )
+    init {
+        if (input.patches == null) {
+            selectionLoadJob = viewModelScope.launch {
+                val previous = selectionRepository.getSelection(packageName)
+                if (previous.values.sumOf { it.size } == 0) return@launch
+                selectionState = SelectionState.Customized(previous)
+            }
         }
-
-        selection
     }
 
     var showSourceSelector by mutableStateOf(requiresSourceSelection)
