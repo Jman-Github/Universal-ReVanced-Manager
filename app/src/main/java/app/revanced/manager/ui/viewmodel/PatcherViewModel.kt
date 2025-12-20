@@ -129,6 +129,11 @@ class PatcherViewModel(
     private var postTimeoutGraceJob: Job? = null
     private var installProgressToastJob: Job? = null
     private var installProgressToast: Toast? = null
+    private var uninstallProgressToastJob: Job? = null
+    private var uninstallProgressToast: Toast? = null
+    private var pendingSignatureMismatchPlan: InstallerManager.InstallPlan? = null
+    private var pendingSignatureMismatchPackage: String? = null
+    private var signatureMismatchUninstallJob: Job? = null
 
     private var installedApp: InstalledApp? = null
     private val selectedApp = input.selectedApp
@@ -156,6 +161,8 @@ class PatcherViewModel(
         private set
     var installStatus by mutableStateOf<InstallCompletionStatus?>(null)
         private set
+    var signatureMismatchPackage by mutableStateOf<String?>(null)
+        private set
     var activeInstallType by mutableStateOf<InstallType?>(null)
         private set
     var lastInstallType by mutableStateOf<InstallType?>(null)
@@ -180,6 +187,12 @@ class PatcherViewModel(
             packageInstallerStatus = null
             expectedInstallSignature = null
             baselineInstallSignature = null
+            pendingSignatureMismatchPlan = null
+            pendingSignatureMismatchPackage = null
+            signatureMismatchPackage = null
+            signatureMismatchUninstallJob?.cancel()
+            signatureMismatchUninstallJob = null
+            stopUninstallProgressToasts()
         } else {
             postTimeoutGraceJob?.cancel()
             postTimeoutGraceJob = null
@@ -187,6 +200,23 @@ class PatcherViewModel(
             suppressFailureAfterSuccess = false
         }
     }
+
+    private fun markInstallSuccess(packageName: String?) {
+        if (installStatus is InstallCompletionStatus.Success) return
+        installStatus = InstallCompletionStatus.Success(packageName)
+        app.toast(app.getString(R.string.install_app_success))
+    }
+
+    private fun handleUninstallFailure(message: String) {
+        pendingSignatureMismatchPlan = null
+        pendingSignatureMismatchPackage = null
+        signatureMismatchPackage = null
+        stopUninstallProgressToasts()
+        showInstallFailure(message)
+    }
+
+    private fun uninstallTimeoutMessage(): String =
+        app.getString(R.string.uninstall_timeout_message)
     private var savedPatchedApp by savedStateHandle.saveableVar { false }
     val hasSavedPatchedApp get() = savedPatchedApp
 
@@ -271,6 +301,55 @@ fun removeMissingPatchesAndStart() {
         expectedInstallSignature = null
         baselineInstallSignature = null
         packageInstallerStatus = null
+    }
+
+    private fun showSignatureMismatchPrompt(
+        packageName: String,
+        plan: InstallerManager.InstallPlan
+    ) {
+        stopInstallProgressToasts()
+        if (isInstalling || installStatus != null) {
+            updateInstallingState(false)
+        } else {
+            installStatus = null
+            packageInstallerStatus = null
+            installFailureMessage = null
+        }
+        pendingSignatureMismatchPlan = plan
+        pendingSignatureMismatchPackage = packageName
+        signatureMismatchPackage = packageName
+    }
+
+    private fun startSignatureMismatchUninstallTimeout(targetPackage: String) {
+        signatureMismatchUninstallJob?.cancel()
+        signatureMismatchUninstallJob = viewModelScope.launch {
+            val deadline = System.currentTimeMillis() + SIGNATURE_MISMATCH_UNINSTALL_TIMEOUT_MS
+            while (isActive && System.currentTimeMillis() < deadline) {
+                val pendingPlan = pendingSignatureMismatchPlan
+                val pendingPackage = pendingSignatureMismatchPackage
+                if (pendingPlan == null || pendingPackage.isNullOrBlank() || pendingPackage != targetPackage) {
+                    return@launch
+                }
+                if (pm.getPackageInfo(targetPackage) == null) {
+                    pendingSignatureMismatchPlan = null
+                    pendingSignatureMismatchPackage = null
+                    signatureMismatchPackage = null
+                    signatureMismatchUninstallJob = null
+                    stopUninstallProgressToasts()
+                    executeInstallPlan(pendingPlan)
+                    return@launch
+                }
+                delay(SIGNATURE_MISMATCH_UNINSTALL_POLL_MS)
+            }
+            if (pendingSignatureMismatchPackage == targetPackage) {
+                stopUninstallProgressToasts()
+                val failureMessage = app.getString(
+                    R.string.uninstall_app_fail,
+                    uninstallTimeoutMessage()
+                )
+                handleUninstallFailure(failureMessage)
+            }
+        }
     }
 
     private fun scheduleInstallTimeout(
@@ -430,7 +509,7 @@ fun removeMissingPatchesAndStart() {
         installedPackageName = packageName
         installFailureMessage = null
         packageInstallerStatus = null
-        installStatus = InstallCompletionStatus.Success(packageName)
+                    markInstallSuccess(packageName)
         updateInstallingState(false)
         stopInstallProgressToasts()
         lastSuccessInstallType = installType
@@ -520,6 +599,12 @@ fun removeMissingPatchesAndStart() {
 
         signature?.toByteArray()
     }.getOrNull()
+
+    private fun hasSignatureMismatch(packageName: String, file: File): Boolean {
+        val installed = readInstalledSignatureBytes(packageName) ?: return false
+        val expected = readArchiveSignatureBytes(file) ?: return false
+        return !installed.contentEquals(expected)
+    }
     private fun tryMarkInstallIfPresent(packageName: String?): Boolean {
         if (packageName.isNullOrBlank()) return false
         val externalPlan = pendingExternalInstall?.takeIf { it.expectedPackage == packageName }
@@ -580,6 +665,24 @@ fun removeMissingPatchesAndStart() {
         installProgressToastJob = null
         installProgressToast?.cancel()
         installProgressToast = null
+    }
+
+    private fun startUninstallProgressToasts() {
+        if (uninstallProgressToastJob?.isActive == true) return
+        uninstallProgressToastJob = viewModelScope.launch {
+            while (isActive) {
+                uninstallProgressToast?.cancel()
+                uninstallProgressToast = app.toastHandle(app.getString(R.string.uninstalling_ellipsis))
+                delay(INSTALL_PROGRESS_TOAST_INTERVAL_MS)
+            }
+        }
+    }
+
+    private fun stopUninstallProgressToasts() {
+        uninstallProgressToastJob?.cancel()
+        uninstallProgressToastJob = null
+        uninstallProgressToast?.cancel()
+        uninstallProgressToast = null
     }
 
     fun suppressInstallProgressToasts() = stopInstallProgressToasts()
@@ -912,7 +1015,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                                 Log.w(TAG, "Failed to persist installed patched app metadata")
                             }
                         }
-                        installStatus = InstallCompletionStatus.Success(packageName)
+                        markInstallSuccess(packageName)
                         lastSuccessInstallType = installType
                         lastSuccessAtMs = System.currentTimeMillis()
                         updateInstallingState(false)
@@ -944,6 +1047,18 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                         if (tryMarkInstallIfPresent(expectedPkg)) return
                         val rawMessage = intent.getStringExtra(InstallService.EXTRA_INSTALL_STATUS_MESSAGE)
                             ?.takeIf { it.isNotBlank() }
+                        if (activeInstallType != InstallType.MOUNT &&
+                            installerManager.isSignatureMismatch(rawMessage)
+                        ) {
+                            val plan = installerManager.resolvePlan(
+                                InstallerManager.InstallTarget.PATCHER,
+                                outputFile,
+                                expectedPkg,
+                                null
+                            )
+                            showSignatureMismatchPrompt(expectedPkg, plan)
+                            return
+                        }
                         val formatted = installerManager.formatFailureHint(pmStatus, rawMessage)
                         val message = formatted
                             ?: rawMessage
@@ -958,12 +1073,51 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                         UninstallService.EXTRA_UNINSTALL_STATUS,
                         PackageInstaller.STATUS_FAILURE
                     )
+                    val targetPackage = intent.getStringExtra(UninstallService.EXTRA_UNINSTALL_PACKAGE_NAME)
+                    val statusMessage = intent.getStringExtra(UninstallService.EXTRA_UNINSTALL_STATUS_MESSAGE)
 
-                    intent.getStringExtra(UninstallService.EXTRA_UNINSTALL_STATUS_MESSAGE)
-                        ?.let(logger::trace)
+                    statusMessage?.let(logger::trace)
 
-                    if (pmStatus != PackageInstaller.STATUS_SUCCESS)
-                        packageInstallerStatus = pmStatus
+                    val pendingPlan = pendingSignatureMismatchPlan
+                    val pendingPackage = pendingSignatureMismatchPackage
+                    if (pendingPlan != null && !pendingPackage.isNullOrBlank() && pendingPackage == targetPackage) {
+                        signatureMismatchUninstallJob?.cancel()
+                        signatureMismatchUninstallJob = null
+                        pendingSignatureMismatchPlan = null
+                        pendingSignatureMismatchPackage = null
+                        stopUninstallProgressToasts()
+                        if (pmStatus == PackageInstaller.STATUS_SUCCESS) {
+                            val stillPresent = pm.getPackageInfo(targetPackage) != null
+                            if (stillPresent) {
+                                val failureMessage = app.getString(
+                                    R.string.uninstall_app_fail,
+                                    app.getString(R.string.uninstall_timeout_message)
+                                )
+                                handleUninstallFailure(failureMessage)
+                                return
+                            }
+                            viewModelScope.launch {
+                                executeInstallPlan(pendingPlan)
+                            }
+                        } else {
+                            val failureMessage = app.getString(
+                                R.string.uninstall_app_fail,
+                                statusMessage ?: pmStatus.toString()
+                            )
+                            handleUninstallFailure(failureMessage)
+                        }
+                        return
+                    }
+
+                    if (pmStatus != PackageInstaller.STATUS_SUCCESS) {
+                        stopUninstallProgressToasts()
+                        val failureMessage = app.getString(
+                            R.string.uninstall_app_fail,
+                            statusMessage ?: pmStatus.toString()
+                        )
+                        handleUninstallFailure(failureMessage)
+                        return
+                    }
                 }
             }
         }
@@ -1223,7 +1377,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                         rootInstaller.mount(packageName)
 
                         installedPackageName = packageName
-                        installStatus = InstallCompletionStatus.Success(packageName)
+            markInstallSuccess(packageName)
                         updateInstallingState(false)
                     } catch (e: Exception) {
                         Log.e(tag, "Failed to install as root", e)
@@ -1319,7 +1473,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         } finally {
             awaitingPackageInstall = null
             if (packageInstallerStatus == PackageInstaller.STATUS_SUCCESS && installStatus !is InstallCompletionStatus.Success) {
-                installStatus = InstallCompletionStatus.Success(installedPackageName ?: packageName)
+                markInstallSuccess(installedPackageName ?: packageName)
             }
             updateInstallingState(false)
         }
@@ -1462,7 +1616,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         updateInstallingState(false)
         stopInstallProgressToasts()
         val installType = if (plan?.token is InstallerManager.Token.Component) InstallType.CUSTOM else InstallType.DEFAULT
-        installStatus = InstallCompletionStatus.Success(packageName)
+        markInstallSuccess(packageName)
         suppressFailureAfterSuccess = true
 
         when (plan.target) {
@@ -1499,6 +1653,12 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     null
                 )
                 Log.d(TAG, "install() resolved plan=${plan::class.java.simpleName}")
+                if (plan !is InstallerManager.InstallPlan.Mount &&
+                    hasSignatureMismatch(expectedPackage, outputFile)
+                ) {
+                    showSignatureMismatchPrompt(expectedPackage, plan)
+                    return@runCatching
+                }
                 executeInstallPlan(plan)
             }.onFailure { error ->
                 Log.e(TAG, "install() failed to start", error)
@@ -1559,6 +1719,23 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     fun dismissPackageInstallerDialog() {
         packageInstallerStatus = null
+    }
+
+    fun dismissSignatureMismatchPrompt() {
+        signatureMismatchPackage = null
+        pendingSignatureMismatchPlan = null
+        pendingSignatureMismatchPackage = null
+        signatureMismatchUninstallJob?.cancel()
+        signatureMismatchUninstallJob = null
+    }
+
+    fun confirmSignatureMismatchInstall() {
+        val targetPackage = pendingSignatureMismatchPackage ?: return
+        signatureMismatchPackage = null
+        stopInstallProgressToasts()
+        startUninstallProgressToasts()
+        startSignatureMismatchUninstallTimeout(targetPackage)
+        pm.uninstallPackage(targetPackage)
     }
 
     fun shouldSuppressPackageInstallerDialog(): Boolean {
@@ -1890,6 +2067,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         private const val EXTERNAL_INSTALLER_POST_CLOSE_TIMEOUT_MS = 30_000L
         private const val INSTALL_MONITOR_POLL_MS = 500L
         private const val INSTALL_PROGRESS_TOAST_INTERVAL_MS = 2500L
+        private const val SIGNATURE_MISMATCH_UNINSTALL_TIMEOUT_MS = 30_000L
+        private const val SIGNATURE_MISMATCH_UNINSTALL_POLL_MS = 750L
         private const val MEMORY_ADJUSTMENT_MB = 200
         private const val SUPPRESS_FAILURE_AFTER_SUCCESS_MS = 5000L
 

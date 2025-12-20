@@ -8,6 +8,9 @@ val APK_FILE_MIME_TYPES = arrayOf(
     APK_MIMETYPE,
     "application/zip",
     "application/x-zip-compressed",
+    "application/x-apkm",
+    "application/x-apks",
+    "application/x-xapk",
     "application/xapk",
     "application/vnd.android.xapk",
     "application/vnd.android.apkm",
@@ -15,6 +18,13 @@ val APK_FILE_MIME_TYPES = arrayOf(
     "application/vnd.android.apks",
     "application/apks",
     BIN_MIMETYPE
+)
+val APK_FILE_EXTENSIONS = setOf(
+    "apk",
+    "apkm",
+    "apks",
+    "xapk",
+    "zip"
 )
 const val JSON_MIMETYPE = "application/json"
 const val BIN_MIMETYPE = "application/octet-stream"

@@ -1,7 +1,6 @@
 package app.revanced.manager.ui.screen
 
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -65,22 +64,25 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.revanced.manager.R
+import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.ui.component.AppIcon
 import app.revanced.manager.ui.component.AppLabel
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
 import app.revanced.manager.ui.component.LoadingIndicator
 import app.revanced.manager.ui.component.NonSuggestedVersionDialog
+import app.revanced.manager.ui.component.patches.PathSelectorDialog
 import app.revanced.manager.ui.component.SafeguardHintCard
 import app.revanced.manager.ui.component.SearchView
 import app.revanced.manager.ui.model.SelectedApp
 import app.revanced.manager.ui.viewmodel.AppSelectorViewModel
 import app.revanced.manager.ui.viewmodel.BundleVersionSuggestion
 import app.revanced.manager.domain.manager.PreferencesManager
-import app.revanced.manager.util.APK_FILE_MIME_TYPES
 import app.revanced.manager.util.EventEffect
+import app.revanced.manager.util.isAllowedApkFile
 import app.revanced.manager.util.consumeHorizontalScroll
 import app.revanced.manager.util.transparentListItemColors
+import java.io.File
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 
@@ -96,6 +98,7 @@ fun AppSelectorScreen(
     vm: AppSelectorViewModel = koinViewModel()
 ) {
     val prefs = koinInject<PreferencesManager>()
+    val fs = koinInject<Filesystem>()
     val allowIncompatiblePatches by prefs.disablePatchVersionCompatCheck.getAsState()
     val suggestedVersionSafeguard by prefs.suggestedVersionSafeguard.getAsState()
     val bundleRecommendationsEnabled = allowIncompatiblePatches && !suggestedVersionSafeguard
@@ -107,18 +110,27 @@ fun AppSelectorScreen(
         }
     }
 
-    val pickApkLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            if (uri != null) {
-                vm.handleStorageResult(uri)
+    var showStorageDialog by rememberSaveable { mutableStateOf(false) }
+    val (permissionContract, permissionName) = remember { fs.permissionContract() }
+    val permissionLauncher =
+        rememberLauncherForActivityResult(permissionContract) { granted ->
+            if (granted) {
+                showStorageDialog = true
             } else if (returnToDashboardOnStorage) {
                 onBackClick()
             }
         }
+    val openStoragePicker = {
+        if (fs.hasStoragePermission()) {
+            showStorageDialog = true
+        } else {
+            permissionLauncher.launch(permissionName)
+        }
+    }
     val quickStorageOnly = autoOpenStorage && returnToDashboardOnStorage
     LaunchedEffect(autoOpenStorage) {
         if (autoOpenStorage) {
-            pickApkLauncher.launch(APK_FILE_MIME_TYPES)
+            openStoragePicker()
         }
     }
 
@@ -126,6 +138,21 @@ fun AppSelectorScreen(
         // Skip rendering the selector UI; just trigger the picker and wait for result/back navigation.
         androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize())
         return
+    }
+
+    if (showStorageDialog) {
+        PathSelectorDialog(
+            root = fs.externalFilesDir(),
+            onSelect = { path ->
+                showStorageDialog = false
+                path?.let { vm.handleStorageFile(File(it.toString())) }
+                if (path == null && returnToDashboardOnStorage) {
+                    onBackClick()
+                }
+            },
+            fileFilter = ::isAllowedApkFile,
+            allowDirectorySelection = false
+        )
     }
 
     val suggestedVersions by vm.suggestedAppVersions.collectAsStateWithLifecycle(emptyMap())
@@ -287,7 +314,7 @@ fun AppSelectorScreen(
             item {
                 ListItem(
                     modifier = Modifier.clickable {
-                        pickApkLauncher.launch(APK_FILE_MIME_TYPES)
+                        openStoragePicker()
                     },
                     leadingContent = {
                         Box(Modifier.size(36.dp), Alignment.Center) {

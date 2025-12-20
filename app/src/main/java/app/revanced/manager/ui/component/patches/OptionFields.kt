@@ -239,13 +239,13 @@ private object StringOptionEditor : OptionEditor<String> {
 
         if (showFileDialog) {
             PathSelectorDialog(
-                root = fs.externalFilesDir()
-            ) {
+                root = fs.externalFilesDir(),
+                onSelect = {
                 showFileDialog = false
                 it?.let { path ->
                     fieldValue = path.toString()
                 }
-            }
+            })
         }
 
         AlertDialog(

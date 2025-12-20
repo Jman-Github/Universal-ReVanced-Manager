@@ -23,6 +23,7 @@ import app.universal.revanced.manager.R
 import java.io.File
 import java.io.IOException
 import java.util.LinkedHashMap
+import java.util.Locale
 import java.util.UUID
 
 class InstallerManager(
@@ -642,6 +643,15 @@ class InstallerManager(
             normalizedExtra == null -> base
             else -> app.getString(R.string.installer_hint_with_reason, base, normalizedExtra)
         }
+    }
+
+    fun isSignatureMismatch(message: String?): Boolean {
+        val normalized = message?.lowercase(Locale.ROOT)?.trim().orEmpty()
+        if (normalized.isEmpty()) return false
+        return normalized.contains("install_failed_update_incompatible") ||
+            normalized.contains("install_failed_signature_inconsistent") ||
+            normalized.contains("signatures do not match") ||
+            normalized.contains("signature mismatch")
     }
 }
 

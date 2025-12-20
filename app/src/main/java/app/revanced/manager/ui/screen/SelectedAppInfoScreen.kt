@@ -60,6 +60,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.revanced.manager.R
+import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.data.platform.NetworkInfo
 import app.revanced.manager.data.room.apps.downloaded.DownloadedApp
 import app.revanced.manager.data.room.apps.installed.InstallType
@@ -73,18 +74,20 @@ import app.revanced.manager.ui.component.LoadingIndicator
 import app.revanced.manager.ui.component.NotificationCard
 import app.revanced.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.revanced.manager.ui.component.SafeguardHintCard
+import app.revanced.manager.ui.component.patches.PathSelectorDialog
 import app.revanced.manager.ui.model.SelectedApp
 import app.revanced.manager.ui.viewmodel.SelectedAppInfoViewModel
 import app.revanced.manager.ui.viewmodel.BundleRecommendationDetail
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
-import app.revanced.manager.util.APK_FILE_MIME_TYPES
 import app.revanced.manager.util.EventEffect
 import app.revanced.manager.util.Options
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.enabled
+import app.revanced.manager.util.isAllowedApkFile
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.transparentListItemColors
+import java.io.File
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -140,12 +143,35 @@ fun SelectedAppInfoScreen(
     EventEffect(flow = vm.launchActivityFlow) { intent ->
         launcher.launch(intent)
     }
-    val storagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument(),
-        onResult = vm::handleStorageResult
-    )
+    val fs = koinInject<Filesystem>()
+    var showStorageDialog by rememberSaveable { mutableStateOf(false) }
+    val (permissionContract, permissionName) = remember { fs.permissionContract() }
+    val permissionLauncher =
+        rememberLauncherForActivityResult(permissionContract) { granted ->
+            if (granted) {
+                showStorageDialog = true
+            }
+        }
+    val openStoragePicker = {
+        if (fs.hasStoragePermission()) {
+            showStorageDialog = true
+        } else {
+            permissionLauncher.launch(permissionName)
+        }
+    }
     EventEffect(flow = vm.requestStorageSelection) {
-        storagePickerLauncher.launch(APK_FILE_MIME_TYPES)
+        openStoragePicker()
+    }
+    if (showStorageDialog) {
+        PathSelectorDialog(
+            root = fs.externalFilesDir(),
+            onSelect = { path ->
+                showStorageDialog = false
+                vm.handleStorageFile(path?.let { File(it.toString()) })
+            },
+            fileFilter = ::isAllowedApkFile,
+            allowDirectorySelection = false
+        )
     }
     val composableScope = rememberCoroutineScope()
 

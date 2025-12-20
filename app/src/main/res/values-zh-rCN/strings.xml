@@ -735,6 +735,13 @@
     <string name="install_app">安装</string>
     <!-- Translation needed -->
     <string name="install_app_success">Installed successfully</string>
+
+    <!-- Needs translation -->
+
+    <!-- Needs translation -->
+
+
+    <string name="uninstalling_ellipsis">Uninstalling…</string>
     <string name="install_app_fail_title">安装失败</string>
     <!-- Translation needed -->
     <string name="install_app_fail">Failed to install app: %s</string>
@@ -743,6 +750,8 @@
     <!-- Translation needed -->
     <string name="mount_app_fail">Failed to mount app: %1$s</string>
     <string name="install_timeout_message">安装未完成。请检查系统安装程序对话框并重试。</string>
+    <!-- Needs translation -->
+    <string name="uninstall_timeout_message">Uninstallation did not finish. Check the uninstall dialog and try again.</string>
     <string name="reinstall_app_fail">重新安装应用失败：%s</string>
     <string name="uninstall_app_fail">卸载应用失败：%s</string>
     <string name="open_app">打开</string>
@@ -911,11 +920,17 @@
     <string name="installation_aborted_description">安装被手动取消。要重试吗？</string>
     <string name="installation_blocked_description">安装被阻止。请检查您的设备安全设置并重试。</string>
     <string name="installation_conflict_description">安装被应用的现有安装阻止。要卸载已安装的应用并重试吗？</string>
+    <!-- Needs translation -->
+    <string name="installation_signature_mismatch_dialog_title">Signature mismatch</string>
+    <!-- Needs translation -->
+    <string name="installation_signature_mismatch_description">The installed app is signed differently. Uninstall the installed app and install this one?</string>
     <string name="installation_incompatible_description">应用与此设备不兼容。请使用与此设备兼容的 APK 并重试。</string>
     <string name="installation_invalid_description">应用无效。要卸载该应用并重试吗？</string>
     <string name="installation_storage_issue_description">由于存储空间不足，无法安装应用。请释放一些空间后重试。</string>
     <string name="installation_timeout_description">安装耗时过长。要重试吗？</string>
     <string name="reinstall">重新安装</string>
+    <!-- Needs translation -->
+    <string name="installation_signature_mismatch_confirm">Uninstall and install</string>
     <string name="show">显示</string>
     <string name="debugging">调试</string>
     <string name="about_device">关于设备</string>

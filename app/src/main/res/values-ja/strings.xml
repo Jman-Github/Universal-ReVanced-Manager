@@ -691,6 +691,8 @@
     <string name="install_app_fail_title">インストール失敗</string>
     <string name="install_app_fail">アプリのインストールに失敗しました: %s</string>
     <string name="install_timeout_message">インストールが完了しませんでした。システムインストーラーのダイアログを確認して再試行してください。</string>
+    <!-- Needs translation -->
+    <string name="uninstall_timeout_message">Uninstallation did not finish. Check the uninstall dialog and try again.</string>
     <string name="reinstall_app_fail">アプリの再インストールに失敗しました: %s</string>
     <string name="uninstall_app_fail">アプリのアンインストールに失敗しました: %s</string>
     <string name="open_app">開く</string>
@@ -857,11 +859,17 @@
     <string name="installation_aborted_description">インストールが手動でキャンセルされました。再試行しますか？</string>
     <string name="installation_blocked_description">インストールがブロックされました。デバイスのセキュリティ設定を確認して再試行してください。</string>
     <string name="installation_conflict_description">アプリの既存のインストールにより、インストールが妨げられました。インストールされているアプリをアンインストールして再試行しますか？</string>
+    <!-- Needs translation -->
+    <string name="installation_signature_mismatch_dialog_title">Signature mismatch</string>
+    <!-- Needs translation -->
+    <string name="installation_signature_mismatch_description">The installed app is signed differently. Uninstall the installed app and install this one?</string>
     <string name="installation_incompatible_description">アプリはこのデバイスと互換性がありません。このデバイスと互換性のある APK を使用して再試行してください。</string>
     <string name="installation_invalid_description">アプリが無効です。アプリをアンインストールして再試行しますか？</string>
     <string name="installation_storage_issue_description">ストレージ不足のため、アプリをインストールできませんでした。空き容量を増やして再試行してください。</string>
     <string name="installation_timeout_description">インストールに時間がかかりすぎました。再試行しますか？</string>
     <string name="reinstall">再インストール</string>
+    <!-- Needs translation -->
+    <string name="installation_signature_mismatch_confirm">Uninstall and install</string>
     <string name="show">表示</string>
     <string name="debugging">デバッグ</string>
     <string name="about_device">デバイスについて</string>
@@ -914,6 +922,13 @@
     <string name="installer_mount_mismatch_update">このアプリはルートマウントインストーラーを使用してインストールされました。マウント操作を使用するにはプライマリインストーラーを戻すか、代わりに通常更新してください。</string>
     <string name="installer_mount_mismatch_uninstall">このアプリはルートマウントインストーラーを使用してインストールされました。マウント操作を使用するにはプライマリインストーラーを戻すか、代わりに通常アンインストールしてください。</string>
     <string name="installing_ellipsis">インストール中…</string>
+
+    <!-- Needs translation -->
+
+    <!-- Needs translation -->
+
+
+    <string name="uninstalling_ellipsis">Uninstalling…</string>
     <string name="mounting_ellipsis">マウント中…</string>
     <string name="unmounting">マウント解除中…</string>
     <string name="remount_saved_app">再マウント</string>

@@ -3,6 +3,7 @@
 
 # Features
 
+- Added a dialog that appears for apps with mismatched signatures https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/61
 
 
 # Bug fixes

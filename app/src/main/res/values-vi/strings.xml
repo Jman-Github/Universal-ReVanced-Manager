@@ -705,6 +705,13 @@ Bạn có thể tự xóa chúng, điều chỉnh lựa chọn, hoặc cứ ti�
     <string name="installer_external_success">%1$s báo đã cài đặt thành công.</string>
     <string name="installer_external_finished_no_change">%1$s đã hoàn tất nhưng không cài đặt. Hãy kiểm tra trình cài đặt để xem thông báo lỗi và thử lại.</string>
     <string name="installing_ellipsis">Đang cài…</string>
+
+    <!-- Needs translation -->
+
+    <!-- Needs translation -->
+
+
+    <string name="uninstalling_ellipsis">Uninstalling…</string>
     <string name="mounting_ellipsis">Đang gắn…</string>
     <string name="unmounting">Đang gỡ gắn…</string>
     <string name="install_app">Cài đặt</string>
@@ -714,6 +721,8 @@ Bạn có thể tự xóa chúng, điều chỉnh lựa chọn, hoặc cứ ti�
     <string name="mount_app_fail_title">Không thể gắn</string>
     <string name="mount_app_fail">Không thể gắn ứng dụng: %1$s</string>
     <string name="install_timeout_message">Cài đặt không thành công. Kiểm tra hộp thoại cài đặt hệ thống và thử lại.</string>
+    <!-- Needs translation -->
+    <string name="uninstall_timeout_message">Uninstallation did not finish. Check the uninstall dialog and try again.</string>
     <string name="reinstall_app_fail">Cài đặt lại ứng dụng thất bại: %s</string>
     <string name="uninstall_app_fail">Gỡ cài đặt ứng dụng thất bại: %s</string>
     <string name="open_app">Mở</string>
@@ -881,11 +890,17 @@ Bạn có thể tự xóa chúng, điều chỉnh lựa chọn, hoặc cứ ti�
     <string name="installation_aborted_description">Bạn đã hủy giữa quá trình cài đặt. Hãy thử lại?</string>
     <string name="installation_blocked_description">Việc cài đặt đã bị chặn. Hãy xem cài đặt bảo mật thiết bị của bạn và thử lại.</string>
     <string name="installation_conflict_description">Quá trình cài đặt đã xẩy ra xung đột bởi ứng dụng đã cài đặt trước đó. Bạn có muốn gỡ cài đặt chúng và thử lại?</string>
+    <!-- Needs translation -->
+    <string name="installation_signature_mismatch_dialog_title">Signature mismatch</string>
+    <!-- Needs translation -->
+    <string name="installation_signature_mismatch_description">The installed app is signed differently. Uninstall the installed app and install this one?</string>
     <string name="installation_incompatible_description">Ứng dụng này không tương thích với thiết bị. Hãy sử dụng tệp APK tương thích với thiết bị của bạn và thử lại.</string>
     <string name="installation_invalid_description">Ứng dụng này không hợp lệ. Gỡ cài đặt ứng dụng và thử lại?</string>
     <string name="installation_storage_issue_description">Không thể cài đặt ứng dụng do không đủ dung lượng bộ nhớ. Hãy giải phóng dung lượng và thử lại.</string>
     <string name="installation_timeout_description">Quá trình cài đặt mất quá nhiều thời gian. Hãy thử lại?</string>
     <string name="reinstall">Cài đặt lại</string>
+    <!-- Needs translation -->
+    <string name="installation_signature_mismatch_confirm">Uninstall and install</string>
     <string name="show">Hiện</string>
     <string name="debugging">Gỡ lỗi</string>
     <string name="about_device">Về thiết bị này</string>

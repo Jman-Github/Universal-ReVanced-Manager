@@ -243,6 +243,24 @@ fun InstalledAppInfoScreen(
         )
     }
 
+    viewModel.signatureMismatchPackage?.let {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissSignatureMismatchPrompt,
+            confirmButton = {
+                TextButton(onClick = viewModel::confirmSignatureMismatchInstall) {
+                    Text(stringResource(R.string.installation_signature_mismatch_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissSignatureMismatchPrompt) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+            title = { Text(stringResource(R.string.installation_signature_mismatch_dialog_title)) },
+            text = { Text(stringResource(R.string.installation_signature_mismatch_description)) }
+        )
+    }
+
     viewModel.mountVersionMismatchMessage?.let { message ->
         AlertDialog(
             onDismissRequest = viewModel::dismissMountVersionMismatch,

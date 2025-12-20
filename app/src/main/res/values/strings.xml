@@ -748,6 +748,7 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="installer_external_success">%1$s reported a successful installation.</string>
     <string name="installer_external_finished_no_change">%1$s finished without installing the app. Check the installer for an error message and try again.</string>
     <string name="installing_ellipsis">Installing…</string>
+    <string name="uninstalling_ellipsis">Uninstalling…</string>
     <string name="mounting_ellipsis">Mounting…</string>
     <string name="unmounting">Unmounting…</string>
     <string name="install_app">Install</string>
@@ -757,6 +758,7 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="mount_app_fail_title">Mount failed</string>
     <string name="mount_app_fail">Failed to mount app: %1$s</string>
     <string name="install_timeout_message">Installation did not finish. Check the system installer dialog and try again.</string>
+    <string name="uninstall_timeout_message">Uninstallation did not finish. Check the uninstall dialog and try again.</string>
     <string name="reinstall_app_fail">Failed to reinstall app: %s</string>
     <string name="uninstall_app_fail">Failed to uninstall app: %s</string>
     <string name="open_app">Open</string>
@@ -931,11 +933,14 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="installation_aborted_description">The installation was cancelled manually. Try again?</string>
     <string name="installation_blocked_description">The installation was blocked. Review your device security settings and try again.</string>
     <string name="installation_conflict_description">The installation was prevented by an existing installation of the app. Uninstall the installed app and try again?</string>
+    <string name="installation_signature_mismatch_dialog_title">Signature mismatch</string>
+    <string name="installation_signature_mismatch_description">The installed app is signed differently. Uninstall the installed app and install this one?</string>
     <string name="installation_incompatible_description">The app is incompatible with this device. Use an APK that is compatible by this device and try again.</string>
     <string name="installation_invalid_description">The app is invalid. Uninstall the app and try again?</string>
     <string name="installation_storage_issue_description">The app could not be installed due to insufficient storage. Free up some space and try again.</string>
     <string name="installation_timeout_description">The installation took too long. Try again?</string>
     <string name="reinstall">Reinstall</string>
+    <string name="installation_signature_mismatch_confirm">Uninstall and install</string>
     <string name="show">Show</string>
     <string name="debugging">Debugging</string>
     <string name="about_device">About device</string>
@@ -958,3 +963,4 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="confirm">Confirm</string>
     <string name="saved_app_install_cancelled">Installation cancelled</string>
 </resources>
+

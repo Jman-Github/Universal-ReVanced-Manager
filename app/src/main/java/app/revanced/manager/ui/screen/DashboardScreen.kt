@@ -64,6 +64,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.revanced.manager.R
+import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.patcher.aapt.Aapt
 import app.revanced.manager.ui.component.AlertDialogExtended
 import app.revanced.manager.ui.component.AppTopBar
@@ -76,6 +77,7 @@ import app.revanced.manager.ui.component.bundle.BundleTopBar
 import app.revanced.manager.ui.component.bundle.ImportPatchBundleDialog
 import app.revanced.manager.ui.component.haptics.HapticFloatingActionButton
 import app.revanced.manager.ui.component.haptics.HapticTab
+import app.revanced.manager.ui.component.patches.PathSelectorDialog
 import app.revanced.manager.ui.viewmodel.DashboardViewModel
 import app.revanced.manager.ui.model.SelectedApp
 import app.revanced.manager.ui.viewmodel.PatchProfileLaunchData
@@ -85,11 +87,13 @@ import app.revanced.manager.domain.repository.PatchBundleRepository.BundleImport
 import app.revanced.manager.ui.viewmodel.InstalledAppsViewModel
 import app.revanced.manager.ui.viewmodel.AppSelectorViewModel
 import app.revanced.manager.util.RequestInstallAppsContract
-import app.revanced.manager.util.APK_FILE_MIME_TYPES
 import app.revanced.manager.util.EventEffect
+import app.revanced.manager.util.isAllowedApkFile
 import app.revanced.manager.util.toast
+import java.io.File
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 
 enum class DashboardPage(
     val titleResId: Int,
@@ -124,13 +128,25 @@ fun DashboardScreen(
         false
     )
     val storageVm: AppSelectorViewModel = koinViewModel()
+    val fs = koinInject<Filesystem>()
     EventEffect(flow = storageVm.storageSelectionFlow) { selected ->
         onStorageSelect(selected)
     }
-    val storagePickerLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            uri?.let(storageVm::handleStorageResult)
+    var showStorageDialog by rememberSaveable { mutableStateOf(false) }
+    val (permissionContract, permissionName) = remember { fs.permissionContract() }
+    val permissionLauncher =
+        rememberLauncherForActivityResult(permissionContract) { granted ->
+            if (granted) {
+                showStorageDialog = true
+            }
         }
+    val openStoragePicker = {
+        if (fs.hasStoragePermission()) {
+            showStorageDialog = true
+        } else {
+            permissionLauncher.launch(permissionName)
+        }
+    }
     val bundleUpdateProgress by vm.bundleUpdateProgress.collectAsStateWithLifecycle(null)
     val bundleImportProgress by vm.bundleImportProgress.collectAsStateWithLifecycle(null)
     val androidContext = LocalContext.current
@@ -158,6 +174,18 @@ fun DashboardScreen(
 
     val firstLaunch by vm.prefs.firstLaunch.getAsState()
     if (firstLaunch) AutoUpdatesDialog(vm::applyAutoUpdatePrefs)
+
+    if (showStorageDialog) {
+        PathSelectorDialog(
+            root = fs.externalFilesDir(),
+            onSelect = { path ->
+                showStorageDialog = false
+                path?.let { storageVm.handleStorageFile(File(it.toString())) }
+            },
+            fileFilter = ::isAllowedApkFile,
+            allowDirectorySelection = false
+        )
+    }
 
     var showAddBundleDialog by rememberSaveable { mutableStateOf(false) }
     if (showAddBundleDialog) {
@@ -409,7 +437,7 @@ fun DashboardScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         HapticFloatingActionButton(
-                            onClick = { attemptAppInput { storagePickerLauncher.launch(APK_FILE_MIME_TYPES) } }
+                            onClick = { attemptAppInput(openStoragePicker) }
                         ) {
                             Icon(Icons.Default.Storage, stringResource(R.string.select_from_storage))
                         }

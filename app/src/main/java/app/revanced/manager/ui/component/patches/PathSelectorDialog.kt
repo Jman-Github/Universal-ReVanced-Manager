@@ -38,13 +38,24 @@ import kotlin.io.path.name
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PathSelectorDialog(root: Path, onSelect: (Path?) -> Unit) {
+fun PathSelectorDialog(
+    root: Path,
+    onSelect: (Path?) -> Unit,
+    fileFilter: (Path) -> Boolean = { true },
+    allowDirectorySelection: Boolean = true
+) {
     var currentDirectory by rememberSaveable(root, stateSaver = PathSaver) { mutableStateOf(root) }
     val notAtRootDir = remember(currentDirectory) {
         currentDirectory != root
     }
-    val (directories, files) = remember(currentDirectory) {
-        currentDirectory.listDirectoryEntries().filter(Path::isReadable).partition(Path::isDirectory)
+    val entries = remember(currentDirectory) {
+        currentDirectory.listDirectoryEntries().filter(Path::isReadable)
+    }
+    val directories = remember(entries) {
+        entries.filter(Path::isDirectory)
+    }
+    val files = remember(entries, fileFilter) {
+        entries.filterNot(Path::isDirectory).filter(fileFilter)
     }
 
     FullscreenDialog(
@@ -72,7 +83,8 @@ fun PathSelectorDialog(root: Path, onSelect: (Path?) -> Unit) {
                     PathItem(
                         onClick = { onSelect(currentDirectory) },
                         icon = Icons.Outlined.Folder,
-                        name = currentDirectory.toString()
+                        name = currentDirectory.toString(),
+                        enabled = allowDirectorySelection
                     )
                 }
 
@@ -120,10 +132,11 @@ fun PathSelectorDialog(root: Path, onSelect: (Path?) -> Unit) {
 private fun PathItem(
     onClick: () -> Unit,
     icon: ImageVector,
-    name: String
+    name: String,
+    enabled: Boolean = true
 ) {
     ListItem(
-        modifier = Modifier.clickable(onClick = onClick),
+        modifier = if (enabled) Modifier.clickable(onClick = onClick) else Modifier,
         headlineContent = { Text(name) },
         leadingContent = { Icon(icon, contentDescription = null) }
     )

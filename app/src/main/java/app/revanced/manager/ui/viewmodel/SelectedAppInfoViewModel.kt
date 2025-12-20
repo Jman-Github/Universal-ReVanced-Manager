@@ -7,6 +7,7 @@ import android.content.pm.PackageInfo
 import android.net.Uri
 import android.os.Parcelable
 import android.util.Log
+import android.webkit.MimeTypeMap
 import androidx.activity.result.ActivityResult
 import androidx.annotation.StringRes
 import androidx.compose.runtime.MutableState
@@ -53,10 +54,12 @@ import app.revanced.manager.ui.model.SelectedApp
 import app.revanced.manager.ui.model.navigation.Patcher
 import app.revanced.manager.ui.model.navigation.SelectedApplicationInfo
 import app.revanced.manager.util.Options
+import app.revanced.manager.util.APK_FILE_EXTENSIONS
 import app.revanced.manager.util.PM
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.simpleMessage
 import app.revanced.manager.util.toast
+import androidx.documentfile.provider.DocumentFile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -551,17 +554,38 @@ class SelectedAppInfoViewModel(
         }
     }
 
+    fun handleStorageFile(file: File?) {
+        if (file == null) {
+            if (requiresSourceSelection && selectedApp is SelectedApp.Search) {
+                showSourceSelector = true
+            }
+            return
+        }
+
+        viewModelScope.launch {
+            val local = withContext(Dispatchers.IO) { loadLocalApk(file) }
+            if (local == null) {
+                app.toast(app.getString(R.string.failed_to_load_apk))
+                if (requiresSourceSelection && selectedApp is SelectedApp.Search) {
+                    showSourceSelector = true
+                }
+                return@launch
+            }
+            selectedApp = local
+            dismissSourceSelector()
+        }
+    }
+
     private suspend fun loadLocalApk(uri: Uri): SelectedApp.Local? =
         app.contentResolver.openInputStream(uri)?.use { stream ->
             storageInputDir.listFiles()
                 ?.filter { it.name.startsWith("profile_input.") }
                 ?.forEach(File::delete)
-            val extension = uri.lastPathSegment
-                ?.substringAfterLast('.', "")
-                ?.takeIf { it.isNotBlank() && it.length <= 10 && it.all { ch -> ch.isLetterOrDigit() } }
-                ?.lowercase(Locale.ROOT)
+            val extension = resolveExtension(uri)
+            if (extension !in APK_FILE_EXTENSIONS) return@use null
+            val sanitized = extension.lowercase(Locale.ROOT).takeIf { it.matches(Regex("^[a-z0-9]{1,10}$")) }
                 ?: "apk"
-            val storageInputFile = File(storageInputDir, "profile_input.$extension").apply { delete() }
+            val storageInputFile = File(storageInputDir, "profile_input.$sanitized").apply { delete() }
             Files.copy(stream, storageInputFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
             resolvePackageInfo(storageInputFile)?.let { packageInfo ->
                 SelectedApp.Local(
@@ -572,6 +596,37 @@ class SelectedAppInfoViewModel(
                 )
             }
         }
+
+    private suspend fun loadLocalApk(file: File): SelectedApp.Local? {
+        if (!file.exists()) return null
+        storageInputDir.listFiles()
+            ?.filter { it.name.startsWith("profile_input.") }
+            ?.forEach(File::delete)
+        val extension = file.extension.lowercase(Locale.ROOT)
+        if (extension !in APK_FILE_EXTENSIONS) return null
+        val sanitized = extension.lowercase(Locale.ROOT).takeIf { it.matches(Regex("^[a-z0-9]{1,10}$")) }
+            ?: "apk"
+        val storageInputFile = File(storageInputDir, "profile_input.$sanitized").apply { delete() }
+        Files.copy(file.toPath(), storageInputFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        return resolvePackageInfo(storageInputFile)?.let { packageInfo ->
+            SelectedApp.Local(
+                packageName = packageInfo.packageName,
+                version = packageInfo.versionName ?: "",
+                file = storageInputFile,
+                temporary = true
+            )
+        }
+    }
+
+    private fun resolveExtension(uri: Uri): String {
+        val document = DocumentFile.fromSingleUri(app, uri)
+        val nameExt = document?.name?.substringAfterLast('.', "")?.lowercase(Locale.ROOT)
+        if (!nameExt.isNullOrBlank()) return nameExt
+
+        val mime = app.contentResolver.getType(uri)
+        val resolved = mime?.let { MimeTypeMap.getSingleton().getExtensionFromMimeType(it) }
+        return resolved?.lowercase(Locale.ROOT).orEmpty()
+    }
 
     private suspend fun resolvePackageInfo(file: File): PackageInfo? {
         if (!file.exists()) return null

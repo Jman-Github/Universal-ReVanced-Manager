@@ -721,6 +721,13 @@
     <string name="installer_external_success">%1$s 이 설치 성공을 보고하였습니다.</string>
     <string name="installer_external_finished_no_change">%1$s 는 앱을 설치하지 않고 완료되었습니다. 설치 프로그램에서 오류 메시지를 확인하고 다시 시도하십시오.</string>
     <string name="installing_ellipsis">설치하는 중 ...</string>
+
+    <!-- Needs translation -->
+
+    <!-- Needs translation -->
+
+
+    <string name="uninstalling_ellipsis">Uninstalling…</string>
     <string name="mounting_ellipsis">마운트하는 중 ...</string>
     <string name="unmounting">마운트 해제하는 중 ...</string>
     <string name="install_app">설치하기</string>
@@ -730,6 +737,8 @@
     <string name="mount_app_fail_title">마운트할 수 없습니다</string>
     <string name="mount_app_fail">앱을 마운트할 수 없습니디: %1$s</string>
     <string name="install_timeout_message">설치가 완료되지 않았습니다. 시스템 설치 프로그램 다이얼로그를 확인하고 다시 시도하세요.</string>
+    <!-- Needs translation -->
+    <string name="uninstall_timeout_message">Uninstallation did not finish. Check the uninstall dialog and try again.</string>
     <string name="reinstall_app_fail">앱을 다시 설치할 수 없습니다: %s</string>
     <string name="uninstall_app_fail">앱을 제거할 수 없습니다: %s</string>
     <string name="open_app">열기</string>
@@ -897,11 +906,17 @@
     <string name="installation_aborted_description">설치를 수동으로 취소하였습니다. 다시 시도하시겠습니까?</string>
     <string name="installation_blocked_description">설치가 차단되었습니다. 기기 보안 설정을 검토하고 다시 시도하세요.</string>
     <string name="installation_conflict_description">설치가 앱의 기존 설치로 인하여 차단되었습니다. 설치된 앱을 제거하고 다시 시도하시겠습니까?</string>
+    <!-- Needs translation -->
+    <string name="installation_signature_mismatch_dialog_title">Signature mismatch</string>
+    <!-- Needs translation -->
+    <string name="installation_signature_mismatch_description">The installed app is signed differently. Uninstall the installed app and install this one?</string>
     <string name="installation_incompatible_description">앱이 이 기기와 호환되지 않습니다. 이 기기와 호환되는 APK를 사용하고 다시 시도하세요.</string>
     <string name="installation_invalid_description">앱이 잘못되었습니다. 앱을 제거하고 다시 시도하시겠습니까?</string>
     <string name="installation_storage_issue_description">기기 저장소 공간이 부족하여 앱을 설치할 수 없습니다. 여유 공간을 확보하고 다시 시도하세요.</string>
     <string name="installation_timeout_description">설치하는 데 시간이 너무 오래 걸렸습니다. 다시 시도하시겠습니까?</string>
     <string name="reinstall">다시 설치</string>
+    <!-- Needs translation -->
+    <string name="installation_signature_mismatch_confirm">Uninstall and install</string>
     <string name="show">표시</string>
     <string name="debugging">디버깅</string>
     <string name="about_device">기기 정보</string>
