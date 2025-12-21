@@ -25,7 +25,7 @@ class PreferencesManager(
     val customAccentColor = stringPreference("custom_accent_color", "")
     val customThemeColor = stringPreference("custom_theme_color", "")
     val theme = enumPreference("theme", Theme.SYSTEM)
-    val appLanguage = stringPreference("app_language", "en")
+    val appLanguage = stringPreference("app_language", "system")
 
     val api = stringPreference("api_url", "https://api.revanced.app")
     // PR #35: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35

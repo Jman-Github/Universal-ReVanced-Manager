@@ -105,6 +105,7 @@ fun GeneralSettingsScreen(
     val accentControlsAlpha = if (canAdjustAccentColor) 1f else 0.5f
     val languageOptions = remember {
         listOf(
+            LanguageOption("system", R.string.language_option_system),
             LanguageOption("en", R.string.language_option_english),
             LanguageOption("zh-CN", R.string.language_option_chinese_simplified),
             // From PR #38: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/38
@@ -176,8 +177,11 @@ fun GeneralSettingsScreen(
         ) {
             GroupHeader(stringResource(R.string.appearance))
 
-            val selectedLanguageLabel = languageOptions.firstOrNull { it.code == appLanguage }?.labelRes
-                ?: R.string.language_option_english
+            val selectedLanguageLabel = when (appLanguage) {
+                "system" -> R.string.language_option_system
+                else -> languageOptions.firstOrNull { it.code == appLanguage }?.labelRes
+                    ?: R.string.language_option_english
+            }
 
             val baseThemeSwatches = remember(supportsDynamicColor) {
                 buildList {

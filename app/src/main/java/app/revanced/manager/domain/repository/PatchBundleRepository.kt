@@ -778,6 +778,17 @@ class PatchBundleRepository(
         var host = parsed.host
         var pathSegments = parsed.encodedPath.trim('/').split('/').filter { it.isNotBlank() }
 
+        // Allow GitHub pull request URLs untouched (handled separately by Source.from / GitHubPullRequestBundle).
+        if (host.equals("github.com", ignoreCase = true) &&
+            pathSegments.size >= 3 &&
+            pathSegments[2] == "pull"
+        ) {
+            val scheme = if (parsed.protocol.name.equals("https", ignoreCase = true)) "https" else "http"
+            val basePath = "/" + pathSegments.joinToString("/")
+            val query = parsed.encodedQuery.takeIf { it.isNotEmpty() }?.let { "?$it" }.orEmpty()
+            return "$scheme://$host$basePath$query"
+        }
+
         if (host.equals("github.com", ignoreCase = true) && pathSegments.size >= 4 && pathSegments[2] == "blob") {
             // https://github.com/{owner}/{repo}/blob/{branch}/path -> raw.githubusercontent.com/{owner}/{repo}/{branch}/path
             val owner = pathSegments[0]
