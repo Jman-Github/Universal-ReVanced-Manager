@@ -49,8 +49,8 @@ class InstallerManager(
         val entries = mutableListOf<Entry>()
 
         entryFor(Token.Internal, target, checkRoot = false)?.let(entries::add)
-        entryFor(Token.AutoSaved, target, checkRoot = false)?.let(entries::add)
-        entryFor(Token.Shizuku, target, checkRoot = false)?.let(entries::add)
+        entryFor(Token.AutoSaved, target, checkRoot = true)?.let(entries::add)
+        entryFor(Token.Shizuku, target, checkRoot = true)?.let(entries::add)
 
         val activityEntries = queryInstallerActivities()
             .filter(::isInstallerCandidate)
