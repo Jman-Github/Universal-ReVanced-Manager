@@ -729,6 +729,8 @@
     <string name="install_app_success">성공적으로 설치히였습니다</string>
     <string name="install_app_fail_title">설치할 수 없습니다</string>
     <string name="install_app_fail">앱을 설치할 수 없습니다: %s</string>
+    <string name="install_app_fail_missing_stock">마운트 설치를 위한 원본 APK가 누락되어 있습니다.</string>
+    <string name="mount_split_not_supported">루팅된 마운트 설치 프로그램은 분할 APK를 지원하지 않습니다. 대신에 시스템 설치 프로그램을 사용하세요.</string>
     <string name="mount_app_fail_title">마운트할 수 없습니다</string>
     <string name="mount_app_fail">앱을 마운트할 수 없습니다: %1$s</string>
     <string name="install_timeout_message">설치가 완료되지 않았습니다. 시스템 설치 프로그램 다이얼로그를 확인하고 다시 시도하세요.</string>
