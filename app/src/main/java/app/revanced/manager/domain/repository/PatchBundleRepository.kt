@@ -51,6 +51,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import io.ktor.http.Url
 import java.io.File
 import java.io.InputStream
 import java.nio.ByteBuffer
@@ -739,7 +740,22 @@ class PatchBundleRepository(
         onProgress: PatchBundleDownloadProgress? = null,
     ) =
         dispatchAction("Add bundle ($url)") { state ->
-            val src = createEntity("", SourceInfo.from(url), autoUpdate, createdAt = createdAt, updatedAt = updatedAt).load() as RemotePatchBundle
+            val normalizedUrl = try {
+                normalizeRemoteBundleUrl(url)
+            } catch (e: IllegalArgumentException) {
+                withContext(Dispatchers.Main) {
+                    app.toast(e.message ?: "Invalid bundle URL")
+                }
+                return@dispatchAction state
+            }
+
+            val src = createEntity(
+                "",
+                SourceInfo.from(normalizedUrl),
+                autoUpdate,
+                createdAt = createdAt,
+                updatedAt = updatedAt
+            ).load() as RemotePatchBundle
             val allowUnsafeDownload = prefs.allowMeteredUpdates.get()
             update(
                 src,
@@ -750,6 +766,36 @@ class PatchBundleRepository(
             )
             state.copy(sources = state.sources.put(src.uid, src))
         }
+
+    private fun normalizeRemoteBundleUrl(input: String): String {
+        val trimmed = input.trim()
+        val parsed = try {
+            Url(trimmed)
+        } catch (e: Exception) {
+            throw IllegalArgumentException("Invalid bundle URL: ${e.message ?: trimmed}")
+        }
+
+        var host = parsed.host
+        var pathSegments = parsed.encodedPath.trim('/').split('/').filter { it.isNotBlank() }
+
+        if (host.equals("github.com", ignoreCase = true) && pathSegments.size >= 4 && pathSegments[2] == "blob") {
+            // https://github.com/{owner}/{repo}/blob/{branch}/path -> raw.githubusercontent.com/{owner}/{repo}/{branch}/path
+            val owner = pathSegments[0]
+            val repo = pathSegments[1]
+            val branchAndPath = pathSegments.drop(3)
+            host = "raw.githubusercontent.com"
+            pathSegments = listOf(owner, repo) + branchAndPath
+        }
+
+        val normalizedPath = "/" + pathSegments.joinToString("/")
+        val pathNoQuery = normalizedPath.substringBefore('?').substringBefore('#')
+        if (!pathNoQuery.endsWith(".json", ignoreCase = true)) {
+            throw IllegalArgumentException("Patch bundle URL must point to a .json file.")
+        }
+
+        val query = parsed.encodedQuery.takeIf { it.isNotEmpty() }?.let { "?$it" }.orEmpty()
+        return "https://$host$normalizedPath$query"
+    }
 
     suspend fun reloadApiBundles() = dispatchAction("Reload API bundles") {
         this@PatchBundleRepository.sources.first().filterIsInstance<APIPatchBundle>().forEach {

@@ -5,6 +5,7 @@
 
 - Added a dialog that appears for apps with mismatched signatures https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/61
 - Added a split APK not support guard for the Rooted mount installer
+- Added additional guards and checks during patch bundle importing using a remote URL
 
 # Bug fixes
 
