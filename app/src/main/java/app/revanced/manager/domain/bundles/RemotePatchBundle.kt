@@ -25,6 +25,7 @@ import org.koin.core.component.inject
 import java.io.File
 import java.io.IOException
 import java.util.zip.ZipInputStream
+import okhttp3.Protocol
 
 data class PatchBundleDownloadResult(
     val versionSignature: String,
@@ -238,6 +239,9 @@ class GitHubPullRequestBundle(
         val customHttpClient = HttpClient(OkHttp) {
             engine {
                 config {
+                    // Force HTTP/1.1 to avoid HTTP/2 PROTOCOL_ERROR stream resets when fetching
+                    // PR artifacts from GitHub.
+                    protocols(listOf(Protocol.HTTP_1_1))
                     followRedirects(true)
                     followSslRedirects(true)
                 }
