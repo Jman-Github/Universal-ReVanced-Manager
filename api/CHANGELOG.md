@@ -11,6 +11,7 @@
 - Fixed `.xapk`, `.apkm` and `.apks` file types not being selectable from the select from storage screen(s) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/63
 - Fixed an occasional crash that occurred with some users when opening the app and quickly going to the app selection page and opening a "Show suggested versions" expandable
 - Fixed instability of Rooted mount installer
+- Fixed an issue where the Rooted mount installer would be selectable for users who are non-root
 
 
 # v1.6.0 (2025-12-17)

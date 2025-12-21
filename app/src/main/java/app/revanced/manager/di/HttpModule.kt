@@ -40,7 +40,9 @@ val httpModule = module {
             json(json)
         }
         install(HttpTimeout) {
-            socketTimeoutMillis = 10000
+            connectTimeoutMillis = 10_000
+            socketTimeoutMillis = 60_000
+            requestTimeoutMillis = 5 * 60_000
         }
         install(UserAgent) {
             agent = "ReVanced-Manager/${BuildConfig.VERSION_CODE}"
