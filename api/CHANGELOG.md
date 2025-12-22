@@ -6,8 +6,10 @@
 - Added a dialog that appears for apps with mismatched signatures https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/61
 - Added a split APK not support guard for the Rooted mount installer
 - Added additional guards and checks during patch bundle importing using a remote URL
-- Added a "Use device langauge" option that uses the devices set langauge if avaliable, if not it falls back to English
+- Added a "Use device langauge" option that uses the devices set langauge if avaliable, if not it falls back to English https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/69
 - Importing patch bundles from a file now shows the progress of the import (similar to how importing remote bundles work)
+- Imrpoved monochrome icons
+
 
 # Bug fixes
 
@@ -15,7 +17,13 @@
 - Fixed an occasional crash that occurred with some users when opening the app and quickly going to the app selection page and opening a "Show suggested versions" expandable
 - Fixed instability of Rooted mount installer
 - Fixed an issue where the Rooted mount installer would be selectable for users who are non-root
-- Fixed importing patch bundles from storage taking much longer than it should to import (larger patch bundles till take some time)
+- Fixed importing patch bundles from storage taking much longer than it should to import (larger patch bundles till take some time) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/66
+- Fixed the occasional issue where a patch profile without Universal Patches would claim it requires universal patches enabled in order to use the said profile
+
+
+# Docs
+
+- Added a new contributor to the "Contributors" section
 
 
 # v1.6.0 (2025-12-17)

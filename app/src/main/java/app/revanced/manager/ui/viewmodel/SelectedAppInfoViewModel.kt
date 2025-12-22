@@ -217,6 +217,40 @@ class SelectedAppInfoViewModel(
             invalidateSelectedAppInfo()
         }
 
+    var options: Options by savedStateHandle.saveable {
+        val state = mutableStateOf<Options>(emptyMap())
+
+        optionsLoadJob = viewModelScope.launch {
+            val bundlePatches = withContext(Dispatchers.Default) {
+                bundleRepository
+                    .scopedBundleInfoFlow(packageName, input.app.version)
+                    .first()
+                    .associate { scoped -> scoped.uid to scoped.patches.associateBy { it.name } }
+            }
+
+            state.value = withContext(Dispatchers.Default) {
+                optionsRepository.getOptions(packageName, bundlePatches)
+            }
+        }
+
+        state
+    }
+        private set
+
+    private var selectionState: SelectionState by mutableStateOf(
+        if (input.patches != null) SelectionState.Customized(input.patches) else SelectionState.Default
+    )
+
+    init {
+        if (input.patches == null) {
+            selectionLoadJob = viewModelScope.launch {
+                val previous = selectionRepository.getSelection(packageName)
+                if (previous.values.sumOf { it.size } == 0) return@launch
+                selectionState = SelectionState.Customized(previous)
+            }
+        }
+    }
+
     init {
         invalidateSelectedAppInfo()
         profileId?.let(::loadProfileConfiguration)
@@ -457,42 +491,10 @@ class SelectedAppInfoViewModel(
 
         preferred ?: suggestedVersions[input.app.packageName]
     }
-    var options: Options by savedStateHandle.saveable {
-        val state = mutableStateOf<Options>(emptyMap())
-
-        optionsLoadJob = viewModelScope.launch {
-            val bundlePatches = withContext(Dispatchers.Default) {
-                bundleRepository
-                    .scopedBundleInfoFlow(packageName, input.app.version)
-                    .first()
-                    .associate { scoped -> scoped.uid to scoped.patches.associateBy { it.name } }
-            }
-
-            state.value = withContext(Dispatchers.Default) {
-                optionsRepository.getOptions(packageName, bundlePatches)
-            }
-        }
-
-        state
-    }
-        private set
 
     suspend fun awaitOptions(): Options {
         optionsLoadJob?.join()
         return options
-    }
-
-    private var selectionState: SelectionState by mutableStateOf(
-        if (input.patches != null) SelectionState.Customized(input.patches) else SelectionState.Default
-    )
-    init {
-        if (input.patches == null) {
-            selectionLoadJob = viewModelScope.launch {
-                val previous = selectionRepository.getSelection(packageName)
-                if (previous.values.sumOf { it.size } == 0) return@launch
-                selectionState = SelectionState.Customized(previous)
-            }
-        }
     }
 
     var showSourceSelector by mutableStateOf(requiresSourceSelection)
