@@ -168,6 +168,15 @@ To import patch bundles into Universal ReVanced Manager, use my [ReVanced Patch 
       Japanese localization
     </td>
   </tr>
+  <tr>
+    <td style="vertical-align:middle;padding-right:8px;">
+      <img src="https://images.weserv.nl/?url=github.com%2Fvippium.png&h=36&w=36&fit=cover&mask=circle" alt="vippium avatar" width="36" height="36" />
+    </td>
+    <td style="vertical-align:middle;">
+      <a href="https://github.com/vippium">vippium</a><br />
+      Monochrome icon improvements
+    </td>
+  </tr>
 </table>
 
 ## ⚖️ License
