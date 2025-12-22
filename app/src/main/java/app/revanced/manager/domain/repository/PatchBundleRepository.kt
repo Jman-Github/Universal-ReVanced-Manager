@@ -53,6 +53,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import io.ktor.http.Url
 import java.io.File
+import java.io.FileInputStream
 import java.io.InputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -137,7 +138,7 @@ class PatchBundleRepository(
         if (!isDone) return
 
         bundleImportAutoClearJob = scope.launch {
-            delay(1_000)
+            delay(8_000)
             val current = bundleImportProgressFlow.value ?: return@launch
             val currentDownloadComplete = current.bytesTotal?.takeIf { it > 0L }?.let { total ->
                 current.bytesRead >= total
@@ -467,17 +468,21 @@ class PatchBundleRepository(
 
     private suspend fun nextSortOrder(): Int = (dao.maxSortOrder() ?: -1) + 1
 
-    private suspend fun ensureUniqueName(requestedName: String?): String {
-        val trimmed = requestedName?.trim().orEmpty()
-        if (trimmed.isEmpty()) return trimmed
+    private suspend fun ensureUniqueName(requestedName: String?, excludeUid: Int? = null): String {
+        val base = requestedName?.trim().takeUnless { it.isNullOrBlank() }
+            ?: app.getString(R.string.patches_name_fallback)
 
-        val existing = dao.all().map { it.name.lowercase(Locale.US) }.toSet()
-        if (trimmed.lowercase(Locale.US) !in existing) return trimmed
+        val existing = dao.all()
+            .filterNot { entity -> excludeUid != null && entity.uid == excludeUid }
+            .map { it.name.lowercase(Locale.US) }
+            .toSet()
+
+        if (base.lowercase(Locale.US) !in existing) return base
 
         var suffix = 2
         var candidate: String
         do {
-            candidate = "$trimmed ($suffix)"
+            candidate = "$base ($suffix)"
             suffix += 1
         } while (candidate.lowercase(Locale.US) in existing)
         return candidate
@@ -498,7 +503,11 @@ class PatchBundleRepository(
         val normalizedDisplayName = displayName?.takeUnless { it.isBlank() }
             ?: existingProps?.displayName?.takeUnless { it.isBlank() }
             ?: if (resolvedUid == DEFAULT_SOURCE_UID) "Official ReVanced Patches" else null
-        val normalizedName = ensureUniqueName(name)
+        val normalizedName = if (resolvedUid == DEFAULT_SOURCE_UID) {
+            name
+        } else {
+            ensureUniqueName(name, resolvedUid)
+        }
         val assignedSortOrder = when {
             sortOrder != null -> sortOrder
             else -> existingProps?.sortOrder ?: nextSortOrder()
@@ -660,23 +669,94 @@ class PatchBundleRepository(
         }
     }
 
-    suspend fun createLocal(createStream: suspend () -> InputStream) = dispatchAction("Add bundle") {
+    suspend fun createLocal(expectedSize: Long? = null, createStream: suspend () -> InputStream) = dispatchAction("Add bundle") {
+        var copyTotal: Long? = expectedSize?.takeIf { it > 0L }
+        var copyRead = 0L
+        val totalSteps = 2
+        var displayName: String? = null
+        setBundleImportProgress(
+            ImportProgress(
+                processed = 0,
+                total = totalSteps,
+                phase = BundleImportPhase.Downloading,
+                bytesRead = 0L,
+                bytesTotal = null,
+                isStepBased = true
+            )
+        )
+
         val tempFile = withContext(Dispatchers.IO) {
             File.createTempFile("local_bundle", ".jar", app.cacheDir)
         }
         try {
+            val sha256 = MessageDigest.getInstance("SHA-256")
             withContext(Dispatchers.IO) {
                 tempFile.outputStream().use { output ->
-                    createStream().use { input -> input.copyTo(output) }
+                    createStream().use { input ->
+                        if (copyTotal == null) {
+                            copyTotal = when (input) {
+                                is FileInputStream -> runCatching { input.channel.size() }.getOrNull()
+                                else -> runCatching { input.available().takeIf { it > 0 }?.toLong() }.getOrNull()
+                            }
+                        }
+                        setBundleImportProgress(
+                            ImportProgress(
+                                processed = 0,
+                                total = totalSteps,
+                                phase = BundleImportPhase.Downloading,
+                                bytesRead = 0L,
+                                bytesTotal = copyTotal,
+                                isStepBased = true
+                            )
+                        )
+
+                        val buffer = ByteArray(256 * 1024)
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read == -1) break
+                            output.write(buffer, 0, read)
+                            sha256.update(buffer, 0, read)
+                            copyRead += read
+                            setBundleImportProgress(
+                                ImportProgress(
+                                    processed = 0,
+                                    total = totalSteps,
+                                    phase = BundleImportPhase.Downloading,
+                                    bytesRead = copyRead,
+                                    bytesTotal = copyTotal,
+                                    isStepBased = true
+                                )
+                            )
+                        }
+                    }
                 }
+            }
+            val precomputedDigest = sha256.digest()
+            if (copyTotal == null && copyRead > 0L) {
+                copyTotal = copyRead
             }
 
             val manifestName = runCatching {
                 PatchBundle(tempFile.absolutePath).manifestAttributes?.name
             }.getOrNull()?.takeUnless { it.isNullOrBlank() }
 
-            val uid = stableLocalUid(manifestName, tempFile)
+            val uid = stableLocalUid(manifestName, tempFile, precomputedDigest)
             val existingProps = dao.getProps(uid)
+            displayName = (manifestName ?: existingProps?.name).orEmpty()
+
+            val replaceTotal = tempFile.length().takeIf { it > 0L } ?: copyTotal
+            setBundleImportProgress(
+                ImportProgress(
+                    processed = 1,
+                    total = totalSteps,
+                    currentBundleName = displayName.takeIf { it.isNotBlank() },
+                    phase = BundleImportPhase.Processing,
+                    bytesRead = 0L,
+                    bytesTotal = replaceTotal,
+                    isStepBased = true
+                )
+            )
+
             val entity = createEntity(
                 name = manifestName ?: existingProps?.name.orEmpty(),
                 source = SourceInfo.Local,
@@ -687,7 +767,24 @@ class PatchBundleRepository(
 
             with(localBundle) {
                 try {
-                    tempFile.inputStream().use { patches -> replace(patches) }
+                    tempFile.inputStream().use { patches ->
+                        replace(
+                            patches,
+                            totalBytes = replaceTotal
+                        ) { read, total ->
+                            setBundleImportProgress(
+                                ImportProgress(
+                                    processed = 1,
+                                    total = totalSteps,
+                                    currentBundleName = displayName.takeIf { it.isNotBlank() },
+                                    phase = BundleImportPhase.Processing,
+                                    bytesRead = read,
+                                    bytesTotal = total,
+                                    isStepBased = true
+                                )
+                            )
+                        }
+                    }
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
                     Log.e(tag, "Got exception while importing bundle", e)
@@ -702,31 +799,45 @@ class PatchBundleRepository(
             tempFile.delete()
         }
 
-        doReload()
+        val newState = doReload()
+        setBundleImportProgress(
+            ImportProgress(
+                processed = totalSteps,
+                total = totalSteps,
+                currentBundleName = displayName.takeIf { it.isNotBlank() },
+                phase = BundleImportPhase.Finalizing,
+                bytesRead = copyTotal ?: copyRead,
+                bytesTotal = copyTotal,
+                isStepBased = true
+            )
+        )
+        newState
     }
 
-    private fun stableLocalUid(manifestName: String?, file: File): Int {
-        val digest = MessageDigest.getInstance("SHA-256")
-        val hashedFile = runCatching {
-            file.inputStream().use { input ->
-                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                while (true) {
-                    val read = input.read(buffer)
-                    if (read == -1) break
-                    digest.update(buffer, 0, read)
+    private fun stableLocalUid(manifestName: String?, file: File, precomputedDigest: ByteArray? = null): Int {
+        val digest = precomputedDigest?.let { MessageDigest.getInstance("SHA-256").also { d -> d.update(it) } }
+            ?: MessageDigest.getInstance("SHA-256").also { d ->
+                val hashedFile = runCatching {
+                    file.inputStream().use { input ->
+                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read == -1) break
+                            d.update(buffer, 0, read)
+                        }
+                    }
+                }.isSuccess
+
+                if (!hashedFile) {
+                    val normalizedName = manifestName?.trim()?.takeUnless(String::isEmpty)
+                    if (normalizedName != null) {
+                        d.update("local:name".toByteArray(StandardCharsets.UTF_8))
+                        d.update(normalizedName.lowercase(Locale.US).toByteArray(StandardCharsets.UTF_8))
+                    } else {
+                        d.update(file.absolutePath.toByteArray(StandardCharsets.UTF_8))
+                    }
                 }
             }
-        }.isSuccess
-
-        if (!hashedFile) {
-            val normalizedName = manifestName?.trim()?.takeUnless(String::isEmpty)
-            if (normalizedName != null) {
-                digest.update("local:name".toByteArray(StandardCharsets.UTF_8))
-                digest.update(normalizedName.lowercase(Locale.US).toByteArray(StandardCharsets.UTF_8))
-            } else {
-                digest.update(file.absolutePath.toByteArray(StandardCharsets.UTF_8))
-            }
-        }
 
         val raw = ByteBuffer.wrap(digest.digest(), 0, 4).order(ByteOrder.BIG_ENDIAN).int
         return if (raw != 0) raw else 1
@@ -994,9 +1105,10 @@ class PatchBundleRepository(
             }
 
             updated.forEach { (src, downloadResult) ->
-                val name = runCatching {
+                val rawName = runCatching {
                     PatchBundle(src.patchesJarFile.absolutePath).manifestAttributes?.name
                 }.getOrNull()?.trim().takeUnless { it.isNullOrBlank() } ?: src.name
+                val name = if (src.uid == DEFAULT_SOURCE_UID) rawName else ensureUniqueName(rawName, src.uid)
                 val now = System.currentTimeMillis()
 
                 updateDb(src.uid) {
@@ -1134,16 +1246,19 @@ class PatchBundleRepository(
         val phase: BundleImportPhase = BundleImportPhase.Processing,
         val bytesRead: Long = 0L,
         val bytesTotal: Long? = null,
+        val isStepBased: Boolean = false,
     ) {
         val ratio: Float?
             get() {
                 val safeTotal = total.coerceAtLeast(1)
-                val base = processed.coerceAtLeast(0).toFloat() / safeTotal
-                if (phase != BundleImportPhase.Downloading) return base.coerceIn(0f, 1f)
+                val clampedProcessed = processed.coerceIn(0, safeTotal)
+                if (clampedProcessed >= safeTotal) return 1f
 
-                val totalBytes = bytesTotal?.takeIf { it > 0L } ?: return null
-                val perBundleFraction = (bytesRead.toFloat() / totalBytes).coerceIn(0f, 1f)
-                return (base + (perBundleFraction / safeTotal)).coerceIn(0f, 1f)
+                val totalBytes = bytesTotal?.takeIf { it > 0L }
+                    ?: return (clampedProcessed.toFloat() / safeTotal).coerceIn(0f, 1f)
+
+                val perStepFraction = (bytesRead.toFloat() / totalBytes).coerceIn(0f, 1f)
+                return ((clampedProcessed + perStepFraction) / safeTotal).coerceIn(0f, 1f)
             }
     }
 

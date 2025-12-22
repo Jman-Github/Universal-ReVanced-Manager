@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Universal ReVanced Manager</string>
     <string name="main_top_title">URV Manager</string>
@@ -217,6 +217,8 @@
     <string name="import_patch_bundles_none">Không có gói vá mới nào được nhập</string>
     <string name="import_patch_bundles_banner_title">Đang nhập gói vá</string>
     <string name="import_patch_bundles_banner_subtitle">Đã xử lý %1$d trên %2$d</string>
+    <!-- Needs translation -->
+    <string name="import_patch_bundles_banner_steps">Step %1$d of %2$d</string>
     <string name="import_patch_profiles">Nhập cấu hình vá</string>
     <string name="import_patch_profiles_description">Nhập cấu hình vá đã lưu bằng bằng</string>
     <string name="import_patch_profiles_fail">Không thể nhập cấu hình vá: %s</string>

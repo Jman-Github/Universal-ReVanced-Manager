@@ -30,7 +30,11 @@ class BundleListViewModel : ViewModel(), KoinComponent {
 
     fun refresh() = viewModelScope.launch {
         isRefreshing = true
-        patchBundleRepository.reload()
+        try {
+            patchBundleRepository.reload()
+        } finally {
+            isRefreshing = false
+        }
     }
 
     private suspend fun getSelectedSources() = patchBundleRepository.sources

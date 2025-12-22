@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Universal ReVanced Manager</string>
     <string name="main_top_title">URV Manager</string>
@@ -218,6 +218,8 @@
     <string name="import_patch_bundles_none">새로운 패치 번들을 가져오지 않았습니다</string>
     <string name="import_patch_bundles_banner_title">패치 번들을 가져오는 중</string>
     <string name="import_patch_bundles_banner_subtitle">%2$d 개 중에 %1$d 개를 처리하였습니다</string>
+    <!-- Needs translation -->
+    <string name="import_patch_bundles_banner_steps">Step %1$d of %2$d</string>
     <string name="import_patch_profiles">패치 프로필 가져오기</string>
     <string name="import_patch_profiles_description">JSON 파일에서 저장된 패치 프로필을 가져옵니다</string>
     <string name="import_patch_profiles_fail">패치 번들을 가져올 수 없습니다: %s</string>

@@ -233,6 +233,7 @@
     <string name="import_patch_bundles_none">No new patch bundles were imported</string>
     <string name="import_patch_bundles_banner_title">Importing patch bundles</string>
     <string name="import_patch_bundles_banner_subtitle">%1$d of %2$d processed</string>
+    <string name="import_patch_bundles_banner_steps">Step %1$d of %2$d</string>
     <string name="import_patch_profiles">Import patch profiles</string>
     <string name="import_patch_profiles_description">Import saved patch profiles from a JSON file</string>
     <string name="import_patch_profiles_fail">Could not import patch profiles: %s</string>

@@ -89,6 +89,7 @@ import app.revanced.manager.ui.viewmodel.AppSelectorViewModel
 import app.revanced.manager.util.RequestInstallAppsContract
 import app.revanced.manager.util.EventEffect
 import app.revanced.manager.util.isAllowedApkFile
+import app.revanced.manager.util.isAllowedRvpFile
 import app.revanced.manager.util.toast
 import java.io.File
 import kotlinx.coroutines.launch
@@ -159,6 +160,23 @@ fun DashboardScreen(
     val appsSelectionActive = installedAppsViewModel.selectedApps.isNotEmpty()
     val selectedAppCount = installedAppsViewModel.selectedApps.size
 
+    var showBundleFilePicker by rememberSaveable { mutableStateOf(false) }
+    var selectedBundlePath by rememberSaveable { mutableStateOf<String?>(null) }
+    val (bundlePermissionContract, bundlePermissionName) = remember { fs.permissionContract() }
+    val bundlePermissionLauncher =
+        rememberLauncherForActivityResult(bundlePermissionContract) { granted ->
+            if (granted) {
+                showBundleFilePicker = true
+            }
+        }
+    fun requestBundleFilePicker() {
+        if (fs.hasStoragePermission()) {
+            showBundleFilePicker = true
+        } else {
+            bundlePermissionLauncher.launch(bundlePermissionName)
+        }
+    }
+
     LaunchedEffect(pagerState.currentPage) {
         if (pagerState.currentPage != DashboardPage.DASHBOARD.ordinal) {
             installedAppsViewModel.clearSelection()
@@ -186,19 +204,35 @@ fun DashboardScreen(
             allowDirectorySelection = false
         )
     }
+    if (showBundleFilePicker) {
+        PathSelectorDialog(
+            root = fs.externalFilesDir(),
+            onSelect = { path ->
+                showBundleFilePicker = false
+                path?.let { selectedBundlePath = it.toString() }
+            },
+            fileFilter = ::isAllowedRvpFile,
+            allowDirectorySelection = false
+        )
+    }
 
     var showAddBundleDialog by rememberSaveable { mutableStateOf(false) }
     if (showAddBundleDialog) {
         ImportPatchBundleDialog(
             onDismiss = { showAddBundleDialog = false },
-            onLocalSubmit = { patches ->
+            onLocalSubmit = { path ->
                 showAddBundleDialog = false
-                vm.createLocalSource(patches)
+                selectedBundlePath = null
+                vm.createLocalSourceFromFile(path)
             },
             onRemoteSubmit = { url, autoUpdate ->
                 showAddBundleDialog = false
                 vm.createRemoteSource(url, autoUpdate)
-            }
+            },
+            onLocalPick = {
+                requestBundleFilePicker()
+            },
+            selectedLocalPath = selectedBundlePath
         )
     }
 
@@ -455,24 +489,33 @@ fun DashboardScreen(
             bundleImportProgress?.let { progress ->
                 val context = LocalContext.current
                 val subtitleParts = buildList {
-                    add(
-                        stringResource(
-                            R.string.import_patch_bundles_banner_subtitle,
-                            progress.processed,
-                            progress.total
-                        )
-                    )
+                    val total = progress.total.coerceAtLeast(1)
+                    val stepLabel = if (progress.isStepBased) {
+                        val step = (progress.processed + 1).coerceAtMost(total)
+                        stringResource(R.string.import_patch_bundles_banner_steps, step, total)
+                    } else {
+                        stringResource(R.string.import_patch_bundles_banner_subtitle, progress.processed, total)
+                    }
+                    add(stepLabel)
                     val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList
-                    val phaseText = when (progress.phase) {
-                        BundleImportPhase.Processing -> "Processing"
-                        BundleImportPhase.Downloading -> "Downloading"
-                        BundleImportPhase.Finalizing -> "Finalizing"
+                    val phaseText = if (progress.isStepBased) {
+                        when (progress.phase) {
+                            BundleImportPhase.Downloading -> "Copying bundle"
+                            BundleImportPhase.Processing -> "Writing bundle"
+                            BundleImportPhase.Finalizing -> "Finalizing import"
+                        }
+                    } else {
+                        when (progress.phase) {
+                            BundleImportPhase.Processing -> "Processing"
+                            BundleImportPhase.Downloading -> "Downloading"
+                            BundleImportPhase.Finalizing -> "Finalizing"
+                        }
                     }
                     val detail = buildString {
                         append(phaseText)
                         append(": ")
                         append(name)
-                        if (progress.phase == BundleImportPhase.Downloading) {
+                        if (progress.bytesTotal?.takeIf { it > 0L } != null) {
                             append(" (")
                             append(Formatter.formatShortFileSize(context, progress.bytesRead))
                             progress.bytesTotal?.takeIf { it > 0L }?.let { total ->

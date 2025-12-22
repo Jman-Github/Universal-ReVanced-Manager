@@ -1,8 +1,5 @@
 package app.revanced.manager.ui.component.bundle
 
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -23,7 +20,6 @@ import app.revanced.manager.ui.component.AlertDialogExtended
 import app.revanced.manager.ui.component.TextHorizontalPadding
 import app.revanced.manager.ui.component.haptics.HapticCheckbox
 import app.revanced.manager.ui.component.haptics.HapticRadioButton
-import app.revanced.manager.util.BIN_MIMETYPE
 import app.revanced.manager.util.transparentListItemColors
 
 private enum class BundleType {
@@ -35,22 +31,14 @@ private enum class BundleType {
 fun ImportPatchBundleDialog(
     onDismiss: () -> Unit,
     onRemoteSubmit: (String, Boolean) -> Unit,
-    onLocalSubmit: (Uri) -> Unit
+    onLocalSubmit: (String) -> Unit,
+    onLocalPick: () -> Unit,
+    selectedLocalPath: String?
 ) {
     var currentStep by rememberSaveable { mutableIntStateOf(0) }
     var bundleType by rememberSaveable { mutableStateOf(BundleType.Remote) }
-    var patchBundle by rememberSaveable { mutableStateOf<Uri?>(null) }
     var remoteUrl by rememberSaveable { mutableStateOf("") }
     var autoUpdate by rememberSaveable { mutableStateOf(true) }
-
-    val patchActivityLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            uri?.let { patchBundle = it }
-        }
-
-    fun launchPatchActivity() {
-        patchActivityLauncher.launch(arrayOf(BIN_MIMETYPE))
-    }
 
     val steps = listOf<@Composable () -> Unit>(
         {
@@ -61,20 +49,20 @@ fun ImportPatchBundleDialog(
         {
             ImportBundleStep(
                 bundleType,
-                patchBundle,
+                selectedLocalPath,
                 remoteUrl,
                 autoUpdate,
-                { launchPatchActivity() },
+                onLocalPick,
                 { remoteUrl = it },
                 { autoUpdate = it }
             )
         }
     )
 
-    val inputsAreValid by remember {
+    val inputsAreValid by remember(bundleType, selectedLocalPath, remoteUrl) {
         derivedStateOf {
-            (bundleType == BundleType.Local && patchBundle != null) ||
-                    (bundleType == BundleType.Remote && remoteUrl.isNotEmpty())
+            (bundleType == BundleType.Local && !selectedLocalPath.isNullOrBlank()) ||
+                (bundleType == BundleType.Remote && remoteUrl.isNotBlank())
         }
     }
 
@@ -92,7 +80,7 @@ fun ImportPatchBundleDialog(
                     enabled = inputsAreValid,
                     onClick = {
                         when (bundleType) {
-                            BundleType.Local -> patchBundle?.let(onLocalSubmit)
+                            BundleType.Local -> selectedLocalPath?.let(onLocalSubmit)
                             BundleType.Remote -> onRemoteSubmit(remoteUrl, autoUpdate)
                         }
                     }
@@ -174,7 +162,7 @@ private fun SelectBundleTypeStep(
 @Composable
 private fun ImportBundleStep(
     bundleType: BundleType,
-    patchBundle: Uri?,
+    patchBundlePath: String?,
     remoteUrl: String,
     autoUpdate: Boolean,
     launchPatchActivity: () -> Unit,
@@ -191,7 +179,9 @@ private fun ImportBundleStep(
                         headlineContent = {
                             Text(stringResource(R.string.patch_bundle))
                         },
-                        supportingContent = { Text(stringResource(if (patchBundle != null) R.string.file_field_set else R.string.file_field_not_set)) },
+                        supportingContent = {
+                            Text(text = patchBundlePath ?: stringResource(R.string.file_field_not_set))
+                        },
                         trailingContent = {
                             IconButton(onClick = launchPatchActivity) {
                                 Icon(imageVector = Icons.Default.Topic, contentDescription = null)

@@ -1,4 +1,4 @@
-<resources>
+﻿<resources>
     <string name="app_name">Universal ReVanced Manager</string>
     <string name="main_top_title">URV管理器</string>
     <string name="patcher">修补程序</string>
@@ -225,6 +225,8 @@
     <string name="import_patch_bundles_none">没有导入新的补丁包</string>
     <string name="import_patch_bundles_banner_title">正在导入补丁包</string>
     <string name="import_patch_bundles_banner_subtitle">已处理 %1$d / %2$d</string>
+    <!-- Needs translation -->
+    <string name="import_patch_bundles_banner_steps">Step %1$d of %2$d</string>
     <string name="import_patch_profiles">导入补丁配置文件</string>
     <string name="import_patch_profiles_description">从 JSON 文件导入保存的补丁配置文件</string>
     <string name="import_patch_profiles_fail">无法导入补丁配置文件：%s</string>

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Universal ReVanced Manager</string>
     <string name="main_top_title">URV Manager</string>
@@ -231,6 +231,8 @@
     <string name="import_patch_bundles_none">新しいパッチバンドルはインポートされませんでした</string>
     <string name="import_patch_bundles_banner_title">パッチバンドルをインポート中</string>
     <string name="import_patch_bundles_banner_subtitle">%1$d / %2$d 処理完了</string>
+    <!-- Needs translation -->
+    <string name="import_patch_bundles_banner_steps">Step %1$d of %2$d</string>
     <string name="import_patch_profiles">パッチプロファイルのインポート</string>
     <string name="import_patch_profiles_description">保存されたパッチプロファイルを JSON ファイルからインポート</string>
     <string name="import_patch_profiles_fail">パッチプロファイルをインポートできませんでした: %s</string>

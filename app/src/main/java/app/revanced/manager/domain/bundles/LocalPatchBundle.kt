@@ -15,10 +15,22 @@ class LocalPatchBundle(
     error: Throwable?,
     directory: File
 ) : PatchBundleSource(name, uid, displayName, createdAt, updatedAt, error, directory) {
-    suspend fun ActionContext.replace(patches: InputStream) {
+    suspend fun ActionContext.replace(
+        patches: InputStream,
+        totalBytes: Long? = null,
+        onProgress: ((bytesRead: Long, totalBytes: Long?) -> Unit)? = null
+    ) {
         withContext(Dispatchers.IO) {
             patchBundleOutputStream().use { outputStream ->
-                patches.copyTo(outputStream)
+                val buffer = ByteArray(256 * 1024)
+                var readTotal = 0L
+                while (true) {
+                    val read = patches.read(buffer)
+                    if (read == -1) break
+                    outputStream.write(buffer, 0, read)
+                    readTotal += read
+                    onProgress?.invoke(readTotal, totalBytes)
+                }
             }
             requireNonEmptyPatchesFile("Importing patch bundle")
         }
