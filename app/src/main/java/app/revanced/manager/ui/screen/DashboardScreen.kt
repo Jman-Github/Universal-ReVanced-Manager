@@ -133,6 +133,7 @@ fun DashboardScreen(
     )
     val storageVm: AppSelectorViewModel = koinViewModel()
     val fs = koinInject<Filesystem>()
+    val storageRoots = remember { fs.storageRoots() }
     EventEffect(flow = storageVm.storageSelectionFlow) { selected ->
         onStorageSelect(selected)
     }
@@ -198,7 +199,7 @@ fun DashboardScreen(
 
     if (showStorageDialog) {
         PathSelectorDialog(
-            root = fs.externalFilesDir(),
+            roots = storageRoots,
             onSelect = { path ->
                 showStorageDialog = false
                 path?.let { storageVm.handleStorageFile(File(it.toString())) }
@@ -209,7 +210,7 @@ fun DashboardScreen(
     }
     if (showBundleFilePicker) {
         PathSelectorDialog(
-            root = fs.externalFilesDir(),
+            roots = storageRoots,
             onSelect = { path ->
                 showBundleFilePicker = false
                 path?.let { selectedBundlePath = it.toString() }

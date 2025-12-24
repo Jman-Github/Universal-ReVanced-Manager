@@ -8,6 +8,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.SdCard
+import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -24,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import app.universal.revanced.manager.R
+import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.FullscreenDialog
 import app.revanced.manager.ui.component.GroupHeader
@@ -39,17 +42,28 @@ import kotlin.io.path.name
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PathSelectorDialog(
-    root: Path,
+    roots: List<Filesystem.StorageRoot>,
     onSelect: (Path?) -> Unit,
     fileFilter: (Path) -> Boolean = { true },
     allowDirectorySelection: Boolean = true
 ) {
-    var currentDirectory by rememberSaveable(root, stateSaver = PathSaver) { mutableStateOf(root) }
-    val notAtRootDir = remember(currentDirectory) {
-        currentDirectory != root
+    val availableRoots = remember(roots) {
+        roots.filter { runCatching { it.path.isReadable() }.getOrDefault(true) }.ifEmpty { roots }
+    }
+    val defaultRoot = availableRoots.firstOrNull() ?: return
+    var currentRootPath by rememberSaveable(defaultRoot.path, stateSaver = PathSaver) { mutableStateOf(defaultRoot.path) }
+    val currentRoot = remember(currentRootPath, availableRoots) {
+        availableRoots.firstOrNull { it.path == currentRootPath } ?: defaultRoot
+    }
+    var currentDirectory by rememberSaveable(currentRootPath, stateSaver = PathSaver) {
+        mutableStateOf(currentRoot.path)
+    }
+    val notAtRootDir = remember(currentDirectory, currentRoot) {
+        currentDirectory != currentRoot.path
     }
     val entries = remember(currentDirectory) {
-        currentDirectory.listDirectoryEntries().filter(Path::isReadable)
+        runCatching { currentDirectory.listDirectoryEntries().filter(Path::isReadable) }
+            .getOrDefault(emptyList())
     }
     val directories = remember(entries) {
         entries.filter(Path::isDirectory)
@@ -86,6 +100,23 @@ fun PathSelectorDialog(
                         name = currentDirectory.toString(),
                         enabled = allowDirectorySelection
                     )
+                }
+
+                if (availableRoots.size > 1) {
+                    item(key = "roots_header") {
+                        GroupHeader(title = stringResource(R.string.storage))
+                    }
+                    items(availableRoots, key = { it.path.toString() }) { root ->
+                        val icon = if (root.isRemovable) Icons.Outlined.SdCard else Icons.Outlined.Storage
+                        PathItem(
+                            onClick = {
+                                currentRootPath = root.path
+                                currentDirectory = root.path
+                            },
+                            icon = icon,
+                            name = root.label
+                        )
+                    }
                 }
 
                 if (notAtRootDir) {

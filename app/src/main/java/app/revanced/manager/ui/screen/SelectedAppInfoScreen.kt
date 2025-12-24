@@ -144,6 +144,7 @@ fun SelectedAppInfoScreen(
         launcher.launch(intent)
     }
     val fs = koinInject<Filesystem>()
+    val storageRoots = remember { fs.storageRoots() }
     var showStorageDialog by rememberSaveable { mutableStateOf(false) }
     val (permissionContract, permissionName) = remember { fs.permissionContract() }
     val permissionLauncher =
@@ -164,7 +165,7 @@ fun SelectedAppInfoScreen(
     }
     if (showStorageDialog) {
         PathSelectorDialog(
-            root = fs.externalFilesDir(),
+            roots = storageRoots,
             onSelect = { path ->
                 showStorageDialog = false
                 vm.handleStorageFile(path?.let { File(it.toString()) })

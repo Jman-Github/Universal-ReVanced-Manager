@@ -98,6 +98,7 @@ fun AppSelectorScreen(
 ) {
     val prefs = koinInject<PreferencesManager>()
     val fs = koinInject<Filesystem>()
+    val storageRoots = remember { fs.storageRoots() }
     val allowIncompatiblePatches by prefs.disablePatchVersionCompatCheck.getAsState()
     val suggestedVersionSafeguard by prefs.suggestedVersionSafeguard.getAsState()
     val bundleRecommendationsEnabled = allowIncompatiblePatches && !suggestedVersionSafeguard
@@ -141,7 +142,7 @@ fun AppSelectorScreen(
 
     if (showStorageDialog) {
         PathSelectorDialog(
-            root = fs.externalFilesDir(),
+            roots = storageRoots,
             onSelect = { path ->
                 showStorageDialog = false
                 path?.let { vm.handleStorageFile(File(it.toString())) }
