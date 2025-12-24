@@ -52,6 +52,7 @@ Universal ReVanced Manager includes powerful features that the official ReVanced
 - 🌐 **Release Link Button**: GitHub button on each bundle’s info page opens the bundle repository’s releases
 - 🕒 **Bundle Timestamps**: Cards show Created and Updated times; exports and imports preserve these timestamps
 - 🧭 **Organize Bundles**: "Organize" button to manually reorder bundles; exports and imports keep the custom order
+- 📱 **Improved UI**: Settings, the Patch Bundles tab, the Apps tab, the app selection page, and the patch selection page all have an improved UI design
 
 ### 📦 App Patching Flow
 - ⚒️ **LisoUseInAIKyrios Patch Support**: Supports the [LisoUseInAIKyrios](https://github.com/LisoUseInAIKyrios/revanced-patches) patch bundle without needing a computer or another app
@@ -64,6 +65,7 @@ Universal ReVanced Manager includes powerful features that the official ReVanced
 - 🛑 **Accidental Exit Protection**: After patching, pressing the back button now shows a confirmation popup. It asks if you really want to leave and gives you the option to save the patched app for later (adds it to the "Apps" tab)
 - 🧩 **Missing Patch Recovery**: If a selected patch no longer exists, a detailed dialog explains the issue and returns you to patch selection with missing patches highlighted
 - 🧷 **Step Auto-Collapse**: Completed patcher steps auto-collapse; toggle in Settings > Advanced > "Auto-collapse completed patcher steps"
+- 🔢 **Version Tags**: On the patch selection and app selection pages, each app or patch displays the versions it supports. Tapping a version chip opens a web search for that specific app and version
 
 ### 📥 Patch Bundle Updates & Imports
 - ⏳ **Progress with Percentages**: Progress bars with percentage for bundle updates, update checks, and imports
@@ -96,6 +98,8 @@ Universal ReVanced Manager includes powerful features that the official ReVanced
 - **Vietnamese (vi)**: User-selectable language option in settings
 - **Korean (ko)**: User-selectable language option in settings
 - **Japanese (ja)**: User-selectable language option in settings
+- **Russian (ru)**: User-selectable language option in settings
+- **Ukrainian (uk)**: User-selectable language option in settings
 
 ## 🔽 Download
 
@@ -175,6 +179,15 @@ To import patch bundles into Universal ReVanced Manager, use my [ReVanced Patch 
     <td style="vertical-align:middle;">
       <a href="https://github.com/vippium">vippium</a><br />
       Monochrome icon improvements
+    </td>
+  </tr>
+  <tr>
+    <td style="vertical-align:middle;padding-right:8px;">
+      <img src="https://images.weserv.nl/?url=github.com%2FVertuhai.png&h=36&w=36&fit=cover&mask=circle" alt="Vertuhai avatar" width="36" height="36" />
+    </td>
+    <td style="vertical-align:middle;">
+      <a href="https://github.com/Vertuhai">Vertuhai</a><br />
+      Russian and Ukrainian localization
     </td>
   </tr>
 </table>
