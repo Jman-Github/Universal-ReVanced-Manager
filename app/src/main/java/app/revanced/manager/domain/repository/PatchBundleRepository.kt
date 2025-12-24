@@ -50,6 +50,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import io.ktor.http.Url
 import java.io.File
@@ -125,6 +127,22 @@ class PatchBundleRepository(
     private val bundleImportProgressFlow = MutableStateFlow<ImportProgress?>(null)
     val bundleImportProgress: StateFlow<ImportProgress?> = bundleImportProgressFlow.asStateFlow()
 
+    private val updateJobMutex = Mutex()
+    private var updateJob: Job? = null
+    private val updateStateMutex = Mutex()
+    @Volatile
+    private var activeUpdateUids: Set<Int> = emptySet()
+    @Volatile
+    private var cancelledUpdateUids: Set<Int> = emptySet()
+    private val pendingUpdateRequests = mutableListOf<UpdateRequest>()
+    private val localImportMutex = Mutex()
+    private val localImportStateMutex = Mutex()
+    private var localImportQueued = 0
+    @Volatile
+    private var localImportProcessedSteps = 0
+    @Volatile
+    private var localImportTotalSteps = 0
+
     private var bundleImportAutoClearJob: Job? = null
 
     fun setBundleImportProgress(progress: ImportProgress?) {
@@ -153,6 +171,112 @@ class PatchBundleRepository(
                 bundleImportProgressFlow.value = null
             }
         }
+    }
+
+    private fun currentUpdateTotal(defaultTotal: Int): Int {
+        val active = activeUpdateUids
+        return if (active.isNotEmpty()) active.size else defaultTotal
+    }
+
+    private suspend fun markActiveUpdateUids(uids: Set<Int>) {
+        updateStateMutex.withLock {
+            activeUpdateUids = uids
+            cancelledUpdateUids = emptySet()
+        }
+    }
+
+    private suspend fun clearActiveUpdateState() {
+        updateStateMutex.withLock {
+            activeUpdateUids = emptySet()
+            cancelledUpdateUids = emptySet()
+        }
+    }
+
+    private suspend fun cancelRemoteUpdates(uids: Set<Int>): Pair<Int, Int> {
+        return updateStateMutex.withLock {
+            if (activeUpdateUids.isEmpty()) return@withLock 0 to 0
+            val affected = activeUpdateUids.intersect(uids)
+            if (affected.isEmpty()) return@withLock 0 to activeUpdateUids.size
+            activeUpdateUids = activeUpdateUids - affected
+            cancelledUpdateUids = cancelledUpdateUids + affected
+            affected.size to activeUpdateUids.size
+        }
+    }
+
+    private fun isRemoteUpdateCancelled(uid: Int): Boolean = cancelledUpdateUids.contains(uid)
+
+    private suspend fun cancelUpdateJob() {
+        updateJobMutex.withLock {
+            updateJob?.cancel()
+            updateJob = null
+        }
+    }
+
+    private suspend fun updateProgressAfterRemoval(affectedCount: Int, remaining: Int) {
+        if (affectedCount <= 0) return
+        if (remaining <= 0) {
+            bundleUpdateProgressFlow.value = null
+            cancelUpdateJob()
+            return
+        }
+        bundleUpdateProgressFlow.update { progress ->
+            if (progress == null) return@update null
+            val clampedCompleted = progress.completed.coerceAtMost(remaining)
+            progress.copy(total = remaining, completed = clampedCompleted)
+        }
+    }
+
+    private suspend fun enqueueLocalImport() {
+        localImportStateMutex.withLock {
+            localImportQueued += 1
+            localImportTotalSteps += LOCAL_IMPORT_STEPS
+            val total = localImportTotalSteps
+            bundleImportProgressFlow.update { progress ->
+                if (progress?.isStepBased != true) return@update progress
+                progress.copy(
+                    total = total,
+                    processed = progress.processed.coerceAtMost(total)
+                )
+            }
+        }
+    }
+
+    private suspend fun completeLocalImport() {
+        localImportStateMutex.withLock {
+            localImportQueued = (localImportQueued - 1).coerceAtLeast(0)
+            localImportProcessedSteps += LOCAL_IMPORT_STEPS
+            if (localImportQueued == 0 && localImportProcessedSteps >= localImportTotalSteps) {
+                localImportProcessedSteps = 0
+                localImportTotalSteps = 0
+            }
+        }
+    }
+
+    private fun localImportBaseSteps(): Int = localImportProcessedSteps
+
+    private fun localImportTotalSteps(): Int = localImportTotalSteps.coerceAtLeast(LOCAL_IMPORT_STEPS)
+
+    private fun setLocalImportProgress(
+        baseProcessed: Int,
+        offset: Int,
+        displayName: String?,
+        phase: BundleImportPhase,
+        bytesRead: Long = 0L,
+        bytesTotal: Long? = null,
+    ) {
+        val total = localImportTotalSteps()
+        val processed = (baseProcessed + offset).coerceAtMost(total)
+        setBundleImportProgress(
+            ImportProgress(
+                processed = processed,
+                total = total,
+                currentBundleName = displayName?.takeIf { it.isNotBlank() },
+                phase = phase,
+                bytesRead = bytesRead,
+                bytesTotal = bytesTotal,
+                isStepBased = true
+            )
+        )
     }
 
     private fun progressLabelFor(bundle: RemotePatchBundle): String {
@@ -581,6 +705,48 @@ class PatchBundleRepository(
         doReload()
     }
 
+    private suspend fun toast(@StringRes id: Int, vararg args: Any?) =
+        withContext(Dispatchers.Main) { app.toast(app.getString(id, *args)) }
+
+    private data class UpdateRequest(
+        val force: Boolean,
+        val showToast: Boolean,
+        val allowUnsafeNetwork: Boolean,
+        val onPerBundleProgress: ((bundle: RemotePatchBundle, bytesRead: Long, bytesTotal: Long?) -> Unit)?,
+        val predicate: (bundle: RemotePatchBundle) -> Boolean,
+    )
+
+    private fun mergeUpdateRequests(requests: List<UpdateRequest>): UpdateRequest {
+        val callbacks = requests.mapNotNull { it.onPerBundleProgress }
+        val mergedCallback: ((RemotePatchBundle, Long, Long?) -> Unit)? = if (callbacks.isEmpty()) {
+            null
+        } else {
+            { bundle, read, total -> callbacks.forEach { it(bundle, read, total) } }
+        }
+        return UpdateRequest(
+            force = requests.any { it.force },
+            showToast = requests.any { it.showToast },
+            allowUnsafeNetwork = requests.any { it.allowUnsafeNetwork },
+            onPerBundleProgress = mergedCallback,
+            predicate = { bundle -> requests.any { it.predicate(bundle) } }
+        )
+    }
+
+    private suspend fun enqueueUpdateRequest(request: UpdateRequest) {
+        updateStateMutex.withLock {
+            pendingUpdateRequests += request
+        }
+    }
+
+    private suspend fun drainPendingUpdateRequests(): UpdateRequest? {
+        return updateStateMutex.withLock {
+            if (pendingUpdateRequests.isEmpty()) return@withLock null
+            val drained = pendingUpdateRequests.toList()
+            pendingUpdateRequests.clear()
+            mergeUpdateRequests(drained)
+        }
+    }
+
     suspend fun disable(vararg bundles: PatchBundleSource) =
         dispatchAction("Disable (${bundles.map { it.uid }.joinToString(",")})") {
             bundles.forEach { bundle ->
@@ -630,6 +796,9 @@ class PatchBundleRepository(
                 sources.remove(it.uid)
                 info.remove(it.uid)
             }
+
+            val (affectedCount, remaining) = cancelRemoteUpdates(bundles.map { it.uid }.toSet())
+            updateProgressAfterRemoval(affectedCount, remaining)
 
             State(sources.toPersistentMap(), info.toPersistentMap())
         }
@@ -723,149 +892,144 @@ class PatchBundleRepository(
         }
     }
 
-    suspend fun createLocal(expectedSize: Long? = null, createStream: suspend () -> InputStream) = dispatchAction("Add bundle") {
+    suspend fun createLocal(expectedSize: Long? = null, createStream: suspend () -> InputStream) {
         var copyTotal: Long? = expectedSize?.takeIf { it > 0L }
         var copyRead = 0L
-        val totalSteps = 2
         var displayName: String? = null
-        setBundleImportProgress(
-            ImportProgress(
-                processed = 0,
-                total = totalSteps,
-                phase = BundleImportPhase.Downloading,
-                bytesRead = 0L,
-                bytesTotal = null,
-                isStepBased = true
-            )
-        )
+        enqueueLocalImport()
+        localImportMutex.withLock {
+            val baseProcessed = localImportBaseSteps()
+            try {
+                setLocalImportProgress(
+                    baseProcessed = baseProcessed,
+                    offset = 0,
+                    displayName = displayName,
+                    phase = BundleImportPhase.Downloading,
+                    bytesRead = 0L,
+                    bytesTotal = null,
+                )
 
-        val tempFile = withContext(Dispatchers.IO) {
-            File.createTempFile("local_bundle", ".jar", app.cacheDir)
-        }
-        try {
-            val sha256 = MessageDigest.getInstance("SHA-256")
-            withContext(Dispatchers.IO) {
-                tempFile.outputStream().use { output ->
-                    createStream().use { input ->
-                        if (copyTotal == null) {
-                            copyTotal = when (input) {
-                                is FileInputStream -> runCatching { input.channel.size() }.getOrNull()
-                                else -> runCatching { input.available().takeIf { it > 0 }?.toLong() }.getOrNull()
+                val tempFile = withContext(Dispatchers.IO) {
+                    File.createTempFile("local_bundle", ".jar", app.cacheDir)
+                }
+                try {
+                    val sha256 = MessageDigest.getInstance("SHA-256")
+                    withContext(Dispatchers.IO) {
+                        tempFile.outputStream().use { output ->
+                            createStream().use { input ->
+                                if (copyTotal == null) {
+                                    copyTotal = when (input) {
+                                        is FileInputStream -> runCatching { input.channel.size() }.getOrNull()
+                                        else -> runCatching { input.available().takeIf { it > 0 }?.toLong() }.getOrNull()
+                                    }
+                                }
+                                setLocalImportProgress(
+                                    baseProcessed = baseProcessed,
+                                    offset = 0,
+                                    displayName = displayName,
+                                    phase = BundleImportPhase.Downloading,
+                                    bytesRead = 0L,
+                                    bytesTotal = copyTotal,
+                                )
+
+                                val buffer = ByteArray(256 * 1024)
+                                while (true) {
+                                    val read = input.read(buffer)
+                                    if (read == -1) break
+                                    output.write(buffer, 0, read)
+                                    sha256.update(buffer, 0, read)
+                                    copyRead += read
+                                    setLocalImportProgress(
+                                        baseProcessed = baseProcessed,
+                                        offset = 0,
+                                        displayName = displayName,
+                                        phase = BundleImportPhase.Downloading,
+                                        bytesRead = copyRead,
+                                        bytesTotal = copyTotal,
+                                    )
+                                }
                             }
                         }
-                        setBundleImportProgress(
-                            ImportProgress(
-                                processed = 0,
-                                total = totalSteps,
-                                phase = BundleImportPhase.Downloading,
-                                bytesRead = 0L,
-                                bytesTotal = copyTotal,
-                                isStepBased = true
-                            )
-                        )
-
-                        val buffer = ByteArray(256 * 1024)
-                        while (true) {
-                            val read = input.read(buffer)
-                            if (read == -1) break
-                            output.write(buffer, 0, read)
-                            sha256.update(buffer, 0, read)
-                            copyRead += read
-                            setBundleImportProgress(
-                                ImportProgress(
-                                    processed = 0,
-                                    total = totalSteps,
-                                    phase = BundleImportPhase.Downloading,
-                                    bytesRead = copyRead,
-                                    bytesTotal = copyTotal,
-                                    isStepBased = true
-                                )
-                            )
-                        }
                     }
-                }
-            }
-            val precomputedDigest = sha256.digest()
-            if (copyTotal == null && copyRead > 0L) {
-                copyTotal = copyRead
-            }
+                    val precomputedDigest = sha256.digest()
+                    if (copyTotal == null && copyRead > 0L) {
+                        copyTotal = copyRead
+                    }
 
-            val manifestName = runCatching {
-                PatchBundle(tempFile.absolutePath).manifestAttributes?.name
-            }.getOrNull()?.takeUnless { it.isNullOrBlank() }
+                    val manifestName = runCatching {
+                        PatchBundle(tempFile.absolutePath).manifestAttributes?.name
+                    }.getOrNull()?.takeUnless { it.isNullOrBlank() }
 
-            val uid = stableLocalUid(manifestName, tempFile, precomputedDigest)
-            val existingProps = dao.getProps(uid)
-            displayName = (manifestName ?: existingProps?.name).orEmpty()
+                    val uid = stableLocalUid(manifestName, tempFile, precomputedDigest)
+                    val existingProps = dao.getProps(uid)
+                    displayName = (manifestName ?: existingProps?.name).orEmpty()
 
-            val replaceTotal = tempFile.length().takeIf { it > 0L } ?: copyTotal
-            setBundleImportProgress(
-                ImportProgress(
-                    processed = 1,
-                    total = totalSteps,
-                    currentBundleName = displayName.takeIf { it.isNotBlank() },
-                    phase = BundleImportPhase.Processing,
-                    bytesRead = 0L,
-                    bytesTotal = replaceTotal,
-                    isStepBased = true
-                )
-            )
+                    val replaceTotal = tempFile.length().takeIf { it > 0L } ?: copyTotal
+                    setLocalImportProgress(
+                        baseProcessed = baseProcessed,
+                        offset = 1,
+                        displayName = displayName,
+                        phase = BundleImportPhase.Processing,
+                        bytesRead = 0L,
+                        bytesTotal = replaceTotal,
+                    )
 
-            val entity = createEntity(
-                name = manifestName ?: existingProps?.name.orEmpty(),
-                source = SourceInfo.Local,
-                uid = uid,
-                displayName = existingProps?.displayName
-            )
-            val localBundle = entity.load() as LocalPatchBundle
+                    val entity = createEntity(
+                        name = manifestName ?: existingProps?.name.orEmpty(),
+                        source = SourceInfo.Local,
+                        uid = uid,
+                        displayName = existingProps?.displayName
+                    )
+                    val localBundle = entity.load() as LocalPatchBundle
 
-            with(localBundle) {
-                try {
-                    tempFile.inputStream().use { patches ->
-                        replace(
-                            patches,
-                            totalBytes = replaceTotal
-                        ) { read, total ->
-                            setBundleImportProgress(
-                                ImportProgress(
-                                    processed = 1,
-                                    total = totalSteps,
-                                    currentBundleName = displayName.takeIf { it.isNotBlank() },
+                    try {
+                        tempFile.inputStream().use { patches ->
+                            localBundle.replace(
+                                patches,
+                                totalBytes = replaceTotal
+                            ) { read, total ->
+                                setLocalImportProgress(
+                                    baseProcessed = baseProcessed,
+                                    offset = 1,
+                                    displayName = displayName,
                                     phase = BundleImportPhase.Processing,
                                     bytesRead = read,
                                     bytesTotal = total,
-                                    isStepBased = true
                                 )
-                            )
+                            }
+                        }
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
+                        Log.e(tag, "Got exception while importing bundle", e)
+                        withContext(Dispatchers.Main) {
+                            app.toast(app.getString(R.string.patches_replace_fail, e.simpleMessage()))
+                        }
+
+                        withContext(Dispatchers.IO) {
+                            runCatching {
+                                localBundle.patchesJarFile.setWritable(true, true)
+                            }
+                            runCatching {
+                                localBundle.patchesJarFile.delete()
+                            }
                         }
                     }
-                } catch (e: Exception) {
-                    if (e is CancellationException) throw e
-                    Log.e(tag, "Got exception while importing bundle", e)
-                    withContext(Dispatchers.Main) {
-                        app.toast(app.getString(R.string.patches_replace_fail, e.simpleMessage()))
-                    }
-
-                    deleteLocalFile()
+                } finally {
+                    tempFile.delete()
                 }
+                dispatchAction("Add bundle") { doReload() }
+                setLocalImportProgress(
+                    baseProcessed = baseProcessed,
+                    offset = LOCAL_IMPORT_STEPS,
+                    displayName = displayName,
+                    phase = BundleImportPhase.Finalizing,
+                    bytesRead = copyTotal ?: copyRead,
+                    bytesTotal = copyTotal,
+                )
+            } finally {
+                completeLocalImport()
             }
-        } finally {
-            tempFile.delete()
         }
-
-        val newState = doReload()
-        setBundleImportProgress(
-            ImportProgress(
-                processed = totalSteps,
-                total = totalSteps,
-                currentBundleName = displayName.takeIf { it.isNotBlank() },
-                phase = BundleImportPhase.Finalizing,
-                bytesRead = copyTotal ?: copyRead,
-                bytesTotal = copyTotal,
-                isStepBased = true
-            )
-        )
-        newState
     }
 
     private fun stableLocalUid(manifestName: String?, file: File, precomputedDigest: ByteArray? = null): Int {
@@ -1061,47 +1225,124 @@ class PatchBundleRepository(
         private val onPerBundleProgress: ((bundle: RemotePatchBundle, bytesRead: Long, bytesTotal: Long?) -> Unit)? = null,
         private val predicate: (bundle: RemotePatchBundle) -> Boolean = { true },
     ) : Action<State> {
-        private suspend fun toast(@StringRes id: Int, vararg args: Any?) =
-            withContext(Dispatchers.Main) { app.toast(app.getString(id, *args)) }
-
         override fun toString() = if (force) "Redownload remote bundles" else "Update check"
 
         override suspend fun ActionContext.execute(
             current: State
-        ) = coroutineScope {
+        ): State {
+            startRemoteUpdateJob(
+                force = force,
+                showToast = showToast,
+                allowUnsafeNetwork = allowUnsafeNetwork,
+                onPerBundleProgress = onPerBundleProgress,
+                predicate = predicate
+            )
+            return current
+        }
+
+        override suspend fun catch(exception: Exception) {
+            Log.e(tag, "Failed to update patches", exception)
+            toast(R.string.patches_download_fail, exception.simpleMessage())
+        }
+    }
+
+    private suspend fun startRemoteUpdateJob(
+        force: Boolean,
+        showToast: Boolean,
+        allowUnsafeNetwork: Boolean,
+        onPerBundleProgress: ((bundle: RemotePatchBundle, bytesRead: Long, bytesTotal: Long?) -> Unit)?,
+        predicate: (bundle: RemotePatchBundle) -> Boolean,
+    ) {
+        val request = UpdateRequest(force, showToast, allowUnsafeNetwork, onPerBundleProgress, predicate)
+        var queued = false
+        updateJobMutex.withLock {
+            if (updateJob?.isActive == true) {
+                queued = true
+            } else {
+                updateJob = scope.launch {
+                    try {
+                        performRemoteUpdate(
+                            force = request.force,
+                            showToast = request.showToast,
+                            allowUnsafeNetwork = request.allowUnsafeNetwork,
+                            onPerBundleProgress = request.onPerBundleProgress,
+                            predicate = request.predicate
+                        )
+                    } finally {
+                        updateJobMutex.withLock {
+                            updateJob = null
+                        }
+                        val next = drainPendingUpdateRequests()
+                        if (next != null) {
+                            startRemoteUpdateJob(
+                                force = next.force,
+                                showToast = next.showToast,
+                                allowUnsafeNetwork = next.allowUnsafeNetwork,
+                                onPerBundleProgress = next.onPerBundleProgress,
+                                predicate = next.predicate
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        if (queued) {
+            enqueueUpdateRequest(request)
+        }
+    }
+
+    private suspend fun performRemoteUpdate(
+        force: Boolean,
+        showToast: Boolean,
+        allowUnsafeNetwork: Boolean,
+        onPerBundleProgress: ((bundle: RemotePatchBundle, bytesRead: Long, bytesTotal: Long?) -> Unit)?,
+        predicate: (bundle: RemotePatchBundle) -> Boolean,
+    ) = coroutineScope {
+        try {
             val allowMeteredUpdates = prefs.allowMeteredUpdates.get()
             if (!allowUnsafeNetwork && !allowMeteredUpdates && !networkInfo.isSafe()) {
                 Log.d(tag, "Skipping update check because the network is down or metered.")
                 bundleUpdateProgressFlow.value = null
-                return@coroutineScope current
+                return@coroutineScope
             }
 
-            val targets = current.sources.values
+            val targets = store.state.value.sources.values
                 .filterIsInstance<RemotePatchBundle>()
                 .filter { predicate(it) }
 
             if (targets.isEmpty()) {
                 if (showToast) toast(R.string.patches_update_unavailable)
                 bundleUpdateProgressFlow.value = null
-                return@coroutineScope current
+                return@coroutineScope
             }
 
+            markActiveUpdateUids(targets.map(RemotePatchBundle::uid).toSet())
+
             bundleUpdateProgressFlow.value = BundleUpdateProgress(
-                total = targets.size,
+                total = currentUpdateTotal(targets.size),
                 completed = 0,
                 phase = BundleUpdatePhase.Checking,
             )
 
-            val updated = try {
+            val updated: Map<RemotePatchBundle, PatchBundleDownloadResult> = try {
                 val results = LinkedHashMap<RemotePatchBundle, PatchBundleDownloadResult>()
                 var completed = 0
 
                 for (bundle in targets) {
+                    val total = currentUpdateTotal(targets.size)
+                    if (total <= 0) {
+                        bundleUpdateProgressFlow.value = null
+                        return@coroutineScope
+                    }
+                    if (isRemoteUpdateCancelled(bundle.uid)) {
+                        continue
+                    }
+
                     Log.d(tag, "Updating patch bundle: ${bundle.name}")
 
                     bundleUpdateProgressFlow.value = BundleUpdateProgress(
-                        total = targets.size,
-                        completed = completed,
+                        total = total,
+                        completed = completed.coerceAtMost(total),
                         currentBundleName = progressLabelFor(bundle),
                         phase = BundleUpdatePhase.Checking,
                         bytesRead = 0L,
@@ -1109,6 +1350,9 @@ class PatchBundleRepository(
                     )
 
                     val onProgress: PatchBundleDownloadProgress = { bytesRead, bytesTotal ->
+                        if (isRemoteUpdateCancelled(bundle.uid)) {
+                            throw BundleUpdateCancelled(bundle.uid)
+                        }
                         bundleUpdateProgressFlow.update { progress ->
                             progress?.copy(
                                 currentBundleName = progressLabelFor(bundle),
@@ -1120,8 +1364,10 @@ class PatchBundleRepository(
                         onPerBundleProgress?.invoke(bundle, bytesRead, bytesTotal)
                     }
 
-                    val result = with(bundle) {
-                        if (force) downloadLatest(onProgress) else update(onProgress)
+                    val result = try {
+                        if (force) bundle.downloadLatest(onProgress) else bundle.update(onProgress)
+                    } catch (e: BundleUpdateCancelled) {
+                        continue
                     }
 
                     val downloadedName = runCatching {
@@ -1133,7 +1379,8 @@ class PatchBundleRepository(
                         }
                     }
 
-                    completed = (completed + 1).coerceAtMost(targets.size)
+                    val nextTotal = currentUpdateTotal(targets.size)
+                    completed = (completed + 1).coerceAtMost(nextTotal)
                     bundleUpdateProgressFlow.update { progress ->
                         progress?.copy(
                             completed = completed,
@@ -1150,45 +1397,50 @@ class PatchBundleRepository(
                 }
 
                 results
+            } catch (e: Exception) {
+                Log.e(tag, "Failed to update patches", e)
+                toast(R.string.patches_download_fail, e.simpleMessage())
+                emptyMap()
             } finally {
                 bundleUpdateProgressFlow.value = null
             }
+
             if (updated.isEmpty()) {
                 if (showToast) toast(R.string.patches_update_unavailable)
-                return@coroutineScope current
+                return@coroutineScope
             }
 
-            updated.forEach { (src, downloadResult) ->
-                val rawName = runCatching {
-                    PatchBundle(src.patchesJarFile.absolutePath).manifestAttributes?.name
-                }.getOrNull()?.trim().takeUnless { it.isNullOrBlank() } ?: src.name
-                val name = if (src.uid == DEFAULT_SOURCE_UID) rawName else ensureUniqueName(rawName, src.uid)
-                val now = System.currentTimeMillis()
+            dispatchAction("Apply updated bundles") {
+                updated.forEach { (src, downloadResult) ->
+                    if (dao.getProps(src.uid) == null) return@forEach
+                    val rawName = runCatching {
+                        PatchBundle(src.patchesJarFile.absolutePath).manifestAttributes?.name
+                    }.getOrNull()?.trim().takeUnless { it.isNullOrBlank() } ?: src.name
+                    val name = if (src.uid == DEFAULT_SOURCE_UID) rawName else ensureUniqueName(rawName, src.uid)
+                    val now = System.currentTimeMillis()
 
-                updateDb(src.uid) {
-                    it.copy(
-                        versionHash = downloadResult.versionSignature,
-                        name = name,
-                        createdAt = downloadResult.assetCreatedAtMillis ?: it.createdAt,
-                        updatedAt = now
-                    )
+                    updateDb(src.uid) {
+                        it.copy(
+                            versionHash = downloadResult.versionSignature,
+                            name = name,
+                            createdAt = downloadResult.assetCreatedAtMillis ?: it.createdAt,
+                            updatedAt = now
+                        )
+                    }
                 }
+
+                doReload()
             }
 
-            if (updated.isNotEmpty()) {
-                val updatedUids = updated.keys.map(RemotePatchBundle::uid).toSet()
-                manualUpdateInfoFlow.update { currentMap -> currentMap - updatedUids }
-            }
-
+            val updatedUids = updated.keys.map(RemotePatchBundle::uid).toSet()
+            manualUpdateInfoFlow.update { currentMap -> currentMap - updatedUids }
             if (showToast) toast(R.string.patches_update_success)
-            doReload()
-        }
-
-        override suspend fun catch(exception: Exception) {
-            Log.e(tag, "Failed to update patches", exception)
-            toast(R.string.patches_download_fail, exception.simpleMessage())
+        } finally {
+            clearActiveUpdateState()
         }
     }
+
+    private class BundleUpdateCancelled(val uid: Int) : Exception()
 
     private inner class ManualUpdateCheck(
         private val targetUids: Set<Int>? = null
@@ -1329,6 +1581,7 @@ class PatchBundleRepository(
 
     private companion object {
         const val DEFAULT_SOURCE_UID = 0
+        const val LOCAL_IMPORT_STEPS = 2
         fun defaultSource() = PatchBundleEntity(
             uid = DEFAULT_SOURCE_UID,
             name = "",

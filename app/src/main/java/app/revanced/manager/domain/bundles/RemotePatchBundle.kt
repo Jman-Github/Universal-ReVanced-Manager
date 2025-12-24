@@ -1,6 +1,5 @@
 package app.revanced.manager.domain.bundles
 
-import app.revanced.manager.data.redux.ActionContext
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.network.api.ReVancedAPI
 import app.revanced.manager.network.dto.ReVancedAsset
@@ -99,10 +98,10 @@ sealed class RemotePatchBundle(
     /**
      * Downloads the latest version regardless if there is a new update available.
      */
-    suspend fun ActionContext.downloadLatest(onProgress: PatchBundleDownloadProgress? = null): PatchBundleDownloadResult =
+    suspend fun downloadLatest(onProgress: PatchBundleDownloadProgress? = null): PatchBundleDownloadResult =
         download(getLatestInfo(), onProgress)
 
-    suspend fun ActionContext.update(onProgress: PatchBundleDownloadProgress? = null): PatchBundleDownloadResult? =
+    suspend fun update(onProgress: PatchBundleDownloadProgress? = null): PatchBundleDownloadResult? =
         withContext(Dispatchers.IO) {
         val info = getLatestInfo()
         if (hasInstalled() && info.version == installedVersionSignatureInternal)

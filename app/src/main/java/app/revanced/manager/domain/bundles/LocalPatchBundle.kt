@@ -1,6 +1,5 @@
 package app.revanced.manager.domain.bundles
 
-import app.revanced.manager.data.redux.ActionContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -16,7 +15,7 @@ class LocalPatchBundle(
     directory: File,
     enabled: Boolean
 ) : PatchBundleSource(name, uid, displayName, createdAt, updatedAt, error, directory, enabled) {
-    suspend fun ActionContext.replace(
+    suspend fun replace(
         patches: InputStream,
         totalBytes: Long? = null,
         onProgress: ((bytesRead: Long, totalBytes: Long?) -> Unit)? = null

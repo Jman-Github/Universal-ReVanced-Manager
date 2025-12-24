@@ -24,7 +24,8 @@
 - Fixed importing patch bundles from storage taking much longer than it should to import (larger patch bundles till take some time) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/66
 - Fixed the occasional issue where a patch profile without Universal Patches would claim it requires universal patches enabled in order to use the said profile
 - Fixed slow download speeds for remote patch bundles
-
+- Fixed issues with deleting patch bundles during imports
+- Fixed issues with importing remote/local patch bundles on top of each other (starting another import when one is already going on)
 
 # Docs
 

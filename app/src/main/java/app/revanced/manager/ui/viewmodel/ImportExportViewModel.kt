@@ -41,11 +41,13 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromStream
 import kotlinx.serialization.json.encodeToStream
+import java.util.concurrent.atomic.AtomicBoolean
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
@@ -294,6 +296,7 @@ class ImportExportViewModel(
         withContext(NonCancellable) {
             uiSafe(app, R.string.import_patch_bundles_fail, "Failed to import patch bundles") {
                 coroutineScope {
+                    val importActive = AtomicBoolean(true)
                     val progressToast = withContext(Dispatchers.Main) {
                         Toast.makeText(
                             app,
@@ -332,6 +335,10 @@ class ImportExportViewModel(
                                 .mapNotNull { it.asRemoteOrNull }
                             val endpointToSource =
                                 initialSources.associateBy { it.endpoint }.toMutableMap()
+                            val importedEndpoints = exportFile.bundles
+                                .map { it.endpoint.trim() }
+                                .filter { it.isNotBlank() && !it.equals(SourceInfo.API.SENTINEL, true) }
+                                .toSet()
 
                             var createdCount = 0
                             var updatedCount = 0
@@ -369,15 +376,16 @@ class ImportExportViewModel(
                                     }.getOrNull()
                                     ?: endpoint
 
-                                fun setImportProgress(
-                                    phase: PatchBundleRepository.BundleImportPhase,
-                                    bytesRead: Long = 0L,
-                                    bytesTotal: Long? = null,
-                                ) {
-                                    patchBundleRepository.setBundleImportProgress(
-                                        PatchBundleRepository.ImportProgress(
-                                            processed = processed,
-                                            total = total,
+                            fun setImportProgress(
+                                phase: PatchBundleRepository.BundleImportPhase,
+                                bytesRead: Long = 0L,
+                                bytesTotal: Long? = null,
+                            ) {
+                                if (!importActive.get()) return
+                                patchBundleRepository.setBundleImportProgress(
+                                    PatchBundleRepository.ImportProgress(
+                                        processed = processed,
+                                        total = total,
                                             currentBundleName = bundleLabel.takeIf { it.isNotBlank() },
                                             phase = phase,
                                             bytesRead = bytesRead,
@@ -386,12 +394,13 @@ class ImportExportViewModel(
                                     )
                                 }
 
-                                fun finishImportItem() {
-                                    processed += 1
-                                    patchBundleRepository.setBundleImportProgress(
-                                        PatchBundleRepository.ImportProgress(processed, total)
-                                    )
-                                }
+                            fun finishImportItem() {
+                                if (!importActive.get()) return
+                                processed += 1
+                                patchBundleRepository.setBundleImportProgress(
+                                    PatchBundleRepository.ImportProgress(processed, total)
+                                )
+                            }
 
                                 setImportProgress(PatchBundleRepository.BundleImportPhase.Processing)
                                 if (endpoint.equals(SourceInfo.API.SENTINEL, true)) {
@@ -464,10 +473,16 @@ class ImportExportViewModel(
                                 }
 
                                 setImportProgress(PatchBundleRepository.BundleImportPhase.Finalizing)
-                                val created = patchBundleRepository.sources
-                                    .map { sources -> sources.mapNotNull { it.asRemoteOrNull } }
-                                    .first { sources -> sources.any { it.endpoint == endpoint } }
-                                    .first { it.endpoint == endpoint }
+                                val created = withTimeoutOrNull(15_000) {
+                                    patchBundleRepository.sources
+                                        .map { sources -> sources.mapNotNull { it.asRemoteOrNull } }
+                                        .first { sources -> sources.any { it.endpoint == endpoint } }
+                                        .first { it.endpoint == endpoint }
+                                }
+                                if (created == null) {
+                                    finishImportItem()
+                                    continue
+                                }
 
                                 createdCount += 1
                                 endpointToSource[endpoint] = created
@@ -637,11 +652,22 @@ class ImportExportViewModel(
                                 }
                             }
 
+                            val missingRemotes = patchBundleRepository.sources.first()
+                                .mapNotNull { it.asRemoteOrNull }
+                                .filter { remote ->
+                                    remote.endpoint in importedEndpoints &&
+                                        remote.state is PatchBundleSource.State.Missing
+                                }
+                            if (missingRemotes.isNotEmpty()) {
+                                patchBundleRepository.update(*missingRemotes.toTypedArray())
+                            }
+
                             PatchBundleImportSummary(createdCount, updatedCount)
                         }
                     } finally {
                         toastRepeater.cancel()
                         withContext(Dispatchers.Main) { progressToast.cancel() }
+                        importActive.set(false)
                         patchBundleRepository.setBundleImportProgress(null)
                     }
 
