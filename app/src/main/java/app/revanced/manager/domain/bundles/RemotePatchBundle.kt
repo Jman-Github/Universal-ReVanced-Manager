@@ -73,15 +73,17 @@ sealed class RemotePatchBundle(
     protected open suspend fun download(info: ReVancedAsset, onProgress: PatchBundleDownloadProgress? = null) =
         withContext(Dispatchers.IO) {
             try {
-                patchBundleOutputStream().use {
-                    http.streamTo(
-                        outputStream = it,
-                        builder = { url(info.downloadUrl) },
-                        onProgress = onProgress
-                    )
-                }
+                patchesFile.parentFile?.mkdirs()
+                patchesFile.setWritable(true, true)
+                http.downloadToFile(
+                    saveLocation = patchesFile,
+                    builder = { url(info.downloadUrl) },
+                    onProgress = onProgress
+                )
+                patchesFile.setReadOnly()
                 requireNonEmptyPatchesFile("Downloading patch bundle")
             } catch (t: Throwable) {
+                runCatching { patchesFile.setWritable(true, true) }
                 runCatching { patchesFile.delete() }
                 throw t
             }

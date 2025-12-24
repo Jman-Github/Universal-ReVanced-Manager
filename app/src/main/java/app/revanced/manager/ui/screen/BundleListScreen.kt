@@ -22,6 +22,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
@@ -66,9 +67,11 @@ fun BundleListScreen(
     EventEffect(eventsFlow) {
         viewModel.handleEvent(it)
     }
-    LaunchedEffect(viewModel.selectedSources.size, sources) {
-        setSelectedSourceCount(viewModel.selectedSources.size)
-        val selectedSources = sources.filter { it.uid in viewModel.selectedSources }
+    val selectedUids = remember { derivedStateOf { viewModel.selectedSources.toSet() } }
+
+    LaunchedEffect(selectedUids.value, sources) {
+        setSelectedSourceCount(selectedUids.value.size)
+        val selectedSources = sources.filter { it.uid in selectedUids.value }
         setSelectedSourceHasEnabled(selectedSources.any { it.enabled })
     }
 
