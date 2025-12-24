@@ -2,6 +2,8 @@ package app.revanced.manager.ui.screen
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.ExperimentalFoundationApi
+import android.content.pm.PackageInfo
+import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,13 +31,9 @@ import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.DropdownMenu
@@ -68,6 +66,7 @@ import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.ui.component.AppIcon
 import app.revanced.manager.ui.component.AppLabel
 import app.revanced.manager.ui.component.AppTopBar
+import app.revanced.manager.ui.component.CheckedFilterChip
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
 import app.revanced.manager.ui.component.LoadingIndicator
 import app.revanced.manager.ui.component.NonSuggestedVersionDialog
@@ -81,7 +80,7 @@ import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.util.EventEffect
 import app.revanced.manager.util.isAllowedApkFile
 import app.revanced.manager.util.consumeHorizontalScroll
-import app.revanced.manager.util.transparentListItemColors
+import app.revanced.manager.util.openUrl
 import java.io.File
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -196,36 +195,21 @@ fun AppSelectorScreen(
             placeholder = { Text(stringResource(R.string.search_apps)) }
         ) {
             if (filteredAppList.isNotEmpty() && filterText.isNotEmpty()) {
-                LazyColumnWithScrollbar(modifier = Modifier.fillMaxSize()) {
+                LazyColumnWithScrollbar(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     items(
                         items = filteredAppList,
                         key = { it.packageName }
                     ) { app ->
-                        ListItem(
-                            modifier = Modifier.clickable {
-                                onSelect(app.packageName)
-                            },
-                            leadingContent = {
-                                AppIcon(
-                                    app.packageInfo,
-                                    null,
-                                    Modifier.size(36.dp)
-                                )
-                            },
-                            headlineContent = { AppLabel(app.packageInfo, defaultText = app.packageName) },
-                            supportingContent = { Text(app.packageName) },
-                            trailingContent = app.patches?.takeIf { it > 0 }?.let {
-                                {
-                                    Text(
-                                        pluralStringResource(
-                                            R.plurals.patch_count,
-                                            it,
-                                            it
-                                        )
-                                    )
-                                }
-                            },
-                            colors = transparentListItemColors
+                        AppSelectorCard(
+                            packageInfo = app.packageInfo,
+                            packageName = app.packageName,
+                            patchCount = app.patches,
+                            onClick = { onSelect(app.packageName) },
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
                 }
@@ -309,28 +293,31 @@ fun AppSelectorScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
-            horizontalAlignment = Alignment.CenterHorizontally
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item {
-                ListItem(
-                    modifier = Modifier.clickable {
-                        openStoragePicker()
-                    },
-                    leadingContent = {
-                        Box(Modifier.size(36.dp), Alignment.Center) {
-                            Icon(
-                                Icons.Default.Storage,
-                                null,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                    },
-                    headlineContent = { Text(stringResource(R.string.select_from_storage)) },
-                    supportingContent = {
-                        Text(stringResource(R.string.select_from_storage_description))
+            item(key = "app-selector-actions") {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    SelectFromStorageCard(onClick = openStoragePicker)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        CheckedFilterChip(
+                            selected = filterInstalledOnly,
+                            onClick = { filterInstalledOnly = !filterInstalledOnly },
+                            label = { Text(stringResource(R.string.app_filter_installed_only)) }
+                        )
+                        CheckedFilterChip(
+                            selected = filterPatchesAvailable,
+                            onClick = { filterPatchesAvailable = !filterPatchesAvailable },
+                            label = { Text(stringResource(R.string.app_filter_patches_available)) }
+                        )
                     }
-                )
-                HorizontalDivider()
+                }
             }
 
             if (appList.isNotEmpty()) {
@@ -338,121 +325,105 @@ fun AppSelectorScreen(
                     items = filteredAppList,
                     key = { it.packageName }
                 ) { app ->
-                    ListItem(
-                        modifier = Modifier.clickable {
-                            onSelect(app.packageName)
-                        },
-                        leadingContent = { AppIcon(app.packageInfo, null, Modifier.size(36.dp)) },
-                        headlineContent = {
-                            AppLabel(
-                                app.packageInfo,
-                                defaultText = app.packageName
-                            )
-                        },
-                        supportingContent = {
-                            val bundleSuggestions = bundleSuggestionsByApp[app.packageName].orEmpty()
-                            var expanded by rememberSaveable(app.packageName) { mutableStateOf(false) }
-                            var dialogBundleUid by remember { mutableStateOf<Int?>(null) }
+                    AppSelectorCard(
+                        packageInfo = app.packageInfo,
+                        packageName = app.packageName,
+                        patchCount = app.patches,
+                        onClick = { onSelect(app.packageName) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        val bundleSuggestions = bundleSuggestionsByApp[app.packageName].orEmpty()
+                        var expanded by rememberSaveable(app.packageName) { mutableStateOf(false) }
+                        var dialogBundleUid by remember { mutableStateOf<Int?>(null) }
 
-                            LaunchedEffect(bundleRecommendationsEnabled) {
-                                if (!bundleRecommendationsEnabled) {
-                                    expanded = false
-                                    dialogBundleUid = null
-                                }
-                            }
-
-                            if (bundleSuggestions.isNotEmpty()) {
-                                Column(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    val toggleLabel = stringResource(
-                                        if (expanded) R.string.hide_suggested_versions
-                                        else R.string.show_suggested_versions
-                                    )
-                                    TextButton(
-                                        onClick = { expanded = !expanded },
-                                        modifier = Modifier.align(Alignment.Start),
-                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ChevronRight,
-                                            contentDescription = null
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            text = toggleLabel,
-                                            style = MaterialTheme.typography.labelLarge,
-                                            color = if (bundleRecommendationsEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-
-                                    if (expanded) {
-                                        Column(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 16.dp, vertical = 4.dp),
-                                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                                            horizontalAlignment = Alignment.CenterHorizontally
-                                        ) {
-                                            if (!bundleRecommendationsEnabled) {
-                                                SafeguardHintCard(
-                                                    title = stringResource(R.string.bundle_version_dialog_locked_title),
-                                                    description = stringResource(R.string.bundle_version_dialog_locked_hint),
-                                                    modifier = Modifier.fillMaxWidth()
-                                                )
-                                            }
-
-                                            bundleSuggestions.forEach { suggestion ->
-                                                BundleSuggestionCard(
-                                                    suggestion = suggestion,
-                                                    enabled = bundleRecommendationsEnabled,
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .widthIn(max = 560.dp)
-                                                        .alpha(if (bundleRecommendationsEnabled) 1f else 0.6f),
-                                                    onShowOtherVersions = {
-                                                        if (bundleRecommendationsEnabled) {
-                                                            dialogBundleUid = suggestion.bundleUid
-                                                        }
-                                                    }
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                                if (dialogBundleUid != null && bundleRecommendationsEnabled) {
-                                    bundleSuggestions
-                                        .firstOrNull { it.bundleUid == dialogBundleUid }
-                                        ?.let { suggestion ->
-                                            OtherSupportedVersionsInfoDialog(
-                                                bundleName = suggestion.bundleName,
-                                                recommendedVersion = suggestion.recommendedVersion,
-                                                otherVersions = suggestion.otherSupportedVersions,
-                                                supportsAllVersions = suggestion.supportsAllVersions,
-                                                onDismissRequest = { dialogBundleUid = null }
-                                            )
-                                        }
-                                } else if (dialogBundleUid != null) {
-                                    dialogBundleUid = null
-                                }
-                            }
-                        },
-                        trailingContent = app.patches?.takeIf { it > 0 }?.let {
-                            {
-                                Text(
-                                    pluralStringResource(
-                                        R.plurals.patch_count,
-                                        it,
-                                        it
-                                    )
-                                )
+                        LaunchedEffect(bundleRecommendationsEnabled) {
+                            if (!bundleRecommendationsEnabled) {
+                                expanded = false
+                                dialogBundleUid = null
                             }
                         }
-                    )
 
+                        if (bundleSuggestions.isNotEmpty()) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                val toggleLabel = stringResource(
+                                    if (expanded) R.string.hide_suggested_versions
+                                    else R.string.show_suggested_versions
+                                )
+                                TextButton(
+                                    onClick = { expanded = !expanded },
+                                    modifier = Modifier.align(Alignment.Start),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ChevronRight,
+                                        contentDescription = null
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = toggleLabel,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = if (bundleRecommendationsEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+
+                                if (expanded) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        if (!bundleRecommendationsEnabled) {
+                                            SafeguardHintCard(
+                                                title = stringResource(R.string.bundle_version_dialog_locked_title),
+                                                description = stringResource(R.string.bundle_version_dialog_locked_hint),
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        }
+
+                                        bundleSuggestions.forEach { suggestion ->
+                                            BundleSuggestionCard(
+                                                suggestion = suggestion,
+                                                packageName = app.packageName,
+                                                enabled = bundleRecommendationsEnabled,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .widthIn(max = 560.dp)
+                                                    .alpha(if (bundleRecommendationsEnabled) 1f else 0.6f),
+                                                onShowOtherVersions = {
+                                                    if (bundleRecommendationsEnabled) {
+                                                        dialogBundleUid = suggestion.bundleUid
+                                                    }
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            if (dialogBundleUid != null && bundleRecommendationsEnabled) {
+                                bundleSuggestions
+                                    .firstOrNull { it.bundleUid == dialogBundleUid }
+                                    ?.let { suggestion ->
+                                        OtherSupportedVersionsInfoDialog(
+                                            bundleName = suggestion.bundleName,
+                                            packageName = app.packageName,
+                                            recommendedVersion = suggestion.recommendedVersion,
+                                            otherVersions = suggestion.otherSupportedVersions,
+                                            supportsAllVersions = suggestion.supportsAllVersions,
+                                            onDismissRequest = { dialogBundleUid = null }
+                                        )
+                                    }
+                            } else if (dialogBundleUid != null) {
+                                dialogBundleUid = null
+                            }
+                        }
+                    }
                 }
-                if (appList.isNotEmpty() && filteredAppList.isEmpty()) {
+                if (filteredAppList.isEmpty()) {
                     item(key = "app-selector-empty") {
                         Column(
                             modifier = Modifier
@@ -489,8 +460,184 @@ fun AppSelectorScreen(
 }
 
 @Composable
+private fun SelectFromStorageCard(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        tonalElevation = 2.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                contentColor = MaterialTheme.colorScheme.primary,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Storage,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.select_from_storage),
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = stringResource(R.string.select_from_storage_description),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Icon(
+                imageVector = Icons.Outlined.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun AppSelectorCard(
+    packageInfo: PackageInfo?,
+    packageName: String,
+    patchCount: Int?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: (@Composable () -> Unit)? = null
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        tonalElevation = 2.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AppIcon(
+                    packageInfo = packageInfo,
+                    contentDescription = null,
+                    modifier = Modifier.size(44.dp)
+                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    AppLabel(
+                        packageInfo = packageInfo,
+                        defaultText = packageName,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        text = packageName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                patchCount?.takeIf { it > 0 }?.let { count ->
+                    Surface(
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        shape = RoundedCornerShape(999.dp)
+                    ) {
+                        Text(
+                            text = pluralStringResource(R.plurals.patch_count, count, count),
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+            content?.invoke()
+        }
+    }
+}
+
+@Composable
+private fun VersionSearchRow(
+    label: String,
+    packageName: String,
+    version: String?,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f)
+        )
+        VersionSearchIconButton(packageName = packageName, version = version)
+    }
+}
+
+@Composable
+private fun VersionSearchIconButton(
+    packageName: String,
+    version: String?,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    IconButton(
+        onClick = { context.openUrl(buildSearchUrl(packageName, version)) },
+        modifier = modifier.size(28.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.Search,
+            contentDescription = stringResource(R.string.search),
+            modifier = Modifier.size(16.dp)
+        )
+    }
+}
+
+private fun buildSearchUrl(packageName: String, version: String?): String {
+    val encodedPackage = Uri.encode(packageName)
+    val encodedVersion = version?.takeIf { it.isNotBlank() }?.let(Uri::encode)
+    return if (encodedVersion == null) {
+        "https://www.google.com/search?q=$encodedPackage"
+    } else {
+        "https://www.google.com/search?q=$encodedPackage+$encodedVersion"
+    }
+}
+
+@Composable
 private fun OtherSupportedVersionsInfoDialog(
     bundleName: String,
+    packageName: String,
     recommendedVersion: String?,
     otherVersions: List<String>,
     supportsAllVersions: Boolean,
@@ -505,31 +652,34 @@ private fun OtherSupportedVersionsInfoDialog(
         },
         title = { Text(stringResource(R.string.other_supported_versions_title, bundleName)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                recommendedVersion?.let {
-                    Text(
-                        stringResource(
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                recommendedVersion?.let { version ->
+                    VersionSearchRow(
+                        label = stringResource(
                             R.string.bundle_version_dialog_recommended,
-                            stringResource(R.string.version_label, it)
+                            stringResource(R.string.version_label, version)
                         ),
-                        style = MaterialTheme.typography.bodyMedium
+                        packageName = packageName,
+                        version = version
                     )
                 }
                 when {
                     otherVersions.isNotEmpty() -> {
-                        val context = LocalContext.current
-                        val versionsText = otherVersions.joinToString(", ") { version ->
-                            context.getString(R.string.version_label, version)
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            otherVersions.forEach { version ->
+                                VersionSearchRow(
+                                    label = stringResource(R.string.version_label, version),
+                                    packageName = packageName,
+                                    version = version
+                                )
+                            }
                         }
-                        Text(
-                            versionsText,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
                     }
                     supportsAllVersions -> {
-                        Text(
-                            stringResource(R.string.other_supported_versions_all),
-                            style = MaterialTheme.typography.bodyMedium
+                        VersionSearchRow(
+                            label = stringResource(R.string.other_supported_versions_all),
+                            packageName = packageName,
+                            version = null
                         )
                     }
                     else -> {
@@ -548,18 +698,15 @@ private fun OtherSupportedVersionsInfoDialog(
 @Composable
 private fun BundleSuggestionCard(
     suggestion: BundleVersionSuggestion,
+    packageName: String,
     enabled: Boolean,
     modifier: Modifier = Modifier,
     onShowOtherVersions: () -> Unit
 ) {
-    ElevatedCard(
+    Surface(
         modifier = modifier,
         shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = MaterialTheme.colorScheme.onSurface
-        ),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+        tonalElevation = 1.dp
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -578,16 +725,32 @@ private fun BundleSuggestionCard(
             val versionLabel = suggestion.recommendedVersion
                 ?.let { stringResource(R.string.version_label, it) }
                 ?: stringResource(R.string.bundle_version_all_versions)
-            Surface(
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                contentColor = MaterialTheme.colorScheme.primary,
-                shape = RoundedCornerShape(12.dp)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    text = versionLabel,
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                )
+                Surface(
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                    contentColor = MaterialTheme.colorScheme.primary,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = versionLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
+                if (suggestion.recommendedVersion != null) {
+                    VersionSearchIconButton(
+                        packageName = packageName,
+                        version = suggestion.recommendedVersion
+                    )
+                } else if (suggestion.supportsAllVersions) {
+                    VersionSearchIconButton(
+                        packageName = packageName,
+                        version = null
+                    )
+                }
             }
             Text(
                 text = if (suggestion.supportsAllVersions) {

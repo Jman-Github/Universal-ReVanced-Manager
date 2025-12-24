@@ -11,6 +11,8 @@
 - Imrpoved monochrome icons
 - Added the ability to disable patch bundles, which removes the bundle from the patch selection page, and grays out the bundle on the patch bundles tab https://github.com/ReVanced/revanced-manager/pull/2731
 - Aligned the pencil button on the patch bundles tab to the other buttons (along with giving it the same size as the other buttons)
+- Added a search button next to all version listings under "Show suggested versions" on the app selection page. Tapping the new button searches with google the package name and the version number (example: com.google.android.youtube 20.51.38)
+- Redesigned the UI of the app selection page
 
 
 # Bug fixes
