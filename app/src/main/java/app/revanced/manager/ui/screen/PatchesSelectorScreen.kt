@@ -166,6 +166,8 @@ fun PatchesSelectorScreen(
     var showBottomSheet by rememberSaveable { mutableStateOf(false) }
     val actionOrderPref by viewModel.prefs.patchSelectionActionOrder.getAsState()
     val hiddenActionsPref by viewModel.prefs.patchSelectionHiddenActions.getAsState()
+    val sortAlphabeticallyPref by viewModel.prefs.patchSelectionSortAlphabetical.getAsState()
+    val sortSettingsModePref by viewModel.prefs.patchSelectionSortSettingsMode.getAsState()
     val orderedActionKeys = remember(actionOrderPref) {
         val parsed = actionOrderPref
             .split(',')
@@ -249,10 +251,30 @@ fun PatchesSelectorScreen(
     val dialogsOpen = showBundleDialog || showProfileNameDialog
     var actionsExpanded by rememberSaveable { mutableStateOf(false) }
     var showResetConfirmation by rememberSaveable { mutableStateOf(false) }
-    var sortAlphabetically by rememberSaveable { mutableStateOf(false) }
-    var sortSettingsMode by rememberSaveable { mutableStateOf(PatchSortSettingsMode.None.name) }
+    var sortAlphabetically by rememberSaveable { mutableStateOf(sortAlphabeticallyPref) }
+    var sortSettingsMode by rememberSaveable { mutableStateOf(sortSettingsModePref) }
     val resolvedSortSettingsMode = remember(sortSettingsMode) {
         PatchSortSettingsMode.values().firstOrNull { it.name == sortSettingsMode } ?: PatchSortSettingsMode.None
+    }
+    LaunchedEffect(sortAlphabeticallyPref) {
+        if (sortAlphabetically != sortAlphabeticallyPref) {
+            sortAlphabetically = sortAlphabeticallyPref
+        }
+    }
+    LaunchedEffect(sortSettingsModePref) {
+        if (sortSettingsMode != sortSettingsModePref) {
+            sortSettingsMode = sortSettingsModePref
+        }
+    }
+    LaunchedEffect(sortAlphabetically, sortAlphabeticallyPref) {
+        if (sortAlphabetically != sortAlphabeticallyPref) {
+            viewModel.prefs.patchSelectionSortAlphabetical.update(sortAlphabetically)
+        }
+    }
+    LaunchedEffect(sortSettingsMode, sortSettingsModePref) {
+        if (sortSettingsMode != sortSettingsModePref) {
+            viewModel.prefs.patchSelectionSortSettingsMode.update(sortSettingsMode)
+        }
     }
     LaunchedEffect(patchLazyListStates) {
         snapshotFlow { patchLazyListStates.any { it.isScrollInProgress } }
