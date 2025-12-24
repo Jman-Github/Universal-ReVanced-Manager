@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -43,6 +44,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
+import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -590,38 +592,66 @@ private fun VersionSearchRow(
     label: String,
     packageName: String,
     version: String?,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    highlighted: Boolean = false
 ) {
     Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.weight(1f)
+        VersionSearchChip(
+            label = label,
+            packageName = packageName,
+            version = version,
+            highlighted = highlighted
         )
-        VersionSearchIconButton(packageName = packageName, version = version)
     }
 }
 
 @Composable
-private fun VersionSearchIconButton(
+private fun VersionSearchChip(
+    label: String,
     packageName: String,
     version: String?,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    highlighted: Boolean = false,
 ) {
     val context = LocalContext.current
-    IconButton(
+    val background = if (highlighted) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
+    }
+    val contentColor = if (highlighted) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Surface(
         onClick = { context.openUrl(buildSearchUrl(packageName, version)) },
-        modifier = modifier.size(28.dp)
+        modifier = modifier.widthIn(max = 220.dp),
+        shape = RoundedCornerShape(999.dp),
+        color = background,
+        contentColor = contentColor
     ) {
-        Icon(
-            imageVector = Icons.Outlined.Search,
-            contentDescription = stringResource(R.string.search),
-            modifier = Modifier.size(16.dp)
-        )
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Icon(
+                imageVector = Icons.Outlined.Search,
+                contentDescription = stringResource(R.string.search),
+                modifier = Modifier.size(14.dp)
+            )
+        }
     }
 }
 
@@ -657,22 +687,37 @@ private fun OtherSupportedVersionsInfoDialog(
                 recommendedVersion?.let { version ->
                     VersionSearchRow(
                         label = stringResource(
-                            R.string.bundle_version_dialog_recommended,
+                            R.string.bundle_version_suggested_label,
                             stringResource(R.string.version_label, version)
                         ),
                         packageName = packageName,
-                        version = version
+                        version = version,
+                        modifier = Modifier.align(Alignment.Start),
+                        highlighted = true
                     )
                 }
                 when {
                     otherVersions.isNotEmpty() -> {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            otherVersions.forEach { version ->
-                                VersionSearchRow(
-                                    label = stringResource(R.string.version_label, version),
-                                    packageName = packageName,
-                                    version = version
-                                )
+                            otherVersions.chunked(2).forEach { row ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    row.forEach { version ->
+                                        VersionSearchRow(
+                                            label = stringResource(R.string.version_label, version),
+                                            packageName = packageName,
+                                            version = version,
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .wrapContentWidth(Alignment.Start)
+                                        )
+                                    }
+                                    if (row.size == 1) {
+                                        Spacer(modifier = Modifier.weight(1f))
+                                    }
+                                }
                             }
                         }
                     }
@@ -680,7 +725,9 @@ private fun OtherSupportedVersionsInfoDialog(
                         VersionSearchRow(
                             label = stringResource(R.string.other_supported_versions_all),
                             packageName = packageName,
-                            version = null
+                            version = null,
+                            modifier = Modifier.align(Alignment.Start),
+                            highlighted = true
                         )
                     }
                     else -> {
@@ -730,26 +777,21 @@ private fun BundleSuggestionCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Surface(
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                    contentColor = MaterialTheme.colorScheme.primary,
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text(
-                        text = versionLabel,
-                        style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                    )
-                }
                 if (suggestion.recommendedVersion != null) {
-                    VersionSearchIconButton(
+                    VersionSearchChip(
+                        label = versionLabel,
                         packageName = packageName,
-                        version = suggestion.recommendedVersion
+                        version = suggestion.recommendedVersion,
+                        modifier = Modifier,
+                        highlighted = true
                     )
                 } else if (suggestion.supportsAllVersions) {
-                    VersionSearchIconButton(
+                    VersionSearchChip(
+                        label = versionLabel,
                         packageName = packageName,
-                        version = null
+                        version = null,
+                        modifier = Modifier,
+                        highlighted = true
                     )
                 }
             }

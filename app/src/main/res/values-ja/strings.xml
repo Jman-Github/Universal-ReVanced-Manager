@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Universal ReVanced Manager</string>
     <string name="main_top_title">URV Manager</string>
@@ -101,7 +101,8 @@
     <string name="bundle_version_dialog_other_title">サポートされている別のバージョンを選択:</string>
     <string name="bundle_version_dialog_locked_title">バージョンセーフガードが有効です</string>
     <string name="bundle_version_dialog_locked_hint">「設定」&gt;「詳細設定」&gt;「セーフガード」に移動し、「推奨アプリバージョンを必須にする」をオフ、「バージョン互換性チェックを無効化」をオンにすると、バンドル固有のバージョンを選択できるようになります。</string>
-
+    <!-- Needs translation -->
+    <string name="patch_versions_dialog_title">Supported versions for %1$s</string>
     <string name="patch_item_description">アプリケーションへのパッチ適用を開始</string>
     <string name="patch_selector_item">パッチを選択</string>
     <string name="patch_selector_item_description">%d 個のパッチを選択済み</string>
@@ -953,3 +954,5 @@
     <string name="saved_app_unmount_title">インストール済みコピーをマウント解除しますか？</string>
     <string name="saved_app_unmount_description">これによりパッチ適用済みAPKのマウントが解除されます。保存済みAPKはそのまま残ります。</string>
 </resources>
+
+

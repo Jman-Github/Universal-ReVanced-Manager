@@ -103,6 +103,7 @@
     <string name="bundle_version_dialog_other_title">Select another supported version:</string>
     <string name="bundle_version_dialog_locked_title">Version safeguards are enabled</string>
     <string name="bundle_version_dialog_locked_hint">Go to Settings &gt; Advanced &gt; Safeguards and set both \"Require suggested app version\" (toggle off) and \"Disable version compatibility check\" (toggle on) to choose bundle-specific versions.</string>
+    <string name="patch_versions_dialog_title">Supported versions for %1$s</string>
 
     <string name="patch_item_description">Start patching the application</string>
     <string name="patch_selector_item">Select patches</string>

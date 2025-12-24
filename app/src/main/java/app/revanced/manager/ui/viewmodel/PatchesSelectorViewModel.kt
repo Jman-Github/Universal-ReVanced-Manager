@@ -84,6 +84,8 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
     private val preferredAppVersionHint = input.preferredAppVersion?.takeUnless { it.isBlank() }
     private var appVersion: String? = null
     private val appVersionState = MutableStateFlow<String?>(null)
+    val appPackageName: String
+        get() = packageName
     val currentAppVersion: String?
         get() = appVersion
     private var currentBundles: List<PatchBundleInfo.Scoped> = emptyList()
@@ -163,6 +165,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
                 prefs.patchSelectionFilterFlags.update(value)
             }
         }
+    val suggestedVersionsByBundle = patchBundleRepository.suggestedVersionsByBundle
 
     init {
         if (prefs.patchSelectionFilterFlags.getBlocking() < 0) {

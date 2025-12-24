@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Universal ReVanced Manager</string>
     <string name="main_top_title">URV Manager</string>
@@ -94,6 +94,8 @@
     <string name="bundle_version_dialog_other_title">지원되는 다른 버전 선택:</string>
     <string name="bundle_version_dialog_locked_title">버전 보안 기능을 활성화하였습니다</string>
     <string name="bundle_version_dialog_locked_hint">\"설정 &gt; 고급 &gt; 보안\"으로 이동하여 \"권장 앱 버전 요구\" (토글 끄기)와 \"\'버전 호환성 검사 비활성화\" (토글 켜기)를 모두 설정하여 번들별 버전을 선택하세요.</string>
+    <!-- Needs translation -->
+    <string name="patch_versions_dialog_title">Supported versions for %1$s</string>
     <string name="patch_item_description">애플리케이션 패치를 시작하였습니다</string>
     <string name="patch_selector_item">패치 선택하기</string>
     <string name="patch_selector_item_description">%d 개의 패치를 선택하였습니다</string>
@@ -957,3 +959,5 @@
     <string name="confirm">확인</string>
     <string name="saved_app_install_cancelled">설치를 취소하였습니다</string>
 </resources>
+
+

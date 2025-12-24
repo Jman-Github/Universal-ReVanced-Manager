@@ -14,6 +14,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -31,6 +32,8 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -48,6 +51,7 @@ import androidx.compose.material.icons.automirrored.outlined.Redo
 import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.MoreHoriz
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.UnfoldLess
 import androidx.compose.material.icons.outlined.UnfoldMore
 import androidx.compose.material.icons.outlined.Restore
@@ -96,6 +100,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -108,6 +113,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.net.Uri
 import java.util.Locale
 import app.universal.revanced.manager.R
 import app.revanced.manager.patcher.patch.Option
@@ -133,6 +139,7 @@ import app.revanced.manager.ui.viewmodel.PatchesSelectorViewModel.Companion.SHOW
 import app.revanced.manager.util.Options
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.isScrollingUp
+import app.revanced.manager.util.openUrl
 import app.revanced.manager.util.toast
 import kotlinx.coroutines.flow.collectLatest
 import app.revanced.manager.util.transparentListItemColors
@@ -150,6 +157,9 @@ fun PatchesSelectorScreen(
     val bundleDisplayNames by viewModel.bundleDisplayNames.collectAsStateWithLifecycle(initialValue = emptyMap())
     val bundleTypes by viewModel.bundleTypes.collectAsStateWithLifecycle(initialValue = emptyMap<Int, BundleSourceType>())
     val profiles by viewModel.profiles.collectAsStateWithLifecycle(initialValue = emptyList<PatchProfile>())
+    val suggestedVersionsByBundle by viewModel.suggestedVersionsByBundle.collectAsStateWithLifecycle(
+        initialValue = emptyMap()
+    )
     val pagerState = rememberPagerState(
         initialPage = 0,
         initialPageOffsetFraction = 0f
@@ -660,6 +670,7 @@ fun PatchesSelectorScreen(
         patches: List<PatchInfo>,
         visible: Boolean,
         compatible: Boolean,
+        suggestedVersion: String?,
         header: (@Composable () -> Unit)? = null
     ) {
         if (patches.isNotEmpty() && visible) {
@@ -713,7 +724,9 @@ fun PatchesSelectorScreen(
                             }
                         }
                     },
-                    compatible = compatible
+                    compatible = compatible,
+                    packageName = viewModel.appPackageName,
+                    suggestedVersion = suggestedVersion
                 )
             }
         }
@@ -996,9 +1009,12 @@ fun PatchesSelectorScreen(
                 }
             ) {
                 val bundle = bundles[pagerState.currentPage]
+                val suggestedVersion = suggestedVersionsByBundle[bundle.uid]?.get(viewModel.appPackageName)
 
                 LazyColumnWithScrollbar(
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     fun List<PatchInfo>.searched() = filter {
                         it.name.contains(query, true)
@@ -1008,13 +1024,15 @@ fun PatchesSelectorScreen(
                         uid = bundle.uid,
                         patches = bundle.compatible.searched(),
                         visible = true,
-                        compatible = true
+                        compatible = true,
+                        suggestedVersion = suggestedVersion
                     )
                     patchList(
                         uid = bundle.uid,
                         patches = bundle.universal.searched(),
                         visible = viewModel.filter and SHOW_UNIVERSAL != 0,
-                        compatible = true
+                        compatible = true,
+                        suggestedVersion = suggestedVersion
                     ) {
                         ListHeader(
                             title = stringResource(R.string.universal_patches),
@@ -1025,7 +1043,8 @@ fun PatchesSelectorScreen(
                         uid = bundle.uid,
                         patches = bundle.incompatible.searched(),
                         visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
-                        compatible = viewModel.allowIncompatiblePatches
+                        compatible = viewModel.allowIncompatiblePatches,
+                        suggestedVersion = suggestedVersion
                     ) {
                         ListHeader(
                             title = stringResource(R.string.incompatible_patches),
@@ -1135,38 +1154,44 @@ fun PatchesSelectorScreen(
                 pageContent = { index ->
                     // Avoid crashing if the lists have not been fully initialized yet.
                     if (index > bundles.lastIndex || bundles.size != patchLazyListStates.size) return@HorizontalPager
-                    val bundle = bundles[index]
+                val bundle = bundles[index]
+                val suggestedVersion = suggestedVersionsByBundle[bundle.uid]?.get(viewModel.appPackageName)
 
                     LazyColumnWithScrollbar(
                         modifier = Modifier.fillMaxSize(),
-                        state = patchLazyListStates[index]
+                        state = patchLazyListStates[index],
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        patchList(
-                            uid = bundle.uid,
-                            patches = bundle.compatible,
-                            visible = true,
-                            compatible = true
+                    patchList(
+                        uid = bundle.uid,
+                        patches = bundle.compatible,
+                        visible = true,
+                        compatible = true,
+                        suggestedVersion = suggestedVersion
+                    )
+                    patchList(
+                        uid = bundle.uid,
+                        patches = bundle.universal,
+                        visible = viewModel.filter and SHOW_UNIVERSAL != 0,
+                        compatible = true,
+                        suggestedVersion = suggestedVersion
+                    ) {
+                        ListHeader(
+                            title = stringResource(R.string.universal_patches),
                         )
-                        patchList(
-                            uid = bundle.uid,
-                            patches = bundle.universal,
-                            visible = viewModel.filter and SHOW_UNIVERSAL != 0,
-                            compatible = true
-                        ) {
-                            ListHeader(
-                                title = stringResource(R.string.universal_patches),
-                            )
-                        }
-                        patchList(
-                            uid = bundle.uid,
-                            patches = bundle.incompatible,
-                            visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
-                            compatible = viewModel.allowIncompatiblePatches
-                        ) {
-                            ListHeader(
-                                title = stringResource(R.string.incompatible_patches),
-                                onHelpClick = { showIncompatiblePatchesDialog = true }
-                            )
+                    }
+                    patchList(
+                        uid = bundle.uid,
+                        patches = bundle.incompatible,
+                        visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
+                        compatible = viewModel.allowIncompatiblePatches,
+                        suggestedVersion = suggestedVersion
+                    ) {
+                        ListHeader(
+                            title = stringResource(R.string.incompatible_patches),
+                            onHelpClick = { showIncompatiblePatchesDialog = true }
+                        )
                         }
                     }
                 }
@@ -1181,30 +1206,352 @@ private fun PatchItem(
     onOptionsDialog: () -> Unit,
     selected: Boolean,
     onToggle: () -> Unit,
-    compatible: Boolean = true
-) = ListItem(
-    modifier = Modifier
-        .let { if (!compatible) it.alpha(0.5f) else it }
-        .clickable(onClick = onToggle)
-        .fillMaxSize(),
-    leadingContent = {
-        HapticCheckbox(
-            checked = selected,
-            onCheckedChange = { onToggle() },
-            enabled = compatible
+    compatible: Boolean = true,
+    packageName: String,
+    suggestedVersion: String?
+): Unit {
+    val supportedPackage = patch.compatiblePackages?.firstOrNull { it.packageName == packageName }
+    val supportsAllVersions = patch.compatiblePackages == null || supportedPackage?.versions == null
+    val rawVersions = supportedPackage?.versions?.toList()?.sorted().orEmpty()
+    val suggestedVersionInfo = suggestedVersion
+        ?.takeUnless { it.isBlank() || patch.compatiblePackages == null }
+        ?.let { version ->
+            PatchVersionChipInfo(
+                label = stringResource(
+                    R.string.bundle_version_suggested_label,
+                    formatPatchVersionLabel(version)
+                ),
+                version = version,
+                highlighted = true
+            )
+        }
+    val showAllVersionsChip = supportsAllVersions && suggestedVersionInfo == null
+    val hasMoreVersions = !supportsAllVersions && rawVersions.isNotEmpty()
+    val visibleVersions = if (showAllVersionsChip) {
+        listOf(
+            PatchVersionChipInfo(
+                label = stringResource(R.string.bundle_version_all_versions),
+                version = null,
+                outlined = true
+            )
         )
-    },
-    headlineContent = { Text(patch.name) },
-    supportingContent = patch.description?.let { { Text(it) } },
-    trailingContent = {
-        if (patch.options?.isNotEmpty() == true) {
-            IconButton(onClick = onOptionsDialog, enabled = compatible) {
-                Icon(Icons.Outlined.Settings, null)
+    } else {
+        emptyList()
+    }
+    val hasChips = suggestedVersionInfo != null || showAllVersionsChip || hasMoreVersions
+    var showVersionsDialog by rememberSaveable(patch.name) { mutableStateOf(false) }
+    val dialogVersions = when {
+        supportsAllVersions -> listOf(
+            PatchVersionChipInfo(
+                label = stringResource(R.string.bundle_version_all_versions),
+                version = null,
+                outlined = true
+            )
+        )
+        else -> rawVersions.map { version ->
+            PatchVersionChipInfo(
+                label = formatPatchVersionLabel(version),
+                version = version,
+                outlined = true
+            )
+        }
+    }
+
+    if (showVersionsDialog) {
+        PatchVersionsDialog(
+            patchName = patch.name,
+            packageName = packageName,
+            versions = dialogVersions,
+            suggestedVersion = suggestedVersionInfo,
+            onDismiss = { showVersionsDialog = false }
+        )
+    }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .let { if (!compatible) it.alpha(0.6f) else it },
+        shape = RoundedCornerShape(20.dp),
+        tonalElevation = 2.dp,
+        onClick = onToggle
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                HapticCheckbox(
+                    checked = selected,
+                    onCheckedChange = { onToggle() },
+                    enabled = compatible
+                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = patch.name,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    patch.description?.let { description ->
+                        Text(
+                            text = description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                if (patch.options?.isNotEmpty() == true) {
+                    IconButton(onClick = onOptionsDialog, enabled = compatible) {
+                        Icon(Icons.Outlined.Settings, null)
+                    }
+                }
+            }
+            if (hasChips) {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    suggestedVersionInfo?.let { info ->
+                        PatchVersionSearchChip(
+                            label = info.label,
+                            packageName = packageName,
+                            version = info.version,
+                            highlighted = true
+                        )
+                    }
+                    visibleVersions.forEach { version ->
+                        PatchVersionSearchChip(
+                            label = version.label,
+                            packageName = packageName,
+                            version = version.version,
+                            outlined = true
+                        )
+                    }
+                    if (hasMoreVersions) {
+                        PatchVersionChip(
+                            label = stringResource(R.string.more),
+                            icon = Icons.Outlined.UnfoldMore,
+                            outlined = true,
+                            onClick = { showVersionsDialog = true }
+                        )
+                    }
+                }
             }
         }
-    },
-    colors = transparentListItemColors
+    }
+}
+
+private data class PatchVersionChipInfo(
+    val label: String,
+    val version: String?,
+    val highlighted: Boolean = false,
+    val outlined: Boolean = false
 )
+
+@Composable
+private fun PatchVersionSearchChip(
+    label: String,
+    packageName: String,
+    version: String?,
+    highlighted: Boolean = false,
+    outlined: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    PatchVersionChip(
+        label = label,
+        icon = Icons.Outlined.Search,
+        highlighted = highlighted,
+        outlined = outlined,
+        modifier = modifier,
+        onClick = { context.openUrl(buildSearchUrl(packageName, version)) }
+    )
+}
+
+@Composable
+private fun PatchVersionChipWithSearch(
+    label: String,
+    packageName: String,
+    version: String?,
+    highlighted: Boolean = false,
+    outlined: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        PatchVersionChip(
+            label = label,
+            highlighted = highlighted,
+            outlined = outlined
+        )
+        PatchVersionSearchButton(
+            packageName = packageName,
+            version = version
+        )
+    }
+}
+
+@Composable
+private fun PatchVersionChip(
+    label: String,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    highlighted: Boolean = false,
+    outlined: Boolean = false,
+    onClick: (() -> Unit)? = null
+) {
+    val background = when {
+        highlighted -> MaterialTheme.colorScheme.primaryContainer
+        outlined -> MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
+        else -> MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
+    }
+    val contentColor = when {
+        highlighted -> MaterialTheme.colorScheme.onPrimaryContainer
+        outlined -> MaterialTheme.colorScheme.onSurfaceVariant
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Surface(
+        onClick = onClick ?: {},
+        enabled = onClick != null,
+        color = background,
+        contentColor = contentColor,
+        shape = RoundedCornerShape(999.dp),
+        border = if (outlined) BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)) else null,
+        modifier = modifier.widthIn(max = 220.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(if (icon == null) 6.dp else 4.dp)
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PatchVersionsDialog(
+    patchName: String,
+    packageName: String,
+    versions: List<PatchVersionChipInfo>,
+    suggestedVersion: PatchVersionChipInfo?,
+    onDismiss: () -> Unit
+) {
+    val scrollState = rememberScrollState()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.ok))
+            }
+        },
+        title = {
+            Text(stringResource(R.string.patch_versions_dialog_title, patchName))
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier
+                    .heightIn(max = 320.dp)
+                    .verticalScroll(scrollState)
+            ) {
+                suggestedVersion?.let { info ->
+                    PatchVersionSearchChip(
+                        label = info.label,
+                        packageName = packageName,
+                        version = info.version,
+                        highlighted = true
+                    )
+                }
+                if (versions.isEmpty()) {
+                    Text(stringResource(R.string.other_supported_versions_empty))
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        versions.chunked(2).forEach { row ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                row.forEach { info ->
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .wrapContentWidth(Alignment.Start)
+                                    ) {
+                                        PatchVersionSearchChip(
+                                            label = info.label,
+                                            packageName = packageName,
+                                            version = info.version,
+                                            outlined = true
+                                        )
+                                    }
+                                }
+                                if (row.size == 1) {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    )
+}
+
+private fun formatPatchVersionLabel(version: String): String =
+    if (version.startsWith("v", ignoreCase = true)) version else "v$version"
+
+@Composable
+private fun PatchVersionSearchButton(
+    packageName: String,
+    version: String?,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    IconButton(
+        onClick = { context.openUrl(buildSearchUrl(packageName, version)) },
+        modifier = modifier.size(24.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.Search,
+            contentDescription = stringResource(R.string.search),
+            modifier = Modifier.size(14.dp)
+        )
+    }
+}
+
+private fun buildSearchUrl(packageName: String, version: String?): String {
+    val encodedPackage = Uri.encode(packageName)
+    val encodedVersion = version?.takeIf { it.isNotBlank() }?.let(Uri::encode)
+    return if (encodedVersion == null) {
+        "https://www.google.com/search?q=$encodedPackage"
+    } else {
+        "https://www.google.com/search?q=$encodedPackage+$encodedVersion"
+    }
+}
 
 @Composable
 private fun SaveFabIcon(

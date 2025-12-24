@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Universal ReVanced Manager</string>
     <string name="main_top_title">URV Manager</string>
@@ -94,6 +94,8 @@
     <string name="bundle_version_dialog_other_title">Chọn phiên bản được hỗ trợ khác:</string>
     <string name="bundle_version_dialog_locked_title">Bảo vệ phiên bản đang bật</string>
     <string name="bundle_version_dialog_locked_hint">Vào Cài đặt &gt; Nâng cao &gt; Bảo vệ và bật cả \"Yêu cầu phiên bản ứng dụng được đề xuất\" và \" Tắt kiểm tra tương thích phiên bản\" để chọn phiên bản khác của từng gói.</string>
+    <!-- Needs translation -->
+    <string name="patch_versions_dialog_title">Supported versions for %1$s</string>
     <string name="patch_item_description">Bắt đầu vá</string>
     <string name="patch_selector_item">Chọn bản vá</string>
     <string name="patch_selector_item_description">Đã chọn %d bản vá</string>
@@ -941,3 +943,5 @@ Bạn có thể tự xóa chúng, điều chỉnh lựa chọn, hoặc cứ ti�
     <string name="confirm">Xác nhận</string>
     <string name="saved_app_install_cancelled">Đã huỷ cài đặt</string>
 </resources>
+
+
