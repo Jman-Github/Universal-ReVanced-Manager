@@ -510,6 +510,12 @@ Recommended for this device: %1$d MB.</string>
     <string name="tab_patches">Patch Bundles</string>
     <string name="tab_profiles">Patch Profiles</string>
     <string name="delete">Delete</string>
+    <string name="disable">Disable</string>
+    <string name="enable">Enable</string>
+    <string name="patch_bundle_disabled_toast">Disabled %d bundle(s)</string>
+    <string name="patch_bundle_enabled_toast">Enabled %d bundle(s)</string>
+    <string name="patches_disable_single_dialog_description">Disable \"%s\"?</string>
+    <string name="patches_enable_single_dialog_description">Enable \"%s\"?</string>
     <string name="refresh">Refresh</string>
     <string name="continue_anyways">Continue anyways</string>
     <string name="download_another_version">Download another version</string>

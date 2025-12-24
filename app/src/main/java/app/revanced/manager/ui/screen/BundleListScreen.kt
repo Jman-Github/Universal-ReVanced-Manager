@@ -53,6 +53,7 @@ fun BundleListScreen(
     viewModel: BundleListViewModel = koinViewModel(),
     eventsFlow: Flow<BundleListViewModel.Event>,
     setSelectedSourceCount: (Int) -> Unit,
+    setSelectedSourceHasEnabled: (Boolean) -> Unit,
     showOrderDialog: Boolean = false,
     onDismissOrderDialog: () -> Unit = {},
     onScrollStateChange: (Boolean) -> Unit = {}
@@ -65,8 +66,10 @@ fun BundleListScreen(
     EventEffect(eventsFlow) {
         viewModel.handleEvent(it)
     }
-    LaunchedEffect(viewModel.selectedSources.size) {
+    LaunchedEffect(viewModel.selectedSources.size, sources) {
         setSelectedSourceCount(viewModel.selectedSources.size)
+        val selectedSources = sources.filter { it.uid in viewModel.selectedSources }
+        setSelectedSourceHasEnabled(selectedSources.any { it.enabled })
     }
 
     LaunchedEffect(listState) {
@@ -95,6 +98,9 @@ fun BundleListScreen(
                     manualUpdateInfo = manualUpdateInfo[source.uid],
                     onDelete = {
                         viewModel.delete(source)
+                    },
+                    onDisable = {
+                        viewModel.disable(source)
                     },
                     onUpdate = {
                         viewModel.update(source)

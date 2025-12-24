@@ -24,6 +24,8 @@ import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Bookmarks
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Delete
@@ -121,6 +123,7 @@ fun DashboardScreen(
     val installedAppsViewModel: InstalledAppsViewModel = koinViewModel()
     val patchProfilesViewModel: PatchProfilesViewModel = koinViewModel()
     var selectedSourceCount by rememberSaveable { mutableIntStateOf(0) }
+    var selectedSourcesHasEnabled by rememberSaveable { mutableStateOf(true) }
     val bundlesSelectable by remember { derivedStateOf { selectedSourceCount > 0 } }
     val selectedProfileCount by remember { derivedStateOf { patchProfilesViewModel.selectedProfiles.size } }
     val profilesSelectable = selectedProfileCount > 0
@@ -380,6 +383,17 @@ fun DashboardScreen(
                                     stringResource(R.string.delete)
                                 )
                             }
+                            IconButton(
+                                onClick = {
+                                    vm.disableSources()
+                                    vm.cancelSourceSelection()
+                                }
+                              ) {
+                                  Icon(
+                                      if (selectedSourcesHasEnabled) Icons.Outlined.Block else Icons.Outlined.CheckCircle,
+                                      stringResource(if (selectedSourcesHasEnabled) R.string.disable else R.string.enable)
+                                  )
+                              }
                             IconButton(
                                 onClick = vm::updateSources
                             ) {
@@ -689,6 +703,7 @@ fun DashboardScreen(
                             BundleListScreen(
                                 eventsFlow = vm.bundleListEventsFlow,
                                 setSelectedSourceCount = { selectedSourceCount = it },
+                                setSelectedSourceHasEnabled = { selectedSourcesHasEnabled = it },
                                 showOrderDialog = showBundleOrderDialog,
                                 onDismissOrderDialog = { showBundleOrderDialog = false },
                                 onScrollStateChange = {}

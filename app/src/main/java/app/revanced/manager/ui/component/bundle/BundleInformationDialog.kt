@@ -20,6 +20,8 @@ import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Gavel
 import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Sell
 import androidx.compose.material.icons.outlined.Update
@@ -88,6 +90,7 @@ fun BundleInformationDialog(
     patchCount: Int,
     onDismissRequest: () -> Unit,
     onDeleteRequest: () -> Unit,
+    onDisableRequest: () -> Unit,
     onUpdate: () -> Unit,
     autoOpenReleaseRequest: Int? = null,
 ) {
@@ -232,6 +235,14 @@ fun BundleInformationDialog(
                                 imageVector = FontAwesomeIcons.Brands.Github,
                                 contentDescription = stringResource(R.string.bundle_release_page),
                                 modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        val toggleIcon = if (src.enabled) Icons.Outlined.Block else Icons.Outlined.CheckCircle
+                        val toggleLabel = if (src.enabled) R.string.disable else R.string.enable
+                        IconButton(onClick = onDisableRequest) {
+                            Icon(
+                                toggleIcon,
+                                stringResource(toggleLabel)
                             )
                         }
                         IconButton(onClick = onDeleteRequest) {

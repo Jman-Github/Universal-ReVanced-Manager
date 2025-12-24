@@ -83,7 +83,7 @@ fun InstalledAppInfoScreen(
     val context = LocalContext.current
     val patchBundleRepository: PatchBundleRepository = koinInject()
     val prefs: PreferencesManager = koinInject()
-    val bundleInfo by patchBundleRepository.bundleInfoFlow.collectAsStateWithLifecycle(emptyMap())
+    val bundleInfo by patchBundleRepository.allBundlesInfoFlow.collectAsStateWithLifecycle(emptyMap())
     val bundleSources by patchBundleRepository.sources.collectAsStateWithLifecycle(emptyList())
     val allowUniversalPatches by prefs.disableUniversalPatchCheck.getAsState()
     val exportFormat by prefs.patchedAppExportFormat.getAsState()

@@ -187,7 +187,7 @@ class InstalledAppInfoViewModel(
         val payload = app.selectionPayload ?: return@withContext emptyMap()
         val sources = patchBundleRepository.sources.first()
         val sourceIds = sources.map { it.uid }.toSet()
-        val signatures = patchBundleRepository.bundleInfoFlow.first().toSignatureMap()
+        val signatures = patchBundleRepository.allBundlesInfoFlow.first().toSignatureMap()
         val (remappedPayload, remappedSelection) = payload.remapAndExtractSelection(sources, signatures)
         val persistableSelection = remappedSelection.filterKeys { it in sourceIds }
         if (persistableSelection.isNotEmpty()) {

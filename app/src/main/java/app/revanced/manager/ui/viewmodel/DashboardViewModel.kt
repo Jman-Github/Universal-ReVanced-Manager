@@ -10,7 +10,6 @@ import android.os.PowerManager
 import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.getSystemService
@@ -18,15 +17,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.universal.revanced.manager.R
 import app.revanced.manager.data.platform.NetworkInfo
-import app.revanced.manager.domain.bundles.PatchBundleSource
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
-import app.revanced.manager.domain.bundles.RemotePatchBundle
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.repository.DownloaderPluginRepository
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.network.api.ReVancedAPI
 import app.revanced.manager.util.PM
-import app.revanced.manager.util.toast
 import app.revanced.manager.util.uiSafe
 import java.io.File
 import java.io.FileInputStream
@@ -54,7 +50,7 @@ class DashboardViewModel(
     private val pm: PM,
 ) : ViewModel() {
     val availablePatches =
-        patchBundleRepository.bundleInfoFlow.map { it.values.sumOf { bundle -> bundle.patches.size } }
+        patchBundleRepository.enabledBundlesInfoFlow.map { it.values.sumOf { bundle -> bundle.patches.size } }
     val bundleUpdateProgress = patchBundleRepository.bundleUpdateProgress
     val bundleImportProgress = patchBundleRepository.bundleImportProgress
     private val contentResolver: ContentResolver = app.contentResolver
@@ -136,6 +132,7 @@ class DashboardViewModel(
     fun cancelSourceSelection() = sendEvent(BundleListViewModel.Event.CANCEL)
     fun updateSources() = sendEvent(BundleListViewModel.Event.UPDATE_SELECTED)
     fun deleteSources() = sendEvent(BundleListViewModel.Event.DELETE_SELECTED)
+    fun disableSources() = sendEvent(BundleListViewModel.Event.DISABLE_SELECTED)
 
     private suspend fun <T> withPersistentImportToast(block: suspend () -> T): T = coroutineScope {
         val progressToast = withContext(Dispatchers.Main) {

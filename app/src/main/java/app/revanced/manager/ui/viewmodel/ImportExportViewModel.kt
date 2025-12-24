@@ -117,6 +117,7 @@ data class PatchBundleSnapshot(
     val name: String,
     val displayName: String? = null,
     val autoUpdate: Boolean = false,
+    val enabled: Boolean = true,
     val officialState: OfficialBundleState? = null,
     val position: Int? = null,
     val officialAutoUpdate: Boolean? = null,
@@ -335,11 +336,13 @@ class ImportExportViewModel(
                             var createdCount = 0
                             var updatedCount = 0
                             var officialSnapshot: PatchBundleSnapshot? = null
+                            val pendingEnabledUpdates = LinkedHashMap<Int, Boolean>()
                             val total = exportFile.bundles.size.coerceAtLeast(1)
                             var processed = 0
 
                             for (snapshot in exportFile.bundles) {
                                 val endpoint = snapshot.endpoint.trim()
+                                val snapshotEnabled = snapshot.enabled
                                 val displayName = snapshot.displayName?.trim().takeUnless { it.isNullOrBlank() }
                                 val snapshotName = snapshot.name.trim().takeUnless { it.isBlank() }
                                 val bundleLabel = (displayName ?: snapshotName)
@@ -420,6 +423,10 @@ class ImportExportViewModel(
                                         }
                                         changed = true
                                     }
+                                    if (current.enabled != snapshotEnabled) {
+                                        pendingEnabledUpdates[current.uid] = snapshotEnabled
+                                        changed = true
+                                    }
                                     val needsCreatedAtUpdate = snapshot.createdAt != null && snapshot.createdAt != current.createdAt
                                     val needsUpdatedAtUpdate = snapshot.updatedAt != null && snapshot.updatedAt != current.updatedAt
                                     if (needsCreatedAtUpdate || needsUpdatedAtUpdate) {
@@ -473,6 +480,9 @@ class ImportExportViewModel(
                                         created.setAutoUpdate(snapshot.autoUpdate)
                                     }
                                 }
+                                if (created.enabled != snapshotEnabled) {
+                                    pendingEnabledUpdates[created.uid] = snapshotEnabled
+                                }
 
                                 finishImportItem()
                             }
@@ -518,6 +528,10 @@ class ImportExportViewModel(
                                                     officialUpdated = true
                                                 }
                                             }
+                                            if (source.enabled != snapshot.enabled) {
+                                                pendingEnabledUpdates[source.uid] = snapshot.enabled
+                                                officialUpdated = true
+                                            }
                                             snapshot.officialUsePrereleases?.let { usePrereleases ->
                                                 preferencesManager.usePatchesPrereleases.update(usePrereleases)
                                                 officialUpdated = true
@@ -540,6 +554,10 @@ class ImportExportViewModel(
                                             }
                                     }
                                 }
+                            }
+
+                            if (pendingEnabledUpdates.isNotEmpty()) {
+                                patchBundleRepository.setEnabledStates(pendingEnabledUpdates)
                             }
 
                             if (shouldRemoveOfficial) {
@@ -649,16 +667,17 @@ class ImportExportViewModel(
             val localSources = nonDefaultSources.filter { it.asRemoteOrNull == null }
             val remoteSources = nonDefaultSources.mapNotNull { it.asRemoteOrNull }
 
-            val officialSource = sources.firstOrNull { it.isDefault }
-            val officialDisplayName = officialSource
-                ?.displayName
-                ?.takeUnless { it.isBlank() }
-            val officialState = officialSource?.let { OfficialBundleState.PRESENT } ?: OfficialBundleState.ABSENT
+                val officialSource = sources.firstOrNull { it.isDefault }
+                val officialDisplayName = officialSource
+                    ?.displayName
+                    ?.takeUnless { it.isBlank() }
+                val officialState = officialSource?.let { OfficialBundleState.PRESENT } ?: OfficialBundleState.ABSENT
+                val officialEnabled = officialSource?.enabled ?: true
 
-            val exportedCount = remoteSources.size
+                val exportedCount = remoteSources.size
 
-            val positionLookup = sources.withIndex().associate { it.value.uid to it.index }
-            val officialAutoUpdate = officialSource?.asRemoteOrNull?.autoUpdate ?: false
+                val positionLookup = sources.withIndex().associate { it.value.uid to it.index }
+                val officialAutoUpdate = officialSource?.asRemoteOrNull?.autoUpdate ?: false
             val officialUsePrereleases = preferencesManager.usePatchesPrereleases.get()
 
             val bundles = buildList {
@@ -668,6 +687,7 @@ class ImportExportViewModel(
                         name = it.name,
                         displayName = it.displayName,
                         autoUpdate = it.autoUpdate,
+                        enabled = it.enabled,
                         position = positionLookup[it.uid],
                         createdAt = it.createdAt,
                         updatedAt = it.updatedAt
@@ -679,6 +699,7 @@ class ImportExportViewModel(
                         name = "",
                         displayName = officialDisplayName,
                         autoUpdate = officialAutoUpdate,
+                        enabled = officialEnabled,
                         officialState = officialState,
                         position = officialSource?.let { positionLookup[it.uid] },
                         officialAutoUpdate = officialAutoUpdate,
@@ -721,7 +742,7 @@ class ImportExportViewModel(
                 }
 
                 val sourcesSnapshot = patchBundleRepository.sources.first()
-                val signatureSnapshot = patchBundleRepository.bundleInfoFlow.first()
+                val signatureSnapshot = patchBundleRepository.allBundlesInfoFlow.first()
                     .mapValues { (_, info) -> info.patches.map { it.name.trim().lowercase() }.toSet() }
                 val remappedEntries = entries.map { entry ->
                     val remappedPayload = entry.payload.remapLocalBundles(sourcesSnapshot, signatureSnapshot)

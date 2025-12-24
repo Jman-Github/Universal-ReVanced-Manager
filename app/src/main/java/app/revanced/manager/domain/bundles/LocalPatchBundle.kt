@@ -13,8 +13,9 @@ class LocalPatchBundle(
     createdAt: Long?,
     updatedAt: Long?,
     error: Throwable?,
-    directory: File
-) : PatchBundleSource(name, uid, displayName, createdAt, updatedAt, error, directory) {
+    directory: File,
+    enabled: Boolean
+) : PatchBundleSource(name, uid, displayName, createdAt, updatedAt, error, directory, enabled) {
     suspend fun ActionContext.replace(
         patches: InputStream,
         totalBytes: Long? = null,
@@ -41,7 +42,8 @@ class LocalPatchBundle(
         name: String,
         displayName: String?,
         createdAt: Long?,
-        updatedAt: Long?
+        updatedAt: Long?,
+        enabled: Boolean
     ) = LocalPatchBundle(
         name,
         uid,
@@ -49,6 +51,7 @@ class LocalPatchBundle(
         createdAt,
         updatedAt,
         error,
-        directory
+        directory,
+        enabled
     )
 }

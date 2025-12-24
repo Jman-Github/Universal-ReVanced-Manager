@@ -45,7 +45,8 @@ sealed class RemotePatchBundle(
     directory: File,
     val endpoint: String,
     val autoUpdate: Boolean,
-) : PatchBundleSource(name, uid, displayName, createdAt, updatedAt, error, directory), KoinComponent {
+    enabled: Boolean,
+) : PatchBundleSource(name, uid, displayName, createdAt, updatedAt, error, directory, enabled), KoinComponent {
     protected val http: HttpService by inject()
 
     protected abstract suspend fun getLatestInfo(): ReVancedAsset
@@ -55,7 +56,8 @@ sealed class RemotePatchBundle(
         displayName: String? = this.displayName,
         createdAt: Long? = this.createdAt,
         updatedAt: Long? = this.updatedAt,
-        autoUpdate: Boolean = this.autoUpdate
+        autoUpdate: Boolean = this.autoUpdate,
+        enabled: Boolean = this.enabled
     ): RemotePatchBundle
 
     override fun copy(
@@ -63,8 +65,9 @@ sealed class RemotePatchBundle(
         name: String,
         displayName: String?,
         createdAt: Long?,
-        updatedAt: Long?
-    ): RemotePatchBundle = copy(error, name, displayName, createdAt, updatedAt, this.autoUpdate)
+        updatedAt: Long?,
+        enabled: Boolean
+    ): RemotePatchBundle = copy(error, name, displayName, createdAt, updatedAt, this.autoUpdate, enabled)
 
     // PR #35: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35
     protected open suspend fun download(info: ReVancedAsset, onProgress: PatchBundleDownloadProgress? = null) =
@@ -142,7 +145,8 @@ class JsonPatchBundle(
     directory: File,
     endpoint: String,
     autoUpdate: Boolean,
-) : RemotePatchBundle(name, uid, displayName, createdAt, updatedAt, installedVersionSignature, error, directory, endpoint, autoUpdate) {
+    enabled: Boolean,
+) : RemotePatchBundle(name, uid, displayName, createdAt, updatedAt, installedVersionSignature, error, directory, endpoint, autoUpdate, enabled) {
     override suspend fun getLatestInfo() = withContext(Dispatchers.IO) {
         http.request<ReVancedAsset> {
             url(endpoint)
@@ -155,7 +159,8 @@ class JsonPatchBundle(
         displayName: String?,
         createdAt: Long?,
         updatedAt: Long?,
-        autoUpdate: Boolean
+        autoUpdate: Boolean,
+        enabled: Boolean
     ) = JsonPatchBundle(
         name,
         uid,
@@ -167,6 +172,7 @@ class JsonPatchBundle(
         directory,
         endpoint,
         autoUpdate,
+        enabled
     )
 }
 
@@ -181,7 +187,8 @@ class APIPatchBundle(
     directory: File,
     endpoint: String,
     autoUpdate: Boolean,
-) : RemotePatchBundle(name, uid, displayName, createdAt, updatedAt, installedVersionSignature, error, directory, endpoint, autoUpdate) {
+    enabled: Boolean,
+) : RemotePatchBundle(name, uid, displayName, createdAt, updatedAt, installedVersionSignature, error, directory, endpoint, autoUpdate, enabled) {
     private val api: ReVancedAPI by inject()
 
     override suspend fun getLatestInfo() = api.getPatchesUpdate().getOrThrow()
@@ -191,7 +198,8 @@ class APIPatchBundle(
         displayName: String?,
         createdAt: Long?,
         updatedAt: Long?,
-        autoUpdate: Boolean
+        autoUpdate: Boolean,
+        enabled: Boolean
     ) = APIPatchBundle(
         name,
         uid,
@@ -203,6 +211,7 @@ class APIPatchBundle(
         directory,
         endpoint,
         autoUpdate,
+        enabled
     )
 }
 
@@ -217,8 +226,9 @@ class GitHubPullRequestBundle(
     error: Throwable?,
     directory: File,
     endpoint: String,
-    autoUpdate: Boolean
-) : RemotePatchBundle(name, uid, displayName, createdAt, updatedAt, installedVersionSignature, error, directory, endpoint, autoUpdate) {
+    autoUpdate: Boolean,
+    enabled: Boolean
+) : RemotePatchBundle(name, uid, displayName, createdAt, updatedAt, installedVersionSignature, error, directory, endpoint, autoUpdate, enabled) {
 
     private val api: ReVancedAPI by inject()
 
@@ -319,7 +329,8 @@ class GitHubPullRequestBundle(
         displayName: String?,
         createdAt: Long?,
         updatedAt: Long?,
-        autoUpdate: Boolean
+        autoUpdate: Boolean,
+        enabled: Boolean
     ) = GitHubPullRequestBundle(
         name,
         uid,
@@ -330,7 +341,8 @@ class GitHubPullRequestBundle(
         error,
         directory,
         endpoint,
-        autoUpdate
+        autoUpdate,
+        enabled
     )
 }
 

@@ -85,9 +85,13 @@ class PatchBundleRepository(
             uid to (src.patchBundle ?: return@mapNotNull null)
         }.toMap()
     }
-    val bundleInfoFlow = store.state.map { it.info }
+    val allBundlesInfoFlow = store.state.map { it.info }
+    val enabledBundlesInfoFlow = allBundlesInfoFlow.map { info ->
+        info.filter { (_, bundleInfo) -> bundleInfo.enabled }
+    }
+    val bundleInfoFlow = enabledBundlesInfoFlow
 
-    fun scopedBundleInfoFlow(packageName: String, version: String?) = bundleInfoFlow.map {
+    fun scopedBundleInfoFlow(packageName: String, version: String?) = enabledBundlesInfoFlow.map {
         it.map { (_, bundleInfo) ->
             bundleInfo.forPackage(
                 packageName,
@@ -96,16 +100,16 @@ class PatchBundleRepository(
         }
     }
 
-    val patchCountsFlow = bundleInfoFlow.map { it.mapValues { (_, info) -> info.patches.size } }
+    val patchCountsFlow = allBundlesInfoFlow.map { it.mapValues { (_, info) -> info.patches.size } }
 
-    val suggestedVersions = bundleInfoFlow.map {
+    val suggestedVersions = enabledBundlesInfoFlow.map {
         val allPatches =
             it.values.flatMap { bundle -> bundle.patches.map(PatchInfo::toPatcherPatch) }.toSet()
 
         suggestedVersionsFor(allPatches)
     }
 
-    val suggestedVersionsByBundle = bundleInfoFlow.map { bundleInfos ->
+    val suggestedVersionsByBundle = enabledBundlesInfoFlow.map { bundleInfos ->
         bundleInfos.mapValues { (_, info) ->
             val patches = info.patches.map(PatchInfo::toPatcherPatch).toSet()
             suggestedVersionsFor(patches)
@@ -337,6 +341,7 @@ class PatchBundleRepository(
                     src.displayTitle,
                     bundle.manifestAttributes?.version,
                     src.uid,
+                    src.enabled,
                     PatchBundle.Loader.metadata(bundle)
                 )
             } catch (error: Throwable) {
@@ -379,7 +384,16 @@ class PatchBundleRepository(
         val normalizedDisplayName = displayName?.takeUnless { it.isBlank() }
 
         return when (source) {
-            is SourceInfo.Local -> LocalPatchBundle(actualName, uid, normalizedDisplayName, createdAt, updatedAt, null, dir)
+            is SourceInfo.Local -> LocalPatchBundle(
+                actualName,
+                uid,
+                normalizedDisplayName,
+                createdAt,
+                updatedAt,
+                null,
+                dir,
+                enabled
+            )
             is SourceInfo.API -> APIPatchBundle(
                 actualName,
                 uid,
@@ -391,6 +405,7 @@ class PatchBundleRepository(
                 dir,
                 SourceInfo.API.SENTINEL,
                 autoUpdate,
+                enabled,
             )
 
             is SourceInfo.Remote -> JsonPatchBundle(
@@ -404,6 +419,7 @@ class PatchBundleRepository(
                 dir,
                 source.url.toString(),
                 autoUpdate,
+                enabled,
             )
             // PR #35: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35
             is SourceInfo.GitHubPullRequest -> GitHubPullRequestBundle(
@@ -416,7 +432,8 @@ class PatchBundleRepository(
                 null,
                 dir,
                 source.url.toString(),
-                autoUpdate
+                autoUpdate,
+                enabled
             )
         }
     }
@@ -515,6 +532,7 @@ class PatchBundleRepository(
         val now = System.currentTimeMillis()
         val resolvedCreatedAt = createdAt ?: existingProps?.createdAt ?: now
         val resolvedUpdatedAt = updatedAt ?: now
+        val resolvedEnabled = existingProps?.enabled ?: true
         val entity = PatchBundleEntity(
             uid = resolvedUid,
             name = normalizedName,
@@ -522,6 +540,7 @@ class PatchBundleRepository(
             versionHash = null,
             source = source,
             autoUpdate = autoUpdate,
+            enabled = resolvedEnabled,
             sortOrder = assignedSortOrder,
             createdAt = resolvedCreatedAt,
             updatedAt = resolvedUpdatedAt
@@ -547,6 +566,7 @@ class PatchBundleRepository(
                 versionHash = new.versionHash,
                 source = new.source,
                 autoUpdate = new.autoUpdate,
+                enabled = new.enabled,
                 sortOrder = new.sortOrder,
                 createdAt = new.createdAt,
                 updatedAt = new.updatedAt
@@ -560,6 +580,39 @@ class PatchBundleRepository(
         state.sources.keys.forEach { directoryOf(it).deleteRecursively() }
         doReload()
     }
+
+    suspend fun disable(vararg bundles: PatchBundleSource) =
+        dispatchAction("Disable (${bundles.map { it.uid }.joinToString(",")})") {
+            bundles.forEach { bundle ->
+                updateDb(bundle.uid) { it.copy(enabled = !it.enabled) }
+            }
+            doReload()
+        }
+
+    suspend fun setEnabledStates(states: Map<Int, Boolean>) =
+        dispatchAction("Set bundle enabled states") { state ->
+            val updates = states.filter { (uid, enabled) ->
+                state.sources[uid]?.enabled != enabled
+            }
+            if (updates.isEmpty()) return@dispatchAction state
+
+            updates.forEach { (uid, enabled) ->
+                updateDb(uid) { it.copy(enabled = enabled) }
+            }
+
+            val sources = state.sources.mutate { map ->
+                updates.forEach { (uid, enabled) ->
+                    map[uid] = map[uid]?.copy(enabled = enabled) ?: return@forEach
+                }
+            }
+            val info = state.info.mutate { map ->
+                updates.forEach { (uid, enabled) ->
+                    map[uid] = map[uid]?.copy(enabled = enabled) ?: return@forEach
+                }
+            }
+
+            state.copy(sources = sources, info = info)
+        }
 
     suspend fun remove(vararg bundles: PatchBundleSource) =
         dispatchAction("Remove (${bundles.map { it.uid }.joinToString(",")})") { state ->
@@ -622,6 +675,7 @@ class PatchBundleRepository(
                     versionHash = props.versionHash,
                     source = props.source,
                     autoUpdate = props.autoUpdate,
+                    enabled = props.enabled,
                     sortOrder = props.sortOrder,
                     createdAt = props.createdAt,
                     updatedAt = props.updatedAt
@@ -1282,6 +1336,7 @@ class PatchBundleRepository(
             versionHash = null,
             source = Source.API,
             autoUpdate = false,
+            enabled = true,
             sortOrder = 0,
             createdAt = System.currentTimeMillis(),
             updatedAt = System.currentTimeMillis()
