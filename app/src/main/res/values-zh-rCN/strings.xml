@@ -961,6 +961,8 @@
     <string name="patches_prereleases">使用预发布版本</string>
     <string name="patches_prereleases_description">使用 %s 的预发布版本</string>
     <string name="patches_url">补丁包 URL</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_urls_link">Get patch bundle URLs here</string>
     <string name="incompatible_patches_dialog">这些补丁与选定的应用版本 (%1$s) 不兼容。\n\n点击补丁查看更多详情。</string>
     <string name="incompatible_patch">不兼容的补丁</string>
     <string name="any_version">任意</string>

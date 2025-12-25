@@ -962,6 +962,7 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="patches_prereleases">Use pre-releases</string>
     <string name="patches_prereleases_description">Use pre-release versions of %s</string>
     <string name="patches_url">Patch bundle URL</string>
+    <string name="patch_bundle_urls_link">Get patch bundle URLs here</string>
     <string name="incompatible_patches_dialog">These patches are not compatible with the selected app version (%1$s).\n\nClick on the patches to see more details.</string>
     <string name="incompatible_patch">Incompatible patch</string>
     <string name="any_version">Any</string>

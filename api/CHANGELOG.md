@@ -16,6 +16,7 @@
 - Patch filter selections on the patch selection page now persist https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/73
 - Improved patch selection screen UI
 - Added chip tags on patches on the patch selection screen showing the versions said patch supports https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/75
+- Added a "Get patch bundle URLs here" widget on the "Add a patch bundle" dialog that links to the "ReVanced-Patch-Bundles" repo
 
 
 # Bug fixes

@@ -900,6 +900,8 @@
     <string name="patches_prereleases">プレリリースを使用</string>
     <string name="patches_prereleases_description">%s のプレリリースバージョンを使用する</string>
     <string name="patches_url">パッチバンドルURL</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_urls_link">Get patch bundle URLs here</string>
     <string name="incompatible_patches_dialog">これらのパッチは、選択されたアプリバージョン (%1$s) と互換性がありません。\n\n詳細を表示するにはパッチをクリックしてください。</string>
     <string name="incompatible_patch">互換性のないパッチ</string>
     <string name="any_version">任意</string>

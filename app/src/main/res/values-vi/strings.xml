@@ -932,6 +932,8 @@ Bạn có thể tự xóa chúng, điều chỉnh lựa chọn, hoặc cứ ti�
     <string name="patches_prereleases">Dùng bản phát hành trước</string>
     <string name="patches_prereleases_description">Dùng phiên bản phát hành trước của %s</string>
     <string name="patches_url">URL gói vá</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_urls_link">Get patch bundle URLs here</string>
     <string name="incompatible_patches_dialog">Những bản vá này không tương thích với phiên bản ứng dụng đã chọn (%1$s)\n\nNhấn vào các bản vá để biết chi tiết.</string>
     <string name="incompatible_patch">Bản vá không tương thích</string>
     <string name="any_version">Bất kỳ</string>
