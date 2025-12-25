@@ -25,7 +25,7 @@ class PreferencesManager(
     val customAccentColor = stringPreference("custom_accent_color", "")
     val customThemeColor = stringPreference("custom_theme_color", "")
     val theme = enumPreference("theme", Theme.SYSTEM)
-    val appLanguage = stringPreference("app_language", "en")
+    val appLanguage = stringPreference("app_language", "system")
 
     val api = stringPreference("api_url", "https://api.revanced.app")
     // PR #35: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35
@@ -65,6 +65,9 @@ class PreferencesManager(
     val suggestedVersionSafeguard = booleanPreference("suggested_version_safeguard", true)
     val disablePatchSelectionConfirmations = booleanPreference("disable_patch_selection_confirmations", false)
     val collapsePatchActionsOnSelection = booleanPreference("collapse_patch_actions_on_selection", true)
+    val patchSelectionFilterFlags = intPreference("patch_selection_filter_flags", -1)
+    val patchSelectionSortAlphabetical = booleanPreference("patch_selection_sort_alphabetical", false)
+    val patchSelectionSortSettingsMode = stringPreference("patch_selection_sort_settings_mode", "None")
     val patchSelectionActionOrder =
         stringPreference("patch_selection_action_order", PATCH_ACTION_ORDER_DEFAULT)
     val patchSelectionHiddenActions =
@@ -110,6 +113,9 @@ class PreferencesManager(
         val suggestedVersionSafeguard: Boolean? = null,
         val disablePatchSelectionConfirmations: Boolean? = null,
         val collapsePatchActionsOnSelection: Boolean? = null,
+        val patchSelectionFilterFlags: Int? = null,
+        val patchSelectionSortAlphabetical: Boolean? = null,
+        val patchSelectionSortSettingsMode: String? = null,
         val patchSelectionActionOrder: String? = null,
         val patchSelectionHiddenActions: Set<String>? = null,
         val acknowledgedDownloaderPlugins: Set<String>? = null,
@@ -152,6 +158,9 @@ class PreferencesManager(
         suggestedVersionSafeguard = suggestedVersionSafeguard.get(),
         disablePatchSelectionConfirmations = disablePatchSelectionConfirmations.get(),
         collapsePatchActionsOnSelection = collapsePatchActionsOnSelection.get(),
+        patchSelectionFilterFlags = patchSelectionFilterFlags.get(),
+        patchSelectionSortAlphabetical = patchSelectionSortAlphabetical.get(),
+        patchSelectionSortSettingsMode = patchSelectionSortSettingsMode.get(),
         patchSelectionActionOrder = patchSelectionActionOrder.get(),
         patchSelectionHiddenActions = patchSelectionHiddenActions.get(),
         acknowledgedDownloaderPlugins = acknowledgedDownloaderPlugins.get(),
@@ -196,6 +205,9 @@ class PreferencesManager(
         snapshot.suggestedVersionSafeguard?.let { suggestedVersionSafeguard.value = it }
         snapshot.disablePatchSelectionConfirmations?.let { disablePatchSelectionConfirmations.value = it }
         snapshot.collapsePatchActionsOnSelection?.let { collapsePatchActionsOnSelection.value = it }
+        snapshot.patchSelectionFilterFlags?.let { patchSelectionFilterFlags.value = it }
+        snapshot.patchSelectionSortAlphabetical?.let { patchSelectionSortAlphabetical.value = it }
+        snapshot.patchSelectionSortSettingsMode?.let { patchSelectionSortSettingsMode.value = it }
         snapshot.patchSelectionActionOrder?.let { patchSelectionActionOrder.value = it }
         snapshot.patchSelectionHiddenActions?.let { patchSelectionHiddenActions.value = it }
         snapshot.acknowledgedDownloaderPlugins?.let { acknowledgedDownloaderPlugins.value = it }

@@ -21,7 +21,8 @@ sealed class PatchBundleSource(
     val createdAt: Long?,
     val updatedAt: Long?,
     error: Throwable?,
-    protected val directory: File
+    protected val directory: File,
+    val enabled: Boolean
 ) {
     protected val patchesFile = directory.resolve("patches.jar")
     internal val patchesJarFile: File get() = patchesFile
@@ -51,7 +52,8 @@ sealed class PatchBundleSource(
         name: String = this.name,
         displayName: String? = this.displayName,
         createdAt: Long? = this.createdAt,
-        updatedAt: Long? = this.updatedAt
+        updatedAt: Long? = this.updatedAt,
+        enabled: Boolean = this.enabled
     ): PatchBundleSource
 
     protected fun hasInstalled() = patchesFile.exists()

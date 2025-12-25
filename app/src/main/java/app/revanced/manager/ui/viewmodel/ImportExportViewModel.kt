@@ -41,11 +41,13 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromStream
 import kotlinx.serialization.json.encodeToStream
+import java.util.concurrent.atomic.AtomicBoolean
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
@@ -117,6 +119,7 @@ data class PatchBundleSnapshot(
     val name: String,
     val displayName: String? = null,
     val autoUpdate: Boolean = false,
+    val enabled: Boolean = true,
     val officialState: OfficialBundleState? = null,
     val position: Int? = null,
     val officialAutoUpdate: Boolean? = null,
@@ -293,6 +296,7 @@ class ImportExportViewModel(
         withContext(NonCancellable) {
             uiSafe(app, R.string.import_patch_bundles_fail, "Failed to import patch bundles") {
                 coroutineScope {
+                    val importActive = AtomicBoolean(true)
                     val progressToast = withContext(Dispatchers.Main) {
                         Toast.makeText(
                             app,
@@ -331,15 +335,21 @@ class ImportExportViewModel(
                                 .mapNotNull { it.asRemoteOrNull }
                             val endpointToSource =
                                 initialSources.associateBy { it.endpoint }.toMutableMap()
+                            val importedEndpoints = exportFile.bundles
+                                .map { it.endpoint.trim() }
+                                .filter { it.isNotBlank() && !it.equals(SourceInfo.API.SENTINEL, true) }
+                                .toSet()
 
                             var createdCount = 0
                             var updatedCount = 0
                             var officialSnapshot: PatchBundleSnapshot? = null
+                            val pendingEnabledUpdates = LinkedHashMap<Int, Boolean>()
                             val total = exportFile.bundles.size.coerceAtLeast(1)
                             var processed = 0
 
                             for (snapshot in exportFile.bundles) {
                                 val endpoint = snapshot.endpoint.trim()
+                                val snapshotEnabled = snapshot.enabled
                                 val displayName = snapshot.displayName?.trim().takeUnless { it.isNullOrBlank() }
                                 val snapshotName = snapshot.name.trim().takeUnless { it.isBlank() }
                                 val bundleLabel = (displayName ?: snapshotName)
@@ -366,15 +376,16 @@ class ImportExportViewModel(
                                     }.getOrNull()
                                     ?: endpoint
 
-                                fun setImportProgress(
-                                    phase: PatchBundleRepository.BundleImportPhase,
-                                    bytesRead: Long = 0L,
-                                    bytesTotal: Long? = null,
-                                ) {
-                                    patchBundleRepository.setBundleImportProgress(
-                                        PatchBundleRepository.ImportProgress(
-                                            processed = processed,
-                                            total = total,
+                            fun setImportProgress(
+                                phase: PatchBundleRepository.BundleImportPhase,
+                                bytesRead: Long = 0L,
+                                bytesTotal: Long? = null,
+                            ) {
+                                if (!importActive.get()) return
+                                patchBundleRepository.setBundleImportProgress(
+                                    PatchBundleRepository.ImportProgress(
+                                        processed = processed,
+                                        total = total,
                                             currentBundleName = bundleLabel.takeIf { it.isNotBlank() },
                                             phase = phase,
                                             bytesRead = bytesRead,
@@ -383,12 +394,13 @@ class ImportExportViewModel(
                                     )
                                 }
 
-                                fun finishImportItem() {
-                                    processed += 1
-                                    patchBundleRepository.setBundleImportProgress(
-                                        PatchBundleRepository.ImportProgress(processed, total)
-                                    )
-                                }
+                            fun finishImportItem() {
+                                if (!importActive.get()) return
+                                processed += 1
+                                patchBundleRepository.setBundleImportProgress(
+                                    PatchBundleRepository.ImportProgress(processed, total)
+                                )
+                            }
 
                                 setImportProgress(PatchBundleRepository.BundleImportPhase.Processing)
                                 if (endpoint.equals(SourceInfo.API.SENTINEL, true)) {
@@ -418,6 +430,10 @@ class ImportExportViewModel(
                                         with(patchBundleRepository) {
                                             current.setAutoUpdate(snapshot.autoUpdate)
                                         }
+                                        changed = true
+                                    }
+                                    if (current.enabled != snapshotEnabled) {
+                                        pendingEnabledUpdates[current.uid] = snapshotEnabled
                                         changed = true
                                     }
                                     val needsCreatedAtUpdate = snapshot.createdAt != null && snapshot.createdAt != current.createdAt
@@ -457,10 +473,16 @@ class ImportExportViewModel(
                                 }
 
                                 setImportProgress(PatchBundleRepository.BundleImportPhase.Finalizing)
-                                val created = patchBundleRepository.sources
-                                    .map { sources -> sources.mapNotNull { it.asRemoteOrNull } }
-                                    .first { sources -> sources.any { it.endpoint == endpoint } }
-                                    .first { it.endpoint == endpoint }
+                                val created = withTimeoutOrNull(15_000) {
+                                    patchBundleRepository.sources
+                                        .map { sources -> sources.mapNotNull { it.asRemoteOrNull } }
+                                        .first { sources -> sources.any { it.endpoint == endpoint } }
+                                        .first { it.endpoint == endpoint }
+                                }
+                                if (created == null) {
+                                    finishImportItem()
+                                    continue
+                                }
 
                                 createdCount += 1
                                 endpointToSource[endpoint] = created
@@ -472,6 +494,9 @@ class ImportExportViewModel(
                                     with(patchBundleRepository) {
                                         created.setAutoUpdate(snapshot.autoUpdate)
                                     }
+                                }
+                                if (created.enabled != snapshotEnabled) {
+                                    pendingEnabledUpdates[created.uid] = snapshotEnabled
                                 }
 
                                 finishImportItem()
@@ -518,6 +543,10 @@ class ImportExportViewModel(
                                                     officialUpdated = true
                                                 }
                                             }
+                                            if (source.enabled != snapshot.enabled) {
+                                                pendingEnabledUpdates[source.uid] = snapshot.enabled
+                                                officialUpdated = true
+                                            }
                                             snapshot.officialUsePrereleases?.let { usePrereleases ->
                                                 preferencesManager.usePatchesPrereleases.update(usePrereleases)
                                                 officialUpdated = true
@@ -540,6 +569,10 @@ class ImportExportViewModel(
                                             }
                                     }
                                 }
+                            }
+
+                            if (pendingEnabledUpdates.isNotEmpty()) {
+                                patchBundleRepository.setEnabledStates(pendingEnabledUpdates)
                             }
 
                             if (shouldRemoveOfficial) {
@@ -619,11 +652,22 @@ class ImportExportViewModel(
                                 }
                             }
 
+                            val missingRemotes = patchBundleRepository.sources.first()
+                                .mapNotNull { it.asRemoteOrNull }
+                                .filter { remote ->
+                                    remote.endpoint in importedEndpoints &&
+                                        remote.state is PatchBundleSource.State.Missing
+                                }
+                            if (missingRemotes.isNotEmpty()) {
+                                patchBundleRepository.update(*missingRemotes.toTypedArray())
+                            }
+
                             PatchBundleImportSummary(createdCount, updatedCount)
                         }
                     } finally {
                         toastRepeater.cancel()
                         withContext(Dispatchers.Main) { progressToast.cancel() }
+                        importActive.set(false)
                         patchBundleRepository.setBundleImportProgress(null)
                     }
 
@@ -649,16 +693,17 @@ class ImportExportViewModel(
             val localSources = nonDefaultSources.filter { it.asRemoteOrNull == null }
             val remoteSources = nonDefaultSources.mapNotNull { it.asRemoteOrNull }
 
-            val officialSource = sources.firstOrNull { it.isDefault }
-            val officialDisplayName = officialSource
-                ?.displayName
-                ?.takeUnless { it.isBlank() }
-            val officialState = officialSource?.let { OfficialBundleState.PRESENT } ?: OfficialBundleState.ABSENT
+                val officialSource = sources.firstOrNull { it.isDefault }
+                val officialDisplayName = officialSource
+                    ?.displayName
+                    ?.takeUnless { it.isBlank() }
+                val officialState = officialSource?.let { OfficialBundleState.PRESENT } ?: OfficialBundleState.ABSENT
+                val officialEnabled = officialSource?.enabled ?: true
 
-            val exportedCount = remoteSources.size
+                val exportedCount = remoteSources.size
 
-            val positionLookup = sources.withIndex().associate { it.value.uid to it.index }
-            val officialAutoUpdate = officialSource?.asRemoteOrNull?.autoUpdate ?: false
+                val positionLookup = sources.withIndex().associate { it.value.uid to it.index }
+                val officialAutoUpdate = officialSource?.asRemoteOrNull?.autoUpdate ?: false
             val officialUsePrereleases = preferencesManager.usePatchesPrereleases.get()
 
             val bundles = buildList {
@@ -668,6 +713,7 @@ class ImportExportViewModel(
                         name = it.name,
                         displayName = it.displayName,
                         autoUpdate = it.autoUpdate,
+                        enabled = it.enabled,
                         position = positionLookup[it.uid],
                         createdAt = it.createdAt,
                         updatedAt = it.updatedAt
@@ -679,6 +725,7 @@ class ImportExportViewModel(
                         name = "",
                         displayName = officialDisplayName,
                         autoUpdate = officialAutoUpdate,
+                        enabled = officialEnabled,
                         officialState = officialState,
                         position = officialSource?.let { positionLookup[it.uid] },
                         officialAutoUpdate = officialAutoUpdate,
@@ -721,7 +768,7 @@ class ImportExportViewModel(
                 }
 
                 val sourcesSnapshot = patchBundleRepository.sources.first()
-                val signatureSnapshot = patchBundleRepository.bundleInfoFlow.first()
+                val signatureSnapshot = patchBundleRepository.allBundlesInfoFlow.first()
                     .mapValues { (_, info) -> info.patches.map { it.name.trim().lowercase() }.toSet() }
                 val remappedEntries = entries.map { entry ->
                     val remappedPayload = entry.payload.remapLocalBundles(sourcesSnapshot, signatureSnapshot)

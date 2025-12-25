@@ -83,7 +83,7 @@ fun InstalledAppInfoScreen(
     val context = LocalContext.current
     val patchBundleRepository: PatchBundleRepository = koinInject()
     val prefs: PreferencesManager = koinInject()
-    val bundleInfo by patchBundleRepository.bundleInfoFlow.collectAsStateWithLifecycle(emptyMap())
+    val bundleInfo by patchBundleRepository.allBundlesInfoFlow.collectAsStateWithLifecycle(emptyMap())
     val bundleSources by patchBundleRepository.sources.collectAsStateWithLifecycle(emptyList())
     val allowUniversalPatches by prefs.disableUniversalPatchCheck.getAsState()
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
@@ -243,6 +243,24 @@ fun InstalledAppInfoScreen(
         )
     }
 
+    viewModel.signatureMismatchPackage?.let {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissSignatureMismatchPrompt,
+            confirmButton = {
+                TextButton(onClick = viewModel::confirmSignatureMismatchInstall) {
+                    Text(stringResource(R.string.installation_signature_mismatch_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissSignatureMismatchPrompt) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+            title = { Text(stringResource(R.string.installation_signature_mismatch_dialog_title)) },
+            text = { Text(stringResource(R.string.installation_signature_mismatch_description)) }
+        )
+    }
+
     viewModel.mountVersionMismatchMessage?.let { message ->
         AlertDialog(
             onDismissRequest = viewModel::dismissMountVersionMismatch,
@@ -367,8 +385,14 @@ fun InstalledAppInfoScreen(
             .padding(horizontal = 16.dp)
             .clip(RoundedCornerShape(24.dp))
     ) {
-        val installType = installedApp.installType
         val hasRoot = viewModel.rootInstaller.hasRootAccess()
+        val installType = remember(installedApp.installType, viewModel.primaryInstallerIsMount, hasRoot) {
+            if (installedApp.installType == InstallType.SAVED && viewModel.primaryInstallerIsMount && hasRoot) {
+                InstallType.MOUNT
+            } else {
+                installedApp.installType
+            }
+        }
         val rootRequiredText = stringResource(R.string.installer_status_requires_root)
 
         if (viewModel.appInfo != null) {

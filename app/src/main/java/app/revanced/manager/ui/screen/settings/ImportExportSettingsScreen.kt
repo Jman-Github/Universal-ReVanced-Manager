@@ -184,24 +184,33 @@ fun ImportExportSettingsScreen(
 
             importProgress?.let { progress ->
                 val subtitleParts = buildList {
-                    add(
-                        stringResource(
-                            R.string.import_patch_bundles_banner_subtitle,
-                            progress.processed,
-                            progress.total
-                        )
-                    )
+                    val total = progress.total.coerceAtLeast(1)
+                    val stepLabel = if (progress.isStepBased) {
+                        val step = (progress.processed + 1).coerceAtMost(total)
+                        stringResource(R.string.import_patch_bundles_banner_steps, step, total)
+                    } else {
+                        stringResource(R.string.import_patch_bundles_banner_subtitle, progress.processed, total)
+                    }
+                    add(stepLabel)
                     val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList
-                    val phaseText = when (progress.phase) {
-                        BundleImportPhase.Processing -> "Processing"
-                        BundleImportPhase.Downloading -> "Downloading"
-                        BundleImportPhase.Finalizing -> "Finalizing"
+                    val phaseText = if (progress.isStepBased) {
+                        when (progress.phase) {
+                            BundleImportPhase.Downloading -> "Copying bundle"
+                            BundleImportPhase.Processing -> "Writing bundle"
+                            BundleImportPhase.Finalizing -> "Finalizing import"
+                        }
+                    } else {
+                        when (progress.phase) {
+                            BundleImportPhase.Processing -> "Processing"
+                            BundleImportPhase.Downloading -> "Downloading"
+                            BundleImportPhase.Finalizing -> "Finalizing"
+                        }
                     }
                     val detail = buildString {
                         append(phaseText)
                         append(": ")
                         append(name)
-                        if (progress.phase == BundleImportPhase.Downloading) {
+                        if (progress.bytesTotal?.takeIf { it > 0L } != null) {
                             append(" (")
                             append(Formatter.formatShortFileSize(context, progress.bytesRead))
                             progress.bytesTotal?.takeIf { it > 0L }?.let { total ->

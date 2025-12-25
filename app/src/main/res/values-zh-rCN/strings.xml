@@ -103,7 +103,8 @@
     <string name="bundle_version_dialog_other_title">选择其他支持的版本：</string>
     <string name="bundle_version_dialog_locked_title">版本保护已启用</string>
     <string name="bundle_version_dialog_locked_hint">前往 设置 > 高级 > 保护措施，并将“要求使用建议的应用版本”（关闭）和“禁用版本兼容性检查”（开启）都设置好，才能选择特定包的版本。</string>
-
+    <!-- Needs translation -->
+    <string name="patch_versions_dialog_title">Supported versions for %1$s</string>
     <string name="patch_item_description">开始修补应用程序</string>
     <string name="patch_selector_item">选择补丁</string>
     <string name="patch_selector_item_description">已选择 %d 个补丁</string>
@@ -191,6 +192,8 @@
     <string name="patch_selection_safeguard_description">不阻止选择或取消选择补丁以及自定义选项</string>
     <string name="patch_selection_safeguard_confirmation">更改补丁选择可能导致意外问题。\n\n仍然要启用吗？</string>
     <string name="universal_patches_safeguard">显示 &amp; 允许使用通用补丁</string>
+    <!-- Needs translation -->
+    <string name="universal_patches_safeguard_confirmation">"Universal patches are not as well tested as those meant for specific apps.\n\nEnable anyway?"</string>
     <string name="universal_patches_safeguard_description">不隐藏通用补丁或阻止使用它们</string>
     <string name="universal_patches_profile_blocked_title">通用补丁已禁用</string>
     <string name="universal_patches_profile_blocked_description">此补丁配置文件包含通用补丁。请在高级设置中启用“%1$s”以使用它。</string>
@@ -225,6 +228,8 @@
     <string name="import_patch_bundles_none">没有导入新的补丁包</string>
     <string name="import_patch_bundles_banner_title">正在导入补丁包</string>
     <string name="import_patch_bundles_banner_subtitle">已处理 %1$d / %2$d</string>
+    <!-- Needs translation -->
+    <string name="import_patch_bundles_banner_steps">Step %1$d of %2$d</string>
     <string name="import_patch_profiles">导入补丁配置文件</string>
     <string name="import_patch_profiles_description">从 JSON 文件导入保存的补丁配置文件</string>
     <string name="import_patch_profiles_fail">无法导入补丁配置文件：%s</string>
@@ -350,6 +355,10 @@
     <string name="downloader_plugin_trust_dialog_title">信任插件？</string>
     <string name="downloader_plugin_revoke_trust_dialog_title">撤销信任？</string>
     <string name="downloader_plugin_trust_dialog_body">包名：%1$s\n签名 (SHA-256)：%2$s</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_trust_dialog_plugin">"Plugin:\n%s"</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_trust_dialog_signature">"Signature:\n\n%s"</string>
     <string name="downloader_plugin_view_error">查看错误详情</string>
     <string name="downloader_plugin_failed_dialog_body">加载 \"%1$s\" 失败。您可以查看错误详情或卸载该插件。</string>
     <string name="downloader_plugin_uninstall_title">卸载插件？</string>
@@ -457,6 +466,10 @@
 
     <string name="language_option_vietnamese">Vietnamese</string>
     <string name="language_option_japanese">日语</string>
+    <!-- Needs translation -->
+    <string name="language_option_russian">Russian</string>
+    <!-- Needs translation -->
+    <string name="language_option_ukrainian">Ukrainian</string>
 
     <string name="patcher_preflight_missing_patch_message">The following patches aren\'t available in the current bundle:\n%1$s\nYou can remove them automatically, adjust the selection, or continue anyway.</string>
 
@@ -488,6 +501,18 @@
     <string name="tab_patches">补丁包</string>
     <string name="tab_profiles">补丁配置文件</string>
     <string name="delete">删除</string>
+    <!-- Needs translation -->
+    <string name="disable">Disable</string>
+    <!-- Needs translation -->
+    <string name="enable">Enable</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_enabled_toast">Enabled %d bundle(s)</string>
+    <!-- Needs translation -->
+    <string name="patches_enable_single_dialog_description">Enable "%s"?</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_disabled_toast">Disabled %d bundle(s)</string>
+    <!-- Needs translation -->
+    <string name="patches_disable_single_dialog_description">Disable "%s"?</string>
     <string name="refresh">刷新</string>
     <string name="continue_anyways">仍然继续</string>
     <string name="download_another_version">下载其他版本</string>
@@ -735,14 +760,27 @@
     <string name="install_app">安装</string>
     <!-- Translation needed -->
     <string name="install_app_success">Installed successfully</string>
+
+    <!-- Needs translation -->
+
+    <!-- Needs translation -->
+
+
+    <string name="uninstalling_ellipsis">Uninstalling…</string>
     <string name="install_app_fail_title">安装失败</string>
     <!-- Translation needed -->
     <string name="install_app_fail">Failed to install app: %s</string>
+    <!-- Needs translation -->
+    <string name="install_app_fail_missing_stock">Missing original APK for mount install.</string>
+    <!-- Needs translation -->
+    <string name="mount_split_not_supported">Rooted mount installer does not support split APKs. Use system installer instead.</string>
     <!-- Translation needed -->
     <string name="mount_app_fail_title">Mount failed</string>
     <!-- Translation needed -->
     <string name="mount_app_fail">Failed to mount app: %1$s</string>
     <string name="install_timeout_message">安装未完成。请检查系统安装程序对话框并重试。</string>
+    <!-- Needs translation -->
+    <string name="uninstall_timeout_message">Uninstallation did not finish. Check the uninstall dialog and try again.</string>
     <string name="reinstall_app_fail">重新安装应用失败：%s</string>
     <string name="uninstall_app_fail">卸载应用失败：%s</string>
     <string name="open_app">打开</string>
@@ -911,11 +949,17 @@
     <string name="installation_aborted_description">安装被手动取消。要重试吗？</string>
     <string name="installation_blocked_description">安装被阻止。请检查您的设备安全设置并重试。</string>
     <string name="installation_conflict_description">安装被应用的现有安装阻止。要卸载已安装的应用并重试吗？</string>
+    <!-- Needs translation -->
+    <string name="installation_signature_mismatch_dialog_title">Signature mismatch</string>
+    <!-- Needs translation -->
+    <string name="installation_signature_mismatch_description">The installed app is signed differently. Uninstall the installed app and install this one?</string>
     <string name="installation_incompatible_description">应用与此设备不兼容。请使用与此设备兼容的 APK 并重试。</string>
     <string name="installation_invalid_description">应用无效。要卸载该应用并重试吗？</string>
     <string name="installation_storage_issue_description">由于存储空间不足，无法安装应用。请释放一些空间后重试。</string>
     <string name="installation_timeout_description">安装耗时过长。要重试吗？</string>
     <string name="reinstall">重新安装</string>
+    <!-- Needs translation -->
+    <string name="installation_signature_mismatch_confirm">Uninstall and install</string>
     <string name="show">显示</string>
     <string name="debugging">调试</string>
     <string name="about_device">关于设备</string>
@@ -927,6 +971,8 @@
     <string name="patches_prereleases">使用预发布版本</string>
     <string name="patches_prereleases_description">使用 %s 的预发布版本</string>
     <string name="patches_url">补丁包 URL</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_urls_link">Get patch bundle URLs here</string>
     <string name="incompatible_patches_dialog">这些补丁与选定的应用版本 (%1$s) 不兼容。\n\n点击补丁查看更多详情。</string>
     <string name="incompatible_patch">不兼容的补丁</string>
     <string name="any_version">任意</string>
@@ -954,3 +1000,5 @@
     <string name="plugins_help_description">下载器是一个插件，它允许 URV 从各种来源下载官方 APK 文件。下载的 APK 文件将显示在底部区域。在修补过程中，您可以选择已下载的 APK 文件，也可以通过插件下载。\n\n支持的下载器插件列表请参见此处。</string>
     <string name="here">此处</string>
 </resources>
+
+
