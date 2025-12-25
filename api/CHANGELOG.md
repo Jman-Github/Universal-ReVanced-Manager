@@ -24,7 +24,7 @@
 - Fixed an occasional crash that occurred with some users when opening the app and quickly going to the app selection page and opening a "Show suggested versions" expandable
 - Fixed instability of Rooted mount installer
 - Fixed an issue where the Rooted mount installer would be selectable for users who are non-root
-- Fixed importing patch bundles from storage taking much longer than it should to import (larger patch bundles till take some time) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/66
+- Fixed importing patch bundles from storage taking taking a long time https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/66
 - Fixed the occasional issue where a patch profile without Universal Patches would claim it requires universal patches enabled in order to use the said profile
 - Fixed slow download speeds for remote patch bundles
 - Fixed issues with deleting patch bundles during imports

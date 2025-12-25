@@ -36,6 +36,26 @@ class LocalPatchBundle(
         }
     }
 
+    suspend fun replaceFromTempFile(
+        tempFile: File,
+        totalBytes: Long? = null,
+        onProgress: ((bytesRead: Long, totalBytes: Long?) -> Unit)? = null
+    ): Boolean = withContext(Dispatchers.IO) {
+        val target = patchesJarFile
+        target.parentFile?.mkdirs()
+        target.setWritable(true, true)
+        if (target.exists() && !target.delete()) {
+            return@withContext false
+        }
+        if (!tempFile.renameTo(target)) {
+            return@withContext false
+        }
+        target.setReadOnly()
+        requireNonEmptyPatchesFile("Importing patch bundle")
+        onProgress?.invoke(0L, totalBytes)
+        return@withContext true
+    }
+
     override fun copy(
         error: Throwable?,
         name: String,

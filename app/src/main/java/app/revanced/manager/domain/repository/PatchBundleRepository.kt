@@ -983,19 +983,34 @@ class PatchBundleRepository(
                     val localBundle = entity.load() as LocalPatchBundle
 
                     try {
-                        tempFile.inputStream().use { patches ->
-                            localBundle.replace(
-                                patches,
-                                totalBytes = replaceTotal
-                            ) { read, total ->
-                                setLocalImportProgress(
-                                    baseProcessed = baseProcessed,
-                                    offset = 1,
-                                    displayName = displayName,
-                                    phase = BundleImportPhase.Processing,
-                                    bytesRead = read,
-                                    bytesTotal = total,
-                                )
+                        val moved = localBundle.replaceFromTempFile(
+                            tempFile,
+                            totalBytes = replaceTotal
+                        ) { read, total ->
+                            setLocalImportProgress(
+                                baseProcessed = baseProcessed,
+                                offset = 1,
+                                displayName = displayName,
+                                phase = BundleImportPhase.Processing,
+                                bytesRead = read,
+                                bytesTotal = total,
+                            )
+                        }
+                        if (!moved) {
+                            tempFile.inputStream().use { patches ->
+                                localBundle.replace(
+                                    patches,
+                                    totalBytes = replaceTotal
+                                ) { read, total ->
+                                    setLocalImportProgress(
+                                        baseProcessed = baseProcessed,
+                                        offset = 1,
+                                        displayName = displayName,
+                                        phase = BundleImportPhase.Processing,
+                                        bytesRead = read,
+                                        bytesTotal = total,
+                                    )
+                                }
                             }
                         }
                     } catch (e: Exception) {
@@ -1017,14 +1032,22 @@ class PatchBundleRepository(
                 } finally {
                     tempFile.delete()
                 }
+                setLocalImportProgress(
+                    baseProcessed = baseProcessed,
+                    offset = LOCAL_IMPORT_STEPS - 1,
+                    displayName = displayName,
+                    phase = BundleImportPhase.Finalizing,
+                    bytesRead = 0L,
+                    bytesTotal = null,
+                )
                 dispatchAction("Add bundle") { doReload() }
                 setLocalImportProgress(
                     baseProcessed = baseProcessed,
                     offset = LOCAL_IMPORT_STEPS,
                     displayName = displayName,
                     phase = BundleImportPhase.Finalizing,
-                    bytesRead = copyTotal ?: copyRead,
-                    bytesTotal = copyTotal,
+                    bytesRead = 0L,
+                    bytesTotal = null,
                 )
             } finally {
                 completeLocalImport()
