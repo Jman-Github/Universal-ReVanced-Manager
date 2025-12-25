@@ -4,14 +4,14 @@
 # Features
 
 - Added a dialog that appears for apps with mismatched signatures https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/61
-- Added a split APK not support guard for the Rooted mount installer
+- Added a split APK unsupported guard for the Rooted mount installer
 - Added additional guards and checks during patch bundle importing using a remote URL
-- Added a "Use device langauge" option that uses the devices set langauge if avaliable, if not it falls back to English https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/69
+- Added a "Use device language" option that uses the device's set language if available; if not, it falls back to English https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/69
 - Importing patch bundles from a file now shows the progress of the import (similar to how importing remote bundles work)
-- Imrpoved monochrome icons
+- Improved monochrome icons
 - Added the ability to disable patch bundles, which removes the bundle from the patch selection page, and grays out the bundle on the patch bundles tab https://github.com/ReVanced/revanced-manager/pull/2731
 - Aligned the pencil button on the patch bundles tab to the other buttons (along with giving it the same size as the other buttons)
-- Added a search button next to all version listings under "Show suggested versions" on the app selection page. Tapping the new button searches with google the package name and the version number (example: com.google.android.youtube 20.51.38)
+- Added a search button next to all version listings under "Show suggested versions" on the app selection page. Tapping the new button searches with Google the package name and the version number (example: com.google.android.youtube 20.51.38)
 - Redesigned the UI of the app selection page
 - Patch filter selections on the patch selection page now persist https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/73
 - Improved patch selection screen UI
@@ -27,8 +27,8 @@
 - Fixed an occasional crash that occurred with some users when opening the app and quickly going to the app selection page and opening a "Show suggested versions" expandable
 - Fixed instability of Rooted mount installer
 - Fixed an issue where the Rooted mount installer would be selectable for users who are non-root
-- Fixed importing patch bundles from storage taking taking a long time https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/66
-- Fixed the occasional issue where a patch profile without Universal Patches would claim it requires universal patches enabled in order to use the said profile
+- Fixed importing patch bundles from storage taking a long time https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/66
+- Fixed the occasional issue where a patch profile without Universal Patches would claim it requires universal patches enabled in order to use that profile
 - Fixed slow download speeds for remote patch bundles
 - Fixed issues with deleting patch bundles during imports
 - Fixed issues with importing remote/local patch bundles on top of each other (starting another import when one is already going on)
@@ -100,7 +100,7 @@
 - Patch selection action buttons now remain visible at all times (graying out when unavailable) and automatically collapse when you scroll or switch bundles
 - New Advanced setting lets you choose whether the patch selection action panel should auto-collapse after toggling patches
 - Added a option in settings under Settings > Advanced "Patch selection action buttons order" that lets you reorder the patch selection action buttons
-- Hold tap on the uninstall button on the app info page for saved patched apps to get the option to update the said app (install over the existing one). The uninstall button still remains
+- Tap and hold the uninstall button on the app info page for saved patched apps to get the option to update that app (install over the existing one). The uninstall button still remains
 - Add downloader help dialog explaining plugins and linking to supported list https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/37
 - Updated to Liso’s patcher v22 (backwards compatible with existing patch bundles too) https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/39
 - Moved the rearrange patch bundles button in the patch bundles tab to the top right, next to the settings gear
@@ -145,19 +145,19 @@
 - New bundle recommendation picker lets you choose per-bundle suggested versions or override them with any other supported version
 - "Select an app" screen now groups bundle suggestions behind a toggle with inline dialogs for viewing additional supported versions
 - The built-in Official ReVanced patch bundle now shows a dedicated "Pre-installed" origin label when viewed or restored
-- Added a hyerplink in Settings > About that links to the unique features section of the README.md
+- Added a hyperlink in Settings > About that links to the unique features section of the README.md
 - Changed the "Universal ReVanced Manager" title text on the main three tabs to "URV Manager"
 - Updated the app icon of the manager to a custom one
-- Removed the "Open souce licenses" button & page in Settings > About
+- Removed the "Open source licenses" button & page in Settings > About
 
 
 # Bug fixes
 
 - Fixed patch option expandables in bundle patch lists collapsing or opening in sync when toggling multiple patches
-- Fixed incorrect themeing of certain UI elements with the pure black theme toggled on https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/15 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/20
+- Fixed incorrect theming of certain UI elements with the pure black theme toggled on https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/15 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/20
 - "Remove unused native libraries" setting should now actually remove all unnecessary/unused libraries completely when toggled on
 - Fixed repatching through the "Apps" tab & using last applied patches & sub options on apps not saving https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/19
-- Saved apps in the "Apps" tab should now stay (and not delete themselves automatically) when the user unisntalls the app directly from that page
+- Saved apps in the "Apps" tab should now stay (and not delete themselves automatically) when the user uninstalls the app directly from that page
 - Fixed issues with installing directly from the patcher page https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/22
 
 
@@ -205,7 +205,7 @@
   - Prevent back presses during installation
 - Added an advanced option to strip unused native libraries (unsupported ABIs) from patched APKs during the patching process (https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/7)
 - Added support for the manager to store multiple downloaded apps (ones downloaded through the downloader plugins) in the downloads settings & the ability to export the app to your devices storage
-- Added a "Downloaded apps" option on the select source screen for patching apps that allows the user to select a APK that the manager has cached from a downloader plugins downloads (this option will only appear if the said app is downloaded, otherwise you won't see it)
+- Added a "Downloaded apps" option on the select source screen for patching apps that allows the user to select an APK that the manager has cached from downloader plugin downloads (this option will only appear if that app is downloaded; otherwise you won't see it)
 - Added the ability to update an existing patch profiles through the save profile menu on the patch selection page
 - Exporting a patched app to storage from the patching screen will now automatically save the patched app under the "Apps" tab. This previously only occurred when the user installed the app directly from the patching screen
 - Added an accent color picker in appearance settings so users can choose a custom theme color (in addition to Material You and pure black)
@@ -230,7 +230,7 @@
 
 - Added a changelog log section in remote/URL imported patch bundles information that shows the latest GitHub release changelog for said bundle
 - Added a note on each patch bundle on whether they were imported via remote, or local (remote is via URL and local is via a file on your device)
-- Removed reduntant bundle counter on patches profile tab (there were two counters)
+- Removed redundant bundle counter on patches profile tab (there were two counters)
 
 
 # Bug fixes
@@ -249,8 +249,8 @@
 - Added a "Show actions" button that collapses/expands the action buttons in the patch selection menu
 - Added the ability to export and import Patch Profiles to/from JSON files
 - Added a copy patch bundle URL button in patch bundle options
-- Added the ability to export and import the managers settings from/to a JSON file (this only includes settings, not patch bundles, patch options, patch selections, etc)
-- Adjusted the placement of the patch selection menu action buttons to be go vertically instead of horizontally
+- Added the ability to export and import the manager's settings from/to a JSON file (this only includes settings, not patch bundles, patch options, patch selections, etc)
+- Adjusted the placement of the patch selection menu action buttons to go vertically instead of horizontally
 - Upstream with the Official ReVanced Manager `dev` branch
 
 

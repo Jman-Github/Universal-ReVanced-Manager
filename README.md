@@ -4,11 +4,11 @@
     <source
       width="256px"
       media="(prefers-color-scheme: dark)"
-      srcset="assests/icons/icon-circle.png"
+      srcset="assets/icons/icon-circle.png"
     >
     <img
       width="256px"
-      src="assests/icons/icon-circle.png"
+      src="assets/icons/icon-circle.png"
       alt="Universal ReVanced Manager icon"
     />
   
@@ -197,5 +197,3 @@ To import patch bundles into Universal ReVanced Manager, use my [ReVanced Patch 
 Universal ReVanced Manager is licensed under the GPLv3 license. Please see the [license file](https://github.com/Jman-Github/universal-revanced-manager/blob/main/LICENSE) for more information.
 [tl;dr](https://www.tldrlegal.com/license/gnu-general-public-license-v3-gpl-3) you may copy, distribute and modify Universal ReVanced Manager as long as you track changes/dates in source files.
 Any modifications to Universal ReVanced Manager must also be made available under the GPL, along with build & install instructions.
-
-
