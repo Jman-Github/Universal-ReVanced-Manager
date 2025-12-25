@@ -1,3 +1,41 @@
+# v1.6.1 (2025-12-19)
+
+
+# Features
+
+- Added a dialog that appears for apps with mismatched signatures https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/61
+- Added a split APK not support guard for the Rooted mount installer
+- Added additional guards and checks during patch bundle importing using a remote URL
+- Added a "Use device langauge" option that uses the devices set langauge if avaliable, if not it falls back to English https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/69
+- Importing patch bundles from a file now shows the progress of the import (similar to how importing remote bundles work)
+- Imrpoved monochrome icons
+- Added the ability to disable patch bundles, which removes the bundle from the patch selection page, and grays out the bundle on the patch bundles tab https://github.com/ReVanced/revanced-manager/pull/2731
+- Aligned the pencil button on the patch bundles tab to the other buttons (along with giving it the same size as the other buttons)
+- Added a search button next to all version listings under "Show suggested versions" on the app selection page. Tapping the new button searches with google the package name and the version number (example: com.google.android.youtube 20.51.38)
+- Redesigned the UI of the app selection page
+- Patch filter selections on the patch selection page now persist https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/73
+- Improved patch selection screen UI
+- Added chip tags on patches on the patch selection screen showing the versions said patch supports https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/75
+- Added a "Get patch bundle URLs here" widget on the "Add a patch bundle" dialog that links to the "ReVanced-Patch-Bundles" repo
+
+
+# Bug fixes
+
+- Fixed `.xapk`, `.apkm` and `.apks` file types not being selectable from the select from storage screen(s) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/63
+- Fixed an occasional crash that occurred with some users when opening the app and quickly going to the app selection page and opening a "Show suggested versions" expandable
+- Fixed instability of Rooted mount installer
+- Fixed an issue where the Rooted mount installer would be selectable for users who are non-root
+- Fixed importing patch bundles from storage taking taking a long time https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/66
+- Fixed the occasional issue where a patch profile without Universal Patches would claim it requires universal patches enabled in order to use the said profile
+- Fixed slow download speeds for remote patch bundles
+- Fixed issues with deleting patch bundles during imports
+- Fixed issues with importing remote/local patch bundles on top of each other (starting another import when one is already going on)
+
+# Docs
+
+- Added a new contributor to the "Contributors" section
+
+
 # v1.6.0 (2025-12-17)
 
 

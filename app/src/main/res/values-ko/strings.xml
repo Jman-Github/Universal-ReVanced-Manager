@@ -94,6 +94,8 @@
     <string name="bundle_version_dialog_other_title">지원되는 다른 버전 선택:</string>
     <string name="bundle_version_dialog_locked_title">버전 보안 기능을 활성화하였습니다</string>
     <string name="bundle_version_dialog_locked_hint">\"설정 &gt; 고급 &gt; 보안\"으로 이동하여 \"권장 앱 버전 요구\" (토글 끄기)와 \"\'버전 호환성 검사 비활성화\" (토글 켜기)를 모두 설정하여 번들별 버전을 선택하세요.</string>
+    <!-- Needs translation -->
+    <string name="patch_versions_dialog_title">Supported versions for %1$s</string>
     <string name="patch_item_description">애플리케이션 패치를 시작하였습니다</string>
     <string name="patch_selector_item">패치 선택하기</string>
     <string name="patch_selector_item_description">%d 개의 패치를 선택하였습니다</string>
@@ -218,6 +220,8 @@
     <string name="import_patch_bundles_none">새로운 패치 번들을 가져오지 않았습니다</string>
     <string name="import_patch_bundles_banner_title">패치 번들을 가져오는 중</string>
     <string name="import_patch_bundles_banner_subtitle">%2$d 개 중에 %1$d 개를 처리하였습니다</string>
+    <!-- Needs translation -->
+    <string name="import_patch_bundles_banner_steps">Step %1$d of %2$d</string>
     <string name="import_patch_profiles">패치 프로필 가져오기</string>
     <string name="import_patch_profiles_description">JSON 파일에서 저장된 패치 프로필을 가져옵니다</string>
     <string name="import_patch_profiles_fail">패치 번들을 가져올 수 없습니다: %s</string>
@@ -490,6 +494,18 @@
     <string name="tab_patches">패치 번들</string>
     <string name="tab_profiles">패치 프로필</string>
     <string name="delete">삭제</string>
+    <!-- Needs translation -->
+    <string name="disable">Disable</string>
+    <!-- Needs translation -->
+    <string name="enable">Enable</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_enabled_toast">Enabled %d bundle(s)</string>
+    <!-- Needs translation -->
+    <string name="patches_enable_single_dialog_description">Enable "%s"?</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_disabled_toast">Disabled %d bundle(s)</string>
+    <!-- Needs translation -->
+    <string name="patches_disable_single_dialog_description">Disable "%s"?</string>
     <string name="refresh">새로고침</string>
     <string name="continue_anyways">계속</string>
     <string name="download_another_version">다른 버전 다운로드</string>
@@ -721,15 +737,28 @@
     <string name="installer_external_success">%1$s 이 설치 성공을 보고하였습니다.</string>
     <string name="installer_external_finished_no_change">%1$s 는 앱을 설치하지 않고 완료되었습니다. 설치 프로그램에서 오류 메시지를 확인하고 다시 시도하십시오.</string>
     <string name="installing_ellipsis">설치하는 중 ...</string>
+
+    <!-- Needs translation -->
+
+    <!-- Needs translation -->
+
+
+    <string name="uninstalling_ellipsis">Uninstalling…</string>
     <string name="mounting_ellipsis">마운트하는 중 ...</string>
     <string name="unmounting">마운트 해제하는 중 ...</string>
     <string name="install_app">설치하기</string>
     <string name="install_app_success">성공적으로 설치히였습니다</string>
     <string name="install_app_fail_title">설치할 수 없습니다</string>
     <string name="install_app_fail">앱을 설치할 수 없습니다: %s</string>
+    <!-- Needs translation -->
+    <string name="install_app_fail_missing_stock">Missing original APK for mount install.</string>
+    <!-- Needs translation -->
+    <string name="mount_split_not_supported">Rooted mount installer does not support split APKs. Use system installer instead.</string>
     <string name="mount_app_fail_title">마운트할 수 없습니다</string>
     <string name="mount_app_fail">앱을 마운트할 수 없습니디: %1$s</string>
     <string name="install_timeout_message">설치가 완료되지 않았습니다. 시스템 설치 프로그램 다이얼로그를 확인하고 다시 시도하세요.</string>
+    <!-- Needs translation -->
+    <string name="uninstall_timeout_message">Uninstallation did not finish. Check the uninstall dialog and try again.</string>
     <string name="reinstall_app_fail">앱을 다시 설치할 수 없습니다: %s</string>
     <string name="uninstall_app_fail">앱을 제거할 수 없습니다: %s</string>
     <string name="open_app">열기</string>
@@ -897,11 +926,17 @@
     <string name="installation_aborted_description">설치를 수동으로 취소하였습니다. 다시 시도하시겠습니까?</string>
     <string name="installation_blocked_description">설치가 차단되었습니다. 기기 보안 설정을 검토하고 다시 시도하세요.</string>
     <string name="installation_conflict_description">설치가 앱의 기존 설치로 인하여 차단되었습니다. 설치된 앱을 제거하고 다시 시도하시겠습니까?</string>
+    <!-- Needs translation -->
+    <string name="installation_signature_mismatch_dialog_title">Signature mismatch</string>
+    <!-- Needs translation -->
+    <string name="installation_signature_mismatch_description">The installed app is signed differently. Uninstall the installed app and install this one?</string>
     <string name="installation_incompatible_description">앱이 이 기기와 호환되지 않습니다. 이 기기와 호환되는 APK를 사용하고 다시 시도하세요.</string>
     <string name="installation_invalid_description">앱이 잘못되었습니다. 앱을 제거하고 다시 시도하시겠습니까?</string>
     <string name="installation_storage_issue_description">기기 저장소 공간이 부족하여 앱을 설치할 수 없습니다. 여유 공간을 확보하고 다시 시도하세요.</string>
     <string name="installation_timeout_description">설치하는 데 시간이 너무 오래 걸렸습니다. 다시 시도하시겠습니까?</string>
     <string name="reinstall">다시 설치</string>
+    <!-- Needs translation -->
+    <string name="installation_signature_mismatch_confirm">Uninstall and install</string>
     <string name="show">표시</string>
     <string name="debugging">디버깅</string>
     <string name="about_device">기기 정보</string>
@@ -913,6 +948,8 @@
     <string name="patches_prereleases">Pre-release 버전 사용</string>
     <string name="patches_prereleases_description">%s의 Pre-release 버전을 사용합니다</string>
     <string name="patches_url">패치 번들 URL</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_urls_link">Get patch bundle URLs here</string>
     <string name="incompatible_patches_dialog">이 패치는 선택된 앱 버전 (%1$s) 과 호환되지 않습니다.\n\n자세한 정보를 보려면 패치를 탭하세요.</string>
     <string name="incompatible_patch">호환되지 않는 패치</string>
     <string name="any_version">모든 앱 버전</string>
@@ -924,3 +961,5 @@
     <string name="confirm">확인</string>
     <string name="saved_app_install_cancelled">설치를 취소하였습니다</string>
 </resources>
+
+

@@ -94,6 +94,8 @@
     <string name="bundle_version_dialog_other_title">Chọn phiên bản được hỗ trợ khác:</string>
     <string name="bundle_version_dialog_locked_title">Bảo vệ phiên bản đang bật</string>
     <string name="bundle_version_dialog_locked_hint">Vào Cài đặt &gt; Nâng cao &gt; Bảo vệ và bật cả \"Yêu cầu phiên bản ứng dụng được đề xuất\" và \" Tắt kiểm tra tương thích phiên bản\" để chọn phiên bản khác của từng gói.</string>
+    <!-- Needs translation -->
+    <string name="patch_versions_dialog_title">Supported versions for %1$s</string>
     <string name="patch_item_description">Bắt đầu vá</string>
     <string name="patch_selector_item">Chọn bản vá</string>
     <string name="patch_selector_item_description">Đã chọn %d bản vá</string>
@@ -217,6 +219,8 @@
     <string name="import_patch_bundles_none">Không có gói vá mới nào được nhập</string>
     <string name="import_patch_bundles_banner_title">Đang nhập gói vá</string>
     <string name="import_patch_bundles_banner_subtitle">Đã xử lý %1$d trên %2$d</string>
+    <!-- Needs translation -->
+    <string name="import_patch_bundles_banner_steps">Step %1$d of %2$d</string>
     <string name="import_patch_profiles">Nhập cấu hình vá</string>
     <string name="import_patch_profiles_description">Nhập cấu hình vá đã lưu bằng bằng</string>
     <string name="import_patch_profiles_fail">Không thể nhập cấu hình vá: %s</string>
@@ -477,6 +481,18 @@
     <string name="tab_patches">Gói vá</string>
     <string name="tab_profiles">Cấu hình vá</string>
     <string name="delete">Xoá</string>
+    <!-- Needs translation -->
+    <string name="disable">Disable</string>
+    <!-- Needs translation -->
+    <string name="enable">Enable</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_enabled_toast">Enabled %d bundle(s)</string>
+    <!-- Needs translation -->
+    <string name="patches_enable_single_dialog_description">Enable "%s"?</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_disabled_toast">Disabled %d bundle(s)</string>
+    <!-- Needs translation -->
+    <string name="patches_disable_single_dialog_description">Disable "%s"?</string>
     <string name="refresh">Làm mới</string>
     <string name="continue_anyways">Vẫn tiếp tục</string>
     <string name="download_another_version">Tải xuống phiên bản khác</string>
@@ -705,15 +721,28 @@ Bạn có thể tự xóa chúng, điều chỉnh lựa chọn, hoặc cứ ti�
     <string name="installer_external_success">%1$s báo đã cài đặt thành công.</string>
     <string name="installer_external_finished_no_change">%1$s đã hoàn tất nhưng không cài đặt. Hãy kiểm tra trình cài đặt để xem thông báo lỗi và thử lại.</string>
     <string name="installing_ellipsis">Đang cài…</string>
+
+    <!-- Needs translation -->
+
+    <!-- Needs translation -->
+
+
+    <string name="uninstalling_ellipsis">Uninstalling…</string>
     <string name="mounting_ellipsis">Đang gắn…</string>
     <string name="unmounting">Đang gỡ gắn…</string>
     <string name="install_app">Cài đặt</string>
     <string name="install_app_success">Đã cài đặt ứng dụng</string>
     <string name="install_app_fail_title">Không thể cài đặt</string>
     <string name="install_app_fail">Cài đặt ứng dụng thất bại: %s</string>
+    <!-- Needs translation -->
+    <string name="install_app_fail_missing_stock">Missing original APK for mount install.</string>
+    <!-- Needs translation -->
+    <string name="mount_split_not_supported">Rooted mount installer does not support split APKs. Use system installer instead.</string>
     <string name="mount_app_fail_title">Không thể gắn</string>
     <string name="mount_app_fail">Không thể gắn ứng dụng: %1$s</string>
     <string name="install_timeout_message">Cài đặt không thành công. Kiểm tra hộp thoại cài đặt hệ thống và thử lại.</string>
+    <!-- Needs translation -->
+    <string name="uninstall_timeout_message">Uninstallation did not finish. Check the uninstall dialog and try again.</string>
     <string name="reinstall_app_fail">Cài đặt lại ứng dụng thất bại: %s</string>
     <string name="uninstall_app_fail">Gỡ cài đặt ứng dụng thất bại: %s</string>
     <string name="open_app">Mở</string>
@@ -881,11 +910,17 @@ Bạn có thể tự xóa chúng, điều chỉnh lựa chọn, hoặc cứ ti�
     <string name="installation_aborted_description">Bạn đã hủy giữa quá trình cài đặt. Hãy thử lại?</string>
     <string name="installation_blocked_description">Việc cài đặt đã bị chặn. Hãy xem cài đặt bảo mật thiết bị của bạn và thử lại.</string>
     <string name="installation_conflict_description">Quá trình cài đặt đã xẩy ra xung đột bởi ứng dụng đã cài đặt trước đó. Bạn có muốn gỡ cài đặt chúng và thử lại?</string>
+    <!-- Needs translation -->
+    <string name="installation_signature_mismatch_dialog_title">Signature mismatch</string>
+    <!-- Needs translation -->
+    <string name="installation_signature_mismatch_description">The installed app is signed differently. Uninstall the installed app and install this one?</string>
     <string name="installation_incompatible_description">Ứng dụng này không tương thích với thiết bị. Hãy sử dụng tệp APK tương thích với thiết bị của bạn và thử lại.</string>
     <string name="installation_invalid_description">Ứng dụng này không hợp lệ. Gỡ cài đặt ứng dụng và thử lại?</string>
     <string name="installation_storage_issue_description">Không thể cài đặt ứng dụng do không đủ dung lượng bộ nhớ. Hãy giải phóng dung lượng và thử lại.</string>
     <string name="installation_timeout_description">Quá trình cài đặt mất quá nhiều thời gian. Hãy thử lại?</string>
     <string name="reinstall">Cài đặt lại</string>
+    <!-- Needs translation -->
+    <string name="installation_signature_mismatch_confirm">Uninstall and install</string>
     <string name="show">Hiện</string>
     <string name="debugging">Gỡ lỗi</string>
     <string name="about_device">Về thiết bị này</string>
@@ -897,6 +932,8 @@ Bạn có thể tự xóa chúng, điều chỉnh lựa chọn, hoặc cứ ti�
     <string name="patches_prereleases">Dùng bản phát hành trước</string>
     <string name="patches_prereleases_description">Dùng phiên bản phát hành trước của %s</string>
     <string name="patches_url">URL gói vá</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_urls_link">Get patch bundle URLs here</string>
     <string name="incompatible_patches_dialog">Những bản vá này không tương thích với phiên bản ứng dụng đã chọn (%1$s)\n\nNhấn vào các bản vá để biết chi tiết.</string>
     <string name="incompatible_patch">Bản vá không tương thích</string>
     <string name="any_version">Bất kỳ</string>
@@ -908,3 +945,5 @@ Bạn có thể tự xóa chúng, điều chỉnh lựa chọn, hoặc cứ ti�
     <string name="confirm">Xác nhận</string>
     <string name="saved_app_install_cancelled">Đã huỷ cài đặt</string>
 </resources>
+
+

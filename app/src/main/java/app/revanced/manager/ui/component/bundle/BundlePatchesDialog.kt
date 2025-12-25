@@ -43,7 +43,7 @@ fun BundlePatchesDialog(
 ) {
     val patchBundleRepository: PatchBundleRepository = koinInject()
     val patches by remember(src.uid) {
-        patchBundleRepository.bundleInfoFlow.mapNotNull { it[src.uid]?.patches }
+        patchBundleRepository.allBundlesInfoFlow.mapNotNull { it[src.uid]?.patches }
     }.collectAsStateWithLifecycle(emptyList())
 
     FullscreenDialog(
