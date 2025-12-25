@@ -4,11 +4,11 @@
     <source
       width="256px"
       media="(prefers-color-scheme: dark)"
-      srcset="assests/icons/icon-circle.png"
+      srcset="assets/icons/icon-circle.png"
     >
     <img
       width="256px"
-      src="assests/icons/icon-circle.png"
+      src="assets/icons/icon-circle.png"
       alt="Universal ReVanced Manager icon"
     />
   
