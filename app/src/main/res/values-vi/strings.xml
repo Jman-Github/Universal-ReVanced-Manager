@@ -184,6 +184,8 @@
     <string name="patch_selection_safeguard_description">Không chặn chọn hoặc bỏ chọn bản vá cũng như các tùy chỉnh.</string>
     <string name="patch_selection_safeguard_confirmation">Chọn bản vá khác mặc định có thể phát sinh các sự cố không mong muốn.\n\nBạn vẫn muốn tiếp tục?</string>
     <string name="universal_patches_safeguard">Hiện và cho dùng bản vá phổ quát</string>
+    <!-- Needs translation -->
+    <string name="universal_patches_safeguard_confirmation">"Universal patches are not as well tested as those meant for specific apps.\n\nEnable anyway?"</string>
     <!-- PR #36: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/36 -->
     <string name="universal_patches_safeguard_description">Không ẩn hay ngăn chặn dùng các bản vá phổ quát.</string>
     <string name="universal_patches_profile_blocked_title">Đã tắt bản vá phổ quát</string>
@@ -352,6 +354,10 @@
     <string name="downloader_plugin_trust_dialog_title">Tin tưởng tiện ích?</string>
     <string name="downloader_plugin_revoke_trust_dialog_title">Thu hồi quyền?</string>
     <string name="downloader_plugin_trust_dialog_body">Tên gói: %1$s\n\nChữ ký (SHA-256): %2$s</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_trust_dialog_plugin">"Plugin:\n%s"</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_trust_dialog_signature">"Signature:\n\n%s"</string>
     <string name="downloader_plugin_view_error">Xem chi tiết lỗi</string>
     <string name="downloader_plugin_failed_dialog_body">Không thể tải %1$s. Bạn có thể xem chi tiết lỗi hoặc gỡ cài đặt tiện tích này.</string>
     <string name="downloader_plugin_uninstall_title">Gỡ cài đặt tiện ích?</string>
@@ -465,6 +471,10 @@
     <!-- From PR #38: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/38 -->
     <string name="language_option_vietnamese">Tiếng Việt (dịch bởi ann9cht)</string>
     <string name="language_option_japanese">Tiếng Nhật</string>
+    <!-- Needs translation -->
+    <string name="language_option_russian">Russian</string>
+    <!-- Needs translation -->
+    <string name="language_option_ukrainian">Ukrainian</string>
     <string name="device">Thiết bị</string>
     <string name="device_android_version">Phiên bản Android</string>
     <string name="device_model">Mẫu</string>

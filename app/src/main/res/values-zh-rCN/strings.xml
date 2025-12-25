@@ -192,6 +192,8 @@
     <string name="patch_selection_safeguard_description">不阻止选择或取消选择补丁以及自定义选项</string>
     <string name="patch_selection_safeguard_confirmation">更改补丁选择可能导致意外问题。\n\n仍然要启用吗？</string>
     <string name="universal_patches_safeguard">显示 &amp; 允许使用通用补丁</string>
+    <!-- Needs translation -->
+    <string name="universal_patches_safeguard_confirmation">"Universal patches are not as well tested as those meant for specific apps.\n\nEnable anyway?"</string>
     <string name="universal_patches_safeguard_description">不隐藏通用补丁或阻止使用它们</string>
     <string name="universal_patches_profile_blocked_title">通用补丁已禁用</string>
     <string name="universal_patches_profile_blocked_description">此补丁配置文件包含通用补丁。请在高级设置中启用“%1$s”以使用它。</string>
@@ -353,6 +355,10 @@
     <string name="downloader_plugin_trust_dialog_title">信任插件？</string>
     <string name="downloader_plugin_revoke_trust_dialog_title">撤销信任？</string>
     <string name="downloader_plugin_trust_dialog_body">包名：%1$s\n签名 (SHA-256)：%2$s</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_trust_dialog_plugin">"Plugin:\n%s"</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_trust_dialog_signature">"Signature:\n\n%s"</string>
     <string name="downloader_plugin_view_error">查看错误详情</string>
     <string name="downloader_plugin_failed_dialog_body">加载 \"%1$s\" 失败。您可以查看错误详情或卸载该插件。</string>
     <string name="downloader_plugin_uninstall_title">卸载插件？</string>
@@ -460,6 +466,10 @@
 
     <string name="language_option_vietnamese">Vietnamese</string>
     <string name="language_option_japanese">日语</string>
+    <!-- Needs translation -->
+    <string name="language_option_russian">Russian</string>
+    <!-- Needs translation -->
+    <string name="language_option_ukrainian">Ukrainian</string>
 
     <string name="patcher_preflight_missing_patch_message">The following patches aren\'t available in the current bundle:\n%1$s\nYou can remove them automatically, adjust the selection, or continue anyway.</string>
 

@@ -17,6 +17,8 @@
 - Improved patch selection screen UI
 - Added chip tags on patches on the patch selection screen showing the versions said patch supports https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/75
 - Added a "Get patch bundle URLs here" widget on the "Add a patch bundle" dialog that links to the "ReVanced-Patch-Bundles" repo
+- Added Russian and Ukrainian translations https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/72
+- Redesigned theme preview widgets in Settings > General under "Theme preview"
 
 
 # Bug fixes

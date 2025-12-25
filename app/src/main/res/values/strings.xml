@@ -199,6 +199,7 @@
     <string name="patch_selection_safeguard_description">Do not prevent selecting or deselecting patches and customization of options</string>
     <string name="patch_selection_safeguard_confirmation">Changing the selection of patches may cause unexpected issues.\n\nEnable anyways?</string>
     <string name="universal_patches_safeguard">Show &amp; allow using universal patches</string>
+    <string name="universal_patches_safeguard_confirmation">"Universal patches are not as well tested as those meant for specific apps.\n\nEnable anyway?"</string>
     <!-- PR #36: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/36 -->
     <string name="universal_patches_safeguard_description">Do not hide universal patches or prevent usage of them</string>
     <string name="universal_patches_profile_blocked_title">Universal patches disabled</string>
@@ -377,6 +378,8 @@ Patch profiles are not affected.</string>
     <string name="downloader_plugin_trust_dialog_title">Trust plugin?</string>
     <string name="downloader_plugin_revoke_trust_dialog_title">Revoke trust?</string>
     <string name="downloader_plugin_trust_dialog_body">Package name: %1$s\nSignature (SHA-256): %2$s</string>
+    <string name="downloader_plugin_trust_dialog_plugin">"Plugin:\n%s"</string>
+    <string name="downloader_plugin_trust_dialog_signature">"Signature:\n\n%s"</string>
     <string name="downloader_plugin_view_error">View error details</string>
     <string name="downloader_plugin_failed_dialog_body">Failed to load "%1$s". You can view the error details or uninstall the plugin.</string>
     <string name="downloader_plugin_uninstall_title">Uninstall plugin?</string>
@@ -495,6 +498,8 @@ Recommended for this device: %1$d MB.</string>
     <!-- From PR #38: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/38 -->
     <string name="language_option_vietnamese">Vietnamese</string>
     <string name="language_option_japanese">Japanese</string>
+    <string name="language_option_russian">Russian</string>
+    <string name="language_option_ukrainian">Ukrainian</string>
     <string name="device">Device</string>
     <string name="device_android_version">Android version</string>
     <string name="device_model">Model</string>

@@ -1,0 +1,1495 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="abc_action_bar_up_description">Navigate up</string>
+    <string name="abc_action_mode_done">Готово</string>
+    <string name="abc_capital_off">ВЫКЛ.</string>
+    <string name="abc_capital_on">ВКЛ.</string>
+    <string name="abc_menu_alt_shortcut_label">Alt+</string>
+    <string name="abc_menu_ctrl_shortcut_label">Ctrl+</string>
+    <string name="abc_menu_delete_shortcut_label">delete</string>
+    <string name="abc_menu_enter_shortcut_label">enter</string>
+    <string name="abc_menu_function_shortcut_label">Function+</string>
+    <string name="abc_menu_meta_shortcut_label">Meta+</string>
+    <string name="abc_menu_shift_shortcut_label">Shift+</string>
+    <string name="abc_menu_space_shortcut_label">space</string>
+    <string name="abc_menu_sym_shortcut_label">Sym+</string>
+    <string name="abc_prepend_shortcut_label">Menu+</string>
+    <string name="abc_search_hint">Поиск…</string>
+    <string name="abc_searchview_description_clear">Очистить запрос</string>
+    <string name="abc_searchview_description_search">Поиск</string>
+    <string name="abc_searchview_description_submit">Отправить запрос</string>
+    <string name="abc_searchview_description_voice">Голосовой поиск</string>
+    <string name="abc_toolbar_collapse_description">Свернуть</string>
+    <string name="about">О нас</string>
+    <string name="about_device">Об устройстве</string>
+    <string name="about_revanced_manager">О ReVanced Manager</string>
+    <string name="add">Добавить</string>
+    <string name="add_patches">Добавить патчи</string>
+    <string name="advanced">Расширенные</string>
+    <string name="advanced_description">URL-адрес API, ограничение памяти, отладка</string>
+    <string name="already_patched">Уже исправлено</string>
+    <string name="android_11_bug_dialog_description">Разрешение на установку приложения должно быть предоставлено заранее, чтобы избежать ошибки в системе Android 11, которая негативно повлияет на работу пользователя.</string>
+    <string name="android_11_bug_dialog_title">Андроид 11 ошибка</string>
+    <string name="androidx_startup">androidx.startup</string>
+    <string name="any_version">Любой</string>
+    <string name="api_url">URL-адрес API</string>
+    <string name="api_url_description">API, используемый для загрузки необходимых файлов</string>
+    <string name="api_url_dialog_description">Измените URL-адрес API ReVanced Manager. ReVanced Manager использует API для загрузки исправлений и обновлений.</string>
+    <string name="api_url_dialog_reset">Сбросить URL-адрес API</string>
+    <string name="api_url_dialog_save">Сохранить</string>
+    <string name="api_url_dialog_title">Изменить URL-адрес API</string>
+    <string name="api_url_dialog_warning">ReVanced Manager подключается к API для загрузки исправлений и обновлений. Убедитесь, что вы этому доверяете.</string>
+    <string name="apk_source_auto">Использование всех загрузчиков APK</string>
+    <string name="apk_source_downloader">Использование %s</string>
+    <string name="apk_source_installed">Использовать установленный APK</string>
+    <string name="apk_source_local">Использовать локальный APK-файла</string>
+    <string name="apk_source_selector_item">Выберите источник APK</string>
+    <string name="app_info">Информация о приложении</string>
+    <string name="app_name">ReVanced Manager</string>
+    <string name="app_not_installed">"Выбранное вами приложение не установлено. Вы хотите скачать его?"</string>
+    <string name="app_source_dialog_option_auto">Авто</string>
+    <string name="app_source_dialog_option_auto_description">Использовать все доступные загрузчики для загрузки приложения</string>
+    <string name="app_source_dialog_option_auto_unavailable">Нет доступных плагинов</string>
+    <string name="app_source_dialog_option_installed_no_root">Смонтированные приложения не могут быть исправлены повторно без root-доступа</string>
+    <string name="app_source_dialog_option_installed_version_not_suggested">Версия %s не соответствует предложенной версии.</string>
+    <string name="app_source_dialog_title">Выберите источник</string>
+    <string name="app_version_not_compatible">"Этот патч несовместим с выбранной версией приложения (%1$s)
+
+Он совместим только со следующей версиея(й): %2$s"</string>
+    <string name="appearance">Внешний вид</string>
+    <string name="applied_patches">Примененные патчи</string>
+    <string name="apply">Применить</string>
+    <string name="auto_update">Авто обновление</string>
+    <string name="auto_update_description">Автоматически обновляться при появлении новой версии</string>
+    <string name="auto_updates_dialog_description">Хотите, чтобы ReVanced Manager периодически проверял наличие обновлений для следующих компонентов?</string>
+    <string name="auto_updates_dialog_manager">ReVanced Manager</string>
+    <string name="auto_updates_dialog_note">Эти настройки можно изменить позже.</string>
+    <string name="auto_updates_dialog_patches">Обновленные патчи</string>
+    <string name="auto_updates_dialog_title">Настройка обновлений</string>
+    <string name="autofill">Автозаполнение</string>
+    <string name="back">Назад</string>
+    <string name="battery_optimization_notification">Оптимизацию батареи необходимо отключить, чтобы ReVanced Manager корректно работал в фоновом режиме. Нажмите здесь, чтобы отключить оптимизацию.</string>
+    <string name="call_notification_answer_action">Ответ</string>
+    <string name="call_notification_answer_video_action">Видео</string>
+    <string name="call_notification_decline_action">Отклонить</string>
+    <string name="call_notification_hang_up_action">Hang Up</string>
+    <string name="call_notification_incoming_text">Входящий звонок</string>
+    <string name="call_notification_ongoing_text">Текущий звонок</string>
+    <string name="call_notification_screening_text">Скрининг входящего звонка</string>
+    <string name="cancel">Отмена</string>
+    <string name="changelog">Посмотреть журналы изменений</string>
+    <string name="changelog_description">Ознакомьтесь с последними изменениями в этом обновлении</string>
+    <string name="changelog_download_fail">Не удалось загрузить журнал изменений: %s</string>
+    <string name="changelog_loading">Загрузка журнала изменений</string>
+    <string name="clear">Очистить</string>
+    <string name="close">Закрыть</string>
+    <string name="close_drawer">Закрыть меню навигации</string>
+    <string name="close_sheet">Закрыть лист</string>
+    <string name="collapse_content">свернуть</string>
+    <string name="confirm">Подтвердть</string>
+    <string name="contact">Контакт</string>
+    <string name="continue_">Продолжить</string>
+    <string name="continue_anyways">Продолжить в любом случае</string>
+    <string name="continue_with_version">Продолжить эту версию?</string>
+    <string name="contributors">Авторы</string>
+    <string name="contributors_description">Посмотреть участников ReVanced</string>
+    <string name="copy_to_clipboard">Скопировать в буфер обмена</string>
+    <string name="current_version">Текущая версия: %s</string>
+    <string name="dark">Темный</string>
+    <string name="days_ago">%sd назад</string>
+    <string name="debug_logs_export">Экспорт журналов отладки</string>
+    <string name="debug_logs_export_failed">Не удалось экспортировать журналы.</string>
+    <string name="debug_logs_export_read_failed">Не удалось прочитать журналы (код выхода %d).</string>
+    <string name="debug_logs_export_success">Экспортированные журналы</string>
+    <string name="debugging">Отладка</string>
+    <string name="default_error_message">Неверный ввод</string>
+    <string name="default_install">По умолчанию</string>
+    <string name="default_popup_window_title">Всплывающее окно</string>
+    <string name="delete">Удалить</string>
+    <string name="developer_options">Опции разработчика</string>
+    <string name="developer_options_already_enabled">Параметры разработчика уже включены</string>
+    <string name="developer_options_description">Варианты устранения проблем</string>
+    <string name="developer_options_enabled">Параметры разработчика включены</string>
+    <string name="developer_options_taps">%d taps remaining</string>
+    <string name="device">Устройство</string>
+    <string name="device_android_version">Android-версия</string>
+    <string name="device_architectures">Архитектуры ЦП</string>
+    <string name="device_memory_limit">Ограничения памяти</string>
+    <string name="device_memory_limit_format">%1$dMB (Нормальный) - %2$dMB (Большой)</string>
+    <string name="device_model">Модель</string>
+    <string name="dialog_input_placeholder">Значение</string>
+    <string name="disable_battery_optimization">Отключить оптимизацию батареи</string>
+    <string name="dismiss">Отклонить</string>
+    <string name="dismiss_temporary">Не сейчас</string>
+    <string name="donate">Задонатить</string>
+    <string name="download">Скачать</string>
+    <string name="download_another_version">Скачать другую версию</string>
+    <string name="download_apk">Скачать APK-файл</string>
+    <string name="download_app">Скачать приложение</string>
+    <string name="download_application">Загрузить приложение?</string>
+    <string name="download_confirmation_metered">"В настоящее время вы используете лимитное соединение, и ваш поставщик услуг может взимать плату за передачу данных.
+
+Ты все еще хочешь продолжить?"</string>
+    <string name="download_manager_failed">Не удалось загрузить обновление: %s</string>
+    <string name="download_update_confirmation">Загрузить обновление?</string>
+    <string name="downloaded_apps">Скачанные приложения</string>
+    <string name="downloader_app_not_found">Загрузчик не нашел приложение</string>
+    <string name="downloader_error">Ошибка загрузчика: %s</string>
+    <string name="downloader_invalid_version">Загрузчик не получил правильную версию</string>
+    <string name="downloader_no_plugins_available">Загрузчики установлены, но ни одному из них нельзя доверять. Проверьте свои настройки.</string>
+    <string name="downloader_no_plugins_installed">Загрузчик не установлен</string>
+    <string name="downloader_plugin_delete_apps_description">Вы уверены, что хотите удалить выбранные приложения?</string>
+    <string name="downloader_plugin_delete_apps_title">Удалить выбранные приложения</string>
+    <string name="downloader_plugin_revoke_trust_dialog_title">Отозвать доверие?</string>
+    <string name="downloader_plugin_state_failed">Не удалось загрузить. Нажмите, чтобы узнать больше</string>
+    <string name="downloader_plugin_state_trusted">Надежный</string>
+    <string name="downloader_plugin_state_untrusted">Ненадежный</string>
+    <string name="downloader_plugin_trust_dialog_body">"Продолжение позволит этому плагину работать в вашей системе.
+
+Включайте этот плагин только в том случае, если вы ему доверяете. Плагины могут выполнять произвольный код и могут поставить под угрозу ваше устройство."</string>
+    <string name="downloader_plugin_trust_dialog_plugin">"Плагин:
+%s"</string>
+    <string name="downloader_plugin_trust_dialog_signature">"Подпись:
+
+%s"</string>
+    <string name="downloader_plugin_trust_dialog_title">Доверять плагину?</string>
+    <string name="downloader_plugins">Плагины</string>
+    <string name="downloader_settings_no_apps">Загруженных приложений не найдено</string>
+    <string name="downloading_manager_update">Загрузка обновления…</string>
+    <string name="downloading_patches">Загрузка патчей…</string>
+    <string name="downloads">Загрузки</string>
+    <string name="downloads_description">Плагины загрузчика и загруженные приложения</string>
+    <string name="drag_handle">переупорядочить</string>
+    <string name="dropdown_menu">Выпадающее меню</string>
+    <string name="dynamic_color">Динамический цвет</string>
+    <string name="dynamic_color_description">Адаптировать цвета к обоям</string>
+    <string name="edit">Редактировать</string>
+    <string name="empty">Пусто</string>
+    <string name="enter_url">Введите URL</string>
+    <string name="execute_patches">Выполнение патчей</string>
+    <string name="executing_patch">Выполнять %s</string>
+    <string name="expand_content">расширять</string>
+    <string name="export">Экспорт</string>
+    <string name="export_keystore">Экспортировать хранилище ключей</string>
+    <string name="export_keystore_description">Экспортировать текущее хранилище ключей</string>
+    <string name="export_keystore_success">Экспортированное хранилище ключей</string>
+    <string name="export_keystore_unavailable">Нет хранилища ключей для экспорта</string>
+    <string name="export_patch_selection">Экспортировать выбор патча</string>
+    <string name="export_patch_selection_description">Экспортировать выбранный патч в файл JSON</string>
+    <string name="export_patch_selection_fail">Не удалось экспортировать выбранный патч: %s</string>
+    <string name="export_patch_selection_success">Экспортированный выбор патча</string>
+    <string name="failed_to_check_updates">Не удалось проверить наличие обновлений: %s</string>
+    <string name="failed_to_download_update">Не удалось загрузить обновление: %s</string>
+    <string name="failed_to_execute_patch">Не удалось выполнить %s</string>
+    <string name="failed_to_import_keystore">Не удалось импортировать хранилище ключей.</string>
+    <string name="failed_to_load_apk">Не удалось загрузить APK.</string>
+    <string name="failed_to_mount">Не удалось смонтировать: %s</string>
+    <string name="failed_to_unmount">Не удалось размонтировать: %s</string>
+    <string name="field_not_set">Не установлено</string>
+    <string name="file_field_not_set">Не выбрано</string>
+    <string name="file_field_set">Выбрано</string>
+    <string name="general">Общие</string>
+    <string name="general_description">Тема, динамический цвет</string>
+    <string name="help">Помощь</string>
+    <string name="hide_password_field">Скрыть пароль</string>
+    <string name="hours_ago">%sh назад</string>
+    <string name="import_">Импорт</string>
+    <string name="import_export">Импорт &amp; Экспорт</string>
+    <string name="import_export_description">Хранилище ключей, параметры патчей и выбор</string>
+    <string name="import_keystore">Импортировать хранилище ключей</string>
+    <string name="import_keystore_description">Импортировать собственное хранилище ключей</string>
+    <string name="import_keystore_dialog_alias_field">Имя пользователя (Псевдоним)</string>
+    <string name="import_keystore_dialog_button">Импорт</string>
+    <string name="import_keystore_dialog_description">"Вам нужно будет ввести учетные данные хранилища ключей, чтобы импортировать его."</string>
+    <string name="import_keystore_dialog_password_field">Пароль</string>
+    <string name="import_keystore_dialog_title">Введите учетные данные хранилища ключей</string>
+    <string name="import_keystore_success">Импортированное хранилище ключей</string>
+    <string name="import_keystore_wrong_credentials">Неправильные учетные данные хранилища ключей</string>
+    <string name="import_patch_selection">Импортировать выбор патча</string>
+    <string name="import_patch_selection_description">Импортировать выбранный патч из файла JSON</string>
+    <string name="import_patch_selection_fail">Не удалось импортировать выбранный патч: %s</string>
+    <string name="import_patch_selection_success">Выбор импортированного патча</string>
+    <string name="in_progress">В ходе выполнения</string>
+    <string name="incompatible_patch">Несовместимый патч</string>
+    <string name="incompatible_patches">Несовместимые патчи</string>
+    <string name="incompatible_patches_dialog">"Эти патчи несовместимы с выбранной версией приложения (%1$s).
+
+Нажмите на патчи, чтобы увидеть более подробную информацию."</string>
+    <string name="indeterminate">Частично проверено</string>
+    <string name="input_dialog_value_invalid">Недопустимое значение</string>
+    <string name="install_app">Установить</string>
+    <string name="install_app_fail">Не удалось установить приложение: %s</string>
+    <string name="install_app_success">Приложение установлено</string>
+    <string name="install_type">Тип установки</string>
+    <string name="install_update_manager_failed">Не удалось установить обновление</string>
+    <string name="installation_aborted_description">Установка была отменена вручную. Попробуйте еще раз?</string>
+    <string name="installation_blocked_description">Установка заблокирована. Проверьте настройки безопасности вашего устройства и повторите попытку.</string>
+    <string name="installation_blocked_dialog_title">Установка заблокирована</string>
+    <string name="installation_cancelled_dialog_title">Установка отменена</string>
+    <string name="installation_conflict_description">Установка была прервана существующей установкой приложения. Удалить установленное приложение и попробовать еще раз?</string>
+    <string name="installation_conflict_dialog_title">Конфликт установки</string>
+    <string name="installation_failed_description">Установка не удалась по неизвестной причине. Попробуйте еще раз?</string>
+    <string name="installation_failed_dialog_title">Установка не удалась</string>
+    <string name="installation_incompatible_description">Приложение несовместимо с этим устройством. Используйте APK, совместимый с этим устройством, и повторите попытку.</string>
+    <string name="installation_incompatible_dialog_title">Установка несовместима</string>
+    <string name="installation_invalid_description">Приложение недействительно. Удалить приложение и попробовать еще раз?</string>
+    <string name="installation_invalid_dialog_title">Установка недействительна</string>
+    <string name="installation_storage_issue_description">Приложение не удалось установить из-за недостаточного объема памяти. Освободите место и повторите попытку.</string>
+    <string name="installation_storage_issue_dialog_title">Недостаточно места для хранения</string>
+    <string name="installation_timeout_description">Установка заняла слишком много времени. Попробуйте еще раз?</string>
+    <string name="installation_timeout_dialog_title">Время установки истекло</string>
+    <string name="installed">Установлено</string>
+    <string name="installer">Установщик</string>
+    <string name="installing_manager_update">Установка обновления…</string>
+    <string name="installing_message">Нажмите на <b>Обновить</b> когда будет предложено. ReVanced Manager закроется при обновлении</string>
+    <string name="invalid_date">Неверная дата</string>
+    <string name="just_now">Прямо сейчас</string>
+    <string name="legacy_import_failed">Не удалось импортировать устаревшие настройки</string>
+    <string name="less">Меньше</string>
+    <string name="light">Светлая</string>
+    <string name="loading">Загрузка…</string>
+    <string name="loading_body">Загрузка…</string>
+    <string name="local_patches_description">Добавляйте патчи из локального хранилища</string>
+    <string name="m3c_bottom_sheet_collapse_description">Свернуть нижний лист</string>
+    <string name="m3c_bottom_sheet_dismiss_description">Закрыть нижний лист</string>
+    <string name="m3c_bottom_sheet_drag_handle_description">Перетащите маркер</string>
+    <string name="m3c_bottom_sheet_expand_description">Развернуть нижний лист</string>
+    <string name="m3c_bottom_sheet_pane_title">Нижний лист</string>
+    <string name="m3c_dialog">Диалог</string>
+    <string name="m3c_search_bar_search">Поиск</string>
+    <string name="m3c_suggestions_available">Предложения ниже</string>
+    <string name="manager">Менеджер</string>
+    <string name="manager_prereleases">Использовать предварительную версию</string>
+    <string name="manager_prereleases_description">Использовать предварительную версию ReVanced Manager</string>
+    <string name="manual_update_check">Проверьте наличие обновлений</string>
+    <string name="manual_update_check_description">Проверка обновлений вручную</string>
+    <string name="minutes_ago">%sm назад</string>
+    <string name="more">Более</string>
+    <string name="mount">Монтировать</string>
+    <string name="mount_install">Монтировать</string>
+    <string name="mounted">Смонтирован</string>
+    <string name="navigation_menu">Меню навигации</string>
+    <string name="network_metered_warning">В настоящее время вы используете лимитное соединение. Ваш поставщик услуг может взимать плату за передачу данных.</string>
+    <string name="network_unavailable_warning">Ваше устройство не подключено к Интернету. Загрузка позже не удастся.</string>
+    <string name="never_show_again">Никогда больше не показывать</string>
+    <string name="new_downloader_plugins_notification">Доступны новые плагины для загрузки. Нажмите здесь, чтобы настроить их.</string>
+    <string name="next">Дальше</string>
+    <string name="no">Нет</string>
+    <string name="no_changelogs_found">Журналы изменений не найдены</string>
+    <string name="no_contributors_found">Соавторы не найдены</string>
+    <string name="no_network_toast">Нет подключения к Интернету</string>
+    <string name="no_patch_found">Патч не найден. Проверьте свои патчи</string>
+    <string name="no_patched_apps_found">Пропатченных приложений не найдено</string>
+    <string name="no_patches_selected">Патчи не выбраны</string>
+    <string name="no_update_available">Нет доступных обновлений</string>
+    <string name="non_suggested_version_warning_description">"Выбранная вами версия приложения не соответствует предложенной версии.
+Пожалуйста, используйте предложенную версию: %s
+
+Чтобы продолжить в любом случае, отключите \"Требовать рекомендуемую версию приложения\" в расширенных настройках."</string>
+    <string name="non_suggested_version_warning_title">Нерекомендуемая версия</string>
+    <string name="not_installed">Не установлено</string>
+    <string name="not_mounted">Не смонтирован</string>
+    <string name="not_selected">Не выбрано</string>
+    <string name="ok">ОК</string>
+    <string name="open_app">Открыть</string>
+    <string name="opensource_licenses">Лицензии с открытым исходным кодом</string>
+    <string name="opensource_licenses_description">Просмотрите все библиотеки, использованные для создания этого приложения.</string>
+    <string name="option_preset_custom_value">Пользовательское значение</string>
+    <string name="option_required">Эта опция обязательна</string>
+    <string name="options">Параметры</string>
+    <string name="original_package_name">Оригинальное название пакета</string>
+    <string name="package_name">Имя пакета</string>
+    <string name="patch">Патч</string>
+    <string name="patch_compat_check">Отключить проверку совместимости версий</string>
+    <string name="patch_compat_check_confirmation">"Выбор несовместимых патчей может привести к поломке приложения.
+
+Вы все равно хотите продолжить?"</string>
+    <string name="patch_compat_check_description">Не ограничивайте исправления совместимыми версиями приложений.</string>
+    <string name="patch_item_description">Начните исправлять приложение</string>
+    <string name="patch_options_reset_all">Сбросить параметры исправления глобально</string>
+    <string name="patch_options_reset_all_description">Сбрасывает все параметры патча</string>
+    <string name="patch_options_reset_all_dialog_description">Вы собираетесь сбросить все параметры исправления. Вам придется повторно применить каждый вариант.</string>
+    <string name="patch_options_reset_package">Сбросить параметры исправления для приложения</string>
+    <string name="patch_options_reset_package_description">Сбрасывает параметры исправления для одного приложения.</string>
+    <string name="patch_options_reset_package_dialog_description">Вы собираетесь сбросить параметры исправления для приложения \"%s\". Вам придется повторно применить каждый вариант.</string>
+    <string name="patch_options_reset_patches">Сбросить параметры патча (одиночный)</string>
+    <string name="patch_options_reset_patches_description">Сбрасывает параметры патчей для определенной коллекции патчей.</string>
+    <string name="patch_options_reset_patches_dialog_description">Вы собираетесь сбросить параметры исправления для \"%s\". Вам придется повторно применить каждый вариант.</string>
+    <string name="patch_options_reset_toast">Параметры патча сброшены</string>
+    <string name="patch_selection_reset_all">Сбросить выбор патча глобально</string>
+    <string name="patch_selection_reset_all_description">Сбрасывает все выбранные патчи</string>
+    <string name="patch_selection_reset_all_dialog_description">Вы собираетесь сбросить все выбранные патчи. Вам нужно будет снова вручную выбрать каждый патч.</string>
+    <string name="patch_selection_reset_package">Сбросить выбор патча для приложения</string>
+    <string name="patch_selection_reset_package_description">Сбрасывает выбор патча для одного приложения.</string>
+    <string name="patch_selection_reset_package_dialog_description">Вы собираетесь сбросить выбор патча для приложения \"%s\". Вам придется вручную выбирать каждый патч снова.</string>
+    <string name="patch_selection_reset_patches">Сбросить выбор патча (одиночный)</string>
+    <string name="patch_selection_reset_patches_description">Сбрасывает выбор патчей для определенной коллекции патчей.</string>
+    <string name="patch_selection_reset_patches_dialog_description">Вы собираетесь сбросить выбор патча для \"%s\". Вам придется вручную выбирать каждый патч снова.</string>
+    <string name="patch_selection_reset_toast">Выбор патчей и параметры были сброшены к рекомендуемым значениям по умолчанию</string>
+    <string name="patch_selection_safeguard">Разрешить изменение выбора и параметров патча</string>
+    <string name="patch_selection_safeguard_confirmation">"Изменение выбора исправлений может вызвать непредвиденные проблемы.
+
+Включить все равно?"</string>
+    <string name="patch_selection_safeguard_description">Не запрещать выбор или отмену выбора патчей и настройку параметров.</string>
+    <string name="patch_selector_item">Выберите патчи</string>
+    <string name="patch_selector_item_description">%d выбраны патчи</string>
+    <string name="patch_selector_sheet_filter_compat_title">Совместимость</string>
+    <string name="patch_selector_sheet_filter_title">Фильтр</string>
+    <string name="patcher">Патчер</string>
+    <string name="patcher_install_in_progress">Установка продолжается. пожалуйста, подождите</string>
+    <string name="patcher_notification_text">Нажмите, чтобы вернуться в патчер</string>
+    <string name="patcher_notification_title">Выполняется установка исправлений…</string>
+    <string name="patcher_step_group_patching">Исправление</string>
+    <string name="patcher_step_group_preparing">Подготовка</string>
+    <string name="patcher_step_group_saving">Сохранение</string>
+    <string name="patcher_step_load_patches">Загрузка патчей</string>
+    <string name="patcher_step_sign_apk">Подписать исправленный APK-файл</string>
+    <string name="patcher_step_unpack">Чтение APK-файла</string>
+    <string name="patcher_step_write_patched">Записать исправленный APK-файл</string>
+    <string name="patcher_stop_confirm_description">Вы уверены, что хотите остановить процесс установки исправлений?</string>
+    <string name="patcher_stop_confirm_title">Остановить патчер</string>
+    <string name="patches">Патчи</string>
+    <string name="patches_count_selected">%1$d/%2$d выбрано</string>
+    <string name="patches_delete_multiple_dialog_description">Вы уверены, что хотите удалить выбранные патчи?</string>
+    <string name="patches_delete_single_dialog_description">Вы уверены, что хотите удалить \"%s\"?</string>
+    <string name="patches_download_fail">Не удалось загрузить патчи: %s</string>
+    <string name="patches_error">Ошибка</string>
+    <string name="patches_error_description">Не удалось загрузить патчи. Нажмите, чтобы просмотреть ошибку</string>
+    <string name="patches_force_download">Принудительно загрузить все патчи</string>
+    <string name="patches_missing">Отсутствует</string>
+    <string name="patches_name_default">Патчи</string>
+    <string name="patches_name_fallback">Безымянный</string>
+    <string name="patches_not_downloaded">Патчи не скачивались. Нажмите здесь, чтобы загрузить его</string>
+    <string name="patches_prereleases">Используйте предварительные версии</string>
+    <string name="patches_prereleases_description">Используйте предварительные версии %s</string>
+    <string name="patches_replace_fail">Не удалось импортировать исправления: %s</string>
+    <string name="patches_reset">Сбросить патчи</string>
+    <string name="patches_selected">%s выбрано</string>
+    <string name="patches_update_success">Обновление успешно выполнено</string>
+    <string name="patches_update_unavailable">Нет доступных обновлений</string>
+    <string name="patches_url">URL-адрес исправлений</string>
+    <string name="patches_view_any_package">Любой пакет</string>
+    <string name="patches_view_any_version">Любая версия</string>
+    <string name="patching">Исправление</string>
+    <string name="path_selector">Выбрать из хранилища</string>
+    <string name="path_selector_dirs">Каталоги</string>
+    <string name="path_selector_files">Файлы</string>
+    <string name="path_selector_parent_dir">Предыдущий каталог</string>
+    <string name="plugin_activity_dialog_body">Для продолжения работы с этим плагином требуется взаимодействие с пользователем.</string>
+    <string name="plugin_host_permission_description">Используется для контроля доступа к плагинам ReVanced Manager. Это есть только у ReVanced Manager.</string>
+    <string name="plugin_host_permission_label">Хост плагина ReVanced Manager</string>
+    <string name="process_runtime">Запустить Патчер в другом процессе (экспериментально)</string>
+    <string name="process_runtime_description">Это быстрее и позволяет Patcher использовать больше памяти.</string>
+    <string name="process_runtime_memory_limit">Ограничение памяти процесса патчера</string>
+    <string name="process_runtime_memory_limit_description">Максимальный объем памяти, который может использовать процесс Патчера (в мегабайтах).</string>
+    <string name="pure_black_theme">Чисто черная тема</string>
+    <string name="pure_black_theme_description">Используйте чисто черный фон для темной темы</string>
+    <string name="range_end">Конец диапазона</string>
+    <string name="range_start">Начало диапазона</string>
+    <string name="ready_to_install_update">Готов к установке обновления</string>
+    <string name="recommended">Рекомендуется</string>
+    <string name="refresh">Обновить</string>
+    <string name="regenerate_keystore">Восстановить хранилище ключей</string>
+    <string name="regenerate_keystore_description">Создать новое хранилище ключей</string>
+    <string name="regenerate_keystore_dialog_description">"Вы собираетесь заново создать хранилище ключей, которое менеджер будет использовать в процессе установки исправлений.
+
+Вы не сможете обновить ранее установленные приложения из этого источника."</string>
+    <string name="regenerate_keystore_success">Хранилище ключей успешно заменено</string>
+    <string name="reinstall">Переустановить</string>
+    <string name="reinstall_app_fail">Не удалось переустановить приложение: %s</string>
+    <string name="remote_patches_description">Добавьте патчи из URL. Патчи могут автоматически обновляться.</string>
+    <string name="repatch">Перепатчивание</string>
+    <string name="required_options_screen">Обязательные параметры</string>
+    <string name="reset">Сбросить</string>
+    <string name="reset_patch_options">Сбросить параметры патча</string>
+    <string name="reset_patch_options_description">Сброс сохраненных параметров патча</string>
+    <string name="reset_patch_selection">Сбросить выбор патча</string>
+    <string name="reset_patch_selection_description">Сброс выбора сохраненного патча</string>
+    <string name="reset_patch_selection_success">Выбор патча сброшен</string>
+    <string name="revanced_manager_description">ReVanced Manager — это приложение для Android, которое использует ReVanced Патчер для исправления приложений Android. Он позволяет загружать и исправлять приложения с помощью пользовательских патчей, а также управлять процессом установки исправлений.</string>
+    <string name="safeguards">Защитные меры</string>
+    <string name="save">Сохранить</string>
+    <string name="save_apk">Сохранить APK</string>
+    <string name="save_apk_success">APK сохранен</string>
+    <string name="save_logs">Сохранение журналов</string>
+    <string name="save_with_count">Сохранить (%1$s)</string>
+    <string name="search">Поиск патчей…</string>
+    <string name="search_apps">Поиск приложений…</string>
+    <string name="search_patches">Поиск патчей</string>
+    <string name="select">Выбрать</string>
+    <string name="select_app">Выберите приложение</string>
+    <string name="select_deselect_all">Выбрать или отменить выбор всех</string>
+    <string name="select_from_storage">Выбрать из хранилища</string>
+    <string name="select_from_storage_description">Выберите APK-файл из хранилища с помощью средства выбора файлов</string>
+    <string name="select_install_type">Выберите тип установки</string>
+    <string name="select_patches_type_dialog_description">Добавляйте новые патчи из URL или локальных файлов.</string>
+    <string name="selected">Выбрано</string>
+    <string name="selected_app_meta_any_version">Любая доступная версия</string>
+    <string name="selection_warning_description">"Рекомендуется использовать выбор и параметры патча по умолчанию. Их изменение может привести к неожиданным проблемам.
+
+Вам нужно включить \"Разрешить изменение выбора и параметров патча\" в дополнительных настройках перед переключением патчей."</string>
+    <string name="selection_warning_title">Перестать использовать настройки по умолчанию?</string>
+    <string name="settings">Настройки</string>
+    <string name="share">Поделиться</string>
+    <string name="show">Показать</string>
+    <string name="show_manager_update_dialog_on_launch">Показывать сообщение об обновлении при запуске</string>
+    <string name="show_manager_update_dialog_on_launch_description">Показывать всплывающее уведомление каждый раз, когда при запуске доступно новое обновление</string>
+    <string name="show_password_field">Показать пароль</string>
+    <string name="sign_fail">Не удалось подписать APK: %s</string>
+    <string name="signing">Подписание</string>
+    <string name="snackbar_pane_title">Тревога</string>
+    <string name="state_empty">Пустой</string>
+    <string name="state_off">Выкл.</string>
+    <string name="state_on">Вкл.</string>
+    <string name="status_bar_notification_info_overflow">999+</string>
+    <string name="step_completed">завершенно</string>
+    <string name="step_failed">неудачно</string>
+    <string name="step_running">работающий</string>
+    <string name="step_waiting">ожидающий</string>
+    <string name="storage">Хранилище</string>
+    <string name="string_option_menu_description">Больше возможностей</string>
+    <string name="submit_feedback">Отправить вопрос или оставить отзыв</string>
+    <string name="submit_feedback_description">Помогите нам улучшить это приложение</string>
+    <string name="suggested_version_info">Предлагаемая версия: %s</string>
+    <string name="suggested_version_safeguard">Требовать рекомендуемую версию приложения</string>
+    <string name="suggested_version_safeguard_confirmation">"Выбор приложения, версия которого отличается от предложенной, может вызвать непредвиденные проблемы.
+
+Вы все равно хотите продолжить?"</string>
+    <string name="suggested_version_safeguard_description">Принудительный выбор предлагаемой версии приложения</string>
+    <string name="switch_role">Выключатель</string>
+    <string name="system">Система</string>
+    <string name="tab">Вкладка</string>
+    <string name="tab_apps">Приложения</string>
+    <string name="tab_patches">Патчи</string>
+    <string name="template_percent">%1$d процент.</string>
+    <string name="theme">Тема</string>
+    <string name="theme_description">Выбирать между Светлой или Темной темой</string>
+    <string name="this_version">Эта версия</string>
+    <string name="toast_copied_to_clipboard">Скопировано!</string>
+    <string name="tooltip_description">подсказка</string>
+    <string name="tooltip_label">показать подсказку</string>
+    <string name="type_anything">Введите что-нибудь, чтобы продолжить</string>
+    <string name="uninstall">Удалить</string>
+    <string name="uninstall_app_fail">Не удалось удалить приложение: %s</string>
+    <string name="universal">Любое приложение</string>
+    <string name="universal_patch_warning_description">"Универсальные патчи имеют более широкое применение и не работают так надежно, как патчи, предназначенные для конкретных приложений. При их использовании вы можете столкнуться с проблемами.
+
+Вам нужно включить \"Разрешить использование универсальных патчей\" в дополнительных настройках перед использованием универсальных патчей."</string>
+    <string name="universal_patches">Универсальные патчи</string>
+    <string name="universal_patches_safeguard">Разрешить использование универсальных патчей</string>
+    <string name="universal_patches_safeguard_confirmation">"Универсальные патчи не так хорошо протестированы, как те, которые предназначены для конкретных приложений.
+
+Включить все равно?"</string>
+    <string name="universal_patches_safeguard_description">Не запрещайте использовать универсальные патчи</string>
+    <string name="unmount">Размонтировать</string>
+    <string name="unpatch">Отменить исправление</string>
+    <string name="unpatch_app">Отменить обновление приложения?</string>
+    <string name="unpatch_description">Вы уверены, что хотите удалить обновление для этого приложения?</string>
+    <string name="unsupported_architecture_warning">Исправления для этой архитектуры устройства не поддерживаются и, скорее всего, не удастся.</string>
+    <string name="update">Обновить</string>
+    <string name="update_available">Доступно обновление</string>
+    <string name="update_available_dialog_description">Доступна новая версия ReVanced Manager (%s).</string>
+    <string name="update_check">Проверка обновлений…</string>
+    <string name="update_checking_manager">Проверка обновлений при запуске</string>
+    <string name="update_checking_manager_description">Проверяйте наличие новых версий ReVanced Manager при запуске приложения</string>
+    <string name="update_completed">Обновление установлено</string>
+    <string name="updates">Обновления</string>
+    <string name="updates_description">Проверьте наличие обновлений и просмотрите журналы изменений</string>
+    <string name="version">Версия</string>
+    <string name="version_not_compatible">Не все патчи совместимы с этой версией (%s). Вы все равно хотите продолжить?</string>
+    <string name="view_applied_patches">Просмотр примененных исправлений</string>
+    <string name="view_patches">Просмотр патчей</string>
+    <string name="warning">Предупреждение</string>
+    <string name="website">Веб-сайт</string>
+    <string name="yes">Да</string>
+    <!-- Needs translation -->
+    <string name="main_top_title">URV Manager</string>
+    <!-- Needs translation -->
+    <string name="patch_bundles">Patch Bundles</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle">Patch Bundle</string>
+    <!-- Needs translation -->
+    <string name="cli">CLI</string>
+    <!-- Needs translation -->
+    <string name="dashboard">Dashboard</string>
+    <!-- Needs translation -->
+    <string name="app_filter_title">Filter apps</string>
+    <!-- Needs translation -->
+    <string name="app_filter_installed_only">Installed only</string>
+    <!-- Needs translation -->
+    <string name="app_filter_patches_available">Patches available</string>
+    <!-- Needs translation -->
+    <string name="app_filter_no_results">No apps match your filters.</string>
+    <!-- Needs translation -->
+    <string name="import_patches">Import patches</string>
+    <!-- Needs translation -->
+    <string name="bundle_uid">Bundle UID</string>
+    <!-- Needs translation -->
+    <string name="patches_display_name">Display name</string>
+    <!-- Needs translation -->
+    <string name="app_source_dialog_option_storage">Storage</string>
+    <!-- Needs translation -->
+    <string name="app_source_dialog_option_storage_description">Select an APK from local storage</string>
+    <!-- Needs translation -->
+    <string name="bundle_version_item">Bundle recommendation</string>
+    <!-- Needs translation -->
+    <string name="bundle_version_item_description_default">Using default recommendation</string>
+    <!-- Needs translation -->
+    <string name="bundle_version_item_description_selected">Following %1$s (%2$s)</string>
+    <!-- Needs translation -->
+    <string name="bundle_version_dialog_title">Choose bundle recommendation</string>
+    <!-- Needs translation -->
+    <string name="bundle_version_dialog_description">Pick which bundle’s suggestion should be used when downloading an APK.</string>
+    <!-- Needs translation -->
+    <string name="bundle_version_dialog_default">Use default recommendation</string>
+    <!-- Needs translation -->
+    <string name="bundle_version_dialog_default_subtitle">Automatically pick the most common compatible version.</string>
+    <!-- Needs translation -->
+    <string name="bundle_version_dialog_option_subtitle">Use version %1$s</string>
+    <!-- Needs translation -->
+    <string name="version_label">v%1$s</string>
+    <!-- Needs translation -->
+    <string name="bundle_version_line">%1$s: %2$s</string>
+    <!-- Needs translation -->
+    <string name="bundle_version_all_versions">All versions</string>
+    <!-- Needs translation -->
+    <string name="bundle_version_no_version">No suggested version</string>
+    <!-- Needs translation -->
+    <string name="bundle_version_suggested_label">Suggested version: %1$s</string>
+    <!-- Needs translation -->
+    <string name="bundle_version_other_heading">Other supported versions</string>
+    <!-- Needs translation -->
+    <string name="bundle_update_manual_available">Update available</string>
+    <!-- Needs translation -->
+    <string name="bundle_update_manual_available_with_version">Update available: %1$s</string>
+    <!-- Needs translation -->
+    <string name="bundle_update_progress">%1$d/%2$d bundles processed</string>
+    <!-- Needs translation -->
+    <string name="bundle_update_banner_title">Updating patch bundles</string>
+    <!-- Needs translation -->
+    <string name="bundle_reorder">Organize bundles</string>
+    <!-- Needs translation -->
+    <string name="bundle_reorder_title">Organize patch bundles</string>
+    <!-- Needs translation -->
+    <string name="bundle_reorder_description">Drag the handle to arrange the order bundles appear in the list and the patch selection menu.</string>
+    <!-- Needs translation -->
+    <string name="bundle_reorder_move_up">Move bundle up</string>
+    <!-- Needs translation -->
+    <string name="bundle_reorder_move_down">Move bundle down</string>
+    <!-- Needs translation -->
+    <string name="bundle_actions_expand">Show bundle actions</string>
+    <!-- Needs translation -->
+    <string name="bundle_actions_collapse">Hide bundle actions</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_duplicate_name_error">A patch bundle with this name already exists</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_missing_error">Could not update this patch bundle.</string>
+    <!-- Needs translation -->
+    <string name="bundle_release_page">Open release page</string>
+    <!-- Needs translation -->
+    <string name="bundle_release_page_unavailable">Release page is not available for this bundle</string>
+    <!-- Needs translation -->
+    <string name="bundle_release_page_error">Could not open release page: %s</string>
+    <!-- Needs translation -->
+    <string name="bundle_links_title">Links for %1$s</string>
+    <!-- Needs translation -->
+    <string name="bundle_link_release">GitHub release</string>
+    <!-- Needs translation -->
+    <string name="bundle_link_catalog">Patch list catalog</string>
+    <!-- Needs translation -->
+    <string name="bundle_catalog_unavailable">Patch list catalog unavailable</string>
+    <!-- Needs translation -->
+    <string name="show_suggested_versions">Show suggested versions</string>
+    <!-- Needs translation -->
+    <string name="hide_suggested_versions">Hide suggested versions</string>
+    <!-- Needs translation -->
+    <string name="show_other_versions">Show other versions</string>
+    <!-- Needs translation -->
+    <string name="other_supported_versions_title">Other supported versions (%1$s)</string>
+    <!-- Needs translation -->
+    <string name="other_supported_versions_empty">No other supported versions available.</string>
+    <!-- Needs translation -->
+    <string name="other_supported_versions_all">Supports all versions.</string>
+    <!-- Needs translation -->
+    <string name="bundle_version_dialog_recommended">Suggested version: %1$s</string>
+    <!-- Needs translation -->
+    <string name="bundle_version_dialog_selected_override">Selected version: %1$s</string>
+    <!-- Needs translation -->
+    <string name="bundle_version_dialog_selected_indicator">Selected</string>
+    <!-- Needs translation -->
+    <string name="bundle_version_dialog_selected_indicator_inline">%1$s (selected)</string>
+    <!-- Needs translation -->
+    <string name="bundle_version_dialog_other_title">Select another supported version:</string>
+    <!-- Needs translation -->
+    <string name="bundle_version_dialog_locked_title">Version safeguards are enabled</string>
+    <!-- Needs translation -->
+    <string name="bundle_version_dialog_locked_hint">Go to Settings &gt; Advanced &gt; Safeguards and set both \"Require suggested app version\" (toggle off) and \"Disable version compatibility check\" (toggle on) to choose bundle-specific versions.</string>
+    <!-- Needs translation -->
+    <string name="patch_versions_dialog_title">Supported versions for %1$s</string>
+    <!-- Needs translation -->
+    <string name="apk_source_downloaded">Using downloaded APK</string>
+    <!-- Needs translation -->
+    <string name="suggested_version_bundle_info">%1$s · v%2$s</string>
+    <!-- Needs translation -->
+    <string name="plugins_help_title">What is a downloader?</string>
+    <!-- Needs translation -->
+    <string name="plugins_help_description">A downloader is a plugin which allows URV to download stock APKs from various sources. The downloaded APKs will be shown in the bottom section. During the patching process, you can choose an already downloaded APKs or you can download it via a plugin.\n\nThe list of supported downloader plugins can be found</string>
+    <!-- Needs translation -->
+    <string name="accent_color">Accent color</string>
+    <!-- Needs translation -->
+    <string name="accent_color_description">Choose a custom accent color for the app</string>
+    <!-- Needs translation -->
+    <string name="accent_color_picker_title">Accent color</string>
+    <!-- Needs translation -->
+    <string name="accent_color_preview">Preview</string>
+    <!-- Needs translation -->
+    <string name="accent_color_reset">Reset accent</string>
+    <!-- Needs translation -->
+    <string name="accent_color_presets">Accent presets</string>
+    <!-- Needs translation -->
+    <string name="accent_color_presets_description">Tap a color to apply it instantly</string>
+    <!-- Needs translation -->
+    <string name="theme_color">Theme color</string>
+    <!-- Needs translation -->
+    <string name="theme_color_description">Tint surfaces and backgrounds with your own color</string>
+    <!-- Needs translation -->
+    <string name="theme_color_picker_title">Theme color</string>
+    <!-- Needs translation -->
+    <string name="theme_color_preview">Preview</string>
+    <!-- Needs translation -->
+    <string name="theme_color_reset">Reset theme color</string>
+    <!-- Needs translation -->
+    <string name="theme_color_presets">Theme color presets</string>
+    <!-- Needs translation -->
+    <string name="theme_color_presets_description">Tap a color to recolor backgrounds and cards</string>
+    <!-- Needs translation -->
+    <string name="theme_preview_title">Theme preview</string>
+    <!-- Needs translation -->
+    <string name="theme_preview_description">Updates instantly when changing theme settings</string>
+    <!-- Needs translation -->
+    <string name="theme_presets">Theme presets</string>
+    <!-- Needs translation -->
+    <string name="theme_presets_description">Pick how the app follows system, light, dark, Material You, or pure black</string>
+    <!-- Needs translation -->
+    <string name="theme_preset_default">Follow system</string>
+    <!-- Needs translation -->
+    <string name="theme_preset_sunset">Sunset</string>
+    <!-- Needs translation -->
+    <string name="theme_preset_forest">Forest</string>
+    <!-- Needs translation -->
+    <string name="theme_preset_ocean">Ocean</string>
+    <!-- Needs translation -->
+    <string name="theme_preset_midnight">Midnight</string>
+    <!-- Needs translation -->
+    <string name="theme_preset_amoled">Pure black</string>
+    <!-- Needs translation -->
+    <string name="theme_preset_dynamic">Material You</string>
+    <!-- Needs translation -->
+    <string name="theme_reset">Reset all theme settings</string>
+    <!-- Needs translation -->
+    <string name="color_channel_red">Red</string>
+    <!-- Needs translation -->
+    <string name="color_channel_green">Green</string>
+    <!-- Needs translation -->
+    <string name="color_channel_blue">Blue</string>
+    <!-- Needs translation -->
+    <string name="universal_patches_profile_blocked_title">Universal patches disabled</string>
+    <!-- Needs translation -->
+    <string name="universal_patches_profile_blocked_description">This patch profile contains universal patches. Enable “%1$s” in advanced settings to use it.</string>
+    <!-- Needs translation -->
+    <string name="universal_patches_app_blocked_description">This app contains universal patches. Enable “%1$s” in advanced settings to continue.</string>
+    <!-- Needs translation -->
+    <string name="import_patch_bundles">Import patch bundles</string>
+    <!-- Needs translation -->
+    <string name="import_patch_bundles_description">Restore remote patch bundles from a JSON file</string>
+    <!-- Needs translation -->
+    <string name="import_patch_bundles_fail">Could not import patch bundles: %s</string>
+    <!-- Needs translation -->
+    <string name="import_patch_bundles_in_progress">Importing...</string>
+    <!-- Needs translation -->
+    <string name="import_patch_bundles_success">Imported %d patch bundles</string>
+    <!-- Needs translation -->
+    <string name="import_patch_bundles_updated">Updated %d patch bundles</string>
+    <!-- Needs translation -->
+    <string name="import_patch_bundles_none">No new patch bundles were imported</string>
+    <!-- Needs translation -->
+    <string name="import_patch_bundles_banner_title">Importing patch bundles</string>
+    <!-- Needs translation -->
+    <string name="import_patch_bundles_banner_subtitle">%1$d of %2$d processed</string>
+    <!-- Needs translation -->
+    <string name="import_patch_bundles_banner_steps">Step %1$d of %2$d</string>
+    <!-- Needs translation -->
+    <string name="import_patch_profiles">Import patch profiles</string>
+    <!-- Needs translation -->
+    <string name="import_patch_profiles_description">Import saved patch profiles from a JSON file</string>
+    <!-- Needs translation -->
+    <string name="import_patch_profiles_fail">Could not import patch profiles: %s</string>
+    <!-- Needs translation -->
+    <string name="import_patch_profiles_success">Imported %d patch profiles</string>
+    <!-- Needs translation -->
+    <string name="import_patch_profiles_partial">Imported %1$d patch profiles with %2$d skipped</string>
+    <!-- Needs translation -->
+    <string name="import_patch_profiles_skipped">Skipped %d duplicate patch profiles</string>
+    <!-- Needs translation -->
+    <string name="import_patch_profiles_none">No patch profiles were imported</string>
+    <!-- Needs translation -->
+    <string name="import_manager_settings">Import manager settings</string>
+    <!-- Needs translation -->
+    <string name="import_manager_settings_description">Restore saved manager settings from a JSON file</string>
+    <!-- Needs translation -->
+    <string name="import_manager_settings_fail">Could not import manager settings: %s</string>
+    <!-- Needs translation -->
+    <string name="import_manager_settings_success">Imported manager settings</string>
+    <!-- Needs translation -->
+    <string name="export_patch_bundles">Export patch bundles</string>
+    <!-- Needs translation -->
+    <string name="export_patch_bundles_description">Save imported remote patch bundles to a JSON file</string>
+    <!-- Needs translation -->
+    <string name="export_patch_bundles_fail">Could not export patch bundles: %s</string>
+    <!-- Needs translation -->
+    <string name="export_patch_bundles_empty">There are no patch bundles to export</string>
+    <!-- Needs translation -->
+    <string name="export_patch_bundles_success">Exported %d patch bundles</string>
+    <!-- Needs translation -->
+    <string name="export_patch_bundles_partial">Exported %1$d patch bundles. Some bundles could not be exported because they were added locally.</string>
+    <!-- Needs translation -->
+    <string name="export_patch_bundles_local_not_supported">Export is only available for patch bundles imported from URLs</string>
+    <!-- Needs translation -->
+    <string name="bundle_type_remote">Remote</string>
+    <!-- Needs translation -->
+    <string name="bundle_type_local">Local</string>
+    <!-- Needs translation -->
+    <string name="bundle_type_preinstalled">Pre-installed</string>
+    <!-- Needs translation -->
+    <string name="bundle_created_at">Created %1$s</string>
+    <!-- Needs translation -->
+    <string name="bundle_updated_at">Updated %1$s</string>
+    <!-- Needs translation -->
+    <string name="bundle_changelog">Changelog</string>
+    <!-- Needs translation -->
+    <string name="bundle_view_changelog">View the latest changelog</string>
+    <!-- Needs translation -->
+    <string name="bundle_changelog_error">Failed to load changelog: %s</string>
+    <!-- Needs translation -->
+    <string name="bundle_changelog_retry">Retry</string>
+    <!-- Needs translation -->
+    <string name="bundle_changelog_empty">No changelog available</string>
+    <!-- Needs translation -->
+    <string name="export_patch_profiles">Export patch profiles</string>
+    <!-- Needs translation -->
+    <string name="export_patch_profiles_description">Export all patch profiles to a JSON file</string>
+    <!-- Needs translation -->
+    <string name="export_patch_profiles_fail">Could not export patch profiles: %s</string>
+    <!-- Needs translation -->
+    <string name="export_patch_profiles_success">Exported %d patch profiles</string>
+    <!-- Needs translation -->
+    <string name="export_patch_profiles_empty">There are no patch profiles to export</string>
+    <!-- Needs translation -->
+    <string name="export_manager_settings">Export manager settings</string>
+    <!-- Needs translation -->
+    <string name="export_manager_settings_description">Save all manager settings to a JSON file</string>
+    <!-- Needs translation -->
+    <string name="export_manager_settings_fail">Could not export manager settings: %s</string>
+    <!-- Needs translation -->
+    <string name="export_manager_settings_success">Exported manager settings</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_deselected_all_toast">Deselected all patches</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_deselected_bundle_toast">Deselected all patches in %s</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_no_selected_bundle_toast">No patches to deselect in %s</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_selected_all_toast">Selected all patches</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_select_all_empty_toast">No patches available to select</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_selected_bundle_toast">Selected all patches in %s</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_select_bundle_empty_toast">No selectable patches in %s</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_all_actions_hidden_toast">All action buttons are hidden, enable at least one in settings</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_reset_bundle_toast">Reset defaults for %s</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_button_label_all">Deselect all</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_button_label_bundle">Deselect bundle</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_button_label_defaults">All defaults</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_button_label_select_bundle">Select bundle</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_button_label_select_all">Select all</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_button_label_undo_action">Undo action</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_button_label_redo_action">Redo action</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_history_undo">Undid %1$s</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_history_redo">Redid %1$s</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_action_all_defaults">all defaults</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_action_deselect_all">deselect all</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_action_select_all">select all</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_action_select_bundle">select bundle “%1$s”</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_action_deselect_bundle">deselect bundle “%1$s”</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_action_bundle_defaults">bundle defaults for “%1$s”</string>
+    <!-- Needs translation -->
+    <string name="disable_patch_selection_confirmations">Disable action confirmations</string>
+    <!-- Needs translation -->
+    <string name="disable_patch_selection_confirmations_description">Skip confirmation dialogs for patch selection actions</string>
+    <!-- Needs translation -->
+    <string name="disable_patch_selection_confirmations_warning">Disabling confirmations may cause unintended bulk changes.</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_collapse_on_toggle">Collapse actions after toggling patches</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_collapse_on_toggle_description">Automatically hide the patch selection action buttons whenever you select or deselect a patch</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_action_order_title">Patch selection action buttons order</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_action_order_description">Choose the layout order for the patch selection action buttons</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_action_visibility_title">Hide patch selection action buttons</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_action_visibility_description">Choose which patch selection action buttons are shown</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_action_visibility_reset">Show all action buttons</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_action_order_dialog_title">Reorder patch actions</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_action_order_dialog_description">Move the entries to change how the patch selection action buttons are displayed. The preview updates live.</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_action_order_preview_label">Preview</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_action_order_reset">Reset to default order</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_action_move_up">Move up</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_action_move_down">Move down</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_confirm_deselect_bundle_title">Deselect bundle?</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_confirm_deselect_bundle_message">Deselect all patches selected from %1$s?</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_confirm_deselect_all_title">Deselect all patches?</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_confirm_deselect_all_message">This clears every selected patch across all bundles.</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_confirm_bundle_defaults_title">Restore bundle defaults?</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_confirm_bundle_defaults_message">This restores the recommended defaults for %1$s.</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_confirm_select_bundle_title">Select bundle?</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_confirm_select_bundle_message">Select every patch provided by %1$s?</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_confirm_select_all_title">Select all patches?</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_confirm_select_all_message">This selects every patch across all bundles.</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_button_label_reset_bundle">Bundle defaults</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_save_label">Save profile</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_toggle_expand">Show actions</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_toggle_collapse">Hide actions</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_reset_dialog_title">Reset patch defaults?</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_reset_dialog_message">This will restore your patch selections and options to their recommended defaults.</string>
+    <!-- Needs translation -->
+    <string name="download_settings">Download settings</string>
+    <!-- Needs translation -->
+    <string name="downloader_auto_save_title">Automatically save downloaded APKs</string>
+    <!-- Needs translation -->
+    <string name="downloader_auto_save_description">Keep APKs downloaded through plugins for reuse. Disable to delete them after patching.</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_view_error">View error details</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_failed_dialog_body">Failed to load "%1$s". You can view the error details or uninstall the plugin.</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_uninstall_title">Uninstall plugin?</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_uninstall_description">Are you sure you want to uninstall "%1$s"?</string>
+    <!-- Needs translation -->
+    <string name="strip_unused_libs">Remove unused native libraries</string>
+    <!-- Needs translation -->
+    <string name="strip_unused_libs_description">Delete native libraries for unsupported CPU architectures from patched apps</string>
+    <!-- Needs translation -->
+    <string name="reset_to_recommended">Reset to recommended</string>
+    <!-- Needs translation -->
+    <string name="patcher_auto_collapse_steps">Auto-collapse completed patcher steps</string>
+    <!-- Needs translation -->
+    <string name="patcher_auto_collapse_steps_description">Automatically collapse each patcher progress widget after all of its steps finish</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_rename">Rename patch bundle</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_view_options">View options</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_patch_options_title">Options for %1$s</string>
+    <!-- Needs translation -->
+    <string name="restore_official_bundle">Restore pre-installed Official ReVanced patch bundle</string>
+    <!-- Needs translation -->
+    <string name="restore_official_bundle_description_missing">Reinstall the pre-installed Official ReVanced patches bundle</string>
+    <!-- Needs translation -->
+    <string name="restore_official_bundle_description_installed">The pre-installed Official ReVanced patches bundle is currently installed</string>
+    <!-- Needs translation -->
+    <string name="restore_official_bundle_success">Official ReVanced patch bundle restored</string>
+    <!-- Needs translation -->
+    <string name="restore_official_bundle_failed">Failed to restore the Official ReVanced patch bundle: %1$s</string>
+    <!-- Needs translation -->
+    <string name="restore_official_bundle_already">The Official ReVanced patch bundle is already installed</string>
+    <!-- Needs translation -->
+    <string name="app_exporting">App exporting</string>
+    <!-- Needs translation -->
+    <string name="export_name_format">Export filename format</string>
+    <!-- Needs translation -->
+    <string name="export_name_format_description">Customize the default filename for exported patched apps</string>
+    <!-- Needs translation -->
+    <string name="export_name_format_dialog_title">Export filename format</string>
+    <!-- Needs translation -->
+    <string name="export_name_format_dialog_supporting">Use the placeholders below to build a filename. The .apk extension is added automatically if missing.</string>
+    <!-- Needs translation -->
+    <string name="export_name_format_preview">Preview: %1$s</string>
+    <!-- Needs translation -->
+    <string name="export_name_format_preview_label">Preview</string>
+    <!-- Needs translation -->
+    <string name="export_name_format_variables">Variables</string>
+    <!-- Needs translation -->
+    <string name="export_name_format_reset">Reset to default</string>
+    <!-- Needs translation -->
+    <string name="export_name_format_error_blank">Filename format cannot be blank.</string>
+    <!-- Needs translation -->
+    <string name="export_name_format_current">Current pattern: %1$s</string>
+    <!-- Needs translation -->
+    <string name="export_name_format_insert">Insert</string>
+    <!-- Needs translation -->
+    <string name="export_name_variable_app_name">App name</string>
+    <!-- Needs translation -->
+    <string name="export_name_variable_app_name_description">Replaced with the app\'s display name.</string>
+    <!-- Needs translation -->
+    <string name="export_name_variable_package_name">Package name</string>
+    <!-- Needs translation -->
+    <string name="export_name_variable_package_name_description">Replaced with the app\'s package name.</string>
+    <!-- Needs translation -->
+    <string name="export_name_variable_app_version">App version</string>
+    <!-- Needs translation -->
+    <string name="export_name_variable_app_version_description">Replaced with the app\'s version name.</string>
+    <!-- Needs translation -->
+    <string name="export_name_variable_patches_version">Patches version</string>
+    <!-- Needs translation -->
+    <string name="export_name_variable_patches_version_description">Replaced with the applied patch bundle version(s).</string>
+    <!-- Needs translation -->
+    <string name="export_name_variable_bundle_names">Patch bundle names</string>
+    <!-- Needs translation -->
+    <string name="export_name_variable_bundle_names_description">Replaced with the applied patch bundle name(s).</string>
+    <!-- Needs translation -->
+    <string name="export_name_variable_manager_version">Manager version</string>
+    <!-- Needs translation -->
+    <string name="export_name_variable_manager_version_description">Replaced with the manager version.</string>
+    <!-- Needs translation -->
+    <string name="export_name_variable_timestamp">Timestamp</string>
+    <!-- Needs translation -->
+    <string name="export_name_variable_timestamp_description">Replaced with the current time (yyyyMMdd-HHmmss).</string>
+    <!-- Needs translation -->
+    <string name="export_name_variable_date">Date</string>
+    <!-- Needs translation -->
+    <string name="export_name_variable_date_description">Replaced with the current date (yyyyMMdd).</string>
+    <!-- Needs translation -->
+    <string name="github_pat">GitHub PAT</string>
+    <!-- Needs translation -->
+    <string name="github_pat_description">GitHub Personal Access Token needed for GitHub integration</string>
+    <!-- Needs translation -->
+    <string name="set_github_pat_dialog_title">Set GitHub PAT</string>
+    <!-- Needs translation -->
+    <string name="set_github_pat_dialog_description">Set a GitHub Personal Access Token in order to be able to add Pull Requests as external sources. Create a PAT with scope public_repo</string>
+    <!-- Needs translation -->
+    <string name="include_github_pat_in_exports_label">Include in settings export</string>
+    <!-- Needs translation -->
+    <string name="include_github_pat_in_exports_supporting">Adds this PAT to exported manager settings</string>
+    <!-- Needs translation -->
+    <string name="include_github_pat_in_exports_warning">Do not share your PAT. If you include it in a settings export, keep that file private because it contains the token.</string>
+    <!-- Needs translation -->
+    <string name="language_settings">Language</string>
+    <!-- Needs translation -->
+    <string name="app_language">App language</string>
+    <!-- Needs translation -->
+    <string name="language_dialog_title">Choose app language</string>
+    <!-- Needs translation -->
+    <string name="language_option_system">Use device language</string>
+    <!-- Needs translation -->
+    <string name="language_option_english">English</string>
+    <!-- Needs translation -->
+    <string name="language_option_chinese_simplified">Chinese (Simplified)</string>
+    <!-- Needs translation -->
+    <string name="language_option_korean">Korean</string>
+    <!-- Needs translation -->
+    <string name="language_option_vietnamese">Vietnamese</string>
+    <!-- Needs translation -->
+    <string name="language_option_japanese">Japanese</string>
+    <!-- Needs translation -->
+    <string name="language_option_russian">Russian</string>
+    <!-- Needs translation -->
+    <string name="language_option_ukrainian">Ukrainian</string>
+    <!-- Needs translation -->
+    <string name="tab_profiles">Patch Profiles</string>
+    <!-- Needs translation -->
+    <string name="disable">Disable</string>
+    <!-- Needs translation -->
+    <string name="enable">Enable</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_disabled_toast">Disabled %d bundle(s)</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_enabled_toast">Enabled %d bundle(s)</string>
+    <!-- Needs translation -->
+    <string name="patches_disable_single_dialog_description">Disable \"%s\"?</string>
+    <!-- Needs translation -->
+    <string name="patches_enable_single_dialog_description">Enable \"%s\"?</string>
+    <!-- Needs translation -->
+    <string name="tap_on_patches">Tap on the patches to get more information about them</string>
+    <!-- Needs translation -->
+    <string name="patch_profiles_selected">%1$d patch profile(s) selected</string>
+    <!-- Needs translation -->
+    <string name="selected_apps_count">%1$d app(s) selected</string>
+    <!-- Needs translation -->
+    <string name="selected_apps_delete_dialog_description">Remove the selected apps from the manager? Installed apps on your device will stay untouched.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_save_action">Save patch profile</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_select_bundles_title">Select patch bundles</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_select_bundles_description">Choose the patch bundles to include in this profile.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_select_bundles_empty">No patch bundles are available to save.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_name_title">Name patch profile</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_name_description">Enter a name for this patch profile or select one below to update it</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_update_existing_title">Update existing profile</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_update_existing_description">Tap a saved profile to overwrite it, or leave everything unselected to create a new profile.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_name_hint">Profile name</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_saved_toast">Patch profile "%1$s" saved</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_duplicate_toast">Patch profile "%1$s" already exists for this app</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_updated_toast">Patch profile "%1$s" updated</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_save_failed_toast">Failed to save patch profile</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_rename">Rename</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_rename_title">Rename patch profile</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_version_override_action">Patch profile version settings</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_version_override_title">Version settings for "%1$s"</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_version_override_message">Set a specific app version to store with this profile, or target all versions.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_version_override_label">App version</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_version_override_hint">e.g. 18.27.35</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_version_override_all_versions">Use all versions</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_version_override_saved_toast">Profile version updated</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_version_override_failed_toast">Failed to update profile version</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_version_override_set_to_all">No version entered, saved as "%1$s"</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_version_conflict_title">Keep version override?</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_version_conflict_message">Current version: %1$s\nIncoming version: %2$s\nWhich should be saved to this profile?</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_version_conflict_use_new">Use incoming version</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_version_conflict_keep_existing">Keep existing version</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_empty_state">Save a configuration from the patch selection screen to see it here.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_missing_bundles_toast">Some bundles in this profile are not available and will be skipped.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_changed_patches_toast">Some patches or options in this profile no longer match the bundle and were skipped.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_no_available_bundles_toast">No bundles in this profile are available. Update your bundles and try again.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_launch_error">Could not open this patch profile.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_show_more">Show more</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_show_less">Show less</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_created_at">Created %1$s</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_header">%1$s • %2$s</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_unavailable_suffix">%1$s (unavailable)</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_uid_label">UID: %1$d</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_change_uid">Change UID</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_change_uid_title">Change UID for %1$s</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_change_uid_invalid">Enter a valid numeric UID.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_change_uid_success">Bundle UID updated to %1$d.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_change_uid_not_found">No local patch bundle found with UID %1$d.</string>
+    <!-- Needs translation -->
+    <string name="patcher_process_exit_message">Patcher process exited with code %1$d.</string>
+    <!-- Needs translation -->
+    <string name="patcher_memory_adjustment_title">The patcher ran out of memory</string>
+    <!-- Needs translation -->
+    <string name="patcher_memory_adjustment_message_reduced">The experimental patcher process stopped because it ran out of memory. We lowered its memory limit from %1$d MB to %2$d MB so you can try again immediately.</string>
+    <!-- Needs translation -->
+    <string name="patcher_memory_adjustment_message_no_change">The experimental patcher process stopped because it ran out of memory, but the memory limit is already at %1$d MB. Try lowering it further in Advanced settings or disable the experimental mode before retrying.</string>
+    <!-- Needs translation -->
+    <string name="patcher_memory_adjustment_retry">Try again</string>
+    <!-- Needs translation -->
+    <string name="patcher_memory_adjustment_dismiss">Dismiss</string>
+    <!-- Needs translation -->
+    <string name="patcher_missing_patch_title">Patch selection needs attention</string>
+    <!-- Needs translation -->
+    <string name="patcher_preflight_missing_patch_remove">Remove missing patches</string>
+    <!-- Needs translation -->
+    <string name="patcher_preflight_missing_patch_proceed">Proceed anyway</string>
+    <!-- Needs translation -->
+    <string name="patcher_missing_patch_review">Review selection</string>
+    <!-- Needs translation -->
+    <string name="patch_selector_missing_patch_title">Re-select missing patches</string>
+    <!-- Needs translation -->
+    <string name="delete_profile_confirmation">Delete "%1$s"?</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_delete_multiple_dialog_description">Delete the selected patch profiles?</string>
+    <!-- Needs translation -->
+    <string name="patch_bundles_used">Patch bundles used</string>
+    <!-- Needs translation -->
+    <string name="applied_patches_empty">No patches recorded for this app</string>
+    <!-- Needs translation -->
+    <string name="applied_patches_bundle_missing">Bundle metadata unavailable. Showing saved patch names.</string>
+    <!-- Needs translation -->
+    <string name="no_patch_bundles_tracked">No patch bundles recorded for this app</string>
+    <!-- Needs translation -->
+    <string name="unmounted">Unmounted</string>
+    <!-- Needs translation -->
+    <string name="install_type_custom_installer">Custom installer</string>
+    <!-- Needs translation -->
+    <string name="install_type_system_installer">System installer</string>
+    <!-- Needs translation -->
+    <string name="install_type_mount_label">Rooted mount installer</string>
+    <!-- Needs translation -->
+    <string name="install_type_shizuku_label">Shizuku</string>
+    <!-- Needs translation -->
+    <string name="unmount_confirm_description">Do you want to unmount the app?</string>
+    <!-- Needs translation -->
+    <string name="saved_install">Saved</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_uninstall_success">Uninstalled %1$s</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_uninstall_failed">Failed to uninstall %1$s</string>
+    <!-- Needs translation -->
+    <string name="downloaded_apps_export">Export selected apps</string>
+    <!-- Needs translation -->
+    <string name="downloaded_apps_export_success">Exported %1$d app(s)</string>
+    <!-- Needs translation -->
+    <string name="downloaded_apps_export_failed">Failed to export downloaded apps</string>
+    <!-- Needs translation -->
+    <string name="patch_selector_sheet_filter_sort_title">Sorting</string>
+    <!-- Needs translation -->
+    <string name="patch_selector_sheet_filter_sort_alphabetical">Alphabetical</string>
+    <!-- Needs translation -->
+    <string name="patch_selector_sheet_filter_sort_has_settings">Has settings</string>
+    <!-- Needs translation -->
+    <string name="patch_selector_sheet_filter_sort_no_settings">No settings</string>
+    <!-- Needs translation -->
+    <string name="installer_primary_title">Primary installer</string>
+    <!-- Needs translation -->
+    <string name="installer_primary_description">Used first when installing patched apps.</string>
+    <!-- Needs translation -->
+    <string name="installer_fallback_title">Fallback installer</string>
+    <!-- Needs translation -->
+    <string name="installer_fallback_description">Used automatically when the primary installer is unavailable.</string>
+    <!-- Needs translation -->
+    <string name="installer_internal_name">System installer</string>
+    <!-- Needs translation -->
+    <string name="installer_internal_description">Use the Android package installer</string>
+    <!-- Needs translation -->
+    <string name="installer_auto_saved_name">Rooted mount installer</string>
+    <!-- Needs translation -->
+    <string name="installer_auto_saved_description">Mounts the patched APK over the installed app (root required).</string>
+    <!-- Needs translation -->
+    <string name="installer_shizuku_name">Shizuku</string>
+    <!-- Needs translation -->
+    <string name="installer_shizuku_description">Install silently using Shizuku or Sui.</string>
+    <!-- Needs translation -->
+    <string name="installer_option_none">No fallback</string>
+    <!-- Needs translation -->
+    <string name="installer_none_description">No fallback installer is configured</string>
+    <!-- Needs translation -->
+    <string name="installer_status_requires_root">Requires root access</string>
+    <!-- Needs translation -->
+    <string name="installer_status_not_supported">Not supported for this action.</string>
+    <!-- Needs translation -->
+    <string name="installer_status_shizuku_not_installed">Install Shizuku or Sui to use this option.</string>
+    <!-- Needs translation -->
+    <string name="installer_status_shizuku_not_running">Start Shizuku or Sui and try again.</string>
+    <!-- Needs translation -->
+    <string name="installer_status_shizuku_permission">Grant Shizuku permission to Universal ReVanced Manager from the Shizuku app.</string>
+    <!-- Needs translation -->
+    <string name="installer_mount_warning_title">Rooted mount installer selected</string>
+    <!-- Needs translation -->
+    <string name="installer_mount_warning_install">Your primary installer is set to the rooted mount installer. This saved app was not installed using mount.</string>
+    <!-- Needs translation -->
+    <string name="installer_mount_warning_update">Your primary installer is set to the rooted mount installer. This saved app was not installed using mount.</string>
+    <!-- Needs translation -->
+    <string name="installer_mount_warning_uninstall">Your primary installer is set to the rooted mount installer. This saved app was not installed using mount.</string>
+    <!-- Needs translation -->
+    <string name="installer_mount_mismatch_title">Rooted mount installer not selected</string>
+    <!-- Needs translation -->
+    <string name="installer_mount_mismatch_install">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, then mount.</string>
+    <!-- Needs translation -->
+    <string name="installer_mount_mismatch_update">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, then remount.</string>
+    <!-- Needs translation -->
+    <string name="installer_mount_mismatch_uninstall">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, then unmount.</string>
+    <!-- Needs translation -->
+    <string name="mount_version_mismatch_title">Mount failed</string>
+    <!-- Needs translation -->
+    <string name="mount_version_mismatch_message">Stock app version (%2$s) does not match patched app version (%1$s). Mount the matching stock version, then try again.</string>
+    <!-- Needs translation -->
+    <string name="installer_status_shizuku_unsupported">The installed Shizuku version is not supported.</string>
+    <!-- Needs translation -->
+    <string name="installer_action_open_shizuku">Open Shizuku</string>
+    <!-- Needs translation -->
+    <string name="installer_shizuku_launch_failed">Unable to open Shizuku. Launch it manually and try again.</string>
+    <!-- Needs translation -->
+    <string name="installer_custom_header">Custom installers</string>
+    <!-- Needs translation -->
+    <string name="installer_custom_manage_title">Manage custom installers</string>
+    <!-- Needs translation -->
+    <string name="installer_custom_tab_saved">Saved</string>
+    <!-- Needs translation -->
+    <string name="installer_custom_saved_note">Installers manually added by the user to the Primary &amp; Fallback installer selection menus.</string>
+    <!-- Needs translation -->
+    <string name="installer_custom_tab_auto_saved">Auto saved</string>
+    <!-- Needs translation -->
+    <string name="installer_custom_auto_note">Installers automatically detected and added to the Primary &amp; Fallback installer selection menus.</string>
+    <!-- Needs translation -->
+    <string name="installer_custom_tab_discover">Discover</string>
+    <!-- Needs translation -->
+    <string name="installer_custom_close">Close</string>
+    <!-- Needs translation -->
+    <string name="installer_custom_manage_description">Save third-party installer activities for use as primary or fallback installers</string>
+    <!-- Needs translation -->
+    <string name="installer_custom_input_label">Package name</string>
+    <!-- Needs translation -->
+    <string name="installer_custom_package_hint">Type a package name and tap \"Find installers\" to discover installer activities</string>
+    <!-- Needs translation -->
+    <string name="installer_custom_lookup">Find installers</string>
+    <!-- Needs translation -->
+    <string name="installer_custom_lookup_empty">Enter a package name first.</string>
+    <!-- Needs translation -->
+    <string name="installer_custom_searching">Searching installer activities…</string>
+    <!-- Needs translation -->
+    <string name="installer_custom_lookup_found">Found %1$d installer(s).</string>
+    <!-- Needs translation -->
+    <string name="installer_custom_action_add">Save installer</string>
+    <!-- Needs translation -->
+    <string name="installer_custom_action_remove">Remove saved installer</string>
+    <!-- Needs translation -->
+    <string name="installer_custom_builtin_indicator">Auto saved</string>
+    <!-- Needs translation -->
+    <string name="installer_custom_saved_indicator">Saved</string>
+    <!-- Needs translation -->
+    <string name="installer_custom_lookup_none">No installer activities found for %1$s.</string>
+    <!-- Needs translation -->
+    <string name="installer_custom_candidates_title">Available activities for %1$s</string>
+    <!-- Needs translation -->
+    <string name="installer_custom_saved_header">Saved installers</string>
+    <!-- Needs translation -->
+    <string name="installer_custom_empty">No custom installers saved yet.</string>
+    <!-- Needs translation -->
+    <string name="installer_custom_added">Custom installer saved.</string>
+    <!-- Needs translation -->
+    <string name="installer_custom_exists">That installer is already saved.</string>
+    <!-- Needs translation -->
+    <string name="installer_custom_removed">Custom installer removed.</string>
+    <!-- Needs translation -->
+    <string name="installer_custom_remove_failed">Could not remove the installer. Try again.</string>
+    <!-- Needs translation -->
+    <string name="installer_hint_generic">The installation failed. Try again or switch to a different installer.</string>
+    <!-- Needs translation -->
+    <string name="installer_hint_blocked">The installation was blocked by Android. Check Play Protect or security settings.</string>
+    <!-- Needs translation -->
+    <string name="installer_hint_conflict">Another app with this package name is already installed. Uninstall it before continuing.</string>
+    <!-- Needs translation -->
+    <string name="installer_hint_incompatible">The APK is not compatible with this device or Android version.</string>
+    <!-- Needs translation -->
+    <string name="installer_hint_invalid">The APK is invalid or corrupted.</string>
+    <!-- Needs translation -->
+    <string name="installer_hint_storage">There is not enough storage space for the installation.</string>
+    <!-- Needs translation -->
+    <string name="installer_hint_timeout">The installation timed out. Try again.</string>
+    <!-- Needs translation -->
+    <string name="installer_hint_aborted">The installation was cancelled.</string>
+    <!-- Needs translation -->
+    <string name="installer_hint_with_reason">%1$s&#10;&#10;Details: %2$s</string>
+    <!-- Needs translation -->
+    <string name="installer_external_launched">Opening %1$s…</string>
+    <!-- Needs translation -->
+    <string name="installer_external_timeout">%1$s did not confirm the installation. Check the other app and try again.</string>
+    <!-- Needs translation -->
+    <string name="installer_external_success">%1$s reported a successful installation.</string>
+    <!-- Needs translation -->
+    <string name="installer_external_finished_no_change">%1$s finished without installing the app. Check the installer for an error message and try again.</string>
+    <!-- Needs translation -->
+    <string name="installing_ellipsis">Installing…</string>
+    <!-- Needs translation -->
+    <string name="uninstalling_ellipsis">Uninstalling…</string>
+    <!-- Needs translation -->
+    <string name="mounting_ellipsis">Mounting…</string>
+    <!-- Needs translation -->
+    <string name="unmounting">Unmounting…</string>
+    <!-- Needs translation -->
+    <string name="install_app_fail_title">Installation failed</string>
+    <!-- Needs translation -->
+    <string name="install_app_fail_missing_stock">Missing original APK for mount install.</string>
+    <!-- Needs translation -->
+    <string name="mount_split_not_supported">Rooted mount installer does not support split APKs. Use system installer instead.</string>
+    <!-- Needs translation -->
+    <string name="mount_app_fail_title">Mount failed</string>
+    <!-- Needs translation -->
+    <string name="mount_app_fail">Failed to mount app: %1$s</string>
+    <!-- Needs translation -->
+    <string name="install_timeout_message">Installation did not finish. Check the system installer dialog and try again.</string>
+    <!-- Needs translation -->
+    <string name="uninstall_timeout_message">Uninstallation did not finish. Check the uninstall dialog and try again.</string>
+    <!-- Needs translation -->
+    <string name="saved_app_export_success">Exported patched app</string>
+    <!-- Needs translation -->
+    <string name="saved_app_export_failed">Failed to export patched app</string>
+    <!-- Needs translation -->
+    <string name="saved_app_removed_toast">Removed saved patched app</string>
+    <!-- Needs translation -->
+    <string name="saved_app_copy_removed_toast">Removed saved copy</string>
+    <!-- Needs translation -->
+    <string name="delete_saved_app_title">Delete saved app</string>
+    <!-- Needs translation -->
+    <string name="delete_saved_app_description">This will remove the saved app entry and its stored APK.</string>
+    <!-- Needs translation -->
+    <string name="delete_saved_entry_title">Remove saved app entry</string>
+    <!-- Needs translation -->
+    <string name="delete_saved_entry_description">This will remove the saved app entry and its saved APK. The app will remain installed.</string>
+    <!-- Needs translation -->
+    <string name="saved_app_launch_unavailable">Install the app before opening it.</string>
+    <!-- Needs translation -->
+    <string name="install_saved_app">Install</string>
+    <!-- Needs translation -->
+    <string name="remount_saved_app">Remount</string>
+    <!-- Needs translation -->
+    <string name="update_saved_app">Update</string>
+    <!-- Needs translation -->
+    <string name="installing_saved_app">Installing saved app…</string>
+    <!-- Needs translation -->
+    <string name="saved_app_install_success">Installed saved app</string>
+    <!-- Needs translation -->
+    <string name="saved_app_install_failed">Failed to install saved app</string>
+    <!-- Needs translation -->
+    <string name="saved_app_uninstall_title">Uninstall installed copy?</string>
+    <!-- Needs translation -->
+    <string name="saved_app_unmount_title">Unmount installed copy?</string>
+    <!-- Needs translation -->
+    <string name="saved_app_uninstall_description">This removes the installed version only. Your saved APK stays intact.</string>
+    <!-- Needs translation -->
+    <string name="saved_app_unmount_description">This unmounts the patched APK. Your saved APK stays intact.</string>
+    <!-- Needs translation -->
+    <string name="saved_app_install_missing">Saved APK not found</string>
+    <!-- Needs translation -->
+    <string name="delete_saved_copy">Delete saved copy</string>
+    <!-- Needs translation -->
+    <string name="patcher_step_prepare_split_apk">Merge split APK</string>
+    <!-- Needs translation -->
+    <string name="patcher_step_merge_not_required">No split merge required</string>
+    <!-- Needs translation -->
+    <string name="patcher_install_in_progress_title">Installation in progress</string>
+    <!-- Needs translation -->
+    <string name="patcher_install_in_progress_leave">Leave anyway</string>
+    <!-- Needs translation -->
+    <string name="patcher_install_in_progress_stay">Stay here</string>
+    <!-- Needs translation -->
+    <string name="patcher_mount_in_progress_title">Mount in progress</string>
+    <!-- Needs translation -->
+    <string name="patcher_mount_in_progress">Mount is in progress. Please wait</string>
+    <!-- Needs translation -->
+    <string name="save_patched_app_dialog_title">Leave the patcher?</string>
+    <!-- Needs translation -->
+    <string name="save_patched_app_dialog_message">You are about to leave the patcher. The patched app will be lost unless you save it for later.</string>
+    <!-- Needs translation -->
+    <string name="save_patched_app_dialog_save">Save patched app</string>
+    <!-- Needs translation -->
+    <string name="save_patched_app_dialog_leave">Leave without saving</string>
+    <!-- Needs translation -->
+    <string name="save_patched_app_dialog_cancel">Stay on patcher</string>
+    <!-- Needs translation -->
+    <string name="save_patched_app_dialog_hint_save">Keeps the patched APK accessible from the Apps tab for future installation.</string>
+    <!-- Needs translation -->
+    <string name="save_patched_app_dialog_hint_leave">Discards the patched APK and returns you to the previous screen.</string>
+    <!-- Needs translation -->
+    <string name="patched_app_saved_toast">Patched app saved for later</string>
+    <!-- Needs translation -->
+    <string name="patched_app_save_failed_toast">Failed to save patched app</string>
+    <!-- Needs translation -->
+    <string name="permanent_dismiss">Do not show this again</string>
+    <!-- Needs translation -->
+    <string name="github">Universal ReVanced Manager GitHub</string>
+    <!-- Needs translation -->
+    <string name="original_revanced_manager_github">Official ReVanced Manager GitHub</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_urls">Get patch bundle imports</string>
+    <!-- Needs translation -->
+    <string name="unique_features_label">here.</string>
+    <!-- Needs translation -->
+    <string name="here">here.</string>
+    <!-- Needs translation -->
+    <string name="new_version">New version: %s</string>
+    <!-- Needs translation -->
+    <string name="patches_and_manager">Patch Bundles &amp; Manager</string>
+    <!-- Needs translation -->
+    <string name="update_on_metered_connections">Update on metered connections</string>
+    <!-- Needs translation -->
+    <string name="update_on_metered_connections_description">Allow patch and manager updates over metered networks</string>
+    <!-- Needs translation -->
+    <string name="update_published">Published %s</string>
+    <!-- Needs translation -->
+    <string name="manager_update_banner_title">Downloading manager update</string>
+    <!-- Needs translation -->
+    <string name="manager_update_progress_detail">%1$.1f MB / %2$.1f MB (%3$d%%)</string>
+    <!-- Needs translation -->
+    <string name="resume_download">Resume download</string>
+    <!-- Needs translation -->
+    <string name="deselect_all">Deselect all</string>
+    <!-- Needs translation -->
+    <string name="deselect_bundle">Deselect current bundle</string>
+    <!-- Needs translation -->
+    <string name="installation_signature_mismatch_dialog_title">Signature mismatch</string>
+    <!-- Needs translation -->
+    <string name="installation_signature_mismatch_description">The installed app is signed differently. Uninstall the installed app and install this one?</string>
+    <!-- Needs translation -->
+    <string name="installation_signature_mismatch_confirm">Uninstall and install</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_urls_link">Get patch bundle URLs here</string>
+    <!-- Needs translation -->
+    <string name="saved_app_install_cancelled">Installation cancelled</string>
+</resources>

@@ -199,6 +199,8 @@
     <string name="patch_selection_safeguard_description">パッチの選択・解除やオプションのカスタマイズを制限しない</string>
     <string name="patch_selection_safeguard_confirmation">パッチの選択を変更すると、予期しない問題が発生する可能性があります。\n\nそれでも有効にしますか？</string>
     <string name="universal_patches_safeguard">ユニバーサルパッチの表示と使用を許可</string>
+    <!-- Needs translation -->
+    <string name="universal_patches_safeguard_confirmation">"Universal patches are not as well tested as those meant for specific apps.\n\nEnable anyway?"</string>
     <string name="universal_patches_safeguard_description">ユニバーサルパッチを非表示にせず、使用も制限しない</string>
     <string name="universal_patches_profile_blocked_title">ユニバーサルパッチが無効です</string>
     <string name="universal_patches_profile_blocked_description">このパッチ設定にはユニバーサルパッチが含まれています。使用するには詳細設定で「%1$s」を有効にしてください。</string>
@@ -363,6 +365,10 @@
     <string name="downloader_plugin_trust_dialog_title">プラグインを信頼しますか？</string>
     <string name="downloader_plugin_revoke_trust_dialog_title">信頼を取り消しますか？</string>
     <string name="downloader_plugin_trust_dialog_body">パッケージ名: %1$s\n署名 (SHA-256): %2$s</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_trust_dialog_plugin">"Plugin:\n%s"</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_trust_dialog_signature">"Signature:\n\n%s"</string>
     <string name="downloader_plugin_view_error">エラー詳細を表示</string>
     <string name="downloader_plugin_failed_dialog_body">「%1$s」の読み込みに失敗しました。エラー詳細を表示するか、プラグインをアンインストールできます。</string>
     <string name="downloader_plugin_uninstall_title">プラグインをアンインストールしますか？</string>
@@ -477,6 +483,10 @@
     <string name="language_option_korean">韓国語</string>
     <string name="language_option_vietnamese">ベトナム語</string>
     <string name="language_option_japanese">日本語</string>
+    <!-- Needs translation -->
+    <string name="language_option_russian">Russian</string>
+    <!-- Needs translation -->
+    <string name="language_option_ukrainian">Ukrainian</string>
     <string name="device">デバイス</string>
     <string name="device_android_version">Android バージョン</string>
     <string name="device_model">モデル</string>

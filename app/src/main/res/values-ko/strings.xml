@@ -183,6 +183,8 @@
     <string name="patch_selection_safeguard_description">패치를 선택하거나 선택 해제할 수 있고 옵션을 변경할 수 있습니다</string>
     <string name="patch_selection_safeguard_confirmation">패치 선택목록을 변경하면 예상되지 않은 문제점이 발생할 수 있습니다.\n\n그래도 활성화하시겠습니까?</string>
     <string name="universal_patches_safeguard">범용 패치 표시 및 사용 허용</string>
+    <!-- Needs translation -->
+    <string name="universal_patches_safeguard_confirmation">"Universal patches are not as well tested as those meant for specific apps.\n\nEnable anyway?"</string>
     <!-- PR #36: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/36 -->
     <string name="universal_patches_safeguard_description">범용 패치를 표시하거나 사용할 수 있습니다</string>
     <string name="universal_patches_profile_blocked_title">범용 패치가 비활성화되어 있음</string>
@@ -362,6 +364,10 @@
     <string name="downloader_plugin_trust_dialog_title">플러그인을 신뢰하시겠습니까?</string>
     <string name="downloader_plugin_revoke_trust_dialog_title">신뢰하지 않으시겠습니까?</string>
     <string name="downloader_plugin_trust_dialog_body">패키지 이름: %1$s\n서명 (SHA-256): %2$s</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_trust_dialog_plugin">"Plugin:\n%s"</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_trust_dialog_signature">"Signature:\n\n%s"</string>
     <string name="downloader_plugin_view_error">오류 세부 정보 보기</string>
     <string name="downloader_plugin_failed_dialog_body">\"%1$s\"를 로드할 수 없습니다. 오류 세부 정보를 보거나 플러그인을 삭제할 수 있습니다.</string>
     <string name="downloader_plugin_uninstall_title">플러그인을 삭제하시겠습니까?</string>
@@ -477,6 +483,10 @@
     <!-- From PR #38: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/38 -->
     <string name="language_option_vietnamese">베트남어</string>
     <string name="language_option_japanese">일본어</string>
+    <!-- Needs translation -->
+    <string name="language_option_russian">Russian</string>
+    <!-- Needs translation -->
+    <string name="language_option_ukrainian">Ukrainian</string>
     <string name="device">기기</string>
     <string name="device_android_version">Android 버전</string>
     <string name="device_model">모델</string>

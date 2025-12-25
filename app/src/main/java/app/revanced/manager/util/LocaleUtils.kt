@@ -10,7 +10,9 @@ private val supportedLanguages = setOf(
     "zh-cn",
     "vi",
     "ko",
-    "ja"
+    "ja",
+    "ru",
+    "uk"
 )
 
 private fun normalizeTag(tag: String): String =

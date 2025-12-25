@@ -22,6 +22,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material3.Icon
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -112,7 +116,9 @@ fun GeneralSettingsScreen(
             LanguageOption("vi", R.string.language_option_vietnamese),
             // From PR #42: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/42
             LanguageOption("ko", R.string.language_option_korean),
-            LanguageOption("ja", R.string.language_option_japanese)
+            LanguageOption("ja", R.string.language_option_japanese),
+            LanguageOption("ru", R.string.language_option_russian),
+            LanguageOption("uk", R.string.language_option_ukrainian)
         )
     }
 
@@ -698,30 +704,61 @@ private fun ColorChannelSlider(
 
 @Composable
 private fun ThemePreview(modifier: Modifier = Modifier) {
+    val shape = RoundedCornerShape(18.dp)
     Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(20.dp),
-        tonalElevation = 4.dp,
-        color = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp)
+        modifier = modifier
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
+            .clip(shape),
+        shape = shape,
+        tonalElevation = 1.dp,
+        color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                text = stringResource(R.string.app_name),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = stringResource(R.string.theme_preview_description),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .background(
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                            RoundedCornerShape(8.dp)
+                        )
+                ) {
+                    Text(
+                        text = "UR",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.app_name),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = stringResource(R.string.theme_preview_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
             )
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                FilledTonalButton(onClick = { }) {
+                OutlinedButton(onClick = { }) {
                     Text(stringResource(R.string.apply))
                 }
                 TextButton(onClick = { }) {
@@ -740,23 +777,90 @@ private fun ExpressiveThemePreview(modifier: Modifier = Modifier) {
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                text = stringResource(R.string.app_name),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.primary,
+                                MaterialTheme.colorScheme.tertiary
+                            )
+                        )
+                    )
             )
-            Text(
-                text = stringResource(R.string.theme_preview_description),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    tonalElevation = 2.dp
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Outlined.Palette, contentDescription = null)
+                    }
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.app_name),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = stringResource(R.string.theme_preview_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(Icons.Outlined.AutoAwesome, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Text(
+                            text = stringResource(R.string.theme_preview_title),
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(
+                    MaterialTheme.colorScheme.primary,
+                    MaterialTheme.colorScheme.secondary,
+                    MaterialTheme.colorScheme.tertiary
+                ).forEach { swatch ->
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = swatch,
+                        tonalElevation = 1.dp,
+                        modifier = Modifier.size(18.dp)
+                    ) {}
+                }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 FilledTonalButton(onClick = { }) {
                     Text(stringResource(R.string.apply))
                 }
-                TextButton(onClick = { }) {
+                OutlinedButton(onClick = { }) {
                     Text(stringResource(R.string.cancel))
                 }
             }
