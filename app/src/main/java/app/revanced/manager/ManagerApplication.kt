@@ -81,11 +81,11 @@ class ManagerApplication : Application() {
             if (currentApi == LEGACY_MANAGER_REPO_URL || currentApi == LEGACY_MANAGER_REPO_API_URL) {
                 prefs.api.update(DEFAULT_API_URL)
             }
-            val desiredLanguage = prefs.appLanguage.get().let { if (it == "system") "en" else it }.ifBlank { "en" }
-            if (desiredLanguage != prefs.appLanguage.get()) {
-                prefs.appLanguage.update(desiredLanguage)
+            val storedLanguage = prefs.appLanguage.get().ifBlank { "system" }
+            if (storedLanguage != prefs.appLanguage.get()) {
+                prefs.appLanguage.update(storedLanguage)
             }
-            applyAppLanguage(desiredLanguage)
+            applyAppLanguage(storedLanguage)
         }
         scope.launch(Dispatchers.Default) {
             downloaderPluginRepository.reload()

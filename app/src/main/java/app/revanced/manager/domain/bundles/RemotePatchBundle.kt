@@ -1,6 +1,5 @@
 package app.revanced.manager.domain.bundles
 
-import app.revanced.manager.data.redux.ActionContext
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.network.api.ReVancedAPI
 import app.revanced.manager.network.dto.ReVancedAsset
@@ -25,6 +24,7 @@ import org.koin.core.component.inject
 import java.io.File
 import java.io.IOException
 import java.util.zip.ZipInputStream
+import okhttp3.Protocol
 
 data class PatchBundleDownloadResult(
     val versionSignature: String,
@@ -44,7 +44,8 @@ sealed class RemotePatchBundle(
     directory: File,
     val endpoint: String,
     val autoUpdate: Boolean,
-) : PatchBundleSource(name, uid, displayName, createdAt, updatedAt, error, directory), KoinComponent {
+    enabled: Boolean,
+) : PatchBundleSource(name, uid, displayName, createdAt, updatedAt, error, directory, enabled), KoinComponent {
     protected val http: HttpService by inject()
 
     protected abstract suspend fun getLatestInfo(): ReVancedAsset
@@ -54,7 +55,8 @@ sealed class RemotePatchBundle(
         displayName: String? = this.displayName,
         createdAt: Long? = this.createdAt,
         updatedAt: Long? = this.updatedAt,
-        autoUpdate: Boolean = this.autoUpdate
+        autoUpdate: Boolean = this.autoUpdate,
+        enabled: Boolean = this.enabled
     ): RemotePatchBundle
 
     override fun copy(
@@ -62,22 +64,25 @@ sealed class RemotePatchBundle(
         name: String,
         displayName: String?,
         createdAt: Long?,
-        updatedAt: Long?
-    ): RemotePatchBundle = copy(error, name, displayName, createdAt, updatedAt, this.autoUpdate)
+        updatedAt: Long?,
+        enabled: Boolean
+    ): RemotePatchBundle = copy(error, name, displayName, createdAt, updatedAt, this.autoUpdate, enabled)
 
     // PR #35: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35
     protected open suspend fun download(info: ReVancedAsset, onProgress: PatchBundleDownloadProgress? = null) =
         withContext(Dispatchers.IO) {
             try {
-                patchBundleOutputStream().use {
-                    http.streamTo(
-                        outputStream = it,
-                        builder = { url(info.downloadUrl) },
-                        onProgress = onProgress
-                    )
-                }
+                patchesFile.parentFile?.mkdirs()
+                patchesFile.setWritable(true, true)
+                http.downloadToFile(
+                    saveLocation = patchesFile,
+                    builder = { url(info.downloadUrl) },
+                    onProgress = onProgress
+                )
+                patchesFile.setReadOnly()
                 requireNonEmptyPatchesFile("Downloading patch bundle")
             } catch (t: Throwable) {
+                runCatching { patchesFile.setWritable(true, true) }
                 runCatching { patchesFile.delete() }
                 throw t
             }
@@ -93,10 +98,10 @@ sealed class RemotePatchBundle(
     /**
      * Downloads the latest version regardless if there is a new update available.
      */
-    suspend fun ActionContext.downloadLatest(onProgress: PatchBundleDownloadProgress? = null): PatchBundleDownloadResult =
+    suspend fun downloadLatest(onProgress: PatchBundleDownloadProgress? = null): PatchBundleDownloadResult =
         download(getLatestInfo(), onProgress)
 
-    suspend fun ActionContext.update(onProgress: PatchBundleDownloadProgress? = null): PatchBundleDownloadResult? =
+    suspend fun update(onProgress: PatchBundleDownloadProgress? = null): PatchBundleDownloadResult? =
         withContext(Dispatchers.IO) {
         val info = getLatestInfo()
         if (hasInstalled() && info.version == installedVersionSignatureInternal)
@@ -141,7 +146,8 @@ class JsonPatchBundle(
     directory: File,
     endpoint: String,
     autoUpdate: Boolean,
-) : RemotePatchBundle(name, uid, displayName, createdAt, updatedAt, installedVersionSignature, error, directory, endpoint, autoUpdate) {
+    enabled: Boolean,
+) : RemotePatchBundle(name, uid, displayName, createdAt, updatedAt, installedVersionSignature, error, directory, endpoint, autoUpdate, enabled) {
     override suspend fun getLatestInfo() = withContext(Dispatchers.IO) {
         http.request<ReVancedAsset> {
             url(endpoint)
@@ -154,7 +160,8 @@ class JsonPatchBundle(
         displayName: String?,
         createdAt: Long?,
         updatedAt: Long?,
-        autoUpdate: Boolean
+        autoUpdate: Boolean,
+        enabled: Boolean
     ) = JsonPatchBundle(
         name,
         uid,
@@ -166,6 +173,7 @@ class JsonPatchBundle(
         directory,
         endpoint,
         autoUpdate,
+        enabled
     )
 }
 
@@ -180,7 +188,8 @@ class APIPatchBundle(
     directory: File,
     endpoint: String,
     autoUpdate: Boolean,
-) : RemotePatchBundle(name, uid, displayName, createdAt, updatedAt, installedVersionSignature, error, directory, endpoint, autoUpdate) {
+    enabled: Boolean,
+) : RemotePatchBundle(name, uid, displayName, createdAt, updatedAt, installedVersionSignature, error, directory, endpoint, autoUpdate, enabled) {
     private val api: ReVancedAPI by inject()
 
     override suspend fun getLatestInfo() = api.getPatchesUpdate().getOrThrow()
@@ -190,7 +199,8 @@ class APIPatchBundle(
         displayName: String?,
         createdAt: Long?,
         updatedAt: Long?,
-        autoUpdate: Boolean
+        autoUpdate: Boolean,
+        enabled: Boolean
     ) = APIPatchBundle(
         name,
         uid,
@@ -202,6 +212,7 @@ class APIPatchBundle(
         directory,
         endpoint,
         autoUpdate,
+        enabled
     )
 }
 
@@ -216,8 +227,9 @@ class GitHubPullRequestBundle(
     error: Throwable?,
     directory: File,
     endpoint: String,
-    autoUpdate: Boolean
-) : RemotePatchBundle(name, uid, displayName, createdAt, updatedAt, installedVersionSignature, error, directory, endpoint, autoUpdate) {
+    autoUpdate: Boolean,
+    enabled: Boolean
+) : RemotePatchBundle(name, uid, displayName, createdAt, updatedAt, installedVersionSignature, error, directory, endpoint, autoUpdate, enabled) {
 
     private val api: ReVancedAPI by inject()
 
@@ -238,6 +250,9 @@ class GitHubPullRequestBundle(
         val customHttpClient = HttpClient(OkHttp) {
             engine {
                 config {
+                    // Force HTTP/1.1 to avoid HTTP/2 PROTOCOL_ERROR stream resets when fetching
+                    // PR artifacts from GitHub.
+                    protocols(listOf(Protocol.HTTP_1_1))
                     followRedirects(true)
                     followSslRedirects(true)
                 }
@@ -315,7 +330,8 @@ class GitHubPullRequestBundle(
         displayName: String?,
         createdAt: Long?,
         updatedAt: Long?,
-        autoUpdate: Boolean
+        autoUpdate: Boolean,
+        enabled: Boolean
     ) = GitHubPullRequestBundle(
         name,
         uid,
@@ -326,7 +342,8 @@ class GitHubPullRequestBundle(
         error,
         directory,
         endpoint,
-        autoUpdate
+        autoUpdate,
+        enabled
     )
 }
 

@@ -101,7 +101,8 @@
     <string name="bundle_version_dialog_other_title">サポートされている別のバージョンを選択:</string>
     <string name="bundle_version_dialog_locked_title">バージョンセーフガードが有効です</string>
     <string name="bundle_version_dialog_locked_hint">「設定」&gt;「詳細設定」&gt;「セーフガード」に移動し、「推奨アプリバージョンを必須にする」をオフ、「バージョン互換性チェックを無効化」をオンにすると、バンドル固有のバージョンを選択できるようになります。</string>
-
+    <!-- Needs translation -->
+    <string name="patch_versions_dialog_title">Supported versions for %1$s</string>
     <string name="patch_item_description">アプリケーションへのパッチ適用を開始</string>
     <string name="patch_selector_item">パッチを選択</string>
     <string name="patch_selector_item_description">%d 個のパッチを選択済み</string>
@@ -231,6 +232,8 @@
     <string name="import_patch_bundles_none">新しいパッチバンドルはインポートされませんでした</string>
     <string name="import_patch_bundles_banner_title">パッチバンドルをインポート中</string>
     <string name="import_patch_bundles_banner_subtitle">%1$d / %2$d 処理完了</string>
+    <!-- Needs translation -->
+    <string name="import_patch_bundles_banner_steps">Step %1$d of %2$d</string>
     <string name="import_patch_profiles">パッチプロファイルのインポート</string>
     <string name="import_patch_profiles_description">保存されたパッチプロファイルを JSON ファイルからインポート</string>
     <string name="import_patch_profiles_fail">パッチプロファイルをインポートできませんでした: %s</string>
@@ -482,6 +485,18 @@
     <string name="tab_patches">パッチバンドル</string>
     <string name="tab_profiles">パッチプロファイル</string>
     <string name="delete">削除</string>
+    <!-- Needs translation -->
+    <string name="disable">Disable</string>
+    <!-- Needs translation -->
+    <string name="enable">Enable</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_enabled_toast">Enabled %d bundle(s)</string>
+    <!-- Needs translation -->
+    <string name="patches_enable_single_dialog_description">Enable "%s"?</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_disabled_toast">Disabled %d bundle(s)</string>
+    <!-- Needs translation -->
+    <string name="patches_disable_single_dialog_description">Disable "%s"?</string>
     <string name="refresh">更新</string>
     <string name="continue_anyways">それでも続行</string>
     <string name="download_another_version">別のバージョンをダウンロード</string>
@@ -690,7 +705,13 @@
     <string name="install_app_success">アプリをインストールしました</string>
     <string name="install_app_fail_title">インストール失敗</string>
     <string name="install_app_fail">アプリのインストールに失敗しました: %s</string>
+    <!-- Needs translation -->
+    <string name="install_app_fail_missing_stock">Missing original APK for mount install.</string>
+    <!-- Needs translation -->
+    <string name="mount_split_not_supported">Rooted mount installer does not support split APKs. Use system installer instead.</string>
     <string name="install_timeout_message">インストールが完了しませんでした。システムインストーラーのダイアログを確認して再試行してください。</string>
+    <!-- Needs translation -->
+    <string name="uninstall_timeout_message">Uninstallation did not finish. Check the uninstall dialog and try again.</string>
     <string name="reinstall_app_fail">アプリの再インストールに失敗しました: %s</string>
     <string name="uninstall_app_fail">アプリのアンインストールに失敗しました: %s</string>
     <string name="open_app">開く</string>
@@ -857,11 +878,17 @@
     <string name="installation_aborted_description">インストールが手動でキャンセルされました。再試行しますか？</string>
     <string name="installation_blocked_description">インストールがブロックされました。デバイスのセキュリティ設定を確認して再試行してください。</string>
     <string name="installation_conflict_description">アプリの既存のインストールにより、インストールが妨げられました。インストールされているアプリをアンインストールして再試行しますか？</string>
+    <!-- Needs translation -->
+    <string name="installation_signature_mismatch_dialog_title">Signature mismatch</string>
+    <!-- Needs translation -->
+    <string name="installation_signature_mismatch_description">The installed app is signed differently. Uninstall the installed app and install this one?</string>
     <string name="installation_incompatible_description">アプリはこのデバイスと互換性がありません。このデバイスと互換性のある APK を使用して再試行してください。</string>
     <string name="installation_invalid_description">アプリが無効です。アプリをアンインストールして再試行しますか？</string>
     <string name="installation_storage_issue_description">ストレージ不足のため、アプリをインストールできませんでした。空き容量を増やして再試行してください。</string>
     <string name="installation_timeout_description">インストールに時間がかかりすぎました。再試行しますか？</string>
     <string name="reinstall">再インストール</string>
+    <!-- Needs translation -->
+    <string name="installation_signature_mismatch_confirm">Uninstall and install</string>
     <string name="show">表示</string>
     <string name="debugging">デバッグ</string>
     <string name="about_device">デバイスについて</string>
@@ -873,6 +900,8 @@
     <string name="patches_prereleases">プレリリースを使用</string>
     <string name="patches_prereleases_description">%s のプレリリースバージョンを使用する</string>
     <string name="patches_url">パッチバンドルURL</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_urls_link">Get patch bundle URLs here</string>
     <string name="incompatible_patches_dialog">これらのパッチは、選択されたアプリバージョン (%1$s) と互換性がありません。\n\n詳細を表示するにはパッチをクリックしてください。</string>
     <string name="incompatible_patch">互換性のないパッチ</string>
     <string name="any_version">任意</string>
@@ -914,9 +943,18 @@
     <string name="installer_mount_mismatch_update">このアプリはルートマウントインストーラーを使用してインストールされました。マウント操作を使用するにはプライマリインストーラーを戻すか、代わりに通常更新してください。</string>
     <string name="installer_mount_mismatch_uninstall">このアプリはルートマウントインストーラーを使用してインストールされました。マウント操作を使用するにはプライマリインストーラーを戻すか、代わりに通常アンインストールしてください。</string>
     <string name="installing_ellipsis">インストール中…</string>
+
+    <!-- Needs translation -->
+
+    <!-- Needs translation -->
+
+
+    <string name="uninstalling_ellipsis">Uninstalling…</string>
     <string name="mounting_ellipsis">マウント中…</string>
     <string name="unmounting">マウント解除中…</string>
     <string name="remount_saved_app">再マウント</string>
     <string name="saved_app_unmount_title">インストール済みコピーをマウント解除しますか？</string>
     <string name="saved_app_unmount_description">これによりパッチ適用済みAPKのマウントが解除されます。保存済みAPKはそのまま残ります。</string>
 </resources>
+
+

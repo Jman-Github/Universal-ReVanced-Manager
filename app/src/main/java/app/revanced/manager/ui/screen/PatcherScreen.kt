@@ -218,6 +218,24 @@ fun PatcherScreen(
         }
     }
 
+    viewModel.signatureMismatchPackage?.let {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissSignatureMismatchPrompt,
+            title = { Text(stringResource(R.string.installation_signature_mismatch_dialog_title)) },
+            text = { Text(stringResource(R.string.installation_signature_mismatch_description)) },
+            confirmButton = {
+                TextButton(onClick = viewModel::confirmSignatureMismatchInstall) {
+                    Text(stringResource(R.string.installation_signature_mismatch_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissSignatureMismatchPrompt) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+
     viewModel.memoryAdjustmentDialog?.let { state ->
         val message = if (state.adjusted) {
             stringResource(

@@ -64,22 +64,6 @@ jobs:
           node-version: "lts/*"
           cache: npm
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Import GPG key
-        uses: crazy-max/ghaction-import-gpg@v6
-        with:
-          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
-          passphrase: ${{ secrets.GPG_PASSPHRASE }}
-          fingerprint: ${{ vars.GPG_FINGERPRINT }}
-
-      - name: Release API
-        run: npx multi-semantic-release --tag-format 'api@${version}' --ignore-packages app
-        env:
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Extract release notes
         id: changelog
         run: |
