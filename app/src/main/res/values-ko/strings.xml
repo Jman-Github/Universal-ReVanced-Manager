@@ -94,6 +94,7 @@
     <string name="bundle_version_dialog_other_title">다른 지원 버전 선택:</string>
     <string name="bundle_version_dialog_locked_title">버전 보안이 활성화됨</string>
     <string name="bundle_version_dialog_locked_hint">\"설정 &gt; 고급 &gt; 보안\"으로 이동하여 \"권장 앱 버전 요구\" (끄기)와 \"\'버전 호환성 검사 비활성화\" (켜기)를 설정하면 버전을 선택할 수 있습니다.</string>
+    <string name="patch_versions_dialog_title">%1$s 에 대한 지원 버전</string>
     <string name="patch_item_description">애플리케이션 패치를 시작하였습니다</string>
     <string name="patch_selector_item">패치 선택하기</string>
     <string name="patch_selector_item_description">%d 개의 패치를 선택하였습니다</string>
@@ -218,6 +219,7 @@
     <string name="import_patch_bundles_none">새로운 패치 번들을 가져오지 않았습니다</string>
     <string name="import_patch_bundles_banner_title">패치 번들을 가져오는 중</string>
     <string name="import_patch_bundles_banner_subtitle">%2$d 개 중에 %1$d 개가 처리됨</string>
+    <string name="import_patch_bundles_banner_steps">%2$d 개 중 %1$d 번째 단계</string>
     <string name="import_patch_profiles">패치 프로필 가져오기</string>
     <string name="import_patch_profiles_description">JSON 파일에서 저장된 패치 프로필을 가져옵니다</string>
     <string name="import_patch_profiles_fail">패치 번들을 가져올 수 없습니다: %s</string>
@@ -491,6 +493,12 @@
     <string name="tab_patches">패치 번들</string>
     <string name="tab_profiles">패치 프로필</string>
     <string name="delete">삭제하기</string>
+    <string name="disable">비활성화</string>
+    <string name="enable">활성화</string>
+    <string name="patch_bundle_disabled_toast">%d 개의 번들을 비활성화하였습니다</string>
+    <string name="patch_bundle_enabled_toast">%d 개의 번들을 비활성화하였습니다</string>
+    <string name="patches_disable_single_dialog_description">\"%s\"를 비활성화하시겠습니까?</string>
+    <string name="patches_enable_single_dialog_description">\"%s\"를 활성화하시겠습니까?</string>
     <string name="refresh">새로고침</string>
     <string name="continue_anyways">계속</string>
     <string name="download_another_version">다른 버전을 다운로드하는 중</string>
