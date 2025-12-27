@@ -113,7 +113,7 @@
     <string name="auto_updates_dialog_title">Cấu hình cập nhật</string>
     <string name="auto_updates_dialog_description">Bạn có muốn Universal ReVanced Manager kiểm tra cập nhật định kỳ cho các thành phần sau không?</string>
     <string name="auto_updates_dialog_manager">Universal ReVanced Manager</string>
-    <string name="auto_updates_dialog_patches">ReVanced Patches</string>
+    <string name="auto_updates_dialog_patches">Official ReVanced Patches</string>
     <string name="auto_updates_dialog_note">Bạn có thể thay đổi các cài đặt này sau.</string>
     <string name="general">Chung</string>
     <string name="general_description">Chủ đề, màu động</string>

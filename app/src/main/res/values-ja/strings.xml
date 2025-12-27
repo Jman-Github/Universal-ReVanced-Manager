@@ -127,7 +127,7 @@
     <string name="auto_updates_dialog_title">アップデートの設定</string>
     <string name="auto_updates_dialog_description">Universal ReVanced Manager に、以下のコンポーネントの更新を定期的に確認させますか？</string>
     <string name="auto_updates_dialog_manager">Universal ReVanced Manager</string>
-    <string name="auto_updates_dialog_patches">ReVanced パッチ</string>
+    <string name="auto_updates_dialog_patches">公式 ReVanced パッチ</string>
     <string name="auto_updates_dialog_note">これらの設定は後で変更できます。</string>
 
     <string name="general">一般</string>

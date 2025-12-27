@@ -11,6 +11,7 @@
 - Updated the installation flow for the system installer to prompt the user to enable the "Install unknown apps" permission if not already granted by the user
 - Removed the redundant `Apply` and `Cancel` buttons from the theme preview widgets in Settings > General
 - Added a settings toggle in Settings > Advanced for the patch selection screens patch version tags
+- Updated the "Configure updates" screen that appears on a fresh install from refering to the Official ReVanced Patches as "ReVanced Patches" to "Official ReVanced Patches" instead for consistency
 
 
 # Bug fixes

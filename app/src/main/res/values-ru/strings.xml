@@ -64,7 +64,7 @@
     <string name="auto_updates_dialog_description">Хотите, чтобы ReVanced Manager периодически проверял наличие обновлений для следующих компонентов?</string>
     <string name="auto_updates_dialog_manager">ReVanced Manager</string>
     <string name="auto_updates_dialog_note">Эти настройки можно изменить позже.</string>
-    <string name="auto_updates_dialog_patches">Обновленные патчи</string>
+    <string name="auto_updates_dialog_patches">Официальные патчи ReVanced</string>
     <string name="auto_updates_dialog_title">Настройка обновлений</string>
     <string name="autofill">Автозаполнение</string>
     <string name="back">Назад</string>

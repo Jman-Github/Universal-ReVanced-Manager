@@ -126,7 +126,7 @@
     <string name="auto_updates_dialog_title">Configure updates</string>
     <string name="auto_updates_dialog_description">Do you want Universal ReVanced Manager to periodically check for updates for the following components?</string>
     <string name="auto_updates_dialog_manager">Universal ReVanced Manager</string>
-    <string name="auto_updates_dialog_patches">ReVanced Patches</string>
+    <string name="auto_updates_dialog_patches">Official ReVanced Patches</string>
     <string name="auto_updates_dialog_note">These settings can be changed later.</string>
 
     <string name="general">General</string>

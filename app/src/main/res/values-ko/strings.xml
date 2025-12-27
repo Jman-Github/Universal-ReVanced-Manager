@@ -112,7 +112,7 @@
     <string name="auto_updates_dialog_title">업데이트 설정</string>
     <string name="auto_updates_dialog_description">Universal ReVanced Manager에서 다음 구성 요소에 대한 업데이트를 주기적으로 확인하시겠습니까?</string>
     <string name="auto_updates_dialog_manager">Universal ReVanced Manager</string>
-    <string name="auto_updates_dialog_patches">ReVanced 패치</string>
+    <string name="auto_updates_dialog_patches">공식 ReVanced 패치</string>
     <string name="auto_updates_dialog_note">이 설정은 나중에 변경할 수 있습니다.</string>
     <string name="general">일반</string>
     <string name="general_description">테마 및 동적 색상를 설정할 수 있습니다</string>

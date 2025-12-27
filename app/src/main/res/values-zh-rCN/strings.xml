@@ -126,7 +126,7 @@
     <string name="auto_updates_dialog_title">配置更新</string>
     <string name="auto_updates_dialog_description">您希望 Universal ReVanced Manager 定期检查以下组件的更新吗？</string>
     <string name="auto_updates_dialog_manager">Universal ReVanced Manager</string>
-    <string name="auto_updates_dialog_patches">ReVanced 补丁</string>
+    <string name="auto_updates_dialog_patches">官方 ReVanced 补丁</string>
     <string name="auto_updates_dialog_note">这些设置以后可以更改。</string>
 
     <string name="general">通用</string>
