@@ -58,7 +58,7 @@
     <string name="app_filter_patches_available">Доступні патчі</string>
     <string name="app_filter_title">Фільтр програм</string>
     <string name="app_info">Інформація про заявку</string>
-    <string name="app_language">Мова програми</string>
+    <string name="app_language">Мова додатку</string>
     <string name="app_name">Universal ReVanced Manager</string>
     <string name="app_not_installed">"Вибрана вами програма не встановлена. Ви хочете завантажити його?"</string>
     <string name="app_source_dialog_option_auto">Авто</string>
@@ -77,7 +77,7 @@
     <string name="applied_patches_bundle_missing">Метадані пакета недоступні. Відображає назви збережених патчів.</string>
     <string name="applied_patches_empty">Немає записаних патчів для цієї програми</string>
     <string name="apply">Застосувати</string>
-    <string name="auto_update">Автоматичне оновлення</string>
+    <string name="auto_update">Автооновлення</string>
     <string name="auto_update_description">Автоматично оновлювати, коли стає доступною нова версія</string>
     <string name="auto_updates_dialog_description">Чи хочете ви, щоб Universal ReVanced Manager періодично перевіряв наявність оновлень для наступних компонентів?</string>
     <string name="auto_updates_dialog_manager">Universal ReVanced Manager</string>
@@ -283,12 +283,12 @@
     <string name="export_name_format_preview_label">Попередній перегляд</string>
     <string name="export_name_format_reset">Скинути налаштування за замовчуванням</string>
     <string name="export_name_format_variables">Змінні</string>
-    <string name="export_name_variable_app_name">Назва програми</string>
-    <string name="export_name_variable_app_name_description">"Замінено іменем програми, що відображається."</string>
-    <string name="export_name_variable_app_version">Версія програми</string>
+    <string name="export_name_variable_app_name">"Ім'я додатку"</string>
+    <string name="export_name_variable_app_name_description">"Замінено Ім'ям додатку, що відображається."</string>
+    <string name="export_name_variable_app_version">Версія додатку</string>
     <string name="export_name_variable_app_version_description">"Замінено назвою версії програми."</string>
-    <string name="export_name_variable_bundle_names">Імена пакетів виправлень</string>
-    <string name="export_name_variable_bundle_names_description">Замінено іменами застосованих пакетів виправлень.</string>
+    <string name="export_name_variable_bundle_names">"Ім'я пакетів патчів"</string>
+    <string name="export_name_variable_bundle_names_description">"Замінено Ім'ям застосованих пакетів виправлень."</string>
     <string name="export_name_variable_date">Дата</string>
     <string name="export_name_variable_date_description">Замінено поточною датою (yyyyMMdd).</string>
     <string name="export_name_variable_manager_version">Версія менеджера</string>
@@ -347,7 +347,7 @@
     <string name="import_keystore_dialog_title">Введіть свої облікові дані сховища ключів</string>
     <string name="import_keystore_success">Імпортоване сховище ключів</string>
     <string name="import_keystore_wrong_credentials">Неправильні облікові дані сховища ключів</string>
-    <string name="import_manager_settings">Налаштування менеджера імпорту</string>
+    <string name="import_manager_settings">Імпортувати налаштування менеджера</string>
     <string name="import_manager_settings_description">Відновити збережені налаштування менеджера з файлу JSON</string>
     <string name="import_manager_settings_fail">Не вдалося імпортувати налаштування менеджера: %s</string>
     <string name="import_manager_settings_success">Імпортовані налаштування менеджера</string>
@@ -444,8 +444,8 @@
     <string name="installer_custom_saved_indicator">Збережено</string>
     <string name="installer_custom_saved_note">Встановлювачі, вручну додані користувачем в Основний &amp; Меню вибору резервного встановлювача.</string>
     <string name="installer_custom_searching">Пошук дій встановлювача…</string>
-    <string name="installer_custom_tab_auto_saved">Автоматично збережено</string>
-    <string name="installer_custom_tab_discover">Виявити</string>
+    <string name="installer_custom_tab_auto_saved">Автозбереження</string>
+    <string name="installer_custom_tab_discover">Знайти</string>
     <string name="installer_custom_tab_saved">Збережено</string>
     <string name="installer_external_finished_no_change">%1$s завершено без встановлення програми. Перевірте програму встановлення на наявність повідомлення про помилку та повторіть спробу.</string>
     <string name="installer_external_launched">Відкриття %1$s…</string>
@@ -642,7 +642,7 @@ Universal ReVanced Manager закриється під час оновлення
     <string name="patch_profile_version_override_all_versions">Використовуйте всі версії</string>
     <string name="patch_profile_version_override_failed_toast">Не вдалося оновити версію профілю</string>
     <string name="patch_profile_version_override_hint">e.g. 18.27.35</string>
-    <string name="patch_profile_version_override_label">Версія програми</string>
+    <string name="patch_profile_version_override_label">Версія додатку</string>
     <string name="patch_profile_version_override_message">Встановіть певну версію програми для зберігання в цьому профілі або виберіть усі версії.</string>
     <string name="patch_profile_version_override_saved_toast">Оновлена ​​версія профілю</string>
     <string name="patch_profile_version_override_set_to_all">Версію не введено, збережено як %1$s</string>
@@ -802,7 +802,7 @@ Universal ReVanced Manager закриється під час оновлення
     <string name="plugins_help_title">Що таке завантажувач?</string>
     <string name="process_runtime">Запустіть Patcher в іншому процесі (експериментально)</string>
     <string name="process_runtime_description">"Це швидше і дозволяє Patcher використовувати більше пам’яті."</string>
-    <string name="process_runtime_memory_limit">"Обмеження пам'яті процесу Patcher"</string>
+    <string name="process_runtime_memory_limit">"Обмеження пам'яті процесу Патчера"</string>
     <string name="process_runtime_memory_limit_description">"Максимальний обсяг пам’яті, який може використовувати процес Patcher (у мегабайтах)."</string>
     <string name="process_runtime_memory_limit_description_detailed">"Максимальний обсяг пам’яті, який може використовувати процес Patcher (у мегабайтах). Рекомендовано для цього пристрою: %1$d МБ."</string>
     <string name="pure_black_theme">Черный</string>
@@ -830,7 +830,7 @@ Universal ReVanced Manager закриється під час оновлення
     <string name="reset_patch_selection">Скинути вибір патча</string>
     <string name="reset_patch_selection_description">Скидання збереженого вибору патча</string>
     <string name="reset_patch_selection_success">Вибір патча скинутий</string>
-    <string name="reset_to_recommended">Скинути до рекомендованих</string>
+    <string name="reset_to_recommended">Скинути</string>
     <string name="restore_official_bundle">Відновіть попередньо встановлений пакет офіційних патчів ReVanced</string>
     <string name="restore_official_bundle_already">Офіційний пакет патчів ReVanced уже встановлено</string>
     <string name="restore_official_bundle_description_installed">Офіційний пакет виправлень ReVanced наразі встановлено попередньо</string>

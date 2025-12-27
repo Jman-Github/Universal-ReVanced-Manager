@@ -77,7 +77,7 @@
     <string name="applied_patches_bundle_missing">Метаданные пакета недоступны. Отображение названий сохраненных патчей.</string>
     <string name="applied_patches_empty">Для этого приложения не записано никаких патчей</string>
     <string name="apply">Применить</string>
-    <string name="auto_update">Автоматическое обновление</string>
+    <string name="auto_update">Автообновление</string>
     <string name="auto_update_description">Автоматически обновляться при появлении новой версии</string>
     <string name="auto_updates_dialog_description">Хотите, чтобы Universal ReVanced Manager периодически проверял наличие обновлений для следующих компонентов?</string>
     <string name="auto_updates_dialog_manager">Universal ReVanced Manager</string>
@@ -283,12 +283,12 @@
     <string name="export_name_format_preview_label">Предварительный просмотр</string>
     <string name="export_name_format_reset">Сбросить настройки по умолчанию</string>
     <string name="export_name_format_variables">Переменные</string>
-    <string name="export_name_variable_app_name">Название приложения</string>
+    <string name="export_name_variable_app_name">Имя приложения</string>
     <string name="export_name_variable_app_name_description">"Заменено отображаемым именем приложения."</string>
     <string name="export_name_variable_app_version">Версия приложения</string>
     <string name="export_name_variable_app_version_description">"Заменено названием версии приложения."</string>
-    <string name="export_name_variable_bundle_names">Названия пакетов исправлений</string>
-    <string name="export_name_variable_bundle_names_description">Заменены именами применяемых пакетов исправлений.</string>
+    <string name="export_name_variable_bundle_names">Имя пакета патчей</string>
+    <string name="export_name_variable_bundle_names_description">Заменено именем применяемых пакетов исправлений.</string>
     <string name="export_name_variable_date">Дата</string>
     <string name="export_name_variable_date_description">Заменено текущей датой (yyyyMMdd).</string>
     <string name="export_name_variable_manager_version">Версия менеджера</string>
@@ -444,8 +444,8 @@
     <string name="installer_custom_saved_indicator">Сохранено</string>
     <string name="installer_custom_saved_note">Установщики, вручную добавленные пользователем в Основной &amp; Меню выбора резервного установщика.</string>
     <string name="installer_custom_searching">Поиск действий установщика…</string>
-    <string name="installer_custom_tab_auto_saved">Автоматически сохранено</string>
-    <string name="installer_custom_tab_discover">Обнаружить</string>
+    <string name="installer_custom_tab_auto_saved">Автосохранение</string>
+    <string name="installer_custom_tab_discover">Найти</string>
     <string name="installer_custom_tab_saved">Сохранено</string>
     <string name="installer_external_finished_no_change">%1$s закончил без установки приложения. Проверьте установщик на наличие сообщения об ошибке и повторите попытку.</string>
     <string name="installer_external_launched">Открытие %1$s…</string>
@@ -802,7 +802,7 @@ Universal ReVanced Manager закроется при обновлении."</str
     <string name="plugins_help_title">Что такое загрузчик?</string>
     <string name="process_runtime">Запустить Patcher в другом процессе (экспериментально)</string>
     <string name="process_runtime_description">Это быстрее и позволяет Patcher использовать больше памяти.</string>
-    <string name="process_runtime_memory_limit">Ограничение памяти процесса патчера</string>
+    <string name="process_runtime_memory_limit">Ограничение памяти процесса Патчера</string>
     <string name="process_runtime_memory_limit_description">Максимальный объем памяти, который может использовать процесс Patcher (в мегабайтах).</string>
     <string name="process_runtime_memory_limit_description_detailed">Максимальный объем памяти, который может использовать процесс Patcher (в мегабайтах). Рекомендуется для этого устройства: %1$d MB.</string>
     <string name="pure_black_theme">Черный</string>
@@ -830,7 +830,7 @@ Universal ReVanced Manager закроется при обновлении."</str
     <string name="reset_patch_selection">Сбросить выбор патча</string>
     <string name="reset_patch_selection_description">Сброс выбора сохраненного патча</string>
     <string name="reset_patch_selection_success">Выбор патча сброшен</string>
-    <string name="reset_to_recommended">Сбросить до рекомендованного</string>
+    <string name="reset_to_recommended">Сбросить</string>
     <string name="restore_official_bundle">Восстановите предустановленный пакет официальных патчей ReVanced</string>
     <string name="restore_official_bundle_already">Официальный пакет патчей ReVanced уже установлен</string>
     <string name="restore_official_bundle_description_installed">В настоящее время установлен предустановленный пакет официальных патчей ReVanced</string>
