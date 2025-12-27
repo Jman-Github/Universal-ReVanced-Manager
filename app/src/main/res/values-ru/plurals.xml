@@ -4,6 +4,14 @@
         <item quantity="one">%d патч</item>
         <item quantity="other">%d патчи</item>
     </plurals>
+    <plurals name="patch_profile_bundle_count">
+        <item quantity="one">%d пакет</item>
+        <item quantity="other">%d пакеты</item>
+    </plurals>
+    <plurals name="patch_profile_bundle_patch_count">
+        <item quantity="one">%d патч</item>
+        <item quantity="other">%d патчи</item>
+    </plurals>
     <plurals name="patches_executed">
         <item quantity="one">Выполнить %d патч</item>
         <item quantity="other">Выполнить %d патчи</item>
