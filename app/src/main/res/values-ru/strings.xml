@@ -865,6 +865,10 @@
     <!-- Needs translation -->
     <string name="patch_selection_action_order_description">Choose the layout order for the patch selection action buttons</string>
     <!-- Needs translation -->
+    <string name="patch_selection_version_tags_title">Patch version tags</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_version_tags_description">Show version tags on patches in the selection screen</string>
+    <!-- Needs translation -->
     <string name="patch_selection_action_visibility_title">Hide patch selection action buttons</string>
     <!-- Needs translation -->
     <string name="patch_selection_action_visibility_description">Choose which patch selection action buttons are shown</string>

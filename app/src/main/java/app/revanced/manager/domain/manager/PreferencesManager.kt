@@ -74,6 +74,7 @@ class PreferencesManager(
         stringPreference("patch_selection_action_order", PATCH_ACTION_ORDER_DEFAULT)
     val patchSelectionHiddenActions =
         stringSetPreference("patch_selection_hidden_actions", emptySet())
+    val patchSelectionShowVersionTags = booleanPreference("patch_selection_show_version_tags", true)
     val pathSelectorFavorites = stringSetPreference("path_selector_favorites", emptySet())
 
     val acknowledgedDownloaderPlugins = stringSetPreference("acknowledged_downloader_plugins", emptySet())
@@ -122,6 +123,7 @@ class PreferencesManager(
         val patchSelectionSortSettingsMode: String? = null,
         val patchSelectionActionOrder: String? = null,
         val patchSelectionHiddenActions: Set<String>? = null,
+        val patchSelectionShowVersionTags: Boolean? = null,
         val acknowledgedDownloaderPlugins: Set<String>? = null,
         val autoSaveDownloaderApks: Boolean? = null,
         val pathSelectorFavorites: Set<String>? = null,
@@ -169,6 +171,7 @@ class PreferencesManager(
         patchSelectionSortSettingsMode = patchSelectionSortSettingsMode.get(),
         patchSelectionActionOrder = patchSelectionActionOrder.get(),
         patchSelectionHiddenActions = patchSelectionHiddenActions.get(),
+        patchSelectionShowVersionTags = patchSelectionShowVersionTags.get(),
         acknowledgedDownloaderPlugins = acknowledgedDownloaderPlugins.get(),
         autoSaveDownloaderApks = autoSaveDownloaderApks.get(),
         pathSelectorFavorites = pathSelectorFavorites.get(),
@@ -218,6 +221,7 @@ class PreferencesManager(
         snapshot.patchSelectionSortSettingsMode?.let { patchSelectionSortSettingsMode.value = it }
         snapshot.patchSelectionActionOrder?.let { patchSelectionActionOrder.value = it }
         snapshot.patchSelectionHiddenActions?.let { patchSelectionHiddenActions.value = it }
+        snapshot.patchSelectionShowVersionTags?.let { patchSelectionShowVersionTags.value = it }
         snapshot.acknowledgedDownloaderPlugins?.let { acknowledgedDownloaderPlugins.value = it }
         snapshot.autoSaveDownloaderApks?.let { autoSaveDownloaderApks.value = it }
         snapshot.pathSelectorFavorites?.let { favorites ->

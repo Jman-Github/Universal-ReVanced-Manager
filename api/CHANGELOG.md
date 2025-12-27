@@ -10,6 +10,7 @@
 - Updates no longer are prompted when using dev builds
 - Updated the installation flow for the system installer to prompt the user to enable the "Install unknown apps" permission if not already granted by the user
 - Removed the redundant `Apply` and `Cancel` buttons from the theme preview widgets in Settings > General
+- Added a settings toggle in Settings > Advanced for the patch selection screens patch version tags
 
 
 # Bug fixes

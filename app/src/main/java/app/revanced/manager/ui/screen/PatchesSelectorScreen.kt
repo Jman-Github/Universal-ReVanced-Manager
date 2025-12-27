@@ -180,6 +180,7 @@ fun PatchesSelectorScreen(
     val sortAlphabeticallyPref by viewModel.prefs.patchSelectionSortAlphabetical.getAsState()
     val sortSettingsModePref by viewModel.prefs.patchSelectionSortSettingsMode.getAsState()
     val searchEngineHost by viewModel.prefs.searchEngineHost.getAsState()
+    val showVersionTags by viewModel.prefs.patchSelectionShowVersionTags.getAsState()
     val orderedActionKeys = remember(actionOrderPref) {
         val parsed = actionOrderPref
             .split(',')
@@ -710,6 +711,7 @@ fun PatchesSelectorScreen(
                         patch
                     ),
                     searchEngineHost = searchEngineHost,
+                    showVersionTags = showVersionTags,
                     onToggle = {
                         when {
                             // Open incompatible dialog if the patch is not supported
@@ -1212,7 +1214,8 @@ private fun PatchItem(
     compatible: Boolean = true,
     packageName: String,
     suggestedVersion: String?,
-    searchEngineHost: String
+    searchEngineHost: String,
+    showVersionTags: Boolean
 ): Unit {
     val supportedPackage = patch.compatiblePackages?.firstOrNull { it.packageName == packageName }
     val supportsAllVersions = patch.compatiblePackages == null || supportedPackage?.versions == null
@@ -1318,7 +1321,7 @@ private fun PatchItem(
                     }
                 }
             }
-            if (hasChips) {
+            if (showVersionTags && hasChips) {
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),

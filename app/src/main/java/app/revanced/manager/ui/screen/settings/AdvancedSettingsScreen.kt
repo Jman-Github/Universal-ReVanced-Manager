@@ -665,21 +665,29 @@ fun AdvancedSettingsScreen(
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
             ) {
-                ExpressiveSettingsItem(
-                    headlineContent = stringResource(R.string.patch_selection_action_order_title),
-                    supportingContent = stringResource(R.string.patch_selection_action_order_description),
-                    trailingContent = {
-                        Icon(
-                            imageVector = if (actionsExpanded) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
-                            contentDescription = null
-                        )
-                    },
-                    onClick = { actionsExpanded = !actionsExpanded }
-                )
+            ExpressiveSettingsItem(
+                headlineContent = stringResource(R.string.patch_selection_action_order_title),
+                supportingContent = stringResource(R.string.patch_selection_action_order_description),
+                trailingContent = {
+                    Icon(
+                        imageVector = if (actionsExpanded) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
+                        contentDescription = null
+                    )
+                },
+                onClick = { actionsExpanded = !actionsExpanded }
+            )
 
-                if (actionsExpanded) {
-                    ExpressiveSettingsDivider()
-                    Box(
+            ExpressiveSettingsDivider()
+            BooleanItem(
+                preference = viewModel.prefs.patchSelectionShowVersionTags,
+                coroutineScope = viewModel.viewModelScope,
+                headline = R.string.patch_selection_version_tags_title,
+                description = R.string.patch_selection_version_tags_description
+            )
+
+            if (actionsExpanded) {
+                ExpressiveSettingsDivider()
+                Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(16.dp)
