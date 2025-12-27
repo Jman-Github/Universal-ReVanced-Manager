@@ -154,8 +154,51 @@ class ReVancedAPI(
 
     suspend fun getAppUpdate(): ReVancedAsset? {
         val asset = getLatestAppInfo().getOrNull() ?: return null
-        return asset.takeIf { it.version.removePrefix("v") != BuildConfig.VERSION_NAME }
+        return asset.takeIf { isUpdateAvailable(BuildConfig.VERSION_NAME, it.version) }
     }
+
+    private fun isUpdateAvailable(installedVersion: String, releasedVersion: String): Boolean {
+        val installed = parseVersion(installedVersion, stripDev = true)
+        val released = parseVersion(releasedVersion, stripDev = false)
+        return compareVersions(installed, released) < 0
+    }
+
+    private fun parseVersion(raw: String, stripDev: Boolean): VersionParts {
+        val normalized = normalizeVersion(raw, stripDev)
+        val base = normalized.substringBefore('-')
+        val suffix = normalized.substringAfter('-', "").takeIf { it.isNotBlank() }
+        val numbers = base.split('.')
+            .mapNotNull { it.toIntOrNull() }
+            .ifEmpty { listOf(0) }
+        return VersionParts(numbers, suffix)
+    }
+
+    private fun normalizeVersion(raw: String, stripDev: Boolean): String {
+        val trimmed = raw.trim().removePrefix("v").removePrefix("V")
+        val noBuild = trimmed.substringBefore('+')
+        if (!stripDev) return noBuild
+        return noBuild.replace(Regex("(?i)-dev.*$"), "")
+    }
+
+    private fun compareVersions(left: VersionParts, right: VersionParts): Int {
+        val maxSize = maxOf(left.numbers.size, right.numbers.size)
+        for (index in 0 until maxSize) {
+            val lhs = left.numbers.getOrElse(index) { 0 }
+            val rhs = right.numbers.getOrElse(index) { 0 }
+            if (lhs != rhs) return lhs.compareTo(rhs)
+        }
+        val leftSuffix = left.suffix
+        val rightSuffix = right.suffix
+        if (leftSuffix == null && rightSuffix == null) return 0
+        if (leftSuffix == null) return 1
+        if (rightSuffix == null) return -1
+        return leftSuffix.compareTo(rightSuffix)
+    }
+
+    private data class VersionParts(
+        val numbers: List<Int>,
+        val suffix: String?
+    )
 
     suspend fun getPatchesUpdate(): APIResponse<ReVancedAsset> =
         apiRequest("patches?prerelease=${prefs.usePatchesPrereleases.get()}")

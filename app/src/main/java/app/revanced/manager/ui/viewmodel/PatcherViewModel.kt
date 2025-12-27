@@ -1293,6 +1293,12 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
             when (installType) {
                 InstallType.DEFAULT, InstallType.CUSTOM, InstallType.SAVED, InstallType.SHIZUKU -> {
+                    if (!pm.requestInstallPackagesPermission()) {
+                        val hint = installerManager.formatFailureHint(PackageInstaller.STATUS_FAILURE_BLOCKED, null)
+                            ?: app.getString(R.string.installer_hint_blocked)
+                        showInstallFailure(app.getString(R.string.install_app_fail, hint))
+                        return
+                    }
                     // Check if the app is mounted as root
                     // If it is, unmount it first, silently
                     if (rootInstaller.hasRootAccess() && rootInstaller.isAppMounted(packageName)) {

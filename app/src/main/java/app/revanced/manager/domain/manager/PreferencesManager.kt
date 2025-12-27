@@ -8,6 +8,8 @@ import app.revanced.manager.ui.theme.Theme
 import app.revanced.manager.util.ExportNameFormatter
 import app.revanced.manager.util.isDebuggable
 import kotlinx.serialization.Serializable
+import java.nio.file.Paths
+import kotlin.io.path.isReadable
 
 import app.revanced.manager.ui.model.PatchSelectionActionKey
 
@@ -72,9 +74,12 @@ class PreferencesManager(
         stringPreference("patch_selection_action_order", PATCH_ACTION_ORDER_DEFAULT)
     val patchSelectionHiddenActions =
         stringSetPreference("patch_selection_hidden_actions", emptySet())
+    val patchSelectionShowVersionTags = booleanPreference("patch_selection_show_version_tags", true)
+    val pathSelectorFavorites = stringSetPreference("path_selector_favorites", emptySet())
 
     val acknowledgedDownloaderPlugins = stringSetPreference("acknowledged_downloader_plugins", emptySet())
     val autoSaveDownloaderApks = booleanPreference("auto_save_downloader_apks", true)
+    val searchEngineHost = stringPreference("search_engine_host", "google.com")
 
     @Serializable
     data class SettingsSnapshot(
@@ -118,8 +123,11 @@ class PreferencesManager(
         val patchSelectionSortSettingsMode: String? = null,
         val patchSelectionActionOrder: String? = null,
         val patchSelectionHiddenActions: Set<String>? = null,
+        val patchSelectionShowVersionTags: Boolean? = null,
         val acknowledgedDownloaderPlugins: Set<String>? = null,
-        val autoSaveDownloaderApks: Boolean? = null
+        val autoSaveDownloaderApks: Boolean? = null,
+        val pathSelectorFavorites: Set<String>? = null,
+        val searchEngineHost: String? = null
     )
 
     suspend fun exportSettings() = SettingsSnapshot(
@@ -163,8 +171,11 @@ class PreferencesManager(
         patchSelectionSortSettingsMode = patchSelectionSortSettingsMode.get(),
         patchSelectionActionOrder = patchSelectionActionOrder.get(),
         patchSelectionHiddenActions = patchSelectionHiddenActions.get(),
+        patchSelectionShowVersionTags = patchSelectionShowVersionTags.get(),
         acknowledgedDownloaderPlugins = acknowledgedDownloaderPlugins.get(),
-        autoSaveDownloaderApks = autoSaveDownloaderApks.get()
+        autoSaveDownloaderApks = autoSaveDownloaderApks.get(),
+        pathSelectorFavorites = pathSelectorFavorites.get(),
+        searchEngineHost = searchEngineHost.get()
     )
 
     suspend fun importSettings(snapshot: SettingsSnapshot) = edit {
@@ -210,8 +221,16 @@ class PreferencesManager(
         snapshot.patchSelectionSortSettingsMode?.let { patchSelectionSortSettingsMode.value = it }
         snapshot.patchSelectionActionOrder?.let { patchSelectionActionOrder.value = it }
         snapshot.patchSelectionHiddenActions?.let { patchSelectionHiddenActions.value = it }
+        snapshot.patchSelectionShowVersionTags?.let { patchSelectionShowVersionTags.value = it }
         snapshot.acknowledgedDownloaderPlugins?.let { acknowledgedDownloaderPlugins.value = it }
         snapshot.autoSaveDownloaderApks?.let { autoSaveDownloaderApks.value = it }
+        snapshot.pathSelectorFavorites?.let { favorites ->
+            val sanitized = favorites.filter { path ->
+                runCatching { Paths.get(path).isReadable() }.getOrDefault(false)
+            }.toSet()
+            pathSelectorFavorites.value = sanitized
+        }
+        snapshot.searchEngineHost?.let { searchEngineHost.value = it }
     }
 
 }

@@ -1,3 +1,27 @@
+# v1.7.0 (2025-12-19)
+
+
+# Features
+
+- Added the ability to favorite files and folders in the file picker page https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/77
+- Added device ABI to version serach queries https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/79
+- Added a settings option under Settings > Advanced to change the search engine used for version search queries
+- Dev builds now use `-dev` in their version numbers
+- Updates no longer are prompted when using dev builds
+- Updated the installation flow for the system installer to prompt the user to enable the "Install unknown apps" permission if not already granted by the user
+- Removed the redundant `Apply` and `Cancel` buttons from the theme preview widgets in Settings > General
+- Added a settings toggle in Settings > Advanced for the patch selection screens patch version tags
+- Updated the "Configure updates" screen that appears on a fresh install from refering to the Official ReVanced Patches as "ReVanced Patches" to "Official ReVanced Patches" instead for consistency
+- Update the "Show & allow using universal patches" setting, when toggled off, to hide apps on the app selection screen that don't use any patches (so ones that only use universal patches)
+- Converted the existing components of the app that use old file pickers to the new one along with saving and overwrite warning logic
+
+
+# Bug fixes
+
+
+# Docs
+
+
 # v1.6.1 (2025-12-19)
 
 

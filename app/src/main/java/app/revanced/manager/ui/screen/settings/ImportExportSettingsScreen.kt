@@ -2,7 +2,6 @@ package app.revanced.manager.ui.screen.settings
 
 import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -30,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import app.universal.revanced.manager.R
+import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.ColumnWithScrollbar
 import app.revanced.manager.ui.component.ConfirmDialog
@@ -50,18 +51,21 @@ import app.revanced.manager.ui.component.DownloadProgressBanner
 import app.revanced.manager.ui.component.GroupHeader
 import app.revanced.manager.ui.component.PasswordField
 import app.revanced.manager.ui.component.bundle.BundleSelector
+import app.revanced.manager.ui.component.patches.PathSelectorDialog
 import app.revanced.manager.ui.component.settings.ExpandableSettingListItem
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsCard
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsDivider
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsItem
 import app.revanced.manager.ui.viewmodel.ImportExportViewModel
 import app.revanced.manager.ui.viewmodel.ResetDialogState
-import app.revanced.manager.util.JSON_MIMETYPE
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.uiSafe
 import app.revanced.manager.domain.repository.PatchBundleRepository.BundleImportPhase
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
+import java.nio.file.Files
+import java.nio.file.Path
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,39 +76,61 @@ fun ImportExportSettingsScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var selectorDialog by rememberSaveable { mutableStateOf<(@Composable () -> Unit)?>(null) }
-
-    val importKeystoreLauncher =
-        rememberLauncherForActivityResult(contract = ActivityResultContracts.GetContent()) {
-            it?.let { uri -> vm.startKeystoreImport(uri) }
+    val fs: Filesystem = koinInject()
+    val storageRoots = remember { fs.storageRoots() }
+    val (permissionContract, permissionName) = remember { fs.permissionContract() }
+    var pendingImportPicker by rememberSaveable { mutableStateOf<ImportPicker?>(null) }
+    var activeImportPicker by rememberSaveable { mutableStateOf<ImportPicker?>(null) }
+    var pendingExportPicker by rememberSaveable { mutableStateOf<ExportPicker?>(null) }
+    var activeExportPicker by rememberSaveable { mutableStateOf<ExportPicker?>(null) }
+    var exportFileDialogState by remember { mutableStateOf<ExportFileDialogState?>(null) }
+    var pendingExportConfirmation by remember { mutableStateOf<PendingExportConfirmation?>(null) }
+    val permissionLauncher = rememberLauncherForActivityResult(permissionContract) { granted ->
+        val pendingImport = pendingImportPicker
+        val pendingExport = pendingExportPicker
+        if (granted) {
+            activeImportPicker = pendingImport
+            activeExportPicker = pendingExport
+        } else {
+            if (pendingImport == ImportPicker.PatchSelection) {
+                vm.clearSelectionAction()
+            }
+            if (pendingExport == ExportPicker.PatchSelection) {
+                vm.clearSelectionAction()
+            }
         }
-    val exportKeystoreLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) {
-            it?.let(vm::exportKeystore)
+        pendingImportPicker = null
+        pendingExportPicker = null
+    }
+    val openImportPicker = { target: ImportPicker ->
+        if (fs.hasStoragePermission()) {
+            activeImportPicker = target
+        } else {
+            pendingImportPicker = target
+            permissionLauncher.launch(permissionName)
         }
-    val importBundlesLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) {
-            it?.let(vm::importPatchBundles)
+    }
+    val openExportPicker = { target: ExportPicker ->
+        if (fs.hasStoragePermission()) {
+            activeExportPicker = target
+        } else {
+            pendingExportPicker = target
+            permissionLauncher.launch(permissionName)
         }
-    val exportBundlesLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(JSON_MIMETYPE)) {
-            it?.let(vm::exportPatchBundles)
+    }
+    val runExport = { picker: ExportPicker, target: Path ->
+        val job = when (picker) {
+            ExportPicker.Keystore -> vm.exportKeystore(target)
+            ExportPicker.PatchBundles -> vm.exportPatchBundles(target)
+            ExportPicker.PatchProfiles -> vm.exportPatchProfiles(target)
+            ExportPicker.ManagerSettings -> vm.exportManagerSettings(target)
+            ExportPicker.PatchSelection -> vm.executeSelectionExport(target)
         }
-    val importProfilesLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) {
-            it?.let(vm::importPatchProfiles)
+        coroutineScope.launch {
+            job.join()
+            activeExportPicker = null
         }
-    val exportProfilesLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(JSON_MIMETYPE)) {
-            it?.let(vm::exportPatchProfiles)
-        }
-    val importSettingsLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) {
-            it?.let(vm::importManagerSettings)
-        }
-    val exportSettingsLauncher =
-        rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(JSON_MIMETYPE)) {
-            it?.let(vm::exportManagerSettings)
-        }
+    }
 
     val patchBundles by vm.patchBundles.collectAsStateWithLifecycle(initialValue = emptyList())
     val packagesWithSelections by vm.packagesWithSelection.collectAsStateWithLifecycle(initialValue = emptySet())
@@ -112,21 +138,20 @@ fun ImportExportSettingsScreen(
     val importProgress by vm.bundleImportProgress.collectAsStateWithLifecycle(initialValue = null)
 
     vm.selectionAction?.let { action ->
-        val launcher = rememberLauncherForActivityResult(action.activityContract) { uri ->
-            if (uri == null) {
-                vm.clearSelectionAction()
-            } else {
-                vm.executeSelectionAction(uri)
-            }
-        }
-
         if (vm.selectedBundle == null) {
             BundleSelector(patchBundles) {
                 if (it == null) {
                     vm.clearSelectionAction()
                 } else {
                     vm.selectBundle(it)
-                    launcher.launch(action.activityArg)
+                    when (action) {
+                        ImportExportViewModel.SelectionAction.Import -> {
+                            openImportPicker(ImportPicker.PatchSelection)
+                        }
+                        ImportExportViewModel.SelectionAction.Export -> {
+                            openExportPicker(ExportPicker.PatchSelection)
+                        }
+                    }
                 }
             }
         }
@@ -162,6 +187,21 @@ fun ImportExportSettingsScreen(
             )
         }
     }
+    pendingExportConfirmation?.let { state ->
+        ConfirmDialog(
+            onDismiss = {
+                pendingExportConfirmation = null
+                exportFileDialogState = ExportFileDialogState(state.picker, state.directory, state.fileName)
+            },
+            onConfirm = {
+                pendingExportConfirmation = null
+                runExport(state.picker, state.directory.resolve(state.fileName))
+            },
+            title = stringResource(R.string.export_overwrite_title),
+            description = stringResource(R.string.export_overwrite_description, state.fileName),
+            icon = Icons.Outlined.WarningAmber
+        )
+    }
 
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
 
@@ -181,6 +221,82 @@ fun ImportExportSettingsScreen(
                 .padding(paddingValues)
         ) {
             selectorDialog?.invoke()
+            activeImportPicker?.let { picker ->
+                val fileFilter = when (picker) {
+                    ImportPicker.Keystore -> ::isKeystoreFile
+                    ImportPicker.PatchBundles,
+                    ImportPicker.PatchProfiles,
+                    ImportPicker.ManagerSettings,
+                    ImportPicker.PatchSelection -> ::isJsonFile
+                }
+                PathSelectorDialog(
+                    roots = storageRoots,
+                    onSelect = { path ->
+                        activeImportPicker = null
+                        if (path == null) {
+                            if (picker == ImportPicker.PatchSelection) {
+                                vm.clearSelectionAction()
+                            }
+                            return@PathSelectorDialog
+                        }
+                        when (picker) {
+                            ImportPicker.Keystore -> vm.startKeystoreImport(path)
+                            ImportPicker.PatchBundles -> vm.importPatchBundles(path)
+                            ImportPicker.PatchProfiles -> vm.importPatchProfiles(path)
+                            ImportPicker.ManagerSettings -> vm.importManagerSettings(path)
+                            ImportPicker.PatchSelection -> vm.executeSelectionImport(path)
+                        }
+                    },
+                    fileFilter = fileFilter,
+                    allowDirectorySelection = false
+                )
+            }
+            activeExportPicker?.let { picker ->
+                PathSelectorDialog(
+                    roots = storageRoots,
+                    onSelect = { path ->
+                        if (path == null) {
+                            activeExportPicker = null
+                            if (picker == ExportPicker.PatchSelection) {
+                                vm.clearSelectionAction()
+                            }
+                            return@PathSelectorDialog
+                        }
+                    },
+                    fileFilter = { false },
+                    allowDirectorySelection = false,
+                    confirmButtonText = stringResource(R.string.save),
+                    onConfirm = { directory ->
+                        exportFileDialogState = ExportFileDialogState(picker, directory, picker.defaultName)
+                    }
+                )
+            }
+            exportFileDialogState?.let { state ->
+                ExportFileNameDialog(
+                    initialName = state.fileName,
+                    onDismiss = {
+                        exportFileDialogState = null
+                        if (state.picker == ExportPicker.PatchSelection) {
+                            vm.clearSelectionAction()
+                        }
+                    },
+                    onConfirm = { fileName ->
+                        val trimmedName = fileName.trim()
+                        if (trimmedName.isBlank()) return@ExportFileNameDialog
+                        exportFileDialogState = null
+                        val target = state.directory.resolve(trimmedName)
+                        if (Files.exists(target)) {
+                            pendingExportConfirmation = PendingExportConfirmation(
+                                picker = state.picker,
+                                directory = state.directory,
+                                fileName = trimmedName
+                            )
+                        } else {
+                            runExport(state.picker, target)
+                        }
+                    }
+                )
+            }
 
             importProgress?.let { progress ->
                 val subtitleParts = buildList {
@@ -238,7 +354,7 @@ fun ImportExportSettingsScreen(
             ) {
                 GroupItem(
                     onClick = {
-                        importKeystoreLauncher.launch("*/*")
+                        openImportPicker(ImportPicker.Keystore)
                     },
                     headline = R.string.import_keystore,
                     description = R.string.import_keystore_description
@@ -252,7 +368,7 @@ fun ImportExportSettingsScreen(
                 ExpressiveSettingsDivider()
                 GroupItem(
                     onClick = {
-                        importBundlesLauncher.launch(JSON_MIMETYPE)
+                        openImportPicker(ImportPicker.PatchBundles)
                     },
                     headline = R.string.import_patch_bundles,
                     description = R.string.import_patch_bundles_description
@@ -260,7 +376,7 @@ fun ImportExportSettingsScreen(
                 ExpressiveSettingsDivider()
                 GroupItem(
                     onClick = {
-                        importProfilesLauncher.launch(JSON_MIMETYPE)
+                        openImportPicker(ImportPicker.PatchProfiles)
                     },
                     headline = R.string.import_patch_profiles,
                     description = R.string.import_patch_profiles_description
@@ -268,7 +384,7 @@ fun ImportExportSettingsScreen(
                 ExpressiveSettingsDivider()
                 GroupItem(
                     onClick = {
-                        importSettingsLauncher.launch(JSON_MIMETYPE)
+                        openImportPicker(ImportPicker.ManagerSettings)
                     },
                     headline = R.string.import_manager_settings,
                     description = R.string.import_manager_settings_description
@@ -285,7 +401,7 @@ fun ImportExportSettingsScreen(
                             context.toast(context.getString(R.string.export_keystore_unavailable))
                             return@GroupItem
                         }
-                        exportKeystoreLauncher.launch("Manager.keystore")
+                        openExportPicker(ExportPicker.Keystore)
                     },
                     headline = R.string.export_keystore,
                     description = R.string.export_keystore_description
@@ -299,7 +415,7 @@ fun ImportExportSettingsScreen(
                 ExpressiveSettingsDivider()
                 GroupItem(
                     onClick = {
-                        exportBundlesLauncher.launch("urv_patch_bundles.json")
+                        openExportPicker(ExportPicker.PatchBundles)
                     },
                     headline = R.string.export_patch_bundles,
                     description = R.string.export_patch_bundles_description
@@ -307,7 +423,7 @@ fun ImportExportSettingsScreen(
                 ExpressiveSettingsDivider()
                 GroupItem(
                     onClick = {
-                        exportProfilesLauncher.launch("urv_patch_profiles.json")
+                        openExportPicker(ExportPicker.PatchProfiles)
                     },
                     headline = R.string.export_patch_profiles,
                     description = R.string.export_patch_profiles_description
@@ -315,7 +431,7 @@ fun ImportExportSettingsScreen(
                 ExpressiveSettingsDivider()
                 GroupItem(
                     onClick = {
-                        exportSettingsLauncher.launch("urv_settings.json")
+                        openExportPicker(ExportPicker.ManagerSettings)
                     },
                     headline = R.string.export_manager_settings,
                     description = R.string.export_manager_settings_description
@@ -583,6 +699,80 @@ fun KeystoreCredentialsDialog(
                     label = { Text(stringResource(R.string.import_keystore_dialog_password_field)) }
                 )
             }
+        }
+    )
+}
+
+private data class ExportFileDialogState(
+    val picker: ExportPicker,
+    val directory: Path,
+    val fileName: String
+)
+
+private data class PendingExportConfirmation(
+    val picker: ExportPicker,
+    val directory: Path,
+    val fileName: String
+)
+
+private enum class ExportPicker(val defaultName: String) {
+    Keystore("Manager.keystore"),
+    PatchBundles("urv_patch_bundles.json"),
+    PatchProfiles("urv_patch_profiles.json"),
+    ManagerSettings("urv_settings.json"),
+    PatchSelection("urv_patch_selection.json")
+}
+
+private enum class ImportPicker {
+    Keystore,
+    PatchBundles,
+    PatchProfiles,
+    ManagerSettings,
+    PatchSelection
+}
+
+private fun isJsonFile(path: Path): Boolean =
+    hasExtension(path, "json")
+
+private fun isKeystoreFile(path: Path): Boolean =
+    hasExtension(path, "jks", "keystore", "p12", "pfx", "bks")
+
+private fun hasExtension(path: Path, vararg extensions: String): Boolean {
+    val name = path.fileName?.toString()?.lowercase().orEmpty()
+    return extensions.any { name.endsWith(".${it.lowercase()}") }
+}
+
+@Composable
+private fun ExportFileNameDialog(
+    initialName: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var fileName by rememberSaveable(initialName) { mutableStateOf(initialName) }
+    val trimmedName = fileName.trim()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(trimmedName) },
+                enabled = trimmedName.isNotEmpty()
+            ) {
+                Text(stringResource(R.string.save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+        title = { Text(stringResource(R.string.export)) },
+        text = {
+            OutlinedTextField(
+                value = fileName,
+                onValueChange = { fileName = it },
+                label = { Text(stringResource(R.string.file_name)) },
+                placeholder = { Text(stringResource(R.string.dialog_input_placeholder)) }
+            )
         }
     )
 }
