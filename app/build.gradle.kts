@@ -162,9 +162,23 @@ android {
         vectorDrawables.useSupportLibrary = true
     }
 
+    val keystoreFile = file("keystore.jks")
+    val releaseSigningConfig = if (project.hasProperty("signAsDebug") || !keystoreFile.exists()) {
+        signingConfigs.getByName("debug")
+    } else {
+        signingConfigs.create("release") {
+            storeFile = keystoreFile
+            storePassword = System.getenv("KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("KEYSTORE_ENTRY_ALIAS")
+            keyPassword = System.getenv("KEYSTORE_ENTRY_PASSWORD")
+        }
+    }
+
     buildTypes {
         debug {
             isPseudoLocalesEnabled = true
+            versionNameSuffix = "-dev"
+            signingConfig = releaseSigningConfig
             buildConfigField("long", "BUILD_ID", "${Random.nextLong()}L")
         }
 
@@ -175,19 +189,7 @@ android {
                 proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             }
 
-            val keystoreFile = file("keystore.jks")
-
-            signingConfig = if (project.hasProperty("signAsDebug") || !keystoreFile.exists()) {
-                signingConfigs.getByName("debug")
-            } else {
-                signingConfigs.create("release") {
-                    storeFile = keystoreFile
-                    storePassword = System.getenv("KEYSTORE_PASSWORD")
-                    keyAlias = System.getenv("KEYSTORE_ENTRY_ALIAS")
-                    keyPassword = System.getenv("KEYSTORE_ENTRY_PASSWORD")
-                }
-            }
-
+            signingConfig = releaseSigningConfig
             buildConfigField("long", "BUILD_ID", "0L")
         }
     }
