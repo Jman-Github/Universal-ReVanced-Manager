@@ -391,6 +391,12 @@
     <string name="no">いいえ</string>
     <string name="edit">編集</string>
     <string name="dialog_input_placeholder">値</string>
+    <!-- Needs translation -->
+    <string name="file_name">File name</string>
+    <!-- Needs translation -->
+    <string name="export_overwrite_title">Replace file?</string>
+    <!-- Needs translation -->
+    <string name="export_overwrite_description">A file named %1$s already exists. Replace it?</string>
     <string name="reset">リセット</string>
     <string name="share">共有</string>
     <string name="patch">パッチ</string>

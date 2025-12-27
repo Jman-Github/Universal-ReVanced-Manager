@@ -378,6 +378,12 @@
     <string name="no">Không</string>
     <string name="edit">Chỉnh sửa</string>
     <string name="dialog_input_placeholder">Giá trị</string>
+    <!-- Needs translation -->
+    <string name="file_name">File name</string>
+    <!-- Needs translation -->
+    <string name="export_overwrite_title">Replace file?</string>
+    <!-- Needs translation -->
+    <string name="export_overwrite_description">A file named %1$s already exists. Replace it?</string>
     <string name="reset">Đặt lại</string>
     <string name="share">Chia sẻ</string>
     <string name="patch">Vá</string>

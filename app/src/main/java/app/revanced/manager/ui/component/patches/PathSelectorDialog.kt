@@ -24,6 +24,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -65,7 +66,9 @@ fun PathSelectorDialog(
     roots: List<Filesystem.StorageRoot>,
     onSelect: (Path?) -> Unit,
     fileFilter: (Path) -> Boolean = { true },
-    allowDirectorySelection: Boolean = true
+    allowDirectorySelection: Boolean = true,
+    confirmButtonText: String? = null,
+    onConfirm: ((Path) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val prefs = koinInject<PreferencesManager>()
@@ -138,6 +141,13 @@ fun PathSelectorDialog(
                     onBackClick = { onSelect(null) },
                     backIcon = {
                         Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.close))
+                    },
+                    actions = {
+                        if (confirmButtonText != null && onConfirm != null) {
+                            TextButton(onClick = { onConfirm(currentDirectory) }) {
+                                Text(confirmButtonText)
+                            }
+                        }
                     }
                 )
             },

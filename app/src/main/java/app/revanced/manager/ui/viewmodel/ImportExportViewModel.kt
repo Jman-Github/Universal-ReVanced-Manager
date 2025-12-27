@@ -4,8 +4,6 @@ import android.app.Application
 import android.net.Uri
 import android.util.Log
 import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContract
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -27,7 +25,6 @@ import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemote
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
 import app.revanced.manager.domain.repository.remapLocalBundles
 import app.revanced.manager.data.room.bundles.Source as SourceInfo
-import app.revanced.manager.util.JSON_MIMETYPE
 import app.revanced.manager.util.tag
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.uiSafe
@@ -139,6 +136,12 @@ private data class PatchBundleImportSummary(
     val updated: Int
 )
 
+private data class PatchBundleExportResult(
+    val exportFile: PatchBundleExportFile,
+    val exportedCount: Int,
+    val hasLocalSources: Boolean
+)
+
 @Serializable
 data class PatchProfileExportFile(
     val profiles: List<PatchProfileExportEntry>
@@ -160,6 +163,11 @@ class ImportExportViewModel(
     private val patchProfileRepository: PatchProfileRepository,
     private val preferencesManager: PreferencesManager
 ) : ViewModel() {
+    enum class SelectionAction {
+        Import,
+        Export
+    }
+
     private val contentResolver = app.contentResolver
     val patchBundles = patchBundleRepository.sources
     val bundleImportProgress = patchBundleRepository.bundleImportProgress
@@ -214,6 +222,28 @@ class ImportExportViewModel(
         }
     }
 
+    fun startKeystoreImport(content: Path) = viewModelScope.launch {
+        uiSafe(app, R.string.failed_to_import_keystore, "Failed to import keystore") {
+            val path = withContext(Dispatchers.IO) {
+                File.createTempFile("signing", "ks", app.cacheDir).toPath().also { target ->
+                    content.inputStream().use { input ->
+                        Files.copy(input, target, StandardCopyOption.REPLACE_EXISTING)
+                    }
+                }
+            }
+
+            aliases.forEach { alias ->
+                knownPasswords.forEach { pass ->
+                    if (tryKeystoreImport(alias, pass, path)) {
+                        return@launch
+                    }
+                }
+            }
+
+            keystoreImportPath = path
+        }
+    }
+
     fun cancelKeystoreImport() {
         keystoreImportPath?.deleteExisting()
         keystoreImportPath = null
@@ -247,6 +277,16 @@ class ImportExportViewModel(
         app.toast(app.getString(R.string.export_keystore_success))
     }
 
+    fun exportKeystore(target: Path) = viewModelScope.launch {
+        withContext(Dispatchers.IO) {
+            target.parent?.let { Files.createDirectories(it) }
+            Files.newOutputStream(target).use { output ->
+                keystoreManager.export(output)
+            }
+        }
+        app.toast(app.getString(R.string.export_keystore_success))
+    }
+
     fun regenerateKeystore() = viewModelScope.launch {
         keystoreManager.regenerate()
         app.toast(app.getString(R.string.regenerate_keystore_success))
@@ -267,12 +307,53 @@ class ImportExportViewModel(
         app.toast(app.getString(R.string.reset_patch_selection_success))
     }
 
-    fun executeSelectionAction(target: Uri) = viewModelScope.launch {
-        val source = selectedBundle!!
-        val action = selectionAction!!
+    fun executeSelectionImport(target: Path) = viewModelScope.launch {
+        val source = selectedBundle ?: return@launch
         clearSelectionAction()
 
-        action.execute(source.uid, target)
+        uiSafe(app, R.string.import_patch_selection_fail, "Failed to restore patch selection") {
+            val selection = withContext(Dispatchers.IO) {
+                target.inputStream().use {
+                    Json.decodeFromStream<SerializedSelection>(it)
+                }
+            }
+
+            selectionRepository.import(source.uid, selection)
+            app.toast(app.getString(R.string.import_patch_selection_success))
+        }
+    }
+
+    fun executeSelectionExport(target: Uri) = viewModelScope.launch {
+        val source = selectedBundle ?: return@launch
+        clearSelectionAction()
+
+        uiSafe(app, R.string.export_patch_selection_fail, "Failed to backup patch selection") {
+            val selection = selectionRepository.export(source.uid)
+
+            withContext(Dispatchers.IO) {
+                contentResolver.openOutputStream(target, "wt")!!.use {
+                    Json.Default.encodeToStream(selection, it)
+                }
+            }
+            app.toast(app.getString(R.string.export_patch_selection_success))
+        }
+    }
+
+    fun executeSelectionExport(target: Path) = viewModelScope.launch {
+        val source = selectedBundle ?: return@launch
+        clearSelectionAction()
+
+        uiSafe(app, R.string.export_patch_selection_fail, "Failed to backup patch selection") {
+            val selection = selectionRepository.export(source.uid)
+
+            withContext(Dispatchers.IO) {
+                target.parent?.let { Files.createDirectories(it) }
+                Files.newOutputStream(target).use {
+                    Json.Default.encodeToStream(selection, it)
+                }
+            }
+            app.toast(app.getString(R.string.export_patch_selection_success))
+        }
     }
 
     fun selectBundle(bundle: PatchBundleSource) {
@@ -285,11 +366,11 @@ class ImportExportViewModel(
     }
 
     fun importSelection() = clearSelectionAction().also {
-        selectionAction = Import()
+        selectionAction = SelectionAction.Import
     }
 
     fun exportSelection() = clearSelectionAction().also {
-        selectionAction = Export()
+        selectionAction = SelectionAction.Export
     }
 
     fun importPatchBundles(source: Uri) = viewModelScope.launch {
@@ -686,71 +767,105 @@ class ImportExportViewModel(
         }
     }
 
-    fun exportPatchBundles(target: Uri) = viewModelScope.launch {
-        uiSafe(app, R.string.export_patch_bundles_fail, "Failed to export patch bundles") {
-            val sources = patchBundleRepository.sources.first()
-            val nonDefaultSources = sources.filterNot { it.isDefault }
-            val localSources = nonDefaultSources.filter { it.asRemoteOrNull == null }
-            val remoteSources = nonDefaultSources.mapNotNull { it.asRemoteOrNull }
+    private suspend fun buildPatchBundleExportResult(): PatchBundleExportResult {
+        val sources = patchBundleRepository.sources.first()
+        val nonDefaultSources = sources.filterNot { it.isDefault }
+        val localSources = nonDefaultSources.filter { it.asRemoteOrNull == null }
+        val remoteSources = nonDefaultSources.mapNotNull { it.asRemoteOrNull }
 
-                val officialSource = sources.firstOrNull { it.isDefault }
-                val officialDisplayName = officialSource
-                    ?.displayName
-                    ?.takeUnless { it.isBlank() }
-                val officialState = officialSource?.let { OfficialBundleState.PRESENT } ?: OfficialBundleState.ABSENT
-                val officialEnabled = officialSource?.enabled ?: true
+        val officialSource = sources.firstOrNull { it.isDefault }
+        val officialDisplayName = officialSource
+            ?.displayName
+            ?.takeUnless { it.isBlank() }
+        val officialState = officialSource?.let { OfficialBundleState.PRESENT } ?: OfficialBundleState.ABSENT
+        val officialEnabled = officialSource?.enabled ?: true
 
-                val exportedCount = remoteSources.size
+        val exportedCount = remoteSources.size
 
-                val positionLookup = sources.withIndex().associate { it.value.uid to it.index }
-                val officialAutoUpdate = officialSource?.asRemoteOrNull?.autoUpdate ?: false
-            val officialUsePrereleases = preferencesManager.usePatchesPrereleases.get()
+        val positionLookup = sources.withIndex().associate { it.value.uid to it.index }
+        val officialAutoUpdate = officialSource?.asRemoteOrNull?.autoUpdate ?: false
+        val officialUsePrereleases = preferencesManager.usePatchesPrereleases.get()
 
-            val bundles = buildList {
-                remoteSources.mapTo(this) {
-                    PatchBundleSnapshot(
-                        endpoint = it.endpoint,
-                        name = it.name,
-                        displayName = it.displayName,
-                        autoUpdate = it.autoUpdate,
-                        enabled = it.enabled,
-                        position = positionLookup[it.uid],
-                        createdAt = it.createdAt,
-                        updatedAt = it.updatedAt
-                    )
-                }
-                add(
-                    PatchBundleSnapshot(
-                        endpoint = SourceInfo.API.SENTINEL,
-                        name = "",
-                        displayName = officialDisplayName,
-                        autoUpdate = officialAutoUpdate,
-                        enabled = officialEnabled,
-                        officialState = officialState,
-                        position = officialSource?.let { positionLookup[it.uid] },
-                        officialAutoUpdate = officialAutoUpdate,
-                        officialUsePrereleases = officialUsePrereleases,
-                        createdAt = officialSource?.createdAt,
-                        updatedAt = officialSource?.updatedAt
-                    )
+        val bundles = buildList {
+            remoteSources.mapTo(this) {
+                PatchBundleSnapshot(
+                    endpoint = it.endpoint,
+                    name = it.name,
+                    displayName = it.displayName,
+                    autoUpdate = it.autoUpdate,
+                    enabled = it.enabled,
+                    position = positionLookup[it.uid],
+                    createdAt = it.createdAt,
+                    updatedAt = it.updatedAt
                 )
             }
+            add(
+                PatchBundleSnapshot(
+                    endpoint = SourceInfo.API.SENTINEL,
+                    name = "",
+                    displayName = officialDisplayName,
+                    autoUpdate = officialAutoUpdate,
+                    enabled = officialEnabled,
+                    officialState = officialState,
+                    position = officialSource?.let { positionLookup[it.uid] },
+                    officialAutoUpdate = officialAutoUpdate,
+                    officialUsePrereleases = officialUsePrereleases,
+                    createdAt = officialSource?.createdAt,
+                    updatedAt = officialSource?.updatedAt
+                )
+            )
+        }
+
+        return PatchBundleExportResult(
+            exportFile = PatchBundleExportFile(bundles),
+            exportedCount = exportedCount,
+            hasLocalSources = localSources.isNotEmpty()
+        )
+    }
+
+    fun exportPatchBundles(target: Uri) = viewModelScope.launch {
+        uiSafe(app, R.string.export_patch_bundles_fail, "Failed to export patch bundles") {
+            val result = buildPatchBundleExportResult()
 
             withContext(Dispatchers.IO) {
                 contentResolver.openOutputStream(target, "wt")!!.use {
-                    Json.Default.encodeToStream(PatchBundleExportFile(bundles), it)
+                    Json.Default.encodeToStream(result.exportFile, it)
                 }
             }
 
-            val message = if (localSources.isNotEmpty()) {
+            val message = if (result.hasLocalSources) {
                 R.string.export_patch_bundles_partial
             } else {
                 R.string.export_patch_bundles_success
             }
 
-            app.toast(app.getString(message, exportedCount))
+            app.toast(app.getString(message, result.exportedCount))
         }
     }
+
+    fun exportPatchBundles(target: Path) = viewModelScope.launch {
+        uiSafe(app, R.string.export_patch_bundles_fail, "Failed to export patch bundles") {
+            val result = buildPatchBundleExportResult()
+
+            withContext(Dispatchers.IO) {
+                target.parent?.let { Files.createDirectories(it) }
+                Files.newOutputStream(target).use {
+                    Json.Default.encodeToStream(result.exportFile, it)
+                }
+            }
+
+            val message = if (result.hasLocalSources) {
+                R.string.export_patch_bundles_partial
+            } else {
+                R.string.export_patch_bundles_success
+            }
+
+            app.toast(app.getString(message, result.exportedCount))
+        }
+    }
+
+    fun importPatchBundles(source: Path) =
+        importPatchBundles(Uri.fromFile(source.toFile()))
 
     fun importPatchProfiles(source: Uri) = viewModelScope.launch {
         withContext(NonCancellable) {
@@ -808,6 +923,9 @@ class ImportExportViewModel(
         }
     }
 
+    fun importPatchProfiles(source: Path) =
+        importPatchProfiles(Uri.fromFile(source.toFile()))
+
     fun exportPatchProfiles(target: Uri) = viewModelScope.launch {
         uiSafe(app, R.string.export_patch_profiles_fail, "Failed to export patch profiles") {
             val profiles = patchProfileRepository.exportProfiles()
@@ -818,6 +936,25 @@ class ImportExportViewModel(
 
             withContext(Dispatchers.IO) {
                 contentResolver.openOutputStream(target, "wt")!!.use {
+                    Json.Default.encodeToStream(PatchProfileExportFile(profiles), it)
+                }
+            }
+
+            app.toast(app.getString(R.string.export_patch_profiles_success, profiles.size))
+        }
+    }
+
+    fun exportPatchProfiles(target: Path) = viewModelScope.launch {
+        uiSafe(app, R.string.export_patch_profiles_fail, "Failed to export patch profiles") {
+            val profiles = patchProfileRepository.exportProfiles()
+            if (profiles.isEmpty()) {
+                app.toast(app.getString(R.string.export_patch_profiles_empty))
+                return@uiSafe
+            }
+
+            withContext(Dispatchers.IO) {
+                target.parent?.let { Files.createDirectories(it) }
+                Files.newOutputStream(target).use {
                     Json.Default.encodeToStream(PatchProfileExportFile(profiles), it)
                 }
             }
@@ -841,6 +978,9 @@ class ImportExportViewModel(
         }
     }
 
+    fun importManagerSettings(source: Path) =
+        importManagerSettings(Uri.fromFile(source.toFile()))
+
     fun exportManagerSettings(target: Uri) = viewModelScope.launch {
         uiSafe(app, R.string.export_manager_settings_fail, "Failed to export manager settings") {
             val snapshot = preferencesManager.exportSettings()
@@ -858,47 +998,21 @@ class ImportExportViewModel(
         }
     }
 
-    sealed interface SelectionAction {
-        suspend fun execute(bundleUid: Int, location: Uri)
-        val activityContract: ActivityResultContract<String, Uri?>
-        val activityArg: String
-    }
-
-    private inner class Import : SelectionAction {
-        override val activityContract = ActivityResultContracts.GetContent()
-        override val activityArg = JSON_MIMETYPE
-        override suspend fun execute(bundleUid: Int, location: Uri) = uiSafe(
-            app,
-            R.string.import_patch_selection_fail,
-            "Failed to restore patch selection"
-        ) {
-            val selection = withContext(Dispatchers.IO) {
-                contentResolver.openInputStream(location)!!.use {
-                    Json.decodeFromStream<SerializedSelection>(it)
-                }
-            }
-
-            selectionRepository.import(bundleUid, selection)
-            app.toast(app.getString(R.string.import_patch_selection_success))
-        }
-    }
-
-    private inner class Export : SelectionAction {
-        override val activityContract = ActivityResultContracts.CreateDocument(JSON_MIMETYPE)
-        override val activityArg = "urv_patch_selection.json"
-        override suspend fun execute(bundleUid: Int, location: Uri) = uiSafe(
-            app,
-            R.string.export_patch_selection_fail,
-            "Failed to backup patch selection"
-        ) {
-            val selection = selectionRepository.export(bundleUid)
+    fun exportManagerSettings(target: Path) = viewModelScope.launch {
+        uiSafe(app, R.string.export_manager_settings_fail, "Failed to export manager settings") {
+            val snapshot = preferencesManager.exportSettings()
 
             withContext(Dispatchers.IO) {
-                contentResolver.openOutputStream(location, "wt")!!.use {
-                    Json.Default.encodeToStream(selection, it)
+                target.parent?.let { Files.createDirectories(it) }
+                Files.newOutputStream(target).use { output ->
+                    Json.Default.encodeToStream(
+                        ManagerSettingsExportFile(settings = snapshot),
+                        output
+                    )
                 }
             }
-            app.toast(app.getString(R.string.export_patch_selection_success))
+
+            app.toast(app.getString(R.string.export_manager_settings_success))
         }
     }
 

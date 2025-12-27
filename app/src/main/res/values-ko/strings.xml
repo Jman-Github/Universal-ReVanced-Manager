@@ -388,6 +388,12 @@
     <string name="no">아니요</string>
     <string name="edit">편집</string>
     <string name="dialog_input_placeholder">값</string>
+    <!-- Needs translation -->
+    <string name="file_name">File name</string>
+    <!-- Needs translation -->
+    <string name="export_overwrite_title">Replace file?</string>
+    <!-- Needs translation -->
+    <string name="export_overwrite_description">A file named %1$s already exists. Replace it?</string>
     <string name="reset">초기화</string>
     <string name="share">공유</string>
     <string name="patch">패치하기</string>

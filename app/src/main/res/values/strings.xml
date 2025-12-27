@@ -400,6 +400,9 @@ Patch profiles are not affected.</string>
     <string name="no">No</string>
     <string name="edit">Edit</string>
     <string name="dialog_input_placeholder">Value</string>
+    <string name="file_name">File name</string>
+    <string name="export_overwrite_title">Replace file?</string>
+    <string name="export_overwrite_description">A file named %1$s already exists. Replace it?</string>
     <string name="reset">Reset</string>
     <string name="share">Share</string>
     <string name="patch">Patch</string>

@@ -118,6 +118,12 @@
     <string name="device_memory_limit_format">%1$dMB (Нормальный) - %2$dMB (Большой)</string>
     <string name="device_model">Модель</string>
     <string name="dialog_input_placeholder">Значение</string>
+    <!-- Needs translation -->
+    <string name="file_name">File name</string>
+    <!-- Needs translation -->
+    <string name="export_overwrite_title">Replace file?</string>
+    <!-- Needs translation -->
+    <string name="export_overwrite_description">A file named %1$s already exists. Replace it?</string>
     <string name="disable_battery_optimization">Отключить оптимизацию батареи</string>
     <string name="dismiss">Отклонить</string>
     <string name="dismiss_temporary">Не сейчас</string>

@@ -381,6 +381,12 @@
     <string name="no">否</string>
     <string name="edit">编辑</string>
     <string name="dialog_input_placeholder">值</string>
+    <!-- Needs translation -->
+    <string name="file_name">File name</string>
+    <!-- Needs translation -->
+    <string name="export_overwrite_title">Replace file?</string>
+    <!-- Needs translation -->
+    <string name="export_overwrite_description">A file named %1$s already exists. Replace it?</string>
     <string name="reset">重置</string>
     <string name="share">分享</string>
     <string name="patch">修补</string>
