@@ -8,6 +8,7 @@
 - Added a settings option under Settings > Advanced to change the search engine used for version search queries
 - Dev builds now use `-dev` in their version numbers
 - Updates no longer are prompted when using dev builds
+- Updated the installation flow for the system installer to prompt the user to enable the "Install unknown apps" permission if not already granted by the user
 
 
 # Bug fixes

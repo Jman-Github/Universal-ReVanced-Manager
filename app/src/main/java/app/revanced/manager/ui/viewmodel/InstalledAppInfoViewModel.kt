@@ -393,6 +393,12 @@ class InstalledAppInfoViewModel(
         }
         when (plan) {
             is InstallerManager.InstallPlan.Internal -> {
+                if (!pm.requestInstallPackagesPermission()) {
+                    val hint = installerManager.formatFailureHint(PackageInstaller.STATUS_FAILURE_BLOCKED, null)
+                        ?: context.getString(R.string.installer_hint_blocked)
+                    markInstallFailure(context.getString(R.string.install_app_fail, hint))
+                    return@launch
+                }
                 pendingInternalInstallPackage = app.currentPackageName
                 val success = runCatching {
                     pm.installApp(listOf(apk))

@@ -167,6 +167,10 @@ class UpdateViewModel(
 
         when (plan) {
             is InstallerManager.InstallPlan.Internal -> {
+                if (!pm.requestInstallPackagesPermission()) {
+                    state = State.CAN_INSTALL
+                    return@launch
+                }
                 state = State.INSTALLING
                 pm.installApp(listOf(location))
             }

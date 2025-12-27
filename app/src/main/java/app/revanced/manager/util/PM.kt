@@ -14,6 +14,8 @@ import androidx.core.content.pm.PackageInfoCompat
 import android.content.pm.Signature
 import android.os.Build
 import android.os.Parcelable
+import android.provider.Settings
+import android.net.Uri
 import androidx.compose.runtime.Immutable
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.receiver.InstallReceiver
@@ -169,6 +171,17 @@ class PM(
     }
 
     fun canInstallPackages() = app.packageManager.canRequestPackageInstalls()
+
+    fun requestInstallPackagesPermission(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return true
+        if (canInstallPackages()) return true
+        val intent = Intent(
+            Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+            Uri.parse("package:${app.packageName}")
+        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        app.startActivity(intent)
+        return false
+    }
 
     private fun PackageInstaller.Session.writeApk(apk: File) {
         apk.inputStream().use { inputStream ->
