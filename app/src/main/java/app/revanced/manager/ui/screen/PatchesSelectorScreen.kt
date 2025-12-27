@@ -114,6 +114,7 @@ import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.net.Uri
+import android.os.Build
 import java.util.Locale
 import app.universal.revanced.manager.R
 import app.revanced.manager.patcher.patch.Option
@@ -1545,12 +1546,14 @@ private fun PatchVersionSearchButton(
 
 private fun buildSearchUrl(packageName: String, version: String?): String {
     val encodedPackage = Uri.encode(packageName)
-    val encodedVersion = version?.takeIf { it.isNotBlank() }?.let(Uri::encode)
-    return if (encodedVersion == null) {
-        "https://www.google.com/search?q=$encodedPackage"
-    } else {
-        "https://www.google.com/search?q=$encodedPackage+$encodedVersion"
+    val encodedVersion = version?.takeIf { it.isNotBlank() }?.let {
+        Uri.encode(formatPatchVersionLabel(it))
     }
+    val encodedArch = Build.SUPPORTED_ABIS.firstOrNull()
+        ?.takeIf { it.isNotBlank() }
+        ?.let(Uri::encode)
+    val query = listOfNotNull(encodedPackage, encodedVersion, encodedArch).joinToString("+")
+    return "https://www.google.com/search?q=$query"
 }
 
 @Composable

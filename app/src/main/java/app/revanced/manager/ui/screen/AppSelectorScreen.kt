@@ -4,6 +4,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.ExperimentalFoundationApi
 import android.content.pm.PackageInfo
 import android.net.Uri
+import android.os.Build
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -657,12 +658,15 @@ private fun VersionSearchChip(
 
 private fun buildSearchUrl(packageName: String, version: String?): String {
     val encodedPackage = Uri.encode(packageName)
-    val encodedVersion = version?.takeIf { it.isNotBlank() }?.let(Uri::encode)
-    return if (encodedVersion == null) {
-        "https://www.google.com/search?q=$encodedPackage"
-    } else {
-        "https://www.google.com/search?q=$encodedPackage+$encodedVersion"
+    val encodedVersion = version?.takeIf { it.isNotBlank() }?.let {
+        val formatted = if (it.startsWith("v", ignoreCase = true)) it else "v$it"
+        Uri.encode(formatted)
     }
+    val encodedArch = Build.SUPPORTED_ABIS.firstOrNull()
+        ?.takeIf { it.isNotBlank() }
+        ?.let(Uri::encode)
+    val query = listOfNotNull(encodedPackage, encodedVersion, encodedArch).joinToString("+")
+    return "https://www.google.com/search?q=$query"
 }
 
 @Composable
