@@ -1,3 +1,17 @@
+# v1.7.0 (2025-12-19)
+
+
+# Features
+
+- Added the ability to favorite files and folders in the file picker page https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/77
+
+
+# Bug fixes
+
+
+# Docs
+
+
 # v1.6.1 (2025-12-19)
 
 

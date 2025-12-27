@@ -666,6 +666,16 @@
     <string name="path_selector_parent_dir">이전 디렉터리</string>
     <string name="path_selector_dirs">디렉터리</string>
     <string name="path_selector_files">파일</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorites">Favorites</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorite_added">Added to favorites</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorite_removed">Removed from favorites</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorite_remove_title">Remove favorite?</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorite_remove_description">Remove “%1$s” from favorites?</string>
     <string name="show_password_field">비밀번호 표시</string>
     <string name="hide_password_field">비밀번호 숨기기</string>
     <string name="installer">설치 프로그램</string>

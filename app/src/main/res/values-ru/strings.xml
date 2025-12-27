@@ -375,6 +375,16 @@
     <string name="path_selector_dirs">Каталоги</string>
     <string name="path_selector_files">Файлы</string>
     <string name="path_selector_parent_dir">Предыдущий каталог</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorites">Favorites</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorite_added">Added to favorites</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorite_removed">Removed from favorites</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorite_remove_title">Remove favorite?</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorite_remove_description">Remove “%1$s” from favorites?</string>
     <string name="plugin_activity_dialog_body">Для продолжения работы с этим плагином требуется взаимодействие с пользователем.</string>
     <string name="plugin_host_permission_description">Используется для контроля доступа к плагинам ReVanced Manager. Это есть только у ReVanced Manager.</string>
     <string name="plugin_host_permission_label">Хост плагина ReVanced Manager</string>

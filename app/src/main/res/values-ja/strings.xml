@@ -666,6 +666,16 @@
     <string name="path_selector_parent_dir">前のディレクトリ</string>
     <string name="path_selector_dirs">ディレクトリ</string>
     <string name="path_selector_files">ファイル</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorites">Favorites</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorite_added">Added to favorites</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorite_removed">Removed from favorites</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorite_remove_description">Remove “%1$s” from favorites?</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorite_remove_title">Remove favorite?</string>
 
     <string name="show_password_field">パスワードを表示</string>
     <string name="hide_password_field">パスワードを隠す</string>

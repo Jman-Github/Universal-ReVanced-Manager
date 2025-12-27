@@ -689,6 +689,16 @@
     <string name="path_selector_parent_dir">上一级目录</string>
     <string name="path_selector_dirs">目录</string>
     <string name="path_selector_files">文件</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorites">Favorites</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorite_added">Added to favorites</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorite_removed">Removed from favorites</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorite_remove_title">Remove favorite?</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorite_remove_description">Remove “%1$s” from favorites?</string>
 
     <string name="show_password_field">显示密码</string>
     <string name="hide_password_field">隐藏密码</string>
