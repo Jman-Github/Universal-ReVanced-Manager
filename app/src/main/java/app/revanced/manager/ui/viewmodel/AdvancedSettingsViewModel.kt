@@ -65,6 +65,10 @@ class AdvancedSettingsViewModel(
         prefs.includeGitHubPatInExports.update(enabled)
     }
 
+    fun setSearchEngineHost(value: String) = viewModelScope.launch(Dispatchers.Default) {
+        prefs.searchEngineHost.update(normalizeSearchEngineHost(value, prefs.searchEngineHost.default))
+    }
+
     fun exportDebugLogs(target: Uri) = viewModelScope.launch {
         val exitCode = try {
             withContext(Dispatchers.IO) {
@@ -215,6 +219,14 @@ class AdvancedSettingsViewModel(
         query: String,
         target: InstallerManager.InstallTarget
     ): List<InstallerManager.Entry> = installerManager.searchInstallerEntries(query, target)
+}
+
+private fun normalizeSearchEngineHost(value: String, fallback: String): String {
+    val trimmed = value.trim()
+    if (trimmed.isBlank()) return fallback
+    val noScheme = trimmed.removePrefix("https://").removePrefix("http://")
+    val noPath = noScheme.substringBefore('/').substringBefore('?').substringBefore('#')
+    return noPath.trim().trimEnd('/').ifBlank { fallback }
 }
 
 private fun tokensEqual(a: InstallerManager.Token, b: InstallerManager.Token): Boolean = when {

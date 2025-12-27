@@ -78,6 +78,7 @@ class PreferencesManager(
 
     val acknowledgedDownloaderPlugins = stringSetPreference("acknowledged_downloader_plugins", emptySet())
     val autoSaveDownloaderApks = booleanPreference("auto_save_downloader_apks", true)
+    val searchEngineHost = stringPreference("search_engine_host", "google.com")
 
     @Serializable
     data class SettingsSnapshot(
@@ -123,7 +124,8 @@ class PreferencesManager(
         val patchSelectionHiddenActions: Set<String>? = null,
         val acknowledgedDownloaderPlugins: Set<String>? = null,
         val autoSaveDownloaderApks: Boolean? = null,
-        val pathSelectorFavorites: Set<String>? = null
+        val pathSelectorFavorites: Set<String>? = null,
+        val searchEngineHost: String? = null
     )
 
     suspend fun exportSettings() = SettingsSnapshot(
@@ -169,7 +171,8 @@ class PreferencesManager(
         patchSelectionHiddenActions = patchSelectionHiddenActions.get(),
         acknowledgedDownloaderPlugins = acknowledgedDownloaderPlugins.get(),
         autoSaveDownloaderApks = autoSaveDownloaderApks.get(),
-        pathSelectorFavorites = pathSelectorFavorites.get()
+        pathSelectorFavorites = pathSelectorFavorites.get(),
+        searchEngineHost = searchEngineHost.get()
     )
 
     suspend fun importSettings(snapshot: SettingsSnapshot) = edit {
@@ -223,6 +226,7 @@ class PreferencesManager(
             }.toSet()
             pathSelectorFavorites.value = sanitized
         }
+        snapshot.searchEngineHost?.let { searchEngineHost.value = it }
     }
 
 }

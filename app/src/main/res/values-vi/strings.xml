@@ -841,6 +841,16 @@ Bạn có thể tự xóa chúng, điều chỉnh lựa chọn, hoặc cứ ti�
     <string name="github">Universal ReVanced Manager</string>
     <string name="original_revanced_manager_github">ReVanced Manager chính thức</string>
     <string name="patch_bundle_urls">URL gói vá</string>
+    <!-- Needs translation -->
+    <string name="search_engine_host_title">Search engine domain</string>
+    <!-- Needs translation -->
+    <string name="search_engine_host_description">Version search links use %1$s</string>
+    <!-- Needs translation -->
+    <string name="search_engine_host_dialog_title">Search engine domain</string>
+    <!-- Needs translation -->
+    <string name="search_engine_host_dialog_description">Change the domain used for version search links. Example: google.com or duckduckgo.com</string>
+    <!-- Needs translation -->
+    <string name="search_engine_host_label">Search domain</string>
     <string name="contact">Liên hệ</string>
     <string name="version">Phiên bản</string>
     <string name="submit_feedback">Gửi phản hồi hoặc báo lỗi</string>

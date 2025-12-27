@@ -64,6 +64,7 @@ import androidx.compose.material.icons.outlined.LayersClear
 import androidx.compose.material.icons.outlined.Redo
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.MoreHoriz
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SettingsBackupRestore
 import androidx.compose.material.icons.outlined.UnfoldLess
 import androidx.compose.material.icons.outlined.Undo
@@ -222,8 +223,10 @@ fun AdvancedSettingsScreen(
             val apiUrl by viewModel.prefs.api.getAsState()
             val gitHubPat by viewModel.prefs.gitHubPat.getAsState()
             val includeGitHubPatInExports by viewModel.prefs.includeGitHubPatInExports.getAsState()
+            val searchEngineHost by viewModel.prefs.searchEngineHost.getAsState()
             var showApiUrlDialog by rememberSaveable { mutableStateOf(false) }
             var showGitHubPatDialog by rememberSaveable { mutableStateOf(false) }
+            var showSearchEngineDialog by rememberSaveable { mutableStateOf(false) }
 
             if (showApiUrlDialog) {
                 APIUrlDialog(
@@ -245,6 +248,17 @@ fun AdvancedSettingsScreen(
                         viewModel.setIncludeGitHubPatInExports(includePat)
                     },
                     onDismiss = { showGitHubPatDialog = false }
+                )
+            }
+            if (showSearchEngineDialog) {
+                SearchEngineHostDialog(
+                    currentHost = searchEngineHost,
+                    defaultHost = viewModel.prefs.searchEngineHost.default,
+                    onSubmit = {
+                        showSearchEngineDialog = false
+                        it?.let(viewModel::setSearchEngineHost)
+                    },
+                    onDismiss = { showSearchEngineDialog = false }
                 )
             }
             ExpressiveSettingsCard(
@@ -410,6 +424,20 @@ fun AdvancedSettingsScreen(
                     headlineContent = stringResource(R.string.installer_custom_manage_title),
                     supportingContent = stringResource(R.string.installer_custom_manage_description),
                     onClick = { showCustomInstallerDialog = true }
+                )
+            }
+
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+            ) {
+                ExpressiveSettingsItem(
+                    headlineContent = stringResource(R.string.search_engine_host_title),
+                    supportingContent = stringResource(
+                        R.string.search_engine_host_description,
+                        searchEngineHost
+                    ),
+                    onClick = { showSearchEngineDialog = true }
                 )
             }
 
@@ -2311,4 +2339,57 @@ private fun GitHubPatDialog(
             }
         )
     }
+}
+
+@Composable
+private fun SearchEngineHostDialog(
+    currentHost: String,
+    defaultHost: String,
+    onSubmit: (String?) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var host by rememberSaveable(currentHost) { mutableStateOf(currentHost) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = { onSubmit(host) }) {
+                Text(stringResource(R.string.save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+        icon = { Icon(Icons.Outlined.Search, null) },
+        title = {
+            Text(
+                text = stringResource(R.string.search_engine_host_dialog_title),
+                style = MaterialTheme.typography.headlineSmall.copy(textAlign = TextAlign.Center),
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(
+                    text = stringResource(R.string.search_engine_host_dialog_description),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = host,
+                    onValueChange = { host = it },
+                    label = { Text(stringResource(R.string.search_engine_host_label)) },
+                    placeholder = { Text(defaultHost) },
+                    trailingIcon = {
+                        IconButton(onClick = { host = defaultHost }) {
+                            Icon(Icons.Outlined.Restore, stringResource(R.string.api_url_dialog_reset))
+                        }
+                    }
+                )
+            }
+        }
+    )
 }

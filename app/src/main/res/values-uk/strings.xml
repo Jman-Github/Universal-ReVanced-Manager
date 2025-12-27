@@ -1469,6 +1469,16 @@
     <!-- Needs translation -->
     <string name="patch_bundle_urls">Get patch bundle imports</string>
     <!-- Needs translation -->
+    <string name="search_engine_host_title">Search engine domain</string>
+    <!-- Needs translation -->
+    <string name="search_engine_host_description">Version search links use %1$s</string>
+    <!-- Needs translation -->
+    <string name="search_engine_host_dialog_title">Search engine domain</string>
+    <!-- Needs translation -->
+    <string name="search_engine_host_dialog_description">Change the domain used for version search links. Example: google.com or duckduckgo.com</string>
+    <!-- Needs translation -->
+    <string name="search_engine_host_label">Search domain</string>
+    <!-- Needs translation -->
     <string name="unique_features_label">here.</string>
     <!-- Needs translation -->
     <string name="here">here.</string>

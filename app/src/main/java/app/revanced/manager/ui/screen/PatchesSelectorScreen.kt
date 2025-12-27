@@ -179,6 +179,7 @@ fun PatchesSelectorScreen(
     val hiddenActionsPref by viewModel.prefs.patchSelectionHiddenActions.getAsState()
     val sortAlphabeticallyPref by viewModel.prefs.patchSelectionSortAlphabetical.getAsState()
     val sortSettingsModePref by viewModel.prefs.patchSelectionSortSettingsMode.getAsState()
+    val searchEngineHost by viewModel.prefs.searchEngineHost.getAsState()
     val orderedActionKeys = remember(actionOrderPref) {
         val parsed = actionOrderPref
             .split(',')
@@ -708,6 +709,7 @@ fun PatchesSelectorScreen(
                         uid,
                         patch
                     ),
+                    searchEngineHost = searchEngineHost,
                     onToggle = {
                         when {
                             // Open incompatible dialog if the patch is not supported
@@ -1209,7 +1211,8 @@ private fun PatchItem(
     onToggle: () -> Unit,
     compatible: Boolean = true,
     packageName: String,
-    suggestedVersion: String?
+    suggestedVersion: String?,
+    searchEngineHost: String
 ): Unit {
     val supportedPackage = patch.compatiblePackages?.firstOrNull { it.packageName == packageName }
     val supportsAllVersions = patch.compatiblePackages == null || supportedPackage?.versions == null
@@ -1264,6 +1267,7 @@ private fun PatchItem(
             packageName = packageName,
             versions = dialogVersions,
             suggestedVersion = suggestedVersionInfo,
+            searchEngineHost = searchEngineHost,
             onDismiss = { showVersionsDialog = false }
         )
     }
@@ -1325,6 +1329,7 @@ private fun PatchItem(
                             label = info.label,
                             packageName = packageName,
                             version = info.version,
+                            searchEngineHost = searchEngineHost,
                             highlighted = true
                         )
                     }
@@ -1333,6 +1338,7 @@ private fun PatchItem(
                             label = version.label,
                             packageName = packageName,
                             version = version.version,
+                            searchEngineHost = searchEngineHost,
                             outlined = true
                         )
                     }
@@ -1362,6 +1368,7 @@ private fun PatchVersionSearchChip(
     label: String,
     packageName: String,
     version: String?,
+    searchEngineHost: String,
     highlighted: Boolean = false,
     outlined: Boolean = false,
     modifier: Modifier = Modifier
@@ -1373,7 +1380,7 @@ private fun PatchVersionSearchChip(
         highlighted = highlighted,
         outlined = outlined,
         modifier = modifier,
-        onClick = { context.openUrl(buildSearchUrl(packageName, version)) }
+        onClick = { context.openUrl(buildSearchUrl(packageName, version, searchEngineHost)) }
     )
 }
 
@@ -1382,6 +1389,7 @@ private fun PatchVersionChipWithSearch(
     label: String,
     packageName: String,
     version: String?,
+    searchEngineHost: String,
     highlighted: Boolean = false,
     outlined: Boolean = false,
     modifier: Modifier = Modifier
@@ -1398,7 +1406,8 @@ private fun PatchVersionChipWithSearch(
         )
         PatchVersionSearchButton(
             packageName = packageName,
-            version = version
+            version = version,
+            searchEngineHost = searchEngineHost
         )
     }
 }
@@ -1459,6 +1468,7 @@ private fun PatchVersionsDialog(
     packageName: String,
     versions: List<PatchVersionChipInfo>,
     suggestedVersion: PatchVersionChipInfo?,
+    searchEngineHost: String,
     onDismiss: () -> Unit
 ) {
     val scrollState = rememberScrollState()
@@ -1484,6 +1494,7 @@ private fun PatchVersionsDialog(
                         label = info.label,
                         packageName = packageName,
                         version = info.version,
+                        searchEngineHost = searchEngineHost,
                         highlighted = true
                     )
                 }
@@ -1506,6 +1517,7 @@ private fun PatchVersionsDialog(
                                             label = info.label,
                                             packageName = packageName,
                                             version = info.version,
+                                            searchEngineHost = searchEngineHost,
                                             outlined = true
                                         )
                                     }
@@ -1529,11 +1541,12 @@ private fun formatPatchVersionLabel(version: String): String =
 private fun PatchVersionSearchButton(
     packageName: String,
     version: String?,
+    searchEngineHost: String,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     IconButton(
-        onClick = { context.openUrl(buildSearchUrl(packageName, version)) },
+        onClick = { context.openUrl(buildSearchUrl(packageName, version, searchEngineHost)) },
         modifier = modifier.size(24.dp)
     ) {
         Icon(
@@ -1544,7 +1557,7 @@ private fun PatchVersionSearchButton(
     }
 }
 
-private fun buildSearchUrl(packageName: String, version: String?): String {
+private fun buildSearchUrl(packageName: String, version: String?, searchEngineHost: String): String {
     val encodedPackage = Uri.encode(packageName)
     val encodedVersion = version?.takeIf { it.isNotBlank() }?.let {
         Uri.encode(formatPatchVersionLabel(it))
@@ -1553,7 +1566,16 @@ private fun buildSearchUrl(packageName: String, version: String?): String {
         ?.takeIf { it.isNotBlank() }
         ?.let(Uri::encode)
     val query = listOfNotNull(encodedPackage, encodedVersion, encodedArch).joinToString("+")
-    return "https://www.google.com/search?q=$query"
+    val host = normalizeSearchHost(searchEngineHost)
+    return "https://$host/search?q=$query"
+}
+
+private fun normalizeSearchHost(value: String): String {
+    val trimmed = value.trim()
+    if (trimmed.isBlank()) return "google.com"
+    val noScheme = trimmed.removePrefix("https://").removePrefix("http://")
+    val noPath = noScheme.substringBefore('/').substringBefore('?').substringBefore('#')
+    return noPath.trim().trimEnd('/').ifBlank { "google.com" }
 }
 
 @Composable

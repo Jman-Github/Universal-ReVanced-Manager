@@ -4,6 +4,8 @@
 # Features
 
 - Added the ability to favorite files and folders in the file picker page https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/77
+- Added device ABI to version serach queries https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/79
+- Added a settings option under Settings > Advanced to change the search engine used for version search queries
 
 
 # Bug fixes

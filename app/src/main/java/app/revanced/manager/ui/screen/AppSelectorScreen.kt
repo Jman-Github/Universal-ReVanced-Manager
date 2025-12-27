@@ -105,6 +105,7 @@ fun AppSelectorScreen(
     val allowIncompatiblePatches by prefs.disablePatchVersionCompatCheck.getAsState()
     val suggestedVersionSafeguard by prefs.suggestedVersionSafeguard.getAsState()
     val bundleRecommendationsEnabled = allowIncompatiblePatches && !suggestedVersionSafeguard
+    val searchEngineHost by prefs.searchEngineHost.getAsState()
 
     EventEffect(flow = vm.storageSelectionFlow) {
         onStorageSelect(it)
@@ -393,6 +394,7 @@ fun AppSelectorScreen(
                                             BundleSuggestionCard(
                                                 suggestion = suggestion,
                                                 packageName = app.packageName,
+                                                searchEngineHost = searchEngineHost,
                                                 enabled = bundleRecommendationsEnabled,
                                                 modifier = Modifier
                                                     .fillMaxWidth()
@@ -418,6 +420,7 @@ fun AppSelectorScreen(
                                             recommendedVersion = suggestion.recommendedVersion,
                                             otherVersions = suggestion.otherSupportedVersions,
                                             supportsAllVersions = suggestion.supportsAllVersions,
+                                            searchEngineHost = searchEngineHost,
                                             onDismissRequest = { dialogBundleUid = null }
                                         )
                                     }
@@ -593,6 +596,7 @@ private fun VersionSearchRow(
     label: String,
     packageName: String,
     version: String?,
+    searchEngineHost: String,
     modifier: Modifier = Modifier,
     highlighted: Boolean = false
 ) {
@@ -605,6 +609,7 @@ private fun VersionSearchRow(
             label = label,
             packageName = packageName,
             version = version,
+            searchEngineHost = searchEngineHost,
             highlighted = highlighted
         )
     }
@@ -615,6 +620,7 @@ private fun VersionSearchChip(
     label: String,
     packageName: String,
     version: String?,
+    searchEngineHost: String,
     modifier: Modifier = Modifier,
     highlighted: Boolean = false,
 ) {
@@ -630,7 +636,7 @@ private fun VersionSearchChip(
         MaterialTheme.colorScheme.onSurfaceVariant
     }
     Surface(
-        onClick = { context.openUrl(buildSearchUrl(packageName, version)) },
+                        onClick = { context.openUrl(buildSearchUrl(packageName, version, searchEngineHost)) },
         modifier = modifier.widthIn(max = 220.dp),
         shape = RoundedCornerShape(999.dp),
         color = background,
@@ -656,7 +662,7 @@ private fun VersionSearchChip(
     }
 }
 
-private fun buildSearchUrl(packageName: String, version: String?): String {
+private fun buildSearchUrl(packageName: String, version: String?, searchEngineHost: String): String {
     val encodedPackage = Uri.encode(packageName)
     val encodedVersion = version?.takeIf { it.isNotBlank() }?.let {
         val formatted = if (it.startsWith("v", ignoreCase = true)) it else "v$it"
@@ -666,7 +672,16 @@ private fun buildSearchUrl(packageName: String, version: String?): String {
         ?.takeIf { it.isNotBlank() }
         ?.let(Uri::encode)
     val query = listOfNotNull(encodedPackage, encodedVersion, encodedArch).joinToString("+")
-    return "https://www.google.com/search?q=$query"
+    val host = normalizeSearchHost(searchEngineHost)
+    return "https://$host/search?q=$query"
+}
+
+private fun normalizeSearchHost(value: String): String {
+    val trimmed = value.trim()
+    if (trimmed.isBlank()) return "google.com"
+    val noScheme = trimmed.removePrefix("https://").removePrefix("http://")
+    val noPath = noScheme.substringBefore('/').substringBefore('?').substringBefore('#')
+    return noPath.trim().trimEnd('/').ifBlank { "google.com" }
 }
 
 @Composable
@@ -676,6 +691,7 @@ private fun OtherSupportedVersionsInfoDialog(
     recommendedVersion: String?,
     otherVersions: List<String>,
     supportsAllVersions: Boolean,
+    searchEngineHost: String,
     onDismissRequest: () -> Unit
 ) {
     AlertDialog(
@@ -696,6 +712,7 @@ private fun OtherSupportedVersionsInfoDialog(
                         ),
                         packageName = packageName,
                         version = version,
+                        searchEngineHost = searchEngineHost,
                         modifier = Modifier.align(Alignment.Start),
                         highlighted = true
                     )
@@ -713,6 +730,7 @@ private fun OtherSupportedVersionsInfoDialog(
                                             label = stringResource(R.string.version_label, version),
                                             packageName = packageName,
                                             version = version,
+                                            searchEngineHost = searchEngineHost,
                                             modifier = Modifier
                                                 .weight(1f)
                                                 .wrapContentWidth(Alignment.Start)
@@ -730,6 +748,7 @@ private fun OtherSupportedVersionsInfoDialog(
                             label = stringResource(R.string.other_supported_versions_all),
                             packageName = packageName,
                             version = null,
+                            searchEngineHost = searchEngineHost,
                             modifier = Modifier.align(Alignment.Start),
                             highlighted = true
                         )
@@ -751,6 +770,7 @@ private fun OtherSupportedVersionsInfoDialog(
 private fun BundleSuggestionCard(
     suggestion: BundleVersionSuggestion,
     packageName: String,
+    searchEngineHost: String,
     enabled: Boolean,
     modifier: Modifier = Modifier,
     onShowOtherVersions: () -> Unit
@@ -786,6 +806,7 @@ private fun BundleSuggestionCard(
                         label = versionLabel,
                         packageName = packageName,
                         version = suggestion.recommendedVersion,
+                        searchEngineHost = searchEngineHost,
                         modifier = Modifier,
                         highlighted = true
                     )
@@ -794,6 +815,7 @@ private fun BundleSuggestionCard(
                         label = versionLabel,
                         packageName = packageName,
                         version = null,
+                        searchEngineHost = searchEngineHost,
                         modifier = Modifier,
                         highlighted = true
                     )
