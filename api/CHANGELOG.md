@@ -12,6 +12,7 @@
 - Removed the redundant `Apply` and `Cancel` buttons from the theme preview widgets in Settings > General
 - Added a settings toggle in Settings > Advanced for the patch selection screens patch version tags
 - Updated the "Configure updates" screen that appears on a fresh install from refering to the Official ReVanced Patches as "ReVanced Patches" to "Official ReVanced Patches" instead for consistency
+- Update the "Show & allow using universal patches" setting, when toggled off, to hide apps on the app selection screen that don't use any patches (so ones that only use universal patches)
 
 
 # Bug fixes

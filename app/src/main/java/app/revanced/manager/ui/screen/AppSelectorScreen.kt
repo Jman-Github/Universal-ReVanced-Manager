@@ -105,6 +105,7 @@ fun AppSelectorScreen(
     val allowIncompatiblePatches by prefs.disablePatchVersionCompatCheck.getAsState()
     val suggestedVersionSafeguard by prefs.suggestedVersionSafeguard.getAsState()
     val bundleRecommendationsEnabled = allowIncompatiblePatches && !suggestedVersionSafeguard
+    val allowUniversalPatches by prefs.disableUniversalPatchCheck.getAsState()
     val searchEngineHost by prefs.searchEngineHost.getAsState()
 
     EventEffect(flow = vm.storageSelectionFlow) {
@@ -169,12 +170,19 @@ fun AppSelectorScreen(
     var showFilterMenu by rememberSaveable { mutableStateOf(false) }
 
     val appList by vm.appList.collectAsStateWithLifecycle(initialValue = emptyList())
-    val filteredAppList = remember(appList, filterText, filterInstalledOnly, filterPatchesAvailable) {
+    val filteredAppList = remember(
+        appList,
+        filterText,
+        filterInstalledOnly,
+        filterPatchesAvailable,
+        allowUniversalPatches
+    ) {
         appList
             .asSequence()
             .filter { app ->
                 if (filterInstalledOnly && app.packageInfo == null) return@filter false
                 if (filterPatchesAvailable && (app.patches ?: 0) <= 0) return@filter false
+                if (!allowUniversalPatches && (app.patches ?: 0) <= 0) return@filter false
                 true
             }
             .filter { app ->
