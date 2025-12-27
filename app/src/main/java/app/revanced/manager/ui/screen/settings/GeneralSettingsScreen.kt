@@ -376,6 +376,16 @@ fun GeneralSettingsScreen(
                     .padding(horizontal = 16.dp, vertical = 0.dp)
             )
 
+            Spacer(modifier = Modifier.height(20.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .height(1.dp)
+                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
             FilledTonalButton(
                 onClick = { viewModel.resetThemeSettings() },
                 modifier = Modifier
@@ -751,20 +761,6 @@ private fun ThemePreview(modifier: Modifier = Modifier) {
                     )
                 }
             }
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(onClick = { }) {
-                    Text(stringResource(R.string.apply))
-                }
-                TextButton(onClick = { }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            }
         }
     }
 }
@@ -854,14 +850,6 @@ private fun ExpressiveThemePreview(modifier: Modifier = Modifier) {
                         tonalElevation = 1.dp,
                         modifier = Modifier.size(18.dp)
                     ) {}
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                FilledTonalButton(onClick = { }) {
-                    Text(stringResource(R.string.apply))
-                }
-                OutlinedButton(onClick = { }) {
-                    Text(stringResource(R.string.cancel))
                 }
             }
         }
