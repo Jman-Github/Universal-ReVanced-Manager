@@ -26,6 +26,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -77,12 +78,28 @@ fun PathSelectorDialog(
         roots.filter { runCatching { it.path.isReadable() }.getOrDefault(true) }.ifEmpty { roots }
     }
     val defaultRoot = availableRoots.firstOrNull() ?: return
-    var currentRootPath by rememberSaveable(defaultRoot.path, stateSaver = PathSaver) { mutableStateOf(defaultRoot.path) }
+    val lastDirectoryValue by prefs.pathSelectorLastDirectory.getAsState()
+    val (initialRootPath, initialDirectory) = remember(availableRoots, defaultRoot, lastDirectoryValue) {
+        val lastPath = lastDirectoryValue.takeIf { it.isNotBlank() }
+            ?.let { runCatching { Paths.get(it) }.getOrNull() }
+        val resolved = lastPath
+            ?.let { if (it.isDirectory()) it else it.parent }
+            ?.takeIf { it.isReadable() }
+        val rootForResolved = resolved?.let { dir ->
+            availableRoots.firstOrNull { dir.startsWith(it.path) }
+        }
+        val root = rootForResolved ?: defaultRoot
+        val directory = if (rootForResolved != null) resolved ?: root.path else root.path
+        root.path to directory
+    }
+    var currentRootPath by rememberSaveable(initialRootPath, stateSaver = PathSaver) {
+        mutableStateOf(initialRootPath)
+    }
     val currentRoot = remember(currentRootPath, availableRoots) {
         availableRoots.firstOrNull { it.path == currentRootPath } ?: defaultRoot
     }
-    var currentDirectory by rememberSaveable(currentRootPath, stateSaver = PathSaver) {
-        mutableStateOf(currentRoot.path)
+    var currentDirectory by rememberSaveable(initialRootPath, stateSaver = PathSaver) {
+        mutableStateOf(initialDirectory)
     }
     val notAtRootDir = remember(currentDirectory, currentRoot) {
         currentDirectory != currentRoot.path
@@ -128,6 +145,13 @@ fun PathSelectorDialog(
             pendingRemoveFavorite = path
         } else {
             addFavorite(path)
+        }
+    }
+
+    LaunchedEffect(currentDirectory, lastDirectoryValue) {
+        val nextValue = currentDirectory.absolutePathString()
+        if (nextValue != lastDirectoryValue) {
+            prefs.pathSelectorLastDirectory.update(nextValue)
         }
     }
 

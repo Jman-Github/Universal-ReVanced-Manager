@@ -30,6 +30,8 @@ import app.revanced.manager.ui.model.navigation.ComplexParameter
 import app.revanced.manager.ui.model.navigation.Dashboard
 import app.revanced.manager.ui.model.navigation.InstalledApplicationInfo
 import app.revanced.manager.ui.model.navigation.Patcher
+import app.revanced.manager.ui.model.navigation.PatchBundleDiscovery
+import app.revanced.manager.ui.model.navigation.PatchBundleDiscoveryPatches
 import app.revanced.manager.ui.model.navigation.SelectedApplicationInfo
 import app.revanced.manager.ui.model.navigation.Settings
 import app.revanced.manager.ui.model.navigation.Update
@@ -38,6 +40,8 @@ import app.revanced.manager.ui.screen.AppSelectorScreen
 import app.revanced.manager.ui.screen.DashboardScreen
 import app.revanced.manager.ui.screen.InstalledAppInfoScreen
 import app.revanced.manager.ui.screen.PatcherScreen
+import app.revanced.manager.ui.screen.PatchBundleDiscoveryScreen
+import app.revanced.manager.ui.screen.PatchBundleDiscoveryPatchesScreen
 import app.revanced.manager.ui.screen.PatchesSelectorScreen
 import app.revanced.manager.ui.screen.RequiredOptionsScreen
 import app.revanced.manager.ui.screen.SelectedAppInfoScreen
@@ -137,6 +141,9 @@ private fun ReVancedManager(vm: MainViewModel) {
                 onDownloaderPluginClick = {
                     navController.navigate(Settings.Downloads)
                 },
+                onBundleDiscoveryClick = {
+                    navController.navigate(PatchBundleDiscovery)
+                },
                 onAppClick = { packageName ->
                     navController.navigate(InstalledApplicationInfo(packageName))
                 },
@@ -215,6 +222,23 @@ private fun ReVancedManager(vm: MainViewModel) {
             UpdateScreen(
                 onBackClick = navController::popBackStack,
                 vm = koinViewModel { parametersOf(data.downloadOnScreenEntry) }
+            )
+        }
+
+        composable<PatchBundleDiscovery> {
+            PatchBundleDiscoveryScreen(
+                onBackClick = navController::popBackStack,
+                onViewPatches = { bundleId ->
+                    navController.navigate(PatchBundleDiscoveryPatches(bundleId))
+                }
+            )
+        }
+
+        composable<PatchBundleDiscoveryPatches> {
+            val data = it.toRoute<PatchBundleDiscoveryPatches>()
+            PatchBundleDiscoveryPatchesScreen(
+                bundleId = data.bundleId,
+                onBackClick = navController::popBackStack
             )
         }
 

@@ -14,9 +14,15 @@
 - Updated the "Configure updates" screen that appears on a fresh install from refering to the Official ReVanced Patches as "ReVanced Patches" to "Official ReVanced Patches" instead for consistency
 - Update the "Show & allow using universal patches" setting, when toggled off, to hide apps on the app selection screen that don't use any patches (so ones that only use universal patches)
 - Converted the existing components of the app that use old file pickers to the new one along with saving and overwrite warning logic
+- Removed the "Show other versions" button on the select an app screen for apps that support all versions https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/87
+- Patch options menus now follow the same design as the rest of the patch selection page https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/84
+- The custom file picker now remembers the last directory you where in and persists it across all instances of the file picker
+- Added a discover bundle screen using Brosssh's external bundle API
 
 
 # Bug fixes
+
+- Fixed issues with the experimental patcher where an error would be thrown saying a patch does not exist
 
 
 # Docs

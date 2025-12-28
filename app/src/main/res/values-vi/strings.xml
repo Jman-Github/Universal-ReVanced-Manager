@@ -942,4 +942,22 @@ Bạn có thể tự xóa chúng, điều chỉnh lựa chọn, hoặc cứ ti�
     <string name="export">Xuất</string>
     <string name="confirm">OK</string>
     <string name="saved_app_install_cancelled">Đã hủy cài đặt</string>
+    <string name="patch_bundle_discovery_title">Khám phá gói vá</string>
+    <string name="patch_bundle_discovery_description">Duyệt và thêm các gói bản vá bên ngoài vào URV Manager.</string>
+    <string name="patch_bundle_discovery_search_label">Tìm kiếm gói</string>
+    <string name="patch_bundle_discovery_all">Tất cả</string>
+    <string name="patch_bundle_discovery_empty">Không tìm thấy gói nào.</string>
+    <string name="patch_bundle_discovery_error">Không thể tải gói vá.</string>
+    <string name="patch_bundle_discovery_imported">Đã thêm</string>
+    <string name="patch_bundle_discovery_patch_count">%1$d bản vá</string>
+    <string name="patch_bundle_discovery_release">Bản phát hành</string>
+    <string name="patch_bundle_discovery_prerelease">Bản phát hành trước</string>
+    <string name="patch_bundle_discovery_v3_warning">Hiện gói V3 không được hỗ trợ.</string>
+    <string name="patch_bundle_discovery_open_site">Mở danh mục gói</string>
+    <string name="patch_bundle_discovery_open_github">Mở danh mục trong GitHub</string>
+    <string name="patch_bundle_discovery_view_patches">Xem bản vá</string>
+    <string name="patch_bundle_discovery_patches_title">Bản vá · %1$s/%2$s</string>
+    <string name="patch_bundle_discovery_patches_title_fallback">Gói vá</string>
+    <string name="patch_bundle_discovery_patches_empty">Không tìm thấy bản vá nào trong gói này.</string>
+    <string name="patch_bundle_discovery_patch_unnamed">Bản vá không tên</string>
 </resources>

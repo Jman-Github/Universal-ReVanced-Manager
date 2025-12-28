@@ -1029,6 +1029,42 @@
     <string name="plugins_help_title">什么是下载器?</string>
     <string name="plugins_help_description">下载器是一个插件，它允许 URV 从各种来源下载官方 APK 文件。下载的 APK 文件将显示在底部区域。在修补过程中，您可以选择已下载的 APK 文件，也可以通过插件下载。\n\n支持的下载器插件列表请参见此处。</string>
     <string name="here">此处</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_title">Discover patch bundles</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_description">Browse external patch bundles and add them to the URV Manager.</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_search_label">Search bundles</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_all">All</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_empty">No patch bundles found.</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_error">Failed to load patch bundles.</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_imported">Added</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_patch_count">%1$d patches</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_release">Release</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_prerelease">Prerelease</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_v3_warning">Bundle V3 is not supported yet.</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_open_site">Open bundle catalog</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_open_github">Open catalog on GitHub</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_view_patches">View patches</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_patches_title">Patches · %1$s/%2$s</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_patches_title_fallback">Bundle patches</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_patches_empty">No patches found for this bundle.</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_patch_unnamed">Unnamed patch</string>
 </resources>
 
 

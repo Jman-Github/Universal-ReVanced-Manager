@@ -29,6 +29,7 @@ val viewModelModule = module {
     viewModelOf(::InstalledAppInfoViewModel)
     viewModelOf(::UpdatesSettingsViewModel)
     viewModelOf(::BundleListViewModel)
+    viewModelOf(::BundleDiscoveryViewModel)
     viewModelOf(::ChangelogsViewModel)
     viewModelOf(::PatchProfilesViewModel)
 }

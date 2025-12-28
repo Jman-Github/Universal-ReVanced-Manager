@@ -14,6 +14,12 @@ interface ComplexParameter<T : Parcelable>
 object Dashboard
 
 @Serializable
+object PatchBundleDiscovery
+
+@Serializable
+data class PatchBundleDiscoveryPatches(val bundleId: Int)
+
+@Serializable
 data class AppSelector(val autoStorage: Boolean = false, val autoStorageReturn: Boolean = false)
 
 @Serializable
