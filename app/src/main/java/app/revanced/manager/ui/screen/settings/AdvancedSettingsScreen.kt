@@ -596,6 +596,13 @@ fun AdvancedSettingsScreen(
                 )
                 ExpressiveSettingsDivider()
                 BooleanItem(
+                    preference = viewModel.prefs.autoExpandRunningSteps,
+                    coroutineScope = viewModel.viewModelScope,
+                    headline = R.string.patcher_auto_expand_steps,
+                    description = R.string.patcher_auto_expand_steps_description,
+                )
+                ExpressiveSettingsDivider()
+                BooleanItem(
                     preference = viewModel.prefs.collapsePatchActionsOnSelection,
                     coroutineScope = viewModel.viewModelScope,
                     headline = R.string.patch_selection_collapse_on_toggle,

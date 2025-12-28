@@ -46,6 +46,7 @@ class PreferencesManager(
     val officialBundleSortOrder = intPreference("official_bundle_sort_order", -1)
     val officialBundleCustomDisplayName = stringPreference("official_bundle_custom_display_name", "")
     val autoCollapsePatcherSteps = booleanPreference("auto_collapse_patcher_steps", false)
+    val autoExpandRunningSteps = booleanPreference("auto_expand_running_steps", true)
 
     val allowMeteredUpdates = booleanPreference("allow_metered_updates", true)
     val installerPrimary = stringPreference("installer_primary", InstallerPreferenceTokens.INTERNAL)
@@ -103,6 +104,7 @@ class PreferencesManager(
         val useProcessRuntime: Boolean? = null,
         val patcherProcessMemoryLimit: Int? = null,
         val autoCollapsePatcherSteps: Boolean? = null,
+        val autoExpandRunningSteps: Boolean? = null,
         val patchedAppExportFormat: String? = null,
         val officialBundleRemoved: Boolean? = null,
         val officialBundleCustomDisplayName: String? = null,
@@ -155,6 +157,7 @@ class PreferencesManager(
         useProcessRuntime = useProcessRuntime.get(),
         patcherProcessMemoryLimit = patcherProcessMemoryLimit.get(),
         autoCollapsePatcherSteps = autoCollapsePatcherSteps.get(),
+        autoExpandRunningSteps = autoExpandRunningSteps.get(),
         patchedAppExportFormat = patchedAppExportFormat.get(),
         officialBundleRemoved = officialBundleRemoved.get(),
         officialBundleCustomDisplayName = officialBundleCustomDisplayName.get(),
@@ -207,6 +210,7 @@ class PreferencesManager(
         snapshot.useProcessRuntime?.let { useProcessRuntime.value = it }
         snapshot.patcherProcessMemoryLimit?.let { patcherProcessMemoryLimit.value = it }
         snapshot.autoCollapsePatcherSteps?.let { autoCollapsePatcherSteps.value = it }
+        snapshot.autoExpandRunningSteps?.let { autoExpandRunningSteps.value = it }
         snapshot.patchedAppExportFormat?.let { patchedAppExportFormat.value = it }
         snapshot.officialBundleRemoved?.let { officialBundleRemoved.value = it }
         snapshot.officialBundleCustomDisplayName?.let { officialBundleCustomDisplayName.value = it }

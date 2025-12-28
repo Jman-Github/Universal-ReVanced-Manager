@@ -1,7 +1,7 @@
 package app.revanced.manager.ui.component.patcher
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
@@ -55,20 +54,13 @@ fun Steps(
     steps: List<Step>,
     stepCount: Pair<Int, Int>? = null,
     stepProgressProvider: StepProgressProvider,
+    isExpanded: Boolean = false,
+    autoExpandRunning: Boolean = true,
+    onExpand: () -> Unit,
+    onClick: () -> Unit,
     autoCollapseCompleted: Boolean = false
 ) {
-    var expanded by rememberSaveable { mutableStateOf(true) }
     var autoCollapsed by rememberSaveable { mutableStateOf(false) }
-
-    val categoryColor by animateColorAsState(
-        if (expanded) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent,
-        label = "category"
-    )
-
-    val cardColor by animateColorAsState(
-        if (expanded) MaterialTheme.colorScheme.surfaceContainer else Color.Transparent,
-        label = "card"
-    )
 
     val state = remember(steps) {
         when {
@@ -83,57 +75,59 @@ fun Steps(
         if (state != State.COMPLETED) {
             autoCollapsed = false
         }
+        if (autoExpandRunning && state == State.RUNNING) {
+            onExpand()
+        }
     }
 
-    LaunchedEffect(autoCollapseCompleted, state) {
-        if (autoCollapseCompleted && state == State.COMPLETED && !autoCollapsed) {
-            expanded = false
+    LaunchedEffect(autoCollapseCompleted, state, isExpanded) {
+        if (autoCollapseCompleted && state == State.COMPLETED && !autoCollapsed && isExpanded) {
+            onClick()
             autoCollapsed = true
         }
     }
 
     Column(
         modifier = Modifier
-            .clip(RoundedCornerShape(16.dp))
+            .clip(MaterialTheme.shapes.large)
             .fillMaxWidth()
-            .background(cardColor)
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
     ) {
         Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
             modifier = Modifier
-                .clip(RoundedCornerShape(16.dp))
-                .clickable { expanded = !expanded }
-                .background(categoryColor)
+                .clickable(enabled = true, onClick = onClick)
+                .fillMaxWidth()
+                .padding(20.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.padding(16.dp)
-            ) {
-                StepIcon(state = state, size = 24.dp)
+            StepIcon(state = state, size = 24.dp)
 
-                Text(stringResource(category.displayName))
+            Text(stringResource(category.displayName))
 
-                Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.weight(1f))
 
-                val stepProgress = remember(stepCount, steps) {
-                    stepCount?.let { (current, total) -> "$current/$total" }
-                        ?: "${steps.count { it.state == State.COMPLETED }}/${steps.size}"
-                }
-
-                Text(
-                    text = stepProgress,
-                    style = MaterialTheme.typography.labelSmall
-                )
-
-                ArrowButton(modifier = Modifier.size(24.dp), expanded = expanded, onClick = null)
+            val stepProgress = remember(stepCount, steps) {
+                stepCount?.let { (current, total) -> "$current/$total" }
+                    ?: "${steps.count { it.state == State.COMPLETED }}/${steps.size}"
             }
+
+            Text(
+                text = stepProgress,
+                style = MaterialTheme.typography.labelSmall
+            )
+
+            ArrowButton(modifier = Modifier.size(24.dp), expanded = isExpanded, onClick = null)
         }
 
-        AnimatedVisibility(visible = expanded) {
+        AnimatedVisibility(visible = isExpanded) {
             Column(
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .background(MaterialTheme.colorScheme.background.copy(0.6f))
+                    .fillMaxWidth()
+                    .padding(top = 10.dp)
             ) {
-                steps.forEach { step ->
+                steps.forEachIndexed { index, step ->
                     val (progress, progressText) = when (step.progressKey) {
                         null -> null
                         ProgressKey.DOWNLOAD -> stepProgressProvider.downloadProgress?.let { (downloaded, total) ->
@@ -147,7 +141,9 @@ fun Steps(
                         state = step.state,
                         message = step.message,
                         progress = progress,
-                        progressText = progressText
+                        progressText = progressText,
+                        isFirst = index == 0,
+                        isLast = index == steps.lastIndex,
                     )
                 }
             }
@@ -161,7 +157,9 @@ fun SubStep(
     state: State,
     message: String? = null,
     progress: Float? = null,
-    progressText: String? = null
+    progressText: String? = null,
+    isFirst: Boolean = false,
+    isLast: Boolean = false,
 ) {
     var messageExpanded by rememberSaveable { mutableStateOf(true) }
 
@@ -172,22 +170,22 @@ fun SubStep(
                     clickable { messageExpanded = !messageExpanded }
                 else this
             }
+            .padding(top = if (isFirst) 10.dp else 8.dp, bottom = if (isLast) 20.dp else 8.dp)
+            .padding(horizontal = 20.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Box(
-                modifier = Modifier.size(24.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                StepIcon(state, progress, size = 20.dp)
-            }
+            StepIcon(
+                size = 18.dp,
+                state = state,
+                progress = progress,
+            )
 
             Text(
                 text = name,
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.labelLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, true),
@@ -217,7 +215,7 @@ fun SubStep(
                 text = message.orEmpty(),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.secondary,
-                modifier = Modifier.padding(horizontal = 52.dp, vertical = 8.dp)
+                modifier = Modifier.padding(horizontal = 36.dp, vertical = 8.dp)
             )
         }
     }
@@ -227,40 +225,43 @@ fun SubStep(
 fun StepIcon(state: State, progress: Float? = null, size: Dp) {
     val strokeWidth = Dp(floor(size.value / 10) + 1)
 
-    when (state) {
-        State.COMPLETED -> Icon(
-            Icons.Filled.CheckCircle,
-            contentDescription = stringResource(R.string.step_completed),
-            tint = MaterialTheme.colorScheme.surfaceTint,
-            modifier = Modifier.size(size)
-        )
-
-        State.FAILED -> Icon(
-            Icons.Filled.Cancel,
-            contentDescription = stringResource(R.string.step_failed),
-            tint = MaterialTheme.colorScheme.error,
-            modifier = Modifier.size(size)
-        )
-
-        State.WAITING -> Icon(
-            Icons.Outlined.Circle,
-            contentDescription = stringResource(R.string.step_waiting),
-            tint = MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier.size(size)
-        )
-
-        State.RUNNING ->
-            LoadingIndicator(
-                modifier = stringResource(R.string.step_running).let { description ->
-                    Modifier
-                        .size(size)
-                        .semantics {
-                            contentDescription = description
-                        }
-                },
-                progress = { progress },
-                strokeWidth = strokeWidth
+    Crossfade(targetState = state, label = "State CrossFade") { stepState ->
+        when (stepState) {
+            State.COMPLETED -> Icon(
+                Icons.Filled.CheckCircle,
+                contentDescription = stringResource(R.string.step_completed),
+                tint = Color(0xFF59B463),
+                modifier = Modifier.size(size)
             )
+
+            State.FAILED -> Icon(
+                Icons.Filled.Cancel,
+                contentDescription = stringResource(R.string.step_failed),
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(size)
+            )
+
+            State.WAITING -> Icon(
+                Icons.Outlined.Circle,
+                contentDescription = stringResource(R.string.step_waiting),
+                tint = MaterialTheme.colorScheme.onSurface.copy(.2f),
+                modifier = Modifier.size(size)
+            )
+
+            State.RUNNING -> {
+                LoadingIndicator(
+                    modifier = stringResource(R.string.step_running).let { description ->
+                        Modifier
+                            .size(size)
+                            .semantics {
+                                contentDescription = description
+                            }
+                    },
+                    progress = { progress },
+                    strokeWidth = strokeWidth
+                )
+            }
+        }
     }
 }
 

@@ -434,6 +434,8 @@ Recommended for this device: %1$d MB.</string>
     <string name="reset_to_recommended">Reset to recommended</string>
     <string name="patcher_auto_collapse_steps">Auto-collapse completed patcher steps</string>
     <string name="patcher_auto_collapse_steps_description">Automatically collapse each patcher progress widget after all of its steps finish</string>
+    <string name="patcher_auto_expand_steps">Auto-expand running steps</string>
+    <string name="patcher_auto_expand_steps_description">Automatically expand a patcher progress widget when it starts running</string>
     <string name="patch_bundle_rename">Rename patch bundle</string>
     <string name="patch_profile_view_options">View options</string>
     <string name="patch_profile_patch_options_title">Options for %1$s</string>

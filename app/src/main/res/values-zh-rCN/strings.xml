@@ -417,6 +417,10 @@
     <string name="reset_to_recommended">重置为推荐值</string>
     <string name="patcher_auto_collapse_steps">自动折叠已完成的修补程序步骤</string>
     <string name="patcher_auto_collapse_steps_description">在所有步骤完成后自动折叠每个修补程序进度小部件。</string>
+    <!-- Needs translation -->
+    <string name="patcher_auto_expand_steps">Auto-expand running steps</string>
+    <!-- Needs translation -->
+    <string name="patcher_auto_expand_steps_description">Automatically expand a patcher progress widget when it starts running</string>
     <string name="patch_bundle_rename">重命名补丁包</string>
     <string name="patch_profile_view_options">查看选项</string>
     <string name="patch_profile_patch_options_title">%1$s 的选项</string>

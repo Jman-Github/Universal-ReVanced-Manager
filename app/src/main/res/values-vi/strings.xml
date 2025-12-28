@@ -414,6 +414,10 @@
     <string name="reset_to_recommended">Đặt lại về đề xuất</string>
     <string name="patcher_auto_collapse_steps">Tự thu gọn bước đã hoàn tất</string>
     <string name="patcher_auto_collapse_steps_description">Tự động thu gọn từng tiến trình vá sau khi chúng kết thúc.</string>
+    <!-- Needs translation -->
+    <string name="patcher_auto_expand_steps">Auto-expand running steps</string>
+    <!-- Needs translation -->
+    <string name="patcher_auto_expand_steps_description">Automatically expand a patcher progress widget when it starts running</string>
     <string name="patch_bundle_rename">Đổi tên gói vá</string>
     <string name="patch_profile_view_options">Xem tùy chọn</string>
     <string name="patch_profile_patch_options_title">Tùy chọn cho %1$s</string>

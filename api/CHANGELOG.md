@@ -18,6 +18,9 @@
 - Patch options menus now follow the same design as the rest of the patch selection page https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/84
 - The custom file picker now remembers the last directory you where in and persists it across all instances of the file picker
 - Added a discover bundle screen using Brosssh's external bundle API
+- Added an option in `Developer options` to disable the battery optimization banner that is shown if the user has battery option on
+- Updated the patcher steps UI to match upstream improvements https://github.com/ReVanced/revanced-manager/pull/2805
+- Added a new "Auto-expand running steps" setting for patcher progress widgets
 
 
 # Bug fixes

@@ -959,6 +959,10 @@
     <!-- Needs translation -->
     <string name="patcher_auto_collapse_steps_description">Automatically collapse each patcher progress widget after all of its steps finish</string>
     <!-- Needs translation -->
+    <string name="patcher_auto_expand_steps">Auto-expand running steps</string>
+    <!-- Needs translation -->
+    <string name="patcher_auto_expand_steps_description">Automatically expand a patcher progress widget when it starts running</string>
+    <!-- Needs translation -->
     <string name="patch_bundle_rename">Rename patch bundle</string>
     <!-- Needs translation -->
     <string name="patch_profile_view_options">View options</string>
