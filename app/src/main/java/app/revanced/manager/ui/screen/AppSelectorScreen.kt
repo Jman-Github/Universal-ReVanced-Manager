@@ -838,29 +838,34 @@ private fun BundleSuggestionCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            TextButton(
-                onClick = onShowOtherVersions,
-                enabled = enabled,
-                shape = RoundedCornerShape(50),
-                colors = ButtonDefaults.textButtonColors(
-                    containerColor = if (enabled) {
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-                    } else {
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-                    },
-                    contentColor = if (enabled) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-                ),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                modifier = Modifier.clip(RoundedCornerShape(50))
-            ) {
-                Text(
-                    text = stringResource(R.string.show_other_versions),
-                    style = MaterialTheme.typography.labelLarge
-                )
+            val showOtherVersionsButton = !suggestion.supportsAllVersions ||
+                suggestion.recommendedVersion != null ||
+                suggestion.otherSupportedVersions.isNotEmpty()
+            if (showOtherVersionsButton) {
+                TextButton(
+                    onClick = onShowOtherVersions,
+                    enabled = enabled,
+                    shape = RoundedCornerShape(50),
+                    colors = ButtonDefaults.textButtonColors(
+                        containerColor = if (enabled) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                        } else {
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                        },
+                        contentColor = if (enabled) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    ),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    modifier = Modifier.clip(RoundedCornerShape(50))
+                ) {
+                    Text(
+                        text = stringResource(R.string.show_other_versions),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
             }
         }
     }

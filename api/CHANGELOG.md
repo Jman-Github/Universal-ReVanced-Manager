@@ -14,6 +14,7 @@
 - Updated the "Configure updates" screen that appears on a fresh install from refering to the Official ReVanced Patches as "ReVanced Patches" to "Official ReVanced Patches" instead for consistency
 - Update the "Show & allow using universal patches" setting, when toggled off, to hide apps on the app selection screen that don't use any patches (so ones that only use universal patches)
 - Converted the existing components of the app that use old file pickers to the new one along with saving and overwrite warning logic
+- Removed the "Show other versions" button on the select an app screen for apps that support all versions https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/87
 
 
 # Bug fixes
