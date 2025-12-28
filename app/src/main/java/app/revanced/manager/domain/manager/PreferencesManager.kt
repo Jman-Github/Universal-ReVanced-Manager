@@ -9,6 +9,7 @@ import app.revanced.manager.util.ExportNameFormatter
 import app.revanced.manager.util.isDebuggable
 import kotlinx.serialization.Serializable
 import java.nio.file.Paths
+import kotlin.io.path.isDirectory
 import kotlin.io.path.isReadable
 
 import app.revanced.manager.ui.model.PatchSelectionActionKey
@@ -76,6 +77,7 @@ class PreferencesManager(
         stringSetPreference("patch_selection_hidden_actions", emptySet())
     val patchSelectionShowVersionTags = booleanPreference("patch_selection_show_version_tags", true)
     val pathSelectorFavorites = stringSetPreference("path_selector_favorites", emptySet())
+    val pathSelectorLastDirectory = stringPreference("path_selector_last_directory", "")
 
     val acknowledgedDownloaderPlugins = stringSetPreference("acknowledged_downloader_plugins", emptySet())
     val autoSaveDownloaderApks = booleanPreference("auto_save_downloader_apks", true)
@@ -127,6 +129,7 @@ class PreferencesManager(
         val acknowledgedDownloaderPlugins: Set<String>? = null,
         val autoSaveDownloaderApks: Boolean? = null,
         val pathSelectorFavorites: Set<String>? = null,
+        val pathSelectorLastDirectory: String? = null,
         val searchEngineHost: String? = null
     )
 
@@ -175,6 +178,7 @@ class PreferencesManager(
         acknowledgedDownloaderPlugins = acknowledgedDownloaderPlugins.get(),
         autoSaveDownloaderApks = autoSaveDownloaderApks.get(),
         pathSelectorFavorites = pathSelectorFavorites.get(),
+        pathSelectorLastDirectory = pathSelectorLastDirectory.get().takeIf { it.isNotBlank() },
         searchEngineHost = searchEngineHost.get()
     )
 
@@ -229,6 +233,18 @@ class PreferencesManager(
                 runCatching { Paths.get(path).isReadable() }.getOrDefault(false)
             }.toSet()
             pathSelectorFavorites.value = sanitized
+        }
+        snapshot.pathSelectorLastDirectory?.let { lastDir ->
+            val resolved = runCatching { Paths.get(lastDir) }.getOrNull()
+            val target = when {
+                resolved == null -> null
+                resolved.isDirectory() -> resolved
+                resolved.parent?.isDirectory() == true -> resolved.parent
+                else -> null
+            }
+            if (target != null && target.isReadable()) {
+                pathSelectorLastDirectory.value = target.toString()
+            }
         }
         snapshot.searchEngineHost?.let { searchEngineHost.value = it }
     }
