@@ -1152,6 +1152,12 @@ class PatchBundleRepository(
 
         val normalizedPath = "/" + pathSegments.joinToString("/")
         val pathNoQuery = normalizedPath.substringBefore('?').substringBefore('#')
+        if (host.equals("revanced-external-bundles.brosssh.com", ignoreCase = true) &&
+            pathNoQuery.startsWith("/bundles/id")
+        ) {
+            val query = parsed.encodedQuery.takeIf { it.isNotEmpty() }?.let { "?$it" }.orEmpty()
+            return "https://$host$normalizedPath$query"
+        }
         if (!pathNoQuery.endsWith(".json", ignoreCase = true)) {
             throw IllegalArgumentException("Patch bundle URL must point to a .json file.")
         }

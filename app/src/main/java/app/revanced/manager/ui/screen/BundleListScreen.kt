@@ -6,12 +6,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -34,6 +37,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
 import app.revanced.manager.ui.component.bundle.BundleItem
+import app.revanced.manager.ui.component.settings.ExpressiveSettingsCard
+import app.revanced.manager.ui.component.settings.ExpressiveSettingsItem
 import app.revanced.manager.ui.viewmodel.BundleListViewModel
 import app.revanced.manager.util.EventEffect
 import app.universal.revanced.manager.R
@@ -57,6 +62,7 @@ fun BundleListScreen(
     setSelectedSourceHasEnabled: (Boolean) -> Unit,
     showOrderDialog: Boolean = false,
     onDismissOrderDialog: () -> Unit = {},
+    onDiscoverBundles: () -> Unit = {},
     onScrollStateChange: (Boolean) -> Unit = {}
 ) {
     val patchCounts by viewModel.patchCounts.collectAsStateWithLifecycle(emptyMap())
@@ -91,6 +97,32 @@ fun BundleListScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Top,
         ) {
+            item {
+                ExpressiveSettingsCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    ExpressiveSettingsItem(
+                        headlineContent = stringResource(R.string.patch_bundle_discovery_title),
+                        supportingContent = stringResource(R.string.patch_bundle_discovery_description),
+                        leadingContent = {
+                            Icon(
+                                imageVector = Icons.Outlined.Public,
+                                contentDescription = null
+                            )
+                        },
+                        trailingContent = {
+                            Icon(
+                                imageVector = Icons.Outlined.ChevronRight,
+                                contentDescription = null
+                            )
+                        },
+                        onClick = onDiscoverBundles
+                    )
+                }
+            }
             items(
                 sources,
                 key = { it.uid }

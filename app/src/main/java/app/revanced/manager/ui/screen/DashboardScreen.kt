@@ -117,6 +117,7 @@ fun DashboardScreen(
     onSettingsClick: () -> Unit,
     onUpdateClick: () -> Unit,
     onDownloaderPluginClick: () -> Unit,
+    onBundleDiscoveryClick: () -> Unit,
     onAppClick: (String) -> Unit,
     onProfileLaunch: (PatchProfileLaunchData) -> Unit
 ) {
@@ -707,6 +708,7 @@ fun DashboardScreen(
                                 setSelectedSourceHasEnabled = { selectedSourcesHasEnabled = it },
                                 showOrderDialog = showBundleOrderDialog,
                                 onDismissOrderDialog = { showBundleOrderDialog = false },
+                                onDiscoverBundles = onBundleDiscoveryClick,
                                 onScrollStateChange = {}
                             )
                         }

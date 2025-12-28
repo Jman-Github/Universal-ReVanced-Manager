@@ -17,6 +17,7 @@
 - Removed the "Show other versions" button on the select an app screen for apps that support all versions https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/87
 - Patch options menus now follow the same design as the rest of the patch selection page https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/84
 - The custom file picker now remembers the last directory you where in and persists it across all instances of the file picker
+- Added a discover bundle screen using Brosssh's external bundle API
 
 
 # Bug fixes
