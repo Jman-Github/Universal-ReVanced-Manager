@@ -63,7 +63,8 @@ class PatcherProcess(private val context: Context) : IPatcherProcess.Stub() {
                         .filter { it.name in config.patches }
                         .associateBy { it.name }
 
-                config.options.forEach { (patchName, opts) ->
+                val filteredOptions = config.options.filterKeys { it in patches }
+                filteredOptions.forEach { (patchName, opts) ->
                     val patchOptions = patches[patchName]?.options
                         ?: throw Exception("Patch with name $patchName does not exist.")
 

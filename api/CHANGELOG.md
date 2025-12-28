@@ -22,6 +22,8 @@
 
 # Bug fixes
 
+- Fixed issues with the experimental patcher where an error would be thrown saying a patch does not exist
+
 
 # Docs
 
