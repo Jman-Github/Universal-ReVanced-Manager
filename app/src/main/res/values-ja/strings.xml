@@ -367,13 +367,14 @@
     <string name="downloader_plugin_state_failed">読み込みに失敗しました。詳細はクリックしてください</string>
     <string name="downloader_plugin_state_untrusted">信頼されていない</string>
     <string name="downloader_plugin_trust_dialog_title">プラグインを信頼しますか？</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_trust_dialog_body">Continuing will allow this plugin to run on your system.\n\nOnly enable this plugin if you trust it. Plugins can execute arbitrary code and may compromise your device.</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_trust_dialog_signature">Signature:\n\n%s</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_trust_dialog_plugin">Plugin:\n%s</string>
     <string name="downloader_plugin_revoke_trust_dialog_title">信頼を取り消しますか？</string>
-    <string name="downloader_plugin_trust_dialog_body">パッケージ名: %1$s\n署名 (SHA-256): %2$s</string>
-    <!-- Needs translation -->
-    <string name="downloader_plugin_trust_dialog_plugin">"Plugin:\n%s"</string>
-    <!-- Needs translation -->
-    <string name="downloader_plugin_trust_dialog_signature">"Signature:\n\n%s"</string>
-    <string name="downloader_plugin_view_error">エラー詳細を表示</string>
+<string name="downloader_plugin_view_error">エラー詳細を表示</string>
     <string name="downloader_plugin_failed_dialog_body">「%1$s」の読み込みに失敗しました。エラー詳細を表示するか、プラグインをアンインストールできます。</string>
     <string name="downloader_plugin_uninstall_title">プラグインをアンインストールしますか？</string>
     <string name="downloader_plugin_uninstall_description">本当に「%1$s」をアンインストールしますか？</string>

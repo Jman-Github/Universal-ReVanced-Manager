@@ -22,6 +22,7 @@
 - Updated the patcher steps UI to match upstream improvements https://github.com/ReVanced/revanced-manager/pull/2805
 - Added a new "Auto-expand running steps" setting for patcher progress widgets
 - Upstreamed app info improvements https://github.com/ReVanced/revanced-manager/pull/2896
+- Improved downloader plugin trust dialog design https://github.com/ReVanced/revanced-manager/pull/2420
 
 
 # Bug fixes

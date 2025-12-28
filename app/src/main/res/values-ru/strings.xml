@@ -160,16 +160,14 @@
     <string name="downloader_plugin_state_failed">Не удалось загрузить. Нажмите, чтобы узнать больше</string>
     <string name="downloader_plugin_state_trusted">Надежный</string>
     <string name="downloader_plugin_state_untrusted">Ненадежный</string>
-    <string name="downloader_plugin_trust_dialog_body">"Продолжение позволит этому плагину работать в вашей системе.
-
-Включайте этот плагин только в том случае, если вы ему доверяете. Плагины могут выполнять произвольный код и могут поставить под угрозу ваше устройство."</string>
-    <string name="downloader_plugin_trust_dialog_plugin">"Плагин:
-%s"</string>
-    <string name="downloader_plugin_trust_dialog_signature">"Подпись:
-
-%s"</string>
-    <string name="downloader_plugin_trust_dialog_title">Доверять плагину?</string>
-    <string name="downloader_plugins">Плагины</string>
+<string name="downloader_plugin_trust_dialog_title">Доверять плагину?</string>
+<!-- Needs translation -->
+<string name="downloader_plugin_trust_dialog_body">Continuing will allow this plugin to run on your system.\n\nOnly enable this plugin if you trust it. Plugins can execute arbitrary code and may compromise your device.</string>
+<!-- Needs translation -->
+<string name="downloader_plugin_trust_dialog_signature">Signature:\n\n%s</string>
+<!-- Needs translation -->
+<string name="downloader_plugin_trust_dialog_plugin">Plugin:\n%s</string>
+<string name="downloader_plugins">Плагины</string>
     <string name="downloader_settings_no_apps">Загруженных приложений не найдено</string>
     <string name="downloading_manager_update">Загрузка обновления…</string>
     <string name="downloading_patches">Загрузка патчей…</string>

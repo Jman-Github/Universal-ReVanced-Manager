@@ -357,13 +357,14 @@
     <string name="downloader_plugin_state_failed">加载失败。点击查看更多详情</string>
     <string name="downloader_plugin_state_untrusted">不受信任</string>
     <string name="downloader_plugin_trust_dialog_title">信任插件？</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_trust_dialog_body">Continuing will allow this plugin to run on your system.\n\nOnly enable this plugin if you trust it. Plugins can execute arbitrary code and may compromise your device.</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_trust_dialog_signature">Signature:\n\n%s</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_trust_dialog_plugin">Plugin:\n%s</string>
     <string name="downloader_plugin_revoke_trust_dialog_title">撤销信任？</string>
-    <string name="downloader_plugin_trust_dialog_body">包名：%1$s\n签名 (SHA-256)：%2$s</string>
-    <!-- Needs translation -->
-    <string name="downloader_plugin_trust_dialog_plugin">"Plugin:\n%s"</string>
-    <!-- Needs translation -->
-    <string name="downloader_plugin_trust_dialog_signature">"Signature:\n\n%s"</string>
-    <string name="downloader_plugin_view_error">查看错误详情</string>
+<string name="downloader_plugin_view_error">查看错误详情</string>
     <string name="downloader_plugin_failed_dialog_body">加载 \"%1$s\" 失败。您可以查看错误详情或卸载该插件。</string>
     <string name="downloader_plugin_uninstall_title">卸载插件？</string>
     <string name="downloader_plugin_uninstall_description">您确定要卸载 \"%1$s\" 吗？</string>
