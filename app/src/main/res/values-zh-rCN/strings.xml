@@ -1036,8 +1036,6 @@
     <!-- Needs translation -->
     <string name="patch_bundle_discovery_search_label">Search bundles</string>
     <!-- Needs translation -->
-    <string name="patch_bundle_discovery_all">All</string>
-    <!-- Needs translation -->
     <string name="patch_bundle_discovery_empty">No patch bundles found.</string>
     <!-- Needs translation -->
     <string name="patch_bundle_discovery_error">Failed to load patch bundles.</string>

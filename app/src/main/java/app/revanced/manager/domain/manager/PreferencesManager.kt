@@ -78,6 +78,8 @@ class PreferencesManager(
     val patchSelectionShowVersionTags = booleanPreference("patch_selection_show_version_tags", true)
     val pathSelectorFavorites = stringSetPreference("path_selector_favorites", emptySet())
     val pathSelectorLastDirectory = stringPreference("path_selector_last_directory", "")
+    val patchBundleDiscoveryShowRelease = booleanPreference("patch_bundle_discovery_show_release", false)
+    val patchBundleDiscoveryShowPrerelease = booleanPreference("patch_bundle_discovery_show_prerelease", false)
 
     val acknowledgedDownloaderPlugins = stringSetPreference("acknowledged_downloader_plugins", emptySet())
     val autoSaveDownloaderApks = booleanPreference("auto_save_downloader_apks", true)
@@ -130,6 +132,8 @@ class PreferencesManager(
         val autoSaveDownloaderApks: Boolean? = null,
         val pathSelectorFavorites: Set<String>? = null,
         val pathSelectorLastDirectory: String? = null,
+        val patchBundleDiscoveryShowRelease: Boolean? = null,
+        val patchBundleDiscoveryShowPrerelease: Boolean? = null,
         val searchEngineHost: String? = null
     )
 
@@ -179,6 +183,8 @@ class PreferencesManager(
         autoSaveDownloaderApks = autoSaveDownloaderApks.get(),
         pathSelectorFavorites = pathSelectorFavorites.get(),
         pathSelectorLastDirectory = pathSelectorLastDirectory.get().takeIf { it.isNotBlank() },
+        patchBundleDiscoveryShowRelease = patchBundleDiscoveryShowRelease.get(),
+        patchBundleDiscoveryShowPrerelease = patchBundleDiscoveryShowPrerelease.get(),
         searchEngineHost = searchEngineHost.get()
     )
 
@@ -246,6 +252,8 @@ class PreferencesManager(
                 pathSelectorLastDirectory.value = target.toString()
             }
         }
+        snapshot.patchBundleDiscoveryShowRelease?.let { patchBundleDiscoveryShowRelease.value = it }
+        snapshot.patchBundleDiscoveryShowPrerelease?.let { patchBundleDiscoveryShowPrerelease.value = it }
         snapshot.searchEngineHost?.let { searchEngineHost.value = it }
     }
 

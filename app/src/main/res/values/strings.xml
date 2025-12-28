@@ -986,7 +986,6 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="patch_bundle_discovery_title">Discover patch bundles</string>
     <string name="patch_bundle_discovery_description">Browse external patch bundles and add them to the URV Manager.</string>
     <string name="patch_bundle_discovery_search_label">Search bundles</string>
-    <string name="patch_bundle_discovery_all">All</string>
     <string name="patch_bundle_discovery_empty">No patch bundles found.</string>
     <string name="patch_bundle_discovery_error">Failed to load patch bundles.</string>
     <string name="patch_bundle_discovery_imported">Added</string>
