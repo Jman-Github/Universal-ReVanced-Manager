@@ -21,6 +21,7 @@
 - Added an option in `Developer options` to disable the battery optimization banner that is shown if the user has battery option on
 - Updated the patcher steps UI to match upstream improvements https://github.com/ReVanced/revanced-manager/pull/2805
 - Added a new "Auto-expand running steps" setting for patcher progress widgets
+- Upstreamed app info improvements https://github.com/ReVanced/revanced-manager/pull/2896
 
 
 # Bug fixes
