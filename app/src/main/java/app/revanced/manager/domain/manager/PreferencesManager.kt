@@ -61,6 +61,7 @@ class PreferencesManager(
     val showManagerUpdateDialogOnLaunch = booleanPreference("show_manager_update_dialog_on_launch", true)
     val useManagerPrereleases = booleanPreference("manager_prereleases", false)
     val usePatchesPrereleases = booleanPreference("patches_prereleases", false)
+    val showBatteryOptimizationBanner = booleanPreference("show_battery_optimization_banner", true)
 
     val disablePatchVersionCompatCheck = booleanPreference("disable_patch_version_compatibility_check", false)
     val disableSelectionWarning = booleanPreference("disable_selection_warning", false)
@@ -116,6 +117,7 @@ class PreferencesManager(
         val managerAutoUpdates: Boolean? = null,
         val showManagerUpdateDialogOnLaunch: Boolean? = null,
         val useManagerPrereleases: Boolean? = null,
+        val showBatteryOptimizationBanner: Boolean? = null,
         val disablePatchVersionCompatCheck: Boolean? = null,
         val disableSelectionWarning: Boolean? = null,
         val disableUniversalPatchCheck: Boolean? = null,
@@ -167,6 +169,7 @@ class PreferencesManager(
         managerAutoUpdates = managerAutoUpdates.get(),
         showManagerUpdateDialogOnLaunch = showManagerUpdateDialogOnLaunch.get(),
         useManagerPrereleases = useManagerPrereleases.get(),
+        showBatteryOptimizationBanner = showBatteryOptimizationBanner.get(),
         disablePatchVersionCompatCheck = disablePatchVersionCompatCheck.get(),
         disableSelectionWarning = disableSelectionWarning.get(),
         disableUniversalPatchCheck = disableUniversalPatchCheck.get(),
@@ -220,6 +223,7 @@ class PreferencesManager(
             showManagerUpdateDialogOnLaunch.value = it
         }
         snapshot.useManagerPrereleases?.let { useManagerPrereleases.value = it }
+        snapshot.showBatteryOptimizationBanner?.let { showBatteryOptimizationBanner.value = it }
         snapshot.disablePatchVersionCompatCheck?.let { disablePatchVersionCompatCheck.value = it }
         snapshot.disableSelectionWarning?.let { disableSelectionWarning.value = it }
         snapshot.disableUniversalPatchCheck?.let { disableUniversalPatchCheck.value = it }

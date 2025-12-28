@@ -13,6 +13,7 @@ import android.content.pm.Signature
 import android.net.Uri
 import android.os.Build
 import android.os.ParcelUuid
+import android.os.PowerManager
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.result.ActivityResult
@@ -23,6 +24,7 @@ import androidx.compose.runtime.saveable.autoSaver
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.core.content.ContextCompat
+import androidx.core.content.getSystemService
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MediatorLiveData
 import androidx.lifecycle.SavedStateHandle
@@ -862,7 +864,15 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
     }
 
+    private fun logBatteryOptimizationStatus() {
+        val isIgnoring = app.getSystemService<PowerManager>()
+            ?.isIgnoringBatteryOptimizations(app.packageName) == true
+        val state = if (isIgnoring) "disabled" else "enabled"
+        logger.info("Battery optimization: $state")
+    }
+
     private fun startWorker() {
+        logBatteryOptimizationStatus()
         val workId = launchWorker()
         patcherWorkerId = ParcelUuid(workId)
         observeWorker(workId)

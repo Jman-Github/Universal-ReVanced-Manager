@@ -899,6 +899,16 @@
     <string name="manager_prereleases_description">Universal ReVanced Manager의 Pre-release 버전을 사용합니다</string>
     <string name="update_published">%s 을 게시하였습니다</string>
     <string name="battery_optimization_notification">Universal ReVanced Manager가 백그라운드에서 정상적으로 작동하려면 배터리 최적화를 비활성화해야 합니다. 배터리 최적화를 비활성화하려면 여기를 탭하세요.</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_title">Battery optimization banner</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_description">Show the battery optimization warning banner on the dashboard.</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_disable_title">Hide battery optimization warning?</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_disable_description">Disabling this warning can make it harder to notice background restrictions. Only hide it if you understand the risk.</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_disable_confirm">Hide banner</string>
     <string name="installing_manager_update">업데이트를 설치하는 중 …</string>
     <string name="downloading_manager_update">업데이트를 다운로드하는 중 …</string>
     <string name="manager_update_banner_title">매니저 업데이트를 다운로드하는 중</string>

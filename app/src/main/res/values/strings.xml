@@ -910,6 +910,11 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="manager_prereleases_description">Use pre-release versions of Universal ReVanced Manager</string>
     <string name="update_published">Published %s</string>
     <string name="battery_optimization_notification">Battery optimizations must be turned off in order for Universal ReVanced Manager to work correctly in the background. Click here to turn off optimizations.</string>
+    <string name="battery_optimization_banner_title">Battery optimization banner</string>
+    <string name="battery_optimization_banner_description">Show the battery optimization warning banner on the dashboard.</string>
+    <string name="battery_optimization_banner_disable_title">Hide battery optimization warning?</string>
+    <string name="battery_optimization_banner_disable_description">Disabling this warning can make it harder to notice background restrictions. Only hide it if you understand the risk.</string>
+    <string name="battery_optimization_banner_disable_confirm">Hide banner</string>
     <string name="installing_manager_update">Installing update…</string>
     <string name="downloading_manager_update">Downloading update…</string>
     <string name="manager_update_banner_title">Downloading manager update</string>

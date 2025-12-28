@@ -69,6 +69,16 @@
     <string name="autofill">Автозаповнення</string>
     <string name="back">Назад</string>
     <string name="battery_optimization_notification">Щоб ReVanced Manager правильно працював у фоновому режимі, потрібно вимкнути оптимізацію акумулятора. Натисніть тут, щоб вимкнути оптимізацію.</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_title">Battery optimization banner</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_description">Show the battery optimization warning banner on the dashboard.</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_disable_title">Hide battery optimization warning?</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_disable_description">Disabling this warning can make it harder to notice background restrictions. Only hide it if you understand the risk.</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_disable_confirm">Hide banner</string>
     <string name="call_notification_answer_action">Відповідь</string>
     <string name="call_notification_answer_video_action">Відео</string>
     <string name="call_notification_decline_action">Відхилити</string>

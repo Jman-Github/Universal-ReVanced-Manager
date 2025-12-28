@@ -80,6 +80,12 @@ class DashboardViewModel(
             checkForManagerUpdates()
             updateBatteryOptimizationsWarning()
         }
+        viewModelScope.launch {
+            prefs.showBatteryOptimizationBanner.flow.collect { bannerEnabled ->
+                showBatteryOptimizationsWarning = bannerEnabled &&
+                    !powerManager.isIgnoringBatteryOptimizations(app.packageName)
+            }
+        }
     }
 
     fun ignoreNewDownloaderPlugins() = viewModelScope.launch {
@@ -95,8 +101,11 @@ class DashboardViewModel(
     }
 
     fun updateBatteryOptimizationsWarning() {
-        showBatteryOptimizationsWarning =
-            !powerManager.isIgnoringBatteryOptimizations(app.packageName)
+        viewModelScope.launch {
+            val bannerEnabled = prefs.showBatteryOptimizationBanner.get()
+            showBatteryOptimizationsWarning =
+                bannerEnabled && !powerManager.isIgnoringBatteryOptimizations(app.packageName)
+        }
     }
 
     fun setShowManagerUpdateDialogOnLaunch(value: Boolean) {
