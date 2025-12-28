@@ -2145,24 +2145,63 @@ private fun OptionsDialog(
         }
     ) { paddingValues ->
         LazyColumnWithScrollbar(
-            modifier = Modifier.padding(paddingValues)
+            modifier = Modifier.padding(paddingValues),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (patch.options == null) return@LazyColumnWithScrollbar
 
+            item(key = "options_header") {
+                ListHeader(
+                    title = stringResource(R.string.options)
+                )
+            }
+            item(key = "options_summary") {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    tonalElevation = 2.dp
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = patch.name,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        patch.description?.let { description ->
+                            Text(
+                                text = description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
             items(patch.options, key = { it.key }) { option ->
                 val key = option.key
                 val value =
                     if (values == null || !values.contains(key)) option.default else values[key]
 
                 @Suppress("UNCHECKED_CAST")
-                OptionItem(
-                    option = option as Option<Any>,
-                    value = value,
-                    setValue = {
-                        set(key, it)
-                    },
-                    selectionWarningEnabled = selectionWarningEnabled
-                )
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    tonalElevation = 2.dp
+                ) {
+                    OptionItem(
+                        option = option as Option<Any>,
+                        value = value,
+                        setValue = {
+                            set(key, it)
+                        },
+                        selectionWarningEnabled = selectionWarningEnabled
+                    )
+                }
             }
         }
     }
