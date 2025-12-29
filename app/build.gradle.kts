@@ -186,6 +186,11 @@ android {
             initWith(getByName("release"))
             versionNameSuffix = "-dev"
             signingConfig = releaseSigningConfig
+            if (!project.hasProperty("noProguard")) {
+                isMinifyEnabled = true
+                isShrinkResources = true
+                proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            }
             buildConfigField("long", "BUILD_ID", "${Random.nextLong()}L")
         }
 
