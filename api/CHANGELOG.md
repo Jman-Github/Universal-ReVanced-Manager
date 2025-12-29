@@ -24,6 +24,7 @@
 - Upstreamed app info improvements https://github.com/ReVanced/revanced-manager/pull/2896
 - Improved downloader plugin trust dialog design https://github.com/ReVanced/revanced-manager/pull/2420
 - Added a background bundle update checker & notification system which notifies the user if a patch bundle has an update. Enable in Settings > Updates https://github.com/ReVanced/revanced-manager/pull/2561
+- Added individual patcher steps in the patcher screen https://github.com/ReVanced/revanced-manager/pull/2889
 
 
 # Bug fixes

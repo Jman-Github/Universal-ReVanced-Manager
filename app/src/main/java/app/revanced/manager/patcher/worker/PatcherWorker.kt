@@ -31,16 +31,20 @@ import app.revanced.manager.domain.repository.InstalledAppRepository
 import app.revanced.manager.domain.worker.Worker
 import app.revanced.manager.domain.worker.WorkerRepository
 import app.revanced.manager.network.downloader.LoadedDownloaderPlugin
+import app.revanced.manager.patcher.ProgressEvent
+import app.revanced.manager.patcher.RemoteError
+import app.revanced.manager.patcher.StepId
 import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.patcher.runtime.CoroutineRuntime
 import app.revanced.manager.patcher.runtime.ProcessRuntime
 import app.revanced.manager.patcher.util.NativeLibStripper
+import app.revanced.manager.patcher.runStep
+import app.revanced.manager.patcher.toRemoteError
 import app.revanced.manager.plugin.downloader.GetScope
 import app.revanced.manager.plugin.downloader.PluginHostApi
 import app.revanced.manager.plugin.downloader.UserInteractionException
 import app.revanced.manager.ui.model.SelectedApp
-import app.revanced.manager.ui.model.State
 import app.revanced.manager.util.Options
 import app.revanced.manager.util.PM
 import app.revanced.manager.util.PatchSelection
@@ -51,8 +55,6 @@ import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.io.File
-
-typealias ProgressEventHandler = (name: String?, state: State?, message: String?) -> Unit
 
 @OptIn(PluginHostApi::class)
 class PatcherWorker(
@@ -75,11 +77,9 @@ class PatcherWorker(
         val selectedPatches: PatchSelection,
         val options: Options,
         val logger: Logger,
-        val onDownloadProgress: suspend (Pair<Long, Long?>?) -> Unit,
-        val onPatchCompleted: suspend () -> Unit,
         val handleStartActivityRequest: suspend (LoadedDownloaderPlugin, Intent) -> ActivityResult,
         val setInputFile: suspend (File, Boolean, Boolean) -> Unit,
-        val onProgress: ProgressEventHandler
+        val onEvent: (ProgressEvent) -> Unit
     ) {
         val packageName get() = input.packageName
     }
@@ -150,10 +150,6 @@ class PatcherWorker(
     }
 
     private suspend fun runPatcher(args: Args): Result {
-
-        fun updateProgress(name: String? = null, state: State? = null, message: String? = null) =
-            args.onProgress(name, state, message)
-
         val patchedApk = fs.tempDir.resolve("patched.apk")
         var downloadCleanup: (() -> Unit)? = null
 
@@ -177,20 +173,27 @@ class PatcherWorker(
                     args.input.version,
                     prefs.suggestedVersionSafeguard.get(),
                     !prefs.disablePatchVersionCompatCheck.get(),
-                    onDownload = args.onDownloadProgress,
+                    onDownload = { progress ->
+                        args.onEvent(
+                            ProgressEvent.Progress(
+                                stepId = StepId.DownloadAPK,
+                                current = progress.first,
+                                total = progress.second
+                            )
+                        )
+                    },
                     persistDownload = autoSaveDownloads
-                ).also {
-                    args.setInputFile(it.file, it.needsSplit, it.merged)
-                    updateProgress(state = State.COMPLETED) // Download APK
+                ).also { result ->
+                    args.setInputFile(result.file, result.needsSplit, result.merged)
                 }
 
             val downloadResult = when (val selectedApp = args.input) {
-                is SelectedApp.Download -> {
+                is SelectedApp.Download -> runStep(StepId.DownloadAPK, args.onEvent) {
                     val (plugin, data) = downloaderPluginRepository.unwrapParceledData(selectedApp.data)
                     download(plugin, data)
                 }
 
-                is SelectedApp.Search -> {
+                is SelectedApp.Search -> runStep(StepId.DownloadAPK, args.onEvent) {
                     downloaderPluginRepository.loadedPluginsFlow.first()
                         .firstNotNullOfOrNull { plugin ->
                             try {
@@ -263,8 +266,7 @@ class PatcherWorker(
                 args.selectedPatches,
                 args.options,
                 args.logger,
-                args.onPatchCompleted,
-                args.onProgress,
+                args.onEvent,
                 stripNativeLibs
             )
 
@@ -272,8 +274,9 @@ class PatcherWorker(
                 NativeLibStripper.strip(patchedApk)
             }
 
-            keystoreManager.sign(patchedApk, File(args.output))
-            updateProgress(state = State.COMPLETED) // Signing
+            runStep(StepId.SignAPK, args.onEvent) {
+                keystoreManager.sign(patchedApk, File(args.output))
+            }
 
             val elapsed = System.currentTimeMillis() - startTime
             val rt = Runtime.getRuntime()
@@ -297,7 +300,7 @@ class PatcherWorker(
                 R.string.patcher_process_exit_message,
                 e.exitCode
             )
-            updateProgress(state = State.FAILED, message = message)
+            args.onEvent(ProgressEvent.Failed(null, Exception(message).toRemoteError()))
             val previousLimit = prefs.patcherProcessMemoryLimit.get()
             Result.failure(
                 workDataOf(
@@ -311,13 +314,22 @@ class PatcherWorker(
                 tag,
                 "An exception occurred in the remote process while patching. ${e.originalStackTrace}".logFmt()
             )
-            updateProgress(state = State.FAILED, message = e.originalStackTrace)
+            args.onEvent(
+                ProgressEvent.Failed(
+                    null,
+                    RemoteError(
+                        type = e::class.java.name,
+                        message = e.message,
+                        stackTrace = e.originalStackTrace
+                    )
+                )
+            )
             Result.failure(
                 workDataOf(PROCESS_FAILURE_MESSAGE_KEY to e.originalStackTrace)
             )
         } catch (e: Exception) {
             Log.e(tag, "An exception occurred while patching".logFmt(), e)
-            updateProgress(state = State.FAILED, message = e.stackTraceToString())
+            args.onEvent(ProgressEvent.Failed(null, e.toRemoteError()))
             Result.failure(
                 workDataOf(PROCESS_FAILURE_MESSAGE_KEY to e.stackTraceToString())
             )

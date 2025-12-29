@@ -47,6 +47,8 @@ import app.revanced.manager.domain.repository.PatchOptionsRepository
 import app.revanced.manager.domain.repository.PatchSelectionRepository
 import app.revanced.manager.domain.repository.InstalledAppRepository
 import app.revanced.manager.domain.worker.WorkerRepository
+import app.revanced.manager.patcher.ProgressEvent
+import app.revanced.manager.patcher.StepId
 import app.revanced.manager.patcher.logger.LogLevel
 import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.runtime.MemoryLimitConfig
@@ -58,13 +60,11 @@ import app.revanced.manager.plugin.downloader.UserInteractionException
 import app.revanced.manager.service.InstallService
 import app.revanced.manager.service.UninstallService
 import app.revanced.manager.ui.model.InstallerModel
-import app.revanced.manager.ui.model.ProgressKey
 import app.revanced.manager.ui.model.SelectedApp
 import app.revanced.manager.ui.model.State
 import app.revanced.manager.ui.model.Step
 import app.revanced.manager.ui.model.StepCategory
-import app.revanced.manager.ui.model.StepId
-import app.revanced.manager.ui.model.StepProgressProvider
+import app.revanced.manager.ui.model.withState
 import app.revanced.manager.ui.model.navigation.Patcher
 import app.revanced.manager.util.PM
 import app.revanced.manager.util.PatchedAppExportData
@@ -103,7 +103,7 @@ import java.util.UUID
 @OptIn(SavedStateHandleSaveableApi::class, PluginHostApi::class)
 class PatcherViewModel(
     private val input: Patcher.ViewModelParams
-) : ViewModel(), KoinComponent, StepProgressProvider, InstallerModel {
+) : ViewModel(), KoinComponent, InstallerModel {
     private val app: Application by inject()
     private val fs: Filesystem by inject()
     private val pm: PM by inject()
@@ -714,21 +714,6 @@ fun removeMissingPatchesAndStart() {
         }
     }
 
-    private val patchCount = input.selectedPatches.values.sumOf { it.size }
-    private var completedPatchCount by savedStateHandle.saveable {
-        // SavedStateHandle.saveable only supports the boxed version.
-        @Suppress("AutoboxingStateCreation") mutableStateOf(
-            0
-        )
-    }
-    val patchesProgress get() = completedPatchCount to patchCount
-    override var downloadProgress by savedStateHandle.saveable(
-        key = "downloadProgress",
-        stateSaver = autoSaver()
-    ) {
-        mutableStateOf<Pair<Long, Long?>?>(null)
-    }
-        private set
     data class MemoryAdjustmentDialogState(
         val previousLimit: Int,
         val newLimit: Int,
@@ -803,17 +788,14 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         generateSteps(
             app,
             input.selectedApp,
+            input.selectedPatches,
             requiresSplitPreparation
         ).toMutableStateList()
     }
-    private var currentStepIndex = 0
 
     val progress by derivedStateOf {
-        val current = steps.count {
-            it.state == State.COMPLETED && it.category != StepCategory.PATCHING
-        } + completedPatchCount
-
-        val total = steps.size - 1 + patchCount
+        val current = steps.count { it.state == State.COMPLETED }
+        val total = steps.size
 
         current.toFloat() / total.toFloat()
     }
@@ -1236,7 +1218,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             buildString {
                 append(index + 1)
                 append(". ")
-                append(step.name)
+                append(step.title)
                 append(" [")
                 append(context.getString(step.category.displayName))
                 append("] - ")
@@ -1818,14 +1800,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             input.selectedPatches,
             input.options,
             logger,
-            onDownloadProgress = {
-                withContext(Dispatchers.Main) {
-                    downloadProgress = it
-                }
-            },
-            onPatchCompleted = {
-                withContext(Dispatchers.Main) { completedPatchCount += 1 }
-            },
             setInputFile = { file, needsSplit, merged ->
                 val storedFile = if (shouldPreserveInput) {
                     val existing = inputFile
@@ -1867,24 +1841,37 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     }
                 }
             },
-            onProgress = { name, state, message ->
-                viewModelScope.launch {
-                    steps[currentStepIndex] = steps[currentStepIndex].run {
-                        copy(
-                            name = name ?: this.name,
-                            state = state ?: this.state,
-                            message = message ?: this.message
-                        )
-                    }
+            onEvent = ::handleProgressEvent
+        )
+    }
 
-                    if (state == State.COMPLETED && currentStepIndex != steps.lastIndex) {
-                        currentStepIndex++
-                        steps[currentStepIndex] =
-                            steps[currentStepIndex].copy(state = State.RUNNING)
-                    }
+    private fun handleProgressEvent(event: ProgressEvent) = viewModelScope.launch {
+        val stepIndex = steps.indexOfFirst { step ->
+            event.stepId?.let { id -> id == step.id }
+                ?: (step.state == State.RUNNING || step.state == State.WAITING)
+        }
+
+        if (stepIndex != -1) steps[stepIndex] = steps[stepIndex].run {
+            when (event) {
+                is ProgressEvent.Started -> withState(State.RUNNING)
+
+                is ProgressEvent.Progress -> withState(
+                    message = event.message ?: message,
+                    progress = event.current?.let { event.current to event.total } ?: progress
+                )
+
+                is ProgressEvent.Completed -> withState(State.COMPLETED, progress = null)
+
+                is ProgressEvent.Failed -> {
+                    if (event.stepId == null && steps.any { it.state == State.FAILED }) return@launch
+                    withState(
+                        State.FAILED,
+                        message = event.error.stackTrace,
+                        progress = null
+                    )
                 }
             }
-        )
+        }
     }
 
     private fun observeWorker(id: UUID) {
@@ -1962,12 +1949,14 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
 
     private fun resetStateForRetry() {
-        completedPatchCount = 0
-        downloadProgress = null
-        val newSteps = generateSteps(app, input.selectedApp, requiresSplitPreparation).toMutableStateList()
+        val newSteps = generateSteps(
+            app,
+            input.selectedApp,
+            input.selectedPatches,
+            requiresSplitPreparation
+        ).toMutableStateList()
         steps.clear()
         steps.addAll(newSteps)
-        currentStepIndex = newSteps.indexOfFirst { it.state == State.RUNNING }.takeIf { it >= 0 } ?: 0
         _patcherSucceeded.value = null
     }
 
@@ -1999,53 +1988,28 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
 
         if (needsSplit && merged) {
-            val index = steps.indexOfFirst { it.id == StepId.PREPARE_SPLIT_APK }
+            val index = steps.indexOfFirst { it.id == StepId.PrepareSplitApk }
             if (index >= 0) {
-                steps[index] = steps[index].copy(state = State.COMPLETED)
-                if (currentStepIndex == index && index < steps.lastIndex) {
-                    currentStepIndex++
-                    steps[currentStepIndex] = steps[currentStepIndex].copy(state = State.RUNNING)
-                }
+                steps[index] = steps[index].withState(State.COMPLETED)
             }
         }
     }
 
     private fun addSplitStep() {
-        if (steps.any { it.id == StepId.PREPARE_SPLIT_APK }) return
+        if (steps.any { it.id == StepId.PrepareSplitApk }) return
 
-        val loadIndex = steps.indexOfFirst { it.id == StepId.LOAD_PATCHES }
+        val loadIndex = steps.indexOfFirst { it.id == StepId.LoadPatches }
         val insertIndex = when {
             loadIndex >= 0 -> loadIndex + 1
-            else -> steps.indexOfFirst { it.id == StepId.READ_APK }.takeIf { it >= 0 } ?: steps.size
+            else -> steps.indexOfFirst { it.id == StepId.ReadAPK }.takeIf { it >= 0 } ?: steps.size
         }
-        val state = if (insertIndex <= currentStepIndex) State.COMPLETED else State.WAITING
-
-        steps.add(insertIndex, buildSplitStep(app, state = state))
-
-        if (insertIndex <= currentStepIndex) {
-            currentStepIndex++
-        }
+        steps.add(insertIndex, buildSplitStep(app))
     }
 
     private fun removeSplitStep() {
-        val index = steps.indexOfFirst { it.id == StepId.PREPARE_SPLIT_APK }
+        val index = steps.indexOfFirst { it.id == StepId.PrepareSplitApk }
         if (index == -1) return
-
-        val removingCurrent = index == currentStepIndex
         steps.removeAt(index)
-
-        when {
-            currentStepIndex > index -> currentStepIndex--
-            removingCurrent -> {
-                currentStepIndex = index.coerceAtMost(steps.lastIndex).coerceAtLeast(0)
-                if (steps.isNotEmpty()) {
-                    val current = steps[currentStepIndex]
-                    if (current.state == State.WAITING) {
-                        steps[currentStepIndex] = current.copy(state = State.RUNNING)
-                    }
-                }
-            }
-        }
     }
 
     private fun sanitizeSelection(
@@ -2115,47 +2079,70 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         fun generateSteps(
             context: Context,
             selectedApp: SelectedApp,
+            selectedPatches: PatchSelection,
             splitStepActive: Boolean
-        ): List<Step> {
-            val needsDownload =
-                selectedApp is SelectedApp.Download || selectedApp is SelectedApp.Search
+        ): List<Step> = buildList {
+            if (selectedApp is SelectedApp.Download || selectedApp is SelectedApp.Search) {
+                add(
+                    Step(
+                        StepId.DownloadAPK,
+                        context.getString(R.string.download_apk),
+                        StepCategory.PREPARING
+                    )
+                )
+            }
 
-            return listOfNotNull(
+            add(
                 Step(
-                    id = StepId.DOWNLOAD_APK,
-                    context.getString(R.string.download_apk),
-                    StepCategory.PREPARING,
-                    state = State.RUNNING,
-                    progressKey = ProgressKey.DOWNLOAD,
-                ).takeIf { needsDownload },
-                Step(
-                    id = StepId.LOAD_PATCHES,
+                    StepId.LoadPatches,
                     context.getString(R.string.patcher_step_load_patches),
-                    StepCategory.PREPARING,
-                    state = if (needsDownload) State.WAITING else State.RUNNING,
-                ),
-                buildSplitStep(context).takeIf { splitStepActive },
+                    StepCategory.PREPARING
+                )
+            )
+
+            if (splitStepActive) {
+                add(buildSplitStep(context))
+            }
+
+            add(
                 Step(
-                    id = StepId.READ_APK,
+                    StepId.ReadAPK,
                     context.getString(R.string.patcher_step_unpack),
                     StepCategory.PREPARING
-                ),
+                )
+            )
 
+            add(
                 Step(
-                    id = StepId.EXECUTE_PATCHES,
+                    StepId.ExecutePatches,
                     context.getString(R.string.execute_patches),
-                    StepCategory.PATCHING
-                ),
+                    StepCategory.PATCHING,
+                    hide = true
+                )
+            )
 
+            selectedPatches.values.asSequence().flatten().sorted().forEachIndexed { index, name ->
+                add(
+                    Step(
+                        StepId.ExecutePatch(index),
+                        name,
+                        StepCategory.PATCHING
+                    )
+                )
+            }
+
+            add(
                 Step(
-                    id = StepId.WRITE_PATCHED_APK,
-                    name = context.getString(R.string.patcher_step_write_patched),
-                    category = StepCategory.SAVING
-                ),
+                    StepId.WriteAPK,
+                    context.getString(R.string.patcher_step_write_patched),
+                    StepCategory.SAVING
+                )
+            )
+            add(
                 Step(
-                    id = StepId.SIGN_PATCHED_APK,
-                    name = context.getString(R.string.patcher_step_sign_apk),
-                    category = StepCategory.SAVING
+                    StepId.SignAPK,
+                    context.getString(R.string.patcher_step_sign_apk),
+                    StepCategory.SAVING
                 )
             )
         }
@@ -2165,12 +2152,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
 private fun buildSplitStep(
     context: Context,
-    state: State = State.WAITING,
     message: String? = null
 ) = Step(
-    id = StepId.PREPARE_SPLIT_APK,
-    name = context.getString(R.string.patcher_step_prepare_split_apk),
+    id = StepId.PrepareSplitApk,
+    title = context.getString(R.string.patcher_step_prepare_split_apk),
     category = StepCategory.PREPARING,
-    state = state,
     message = message
 )
