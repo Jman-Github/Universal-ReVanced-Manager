@@ -182,6 +182,13 @@ android {
             buildConfigField("long", "BUILD_ID", "${Random.nextLong()}L")
         }
 
+        create("dev") {
+            initWith(getByName("release"))
+            versionNameSuffix = "-dev"
+            signingConfig = releaseSigningConfig
+            buildConfigField("long", "BUILD_ID", "${Random.nextLong()}L")
+        }
+
         release {
             if (!project.hasProperty("noProguard")) {
                 isMinifyEnabled = true
