@@ -151,7 +151,7 @@ android {
         minSdk = 26
         targetSdk = 35
 
-        val versionStr = if (version == "unspecified") "1.7.0" else version.toString()
+        val versionStr = if (version == "unspecified") "1.6.1" else version.toString()
         versionName = versionStr
         versionCode = with(versionStr.toVersion()) {
             major * 10_000_000 +
@@ -186,6 +186,11 @@ android {
             initWith(getByName("release"))
             versionNameSuffix = "-dev"
             signingConfig = releaseSigningConfig
+            if (!project.hasProperty("noProguard")) {
+                isMinifyEnabled = true
+                isShrinkResources = true
+                proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            }
             buildConfigField("long", "BUILD_ID", "${Random.nextLong()}L")
         }
 
