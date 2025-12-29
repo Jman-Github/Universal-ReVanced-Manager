@@ -333,7 +333,11 @@ fun PatchBundleDiscoveryScreen(
                                 viewModel.bundleEndpoint(bundle.bundleId) in existingEndpoints
                             },
                             onImport = { bundle ->
-                                viewModel.importBundle(bundle.bundleId, autoUpdate = true)
+                                viewModel.importBundle(
+                                    bundle.bundleId,
+                                    autoUpdate = true,
+                                    searchUpdate = true
+                                )
                             },
                             onViewPatches = { bundle ->
                                 onViewPatches(bundle.bundleId)

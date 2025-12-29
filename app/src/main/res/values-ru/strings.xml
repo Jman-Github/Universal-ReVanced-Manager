@@ -64,11 +64,33 @@
     <string name="auto_updates_dialog_description">Хотите, чтобы ReVanced Manager периодически проверял наличие обновлений для следующих компонентов?</string>
     <string name="auto_updates_dialog_manager">ReVanced Manager</string>
     <string name="auto_updates_dialog_note">Эти настройки можно изменить позже.</string>
+    <!-- Needs translation -->
+    <string name="background_bundle_update">Background bundle updates</string>
+    <!-- Needs translation -->
+    <string name="background_bundle_update_description">Check for patch bundle updates in the background</string>
+    <!-- Needs translation -->
+    <string name="background_radio_menu_title">Background updates</string>
+    <!-- Needs translation -->
+    <string name="background_bundle_ask_notification">Allow notifications?</string>
+    <!-- Needs translation -->
+    <string name="background_bundle_ask_notification_description">Enable notifications so the manager can alert you when patch bundle updates are available.</string>
+    <!-- Needs translation -->
+    <string name="never">Never</string>
+    <!-- Needs translation -->
+    <string name="minutes_15">Every 15 minutes</string>
+    <!-- Needs translation -->
+    <string name="hourly">Hourly</string>
+    <!-- Needs translation -->
+    <string name="daily">Daily</string>
     <string name="auto_updates_dialog_patches">Официальные патчи ReVanced</string>
     <string name="auto_updates_dialog_title">Настройка обновлений</string>
     <string name="autofill">Автозаполнение</string>
     <string name="back">Назад</string>
     <string name="battery_optimization_notification">Оптимизацию батареи необходимо отключить, чтобы ReVanced Manager корректно работал в фоновом режиме. Нажмите здесь, чтобы отключить оптимизацию.</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_dialog_description">To receive background bundle update notifications reliably, disable battery optimization for URV Manager.</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_dialog_title">Battery optimization</string>
     <!-- Needs translation -->
     <string name="battery_optimization_banner_title">Battery optimization banner</string>
     <!-- Needs translation -->
@@ -590,6 +612,14 @@
     <string name="bundle_update_progress">%1$d/%2$d bundles processed</string>
     <!-- Needs translation -->
     <string name="bundle_update_banner_title">Updating patch bundles</string>
+    <!-- Needs translation -->
+    <string name="bundle_update_available">Patch bundle update available</string>
+    <!-- Needs translation -->
+    <string name="bundle_update_description_available">New version for %1$s: %2$s</string>
+    <!-- Needs translation -->
+    <string name="bundle_search_update">Search for updates</string>
+    <!-- Needs translation -->
+    <string name="bundle_search_update_description">Check this bundle for updates in the background</string>
     <!-- Needs translation -->
     <string name="bundle_reorder">Organize bundles</string>
     <!-- Needs translation -->

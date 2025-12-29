@@ -111,8 +111,9 @@ fun BundleInformationDialog(
     val catalogUrl = remember(src) {
         if (src.isDefault) PatchListCatalog.revancedCatalogUrl() else PatchListCatalog.resolveCatalogUrl(src)
     }
-    val (autoUpdate, endpoint) = src.asRemoteOrNull?.let { it.autoUpdate to it.endpoint }
-        ?: (null to null)
+    val (autoUpdate, endpoint, searchUpdate) = src.asRemoteOrNull?.let {
+        Triple(it.autoUpdate, it.endpoint, it.searchUpdate)
+    } ?: Triple(null, null, null)
     var showDisplayNameDialog by remember { mutableStateOf(false) }
     var releasePageUrl by remember(src.uid, manifestSource) {
         mutableStateOf(
@@ -127,6 +128,12 @@ fun BundleInformationDialog(
     fun onAutoUpdateChange(new: Boolean) = composableScope.launch {
         with(bundleRepo) {
             src.asRemoteOrNull?.setAutoUpdate(new)
+        }
+    }
+
+    fun onSearchUpdateChange(new: Boolean) = composableScope.launch {
+        with(bundleRepo) {
+            src.asRemoteOrNull?.setSearchUpdate(new)
         }
     }
 
@@ -368,6 +375,21 @@ fun BundleInformationDialog(
                         },
                         modifier = Modifier.clickable {
                             onAutoUpdateChange(!autoUpdate)
+                        }
+                    )
+                }
+                if (searchUpdate != null) {
+                    BundleListItem(
+                        headlineText = stringResource(R.string.bundle_search_update),
+                        supportingText = stringResource(R.string.bundle_search_update_description),
+                        trailingContent = {
+                            HapticSwitch(
+                                checked = searchUpdate,
+                                onCheckedChange = ::onSearchUpdateChange
+                            )
+                        },
+                        modifier = Modifier.clickable {
+                            onSearchUpdateChange(!searchUpdate)
                         }
                     )
                 }

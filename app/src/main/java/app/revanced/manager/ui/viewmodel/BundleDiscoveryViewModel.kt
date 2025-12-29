@@ -48,10 +48,10 @@ class BundleDiscoveryViewModel(
         }
     }
 
-    fun importBundle(bundleId: Int, autoUpdate: Boolean) {
+    fun importBundle(bundleId: Int, autoUpdate: Boolean, searchUpdate: Boolean) {
         viewModelScope.launch {
             val url = bundleEndpoint(bundleId)
-            patchBundleRepository.createRemote(url, autoUpdate)
+            patchBundleRepository.createRemote(url, searchUpdate, autoUpdate)
         }
     }
 

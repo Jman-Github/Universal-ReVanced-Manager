@@ -230,9 +230,9 @@ fun DashboardScreen(
                 selectedBundlePath = null
                 vm.createLocalSourceFromFile(path)
             },
-            onRemoteSubmit = { url, autoUpdate ->
+            onRemoteSubmit = { url, autoUpdate, searchUpdate ->
                 showAddBundleDialog = false
-                vm.createRemoteSource(url, autoUpdate)
+                vm.createRemoteSource(url, autoUpdate, searchUpdate)
             },
             onLocalPick = {
                 requestBundleFilePicker()

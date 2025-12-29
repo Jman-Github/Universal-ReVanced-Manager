@@ -11,6 +11,7 @@ import app.revanced.manager.di.*
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.repository.DownloaderPluginRepository
 import app.revanced.manager.domain.repository.PatchBundleRepository
+import app.revanced.manager.domain.worker.WorkerRepository
 import app.revanced.manager.network.service.HttpService
 import app.revanced.manager.util.tag
 import app.revanced.manager.util.PatchListCatalog
@@ -37,6 +38,7 @@ class ManagerApplication : Application() {
     private val prefs: PreferencesManager by inject()
     private val patchBundleRepository: PatchBundleRepository by inject()
     private val downloaderPluginRepository: DownloaderPluginRepository by inject()
+    private val workerRepository: WorkerRepository by inject()
     private val fs: Filesystem by inject()
     private val httpService: HttpService by inject()
 
@@ -77,6 +79,9 @@ class ManagerApplication : Application() {
 
         scope.launch {
             prefs.preload()
+            workerRepository.scheduleBundleUpdateNotificationWork(
+                prefs.searchForUpdatesBackgroundInterval.get()
+            )
             val currentApi = prefs.api.get()
             if (currentApi == LEGACY_MANAGER_REPO_URL || currentApi == LEGACY_MANAGER_REPO_API_URL) {
                 prefs.api.update(DEFAULT_API_URL)

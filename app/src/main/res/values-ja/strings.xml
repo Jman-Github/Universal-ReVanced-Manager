@@ -75,6 +75,14 @@
     <string name="bundle_update_manual_available_with_version">アップデート利用可能: %1$s</string>
     <string name="bundle_update_progress">%1$d/%2$d バンドルを処理しました</string>
     <string name="bundle_update_banner_title">パッチソースを更新中</string>
+    <!-- Needs translation -->
+    <string name="bundle_update_available">Patch bundle update available</string>
+    <!-- Needs translation -->
+    <string name="bundle_update_description_available">New version for %1$s: %2$s</string>
+    <!-- Needs translation -->
+    <string name="bundle_search_update">Search for updates</string>
+    <!-- Needs translation -->
+    <string name="bundle_search_update_description">Check this bundle for updates in the background</string>
     <string name="bundle_reorder">バンドルを整理</string>
     <string name="bundle_reorder_title">パッチソースの整理</string>
     <string name="bundle_reorder_description">ハンドルをドラッグして、リストやパッチ選択メニューに表示されるバンドルの順序を並べ替えます。</string>
@@ -129,6 +137,24 @@
     <string name="auto_updates_dialog_manager">Universal ReVanced Manager</string>
     <string name="auto_updates_dialog_patches">公式 ReVanced パッチ</string>
     <string name="auto_updates_dialog_note">これらの設定は後で変更できます。</string>
+    <!-- Needs translation -->
+    <string name="background_bundle_update">Background bundle updates</string>
+    <!-- Needs translation -->
+    <string name="background_bundle_update_description">Check for patch bundle updates in the background</string>
+    <!-- Needs translation -->
+    <string name="background_radio_menu_title">Background updates</string>
+    <!-- Needs translation -->
+    <string name="background_bundle_ask_notification">Allow notifications?</string>
+    <!-- Needs translation -->
+    <string name="background_bundle_ask_notification_description">Enable notifications so the manager can alert you when patch bundle updates are available.</string>
+    <!-- Needs translation -->
+    <string name="never">Never</string>
+    <!-- Needs translation -->
+    <string name="minutes_15">Every 15 minutes</string>
+    <!-- Needs translation -->
+    <string name="hourly">Hourly</string>
+    <!-- Needs translation -->
+    <string name="daily">Daily</string>
 
     <string name="general">一般</string>
     <string name="general_description">テーマ、ダイナミックカラー</string>
@@ -908,6 +934,10 @@
     <string name="manager_prereleases_description">Universal ReVanced Manager のプレリリースバージョンを使用する</string>
     <string name="update_published">公開日: %s</string>
     <string name="battery_optimization_notification">Universal ReVanced Manager がバックグラウンドで正しく動作するには、バッテリーの最適化をオフにする必要があります。ここをクリックして最適化をオフにしてください。</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_dialog_description">To receive background bundle update notifications reliably, disable battery optimization for URV Manager.</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_dialog_title">Battery optimization</string>
     <!-- Needs translation -->
     <string name="battery_optimization_banner_title">Battery optimization banner</string>
     <!-- Needs translation -->

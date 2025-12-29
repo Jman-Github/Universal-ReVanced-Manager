@@ -529,6 +529,8 @@ class PatchBundleRepository(
                 dir,
                 SourceInfo.API.SENTINEL,
                 autoUpdate,
+                searchUpdate,
+                lastNotifiedVersion,
                 enabled,
             )
 
@@ -543,6 +545,8 @@ class PatchBundleRepository(
                 dir,
                 source.url.toString(),
                 autoUpdate,
+                searchUpdate,
+                lastNotifiedVersion,
                 enabled,
             )
             // PR #35: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35
@@ -557,6 +561,8 @@ class PatchBundleRepository(
                 dir,
                 source.url.toString(),
                 autoUpdate,
+                searchUpdate,
+                lastNotifiedVersion,
                 enabled
             )
         }
@@ -633,11 +639,13 @@ class PatchBundleRepository(
         name: String,
         source: Source,
         autoUpdate: Boolean = false,
+        searchUpdate: Boolean = true,
         displayName: String? = null,
         uid: Int? = null,
         sortOrder: Int? = null,
         createdAt: Long? = null,
-        updatedAt: Long? = null
+        updatedAt: Long? = null,
+        lastNotifiedVersion: String? = null
     ): PatchBundleEntity {
         val resolvedUid = uid ?: generateUid()
         val existingProps = dao.getProps(resolvedUid)
@@ -657,6 +665,8 @@ class PatchBundleRepository(
         val resolvedCreatedAt = createdAt ?: existingProps?.createdAt ?: now
         val resolvedUpdatedAt = updatedAt ?: now
         val resolvedEnabled = existingProps?.enabled ?: true
+        val resolvedSearchUpdate = existingProps?.searchUpdate ?: searchUpdate
+        val resolvedLastNotifiedVersion = lastNotifiedVersion ?: existingProps?.lastNotifiedVersion
         val entity = PatchBundleEntity(
             uid = resolvedUid,
             name = normalizedName,
@@ -664,6 +674,8 @@ class PatchBundleRepository(
             versionHash = null,
             source = source,
             autoUpdate = autoUpdate,
+            searchUpdate = resolvedSearchUpdate,
+            lastNotifiedVersion = resolvedLastNotifiedVersion,
             enabled = resolvedEnabled,
             sortOrder = assignedSortOrder,
             createdAt = resolvedCreatedAt,
@@ -690,6 +702,8 @@ class PatchBundleRepository(
                 versionHash = new.versionHash,
                 source = new.source,
                 autoUpdate = new.autoUpdate,
+                searchUpdate = new.searchUpdate,
+                lastNotifiedVersion = new.lastNotifiedVersion,
                 enabled = new.enabled,
                 sortOrder = new.sortOrder,
                 createdAt = new.createdAt,
@@ -844,6 +858,8 @@ class PatchBundleRepository(
                     versionHash = props.versionHash,
                     source = props.source,
                     autoUpdate = props.autoUpdate,
+                    searchUpdate = props.searchUpdate,
+                    lastNotifiedVersion = props.lastNotifiedVersion,
                     enabled = props.enabled,
                     sortOrder = props.sortOrder,
                     createdAt = props.createdAt,
@@ -1086,6 +1102,7 @@ class PatchBundleRepository(
 
     suspend fun createRemote(
         url: String,
+        searchUpdate: Boolean,
         autoUpdate: Boolean,
         createdAt: Long? = null,
         updatedAt: Long? = null,
@@ -1105,6 +1122,7 @@ class PatchBundleRepository(
                 "",
                 SourceInfo.from(normalizedUrl),
                 autoUpdate,
+                searchUpdate = searchUpdate,
                 createdAt = createdAt,
                 updatedAt = updatedAt
             ).load() as RemotePatchBundle
@@ -1191,6 +1209,25 @@ class PatchBundleRepository(
         }
     }
 
+    suspend fun RemotePatchBundle.setSearchUpdate(value: Boolean) {
+        dispatchAction("Set search update ($name, $value)") { state ->
+            updateDb(uid) { it.copy(searchUpdate = value) }
+            val newSrc = (state.sources[uid] as? RemotePatchBundle)?.copy(searchUpdate = value)
+                ?: return@dispatchAction state
+
+            state.copy(sources = state.sources.put(uid, newSrc))
+        }
+    }
+
+    private suspend fun updateLastNotifiedVersion(uid: Int, version: String?) {
+        dispatchAction("Set last notified version ($uid)") { state ->
+            updateDb(uid) { it.copy(lastNotifiedVersion = version) }
+            val src = (state.sources[uid] as? RemotePatchBundle) ?: return@dispatchAction state
+            val updated = src.copy(lastNotifiedVersion = version)
+            state.copy(sources = state.sources.put(uid, updated))
+        }
+    }
+
     suspend fun update(
         vararg sources: RemotePatchBundle,
         showToast: Boolean = false,
@@ -1215,6 +1252,40 @@ class PatchBundleRepository(
     suspend fun updateCheck() {
         store.dispatch(Update { it.autoUpdate })
         checkManualUpdates()
+    }
+
+    suspend fun fetchUpdatesAndNotify(
+        context: Context,
+        onNotification: (bundleName: String, bundleVersion: String) -> Unit
+    ) = coroutineScope {
+        val allowMeteredUpdates = prefs.allowMeteredUpdates.get()
+        if (!allowMeteredUpdates && !networkInfo.isSafe()) {
+            Log.d(tag, "Skipping background update check because the network is down or metered.")
+            return@coroutineScope
+        }
+
+        sources.first()
+            .filterIsInstance<RemotePatchBundle>()
+            .forEach { bundle ->
+                if (!bundle.searchUpdate || !bundle.enabled) return@forEach
+                if (bundle.state !is PatchBundleSource.State.Available) return@forEach
+
+                val info = runCatching { bundle.fetchLatestReleaseInfo() }.getOrElse { error ->
+                    Log.e(tag, "Failed to check update for ${bundle.name}", error)
+                    return@forEach
+                }
+
+                val latestSignature = info.version.takeUnless { it.isBlank() }
+                val installedSignature = bundle.installedVersionSignature
+                val hasUpdate = latestSignature == null || installedSignature != latestSignature
+                if (!hasUpdate) return@forEach
+
+                val versionLabel = latestSignature ?: bundle.version ?: return@forEach
+                if (bundle.lastNotifiedVersion == versionLabel) return@forEach
+
+                onNotification(bundle.displayTitle, versionLabel)
+                updateLastNotifiedVersion(bundle.uid, versionLabel)
+            }
     }
 
     suspend fun checkManualUpdates(vararg bundleUids: Int) =
@@ -1618,6 +1689,8 @@ class PatchBundleRepository(
             versionHash = null,
             source = Source.API,
             autoUpdate = false,
+            searchUpdate = true,
+            lastNotifiedVersion = null,
             enabled = true,
             sortOrder = 0,
             createdAt = System.currentTimeMillis(),

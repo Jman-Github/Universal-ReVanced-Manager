@@ -2,6 +2,7 @@ package app.revanced.manager.domain.manager
 
 import android.content.ComponentName
 import android.content.Context
+import app.universal.revanced.manager.R
 import app.revanced.manager.domain.manager.base.BasePreferencesManager
 import app.revanced.manager.domain.manager.base.EditorContext
 import app.revanced.manager.ui.theme.Theme
@@ -13,6 +14,13 @@ import kotlin.io.path.isDirectory
 import kotlin.io.path.isReadable
 
 import app.revanced.manager.ui.model.PatchSelectionActionKey
+
+enum class SearchForUpdatesBackgroundInterval(val displayName: Int, val value: Long) {
+    NEVER(R.string.never, 0),
+    MIN15(R.string.minutes_15, 15),
+    HOUR(R.string.hourly, 60),
+    DAY(R.string.daily, 60 * 24)
+}
 
 class PreferencesManager(
     context: Context
@@ -63,6 +71,10 @@ class PreferencesManager(
     val useManagerPrereleases = booleanPreference("manager_prereleases", false)
     val usePatchesPrereleases = booleanPreference("patches_prereleases", false)
     val showBatteryOptimizationBanner = booleanPreference("show_battery_optimization_banner", true)
+    val searchForUpdatesBackgroundInterval = enumPreference(
+        "background_bundle_update_time",
+        SearchForUpdatesBackgroundInterval.NEVER
+    )
 
     val disablePatchVersionCompatCheck = booleanPreference("disable_patch_version_compatibility_check", false)
     val disableSelectionWarning = booleanPreference("disable_selection_warning", false)
@@ -120,6 +132,7 @@ class PreferencesManager(
         val showManagerUpdateDialogOnLaunch: Boolean? = null,
         val useManagerPrereleases: Boolean? = null,
         val showBatteryOptimizationBanner: Boolean? = null,
+        val searchForUpdatesBackgroundInterval: SearchForUpdatesBackgroundInterval? = null,
         val disablePatchVersionCompatCheck: Boolean? = null,
         val disableSelectionWarning: Boolean? = null,
         val disableUniversalPatchCheck: Boolean? = null,
@@ -138,7 +151,7 @@ class PreferencesManager(
         val pathSelectorLastDirectory: String? = null,
         val patchBundleDiscoveryShowRelease: Boolean? = null,
         val patchBundleDiscoveryShowPrerelease: Boolean? = null,
-        val searchEngineHost: String? = null
+        val searchEngineHost: String? = null,
     )
 
     suspend fun exportSettings() = SettingsSnapshot(
@@ -173,6 +186,7 @@ class PreferencesManager(
         showManagerUpdateDialogOnLaunch = showManagerUpdateDialogOnLaunch.get(),
         useManagerPrereleases = useManagerPrereleases.get(),
         showBatteryOptimizationBanner = showBatteryOptimizationBanner.get(),
+        searchForUpdatesBackgroundInterval = searchForUpdatesBackgroundInterval.get(),
         disablePatchVersionCompatCheck = disablePatchVersionCompatCheck.get(),
         disableSelectionWarning = disableSelectionWarning.get(),
         disableUniversalPatchCheck = disableUniversalPatchCheck.get(),
@@ -191,7 +205,7 @@ class PreferencesManager(
         pathSelectorLastDirectory = pathSelectorLastDirectory.get().takeIf { it.isNotBlank() },
         patchBundleDiscoveryShowRelease = patchBundleDiscoveryShowRelease.get(),
         patchBundleDiscoveryShowPrerelease = patchBundleDiscoveryShowPrerelease.get(),
-        searchEngineHost = searchEngineHost.get()
+        searchEngineHost = searchEngineHost.get(),
     )
 
     suspend fun importSettings(snapshot: SettingsSnapshot) = edit {
@@ -228,6 +242,9 @@ class PreferencesManager(
         }
         snapshot.useManagerPrereleases?.let { useManagerPrereleases.value = it }
         snapshot.showBatteryOptimizationBanner?.let { showBatteryOptimizationBanner.value = it }
+        snapshot.searchForUpdatesBackgroundInterval?.let {
+            searchForUpdatesBackgroundInterval.value = it
+        }
         snapshot.disablePatchVersionCompatCheck?.let { disablePatchVersionCompatCheck.value = it }
         snapshot.disableSelectionWarning?.let { disableSelectionWarning.value = it }
         snapshot.disableUniversalPatchCheck?.let { disableUniversalPatchCheck.value = it }
