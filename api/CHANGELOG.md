@@ -33,6 +33,9 @@
 
 # Docs
 
+- Fixed the app icon in the `README.md` not showing
+- Added a star history graph to the `README.d`
+
 
 # v1.6.1 (2025-12-19)
 
