@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.revanced.manager.R
 import app.revanced.manager.data.platform.Filesystem
+import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.patcher.aapt.Aapt
 import app.revanced.manager.ui.component.AlertDialogExtended
 import app.revanced.manager.ui.component.AppTopBar
@@ -134,6 +135,8 @@ fun DashboardScreen(
     )
     val storageVm: AppSelectorViewModel = koinViewModel()
     val fs = koinInject<Filesystem>()
+    val prefs: PreferencesManager = koinInject()
+    val savedAppsEnabled by prefs.enableSavedApps.getAsState()
     val storageRoots = remember { fs.storageRoots() }
     EventEffect(flow = storageVm.storageSelectionFlow) { selected ->
         onStorageSelect(selected)
@@ -342,27 +345,29 @@ fun DashboardScreen(
         topBar = {
             when {
                 appsSelectionActive && pagerState.currentPage == DashboardPage.DASHBOARD.ordinal -> {
-                    BundleTopBar(
-                        title = stringResource(R.string.selected_apps_count, selectedAppCount),
-                        onBackClick = installedAppsViewModel::clearSelection,
-                        backIcon = {
-                            Icon(
+                        BundleTopBar(
+                            title = stringResource(R.string.selected_apps_count, selectedAppCount),
+                            onBackClick = installedAppsViewModel::clearSelection,
+                            backIcon = {
+                                Icon(
                                 imageVector = Icons.Default.Close,
                                 contentDescription = stringResource(R.string.back)
                             )
-                        },
-                        actions = {
-                            IconButton(
-                                onClick = { showDeleteSavedAppsDialog = true }
-                            ) {
-                                Icon(
-                                    Icons.Outlined.Delete,
-                                    stringResource(R.string.delete)
-                                )
+                            },
+                            actions = {
+                                if (savedAppsEnabled) {
+                                    IconButton(
+                                        onClick = { showDeleteSavedAppsDialog = true }
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.Delete,
+                                            stringResource(R.string.delete)
+                                        )
+                                    }
+                                }
                             }
-                        }
-                    )
-                }
+                        )
+                    }
 
                 bundlesSelectable -> {
                     BundleTopBar(

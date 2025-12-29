@@ -628,6 +628,13 @@ fun AdvancedSettingsScreen(
                 )
                 ExpressiveSettingsDivider()
                 BooleanItem(
+                    preference = viewModel.prefs.enableSavedApps,
+                    coroutineScope = viewModel.viewModelScope,
+                    headline = R.string.patcher_saved_apps_title,
+                    description = R.string.patcher_saved_apps_description,
+                )
+                ExpressiveSettingsDivider()
+                BooleanItem(
                     preference = viewModel.prefs.collapsePatchActionsOnSelection,
                     coroutineScope = viewModel.viewModelScope,
                     headline = R.string.patch_selection_collapse_on_toggle,

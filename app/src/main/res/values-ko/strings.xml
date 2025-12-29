@@ -460,6 +460,10 @@
     <string name="patcher_auto_expand_steps">Auto-expand running steps</string>
     <!-- Needs translation -->
     <string name="patcher_auto_expand_steps_description">Automatically expand a patcher progress widget when it starts running</string>
+    <!-- Needs translation -->
+    <string name="patcher_saved_apps_title">Save patched apps for later</string>
+    <!-- Needs translation -->
+    <string name="patcher_saved_apps_description">When enabled, the manager saves a patched app entry and APK so it stays in the Apps tab and can be reinstalled later. Turning this off skips saving and hides the delete option</string>
     <string name="patch_bundle_rename">패치 번들 이름 변경</string>
     <string name="patch_profile_view_options">옵션 보기</string>
     <string name="patch_profile_patch_options_title">%1$s 옵션</string>

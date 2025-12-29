@@ -95,6 +95,7 @@ fun PatcherScreen(
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
     val autoCollapsePatcherSteps by prefs.autoCollapsePatcherSteps.getAsState()
     val autoExpandRunningSteps by prefs.autoExpandRunningSteps.getAsState()
+    val savedAppsEnabled by prefs.enableSavedApps.getAsState()
     val exportMetadata = viewModel.exportMetadata
     val fallbackExportMetadata = remember(viewModel.packageName, viewModel.version) {
         PatchedAppExportData(
@@ -119,7 +120,10 @@ fun PatcherScreen(
     fun onPageBack() = when {
         patcherSucceeded == null -> showDismissConfirmationDialog = true
         viewModel.isInstalling -> showInstallInProgressDialog = true
-        patcherSucceeded == true && viewModel.installedPackageName == null && !viewModel.hasSavedPatchedApp -> showSavePatchedAppDialog = true
+        patcherSucceeded == true &&
+            viewModel.installedPackageName == null &&
+            !viewModel.hasSavedPatchedApp &&
+            savedAppsEnabled -> showSavePatchedAppDialog = true
         else -> onLeave()
     }
 
