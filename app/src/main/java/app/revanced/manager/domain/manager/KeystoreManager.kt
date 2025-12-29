@@ -44,9 +44,20 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
     )
 
     suspend fun sign(input: File, output: File) = withContext(Dispatchers.Default) {
-        val sanitized = sanitizeZipIfNeeded(input)
-        ApkUtils.signApk(sanitized, output, prefs.keystoreAlias.get(), signingDetails())
-        if (sanitized != input) sanitized.delete()
+        try {
+            ApkUtils.signApk(input, output, prefs.keystoreAlias.get(), signingDetails())
+            return@withContext
+        } catch (e: Exception) {
+            val sanitized = sanitizeZipIfNeeded(input)
+            if (sanitized == input) {
+                throw e
+            }
+            try {
+                ApkUtils.signApk(sanitized, output, prefs.keystoreAlias.get(), signingDetails())
+            } finally {
+                sanitized.delete()
+            }
+        }
     }
 
     suspend fun regenerate() = withContext(Dispatchers.Default) {

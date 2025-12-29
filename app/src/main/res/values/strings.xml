@@ -444,6 +444,8 @@ Patch profiles are not affected.</string>
     <string name="process_runtime_memory_limit_description">The max amount of memory that the Patcher process can use (in megabytes)</string>
     <string name="process_runtime_memory_limit_description_detailed">The max amount of memory that the Patcher process can use (in megabytes).
 Recommended for this device: %1$d MB.</string>
+    <string name="process_runtime_memory_aggressive">Aggressive patcher memory limit</string>
+    <string name="process_runtime_memory_aggressive_description">Use the highest memory limit allowed by your device for the experimental patcher</string>
     <string name="reset_to_recommended">Reset to recommended</string>
     <string name="patcher_auto_collapse_steps">Auto-collapse completed patcher steps</string>
     <string name="patcher_auto_collapse_steps_description">Automatically collapse each patcher progress widget after all of its steps finish</string>

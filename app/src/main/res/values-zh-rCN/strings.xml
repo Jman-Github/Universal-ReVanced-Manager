@@ -441,6 +441,10 @@
     <string name="process_runtime_memory_limit">修补程序进程内存限制</string>
     <string name="process_runtime_memory_limit_description">修补程序进程可以使用的最大内存量（以兆字节为单位）</string>
     <string name="process_runtime_memory_limit_description_detailed">修补程序进程可以使用的最大内存量（以兆字节为单位）。\n此设备的推荐值：%1$d MB。</string>
+    <!-- Needs translation -->
+    <string name="process_runtime_memory_aggressive">Aggressive patcher memory limit</string>
+    <!-- Needs translation -->
+    <string name="process_runtime_memory_aggressive_description">Use the highest memory limit allowed by your device for the experimental patcher</string>
     <string name="reset_to_recommended">重置为推荐值</string>
     <string name="patcher_auto_collapse_steps">自动折叠已完成的修补程序步骤</string>
     <string name="patcher_auto_collapse_steps_description">在所有步骤完成后自动折叠每个修补程序进度小部件。</string>

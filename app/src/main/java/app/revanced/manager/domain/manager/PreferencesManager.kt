@@ -5,6 +5,7 @@ import android.content.Context
 import app.universal.revanced.manager.R
 import app.revanced.manager.domain.manager.base.BasePreferencesManager
 import app.revanced.manager.domain.manager.base.EditorContext
+import app.revanced.manager.patcher.runtime.MemoryLimitConfig
 import app.revanced.manager.ui.theme.Theme
 import app.revanced.manager.util.ExportNameFormatter
 import app.revanced.manager.util.isDebuggable
@@ -45,7 +46,14 @@ class PreferencesManager(
 
     val useProcessRuntime = booleanPreference("use_process_runtime", false)
     val stripUnusedNativeLibs = booleanPreference("strip_unused_native_libs", false)
-    val patcherProcessMemoryLimit = intPreference("process_runtime_memory_limit", 700)
+    val patcherProcessMemoryLimit = intPreference(
+        "process_runtime_memory_limit",
+        MemoryLimitConfig.recommendedLimitMb(context)
+    )
+    val patcherProcessMemoryAggressive = booleanPreference(
+        "process_runtime_memory_aggressive",
+        false
+    )
     val patchedAppExportFormat = stringPreference(
         "patched_app_export_format",
         ExportNameFormatter.DEFAULT_TEMPLATE
@@ -115,6 +123,7 @@ class PreferencesManager(
         val includeGitHubPatInExports: Boolean? = null,
         val useProcessRuntime: Boolean? = null,
         val patcherProcessMemoryLimit: Int? = null,
+        val patcherProcessMemoryAggressive: Boolean? = null,
         val autoCollapsePatcherSteps: Boolean? = null,
         val autoExpandRunningSteps: Boolean? = null,
         val patchedAppExportFormat: String? = null,
@@ -169,6 +178,7 @@ class PreferencesManager(
         includeGitHubPatInExports = includeGitHubPatInExports.get(),
         useProcessRuntime = useProcessRuntime.get(),
         patcherProcessMemoryLimit = patcherProcessMemoryLimit.get(),
+        patcherProcessMemoryAggressive = patcherProcessMemoryAggressive.get(),
         autoCollapsePatcherSteps = autoCollapsePatcherSteps.get(),
         autoExpandRunningSteps = autoExpandRunningSteps.get(),
         patchedAppExportFormat = patchedAppExportFormat.get(),
@@ -223,6 +233,7 @@ class PreferencesManager(
         snapshot.includeGitHubPatInExports?.let { includeGitHubPatInExports.value = it }
         snapshot.useProcessRuntime?.let { useProcessRuntime.value = it }
         snapshot.patcherProcessMemoryLimit?.let { patcherProcessMemoryLimit.value = it }
+        snapshot.patcherProcessMemoryAggressive?.let { patcherProcessMemoryAggressive.value = it }
         snapshot.autoCollapsePatcherSteps?.let { autoCollapsePatcherSteps.value = it }
         snapshot.autoExpandRunningSteps?.let { autoExpandRunningSteps.value = it }
         snapshot.patchedAppExportFormat?.let { patchedAppExportFormat.value = it }

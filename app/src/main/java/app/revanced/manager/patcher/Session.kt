@@ -12,6 +12,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.Closeable
 import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
@@ -88,14 +90,39 @@ class Session(
 
             val patched = tempDir.resolve("result.apk")
             withContext(Dispatchers.IO) {
-                Files.copy(input.toPath(), patched.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                fastCopy(input, patched)
             }
             result.applyTo(patched)
 
             logger.info("Patched apk saved to $patched")
 
             withContext(Dispatchers.IO) {
-                Files.move(patched.toPath(), output.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                try {
+                    Files.move(
+                        patched.toPath(),
+                        output.toPath(),
+                        StandardCopyOption.REPLACE_EXISTING,
+                        StandardCopyOption.ATOMIC_MOVE
+                    )
+                } catch (_: Exception) {
+                    Files.move(
+                        patched.toPath(),
+                        output.toPath(),
+                        StandardCopyOption.REPLACE_EXISTING
+                    )
+                }
+            }
+        }
+    }
+
+    private fun fastCopy(source: File, target: File) {
+        FileInputStream(source).channel.use { input ->
+            FileOutputStream(target).channel.use { output ->
+                var position = 0L
+                val size = input.size()
+                while (position < size) {
+                    position += input.transferTo(position, size - position, output)
+                }
             }
         }
     }

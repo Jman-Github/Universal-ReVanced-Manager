@@ -448,6 +448,10 @@
     <string name="process_runtime_memory_limit">패처 프로세스 메모리 제한</string>
     <string name="process_runtime_memory_limit_description">패처 프로세스가 사용할 수 있는 최대 메모리 용량을 지정할 수 있습니다 (메가바이트)</string>
     <string name="process_runtime_memory_limit_description_detailed">패처 프로세스에서 사용할 수 있는 최대 메모리 용량을 지정할 수 있습니다 (메가바이트). 
+    <!-- Needs translation -->
+    <string name="process_runtime_memory_aggressive">Aggressive patcher memory limit</string>
+    <!-- Needs translation -->
+    <string name="process_runtime_memory_aggressive_description">Use the highest memory limit allowed by your device for the experimental patcher</string>
 이 기기에 권장된 메모리 용량: %1$d MB.</string>
     <string name="reset_to_recommended">권장값으로 초기화</string>
     <string name="patcher_auto_collapse_steps">완료된 패처 단계 자동 접기</string>

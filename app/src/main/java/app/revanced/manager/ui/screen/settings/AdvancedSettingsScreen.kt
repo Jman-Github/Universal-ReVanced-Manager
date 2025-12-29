@@ -578,14 +578,39 @@ fun AdvancedSettingsScreen(
                     description = R.string.process_runtime_description,
                 )
                 ExpressiveSettingsDivider()
-                val recommendedProcessLimit = remember { 700 }
+                val recommendedProcessLimit = remember(context) {
+                    MemoryLimitConfig.recommendedLimitMb(context)
+                }
+                val processRuntimeEnabled by viewModel.prefs.useProcessRuntime.getAsState()
+                val aggressiveLimitEnabled by viewModel.prefs.patcherProcessMemoryAggressive.getAsState()
+                val aggressiveControlEnabled = processRuntimeEnabled
+                val memoryLimitEnabled = processRuntimeEnabled && !aggressiveLimitEnabled
+                val memoryLimitAlpha = if (memoryLimitEnabled) 1f else 0.5f
+                val aggressiveAlpha = if (aggressiveControlEnabled) 1f else 0.5f
+
+                LaunchedEffect(processRuntimeEnabled, aggressiveLimitEnabled) {
+                    if (!processRuntimeEnabled && aggressiveLimitEnabled) {
+                        viewModel.prefs.patcherProcessMemoryAggressive.update(false)
+                    }
+                }
                 IntegerItem(
+                    modifier = Modifier.alpha(memoryLimitAlpha),
                     preference = viewModel.prefs.patcherProcessMemoryLimit,
                     coroutineScope = viewModel.viewModelScope,
                     headline = R.string.process_runtime_memory_limit,
                     description = R.string.process_runtime_memory_limit_description,
                     neutralButtonLabel = stringResource(R.string.reset_to_recommended),
-                    neutralValueProvider = { recommendedProcessLimit }
+                    neutralValueProvider = { recommendedProcessLimit },
+                    enabled = memoryLimitEnabled
+                )
+                ExpressiveSettingsDivider()
+                BooleanItem(
+                    modifier = Modifier.alpha(aggressiveAlpha),
+                    preference = viewModel.prefs.patcherProcessMemoryAggressive,
+                    coroutineScope = viewModel.viewModelScope,
+                    headline = R.string.process_runtime_memory_aggressive,
+                    description = R.string.process_runtime_memory_aggressive_description,
+                    enabled = aggressiveControlEnabled
                 )
                 ExpressiveSettingsDivider()
                 BooleanItem(

@@ -10,21 +10,23 @@
 - Updates are no longer prompted when using dev builds
 - Updated the installation flow for the system installer to prompt the user to enable the "Install unknown apps" permission if not already granted by the user
 - Removed the redundant `Apply` and `Cancel` buttons from the theme preview widgets in Settings > General
-- Added a settings toggle in Settings > Advanced for the patch selection screens patch version tags
+- Added a settings toggle in Settings > Advanced for the patch selection screen version tags
 - Updated the "Configure updates" screen that appears on a fresh install from referring to the Official ReVanced Patches as "ReVanced Patches" to "Official ReVanced Patches" instead for consistency
 - Updated the "Show & allow using universal patches" setting, when toggled off, to hide apps on the app selection screen that don't use any patches (so ones that only use universal patches)
-- Converted the existing components of the app that use old file pickers to the new one along with saving and overwrite warning logic
+- Converted the existing components of the app that use old file pickers to the new one, including save and overwrite warning logic
 - Removed the "Show other versions" button on the select an app screen for apps that support all versions https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/87
 - Patch options menus now follow the same design as the rest of the patch selection page https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/84
 - The custom file picker now remembers the last directory you were in and persists it across all instances of the file picker
 - Added a discover bundle screen using Brosssh's external bundle API
-- Added an option in `Developer options` to disable the battery optimization banner that is shown if the user has battery optimization on
+- Added an option in `Developer Options` to disable the battery optimization banner that is shown if the user has battery optimization on
 - Updated the patcher steps UI to match upstream improvements https://github.com/ReVanced/revanced-manager/pull/2805
 - Added a new "Auto-expand running steps" setting for patcher progress widgets
 - Upstreamed app info improvements https://github.com/ReVanced/revanced-manager/pull/2896
 - Improved downloader plugin trust dialog design https://github.com/ReVanced/revanced-manager/pull/2420
 - Added a background bundle update checker & notification system which notifies the user if a patch bundle has an update. Enable in Settings > Updates https://github.com/ReVanced/revanced-manager/pull/2561
 - Added individual patcher steps in the patcher screen https://github.com/ReVanced/revanced-manager/pull/2889
+- Improved the experimental patcher with a faster APK write path during patching. ZIP sanitization before signing now runs only if initial signing 
+- Patch profiles empty state text now matches the apps tab styling
 
 
 # Bug fixes

@@ -74,9 +74,18 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
         val managerBaseApk = pm.getPackageInfo(context.packageName)!!.applicationInfo!!.sourceDir
 
         val requestedLimit = prefs.patcherProcessMemoryLimit.get()
-        val sanitizedLimit = MemoryLimitConfig.clampLimitMb(context, requestedLimit)
-        if (sanitizedLimit != requestedLimit) {
-            Log.w(tag, "Requested process memory limit ${requestedLimit}MB exceeded device capabilities; clamped to ${sanitizedLimit}MB")
+        val aggressiveLimit = prefs.patcherProcessMemoryAggressive.get()
+        val runtimeLimit = if (aggressiveLimit) {
+            MemoryLimitConfig.maxLimitMb(context)
+        } else {
+            MemoryLimitConfig.autoScaleLimitMb(context, requestedLimit)
+        }
+        if (runtimeLimit != requestedLimit && !aggressiveLimit) {
+            Log.d(tag, "Auto-scaled process memory limit from ${requestedLimit}MB to ${runtimeLimit}MB")
+        }
+        val sanitizedLimit = MemoryLimitConfig.clampLimitMb(context, runtimeLimit)
+        if (sanitizedLimit != runtimeLimit) {
+            Log.w(tag, "Requested process memory limit ${runtimeLimit}MB exceeded device capabilities; clamped to ${sanitizedLimit}MB")
         }
         val limit = "${sanitizedLimit}M"
         val propOverride = resolvePropOverride(context)?.absolutePath

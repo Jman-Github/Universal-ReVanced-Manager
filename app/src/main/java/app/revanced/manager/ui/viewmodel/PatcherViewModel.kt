@@ -1915,9 +1915,20 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     PatcherWorker.PROCESS_PREVIOUS_LIMIT_KEY,
                     -1
                 )
-                val previousLimit = if (previousFromWorker > 0) previousFromWorker else prefs.patcherProcessMemoryLimit.get()
-                val newLimit = (previousLimit - MEMORY_ADJUSTMENT_MB).coerceAtLeast(MemoryLimitConfig.MIN_LIMIT_MB)
+                val aggressiveLimit = prefs.patcherProcessMemoryAggressive.get()
+                val previousLimit = if (aggressiveLimit) {
+                    MemoryLimitConfig.maxLimitMb(app)
+                } else if (previousFromWorker > 0) {
+                    previousFromWorker
+                } else {
+                    prefs.patcherProcessMemoryLimit.get()
+                }
+                val newLimit = (previousLimit - MEMORY_ADJUSTMENT_MB)
+                    .coerceAtLeast(MemoryLimitConfig.MIN_LIMIT_MB)
                 val adjusted = newLimit < previousLimit
+                if (aggressiveLimit) {
+                    prefs.patcherProcessMemoryAggressive.update(false)
+                }
                 if (adjusted) {
                     prefs.patcherProcessMemoryLimit.update(newLimit)
                 }

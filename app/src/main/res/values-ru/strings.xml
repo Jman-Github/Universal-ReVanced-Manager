@@ -428,6 +428,10 @@
     <string name="process_runtime_description">Это быстрее и позволяет Patcher использовать больше памяти.</string>
     <string name="process_runtime_memory_limit">Ограничение памяти процесса патчера</string>
     <string name="process_runtime_memory_limit_description">Максимальный объем памяти, который может использовать процесс Патчера (в мегабайтах).</string>
+    <!-- Needs translation -->
+    <string name="process_runtime_memory_aggressive">Aggressive patcher memory limit</string>
+    <!-- Needs translation -->
+    <string name="process_runtime_memory_aggressive_description">Use the highest memory limit allowed by your device for the experimental patcher</string>
     <string name="pure_black_theme">Чисто черная тема</string>
     <string name="pure_black_theme_description">Используйте чисто черный фон для темной темы</string>
     <string name="range_end">Конец диапазона</string>

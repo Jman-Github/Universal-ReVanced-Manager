@@ -451,6 +451,10 @@
     <string name="process_runtime_memory_limit">パッチャープロセスのメモリ制限</string>
     <string name="process_runtime_memory_limit_description">パッチャープロセスが使用できるメモリの最大量（メガバイト単位）</string>
     <string name="process_runtime_memory_limit_description_detailed">パッチャープロセスが使用できるメモリの最大量（メガバイト単位）。\nこのデバイスの推奨値: %1$d MB。</string>
+    <!-- Needs translation -->
+    <string name="process_runtime_memory_aggressive">Aggressive patcher memory limit</string>
+    <!-- Needs translation -->
+    <string name="process_runtime_memory_aggressive_description">Use the highest memory limit allowed by your device for the experimental patcher</string>
     <string name="reset_to_recommended">推奨値にリセット</string>
     <string name="patcher_auto_collapse_steps">完了したパッチャーステップを自動的に折りたたむ</string>
     <string name="patcher_auto_collapse_steps_description">すべてのステップが完了した後、各 Patcher 進捗ウィジェットを自動的に折りたたみます</string>

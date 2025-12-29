@@ -438,6 +438,10 @@
     <string name="process_runtime_memory_limit">Giới hạn bộ nhớ cho tiến trình vá</string>
     <string name="process_runtime_memory_limit_description">Nhập dung lượng bộ nhớ tối đa mà tiến trình vá sử dụng (tính bằng megabyte).</string>
     <string name="process_runtime_memory_limit_description_detailed">Nhập dung lượng bộ nhớ tối đa mà tiến trình vá sử dụng (tính bằng megabyte).\nĐề xuất cho thiết bị này: %1$d MB.</string>
+    <!-- Needs translation -->
+    <string name="process_runtime_memory_aggressive">Aggressive patcher memory limit</string>
+    <!-- Needs translation -->
+    <string name="process_runtime_memory_aggressive_description">Use the highest memory limit allowed by your device for the experimental patcher</string>
     <string name="reset_to_recommended">Đặt lại về đề xuất</string>
     <string name="patcher_auto_collapse_steps">Tự thu gọn bước đã hoàn tất</string>
     <string name="patcher_auto_collapse_steps_description">Tự động thu gọn từng tiến trình vá sau khi chúng kết thúc.</string>
