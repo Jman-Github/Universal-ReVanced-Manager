@@ -31,7 +31,7 @@ jobs:
         run: |
           echo "${{ secrets.KEYSTORE }}" | base64 --decode > "app/keystore.jks"
 
-      - name: Build release
+      - name: Build dev
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -39,14 +39,14 @@ jobs:
           KEYSTORE_ENTRY_ALIAS: ${{ secrets.KEYSTORE_ENTRY_ALIAS }}
           KEYSTORE_ENTRY_PASSWORD: ${{ secrets.KEYSTORE_ENTRY_PASSWORD }}
         run: |
-          ./gradlew -Dorg.gradle.java.home="${{ steps.setup-java.outputs.path }}" --no-daemon :app:assembleRelease
+          ./gradlew -Dorg.gradle.java.home="${{ steps.setup-java.outputs.path }}" --no-daemon :app:assembleDev
 
-      - name: Locate release artifact
+      - name: Locate dev artifact
         id: artifact
         run: |
-          APK_PATH="$(ls -t app/build/outputs/apk/release/*.apk 2>/dev/null | head -n 1)"
+          APK_PATH="$(ls -t app/build/outputs/apk/dev/*.apk 2>/dev/null | head -n 1)"
           if [ -z "$APK_PATH" ]; then
-            echo "Unable to find release APK in app/build/outputs/apk/release"
+            echo "Unable to find dev APK in app/build/outputs/apk/dev"
             exit 1
           fi
           echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
@@ -60,4 +60,4 @@ jobs:
           if-no-files-found: error
           path: |
             ${{ steps.artifact.outputs.apk_path }}
-            app/build/outputs/apk/release/output-metadata.json
+            app/build/outputs/apk/dev/output-metadata.json
