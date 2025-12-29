@@ -84,6 +84,7 @@ class PreferencesManager(
         "background_bundle_update_time",
         SearchForUpdatesBackgroundInterval.NEVER
     )
+    val pendingManagerUpdateVersionCode = intPreference("pending_manager_update_version_code", -1)
 
     val disablePatchVersionCompatCheck = booleanPreference("disable_patch_version_compatibility_check", false)
     val disableSelectionWarning = booleanPreference("disable_selection_warning", false)

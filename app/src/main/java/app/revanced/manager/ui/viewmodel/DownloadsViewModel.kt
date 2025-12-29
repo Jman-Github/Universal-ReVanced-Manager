@@ -58,14 +58,15 @@ class DownloadsViewModel(
                 ?: intent.getStringExtra(PackageInstaller.EXTRA_PACKAGE_NAME)
                 ?: intent.data?.schemeSpecificPart
                 ?: return
-            if (!pendingUninstalls.remove(packageName)) return
-
             val status = intent.getIntExtra(
                 UninstallService.EXTRA_UNINSTALL_STATUS,
                 PackageInstaller.STATUS_FAILURE
             )
             val statusMessage =
                 intent.getStringExtra(UninstallService.EXTRA_UNINSTALL_STATUS_MESSAGE)
+
+            if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) return
+            if (!pendingUninstalls.remove(packageName)) return
 
             if (status == PackageInstaller.STATUS_SUCCESS) {
                 viewModelScope.launch {

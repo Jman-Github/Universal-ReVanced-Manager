@@ -27,7 +27,8 @@
 - Added individual patcher steps in the patcher screen https://github.com/ReVanced/revanced-manager/pull/2889
 - Improved the experimental patcher with a faster APK write path during patching. ZIP sanitization before signing now runs only if initial signing 
 - Patch profiles empty state text now matches the apps tab styling
-- Added a toggle to disable saving patched apps and hide saved‑app delete actions when disabled
+- Added a toggle to disable saving patched apps and hide saved‑app delete actions when disabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/91
+- Made the system installer detect failures or interruptions for accurately https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/92
 
 
 # Bug fixes

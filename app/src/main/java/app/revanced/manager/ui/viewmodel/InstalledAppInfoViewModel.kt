@@ -82,6 +82,10 @@ class InstalledAppInfoViewModel(
     private var installProgressToastJob: Job? = null
     private var uninstallProgressToastJob: Job? = null
     private var uninstallProgressToast: Toast? = null
+    private var installSessionId: Int? = null
+    private var installSessionCallback: PackageInstaller.SessionCallback? = null
+    private var deferInstallProgressToasts = false
+    private var deferUninstallProgressToasts = false
     private var pendingInternalInstallPackage: String? = null
     private var pendingSignatureMismatchPackage: String? = null
     private var signatureMismatchUninstallJob: Job? = null
@@ -318,6 +322,7 @@ class InstalledAppInfoViewModel(
     }
 
     private fun startInstallProgressToasts() {
+        if (deferInstallProgressToasts) return
         if (installProgressToastJob?.isActive == true) return
         isInstalling = true
         installProgressToastJob = viewModelScope.launch {
@@ -332,12 +337,57 @@ class InstalledAppInfoViewModel(
         installProgressToastJob?.cancel()
         installProgressToastJob = null
         internalInstallTimeoutJob?.cancel()
+        deferInstallProgressToasts = false
+        clearInstallSessionCallback()
         if (pendingExternalInstall == null && pendingInternalInstallPackage == null) {
             isInstalling = false
         }
     }
 
+    private fun enableInstallProgressToasts() {
+        if (!deferInstallProgressToasts) return
+        deferInstallProgressToasts = false
+        startInstallProgressToasts()
+    }
+
+    private fun registerInstallSessionCallback(sessionId: Int) {
+        clearInstallSessionCallback()
+        installSessionId = sessionId
+        val installer = context.packageManager.packageInstaller
+        val callback = object : PackageInstaller.SessionCallback() {
+            override fun onActiveChanged(id: Int, active: Boolean) {
+                if (id != sessionId || !active) return
+                viewModelScope.launch { enableInstallProgressToasts() }
+            }
+
+            override fun onFinished(id: Int, success: Boolean) {
+                if (id != sessionId) return
+                clearInstallSessionCallback()
+            }
+
+            override fun onCreated(id: Int) {}
+            override fun onBadgingChanged(id: Int) {}
+            override fun onProgressChanged(id: Int, progress: Float) {}
+        }
+        installSessionCallback = callback
+        installer.registerSessionCallback(callback)
+        installer.getSessionInfo(sessionId)?.let { info ->
+            if (info.isActive) {
+                enableInstallProgressToasts()
+            }
+        }
+    }
+
+    private fun clearInstallSessionCallback() {
+        val callback = installSessionCallback ?: return
+        val installer = context.packageManager.packageInstaller
+        runCatching { installer.unregisterSessionCallback(callback) }
+        installSessionCallback = null
+        installSessionId = null
+    }
+
     private fun startUninstallProgressToasts() {
+        if (deferUninstallProgressToasts) return
         if (uninstallProgressToastJob?.isActive == true) return
         uninstallProgressToastJob = viewModelScope.launch {
             while (isActive) {
@@ -353,6 +403,13 @@ class InstalledAppInfoViewModel(
         uninstallProgressToastJob = null
         uninstallProgressToast?.cancel()
         uninstallProgressToast = null
+        deferUninstallProgressToasts = false
+    }
+
+    private fun enableUninstallProgressToasts() {
+        if (!deferUninstallProgressToasts) return
+        deferUninstallProgressToasts = false
+        startUninstallProgressToasts()
     }
 
     fun handleActivityResult(result: ActivityResult) {
@@ -386,8 +443,9 @@ class InstalledAppInfoViewModel(
             showSignatureMismatchPrompt(app.currentPackageName)
             return@launch
         }
-        startInstallProgressToasts()
         isInstalling = true
+        deferInstallProgressToasts = plan is InstallerManager.InstallPlan.Internal
+        startInstallProgressToasts()
         if (plan is InstallerManager.InstallPlan.External) {
             runCatching { apk.copyTo(plan.sharedFile, overwrite = true) }
         }
@@ -401,7 +459,8 @@ class InstalledAppInfoViewModel(
                 }
                 pendingInternalInstallPackage = app.currentPackageName
                 val success = runCatching {
-                    pm.installApp(listOf(apk))
+                    val sessionId = pm.installApp(listOf(apk))
+                    registerInstallSessionCallback(sessionId)
                 }.onFailure {
                     Log.e(tag, "Failed to install saved app", it)
                 }.isSuccess
@@ -729,6 +788,8 @@ class InstalledAppInfoViewModel(
     fun uninstallSavedInstallation() = viewModelScope.launch {
         val app = installedApp ?: return@launch
         if (!isInstalledOnDevice) return@launch
+        deferUninstallProgressToasts = true
+        startUninstallProgressToasts()
         pm.uninstallPackage(app.currentPackageName)
     }
 
@@ -957,6 +1018,10 @@ class InstalledAppInfoViewModel(
                     if (pkg != currentApp.currentPackageName) return
 
                     when (status) {
+                        PackageInstaller.STATUS_PENDING_USER_ACTION -> {
+                            enableInstallProgressToasts()
+                        }
+
                         PackageInstaller.STATUS_SUCCESS -> {
                             viewModelScope.launch {
                                 persistInstallMetadata(InstallType.DEFAULT)
@@ -1012,6 +1077,13 @@ class InstalledAppInfoViewModel(
                     val currentApp = installedApp ?: return
                     if (targetPackage != currentApp.currentPackageName) return
 
+                    if (extraStatus == PackageInstaller.STATUS_PENDING_USER_ACTION) {
+                        if (deferUninstallProgressToasts) {
+                            enableUninstallProgressToasts()
+                        }
+                        return
+                    }
+
                     val pendingSignature = pendingSignatureMismatchPackage
                     if (pendingSignature != null && pendingSignature == targetPackage) {
                         signatureMismatchUninstallJob?.cancel()
@@ -1034,6 +1106,7 @@ class InstalledAppInfoViewModel(
                         return
                     }
 
+                    stopUninstallProgressToasts()
                     if (extraStatus == PackageInstaller.STATUS_SUCCESS) {
                         viewModelScope.launch {
                             if (currentApp.installType == InstallType.SAVED) {
@@ -1128,7 +1201,7 @@ class InstalledAppInfoViewModel(
         val targetPackage = pendingSignatureMismatchPackage ?: return
         signatureMismatchPackage = null
         stopInstallProgressToasts()
-        startUninstallProgressToasts()
+        deferUninstallProgressToasts = true
         startSignatureMismatchUninstallTimeout(targetPackage)
         pm.uninstallPackage(targetPackage)
     }

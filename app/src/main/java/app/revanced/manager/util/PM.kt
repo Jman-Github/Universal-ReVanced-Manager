@@ -152,12 +152,14 @@ class PM(
         false
     )
 
-    suspend fun installApp(apks: List<File>) = withContext(Dispatchers.IO) {
+    suspend fun installApp(apks: List<File>): Int = withContext(Dispatchers.IO) {
         val packageInstaller = app.packageManager.packageInstaller
-        packageInstaller.openSession(packageInstaller.createSession(sessionParams)).use { session ->
+        val sessionId = packageInstaller.createSession(sessionParams)
+        packageInstaller.openSession(sessionId).use { session ->
             apks.forEach { apk -> session.writeApk(apk) }
             session.commit(app.installIntentSender)
         }
+        sessionId
     }
 
     fun uninstallPackage(pkg: String) {

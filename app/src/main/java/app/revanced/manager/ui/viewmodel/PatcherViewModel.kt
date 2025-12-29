@@ -131,8 +131,12 @@ class PatcherViewModel(
     private var postTimeoutGraceJob: Job? = null
     private var installProgressToastJob: Job? = null
     private var installProgressToast: Toast? = null
+    private var installSessionId: Int? = null
+    private var installSessionCallback: PackageInstaller.SessionCallback? = null
+    private var deferInstallProgressToasts = false
     private var uninstallProgressToastJob: Job? = null
     private var uninstallProgressToast: Toast? = null
+    private var deferUninstallProgressToasts = false
     private var pendingSignatureMismatchPlan: InstallerManager.InstallPlan? = null
     private var pendingSignatureMismatchPackage: String? = null
     private var signatureMismatchUninstallJob: Job? = null
@@ -195,10 +199,14 @@ class PatcherViewModel(
             signatureMismatchUninstallJob?.cancel()
             signatureMismatchUninstallJob = null
             stopUninstallProgressToasts()
+            deferInstallProgressToasts = false
+            clearInstallSessionCallback()
         } else {
             postTimeoutGraceJob?.cancel()
             postTimeoutGraceJob = null
-            startInstallProgressToasts()
+            if (!deferInstallProgressToasts) {
+                startInstallProgressToasts()
+            }
             suppressFailureAfterSuccess = false
         }
     }
@@ -662,6 +670,14 @@ fun removeMissingPatchesAndStart() {
         }
     }
 
+    private fun enableInstallProgressToasts() {
+        if (!deferInstallProgressToasts) return
+        deferInstallProgressToasts = false
+        if (isInstalling) {
+            startInstallProgressToasts()
+        }
+    }
+
     private fun stopInstallProgressToasts() {
         installProgressToastJob?.cancel()
         installProgressToastJob = null
@@ -669,7 +685,44 @@ fun removeMissingPatchesAndStart() {
         installProgressToast = null
     }
 
+    private fun registerInstallSessionCallback(sessionId: Int) {
+        clearInstallSessionCallback()
+        installSessionId = sessionId
+        val installer = app.packageManager.packageInstaller
+        val callback = object : PackageInstaller.SessionCallback() {
+            override fun onActiveChanged(id: Int, active: Boolean) {
+                if (id != sessionId || !active) return
+                viewModelScope.launch { enableInstallProgressToasts() }
+            }
+
+            override fun onFinished(id: Int, success: Boolean) {
+                if (id != sessionId) return
+                clearInstallSessionCallback()
+            }
+
+            override fun onCreated(id: Int) {}
+            override fun onBadgingChanged(id: Int) {}
+            override fun onProgressChanged(id: Int, progress: Float) {}
+        }
+        installSessionCallback = callback
+        installer.registerSessionCallback(callback)
+        installer.getSessionInfo(sessionId)?.let { info ->
+            if (info.isActive) {
+                enableInstallProgressToasts()
+            }
+        }
+    }
+
+    private fun clearInstallSessionCallback() {
+        val callback = installSessionCallback ?: return
+        val installer = app.packageManager.packageInstaller
+        runCatching { installer.unregisterSessionCallback(callback) }
+        installSessionCallback = null
+        installSessionId = null
+    }
+
     private fun startUninstallProgressToasts() {
+        if (deferUninstallProgressToasts) return
         if (uninstallProgressToastJob?.isActive == true) return
         uninstallProgressToastJob = viewModelScope.launch {
             while (isActive) {
@@ -685,6 +738,13 @@ fun removeMissingPatchesAndStart() {
         uninstallProgressToastJob = null
         uninstallProgressToast?.cancel()
         uninstallProgressToast = null
+        deferUninstallProgressToasts = false
+    }
+
+    private fun enableUninstallProgressToasts() {
+        if (!deferUninstallProgressToasts) return
+        deferUninstallProgressToasts = false
+        startUninstallProgressToasts()
     }
 
     fun suppressInstallProgressToasts() = stopInstallProgressToasts()
@@ -1072,6 +1132,12 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
                     val pendingPlan = pendingSignatureMismatchPlan
                     val pendingPackage = pendingSignatureMismatchPackage
+                    if (pmStatus == PackageInstaller.STATUS_PENDING_USER_ACTION) {
+                        if (pendingPlan != null && !pendingPackage.isNullOrBlank() && pendingPackage == targetPackage) {
+                            enableUninstallProgressToasts()
+                        }
+                        return
+                    }
                     if (pendingPlan != null && !pendingPackage.isNullOrBlank() && pendingPackage == targetPackage) {
                         signatureMismatchUninstallJob?.cancel()
                         signatureMismatchUninstallJob = null
@@ -1138,6 +1204,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     @OptIn(DelicateCoroutinesApi::class)
     override fun onCleared() {
         super.onCleared()
+        clearInstallSessionCallback()
         app.unregisterReceiver(installerBroadcastReceiver)
         patcherWorkerId?.uuid?.let(workManager::cancelWorkById)
         pendingExternalInstall?.let(installerManager::cleanup)
@@ -1264,6 +1331,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         var pmInstallStarted = false
         try {
             activeInstallType = installType
+            deferInstallProgressToasts = when (installType) {
+                InstallType.DEFAULT, InstallType.CUSTOM, InstallType.SAVED -> true
+                else -> false
+            }
             updateInstallingState(true)
             installStatus = InstallCompletionStatus.InProgress
 
@@ -1304,7 +1375,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     awaitingPackageInstall = currentPackageInfo.packageName
                     try {
                         Log.d(TAG, "Starting PackageInstaller session for ${currentPackageInfo.packageName}")
-                        pm.installApp(listOf(outputFile))
+                        val sessionId = pm.installApp(listOf(outputFile))
+                        registerInstallSessionCallback(sessionId)
                         pmInstallStarted = true
                         installStatus = InstallCompletionStatus.InProgress
                         scheduleInstallTimeout(currentPackageInfo.packageName)
@@ -1736,7 +1808,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         val targetPackage = pendingSignatureMismatchPackage ?: return
         signatureMismatchPackage = null
         stopInstallProgressToasts()
-        startUninstallProgressToasts()
+        deferUninstallProgressToasts = true
         startSignatureMismatchUninstallTimeout(targetPackage)
         pm.uninstallPackage(targetPackage)
     }
