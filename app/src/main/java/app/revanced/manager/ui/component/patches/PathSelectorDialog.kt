@@ -7,11 +7,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.Android
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.SdCard
@@ -26,6 +28,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,18 +41,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
 import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.domain.manager.PreferencesManager
+import app.revanced.manager.patcher.split.SplitApkInspector
+import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.ui.component.AppTopBar
+import app.revanced.manager.ui.component.AppIcon
 import app.revanced.manager.ui.component.ConfirmDialog
 import app.revanced.manager.ui.component.FullscreenDialog
 import app.revanced.manager.ui.component.GroupHeader
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
 import app.revanced.manager.util.toast
+import app.revanced.manager.util.APK_FILE_EXTENSIONS
+import app.revanced.manager.util.PM
 import app.revanced.manager.util.saver.PathSaver
 import org.koin.compose.koinInject
 import java.nio.file.Path
@@ -60,6 +68,8 @@ import kotlin.io.path.isReadable
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.name
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,11 +78,14 @@ fun PathSelectorDialog(
     onSelect: (Path?) -> Unit,
     fileFilter: (Path) -> Boolean = { true },
     allowDirectorySelection: Boolean = true,
+    fileTypeLabel: String? = null,
     confirmButtonText: String? = null,
     onConfirm: ((Path) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val prefs = koinInject<PreferencesManager>()
+    val pm = koinInject<PM>()
+    val filesystem = koinInject<Filesystem>()
     val scope = rememberCoroutineScope()
     val availableRoots = remember(roots) {
         roots.filter { runCatching { it.path.isReadable() }.getOrDefault(true) }.ifEmpty { roots }
@@ -238,7 +251,16 @@ fun PathSelectorDialog(
                                 }
                             },
                             onLongClick = { handleFavoritePress(favorite) },
-                            icon = if (isDir) Icons.Outlined.Folder else Icons.AutoMirrored.Outlined.InsertDriveFile,
+                            icon = if (isDir) Icons.Outlined.Folder else fileIconForPath(favorite),
+                            leadingContent = if (isDir) null else {
+                                {
+                                    ApkFileIcon(
+                                        path = favorite,
+                                        pm = pm,
+                                        filesystem = filesystem
+                                    )
+                                }
+                            },
                             name = favorite.name.ifBlank { favorite.absolutePathString() },
                             supportingText = favorite.absolutePathString()
                         )
@@ -289,14 +311,26 @@ fun PathSelectorDialog(
 
                 if (files.isNotEmpty()) {
                     item(key = "files_header") {
-                        GroupHeader(title = stringResource(R.string.path_selector_files))
+                        val header = if (!fileTypeLabel.isNullOrBlank()) {
+                            "${stringResource(R.string.path_selector_files)} ($fileTypeLabel)"
+                        } else {
+                            stringResource(R.string.path_selector_files)
+                        }
+                        GroupHeader(title = header)
                     }
                 }
                 items(files, key = { it.absolutePathString() }) {
                     PathItem(
                         onClick = { onSelect(it) },
                         onLongClick = { handleFavoritePress(it) },
-                        icon = Icons.AutoMirrored.Outlined.InsertDriveFile,
+                        icon = fileIconForPath(it),
+                        leadingContent = {
+                            ApkFileIcon(
+                                path = it,
+                                pm = pm,
+                                filesystem = filesystem
+                            )
+                        },
                         name = it.name
                     )
                 }
@@ -319,11 +353,83 @@ fun PathSelectorDialog(
     }
 }
 
+private fun fileIconForPath(path: Path): ImageVector {
+    val lowerName = path.fileName?.toString()?.lowercase().orEmpty()
+    return if (lowerName.endsWith(".apk")) {
+        Icons.Outlined.Android
+    } else {
+        Icons.AutoMirrored.Outlined.InsertDriveFile
+    }
+}
+
+@Composable
+private fun ApkFileIcon(
+    path: Path,
+    pm: PM,
+    filesystem: Filesystem
+) {
+    val fileName = path.fileName?.toString()?.lowercase().orEmpty()
+    val extension = fileName.substringAfterLast('.', "")
+    if (extension !in APK_FILE_EXTENSIONS) {
+        Icon(Icons.AutoMirrored.Outlined.InsertDriveFile, contentDescription = null)
+        return
+    }
+
+    var iconInfo by remember(path) { mutableStateOf<ApkIconInfo?>(null) }
+    LaunchedEffect(path) {
+        iconInfo?.cleanup?.invoke()
+        iconInfo = loadApkIconInfo(path, pm, filesystem)
+    }
+    DisposableEffect(path) {
+        onDispose {
+            iconInfo?.cleanup?.invoke()
+        }
+    }
+
+    val packageInfo = iconInfo?.packageInfo
+    if (packageInfo != null) {
+        AppIcon(
+            packageInfo = packageInfo,
+            contentDescription = null,
+            modifier = Modifier.size(24.dp)
+        )
+    } else {
+        Icon(Icons.AutoMirrored.Outlined.InsertDriveFile, contentDescription = null)
+    }
+}
+
+private data class ApkIconInfo(
+    val packageInfo: android.content.pm.PackageInfo?,
+    val cleanup: (() -> Unit)?
+)
+
+private suspend fun loadApkIconInfo(
+    path: Path,
+    pm: PM,
+    filesystem: Filesystem
+): ApkIconInfo? = withContext(Dispatchers.IO) {
+    val file = path.toFile()
+    if (!file.exists()) return@withContext null
+    val extension = file.extension.lowercase()
+    val isSplitArchive = extension != "apk" && SplitApkPreparer.isSplitArchive(file)
+    if (extension != "apk" && !isSplitArchive) return@withContext null
+
+    if (isSplitArchive) {
+        val extracted = SplitApkInspector.extractRepresentativeApk(file, filesystem.tempDir)
+            ?: return@withContext null
+        val pkgInfo = pm.getPackageInfo(extracted.file)
+        ApkIconInfo(pkgInfo, extracted.cleanup)
+    } else {
+        ApkIconInfo(pm.getPackageInfo(file), null)
+    }
+}
+
 @Composable
 private fun PathItem(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     icon: ImageVector,
+    leadingContent: (@Composable () -> Unit)? = null,
     name: String,
     enabled: Boolean = true,
     supportingText: String? = null
@@ -342,6 +448,8 @@ private fun PathItem(
         },
         headlineContent = { Text(name) },
         supportingContent = supportingText?.let { { Text(it) } },
-        leadingContent = { Icon(icon, contentDescription = null) }
+        leadingContent = {
+            leadingContent?.invoke() ?: Icon(icon, contentDescription = null)
+        }
     )
 }

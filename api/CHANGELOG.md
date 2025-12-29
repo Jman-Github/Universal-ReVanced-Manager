@@ -29,6 +29,7 @@
 - Patch profiles empty state text now matches the apps tab styling
 - Added a toggle to disable saving patched apps and hide saved‑app delete actions when disabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/91
 - Made the system installer detect failures or interruptions for accurately https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/92
+- With the custom file picker, you can now see APK file's app icons
 
 
 # Bug fixes

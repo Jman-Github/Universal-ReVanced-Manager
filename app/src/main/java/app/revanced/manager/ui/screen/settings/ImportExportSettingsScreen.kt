@@ -252,6 +252,20 @@ fun ImportExportSettingsScreen(
                 )
             }
             activeExportPicker?.let { picker ->
+                val fileFilter = when (picker) {
+                    ExportPicker.Keystore -> ::isKeystoreFile
+                    ExportPicker.PatchBundles,
+                    ExportPicker.PatchProfiles,
+                    ExportPicker.ManagerSettings,
+                    ExportPicker.PatchSelection -> ::isJsonFile
+                }
+                val fileTypeLabel = when (picker) {
+                    ExportPicker.Keystore -> ".keystore"
+                    ExportPicker.PatchBundles,
+                    ExportPicker.PatchProfiles,
+                    ExportPicker.ManagerSettings,
+                    ExportPicker.PatchSelection -> ".json"
+                }
                 PathSelectorDialog(
                     roots = storageRoots,
                     onSelect = { path ->
@@ -263,8 +277,9 @@ fun ImportExportSettingsScreen(
                             return@PathSelectorDialog
                         }
                     },
-                    fileFilter = { false },
+                    fileFilter = fileFilter,
                     allowDirectorySelection = false,
+                    fileTypeLabel = fileTypeLabel,
                     confirmButtonText = stringResource(R.string.save),
                     onConfirm = { directory ->
                         exportFileDialogState = ExportFileDialogState(picker, directory, picker.defaultName)
