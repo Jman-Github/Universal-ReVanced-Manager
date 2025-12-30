@@ -119,14 +119,14 @@
     <string name="auto_updates_dialog_patches">공식 ReVanced 패치</string>
     <string name="auto_updates_dialog_note">이 설정은 나중에 변경할 수 있습니다.</string>
     <string name="background_bundle_update">백그라운드 번들 업데이트</string>
-    <string name="background_bundle_update_description">백그라운드에서 패치 번들 업데이트를 확인합니다</string>
+    <string name="background_bundle_update_description">백그라운드에서 패치 번들 업데이트를 확인할 수 있습니다</string>
     <string name="background_radio_menu_title">백그라운드 업데이트</string>
     <string name="background_bundle_ask_notification">알림을 허용하시겠습니까?</string>
     <string name="background_bundle_ask_notification_description">이 기능을 활성화하면, 패치 번들 업데이트가 있을 경우에 매니저가 사용자에게 알려줄 수 있습니다.</string>
     <string name="never">사용 안 함</string>
-    <string name="minutes_15">15분마다</string>
-    <string name="hourly">매시간마다</string>
-    <string name="daily">날마다</string>
+    <string name="minutes_15">15 분 마다</string>
+    <string name="hourly">시간마다</string>
+    <string name="daily">매일</string>
     <string name="general">일반</string>
     <string name="general_description">테마 및 동적 색상를 설정할 수 있습니다</string>
     <string name="updates">업데이트</string>
@@ -258,8 +258,8 @@
     <string name="bundle_type_remote">수동 설치됨</string>
     <string name="bundle_type_local">기기</string>
     <string name="bundle_type_preinstalled">미리 설치됨</string>
-    <string name="bundle_created_at">%1$s에 생성됨</string>
-    <string name="bundle_updated_at">%1$s에 업데이트됨</string>
+    <string name="bundle_created_at">%1$s 생성됨</string>
+    <string name="bundle_updated_at">%1$s 업데이트됨</string>
     <string name="bundle_changelog">변경 사항</string>
     <string name="bundle_view_changelog">최신 변경 사항을 확인할 수 있습니다</string>
     <string name="bundle_changelog_error">변경 사항을 로드할 수 없습니다: %s</string>
@@ -426,11 +426,15 @@
     <string name="process_runtime_memory_limit_description">패처 프로세스가 사용할 수 있는 최대 메모리 용량을 지정할 수 있습니다 (메가바이트)</string>
     <string name="process_runtime_memory_limit_description_detailed">패처 프로세스에서 사용할 수 있는 최대 메모리 용량을 지정할 수 있습니다 (메가바이트). 
 이 기기에 권장된 메모리 용량: %1$d MB.</string>
+    <string name="process_runtime_memory_aggressive">공격적인 패처 메모리 제한</string>
+    <string name="process_runtime_memory_aggressive_description">실험적인 패처에 대하여 이 기기에서 허용하는 최대 메모리 제한을 사용합니다</string>
     <string name="reset_to_recommended">권장값으로 초기화</string>
     <string name="patcher_auto_collapse_steps">완료된 패처 단계 자동 접기</string>
     <string name="patcher_auto_collapse_steps_description">모든 단계가 완료된 후에 각 패처 진행 위젯을 자동으로 접습니다</string>
     <string name="patcher_auto_expand_steps">실행 중인 패처 단계 자동 펼치기</string>
     <string name="patcher_auto_expand_steps_description">패처 진행 위젯이 실행되기 시작하면 자동으로 펼칩니다</string>
+    <string name="patcher_saved_apps_title">나중에 사용할 패치된 앱 저장</string>
+    <string name="patcher_saved_apps_description">이 기능을 활성화하면, 매니저가 패치된 앱 항목과 APK를 저장하여 앱 탭에 유지되고 나중에 다시 설치할 수 있습니다. 이 기능을 비활성화하면 저장을 건너뛰어지고 삭제 옵션을 숨겨집니다</string>
     <string name="patch_bundle_rename">패치 번들 이름 변경</string>
     <string name="patch_profile_view_options">옵션 보기</string>
     <string name="patch_profile_patch_options_title">%1$s 옵션</string>
@@ -822,7 +826,7 @@
     <string name="patcher_mount_in_progress_title">마운트가 진행중 입니다</string>
     <string name="patcher_mount_in_progress">마운트가 진행중 입니다. 잠시만 기다리세요</string>
     <string name="execute_patches">패치를 실행하는 중</string>
-    <string name="executing_patch">%s 을 실행하는 중</string>
+    <string name="executing_patch">%s 를 실행하는 중</string>
     <string name="failed_to_execute_patch">%s 을 실행할 수 없습니다</string>
     <string name="save_patched_app_dialog_title">패처를 종료하시겠습니까?</string>
     <string name="save_patched_app_dialog_message">패처를 종료하려고 합니다. 패치된 앱은 나중에 사용할 수 있도록 저장하지 않으면 손실됩니다.</string>
@@ -895,7 +899,7 @@
     <string name="battery_optimization_notification">Universal ReVanced Manager가 백그라운드에서 정상적으로 작동하려면 배터리 최적화를 비활성화해야 합니다. 배터리 최적화를 비활성화하려면 여기를 탭하세요.</string>
     <string name="battery_optimization_dialog_description">백그라운드 번들 업데이트 알림을 안정적으로 받으려면 URV 매니저의 배터리 최적화를 비활성화하세요.</string>
     <string name="battery_optimization_dialog_title">배터리 최적화</string>
-    <string name="battery_optimization_banner_title">배터리 최적화 배너</string>
+    <string name="battery_optimization_banner_title">배터리 최적화 배너 표시</string>
     <string name="battery_optimization_banner_description">대시보드에 배터리 최적화 경고 배너를 표시합니다.</string>
     <string name="battery_optimization_banner_disable_title">배터리 최적화 경고를 숨기시겠습니까?</string>
     <string name="battery_optimization_banner_disable_description">이 경고를 비활성화하면 백그라운드 제한 사항을 알아차리기 어려울 수 있습니다. 위험을 이해한 경우에만 숨기세요.</string>
