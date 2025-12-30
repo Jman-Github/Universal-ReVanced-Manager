@@ -124,9 +124,9 @@
     <string name="background_bundle_ask_notification">알림을 허용하시겠습니까?</string>
     <string name="background_bundle_ask_notification_description">이 기능을 활성화하면, 패치 번들 업데이트가 있을 경우에 매니저가 사용자에게 알려줄 수 있습니다.</string>
     <string name="never">사용 안 함</string>
-    <string name="minutes_15">15 분 마다</string>
-    <string name="hourly">시간마다</string>
-    <string name="daily">매일</string>
+    <string name="minutes_15">15분마다</string>
+    <string name="hourly">매시간마다</string>
+    <string name="daily">날마다</string>
     <string name="general">일반</string>
     <string name="general_description">테마 및 동적 색상를 설정할 수 있습니다</string>
     <string name="updates">업데이트</string>
