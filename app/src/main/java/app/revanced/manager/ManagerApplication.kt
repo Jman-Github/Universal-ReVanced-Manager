@@ -13,6 +13,7 @@ import app.revanced.manager.domain.repository.DownloaderPluginRepository
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.domain.worker.WorkerRepository
 import app.revanced.manager.network.service.HttpService
+import app.revanced.manager.util.AppForeground
 import app.revanced.manager.util.tag
 import app.revanced.manager.util.PatchListCatalog
 import app.revanced.manager.util.applyAppLanguage
@@ -58,7 +59,8 @@ class ManagerApplication : Application() {
                 workerModule,
                 viewModelModule,
                 databaseModule,
-                rootModule
+                rootModule,
+                ackpineModule
             )
         }
 
@@ -120,8 +122,12 @@ class ManagerApplication : Application() {
             }
 
             override fun onActivityStarted(activity: Activity) {}
-            override fun onActivityResumed(activity: Activity) {}
-            override fun onActivityPaused(activity: Activity) {}
+            override fun onActivityResumed(activity: Activity) {
+                AppForeground.onResumed()
+            }
+            override fun onActivityPaused(activity: Activity) {
+                AppForeground.onPaused()
+            }
             override fun onActivityStopped(activity: Activity) {}
             override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
             override fun onActivityDestroyed(activity: Activity) {}

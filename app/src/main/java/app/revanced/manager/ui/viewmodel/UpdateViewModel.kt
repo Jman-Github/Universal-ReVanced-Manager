@@ -6,7 +6,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.pm.PackageInstaller
+import android.net.Uri
 import androidx.annotation.StringRes
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -24,7 +24,6 @@ import app.revanced.manager.network.dto.ReVancedAsset
 import app.revanced.manager.network.service.HttpService
 import app.revanced.manager.domain.installer.InstallerManager
 import app.revanced.manager.domain.installer.ShizukuInstaller
-import app.revanced.manager.service.InstallService
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.util.PM
 import app.revanced.manager.util.toast
@@ -39,6 +38,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
+import org.koin.core.component.get
+import ru.solrudev.ackpine.installer.InstallFailure
+import ru.solrudev.ackpine.installer.PackageInstaller
+import ru.solrudev.ackpine.installer.createSession
+import ru.solrudev.ackpine.session.Session
+import ru.solrudev.ackpine.session.await
+import ru.solrudev.ackpine.session.parameters.Confirmation
 
 class UpdateViewModel(
     private val downloadOnScreenEntry: Boolean
@@ -52,17 +58,11 @@ class UpdateViewModel(
     private val fs: Filesystem by inject()
     private val prefs: PreferencesManager by inject()
     private val installerManager: InstallerManager by inject()
+    private val ackpineInstaller: PackageInstaller = get()
 
     private var pendingExternalInstall: InstallerManager.InstallPlan.External? = null
     private var externalInstallTimeoutJob: Job? = null
     private var currentDownloadVersion: String? = null
-    private var installSessionId: Int? = null
-    private var installSessionCallback: PackageInstaller.SessionCallback? = null
-    private var deferInstallState = false
-    private var expectedInternalPackage: String? = null
-    private var expectedInternalVersionCode: Long? = null
-    private var internalInstallMonitorJob: Job? = null
-    private var internalInstallStartTimeMs: Long? = null
 
     var downloadedSize by mutableLongStateOf(0L)
         private set
@@ -88,7 +88,6 @@ class UpdateViewModel(
     private val location = fs.tempDir.resolve("updater.apk")
     private val job = viewModelScope.launch {
         uiSafe(app, R.string.download_manager_failed, "Failed to download Universal ReVanced Manager") {
-            reconcilePendingInternalUpdate()
             releaseInfo = reVancedAPI.getAppUpdate() ?: throw Exception("No update available")
 
             if (downloadOnScreenEntry) {
@@ -160,18 +159,12 @@ class UpdateViewModel(
     }
 
     fun installUpdate() = viewModelScope.launch {
-        if (state == State.INSTALLING || deferInstallState) return@launch
+        if (state == State.INSTALLING) return@launch
         pendingExternalInstall?.let(installerManager::cleanup)
         pendingExternalInstall = null
         externalInstallTimeoutJob?.cancel()
         externalInstallTimeoutJob = null
         installError = ""
-        clearInstallSessionCallback()
-        deferInstallState = false
-        expectedInternalPackage = null
-        expectedInternalVersionCode = null
-        internalInstallStartTimeMs = null
-        stopInternalInstallMonitor()
         prefs.pendingManagerUpdateVersionCode.update(-1)
 
         val plan = installerManager.resolvePlan(
@@ -187,14 +180,29 @@ class UpdateViewModel(
                     state = State.CAN_INSTALL
                     return@launch
                 }
-                expectedInternalPackage = app.packageName
-                expectedInternalVersionCode = pm.getPackageInfo(location)?.let(pm::getVersionCode)
-                internalInstallStartTimeMs = System.currentTimeMillis()
-                deferInstallState = true
-                val sessionId = pm.installApp(listOf(location))
-                registerInstallSessionCallback(sessionId)
-                startInternalInstallMonitor()
-                expectedInternalVersionCode?.let { prefs.pendingManagerUpdateVersionCode.update(it.toInt()) }
+                state = State.INSTALLING
+                val result = withContext(Dispatchers.IO) {
+                    ackpineInstaller.createSession(Uri.fromFile(location)) {
+                        confirmation = Confirmation.IMMEDIATE
+                    }.await()
+                }
+                when (result) {
+                    is Session.State.Failed<InstallFailure> -> when (val failure = result.failure) {
+                        is InstallFailure.Aborted -> state = State.CAN_INSTALL
+                        else -> {
+                            val msg = failure.message.orEmpty()
+                            app.toast(app.getString(R.string.install_app_fail, msg))
+                            installError = msg
+                            state = State.FAILED
+                        }
+                    }
+
+                    Session.State.Succeeded -> {
+                        installError = ""
+                        state = State.SUCCESS
+                        app.toast(app.getString(R.string.update_completed))
+                    }
+                }
             }
 
             is InstallerManager.InstallPlan.Mount -> {
@@ -275,263 +283,45 @@ class UpdateViewModel(
         state = State.SUCCESS
     }
 
-    private fun handleInternalInstallSuccess(packageName: String) {
-        if (expectedInternalPackage != packageName) return
-        if (state == State.SUCCESS) return
-        expectedInternalPackage = null
-        expectedInternalVersionCode = null
-        internalInstallStartTimeMs = null
-        stopInternalInstallMonitor()
-        installError = ""
-        app.toast(app.getString(R.string.update_completed))
-        state = State.SUCCESS
-        deferInstallState = false
-        clearInstallSessionCallback()
-        viewModelScope.launch {
-            prefs.pendingManagerUpdateVersionCode.update(-1)
-        }
-    }
-
-    private val installBroadcastReceiver = object : BroadcastReceiver() {
+    private val externalInstallReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            when (intent?.action) {
-                Intent.ACTION_PACKAGE_ADDED,
-                Intent.ACTION_PACKAGE_REPLACED -> {
-                    val pkg = intent.data?.schemeSpecificPart ?: return
-                    if (pendingExternalInstall != null) {
-                        handleExternalInstallSuccess(pkg)
-                    } else {
-                        handleInternalInstallSuccess(pkg)
-                    }
-                }
-
-                InstallService.APP_INSTALL_ACTION -> {
-                    val reportedPackage = intent.getStringExtra(InstallService.EXTRA_PACKAGE_NAME)
-                    val expectedPackage = pendingExternalInstall?.expectedPackage ?: expectedInternalPackage
-                    if (reportedPackage != null && expectedPackage != null && reportedPackage != expectedPackage) {
-                        return
-                    }
-                    val pmStatus = intent.getIntExtra(InstallService.EXTRA_INSTALL_STATUS, -999)
-                    val extra =
-                        intent.getStringExtra(InstallService.EXTRA_INSTALL_STATUS_MESSAGE) ?: ""
-
-                    when (pmStatus) {
-                        PackageInstaller.STATUS_PENDING_USER_ACTION -> {
-                            if (deferInstallState) {
-                                enableInstallState()
-                            }
-                        }
-
-                        PackageInstaller.STATUS_SUCCESS -> {
-                            pendingExternalInstall?.let(installerManager::cleanup)
-                            pendingExternalInstall = null
-                            externalInstallTimeoutJob?.cancel()
-                            externalInstallTimeoutJob = null
-                            installError = ""
-                            app.toast(app.getString(R.string.install_app_success))
-                            state = State.SUCCESS
-                            expectedInternalPackage = null
-                            expectedInternalVersionCode = null
-                            internalInstallStartTimeMs = null
-                            stopInternalInstallMonitor()
-                            clearInstallSessionCallback()
-                            deferInstallState = false
-                            viewModelScope.launch {
-                                prefs.pendingManagerUpdateVersionCode.update(-1)
-                            }
-                        }
-                        PackageInstaller.STATUS_FAILURE_ABORTED -> {
-                            pendingExternalInstall?.let(installerManager::cleanup)
-                            pendingExternalInstall = null
-                            externalInstallTimeoutJob?.cancel()
-                            externalInstallTimeoutJob = null
-                            state = State.CAN_INSTALL
-                            expectedInternalPackage = null
-                            expectedInternalVersionCode = null
-                            internalInstallStartTimeMs = null
-                            stopInternalInstallMonitor()
-                            clearInstallSessionCallback()
-                            deferInstallState = false
-                            viewModelScope.launch {
-                                prefs.pendingManagerUpdateVersionCode.update(-1)
-                            }
-                        }
-                        else -> {
-                            val hint = installerManager.formatFailureHint(pmStatus, extra)
-                            val message = app.getString(
-                                R.string.install_app_fail,
-                                hint ?: extra.ifBlank { pmStatus.toString() }
-                            )
-                            pendingExternalInstall?.let(installerManager::cleanup)
-                            pendingExternalInstall = null
-                            externalInstallTimeoutJob?.cancel()
-                            externalInstallTimeoutJob = null
-                            app.toast(message)
-                            installError = hint ?: extra
-                            state = State.FAILED
-                            expectedInternalPackage = null
-                            expectedInternalVersionCode = null
-                            internalInstallStartTimeMs = null
-                            stopInternalInstallMonitor()
-                            clearInstallSessionCallback()
-                            deferInstallState = false
-                            viewModelScope.launch {
-                                prefs.pendingManagerUpdateVersionCode.update(-1)
-                            }
-                        }
-                    }
+            val plan = pendingExternalInstall ?: return
+            val pkg = intent?.data?.schemeSpecificPart ?: return
+            if (intent.action == Intent.ACTION_PACKAGE_ADDED || intent.action == Intent.ACTION_PACKAGE_REPLACED) {
+                if (pkg == plan.expectedPackage) {
+                    handleExternalInstallSuccess(pkg)
                 }
             }
         }
     }
 
     init {
-        ContextCompat.registerReceiver(app, installBroadcastReceiver, IntentFilter().apply {
-            addAction(InstallService.APP_INSTALL_ACTION)
-            addAction(Intent.ACTION_PACKAGE_ADDED)
-            addAction(Intent.ACTION_PACKAGE_REPLACED)
-            addDataScheme("package")
-        }, ContextCompat.RECEIVER_NOT_EXPORTED)
+        ContextCompat.registerReceiver(
+            app,
+            externalInstallReceiver,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_PACKAGE_ADDED)
+                addAction(Intent.ACTION_PACKAGE_REPLACED)
+                addDataScheme("package")
+            },
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
     }
 
     override fun onCleared() {
         super.onCleared()
-        app.unregisterReceiver(installBroadcastReceiver)
-        clearInstallSessionCallback()
-
+        app.unregisterReceiver(externalInstallReceiver)
         pendingExternalInstall?.let(installerManager::cleanup)
         pendingExternalInstall = null
         externalInstallTimeoutJob?.cancel()
         externalInstallTimeoutJob = null
-        expectedInternalPackage = null
-        expectedInternalVersionCode = null
-        internalInstallStartTimeMs = null
-        stopInternalInstallMonitor()
 
         job.cancel()
         location.delete()
     }
 
-    private fun enableInstallState() {
-        if (!deferInstallState) return
-        deferInstallState = false
-        state = State.INSTALLING
-    }
-
-    private suspend fun reconcilePendingInternalUpdate() {
-        val pendingVersion = prefs.pendingManagerUpdateVersionCode.get()
-        if (pendingVersion <= 0) return
-        val currentVersion = pm.getPackageInfo(app.packageName)?.let(pm::getVersionCode) ?: 0L
-        if (currentVersion >= pendingVersion) {
-            installError = ""
-            state = State.SUCCESS
-            app.toast(app.getString(R.string.update_completed))
-        } else {
-            val message = app.getString(R.string.install_timeout_message)
-            installError = message
-            state = State.FAILED
-        }
-        prefs.pendingManagerUpdateVersionCode.update(-1)
-    }
-
-    private fun startInternalInstallMonitor() {
-        if (internalInstallMonitorJob?.isActive == true) return
-        val expectedPackage = expectedInternalPackage ?: return
-        val expectedVersionCode = expectedInternalVersionCode
-        val startTime = internalInstallStartTimeMs ?: System.currentTimeMillis()
-        internalInstallMonitorJob = viewModelScope.launch {
-            val deadline = System.currentTimeMillis() + INTERNAL_INSTALL_TIMEOUT_MS
-            while (System.currentTimeMillis() < deadline) {
-                val info = pm.getPackageInfo(expectedPackage)
-                if (info != null) {
-                    val updatedSinceStart = info.lastUpdateTime >= startTime && startTime > 0L
-                    val versionOk = expectedVersionCode?.let { pm.getVersionCode(info) >= it } ?: false
-                    if (versionOk || updatedSinceStart) {
-                        handleInternalInstallSuccess(expectedPackage)
-                        return@launch
-                    }
-                }
-                delay(INTERNAL_INSTALL_POLL_MS)
-            }
-            if (state == State.INSTALLING || deferInstallState) {
-                val message = app.getString(R.string.install_timeout_message)
-                app.toast(app.getString(R.string.install_app_fail, message))
-                installError = message
-                state = State.FAILED
-                expectedInternalPackage = null
-                expectedInternalVersionCode = null
-                internalInstallStartTimeMs = null
-                deferInstallState = false
-                clearInstallSessionCallback()
-                prefs.pendingManagerUpdateVersionCode.update(-1)
-            }
-        }
-    }
-
-    private fun stopInternalInstallMonitor() {
-        internalInstallMonitorJob?.cancel()
-        internalInstallMonitorJob = null
-    }
-
-    private fun registerInstallSessionCallback(sessionId: Int) {
-        clearInstallSessionCallback()
-        installSessionId = sessionId
-        val installer = app.packageManager.packageInstaller
-        val callback = object : PackageInstaller.SessionCallback() {
-            override fun onActiveChanged(id: Int, active: Boolean) {
-                if (id != sessionId || !active) return
-                viewModelScope.launch { enableInstallState() }
-            }
-
-            override fun onFinished(id: Int, success: Boolean) {
-                if (id != sessionId) return
-                if (success) {
-                    expectedInternalPackage?.let(::handleInternalInstallSuccess)
-                } else if (state != State.SUCCESS) {
-                    val message = app.getString(
-                        R.string.install_app_fail,
-                        app.getString(R.string.installer_hint_generic)
-                    )
-                    app.toast(message)
-                    installError = app.getString(R.string.installer_hint_generic)
-                    state = State.FAILED
-                    expectedInternalPackage = null
-                    expectedInternalVersionCode = null
-                    internalInstallStartTimeMs = null
-                    stopInternalInstallMonitor()
-                    deferInstallState = false
-                    viewModelScope.launch {
-                        prefs.pendingManagerUpdateVersionCode.update(-1)
-                    }
-                }
-                clearInstallSessionCallback()
-            }
-
-            override fun onCreated(id: Int) {}
-            override fun onBadgingChanged(id: Int) {}
-            override fun onProgressChanged(id: Int, progress: Float) {}
-        }
-        installSessionCallback = callback
-        installer.registerSessionCallback(callback)
-        installer.getSessionInfo(sessionId)?.let { info ->
-            if (info.isActive) {
-                enableInstallState()
-            }
-        }
-    }
-
-    private fun clearInstallSessionCallback() {
-        val callback = installSessionCallback ?: return
-        val installer = app.packageManager.packageInstaller
-        runCatching { installer.unregisterSessionCallback(callback) }
-        installSessionCallback = null
-        installSessionId = null
-    }
-
     companion object {
         private const val EXTERNAL_INSTALL_TIMEOUT_MS = 60_000L
-        private const val INTERNAL_INSTALL_TIMEOUT_MS = 60_000L
-        private const val INTERNAL_INSTALL_POLL_MS = 1_000L
     }
 
     enum class State(@StringRes val title: Int) {

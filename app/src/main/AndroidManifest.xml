@@ -59,16 +59,6 @@
 
         <activity android:name="app.revanced.manager.plugin.downloader.webview.WebViewActivity" android:exported="false" android:theme="@style/Theme.WebViewActivity" />
 
-        <service android:name="app.revanced.manager.service.InstallService" />
-        <service android:name="app.revanced.manager.service.UninstallService" />
-
-        <receiver
-            android:name="app.revanced.manager.receiver.InstallReceiver"
-            android:exported="false" />
-        <receiver
-            android:name="app.revanced.manager.receiver.UninstallReceiver"
-            android:exported="false" />
-
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="specialUse"
@@ -94,6 +84,9 @@
             <meta-data
                     android:name="androidx.work.WorkManagerInitializer"
                     android:value="androidx.startup"
+                    tools:node="remove" />
+            <meta-data
+                    android:name="ru.solrudev.ackpine.AckpineInitializer"
                     tools:node="remove" />
         </provider>
     </application>
