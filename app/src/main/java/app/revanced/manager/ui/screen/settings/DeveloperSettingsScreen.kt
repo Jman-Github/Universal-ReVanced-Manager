@@ -42,6 +42,7 @@ fun DeveloperSettingsScreen(
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
     val coroutineScope = rememberCoroutineScope()
     val showBatteryOptimizationBanner by vm.prefs.showBatteryOptimizationBanner.getAsState()
+    val allowPatchProfileBundleOverride by vm.prefs.allowPatchProfileBundleOverride.getAsState()
     var showBatteryOptimizationDialog by rememberSaveable { mutableStateOf(false) }
 
     if (showBatteryOptimizationDialog) {
@@ -112,6 +113,22 @@ fun DeveloperSettingsScreen(
                 ExpressiveSettingsItem(
                     headlineContent = stringResource(R.string.patches_reset),
                     modifier = Modifier.clickable(onClick = vm::redownloadBundles)
+                )
+            }
+            GroupHeader(stringResource(R.string.tab_profiles))
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                ExpressiveSettingsDivider()
+                BooleanItem(
+                    value = allowPatchProfileBundleOverride,
+                    onValueChange = { enabled ->
+                        coroutineScope.launch {
+                            vm.prefs.allowPatchProfileBundleOverride.update(enabled)
+                        }
+                    },
+                    headline = R.string.patch_profile_bundle_override_title,
+                    description = R.string.patch_profile_bundle_override_description
                 )
             }
         }

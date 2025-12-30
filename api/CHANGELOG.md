@@ -30,6 +30,7 @@
 - Added a toggle to disable saving patched apps and hide saved‑app delete actions when disabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/91
 - Made the system installer detect failures or interruptions for accurately https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/92
 - With the custom file picker, you can now see APK file's app icons
+- Added the ability to manually select a patch bundle from a dialog for patch profiles using remote patch bundles that are marked as unavailable
 
 
 # Bug fixes

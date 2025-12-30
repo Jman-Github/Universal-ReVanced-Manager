@@ -629,6 +629,28 @@
     <string name="patch_profile_bundle_change_uid_invalid">有効な数値の UID を入力してください。</string>
     <string name="patch_profile_bundle_change_uid_success">バンドル UID を %1$d に更新しました。</string>
     <string name="patch_profile_bundle_change_uid_not_found">UID %1$d のローカルパッチソースが見つかりません。</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote">Select bundle</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_title">Select bundle for %1$s</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_description">Choose a remote patch bundle to replace the unavailable one.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_empty">No available remote bundles found.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_success">Profile updated to use %1$s.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_incompatible_title">Bundle incompatible</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_incompatible_message">%1$s does not contain the required patches. It was not applied. Select a different bundle.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_override">Use anyway</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_error">Failed to update the profile bundle.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_override_title">Allow incompatible bundle override</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_override_description">Show a developer-only override button when a patch profile bundle is incompatible.</string>
     <string name="patcher_process_exit_message">Patcher プロセスはコード %1$d で終了しました。</string>
     <string name="patcher_memory_adjustment_title">Patcher がメモリ不足になりました</string>
     <string name="patcher_memory_adjustment_message_reduced">実験的な Patcher プロセスはメモリ不足のため停止しました。すぐに再試行できるように、メモリ制限を %1$d MB から %2$d MB に下げました。</string>

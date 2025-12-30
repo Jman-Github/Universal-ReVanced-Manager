@@ -640,6 +640,28 @@
     <string name="patch_profile_bundle_change_uid_invalid">请输入有效的数字 UID。</string>
     <string name="patch_profile_bundle_change_uid_success">包 UID 已更新为 %1$d。</string>
     <string name="patch_profile_bundle_change_uid_not_found">未找到 UID 为 %1$d 的本地补丁包。</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote">Select bundle</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_title">Select bundle for %1$s</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_description">Choose a remote patch bundle to replace the unavailable one.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_empty">No available remote bundles found.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_success">Profile updated to use %1$s.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_incompatible_title">Bundle incompatible</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_incompatible_message">%1$s does not contain the required patches. It was not applied. Select a different bundle.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_override">Use anyway</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_error">Failed to update the profile bundle.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_override_title">Allow incompatible bundle override</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_override_description">Show a developer-only override button when a patch profile bundle is incompatible.</string>
     <string name="patcher_process_exit_message">修补程序进程退出，代码为 %1$d。</string>
     <string name="patcher_memory_adjustment_title">修补程序内存不足</string>
     <string name="patcher_memory_adjustment_message_reduced">实验性修补程序进程因内存不足而停止。我们将其内存限制从 %1$d MB 降低到 %2$d MB，以便您可以立即重试。</string>

@@ -624,6 +624,28 @@
     <string name="patch_profile_bundle_change_uid_invalid">유효한 숫자 UID를 입력하세요.</string>
     <string name="patch_profile_bundle_change_uid_success">번들 UID를 %1$d 로 업데이트하였습니다.</string>
     <string name="patch_profile_bundle_change_uid_not_found">UID가 %1$d 인 기기 패치 번들을 찾을 수 없습니다.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote">Select bundle</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_title">Select bundle for %1$s</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_description">Choose a remote patch bundle to replace the unavailable one.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_empty">No available remote bundles found.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_success">Profile updated to use %1$s.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_incompatible_title">Bundle incompatible</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_incompatible_message">%1$s does not contain the required patches. It was not applied. Select a different bundle.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_override">Use anyway</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_error">Failed to update the profile bundle.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_override_title">Allow incompatible bundle override</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_override_description">Show a developer-only override button when a patch profile bundle is incompatible.</string>
     <string name="patcher_process_exit_message">패처 프로세스를 코드 %1$d 로 종료하였습니다.</string>
     <string name="patcher_memory_adjustment_title">패처의 메모리가 부족합니다</string>
     <string name="patcher_memory_adjustment_message_reduced">실험용 패처 프로세스가 메모리 부족으로 중지되었습니다. 즉시 다시 시도할 수 있도록 메모리 제한을 %1$d MB에서 %2$d MB로 줄였습니다.</string>

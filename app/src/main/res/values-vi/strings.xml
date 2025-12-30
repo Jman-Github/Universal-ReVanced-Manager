@@ -617,6 +617,28 @@
     <string name="patch_profile_bundle_change_uid_invalid">Nhập mã định danh hợp lệ.</string>
     <string name="patch_profile_bundle_change_uid_success">Đã cập nhật mã định danh gói đến %1$d.</string>
     <string name="patch_profile_bundle_change_uid_not_found">Không tìm thấy gói vá nào từ bộ nhớ với UID %1$d.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote">Select bundle</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_title">Select bundle for %1$s</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_description">Choose a remote patch bundle to replace the unavailable one.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_empty">No available remote bundles found.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_success">Profile updated to use %1$s.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_incompatible_title">Bundle incompatible</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_incompatible_message">%1$s does not contain the required patches. It was not applied. Select a different bundle.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_override">Use anyway</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_error">Failed to update the profile bundle.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_override_title">Allow incompatible bundle override</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_override_description">Show a developer-only override button when a patch profile bundle is incompatible.</string>
     <string name="patcher_process_exit_message">Tiến trình vá bị thoát với mã %1$d.</string>
     <string name="patcher_memory_adjustment_title">Không đủ RAM cho trình vá.</string>
     <string name="patcher_memory_adjustment_message_reduced">Tiến trình vá thử nghiệm đã dừng vì hết bộ nhớ RAM. Chúng tôi đã giảm giới hạn bộ nhớ của nó từ %1$d MB xuống còn %2$d MB để bạn có thể thử lại ngay.</string>

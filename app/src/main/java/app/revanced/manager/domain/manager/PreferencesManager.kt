@@ -80,6 +80,10 @@ class PreferencesManager(
     val useManagerPrereleases = booleanPreference("manager_prereleases", false)
     val usePatchesPrereleases = booleanPreference("patches_prereleases", false)
     val showBatteryOptimizationBanner = booleanPreference("show_battery_optimization_banner", true)
+    val allowPatchProfileBundleOverride = booleanPreference(
+        "allow_patch_profile_bundle_override",
+        false
+    )
     val searchForUpdatesBackgroundInterval = enumPreference(
         "background_bundle_update_time",
         SearchForUpdatesBackgroundInterval.NEVER
@@ -144,6 +148,7 @@ class PreferencesManager(
         val showManagerUpdateDialogOnLaunch: Boolean? = null,
         val useManagerPrereleases: Boolean? = null,
         val showBatteryOptimizationBanner: Boolean? = null,
+        val allowPatchProfileBundleOverride: Boolean? = null,
         val searchForUpdatesBackgroundInterval: SearchForUpdatesBackgroundInterval? = null,
         val disablePatchVersionCompatCheck: Boolean? = null,
         val disableSelectionWarning: Boolean? = null,
@@ -200,6 +205,7 @@ class PreferencesManager(
         showManagerUpdateDialogOnLaunch = showManagerUpdateDialogOnLaunch.get(),
         useManagerPrereleases = useManagerPrereleases.get(),
         showBatteryOptimizationBanner = showBatteryOptimizationBanner.get(),
+        allowPatchProfileBundleOverride = allowPatchProfileBundleOverride.get(),
         searchForUpdatesBackgroundInterval = searchForUpdatesBackgroundInterval.get(),
         disablePatchVersionCompatCheck = disablePatchVersionCompatCheck.get(),
         disableSelectionWarning = disableSelectionWarning.get(),
@@ -258,6 +264,7 @@ class PreferencesManager(
         }
         snapshot.useManagerPrereleases?.let { useManagerPrereleases.value = it }
         snapshot.showBatteryOptimizationBanner?.let { showBatteryOptimizationBanner.value = it }
+        snapshot.allowPatchProfileBundleOverride?.let { allowPatchProfileBundleOverride.value = it }
         snapshot.searchForUpdatesBackgroundInterval?.let {
             searchForUpdatesBackgroundInterval.value = it
         }
