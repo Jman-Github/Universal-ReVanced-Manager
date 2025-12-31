@@ -539,7 +539,7 @@
     <string name="patches_disable_single_dialog_description">\"%s\"를 비활성화하시겠습니까?</string>
     <string name="patches_enable_single_dialog_description">\"%s\"를 활성화하시겠습니까?</string>
     <string name="refresh">새로고침</string>
-    <string name="continue_anyways">계속</string>
+    <string name="continue_anyways">계속하기</string>
     <string name="download_another_version">다른 버전을 다운로드하는 중</string>
     <string name="download_app">앱을 다운로드하는 중</string>
     <string name="download_apk">APK 파일을 다운로드하는 중</string>
@@ -664,7 +664,7 @@
     <string name="not_installed">설치되지 않음</string>
     <string name="installed">설치됨</string>
     <string name="app_info">앱 정보</string>
-    <string name="uninstall">삭제</string>
+    <string name="uninstall">삭제하기</string>
     <string name="unpatch">패치 해제</string>
     <string name="repatch">다시 패치</string>
     <string name="install_type">설치 유형</string>
@@ -688,7 +688,7 @@
     <string name="mount">마운트</string>
     <string name="unmount">마운트 해제</string>
     <string name="unmount_confirm_description">앱을 마운트 해제하시겠습니까?</string>
-    <string name="saved_install">저장하였습니다</string>
+    <string name="saved_install">저장됨</string>
     <string name="failed_to_mount">마운트를 할 수 없습니다: %s</string>
     <string name="failed_to_unmount">마운트를 해제할 수 없습니다: %s</string>
     <string name="unpatch_app">앱을 패치 해제하시겠습니까?</string>
