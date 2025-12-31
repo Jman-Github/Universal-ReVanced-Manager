@@ -140,7 +140,7 @@
     <!-- Needs translation -->
     <string name="background_bundle_update">Background bundle updates</string>
     <!-- Needs translation -->
-    <string name="background_bundle_update_description">Controls the patcher and bundle update notifications. When enabled, bundle updates download in the background. If notifications are allowed, you will see progress and completion updates.</string>
+    <string name="background_bundle_update_description">Controls the patcher and bundle update notifications. When enabled, bundle updates download in the background. If notifications are allowed, you will see progress and completion updates along with the patching in progress notification.</string>
     <!-- Needs translation -->
     <string name="background_radio_menu_title">Background updates</string>
     <!-- Needs translation -->
@@ -657,6 +657,26 @@
     <string name="patch_profile_bundle_select_remote_override">Use anyway</string>
     <!-- Needs translation -->
     <string name="patch_profile_bundle_select_remote_error">Failed to update the profile bundle.</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_missing_title">Bundle not detected</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_action">Select bundle</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_title">Select bundle for %1$s</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_description">Choose a patch bundle to replace the missing one.</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_empty">No patch bundles available.</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_success">Saved app updated to use %1$s.</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_incompatible_title">Bundle incompatible</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_incompatible_message">%1$s does not contain the required patches. It was not applied. Select a different bundle.</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_override">Use anyway</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_error">Failed to update the saved app bundle.</string>
     <!-- Needs translation -->
     <string name="patch_profile_bundle_override_title">Allow incompatible bundle override</string>
     <!-- Needs translation -->

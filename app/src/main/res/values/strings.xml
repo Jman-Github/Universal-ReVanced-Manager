@@ -140,7 +140,7 @@
     <string name="auto_updates_dialog_patches">Official ReVanced Patches</string>
     <string name="auto_updates_dialog_note">These settings can be changed later.</string>
     <string name="background_bundle_update">Background bundle updates</string>
-    <string name="background_bundle_update_description">Controls the patcher and bundle update notifications. When enabled, bundle updates download in the background. If notifications are allowed, you will see progress and completion updates.</string>
+    <string name="background_bundle_update_description">Controls the patcher and bundle update notifications. When enabled, bundle updates download in the background. If notifications are allowed, you will see progress and completion updates along with the patching in progress notification.</string>
     <string name="background_radio_menu_title">Background updates</string>
     <string name="background_bundle_ask_notification">Allow notifications?</string>
     <string name="background_bundle_ask_notification_description">Enable notifications so the manager can alert you when patch bundle updates are available.</string>
@@ -631,6 +631,16 @@ Recommended for this device: %1$d MB.</string>
     <string name="patch_profile_bundle_select_remote_incompatible_message">%1$s does not contain the required patches. It was not applied. Select a different bundle.</string>
     <string name="patch_profile_bundle_select_remote_override">Use anyway</string>
     <string name="patch_profile_bundle_select_remote_error">Failed to update the profile bundle.</string>
+    <string name="saved_app_bundle_missing_title">Bundle not detected</string>
+    <string name="saved_app_bundle_select_action">Select bundle</string>
+    <string name="saved_app_bundle_select_title">Select bundle for %1$s</string>
+    <string name="saved_app_bundle_select_description">Choose a patch bundle to replace the missing one.</string>
+    <string name="saved_app_bundle_select_empty">No patch bundles available.</string>
+    <string name="saved_app_bundle_select_success">Saved app updated to use %1$s.</string>
+    <string name="saved_app_bundle_select_incompatible_title">Bundle incompatible</string>
+    <string name="saved_app_bundle_select_incompatible_message">%1$s does not contain the required patches. It was not applied. Select a different bundle.</string>
+    <string name="saved_app_bundle_select_override">Use anyway</string>
+    <string name="saved_app_bundle_select_error">Failed to update the saved app bundle.</string>
     <string name="patch_profile_bundle_override_title">Allow incompatible bundle override</string>
     <string name="patch_profile_bundle_override_description">Show a developer-only override button when a patch profile bundle is incompatible.</string>
     <string name="patcher_process_exit_message">Patcher process exited with code %1$d.</string>

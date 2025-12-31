@@ -31,7 +31,10 @@ import app.revanced.manager.domain.installer.ShizukuInstaller
 import app.revanced.manager.domain.repository.InstalledAppRepository
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.domain.repository.remapAndExtractSelection
+import app.revanced.manager.domain.repository.remapLocalBundles
+import app.revanced.manager.domain.repository.toPayload
 import app.revanced.manager.domain.repository.toSignatureMap
+import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.revanced.manager.util.PM
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.asCode
@@ -1076,6 +1079,89 @@ class InstalledAppInfoViewModel(
 
     fun clearInstallResult() {
         installResult = null
+    }
+
+    enum class ReplaceSavedBundleResult {
+        SUCCESS,
+        APP_NOT_FOUND,
+        TARGET_NOT_FOUND,
+        INCOMPATIBLE,
+        FAILED
+    }
+
+    suspend fun replaceSavedBundle(
+        currentUid: Int,
+        targetUid: Int,
+        requiredPatchesLowercase: Set<String>,
+        allowIncompatible: Boolean = false
+    ): ReplaceSavedBundleResult = withContext(Dispatchers.Default) {
+        val app = installedApp ?: return@withContext ReplaceSavedBundleResult.APP_NOT_FOUND
+        if (app.installType != InstallType.SAVED) {
+            return@withContext ReplaceSavedBundleResult.APP_NOT_FOUND
+        }
+        if (requiredPatchesLowercase.isEmpty() && !allowIncompatible) {
+            return@withContext ReplaceSavedBundleResult.INCOMPATIBLE
+        }
+
+        if (!allowIncompatible) {
+            val bundleInfoSnapshot = patchBundleRepository.bundleInfoFlow.first()
+            val targetInfo = bundleInfoSnapshot[targetUid]
+                ?: return@withContext ReplaceSavedBundleResult.INCOMPATIBLE
+            val availablePatches = targetInfo.patches
+                .mapTo(mutableSetOf()) { it.name.trim().lowercase() }
+            if (!requiredPatchesLowercase.all { it in availablePatches }) {
+                return@withContext ReplaceSavedBundleResult.INCOMPATIBLE
+            }
+        }
+
+        val sourcesList = patchBundleRepository.sources.first()
+        val targetSource = sourcesList.firstOrNull { it.uid == targetUid }
+            ?: return@withContext ReplaceSavedBundleResult.TARGET_NOT_FOUND
+
+        val selection = appliedPatches ?: resolveAppliedSelection(app)
+        val updatedSelection = selection.toMutableMap()
+        val removedPatches = updatedSelection.remove(currentUid).orEmpty()
+        if (removedPatches.isEmpty()) {
+            return@withContext ReplaceSavedBundleResult.APP_NOT_FOUND
+        }
+        val merged = updatedSelection[targetUid]?.toMutableSet() ?: mutableSetOf()
+        merged.addAll(removedPatches)
+        if (merged.isNotEmpty()) {
+            updatedSelection[targetUid] = merged
+        } else {
+            updatedSelection.remove(targetUid)
+        }
+
+        val bundleInfoSnapshot = patchBundleRepository.allBundlesInfoFlow.first()
+        val updatedPayload = app.selectionPayload?.let { payload ->
+            val remapped = payload.remapLocalBundles(sourcesList)
+            val bundles = remapped.bundles.toMutableList()
+            val bundleIndex = bundles.indexOfFirst { it.bundleUid == currentUid }
+            if (bundleIndex == -1) return@let remapped
+
+            val updatedBundle = bundles[bundleIndex].copy(
+                bundleUid = targetSource.uid,
+                displayName = targetSource.displayTitle,
+                sourceName = targetSource.patchBundle?.manifestAttributes?.name ?: targetSource.name,
+                sourceEndpoint = targetSource.asRemoteOrNull?.endpoint
+            )
+            bundles[bundleIndex] = updatedBundle
+            remapped.copy(bundles = bundles)
+        } ?: updatedSelection.toPayload(sourcesList, bundleInfoSnapshot)
+
+        installedAppRepository.addOrUpdate(
+            currentPackageName = app.currentPackageName,
+            originalPackageName = app.originalPackageName,
+            version = app.version,
+            installType = app.installType,
+            patchSelection = updatedSelection,
+            selectionPayload = updatedPayload
+        )
+
+        installedApp = app.copy(selectionPayload = updatedPayload)
+        appliedPatches = updatedSelection
+
+        ReplaceSavedBundleResult.SUCCESS
     }
 
     fun dismissSignatureMismatchPrompt() {

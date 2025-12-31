@@ -1,6 +1,7 @@
 package app.revanced.manager.ui.screen
 
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult
 import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
@@ -9,9 +10,15 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowRight
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
@@ -25,6 +32,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -39,13 +47,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.revanced.manager.R
@@ -62,6 +71,7 @@ import app.revanced.manager.ui.component.SegmentedButton
 import app.revanced.manager.ui.component.ConfirmDialog
 import app.revanced.manager.ui.component.settings.SettingsListItem
 import app.revanced.manager.ui.viewmodel.InstalledAppInfoViewModel
+import app.revanced.manager.ui.viewmodel.InstalledAppInfoViewModel.ReplaceSavedBundleResult
 import app.revanced.manager.ui.viewmodel.InstallResult
 import app.revanced.manager.ui.viewmodel.MountWarningAction
 import app.revanced.manager.ui.viewmodel.MountWarningReason
@@ -71,7 +81,11 @@ import app.revanced.manager.util.ExportNameFormatter
 import app.revanced.manager.util.PatchedAppExportData
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.tag
+import app.revanced.manager.util.toast
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
+import java.util.Locale
+import androidx.compose.runtime.rememberCoroutineScope
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -81,11 +95,13 @@ fun InstalledAppInfoScreen(
     viewModel: InstalledAppInfoViewModel
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val patchBundleRepository: PatchBundleRepository = koinInject()
     val prefs: PreferencesManager = koinInject()
     val bundleInfo by patchBundleRepository.allBundlesInfoFlow.collectAsStateWithLifecycle(emptyMap())
     val bundleSources by patchBundleRepository.sources.collectAsStateWithLifecycle(emptyList())
     val allowUniversalPatches by prefs.disableUniversalPatchCheck.getAsState()
+    val allowBundleOverride by prefs.allowPatchProfileBundleOverride.getAsState()
     val savedAppsEnabled by prefs.enableSavedApps.getAsState()
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
     var showAppliedPatchesDialog by rememberSaveable { mutableStateOf(false) }
@@ -97,6 +113,28 @@ fun InstalledAppInfoScreen(
     val savedBundleVersions = remember(selectionPayload) {
         selectionPayload?.bundles.orEmpty().associate { it.bundleUid to it.version }
     }
+    data class SavedBundleTarget(
+        val bundleUid: Int,
+        val bundleName: String,
+        val requiredPatchesLowercase: Set<String>
+    )
+    data class SavedBundleOption(
+        val uid: Int,
+        val displayName: String,
+        val version: String?,
+        val patchCount: Int,
+        val patchNamesLowercase: Set<String>
+    )
+    data class SavedBundleOverrideTarget(
+        val bundleUid: Int,
+        val targetUid: Int,
+        val displayName: String,
+        val requiredPatchesLowercase: Set<String>
+    )
+    var missingBundleTarget by remember { mutableStateOf<SavedBundleTarget?>(null) }
+    var missingBundleSelectionUid by rememberSaveable { mutableStateOf<Int?>(null) }
+    var missingBundleSaving by remember { mutableStateOf(false) }
+    var missingBundleIncompatibleTarget by remember { mutableStateOf<SavedBundleOverrideTarget?>(null) }
 
     val appliedBundles = remember(appliedSelection, bundleInfo, bundleSources, context, savedBundleVersions) {
         if (appliedSelection.isNullOrEmpty()) return@remember emptyList<AppliedPatchBundleUi>()
@@ -139,6 +177,21 @@ fun InstalledAppInfoScreen(
             Log.e(tag, "Failed to build applied bundle summary", error)
             emptyList()
         }
+    }
+    val bundleOptions = remember(bundleInfo, bundleSources) {
+        bundleInfo.mapNotNull { (uid, info) ->
+            val source = bundleSources.firstOrNull { it.uid == uid }
+            val displayName = source?.displayTitle ?: info.name
+            val patchNamesLowercase = info.patches
+                .mapTo(mutableSetOf()) { it.name.trim().lowercase(Locale.ROOT) }
+            SavedBundleOption(
+                uid = uid,
+                displayName = displayName,
+                version = info.version,
+                patchCount = info.patches.size,
+                patchNamesLowercase = patchNamesLowercase
+            )
+        }.sortedBy { it.displayName.lowercase(Locale.ROOT) }
     }
 
     val globalUniversalPatchNames = remember(bundleInfo) {
@@ -221,6 +274,228 @@ fun InstalledAppInfoScreen(
                     ),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        )
+    }
+
+    missingBundleTarget?.let { target ->
+        val options = bundleOptions
+        AlertDialog(
+            onDismissRequest = {
+                if (missingBundleSaving) return@AlertDialog
+                missingBundleTarget = null
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val selectedId = missingBundleSelectionUid ?: return@TextButton
+                        val selected = options.firstOrNull { it.uid == selectedId } ?: return@TextButton
+                        if (missingBundleSaving) return@TextButton
+                        val isCompatible = target.requiredPatchesLowercase.all {
+                            it in selected.patchNamesLowercase
+                        }
+                        if (!isCompatible) {
+                            missingBundleIncompatibleTarget = SavedBundleOverrideTarget(
+                                bundleUid = target.bundleUid,
+                                targetUid = selected.uid,
+                                displayName = selected.displayName,
+                                requiredPatchesLowercase = target.requiredPatchesLowercase
+                            )
+                            return@TextButton
+                        }
+                        missingBundleSaving = true
+                        scope.launch {
+                            try {
+                                when (
+                                    viewModel.replaceSavedBundle(
+                                        target.bundleUid,
+                                        selected.uid,
+                                        target.requiredPatchesLowercase,
+                                        false
+                                    )
+                                ) {
+                                    ReplaceSavedBundleResult.SUCCESS -> context.toast(
+                                        context.getString(
+                                            R.string.saved_app_bundle_select_success,
+                                            selected.displayName
+                                        )
+                                    )
+                                    ReplaceSavedBundleResult.INCOMPATIBLE -> {
+                                        missingBundleIncompatibleTarget = SavedBundleOverrideTarget(
+                                            bundleUid = target.bundleUid,
+                                            targetUid = selected.uid,
+                                            displayName = selected.displayName,
+                                            requiredPatchesLowercase = target.requiredPatchesLowercase
+                                        )
+                                    }
+                                    ReplaceSavedBundleResult.APP_NOT_FOUND,
+                                    ReplaceSavedBundleResult.TARGET_NOT_FOUND,
+                                    ReplaceSavedBundleResult.FAILED -> context.toast(
+                                        context.getString(R.string.saved_app_bundle_select_error)
+                                    )
+                                }
+                            } finally {
+                                missingBundleSaving = false
+                                missingBundleTarget = null
+                            }
+                        }
+                    },
+                    enabled = !missingBundleSaving && missingBundleSelectionUid != null && options.isNotEmpty()
+                ) {
+                    Text(stringResource(R.string.confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        if (missingBundleSaving) return@TextButton
+                        missingBundleTarget = null
+                    }
+                ) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+            title = {
+                Text(
+                    stringResource(
+                        R.string.saved_app_bundle_select_title,
+                        target.bundleName
+                    )
+                )
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .heightIn(max = 360.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Text(
+                        text = stringResource(R.string.saved_app_bundle_select_description),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (options.isEmpty()) {
+                        Text(
+                            text = stringResource(R.string.saved_app_bundle_select_empty),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        options.forEach { option ->
+                            val patchCountText = pluralStringResource(
+                                R.plurals.patch_profile_bundle_patch_count,
+                                option.patchCount,
+                                option.patchCount
+                            )
+                            val versionLabel = option.version?.let { version ->
+                                if (version.startsWith("v", ignoreCase = true)) version else "v$version"
+                            }
+                            val subtitle = if (versionLabel != null) {
+                                "$versionLabel - $patchCountText"
+                            } else {
+                                patchCountText
+                            }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { missingBundleSelectionUid = option.uid }
+                                    .padding(vertical = 6.dp)
+                            ) {
+                                RadioButton(
+                                    selected = missingBundleSelectionUid == option.uid,
+                                    onClick = { missingBundleSelectionUid = option.uid }
+                                )
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = option.displayName,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = subtitle,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        )
+    }
+
+    missingBundleIncompatibleTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { missingBundleIncompatibleTarget = null },
+            confirmButton = {
+                if (allowBundleOverride) {
+                    TextButton(
+                        onClick = {
+                            if (missingBundleSaving) return@TextButton
+                            missingBundleSaving = true
+                            scope.launch {
+                                try {
+                                    when (
+                                        viewModel.replaceSavedBundle(
+                                            target.bundleUid,
+                                            target.targetUid,
+                                            target.requiredPatchesLowercase,
+                                            true
+                                        )
+                                    ) {
+                                        ReplaceSavedBundleResult.SUCCESS -> context.toast(
+                                            context.getString(
+                                                R.string.saved_app_bundle_select_success,
+                                                target.displayName
+                                            )
+                                        )
+                                        ReplaceSavedBundleResult.INCOMPATIBLE,
+                                        ReplaceSavedBundleResult.TARGET_NOT_FOUND,
+                                        ReplaceSavedBundleResult.APP_NOT_FOUND,
+                                        ReplaceSavedBundleResult.FAILED -> context.toast(
+                                            context.getString(R.string.saved_app_bundle_select_error)
+                                        )
+                                    }
+                                } finally {
+                                    missingBundleSaving = false
+                                    missingBundleIncompatibleTarget = null
+                                    missingBundleTarget = null
+                                }
+                            }
+                        }
+                    ) {
+                        Text(stringResource(R.string.saved_app_bundle_select_override))
+                    }
+                } else {
+                    TextButton(onClick = { missingBundleIncompatibleTarget = null }) {
+                        Text(stringResource(R.string.ok))
+                    }
+                }
+            },
+            dismissButton = {
+                if (allowBundleOverride) {
+                    TextButton(onClick = { missingBundleIncompatibleTarget = null }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            },
+            title = { Text(stringResource(R.string.saved_app_bundle_select_incompatible_title)) },
+            text = {
+                Text(
+                    text = stringResource(
+                        R.string.saved_app_bundle_select_incompatible_message,
+                        target.displayName
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         )
@@ -733,6 +1008,41 @@ fun InstalledAppInfoScreen(
                     headlineContent = stringResource(R.string.patch_bundles_used),
                     supportingContent = bundleSummaryText
                 )
+
+                val missingBundles = appliedBundles.filterNot { it.bundleAvailable }
+                if (installedApp.installType == InstallType.SAVED && missingBundles.isNotEmpty()) {
+                    missingBundles.forEach { bundle ->
+                        SettingsListItem(
+                            headlineContent = stringResource(R.string.saved_app_bundle_missing_title),
+                            supportingContent = stringResource(
+                                R.string.patch_profile_bundle_unavailable_suffix,
+                                bundle.title
+                            ),
+                            trailingContent = {
+                                TextButton(
+                                    onClick = {
+                                        val requiredPatches = buildSet {
+                                            appliedSelection?.get(bundle.uid).orEmpty().forEach { add(it) }
+                                            bundle.patchInfos.forEach { add(it.name) }
+                                            bundle.fallbackNames.forEach { add(it) }
+                                        }.map { it.trim() }
+                                            .filter { it.isNotBlank() }
+                                            .map { it.lowercase(Locale.ROOT) }
+                                            .toSet()
+                                        missingBundleSelectionUid = null
+                                        missingBundleTarget = SavedBundleTarget(
+                                            bundleUid = bundle.uid,
+                                            bundleName = bundle.title,
+                                            requiredPatchesLowercase = requiredPatches
+                                        )
+                                    }
+                                ) {
+                                    Text(stringResource(R.string.saved_app_bundle_select_action))
+                                }
+                            }
+                        )
+                    }
+                }
             }
         }
     }
