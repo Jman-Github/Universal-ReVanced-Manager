@@ -61,6 +61,7 @@ import app.revanced.manager.ui.theme.Theme
 import app.revanced.manager.ui.viewmodel.MainViewModel
 import app.revanced.manager.ui.viewmodel.SelectedAppInfoViewModel
 import app.revanced.manager.util.EventEffect
+import app.revanced.manager.util.AppForeground
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.androidx.compose.navigation.koinNavViewModel
@@ -106,6 +107,11 @@ class MainActivity : AppCompatActivity() {
                 ReVancedManager(vm)
             }
         }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        AppForeground.onWindowFocusChanged(hasFocus)
     }
 }
 

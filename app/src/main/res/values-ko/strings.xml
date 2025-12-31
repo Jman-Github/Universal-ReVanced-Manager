@@ -14,6 +14,10 @@
     <string name="copy_to_clipboard">클립보드에 복사하였습니다</string>
     <string name="dashboard">대시보드</string>
     <string name="settings">설정</string>
+    <!-- Needs translation -->
+    <string name="settings_search_hint">Search settings</string>
+    <!-- Needs translation -->
+    <string name="settings_search_no_results">No settings found.</string>
     <string name="select_app">앱 선택하기</string>
     <string name="app_filter_title">앱 필터</string>
     <string name="app_filter_installed_only">설치된 앱만</string>
@@ -65,6 +69,24 @@
     <string name="bundle_update_manual_available_with_version">업데이트 사용 가능: %1$s</string>
     <string name="bundle_update_progress">%1$d/%2$d 개의 번들이 처리됨</string>
     <string name="bundle_update_banner_title">패치 번들 업데이트하는 중</string>
+    <!-- Needs translation -->
+    <string name="bundle_update_available">Patch bundle update available</string>
+    <!-- Needs translation -->
+    <string name="bundle_update_description_available">New version for %1$s: %2$s</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_notification_progress">Updating %1$d of %2$d: %3$s</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_notification_completed">Update completed</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_notification_completed_with_available">Update completed. %1$d updates available.</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_notification_available">%1$d updates available.</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_notification_failed">Update failed</string>
+    <!-- Needs translation -->
+    <string name="bundle_search_update">Search for updates</string>
+    <!-- Needs translation -->
+    <string name="bundle_search_update_description">Check this bundle for updates in the background</string>
     <string name="bundle_reorder">번들 정리</string>
     <string name="bundle_reorder_title">패치 번들 정리</string>
     <string name="bundle_reorder_description">핸들을 드래그하여 목록과 패치 선택목록 메뉴에 나타나는 번들 순서를 정렬하세요.</string>
@@ -114,6 +136,32 @@
     <string name="auto_updates_dialog_manager">Universal ReVanced Manager</string>
     <string name="auto_updates_dialog_patches">공식 ReVanced 패치</string>
     <string name="auto_updates_dialog_note">이 설정은 나중에 변경할 수 있습니다.</string>
+    <!-- Needs translation -->
+    <string name="background_bundle_update">Background bundle updates</string>
+    <!-- Needs translation -->
+    <string name="background_bundle_update_description">Controls the patcher and bundle update notifications. When enabled, bundle updates download in the background. If notifications are allowed, you will see progress and completion updates along with the patching in progress notification.</string>
+    <!-- Needs translation -->
+    <string name="background_radio_menu_title">Background updates</string>
+    <!-- Needs translation -->
+    <string name="background_bundle_ask_notification">Allow notifications?</string>
+    <!-- Needs translation -->
+    <string name="background_bundle_ask_notification_description">Enable notifications so the manager can alert you when patch bundle updates are available.</string>
+    <!-- Needs translation -->
+    <string name="notification_channel_bundle_updates_name">Background bundle updates</string>
+    <!-- Needs translation -->
+    <string name="notification_channel_bundle_updates_description">Shows progress for background patch bundle updates.</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_summary_title">Patch bundle updates available</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_summary_description">Tap to view the manager and review bundle updates.</string>
+    <!-- Needs translation -->
+    <string name="never">Never</string>
+    <!-- Needs translation -->
+    <string name="minutes_15">Every 15 minutes</string>
+    <!-- Needs translation -->
+    <string name="hourly">Hourly</string>
+    <!-- Needs translation -->
+    <string name="daily">Daily</string>
     <string name="general">일반</string>
     <string name="general_description">테마 및 동적 색상를 설정할 수 있습니다</string>
     <string name="updates">업데이트</string>
@@ -366,13 +414,14 @@
     <string name="downloader_plugin_state_failed">로드할 수 없습니다. 자세한 내용을 보려면 여기를 탭하세요</string>
     <string name="downloader_plugin_state_untrusted">신뢰하지 않음</string>
     <string name="downloader_plugin_trust_dialog_title">플러그인을 신뢰하시겠습니까?</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_trust_dialog_body">Continuing will allow this plugin to run on your system.\n\nOnly enable this plugin if you trust it. Plugins can execute arbitrary code and may compromise your device.</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_trust_dialog_signature">Signature:\n\n%s</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_trust_dialog_plugin">Plugin:\n%s</string>
     <string name="downloader_plugin_revoke_trust_dialog_title">신뢰하지 않으시겠습니까?</string>
-    <string name="downloader_plugin_trust_dialog_body">패키지 이름: %1$s\n서명 (SHA-256): %2$s</string>
-    <!-- Needs translation -->
-    <string name="downloader_plugin_trust_dialog_plugin">"Plugin:\n%s"</string>
-    <!-- Needs translation -->
-    <string name="downloader_plugin_trust_dialog_signature">"Signature:\n\n%s"</string>
-    <string name="downloader_plugin_view_error">오류 세부 정보 보기</string>
+<string name="downloader_plugin_view_error">오류 세부 정보 보기</string>
     <string name="downloader_plugin_failed_dialog_body">\"%1$s\"를 로드할 수 없습니다. 오류 세부 정보를 보거나 플러그인을 삭제할 수 있습니다.</string>
     <string name="downloader_plugin_uninstall_title">플러그인을 삭제하시겠습니까?</string>
     <string name="downloader_plugin_uninstall_description">\"%1$s\"를 삭제하시겠습니까?</string>
@@ -421,10 +470,22 @@
     <string name="process_runtime_memory_limit">패처 프로세스 메모리 제한</string>
     <string name="process_runtime_memory_limit_description">패처 프로세스가 사용할 수 있는 최대 메모리 용량을 지정할 수 있습니다 (메가바이트)</string>
     <string name="process_runtime_memory_limit_description_detailed">패처 프로세스에서 사용할 수 있는 최대 메모리 용량을 지정할 수 있습니다 (메가바이트). 
+    <!-- Needs translation -->
+    <string name="process_runtime_memory_aggressive">Aggressive patcher memory limit</string>
+    <!-- Needs translation -->
+    <string name="process_runtime_memory_aggressive_description">Use the highest memory limit allowed by your device for the experimental patcher</string>
 이 기기에 권장된 메모리 용량: %1$d MB.</string>
     <string name="reset_to_recommended">권장값으로 초기화</string>
     <string name="patcher_auto_collapse_steps">완료된 패처 단계 자동 접기</string>
     <string name="patcher_auto_collapse_steps_description">모든 단계가 완료된 후에 각 패처 진행 위젯을 자동으로 접습니다</string>
+    <!-- Needs translation -->
+    <string name="patcher_auto_expand_steps">Auto-expand running steps</string>
+    <!-- Needs translation -->
+    <string name="patcher_auto_expand_steps_description">Automatically expand a patcher progress widget when it starts running</string>
+    <!-- Needs translation -->
+    <string name="patcher_saved_apps_title">Save patched apps for later</string>
+    <!-- Needs translation -->
+    <string name="patcher_saved_apps_description">When enabled, the manager saves a patched app entry and APK so it stays in the Apps tab and can be reinstalled later. Turning this off skips saving and hides the delete option</string>
     <string name="patch_bundle_rename">패치 번들 이름 변경</string>
     <string name="patch_profile_view_options">옵션 보기</string>
     <string name="patch_profile_patch_options_title">%1$s 옵션</string>
@@ -585,6 +646,48 @@
     <string name="patch_profile_bundle_change_uid_invalid">유효한 숫자 UID를 입력하세요.</string>
     <string name="patch_profile_bundle_change_uid_success">번들 UID를 %1$d 로 업데이트하였습니다.</string>
     <string name="patch_profile_bundle_change_uid_not_found">UID가 %1$d 인 기기 패치 번들을 찾을 수 없습니다.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote">Select bundle</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_title">Select bundle for %1$s</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_description">Choose a remote patch bundle to replace the unavailable one.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_empty">No available remote bundles found.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_success">Profile updated to use %1$s.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_incompatible_title">Bundle incompatible</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_incompatible_message">%1$s does not contain the required patches. It was not applied. Select a different bundle.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_override">Use anyway</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_error">Failed to update the profile bundle.</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_missing_title">Bundle not detected</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_action">Select bundle</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_title">Select bundle for %1$s</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_description">Choose a patch bundle to replace the missing one.</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_empty">No patch bundles available.</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_success">Saved app updated to use %1$s.</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_incompatible_title">Bundle incompatible</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_incompatible_message">%1$s does not contain the required patches. It was not applied. Select a different bundle.</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_override">Use anyway</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_error">Failed to update the saved app bundle.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_override_title">Allow incompatible bundle override</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_override_description">Show a developer-only override button when a patch profile bundle is incompatible.</string>
     <string name="patcher_process_exit_message">패처 프로세스를 코드 %1$d 로 종료하였습니다.</string>
     <string name="patcher_memory_adjustment_title">패처의 메모리가 부족합니다</string>
     <string name="patcher_memory_adjustment_message_reduced">실험용 패처 프로세스가 메모리 부족으로 중지되었습니다. 즉시 다시 시도할 수 있도록 메모리 제한을 %1$d MB에서 %2$d MB로 줄였습니다.</string>
@@ -814,6 +917,10 @@
     <string name="patcher_step_sign_apk">패치된 APK 파일에 서명하는 중</string>
     <string name="patcher_notification_title">패치 진행하는 중 …</string>
     <string name="patcher_notification_text">탭하여 패처로 돌아가기</string>
+    <!-- Needs translation -->
+    <string name="notification_channel_patching_name">Patching</string>
+    <!-- Needs translation -->
+    <string name="notification_channel_patching_description">Shows progress while patching an app.</string>
     <string name="patcher_stop_confirm_title">패처 중지</string>
     <string name="patcher_stop_confirm_description">패치 프로세스를 중지하시겠습니까?</string>
     <string name="patcher_install_in_progress_title">설치가 진행 중입니다</string>
@@ -899,6 +1006,20 @@
     <string name="manager_prereleases_description">Universal ReVanced Manager의 Pre-release 버전을 사용합니다</string>
     <string name="update_published">%s 을 게시하였습니다</string>
     <string name="battery_optimization_notification">Universal ReVanced Manager가 백그라운드에서 정상적으로 작동하려면 배터리 최적화를 비활성화해야 합니다. 배터리 최적화를 비활성화하려면 여기를 탭하세요.</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_dialog_description">To receive background bundle update notifications reliably, disable battery optimization for URV Manager.</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_dialog_title">Battery optimization</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_title">Battery optimization banner</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_description">Show the battery optimization warning banner on the dashboard.</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_disable_title">Hide battery optimization warning?</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_disable_description">Disabling this warning can make it harder to notice background restrictions. Only hide it if you understand the risk.</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_disable_confirm">Hide banner</string>
     <string name="installing_manager_update">업데이트를 설치하는 중 …</string>
     <string name="downloading_manager_update">업데이트를 다운로드하는 중 …</string>
     <string name="manager_update_banner_title">매니저 업데이트를 다운로드하는 중</string>
@@ -987,8 +1108,6 @@
     <string name="patch_bundle_discovery_description">Browse external patch bundles and add them to the URV Manager.</string>
     <!-- Needs translation -->
     <string name="patch_bundle_discovery_search_label">Search bundles</string>
-    <!-- Needs translation -->
-    <string name="patch_bundle_discovery_all">All</string>
     <!-- Needs translation -->
     <string name="patch_bundle_discovery_empty">No patch bundles found.</string>
     <!-- Needs translation -->

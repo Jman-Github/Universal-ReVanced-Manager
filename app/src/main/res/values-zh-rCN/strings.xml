@@ -16,6 +16,10 @@
 
     <string name="dashboard">仪表盘</string>
     <string name="settings">设置</string>
+    <!-- Needs translation -->
+    <string name="settings_search_hint">Search settings</string>
+    <!-- Needs translation -->
+    <string name="settings_search_no_results">No settings found.</string>
     <string name="select_app">选择一个应用</string>
     <!-- Translation needed -->
     <string name="app_filter_title">Filter apps</string>
@@ -78,6 +82,24 @@
     <string name="bundle_update_manual_available_with_version">有可用更新：%1$s</string>
     <string name="bundle_update_progress">已处理 %1$d/%2$d 个包</string>
     <string name="bundle_update_banner_title">正在更新补丁包</string>
+    <!-- Needs translation -->
+    <string name="bundle_update_available">Patch bundle update available</string>
+    <!-- Needs translation -->
+    <string name="bundle_update_description_available">New version for %1$s: %2$s</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_notification_progress">Updating %1$d of %2$d: %3$s</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_notification_completed">Update completed</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_notification_completed_with_available">Update completed. %1$d updates available.</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_notification_available">%1$d updates available.</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_notification_failed">Update failed</string>
+    <!-- Needs translation -->
+    <string name="bundle_search_update">Search for updates</string>
+    <!-- Needs translation -->
+    <string name="bundle_search_update_description">Check this bundle for updates in the background</string>
     <string name="bundle_reorder">整理包</string>
     <string name="bundle_reorder_title">整理补丁包</string>
     <string name="bundle_reorder_description">拖动手柄以调整包在列表和补丁选择菜单中出现的顺序。</string>
@@ -128,6 +150,32 @@
     <string name="auto_updates_dialog_manager">Universal ReVanced Manager</string>
     <string name="auto_updates_dialog_patches">官方 ReVanced 补丁</string>
     <string name="auto_updates_dialog_note">这些设置以后可以更改。</string>
+    <!-- Needs translation -->
+    <string name="background_bundle_update">Background bundle updates</string>
+    <!-- Needs translation -->
+    <string name="background_bundle_update_description">Controls the patcher and bundle update notifications. When enabled, bundle updates download in the background. If notifications are allowed, you will see progress and completion updates along with the patching in progress notification.</string>
+    <!-- Needs translation -->
+    <string name="background_radio_menu_title">Background updates</string>
+    <!-- Needs translation -->
+    <string name="background_bundle_ask_notification">Allow notifications?</string>
+    <!-- Needs translation -->
+    <string name="background_bundle_ask_notification_description">Enable notifications so the manager can alert you when patch bundle updates are available.</string>
+    <!-- Needs translation -->
+    <string name="notification_channel_bundle_updates_name">Background bundle updates</string>
+    <!-- Needs translation -->
+    <string name="notification_channel_bundle_updates_description">Shows progress for background patch bundle updates.</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_summary_title">Patch bundle updates available</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_summary_description">Tap to view the manager and review bundle updates.</string>
+    <!-- Needs translation -->
+    <string name="never">Never</string>
+    <!-- Needs translation -->
+    <string name="minutes_15">Every 15 minutes</string>
+    <!-- Needs translation -->
+    <string name="hourly">Hourly</string>
+    <!-- Needs translation -->
+    <string name="daily">Daily</string>
 
     <string name="general">通用</string>
     <string name="general_description">主题，动态取色</string>
@@ -357,13 +405,14 @@
     <string name="downloader_plugin_state_failed">加载失败。点击查看更多详情</string>
     <string name="downloader_plugin_state_untrusted">不受信任</string>
     <string name="downloader_plugin_trust_dialog_title">信任插件？</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_trust_dialog_body">Continuing will allow this plugin to run on your system.\n\nOnly enable this plugin if you trust it. Plugins can execute arbitrary code and may compromise your device.</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_trust_dialog_signature">Signature:\n\n%s</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_trust_dialog_plugin">Plugin:\n%s</string>
     <string name="downloader_plugin_revoke_trust_dialog_title">撤销信任？</string>
-    <string name="downloader_plugin_trust_dialog_body">包名：%1$s\n签名 (SHA-256)：%2$s</string>
-    <!-- Needs translation -->
-    <string name="downloader_plugin_trust_dialog_plugin">"Plugin:\n%s"</string>
-    <!-- Needs translation -->
-    <string name="downloader_plugin_trust_dialog_signature">"Signature:\n\n%s"</string>
-    <string name="downloader_plugin_view_error">查看错误详情</string>
+<string name="downloader_plugin_view_error">查看错误详情</string>
     <string name="downloader_plugin_failed_dialog_body">加载 \"%1$s\" 失败。您可以查看错误详情或卸载该插件。</string>
     <string name="downloader_plugin_uninstall_title">卸载插件？</string>
     <string name="downloader_plugin_uninstall_description">您确定要卸载 \"%1$s\" 吗？</string>
@@ -414,9 +463,21 @@
     <string name="process_runtime_memory_limit">修补程序进程内存限制</string>
     <string name="process_runtime_memory_limit_description">修补程序进程可以使用的最大内存量（以兆字节为单位）</string>
     <string name="process_runtime_memory_limit_description_detailed">修补程序进程可以使用的最大内存量（以兆字节为单位）。\n此设备的推荐值：%1$d MB。</string>
+    <!-- Needs translation -->
+    <string name="process_runtime_memory_aggressive">Aggressive patcher memory limit</string>
+    <!-- Needs translation -->
+    <string name="process_runtime_memory_aggressive_description">Use the highest memory limit allowed by your device for the experimental patcher</string>
     <string name="reset_to_recommended">重置为推荐值</string>
     <string name="patcher_auto_collapse_steps">自动折叠已完成的修补程序步骤</string>
     <string name="patcher_auto_collapse_steps_description">在所有步骤完成后自动折叠每个修补程序进度小部件。</string>
+    <!-- Needs translation -->
+    <string name="patcher_auto_expand_steps">Auto-expand running steps</string>
+    <!-- Needs translation -->
+    <string name="patcher_auto_expand_steps_description">Automatically expand a patcher progress widget when it starts running</string>
+    <!-- Needs translation -->
+    <string name="patcher_saved_apps_title">Save patched apps for later</string>
+    <!-- Needs translation -->
+    <string name="patcher_saved_apps_description">When enabled, the manager saves a patched app entry and APK so it stays in the Apps tab and can be reinstalled later. Turning this off skips saving and hides the delete option</string>
     <string name="patch_bundle_rename">重命名补丁包</string>
     <string name="patch_profile_view_options">查看选项</string>
     <string name="patch_profile_patch_options_title">%1$s 的选项</string>
@@ -601,6 +662,48 @@
     <string name="patch_profile_bundle_change_uid_invalid">请输入有效的数字 UID。</string>
     <string name="patch_profile_bundle_change_uid_success">包 UID 已更新为 %1$d。</string>
     <string name="patch_profile_bundle_change_uid_not_found">未找到 UID 为 %1$d 的本地补丁包。</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote">Select bundle</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_title">Select bundle for %1$s</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_description">Choose a remote patch bundle to replace the unavailable one.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_empty">No available remote bundles found.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_success">Profile updated to use %1$s.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_incompatible_title">Bundle incompatible</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_incompatible_message">%1$s does not contain the required patches. It was not applied. Select a different bundle.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_override">Use anyway</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_error">Failed to update the profile bundle.</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_missing_title">Bundle not detected</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_action">Select bundle</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_title">Select bundle for %1$s</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_description">Choose a patch bundle to replace the missing one.</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_empty">No patch bundles available.</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_success">Saved app updated to use %1$s.</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_incompatible_title">Bundle incompatible</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_incompatible_message">%1$s does not contain the required patches. It was not applied. Select a different bundle.</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_override">Use anyway</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_error">Failed to update the saved app bundle.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_override_title">Allow incompatible bundle override</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_override_description">Show a developer-only override button when a patch profile bundle is incompatible.</string>
     <string name="patcher_process_exit_message">修补程序进程退出，代码为 %1$d。</string>
     <string name="patcher_memory_adjustment_title">修补程序内存不足</string>
     <string name="patcher_memory_adjustment_message_reduced">实验性修补程序进程因内存不足而停止。我们将其内存限制从 %1$d MB 降低到 %2$d MB，以便您可以立即重试。</string>
@@ -835,6 +938,10 @@
     <string name="patcher_step_sign_apk">为修补后的 APK 文件签名</string>
     <string name="patcher_notification_title">正在修补…</string>
     <string name="patcher_notification_text">点击返回修补程序</string>
+    <!-- Needs translation -->
+    <string name="notification_channel_patching_name">Patching</string>
+    <!-- Needs translation -->
+    <string name="notification_channel_patching_description">Shows progress while patching an app.</string>
     <string name="patcher_stop_confirm_title">停止修补程序</string>
     <string name="patcher_stop_confirm_description">您确定要停止修补过程吗？</string>
     <!-- Translation needed -->
@@ -926,6 +1033,20 @@
     <string name="manager_prereleases_description">使用 Universal ReVanced Manager 的预发布版本</string>
     <string name="update_published">发布于 %s</string>
     <string name="battery_optimization_notification">必须关闭电池优化，Universal ReVanced Manager 才能在后台正常工作。点击此处关闭优化。</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_dialog_description">To receive background bundle update notifications reliably, disable battery optimization for URV Manager.</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_dialog_title">Battery optimization</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_title">Battery optimization banner</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_description">Show the battery optimization warning banner on the dashboard.</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_disable_title">Hide battery optimization warning?</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_disable_description">Disabling this warning can make it harder to notice background restrictions. Only hide it if you understand the risk.</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_disable_confirm">Hide banner</string>
     <string name="installing_manager_update">正在安装更新…</string>
     <string name="downloading_manager_update">正在下载更新…</string>
     <string name="manager_update_banner_title">正在下载管理器更新</string>
@@ -1035,8 +1156,6 @@
     <string name="patch_bundle_discovery_description">Browse external patch bundles and add them to the URV Manager.</string>
     <!-- Needs translation -->
     <string name="patch_bundle_discovery_search_label">Search bundles</string>
-    <!-- Needs translation -->
-    <string name="patch_bundle_discovery_all">All</string>
     <!-- Needs translation -->
     <string name="patch_bundle_discovery_empty">No patch bundles found.</string>
     <!-- Needs translation -->

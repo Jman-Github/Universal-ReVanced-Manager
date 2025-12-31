@@ -9,13 +9,18 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.Public
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Source
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -30,6 +35,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -56,7 +62,9 @@ import app.revanced.manager.ui.component.LazyColumnWithScrollbar
 import app.revanced.manager.ui.component.LoadingIndicator
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsCard
 import app.revanced.manager.ui.viewmodel.BundleDiscoveryViewModel
+import app.revanced.manager.util.consumeHorizontalScroll
 import app.revanced.manager.util.openUrl
+import app.revanced.manager.domain.manager.PreferencesManager
 import compose.icons.FontAwesomeIcons
 import compose.icons.fontawesomeicons.Brands
 import compose.icons.fontawesomeicons.brands.Github
@@ -73,6 +81,7 @@ fun PatchBundleDiscoveryScreen(
 ) {
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
     val context = LocalContext.current
+    val prefs: PreferencesManager = koinInject()
     val patchBundleRepository: PatchBundleRepository = koinInject()
     val sources by patchBundleRepository.sources.collectAsStateWithLifecycle(emptyList())
     val existingEndpoints = remember(sources) {
@@ -82,26 +91,79 @@ fun PatchBundleDiscoveryScreen(
     val isLoading = viewModel.isLoading
     val errorMessage = viewModel.errorMessage
     var query by remember { mutableStateOf("") }
-    var filter by remember { mutableStateOf(BundleFilter.All) }
-    val filteredBundles by remember(bundles, query, filter) {
+    val showReleasePref by prefs.patchBundleDiscoveryShowRelease.getAsState()
+    val showPrereleasePref by prefs.patchBundleDiscoveryShowPrerelease.getAsState()
+    var showRelease by remember { mutableStateOf(showReleasePref) }
+    var showPrerelease by remember { mutableStateOf(showPrereleasePref) }
+    LaunchedEffect(showReleasePref) {
+        if (showRelease != showReleasePref) {
+            showRelease = showReleasePref
+        }
+    }
+    LaunchedEffect(showPrereleasePref) {
+        if (showPrerelease != showPrereleasePref) {
+            showPrerelease = showPrereleasePref
+        }
+    }
+    LaunchedEffect(showRelease, showReleasePref) {
+        if (showRelease != showReleasePref) {
+            prefs.patchBundleDiscoveryShowRelease.update(showRelease)
+        }
+    }
+    LaunchedEffect(showPrerelease, showPrereleasePref) {
+        if (showPrerelease != showPrereleasePref) {
+            prefs.patchBundleDiscoveryShowPrerelease.update(showPrerelease)
+        }
+    }
+    val groupedBundles by remember(bundles, query, showRelease, showPrerelease) {
         derivedStateOf {
             if (bundles == null) return@derivedStateOf null
             val trimmedQuery = query.trim().lowercase()
-            bundles.filter { bundle ->
-                when (filter) {
-                    BundleFilter.All -> true
-                    BundleFilter.Release -> !bundle.isPrerelease
-                    BundleFilter.Prerelease -> bundle.isPrerelease
+            val grouped = LinkedHashMap<String, BundleGroup>()
+            val order = mutableListOf<String>()
+
+            bundles.forEach { bundle ->
+                val owner = bundle.ownerName.takeIf { it.isNotBlank() }
+                val repo = bundle.repoName.takeIf { it.isNotBlank() }
+                val key = if (owner != null || repo != null) {
+                    listOfNotNull(owner, repo).joinToString("/")
+                } else {
+                    bundle.sourceUrl
                 }
-            }.filter { bundle ->
+                val entry = grouped.getOrPut(key) {
+                    order.add(key)
+                    BundleGroup(key = key, release = null, prerelease = null)
+                }
+                grouped[key] = if (bundle.isPrerelease) {
+                    entry.copy(prerelease = bundle)
+                } else {
+                    entry.copy(release = bundle)
+                }
+            }
+
+            val hasTypeFilter = showRelease || showPrerelease
+            val filteredByType = order.mapNotNull { grouped[it] }.filter { group ->
+                if (!hasTypeFilter || (showRelease && showPrerelease)) return@filter true
+                val hasRelease = group.release != null
+                val hasPrerelease = group.prerelease != null
+
+                (showRelease && hasRelease) || (showPrerelease && hasPrerelease)
+            }
+
+            filteredByType.filter { group ->
                 if (trimmedQuery.isEmpty()) return@filter true
-                val haystack = listOfNotNull(
-                    bundle.sourceUrl,
-                    bundle.ownerName,
-                    bundle.repoName,
-                    bundle.repoDescription,
-                    bundle.version
-                ).joinToString(" ").lowercase()
+                val haystack = listOfNotNull(group.release, group.prerelease)
+                    .flatMap {
+                        listOfNotNull(
+                            it.sourceUrl,
+                            it.ownerName,
+                            it.repoName,
+                            it.repoDescription,
+                            it.version
+                        )
+                    }
+                    .joinToString(" ")
+                    .lowercase()
                 haystack.contains(trimmedQuery)
             }
         }
@@ -139,7 +201,7 @@ fun PatchBundleDiscoveryScreen(
             .fillMaxSize()
             .nestedScroll(scrollBehavior.nestedScrollConnection)
     ) { paddingValues ->
-        val visibleBundles = filteredBundles
+        val visibleBundles = groupedBundles
         LazyColumnWithScrollbar(
             modifier = Modifier
                 .fillMaxSize()
@@ -148,41 +210,82 @@ fun PatchBundleDiscoveryScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ExpressiveSettingsCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(16.dp)
                 ) {
-                    Text(
-                        text = stringResource(R.string.patch_bundle_discovery_description),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    OutlinedTextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        label = { Text(stringResource(R.string.patch_bundle_discovery_search_label)) },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        CheckedFilterChip(
-                            selected = filter == BundleFilter.All,
-                            onClick = { filter = BundleFilter.All },
-                            label = { Text(stringResource(R.string.patch_bundle_discovery_all)) }
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.size(40.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Public,
+                                    contentDescription = null,
+                                    modifier = Modifier.padding(8.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.patch_bundle_discovery_title),
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Text(
+                                    text = stringResource(R.string.patch_bundle_discovery_description),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        OutlinedTextField(
+                            value = query,
+                            onValueChange = { query = it },
+                            label = { Text(stringResource(R.string.patch_bundle_discovery_search_label)) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Outlined.Search,
+                                    contentDescription = null
+                                )
+                            },
+                            trailingIcon = {
+                                if (query.isNotBlank()) {
+                                    IconButton(onClick = { query = "" }) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Close,
+                                            contentDescription = null
+                                        )
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
                         )
-                        CheckedFilterChip(
-                            selected = filter == BundleFilter.Release,
-                            onClick = { filter = BundleFilter.Release },
-                            label = { Text(stringResource(R.string.patch_bundle_discovery_release)) }
-                        )
-                        CheckedFilterChip(
-                            selected = filter == BundleFilter.Prerelease,
-                            onClick = { filter = BundleFilter.Prerelease },
-                            label = { Text(stringResource(R.string.patch_bundle_discovery_prerelease)) }
-                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            CheckedFilterChip(
+                                selected = showRelease,
+                                onClick = { showRelease = !showRelease },
+                                label = { Text(stringResource(R.string.patch_bundle_discovery_release)) }
+                            )
+                            CheckedFilterChip(
+                                selected = showPrerelease,
+                                onClick = { showPrerelease = !showPrerelease },
+                                label = { Text(stringResource(R.string.patch_bundle_discovery_prerelease)) }
+                            )
+                        }
                     }
                 }
             }
@@ -220,14 +323,25 @@ fun PatchBundleDiscoveryScreen(
                 }
 
                 else -> {
-                    items(visibleBundles, key = { it.bundleId }) { bundle ->
-                        val endpoint = viewModel.bundleEndpoint(bundle.bundleId)
-                        val isImported = endpoint in existingEndpoints
+                    items(visibleBundles, key = { it.key }) { group ->
                         BundleDiscoveryItem(
-                            bundle = bundle,
-                            isImported = isImported,
-                            onImport = { viewModel.importBundle(bundle.bundleId, autoUpdate = true) },
-                            onViewPatches = { onViewPatches(bundle.bundleId) }
+                            releaseBundle = group.release,
+                            prereleaseBundle = group.prerelease,
+                            allowRelease = showRelease,
+                            allowPrerelease = showPrerelease,
+                            isImported = { bundle ->
+                                viewModel.bundleEndpoint(bundle.bundleId) in existingEndpoints
+                            },
+                            onImport = { bundle ->
+                                viewModel.importBundle(
+                                    bundle.bundleId,
+                                    autoUpdate = true,
+                                    searchUpdate = true
+                                )
+                            },
+                            onViewPatches = { bundle ->
+                                onViewPatches(bundle.bundleId)
+                            }
                         )
                     }
                 }
@@ -239,13 +353,35 @@ fun PatchBundleDiscoveryScreen(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun BundleDiscoveryItem(
-    bundle: ExternalBundleSnapshot,
-    isImported: Boolean,
-    onImport: () -> Unit,
-    onViewPatches: () -> Unit,
+    releaseBundle: ExternalBundleSnapshot?,
+    prereleaseBundle: ExternalBundleSnapshot?,
+    allowRelease: Boolean,
+    allowPrerelease: Boolean,
+    isImported: (ExternalBundleSnapshot) -> Boolean,
+    onImport: (ExternalBundleSnapshot) -> Unit,
+    onViewPatches: (ExternalBundleSnapshot) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val hasRelease = releaseBundle != null
+    val hasPrerelease = prereleaseBundle != null
+    val noTypeFilter = !allowRelease && !allowPrerelease
+    val releaseAllowed = hasRelease && (allowRelease || noTypeFilter)
+    val prereleaseAllowed = hasPrerelease && (allowPrerelease || noTypeFilter)
+    val toggleEnabled = releaseAllowed && prereleaseAllowed
+    var showPrerelease by remember(releaseBundle?.bundleId, prereleaseBundle?.bundleId) {
+        mutableStateOf(!hasRelease && hasPrerelease)
+    }
+    val effectiveShowPrerelease = when {
+        releaseAllowed && !prereleaseAllowed -> false
+        prereleaseAllowed && !releaseAllowed -> true
+        else -> showPrerelease
+    }
+    val bundle = if (effectiveShowPrerelease && prereleaseBundle != null) {
+        prereleaseBundle
+    } else {
+        releaseBundle ?: prereleaseBundle ?: return
+    }
     val displayName = remember(bundle.ownerName, bundle.repoName, bundle.sourceUrl) {
         listOf(bundle.ownerName, bundle.repoName)
             .filter { it.isNotBlank() }
@@ -253,26 +389,26 @@ private fun BundleDiscoveryItem(
             .ifBlank { bundle.sourceUrl }
     }
     val description = bundle.repoDescription?.takeIf { it.isNotBlank() }
-    val releaseLabel = if (bundle.isPrerelease) {
-        stringResource(R.string.patch_bundle_discovery_prerelease)
-    } else {
-        stringResource(R.string.patch_bundle_discovery_release)
-    }
     val patchCount = bundle.patches.size
     val isSupported = !bundle.isBundleV3
-    val importEnabled = isSupported && !isImported
+    val importEnabled = isSupported && !isImported(bundle)
     val viewPatchesEnabled = patchCount > 0
-    val importLabel = if (isImported) {
+    val importLabel = if (isImported(bundle)) {
         stringResource(R.string.patch_bundle_discovery_imported)
     } else {
         stringResource(R.string.import_)
     }
+    val toggleLabel = stringResource(
+        if (effectiveShowPrerelease) {
+            R.string.patch_bundle_discovery_prerelease
+        } else {
+            R.string.patch_bundle_discovery_release
+        }
+    )
 
     ExpressiveSettingsCard(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        contentPadding = PaddingValues(16.dp)
+        modifier = modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(
@@ -343,24 +479,11 @@ private fun BundleDiscoveryItem(
                     )
                 }
                 BundleTag(
-                    text = releaseLabel,
-                    containerColor = if (bundle.isPrerelease) {
-                        MaterialTheme.colorScheme.tertiaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.secondaryContainer
-                    },
-                    contentColor = if (bundle.isPrerelease) {
-                        MaterialTheme.colorScheme.onTertiaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSecondaryContainer
-                    }
-                )
-                BundleTag(
                     text = stringResource(R.string.patch_bundle_discovery_patch_count, patchCount),
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 )
-                if (isImported) {
+                if (isImported(bundle)) {
                     BundleTag(
                         text = stringResource(R.string.patch_bundle_discovery_imported),
                         containerColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -379,20 +502,56 @@ private fun BundleDiscoveryItem(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                OutlinedButton(
-                    enabled = viewPatchesEnabled,
-                    onClick = onViewPatches
+                val toggleScrollState = rememberScrollState()
+                FilledTonalButton(
+                    enabled = toggleEnabled,
+                    onClick = { showPrerelease = !showPrerelease },
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Text(text = stringResource(R.string.patch_bundle_discovery_view_patches))
+                    Text(
+                        text = toggleLabel,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Clip,
+                        modifier = Modifier
+                            .consumeHorizontalScroll(toggleScrollState)
+                            .horizontalScroll(toggleScrollState)
+                    )
                 }
+                val viewScrollState = rememberScrollState()
+                FilledTonalButton(
+                    enabled = viewPatchesEnabled,
+                    onClick = { onViewPatches(bundle) },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = stringResource(R.string.patch_bundle_discovery_view_patches),
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Clip,
+                        modifier = Modifier
+                            .consumeHorizontalScroll(viewScrollState)
+                            .horizontalScroll(viewScrollState)
+                    )
+                }
+                val importScrollState = rememberScrollState()
                 FilledTonalButton(
                     enabled = importEnabled,
-                    onClick = onImport
+                    onClick = { onImport(bundle) },
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Text(text = importLabel)
+                    Text(
+                        text = importLabel,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Clip,
+                        modifier = Modifier
+                            .consumeHorizontalScroll(importScrollState)
+                            .horizontalScroll(importScrollState)
+                    )
                 }
             }
         }
@@ -418,8 +577,8 @@ private fun BundleTag(
     }
 }
 
-private enum class BundleFilter {
-    All,
-    Release,
-    Prerelease,
-}
+private data class BundleGroup(
+    val key: String,
+    val release: ExternalBundleSnapshot?,
+    val prerelease: ExternalBundleSnapshot?
+)

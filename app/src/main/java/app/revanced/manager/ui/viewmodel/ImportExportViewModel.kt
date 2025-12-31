@@ -116,6 +116,7 @@ data class PatchBundleSnapshot(
     val name: String,
     val displayName: String? = null,
     val autoUpdate: Boolean = false,
+    val searchUpdate: Boolean = true,
     val enabled: Boolean = true,
     val officialState: OfficialBundleState? = null,
     val position: Int? = null,
@@ -536,6 +537,7 @@ class ImportExportViewModel(
                                     setImportProgress(PatchBundleRepository.BundleImportPhase.Downloading)
                                     patchBundleRepository.createRemote(
                                         endpoint,
+                                        snapshot.searchUpdate,
                                         snapshot.autoUpdate,
                                         createdAt = snapshot.createdAt,
                                         updatedAt = snapshot.updatedAt,
@@ -623,6 +625,12 @@ class ImportExportViewModel(
                                                     }
                                                     officialUpdated = true
                                                 }
+                                            }
+                                            if (source.asRemoteOrNull?.searchUpdate != snapshot.searchUpdate) {
+                                                with(patchBundleRepository) {
+                                                    source.asRemoteOrNull?.setSearchUpdate(snapshot.searchUpdate)
+                                                }
+                                                officialUpdated = true
                                             }
                                             if (source.enabled != snapshot.enabled) {
                                                 pendingEnabledUpdates[source.uid] = snapshot.enabled
@@ -793,6 +801,7 @@ class ImportExportViewModel(
                     name = it.name,
                     displayName = it.displayName,
                     autoUpdate = it.autoUpdate,
+                    searchUpdate = it.searchUpdate,
                     enabled = it.enabled,
                     position = positionLookup[it.uid],
                     createdAt = it.createdAt,
@@ -805,6 +814,7 @@ class ImportExportViewModel(
                     name = "",
                     displayName = officialDisplayName,
                     autoUpdate = officialAutoUpdate,
+                    searchUpdate = officialSource?.asRemoteOrNull?.searchUpdate ?: true,
                     enabled = officialEnabled,
                     officialState = officialState,
                     position = officialSource?.let { positionLookup[it.uid] },

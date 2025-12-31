@@ -50,9 +50,11 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.job
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.coroutineContext
 import io.ktor.http.Url
 import java.io.File
 import java.io.FileInputStream
@@ -529,6 +531,8 @@ class PatchBundleRepository(
                 dir,
                 SourceInfo.API.SENTINEL,
                 autoUpdate,
+                searchUpdate,
+                lastNotifiedVersion,
                 enabled,
             )
 
@@ -543,6 +547,8 @@ class PatchBundleRepository(
                 dir,
                 source.url.toString(),
                 autoUpdate,
+                searchUpdate,
+                lastNotifiedVersion,
                 enabled,
             )
             // PR #35: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35
@@ -557,6 +563,8 @@ class PatchBundleRepository(
                 dir,
                 source.url.toString(),
                 autoUpdate,
+                searchUpdate,
+                lastNotifiedVersion,
                 enabled
             )
         }
@@ -633,11 +641,13 @@ class PatchBundleRepository(
         name: String,
         source: Source,
         autoUpdate: Boolean = false,
+        searchUpdate: Boolean = true,
         displayName: String? = null,
         uid: Int? = null,
         sortOrder: Int? = null,
         createdAt: Long? = null,
-        updatedAt: Long? = null
+        updatedAt: Long? = null,
+        lastNotifiedVersion: String? = null
     ): PatchBundleEntity {
         val resolvedUid = uid ?: generateUid()
         val existingProps = dao.getProps(resolvedUid)
@@ -657,6 +667,8 @@ class PatchBundleRepository(
         val resolvedCreatedAt = createdAt ?: existingProps?.createdAt ?: now
         val resolvedUpdatedAt = updatedAt ?: now
         val resolvedEnabled = existingProps?.enabled ?: true
+        val resolvedSearchUpdate = existingProps?.searchUpdate ?: searchUpdate
+        val resolvedLastNotifiedVersion = lastNotifiedVersion ?: existingProps?.lastNotifiedVersion
         val entity = PatchBundleEntity(
             uid = resolvedUid,
             name = normalizedName,
@@ -664,6 +676,8 @@ class PatchBundleRepository(
             versionHash = null,
             source = source,
             autoUpdate = autoUpdate,
+            searchUpdate = resolvedSearchUpdate,
+            lastNotifiedVersion = resolvedLastNotifiedVersion,
             enabled = resolvedEnabled,
             sortOrder = assignedSortOrder,
             createdAt = resolvedCreatedAt,
@@ -690,6 +704,8 @@ class PatchBundleRepository(
                 versionHash = new.versionHash,
                 source = new.source,
                 autoUpdate = new.autoUpdate,
+                searchUpdate = new.searchUpdate,
+                lastNotifiedVersion = new.lastNotifiedVersion,
                 enabled = new.enabled,
                 sortOrder = new.sortOrder,
                 createdAt = new.createdAt,
@@ -844,6 +860,8 @@ class PatchBundleRepository(
                     versionHash = props.versionHash,
                     source = props.source,
                     autoUpdate = props.autoUpdate,
+                    searchUpdate = props.searchUpdate,
+                    lastNotifiedVersion = props.lastNotifiedVersion,
                     enabled = props.enabled,
                     sortOrder = props.sortOrder,
                     createdAt = props.createdAt,
@@ -1086,6 +1104,7 @@ class PatchBundleRepository(
 
     suspend fun createRemote(
         url: String,
+        searchUpdate: Boolean,
         autoUpdate: Boolean,
         createdAt: Long? = null,
         updatedAt: Long? = null,
@@ -1105,6 +1124,7 @@ class PatchBundleRepository(
                 "",
                 SourceInfo.from(normalizedUrl),
                 autoUpdate,
+                searchUpdate = searchUpdate,
                 createdAt = createdAt,
                 updatedAt = updatedAt
             ).load() as RemotePatchBundle
@@ -1191,6 +1211,25 @@ class PatchBundleRepository(
         }
     }
 
+    suspend fun RemotePatchBundle.setSearchUpdate(value: Boolean) {
+        dispatchAction("Set search update ($name, $value)") { state ->
+            updateDb(uid) { it.copy(searchUpdate = value) }
+            val newSrc = (state.sources[uid] as? RemotePatchBundle)?.copy(searchUpdate = value)
+                ?: return@dispatchAction state
+
+            state.copy(sources = state.sources.put(uid, newSrc))
+        }
+    }
+
+    private suspend fun updateLastNotifiedVersion(uid: Int, version: String?) {
+        dispatchAction("Set last notified version ($uid)") { state ->
+            updateDb(uid) { it.copy(lastNotifiedVersion = version) }
+            val src = (state.sources[uid] as? RemotePatchBundle) ?: return@dispatchAction state
+            val updated = src.copy(lastNotifiedVersion = version)
+            state.copy(sources = state.sources.put(uid, updated))
+        }
+    }
+
     suspend fun update(
         vararg sources: RemotePatchBundle,
         showToast: Boolean = false,
@@ -1207,6 +1246,52 @@ class PatchBundleRepository(
         )
     }
 
+    suspend fun updateNow(
+        force: Boolean = false,
+        allowUnsafeNetwork: Boolean = false,
+        onPerBundleProgress: ((bundle: RemotePatchBundle, bytesRead: Long, bytesTotal: Long?) -> Unit)? = null,
+        predicate: (bundle: RemotePatchBundle) -> Boolean = { true },
+    ): Boolean {
+        while (true) {
+            val activeJob = updateJobMutex.withLock {
+                if (updateJob?.isActive == true) {
+                    updateJob
+                } else {
+                    updateJob = coroutineContext.job
+                    null
+                }
+            }
+            if (activeJob == null) break
+            activeJob.join()
+        }
+
+        return try {
+            performRemoteUpdate(
+                force = force,
+                showToast = false,
+                allowUnsafeNetwork = allowUnsafeNetwork,
+                onPerBundleProgress = onPerBundleProgress,
+                predicate = predicate
+            )
+        } finally {
+            updateJobMutex.withLock {
+                if (updateJob == coroutineContext.job) {
+                    updateJob = null
+                }
+            }
+            val next = drainPendingUpdateRequests()
+            if (next != null) {
+                startRemoteUpdateJob(
+                    force = next.force,
+                    showToast = next.showToast,
+                    allowUnsafeNetwork = next.allowUnsafeNetwork,
+                    onPerBundleProgress = next.onPerBundleProgress,
+                    predicate = next.predicate
+                )
+            }
+        }
+    }
+
     suspend fun redownloadRemoteBundles() = store.dispatch(Update(force = true))
 
     /**
@@ -1215,6 +1300,47 @@ class PatchBundleRepository(
     suspend fun updateCheck() {
         store.dispatch(Update { it.autoUpdate })
         checkManualUpdates()
+    }
+
+    suspend fun fetchUpdatesAndNotify(
+        context: Context,
+        predicate: (bundle: RemotePatchBundle) -> Boolean = { true },
+        onNotification: (bundleName: String, bundleVersion: String) -> Boolean
+    ): Boolean = coroutineScope {
+        val allowMeteredUpdates = prefs.allowMeteredUpdates.get()
+        if (!allowMeteredUpdates && !networkInfo.isSafe()) {
+            Log.d(tag, "Skipping background update check because the network is down or metered.")
+            return@coroutineScope false
+        }
+
+        var notifiedAny = false
+        sources.first()
+            .filterIsInstance<RemotePatchBundle>()
+            .forEach { bundle ->
+                if (!predicate(bundle)) return@forEach
+                if (!bundle.searchUpdate || !bundle.enabled) return@forEach
+                if (bundle.state !is PatchBundleSource.State.Available) return@forEach
+
+                val info = runCatching { bundle.fetchLatestReleaseInfo() }.getOrElse { error ->
+                    Log.e(tag, "Failed to check update for ${bundle.name}", error)
+                    return@forEach
+                }
+
+                val latestSignature = info.version.takeUnless { it.isBlank() }
+                val installedSignature = bundle.installedVersionSignature
+                val hasUpdate = latestSignature == null || installedSignature != latestSignature
+                if (!hasUpdate) return@forEach
+
+                val versionLabel = latestSignature ?: bundle.version ?: return@forEach
+                if (bundle.lastNotifiedVersion == versionLabel) return@forEach
+
+                val notified = onNotification(bundle.displayTitle, versionLabel)
+                if (notified) {
+                    updateLastNotifiedVersion(bundle.uid, versionLabel)
+                    notifiedAny = true
+                }
+            }
+        notifiedAny
     }
 
     suspend fun checkManualUpdates(vararg bundleUids: Int) =
@@ -1326,13 +1452,13 @@ class PatchBundleRepository(
         allowUnsafeNetwork: Boolean,
         onPerBundleProgress: ((bundle: RemotePatchBundle, bytesRead: Long, bytesTotal: Long?) -> Unit)?,
         predicate: (bundle: RemotePatchBundle) -> Boolean,
-    ) = coroutineScope {
+    ): Boolean = coroutineScope {
         try {
             val allowMeteredUpdates = prefs.allowMeteredUpdates.get()
             if (!allowUnsafeNetwork && !allowMeteredUpdates && !networkInfo.isSafe()) {
                 Log.d(tag, "Skipping update check because the network is down or metered.")
                 bundleUpdateProgressFlow.value = null
-                return@coroutineScope
+                return@coroutineScope false
             }
 
             val targets = store.state.value.sources.values
@@ -1342,7 +1468,7 @@ class PatchBundleRepository(
             if (targets.isEmpty()) {
                 if (showToast) toast(R.string.patches_update_unavailable)
                 bundleUpdateProgressFlow.value = null
-                return@coroutineScope
+                return@coroutineScope false
             }
 
             markActiveUpdateUids(targets.map(RemotePatchBundle::uid).toSet())
@@ -1361,7 +1487,7 @@ class PatchBundleRepository(
                     val total = currentUpdateTotal(targets.size)
                     if (total <= 0) {
                         bundleUpdateProgressFlow.value = null
-                        return@coroutineScope
+                        return@coroutineScope false
                     }
                     if (isRemoteUpdateCancelled(bundle.uid)) {
                         continue
@@ -1436,7 +1562,7 @@ class PatchBundleRepository(
 
             if (updated.isEmpty()) {
                 if (showToast) toast(R.string.patches_update_unavailable)
-                return@coroutineScope
+                return@coroutineScope false
             }
 
             dispatchAction("Apply updated bundles") {
@@ -1464,6 +1590,7 @@ class PatchBundleRepository(
             val updatedUids = updated.keys.map(RemotePatchBundle::uid).toSet()
             manualUpdateInfoFlow.update { currentMap -> currentMap - updatedUids }
             if (showToast) toast(R.string.patches_update_success)
+            true
         } finally {
             clearActiveUpdateState()
         }
@@ -1618,6 +1745,8 @@ class PatchBundleRepository(
             versionHash = null,
             source = Source.API,
             autoUpdate = false,
+            searchUpdate = true,
+            lastNotifiedVersion = null,
             enabled = true,
             sortOrder = 0,
             createdAt = System.currentTimeMillis(),

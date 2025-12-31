@@ -17,7 +17,8 @@ fun BooleanItem(
     preference: Preference<Boolean>,
     coroutineScope: CoroutineScope = rememberCoroutineScope(),
     @StringRes headline: Int,
-    @StringRes description: Int
+    @StringRes description: Int,
+    enabled: Boolean = true
 ) {
     val value by preference.getAsState()
 
@@ -26,7 +27,8 @@ fun BooleanItem(
         value = value,
         onValueChange = { coroutineScope.launch { preference.update(it) } },
         headline = headline,
-        description = description
+        description = description,
+        enabled = enabled
     )
 }
 
@@ -36,17 +38,20 @@ fun BooleanItem(
     value: Boolean,
     onValueChange: (Boolean) -> Unit,
     @StringRes headline: Int,
-    @StringRes description: Int
+    @StringRes description: Int,
+    enabled: Boolean = true
 ) = ExpressiveSettingsItem(
     modifier = Modifier
-        .clickable { onValueChange(!value) }
+        .clickable(enabled = enabled) { onValueChange(!value) }
         .then(modifier),
     headlineContent = stringResource(headline),
     supportingContent = stringResource(description),
+    enabled = enabled,
     trailingContent = {
         ExpressiveSettingsSwitch(
             checked = value,
             onCheckedChange = onValueChange,
+            enabled = enabled
         )
     }
 )

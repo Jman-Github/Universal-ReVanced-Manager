@@ -30,7 +30,8 @@ fun IntegerItem(
     supportingText: String? = null,
     trailingContent: (@Composable () -> Unit)? = null,
     neutralButtonLabel: String? = null,
-    neutralValueProvider: (() -> Int?)? = null
+    neutralValueProvider: (() -> Int?)? = null,
+    enabled: Boolean = true
 ) {
     val value by preference.getAsState()
 
@@ -43,7 +44,8 @@ fun IntegerItem(
         supportingText = supportingText,
         trailingContent = trailingContent,
         neutralButtonLabel = neutralButtonLabel,
-        neutralValueProvider = neutralValueProvider
+        neutralValueProvider = neutralValueProvider,
+        enabled = enabled
     )
 }
 
@@ -57,13 +59,14 @@ fun IntegerItem(
     supportingText: String? = null,
     trailingContent: (@Composable () -> Unit)? = null,
     neutralButtonLabel: String? = null,
-    neutralValueProvider: (() -> Int?)? = null
+    neutralValueProvider: (() -> Int?)? = null,
+    enabled: Boolean = true
 ) {
     var dialogOpen by rememberSaveable {
         mutableStateOf(false)
     }
 
-    if (dialogOpen) {
+    if (dialogOpen && enabled) {
         IntInputDialog(
             current = value,
             name = stringResource(headline),
@@ -78,12 +81,13 @@ fun IntegerItem(
 
     ExpressiveSettingsItem(
         modifier = Modifier
-            .clickable { dialogOpen = true }
+            .clickable(enabled = enabled) { dialogOpen = true }
             .then(modifier),
         headlineContent = stringResource(headline),
         supportingContent = supportingText ?: stringResource(description),
+        enabled = enabled,
         trailingContent = {
-            IconButton(onClick = { dialogOpen = true }) {
+            IconButton(onClick = { dialogOpen = true }, enabled = enabled) {
                 Icon(
                     Icons.Outlined.Edit,
                     contentDescription = stringResource(R.string.edit)

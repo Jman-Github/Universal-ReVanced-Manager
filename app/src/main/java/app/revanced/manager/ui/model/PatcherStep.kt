@@ -3,6 +3,7 @@ package app.revanced.manager.ui.model
 import android.os.Parcelable
 import androidx.annotation.StringRes
 import app.universal.revanced.manager.R
+import app.revanced.manager.patcher.StepId
 import kotlinx.parcelize.Parcelize
 
 enum class StepCategory(@StringRes val displayName: Int) {
@@ -11,34 +12,23 @@ enum class StepCategory(@StringRes val displayName: Int) {
     SAVING(R.string.patcher_step_group_saving)
 }
 
-enum class StepId {
-    DOWNLOAD_APK,
-    LOAD_PATCHES,
-    PREPARE_SPLIT_APK,
-    READ_APK,
-    EXECUTE_PATCHES,
-    WRITE_PATCHED_APK,
-    SIGN_PATCHED_APK
-}
-
 enum class State {
     WAITING, RUNNING, FAILED, COMPLETED
-}
-
-enum class ProgressKey {
-    DOWNLOAD
-}
-
-interface StepProgressProvider {
-    val downloadProgress: Pair<Long, Long?>?
 }
 
 @Parcelize
 data class Step(
     val id: StepId,
-    val name: String,
+    val title: String,
     val category: StepCategory,
     val state: State = State.WAITING,
     val message: String? = null,
-    val progressKey: ProgressKey? = null
+    val progress: Pair<Long, Long?>? = null,
+    val hide: Boolean = false,
 ) : Parcelable
+
+fun Step.withState(
+    state: State = this.state,
+    message: String? = this.message,
+    progress: Pair<Long, Long?>? = this.progress
+) = copy(state = state, message = message, progress = progress)

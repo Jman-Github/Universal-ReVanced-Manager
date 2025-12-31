@@ -10,7 +10,6 @@ import android.util.Log
 import android.webkit.MimeTypeMap
 import androidx.activity.result.ActivityResult
 import androidx.annotation.StringRes
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -797,6 +796,7 @@ class SelectedAppInfoViewModel(
                     else -> downloadedAppRepository.getLatest(app.packageName)
                 }
                 downloaded?.let { resolvePackageInfo(downloadedAppRepository.getPreparedApkFile(it)) }
+                    ?: pm.getPackageInfo(app.packageName)
             }
             else -> null
         }
@@ -914,7 +914,7 @@ class SelectedAppInfoViewModel(
         val changedBundles: Set<Int>
     )
 
-    enum class Error(@StringRes val resourceId: Int) {
+    enum class Error(@param:StringRes val resourceId: Int) {
         NoPlugins(R.string.downloader_no_plugins_available)
     }
 
