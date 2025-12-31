@@ -72,6 +72,8 @@ import app.revanced.manager.util.APK_MIMETYPE
 import app.revanced.manager.util.ExportNameFormatter
 import app.revanced.manager.util.EventEffect
 import app.revanced.manager.util.PatchedAppExportData
+import app.revanced.manager.util.mutableStateSetOf
+import app.revanced.manager.util.saver.snapshotStateSetSaver
 import app.revanced.manager.util.toast
 import org.koin.compose.koinInject
 
@@ -92,6 +94,8 @@ fun PatcherScreen(
     val prefs: PreferencesManager = koinInject()
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
     val autoCollapsePatcherSteps by prefs.autoCollapsePatcherSteps.getAsState()
+    val autoExpandRunningSteps by prefs.autoExpandRunningSteps.getAsState()
+    val savedAppsEnabled by prefs.enableSavedApps.getAsState()
     val exportMetadata = viewModel.exportMetadata
     val fallbackExportMetadata = remember(viewModel.packageName, viewModel.version) {
         PatchedAppExportData(
@@ -116,7 +120,10 @@ fun PatcherScreen(
     fun onPageBack() = when {
         patcherSucceeded == null -> showDismissConfirmationDialog = true
         viewModel.isInstalling -> showInstallInProgressDialog = true
-        patcherSucceeded == true && viewModel.installedPackageName == null && !viewModel.hasSavedPatchedApp -> showSavePatchedAppDialog = true
+        patcherSucceeded == true &&
+            viewModel.installedPackageName == null &&
+            !viewModel.hasSavedPatchedApp &&
+            savedAppsEnabled -> showSavePatchedAppDialog = true
         else -> onLeave()
     }
 
@@ -477,6 +484,21 @@ fun PatcherScreen(
                 .padding(paddingValues)
                 .fillMaxSize()
         ) {
+            var expandedCategory by rememberSaveable { mutableStateOf<StepCategory?>(null) }
+            val expandedCategories = rememberSaveable(
+                saver = snapshotStateSetSaver()
+            ) {
+                mutableStateSetOf<StepCategory>()
+            }
+
+            LaunchedEffect(autoCollapsePatcherSteps) {
+                if (autoCollapsePatcherSteps) {
+                    expandedCategory = expandedCategory ?: expandedCategories.firstOrNull()
+                } else {
+                    expandedCategory?.let { expandedCategories.add(it) }
+                }
+            }
+
             LinearProgressIndicator(
                 progress = { viewModel.progress },
                 modifier = Modifier.fillMaxWidth()
@@ -494,8 +516,30 @@ fun PatcherScreen(
                     Steps(
                         category = category,
                         steps = steps,
-                        stepCount = if (category == StepCategory.PATCHING) viewModel.patchesProgress else null,
-                        stepProgressProvider = viewModel,
+                        isExpanded = if (autoCollapsePatcherSteps) {
+                            expandedCategory == category
+                        } else {
+                            expandedCategories.contains(category)
+                        },
+                        autoExpandRunning = autoExpandRunningSteps,
+                        onExpand = {
+                            if (autoCollapsePatcherSteps) {
+                                expandedCategory = category
+                            } else {
+                                expandedCategories.add(category)
+                            }
+                        },
+                        onClick = {
+                            if (autoCollapsePatcherSteps) {
+                                expandedCategory = if (expandedCategory == category) null else category
+                            } else {
+                                if (expandedCategories.contains(category)) {
+                                    expandedCategories.remove(category)
+                                } else {
+                                    expandedCategories.add(category)
+                                }
+                            }
+                        },
                         autoCollapseCompleted = autoCollapsePatcherSteps
                     )
                 }

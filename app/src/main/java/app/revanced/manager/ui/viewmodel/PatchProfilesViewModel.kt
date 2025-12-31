@@ -59,6 +59,14 @@ data class BundleOptionDisplay(
     val displayValue: String
 )
 
+data class RemoteBundleOption(
+    val uid: Int,
+    val displayName: String,
+    val version: String?,
+    val patchCount: Int,
+    val patchNamesLowercase: Set<String>
+)
+
 private fun Any?.toDisplayString(): String = when (this) {
     null -> ""
     is Boolean, is Number -> toString()
@@ -101,6 +109,14 @@ class PatchProfilesViewModel(
     enum class VersionUpdateResult {
         SUCCESS,
         PROFILE_NOT_FOUND,
+        FAILED
+    }
+
+    enum class ReplaceRemoteBundleResult {
+        SUCCESS,
+        INCOMPATIBLE,
+        PROFILE_OR_BUNDLE_NOT_FOUND,
+        TARGET_NOT_FOUND,
         FAILED
     }
 
@@ -245,6 +261,24 @@ class PatchProfilesViewModel(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    val remoteBundleOptions = combine(
+        patchBundleRepository.sources,
+        patchBundleRepository.bundleInfoFlow
+    ) { sources, bundleInfoMap ->
+        val remoteSources = sources.filterIsInstance<RemotePatchBundle>().associateBy { it.uid }
+        bundleInfoMap.mapNotNull { (uid, info) ->
+            val source = remoteSources[uid] ?: return@mapNotNull null
+            RemoteBundleOption(
+                uid = uid,
+                displayName = source.displayTitle,
+                version = info.version,
+                patchCount = info.patches.size,
+                patchNamesLowercase = info.patches
+                    .mapTo(mutableSetOf()) { it.name.trim().lowercase() }
+            )
+        }.sortedBy { it.displayName.lowercase() }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     suspend fun resolveProfile(profileId: Int): PatchProfileLaunchData? {
         val profile = patchProfileRepository.getProfile(profileId) ?: return null
         val sourcesList = patchBundleRepository.sources.first()
@@ -369,6 +403,62 @@ class PatchProfilesViewModel(
             payload = updatedPayload
         )
         ChangeUidResult.SUCCESS
+    }
+
+    suspend fun replaceRemoteBundle(
+        profileId: Int,
+        currentUid: Int,
+        targetUid: Int,
+        requiredPatchesLowercase: Set<String>,
+        allowIncompatible: Boolean = false
+    ): ReplaceRemoteBundleResult = withContext(Dispatchers.Default) {
+        val profile = patchProfileRepository.getProfile(profileId)
+            ?: return@withContext ReplaceRemoteBundleResult.PROFILE_OR_BUNDLE_NOT_FOUND
+        if (requiredPatchesLowercase.isEmpty() && !allowIncompatible) {
+            return@withContext ReplaceRemoteBundleResult.INCOMPATIBLE
+        }
+        if (!allowIncompatible) {
+            val bundleInfoSnapshot = patchBundleRepository.bundleInfoFlow.first()
+            val targetInfo = bundleInfoSnapshot[targetUid]
+                ?: return@withContext ReplaceRemoteBundleResult.INCOMPATIBLE
+            val availablePatches = targetInfo.patches
+                .mapTo(mutableSetOf()) { it.name.trim().lowercase() }
+            if (!requiredPatchesLowercase.all { it in availablePatches }) {
+                return@withContext ReplaceRemoteBundleResult.INCOMPATIBLE
+            }
+        }
+        val sourcesList = patchBundleRepository.sources.first()
+        val targetSource = sourcesList.firstOrNull { it.uid == targetUid }?.asRemoteOrNull
+            ?: return@withContext ReplaceRemoteBundleResult.TARGET_NOT_FOUND
+        val remappedPayload = profile.payload.remapLocalBundles(sourcesList)
+        val bundles = remappedPayload.bundles.toMutableList()
+        val bundleIndex = bundles.indexOfFirst { it.bundleUid == currentUid }
+        if (bundleIndex == -1) {
+            return@withContext ReplaceRemoteBundleResult.PROFILE_OR_BUNDLE_NOT_FOUND
+        }
+
+        val updatedBundle = bundles[bundleIndex].copy(
+            bundleUid = targetSource.uid,
+            displayName = targetSource.displayTitle,
+            sourceName = targetSource.patchBundle?.manifestAttributes?.name ?: targetSource.name,
+            sourceEndpoint = targetSource.endpoint
+        )
+        bundles[bundleIndex] = updatedBundle
+        val updatedPayload = remappedPayload.copy(bundles = bundles.toList())
+
+        val updated = patchProfileRepository.updateProfile(
+            uid = profileId,
+            packageName = profile.packageName,
+            appVersion = profile.appVersion,
+            name = profile.name,
+            payload = updatedPayload
+        )
+
+        if (updated == null) {
+            ReplaceRemoteBundleResult.FAILED
+        } else {
+            ReplaceRemoteBundleResult.SUCCESS
+        }
     }
 
     fun toggleSelection(profileId: Int) {

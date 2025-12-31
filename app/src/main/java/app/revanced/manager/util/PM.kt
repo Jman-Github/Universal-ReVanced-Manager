@@ -2,11 +2,9 @@ package app.revanced.manager.util
 
 import android.annotation.SuppressLint
 import android.app.Application
-import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInfo
-import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.content.pm.PackageManager.PackageInfoFlags
 import android.content.pm.PackageManager.NameNotFoundException
@@ -14,10 +12,10 @@ import androidx.core.content.pm.PackageInfoCompat
 import android.content.pm.Signature
 import android.os.Build
 import android.os.Parcelable
+import android.provider.Settings
+import android.net.Uri
 import androidx.compose.runtime.Immutable
 import app.revanced.manager.domain.repository.PatchBundleRepository
-import app.revanced.manager.receiver.InstallReceiver
-import app.revanced.manager.receiver.UninstallReceiver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -25,9 +23,12 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.parcelize.Parcelize
+import ru.solrudev.ackpine.session.await
+import ru.solrudev.ackpine.session.parameters.Confirmation
+import ru.solrudev.ackpine.uninstaller.PackageUninstaller
+import ru.solrudev.ackpine.uninstaller.createSession
+import ru.solrudev.ackpine.uninstaller.parameters.UninstallParametersDsl
 import java.io.File
-
-private const val byteArraySize = 1024 * 1024 // Because 1,048,576 is not readable
 
 @Immutable
 @Parcelize
@@ -40,7 +41,8 @@ data class AppInfo(
 @SuppressLint("QueryPermissionsNeeded")
 class PM(
     private val app: Application,
-    patchBundleRepository: PatchBundleRepository
+    patchBundleRepository: PatchBundleRepository,
+    private val uninstaller: PackageUninstaller
 ) {
     private val scope = CoroutineScope(Dispatchers.IO)
     val application: Application get() = app
@@ -150,17 +152,14 @@ class PM(
         false
     )
 
-    suspend fun installApp(apks: List<File>) = withContext(Dispatchers.IO) {
-        val packageInstaller = app.packageManager.packageInstaller
-        packageInstaller.openSession(packageInstaller.createSession(sessionParams)).use { session ->
-            apks.forEach { apk -> session.writeApk(apk) }
-            session.commit(app.installIntentSender)
-        }
-    }
-
-    fun uninstallPackage(pkg: String) {
-        val packageInstaller = app.packageManager.packageInstaller
-        packageInstaller.uninstall(pkg, app.uninstallIntentSender)
+    suspend fun uninstallPackage(
+        pkg: String,
+        config: UninstallParametersDsl.() -> Unit = {}
+    ) = withContext(Dispatchers.IO) {
+        uninstaller.createSession(pkg) {
+            confirmation = Confirmation.IMMEDIATE
+            config()
+        }.await()
     }
 
     fun launch(pkg: String) = app.packageManager.getLaunchIntentForPackage(pkg)?.let {
@@ -170,29 +169,16 @@ class PM(
 
     fun canInstallPackages() = app.packageManager.canRequestPackageInstalls()
 
-    private fun PackageInstaller.Session.writeApk(apk: File) {
-        apk.inputStream().use { inputStream ->
-            openWrite(apk.name, 0, apk.length()).use { outputStream ->
-                inputStream.copyTo(outputStream, byteArraySize)
-                fsync(outputStream)
-            }
-        }
+    fun requestInstallPackagesPermission(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return true
+        if (canInstallPackages()) return true
+        val intent = Intent(
+            Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+            Uri.parse("package:${app.packageName}")
+        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        app.startActivity(intent)
+        return false
     }
-
-    private val intentFlags
-        get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
-            PendingIntent.FLAG_MUTABLE
-        else
-            0
-
-    private val sessionParams
-        get() = PackageInstaller.SessionParams(
-            PackageInstaller.SessionParams.MODE_FULL_INSTALL
-        ).apply {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
-                setRequestUpdateOwnership(true)
-            setInstallReason(PackageManager.INSTALL_REASON_USER)
-        }
 
     private fun cleanLabel(raw: String, packageName: String): String {
         val trimmed = raw.trim()
@@ -206,19 +192,4 @@ class PM(
         return candidate.ifBlank { trimmed }
     }
 
-    private val Context.installIntentSender
-        get() = PendingIntent.getBroadcast(
-            this,
-            0,
-            Intent(this, InstallReceiver::class.java),
-            intentFlags or PendingIntent.FLAG_UPDATE_CURRENT
-        ).intentSender
-
-    private val Context.uninstallIntentSender
-        get() = PendingIntent.getBroadcast(
-            this,
-            0,
-            Intent(this, UninstallReceiver::class.java),
-            intentFlags or PendingIntent.FLAG_UPDATE_CURRENT
-        ).intentSender
 }
