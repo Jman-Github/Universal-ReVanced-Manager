@@ -99,8 +99,12 @@ class PatcherWorker(
             applicationContext, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE
         )
         val channel = NotificationChannel(
-            "revanced-patcher-patching", "Patching", NotificationManager.IMPORTANCE_LOW
+            "revanced-patcher-patching",
+            applicationContext.getString(R.string.notification_channel_patching_name),
+            NotificationManager.IMPORTANCE_LOW
         )
+        channel.description =
+            applicationContext.getString(R.string.notification_channel_patching_description)
         val notificationManager =
             applicationContext.getSystemService(NotificationManager::class.java)
         notificationManager.createNotificationChannel(channel)
@@ -110,6 +114,8 @@ class PatcherWorker(
             .setSmallIcon(Icon.createWithResource(applicationContext, R.drawable.ic_notification))
             .setContentIntent(pendingIntent)
             .setCategory(Notification.CATEGORY_SERVICE)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
             .build()
     }
 

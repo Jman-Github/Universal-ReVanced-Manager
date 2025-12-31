@@ -87,6 +87,16 @@
     <!-- Needs translation -->
     <string name="bundle_update_description_available">New version for %1$s: %2$s</string>
     <!-- Needs translation -->
+    <string name="bundle_updates_notification_progress">Updating %1$d of %2$d: %3$s</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_notification_completed">Update completed</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_notification_completed_with_available">Update completed. %1$d updates available.</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_notification_available">%1$d updates available.</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_notification_failed">Update failed</string>
+    <!-- Needs translation -->
     <string name="bundle_search_update">Search for updates</string>
     <!-- Needs translation -->
     <string name="bundle_search_update_description">Check this bundle for updates in the background</string>
@@ -143,13 +153,21 @@
     <!-- Needs translation -->
     <string name="background_bundle_update">Background bundle updates</string>
     <!-- Needs translation -->
-    <string name="background_bundle_update_description">Check for patch bundle updates in the background</string>
+    <string name="background_bundle_update_description">Controls the patcher and bundle update notifications. When enabled, bundle updates download in the background. If notifications are allowed, you will see progress and completion updates.</string>
     <!-- Needs translation -->
     <string name="background_radio_menu_title">Background updates</string>
     <!-- Needs translation -->
     <string name="background_bundle_ask_notification">Allow notifications?</string>
     <!-- Needs translation -->
     <string name="background_bundle_ask_notification_description">Enable notifications so the manager can alert you when patch bundle updates are available.</string>
+    <!-- Needs translation -->
+    <string name="notification_channel_bundle_updates_name">Background bundle updates</string>
+    <!-- Needs translation -->
+    <string name="notification_channel_bundle_updates_description">Shows progress for background patch bundle updates.</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_summary_title">Patch bundle updates available</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_summary_description">Tap to view the manager and review bundle updates.</string>
     <!-- Needs translation -->
     <string name="never">Never</string>
     <!-- Needs translation -->
@@ -900,6 +918,10 @@
     <string name="patcher_step_sign_apk">为修补后的 APK 文件签名</string>
     <string name="patcher_notification_title">正在修补…</string>
     <string name="patcher_notification_text">点击返回修补程序</string>
+    <!-- Needs translation -->
+    <string name="notification_channel_patching_name">Patching</string>
+    <!-- Needs translation -->
+    <string name="notification_channel_patching_description">Shows progress while patching an app.</string>
     <string name="patcher_stop_confirm_title">停止修补程序</string>
     <string name="patcher_stop_confirm_description">您确定要停止修补过程吗？</string>
     <!-- Translation needed -->

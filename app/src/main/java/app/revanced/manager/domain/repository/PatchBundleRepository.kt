@@ -50,9 +50,11 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.job
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.coroutineContext
 import io.ktor.http.Url
 import java.io.File
 import java.io.FileInputStream
@@ -1244,6 +1246,52 @@ class PatchBundleRepository(
         )
     }
 
+    suspend fun updateNow(
+        force: Boolean = false,
+        allowUnsafeNetwork: Boolean = false,
+        onPerBundleProgress: ((bundle: RemotePatchBundle, bytesRead: Long, bytesTotal: Long?) -> Unit)? = null,
+        predicate: (bundle: RemotePatchBundle) -> Boolean = { true },
+    ): Boolean {
+        while (true) {
+            val activeJob = updateJobMutex.withLock {
+                if (updateJob?.isActive == true) {
+                    updateJob
+                } else {
+                    updateJob = coroutineContext.job
+                    null
+                }
+            }
+            if (activeJob == null) break
+            activeJob.join()
+        }
+
+        return try {
+            performRemoteUpdate(
+                force = force,
+                showToast = false,
+                allowUnsafeNetwork = allowUnsafeNetwork,
+                onPerBundleProgress = onPerBundleProgress,
+                predicate = predicate
+            )
+        } finally {
+            updateJobMutex.withLock {
+                if (updateJob == coroutineContext.job) {
+                    updateJob = null
+                }
+            }
+            val next = drainPendingUpdateRequests()
+            if (next != null) {
+                startRemoteUpdateJob(
+                    force = next.force,
+                    showToast = next.showToast,
+                    allowUnsafeNetwork = next.allowUnsafeNetwork,
+                    onPerBundleProgress = next.onPerBundleProgress,
+                    predicate = next.predicate
+                )
+            }
+        }
+    }
+
     suspend fun redownloadRemoteBundles() = store.dispatch(Update(force = true))
 
     /**
@@ -1256,17 +1304,20 @@ class PatchBundleRepository(
 
     suspend fun fetchUpdatesAndNotify(
         context: Context,
-        onNotification: (bundleName: String, bundleVersion: String) -> Unit
-    ) = coroutineScope {
+        predicate: (bundle: RemotePatchBundle) -> Boolean = { true },
+        onNotification: (bundleName: String, bundleVersion: String) -> Boolean
+    ): Boolean = coroutineScope {
         val allowMeteredUpdates = prefs.allowMeteredUpdates.get()
         if (!allowMeteredUpdates && !networkInfo.isSafe()) {
             Log.d(tag, "Skipping background update check because the network is down or metered.")
-            return@coroutineScope
+            return@coroutineScope false
         }
 
+        var notifiedAny = false
         sources.first()
             .filterIsInstance<RemotePatchBundle>()
             .forEach { bundle ->
+                if (!predicate(bundle)) return@forEach
                 if (!bundle.searchUpdate || !bundle.enabled) return@forEach
                 if (bundle.state !is PatchBundleSource.State.Available) return@forEach
 
@@ -1283,9 +1334,13 @@ class PatchBundleRepository(
                 val versionLabel = latestSignature ?: bundle.version ?: return@forEach
                 if (bundle.lastNotifiedVersion == versionLabel) return@forEach
 
-                onNotification(bundle.displayTitle, versionLabel)
-                updateLastNotifiedVersion(bundle.uid, versionLabel)
+                val notified = onNotification(bundle.displayTitle, versionLabel)
+                if (notified) {
+                    updateLastNotifiedVersion(bundle.uid, versionLabel)
+                    notifiedAny = true
+                }
             }
+        notifiedAny
     }
 
     suspend fun checkManualUpdates(vararg bundleUids: Int) =
@@ -1397,13 +1452,13 @@ class PatchBundleRepository(
         allowUnsafeNetwork: Boolean,
         onPerBundleProgress: ((bundle: RemotePatchBundle, bytesRead: Long, bytesTotal: Long?) -> Unit)?,
         predicate: (bundle: RemotePatchBundle) -> Boolean,
-    ) = coroutineScope {
+    ): Boolean = coroutineScope {
         try {
             val allowMeteredUpdates = prefs.allowMeteredUpdates.get()
             if (!allowUnsafeNetwork && !allowMeteredUpdates && !networkInfo.isSafe()) {
                 Log.d(tag, "Skipping update check because the network is down or metered.")
                 bundleUpdateProgressFlow.value = null
-                return@coroutineScope
+                return@coroutineScope false
             }
 
             val targets = store.state.value.sources.values
@@ -1413,7 +1468,7 @@ class PatchBundleRepository(
             if (targets.isEmpty()) {
                 if (showToast) toast(R.string.patches_update_unavailable)
                 bundleUpdateProgressFlow.value = null
-                return@coroutineScope
+                return@coroutineScope false
             }
 
             markActiveUpdateUids(targets.map(RemotePatchBundle::uid).toSet())
@@ -1432,7 +1487,7 @@ class PatchBundleRepository(
                     val total = currentUpdateTotal(targets.size)
                     if (total <= 0) {
                         bundleUpdateProgressFlow.value = null
-                        return@coroutineScope
+                        return@coroutineScope false
                     }
                     if (isRemoteUpdateCancelled(bundle.uid)) {
                         continue
@@ -1507,7 +1562,7 @@ class PatchBundleRepository(
 
             if (updated.isEmpty()) {
                 if (showToast) toast(R.string.patches_update_unavailable)
-                return@coroutineScope
+                return@coroutineScope false
             }
 
             dispatchAction("Apply updated bundles") {
@@ -1535,6 +1590,7 @@ class PatchBundleRepository(
             val updatedUids = updated.keys.map(RemotePatchBundle::uid).toSet()
             manualUpdateInfoFlow.update { currentMap -> currentMap - updatedUids }
             if (showToast) toast(R.string.patches_update_success)
+            true
         } finally {
             clearActiveUpdateState()
         }

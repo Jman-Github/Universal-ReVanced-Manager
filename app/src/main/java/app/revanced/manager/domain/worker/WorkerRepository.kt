@@ -52,7 +52,9 @@ class WorkerRepository(app: Application) {
         context: Context,
         notificationChannel: NotificationChannel,
         title: String,
-        description: String
+        description: String,
+        groupKey: String? = null,
+        isGroupSummary: Boolean = false
     ): Pair<Notification, NotificationManager> {
         val notificationIntent = Intent(context, T::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -66,14 +68,20 @@ class WorkerRepository(app: Application) {
         val notificationManager =
             context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.createNotificationChannel(notificationChannel)
-        return Notification.Builder(context, notificationChannel.id)
+        val builder = Notification.Builder(context, notificationChannel.id)
             .setContentTitle(title)
             .setContentText(description)
             .setLargeIcon(Icon.createWithResource(context, R.drawable.ic_notification))
             .setSmallIcon(Icon.createWithResource(context, R.drawable.ic_notification))
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
-            .build() to notificationManager
+        if (groupKey != null) {
+            builder.setGroup(groupKey)
+            if (isGroupSummary) {
+                builder.setGroupSummary(true)
+            }
+        }
+        return builder.build() to notificationManager
     }
 
     fun scheduleBundleUpdateNotificationWork(

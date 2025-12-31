@@ -23,7 +23,7 @@
 - Added a new "Auto-expand running steps" setting for patcher progress widgets
 - Upstreamed app info improvements https://github.com/ReVanced/revanced-manager/pull/2896
 - Improved downloader plugin trust dialog design https://github.com/ReVanced/revanced-manager/pull/2420
-- Added a background bundle update checker & notification system which notifies the user if a patch bundle has an update. Enable in Settings > Updates https://github.com/ReVanced/revanced-manager/pull/2561
+- Added background bundle updates that can auto-download with a single progress notification, plus availability alerts for bundles set to manual updates. Enable in Settings > Updates. This also includes a background patching notification if you leave the app during patching https://github.com/ReVanced/revanced-manager/pull/2561
 - Added individual patcher steps in the patcher screen https://github.com/ReVanced/revanced-manager/pull/2889
 - Improved the experimental patcher with a faster APK write path during patching. ZIP sanitization before signing now runs only if initial signing 
 - Patch profiles empty state text now matches the apps tab styling

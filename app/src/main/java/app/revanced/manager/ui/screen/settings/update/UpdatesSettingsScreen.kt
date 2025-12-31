@@ -130,9 +130,11 @@ fun UpdatesSettingsScreen(
     }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) {
-        pendingInterval?.let { interval ->
-            vm.updateBackgroundBundleUpdateTime(interval)
+    ) { granted ->
+        if (granted) {
+            pendingInterval?.let { interval ->
+                vm.updateBackgroundBundleUpdateTime(interval)
+            }
         }
         pendingInterval = null
     }

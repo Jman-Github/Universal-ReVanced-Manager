@@ -78,6 +78,11 @@
     <string name="bundle_update_banner_title">Updating patch bundles</string>
     <string name="bundle_update_available">Patch bundle update available</string>
     <string name="bundle_update_description_available">New version for %1$s: %2$s</string>
+    <string name="bundle_updates_notification_progress">Updating %1$d of %2$d: %3$s</string>
+    <string name="bundle_updates_notification_completed">Update completed</string>
+    <string name="bundle_updates_notification_completed_with_available">Update completed. %1$d updates available.</string>
+    <string name="bundle_updates_notification_available">%1$d updates available.</string>
+    <string name="bundle_updates_notification_failed">Update failed</string>
     <string name="bundle_search_update">Search for updates</string>
     <string name="bundle_search_update_description">Check this bundle for updates in the background</string>
     <string name="bundle_reorder">Organize bundles</string>
@@ -135,10 +140,14 @@
     <string name="auto_updates_dialog_patches">Official ReVanced Patches</string>
     <string name="auto_updates_dialog_note">These settings can be changed later.</string>
     <string name="background_bundle_update">Background bundle updates</string>
-    <string name="background_bundle_update_description">Check for patch bundle updates in the background</string>
+    <string name="background_bundle_update_description">Controls the patcher and bundle update notifications. When enabled, bundle updates download in the background. If notifications are allowed, you will see progress and completion updates.</string>
     <string name="background_radio_menu_title">Background updates</string>
     <string name="background_bundle_ask_notification">Allow notifications?</string>
     <string name="background_bundle_ask_notification_description">Enable notifications so the manager can alert you when patch bundle updates are available.</string>
+    <string name="notification_channel_bundle_updates_name">Background bundle updates</string>
+    <string name="notification_channel_bundle_updates_description">Shows progress for background patch bundle updates.</string>
+    <string name="bundle_updates_summary_title">Patch bundle updates available</string>
+    <string name="bundle_updates_summary_description">Tap to view the manager and review bundle updates.</string>
     <string name="never">Never</string>
     <string name="minutes_15">Every 15 minutes</string>
     <string name="hourly">Hourly</string>
@@ -858,6 +867,8 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="patcher_step_sign_apk">Sign patched APK file</string>
     <string name="patcher_notification_title">Patching in progress…</string>
     <string name="patcher_notification_text">Tap to return to the patcher</string>
+    <string name="notification_channel_patching_name">Patching</string>
+    <string name="notification_channel_patching_description">Shows progress while patching an app.</string>
     <string name="patcher_stop_confirm_title">Stop patcher</string>
     <string name="patcher_stop_confirm_description">Are you sure you want to stop the patching process?</string>
     <string name="patcher_install_in_progress_title">Installation in progress</string>
