@@ -30,6 +30,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,6 +57,9 @@ import app.revanced.manager.ui.component.settings.BooleanItem
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsCard
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsDivider
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsItem
+import app.revanced.manager.ui.component.settings.SettingsSearchHighlight
+import app.revanced.manager.ui.model.navigation.Settings
+import app.revanced.manager.ui.screen.settings.SettingsSearchState
 import app.revanced.manager.ui.viewmodel.DownloadsViewModel
 import app.revanced.manager.util.APK_MIMETYPE
 import app.revanced.manager.ui.component.AnnotatedLinkText // From PR #37: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/37
@@ -74,8 +78,18 @@ fun DownloadsSettingsScreen(
     val downloadedApps by viewModel.downloadedApps.collectAsStateWithLifecycle(emptyList())
     val pluginStates by viewModel.downloaderPluginStates.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val searchTarget by SettingsSearchState.target.collectAsStateWithLifecycle()
+    var highlightTarget by rememberSaveable { mutableStateOf<Int?>(null) }
     var showHelpDialog by rememberSaveable { mutableStateOf(false) } // From PR #37: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/37
     val context = LocalContext.current
+
+    LaunchedEffect(searchTarget) {
+        val target = searchTarget
+        if (target?.destination == Settings.Downloads) {
+            highlightTarget = target.targetId
+            SettingsSearchState.clear()
+        }
+    }
 
     val exportApkLauncher =
         rememberLauncherForActivityResult(CreateDocument(APK_MIMETYPE)) { uri ->
@@ -153,15 +167,31 @@ fun DownloadsSettingsScreen(
                     ExpressiveSettingsCard(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     ) {
-                        BooleanItem(
-                            preference = prefs.autoSaveDownloaderApks,
-                            headline = R.string.downloader_auto_save_title,
-                            description = R.string.downloader_auto_save_description
-                        )
+                        SettingsSearchHighlight(
+                            targetKey = R.string.downloader_auto_save_title,
+                            activeKey = highlightTarget,
+                            onHighlightComplete = { highlightTarget = null }
+                        ) { highlightModifier ->
+                            BooleanItem(
+                                modifier = highlightModifier,
+                                preference = prefs.autoSaveDownloaderApks,
+                                headline = R.string.downloader_auto_save_title,
+                                description = R.string.downloader_auto_save_description
+                            )
+                        }
                     }
                 }
                 item {
-                    GroupHeader(stringResource(R.string.downloader_plugins))
+                    SettingsSearchHighlight(
+                        targetKey = R.string.downloader_plugins,
+                        activeKey = highlightTarget,
+                        onHighlightComplete = { highlightTarget = null }
+                    ) { highlightModifier ->
+                        GroupHeader(
+                            stringResource(R.string.downloader_plugins),
+                            modifier = highlightModifier
+                        )
+                    }
                 }
                 pluginStates.forEach { (packageName, state) ->
                     item(key = packageName) {
@@ -308,7 +338,17 @@ fun DownloadsSettingsScreen(
                 }
 
                 item {
-                    GroupHeader(stringResource(R.string.downloaded_apps))
+                    SettingsSearchHighlight(
+                        targetKey = R.string.downloaded_apps,
+                        activeKey = highlightTarget,
+                        extraKeys = setOf(R.string.downloaded_apps_export),
+                        onHighlightComplete = { highlightTarget = null }
+                    ) { highlightModifier ->
+                        GroupHeader(
+                            stringResource(R.string.downloaded_apps),
+                            modifier = highlightModifier
+                        )
+                    }
                 }
                 items(downloadedApps, key = { it.packageName to it.version }) { app ->
                     val selected = app in viewModel.appSelection

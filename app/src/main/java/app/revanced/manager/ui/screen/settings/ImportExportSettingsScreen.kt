@@ -56,8 +56,11 @@ import app.revanced.manager.ui.component.settings.ExpandableSettingListItem
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsCard
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsDivider
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsItem
+import app.revanced.manager.ui.component.settings.SettingsSearchHighlight
 import app.revanced.manager.ui.viewmodel.ImportExportViewModel
 import app.revanced.manager.ui.viewmodel.ResetDialogState
+import app.revanced.manager.ui.model.navigation.Settings
+import app.revanced.manager.ui.screen.settings.SettingsSearchState
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.uiSafe
 import app.revanced.manager.domain.repository.PatchBundleRepository.BundleImportPhase
@@ -74,6 +77,8 @@ fun ImportExportSettingsScreen(
     vm: ImportExportViewModel = koinViewModel()
 ) {
     val context = LocalContext.current
+    val searchTarget by SettingsSearchState.target.collectAsStateWithLifecycle()
+    var highlightTarget by rememberSaveable { mutableStateOf<Int?>(null) }
     val coroutineScope = rememberCoroutineScope()
     var selectorDialog by rememberSaveable { mutableStateOf<(@Composable () -> Unit)?>(null) }
     val fs: Filesystem = koinInject()
@@ -136,6 +141,14 @@ fun ImportExportSettingsScreen(
     val packagesWithSelections by vm.packagesWithSelection.collectAsStateWithLifecycle(initialValue = emptySet())
     val packagesWithOptions by vm.packagesWithOptions.collectAsStateWithLifecycle(initialValue = emptySet())
     val importProgress by vm.bundleImportProgress.collectAsStateWithLifecycle(initialValue = null)
+
+    LaunchedEffect(searchTarget) {
+        val target = searchTarget
+        if (target?.destination == Settings.ImportExport) {
+            highlightTarget = target.targetId
+            SettingsSearchState.clear()
+        }
+    }
 
     vm.selectionAction?.let { action ->
         if (vm.selectedBundle == null) {
@@ -367,220 +380,311 @@ fun ImportExportSettingsScreen(
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                GroupItem(
-                    onClick = {
-                        openImportPicker(ImportPicker.Keystore)
-                    },
-                    headline = R.string.import_keystore,
-                    description = R.string.import_keystore_description
-                )
+                SettingsSearchHighlight(
+                    targetKey = R.string.import_keystore,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    GroupItem(
+                        modifier = highlightModifier,
+                        onClick = {
+                            openImportPicker(ImportPicker.Keystore)
+                        },
+                        headline = R.string.import_keystore,
+                        description = R.string.import_keystore_description
+                    )
+                }
                 ExpressiveSettingsDivider()
-                GroupItem(
-                    onClick = vm::importSelection,
-                    headline = R.string.import_patch_selection,
-                    description = R.string.import_patch_selection_description
-                )
+                SettingsSearchHighlight(
+                    targetKey = R.string.import_patch_selection,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    GroupItem(
+                        modifier = highlightModifier,
+                        onClick = vm::importSelection,
+                        headline = R.string.import_patch_selection,
+                        description = R.string.import_patch_selection_description
+                    )
+                }
                 ExpressiveSettingsDivider()
-                GroupItem(
-                    onClick = {
-                        openImportPicker(ImportPicker.PatchBundles)
-                    },
-                    headline = R.string.import_patch_bundles,
-                    description = R.string.import_patch_bundles_description
-                )
+                SettingsSearchHighlight(
+                    targetKey = R.string.import_patch_bundles,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    GroupItem(
+                        modifier = highlightModifier,
+                        onClick = {
+                            openImportPicker(ImportPicker.PatchBundles)
+                        },
+                        headline = R.string.import_patch_bundles,
+                        description = R.string.import_patch_bundles_description
+                    )
+                }
                 ExpressiveSettingsDivider()
-                GroupItem(
-                    onClick = {
-                        openImportPicker(ImportPicker.PatchProfiles)
-                    },
-                    headline = R.string.import_patch_profiles,
-                    description = R.string.import_patch_profiles_description
-                )
+                SettingsSearchHighlight(
+                    targetKey = R.string.import_patch_profiles,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    GroupItem(
+                        modifier = highlightModifier,
+                        onClick = {
+                            openImportPicker(ImportPicker.PatchProfiles)
+                        },
+                        headline = R.string.import_patch_profiles,
+                        description = R.string.import_patch_profiles_description
+                    )
+                }
                 ExpressiveSettingsDivider()
-                GroupItem(
-                    onClick = {
-                        openImportPicker(ImportPicker.ManagerSettings)
-                    },
-                    headline = R.string.import_manager_settings,
-                    description = R.string.import_manager_settings_description
-                )
+                SettingsSearchHighlight(
+                    targetKey = R.string.import_manager_settings,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    GroupItem(
+                        modifier = highlightModifier,
+                        onClick = {
+                            openImportPicker(ImportPicker.ManagerSettings)
+                        },
+                        headline = R.string.import_manager_settings,
+                        description = R.string.import_manager_settings_description
+                    )
+                }
             }
 
             GroupHeader(stringResource(R.string.export))
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                GroupItem(
-                    onClick = {
-                        if (!vm.canExport()) {
-                            context.toast(context.getString(R.string.export_keystore_unavailable))
-                            return@GroupItem
-                        }
-                        openExportPicker(ExportPicker.Keystore)
-                    },
-                    headline = R.string.export_keystore,
-                    description = R.string.export_keystore_description
-                )
+                SettingsSearchHighlight(
+                    targetKey = R.string.export_keystore,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    GroupItem(
+                        modifier = highlightModifier,
+                        onClick = {
+                            if (!vm.canExport()) {
+                                context.toast(context.getString(R.string.export_keystore_unavailable))
+                                return@GroupItem
+                            }
+                            openExportPicker(ExportPicker.Keystore)
+                        },
+                        headline = R.string.export_keystore,
+                        description = R.string.export_keystore_description
+                    )
+                }
                 ExpressiveSettingsDivider()
-                GroupItem(
-                    onClick = vm::exportSelection,
-                    headline = R.string.export_patch_selection,
-                    description = R.string.export_patch_selection_description
-                )
+                SettingsSearchHighlight(
+                    targetKey = R.string.export_patch_selection,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    GroupItem(
+                        modifier = highlightModifier,
+                        onClick = vm::exportSelection,
+                        headline = R.string.export_patch_selection,
+                        description = R.string.export_patch_selection_description
+                    )
+                }
                 ExpressiveSettingsDivider()
-                GroupItem(
-                    onClick = {
-                        openExportPicker(ExportPicker.PatchBundles)
-                    },
-                    headline = R.string.export_patch_bundles,
-                    description = R.string.export_patch_bundles_description
-                )
+                SettingsSearchHighlight(
+                    targetKey = R.string.export_patch_bundles,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    GroupItem(
+                        modifier = highlightModifier,
+                        onClick = {
+                            openExportPicker(ExportPicker.PatchBundles)
+                        },
+                        headline = R.string.export_patch_bundles,
+                        description = R.string.export_patch_bundles_description
+                    )
+                }
                 ExpressiveSettingsDivider()
-                GroupItem(
-                    onClick = {
-                        openExportPicker(ExportPicker.PatchProfiles)
-                    },
-                    headline = R.string.export_patch_profiles,
-                    description = R.string.export_patch_profiles_description
-                )
+                SettingsSearchHighlight(
+                    targetKey = R.string.export_patch_profiles,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    GroupItem(
+                        modifier = highlightModifier,
+                        onClick = {
+                            openExportPicker(ExportPicker.PatchProfiles)
+                        },
+                        headline = R.string.export_patch_profiles,
+                        description = R.string.export_patch_profiles_description
+                    )
+                }
                 ExpressiveSettingsDivider()
-                GroupItem(
-                    onClick = {
-                        openExportPicker(ExportPicker.ManagerSettings)
-                    },
-                    headline = R.string.export_manager_settings,
-                    description = R.string.export_manager_settings_description
-                )
+                SettingsSearchHighlight(
+                    targetKey = R.string.export_manager_settings,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    GroupItem(
+                        modifier = highlightModifier,
+                        onClick = {
+                            openExportPicker(ExportPicker.ManagerSettings)
+                        },
+                        headline = R.string.export_manager_settings,
+                        description = R.string.export_manager_settings_description
+                    )
+                }
             }
 
             GroupHeader(stringResource(R.string.reset))
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                GroupItem(
-                    onClick = {
-                        vm.resetDialogState = ResetDialogState.Keystore {
-                            vm.regenerateKeystore()
-                        }
-                    },
-                    headline = R.string.regenerate_keystore,
-                    description = R.string.regenerate_keystore_description
-                )
+                SettingsSearchHighlight(
+                    targetKey = R.string.regenerate_keystore,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    GroupItem(
+                        modifier = highlightModifier,
+                        onClick = {
+                            vm.resetDialogState = ResetDialogState.Keystore {
+                                vm.regenerateKeystore()
+                            }
+                        },
+                        headline = R.string.regenerate_keystore,
+                        description = R.string.regenerate_keystore_description
+                    )
+                }
                 ExpressiveSettingsDivider()
 
-                ExpandableSettingListItem(
-                    headlineContent = stringResource(R.string.reset_patch_selection),
-                    supportingContent = stringResource(R.string.reset_patch_selection_description),
-                    expandableContent = {
-                    GroupItem(
-                        onClick = {
-                            vm.resetDialogState = ResetDialogState.PatchSelectionAll {
-                                vm.resetSelection()
-                            }
-                        },
-                        headline = R.string.patch_selection_reset_all,
-                        description = R.string.patch_selection_reset_all_description
-                    )
-
-                    GroupItem(
-                        onClick = {
-                            selectorDialog = {
-                                PackageSelector(packages = packagesWithSelections) { packageName ->
-                                    packageName?.also {
-                                        vm.resetDialogState =
-                                            ResetDialogState.PatchSelectionPackage(packageName) {
-                                                vm.resetSelectionForPackage(packageName)
-                                            }
+                SettingsSearchHighlight(
+                    targetKey = R.string.reset_patch_selection,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpandableSettingListItem(
+                        headlineContent = stringResource(R.string.reset_patch_selection),
+                        supportingContent = stringResource(R.string.reset_patch_selection_description),
+                        modifier = highlightModifier,
+                        expandableContent = {
+                            GroupItem(
+                                onClick = {
+                                    vm.resetDialogState = ResetDialogState.PatchSelectionAll {
+                                        vm.resetSelection()
                                     }
-                                    selectorDialog = null
-                                }
-                            }
-                        },
-                        headline = R.string.patch_selection_reset_package,
-                        description = R.string.patch_selection_reset_package_description
-                    )
+                                },
+                                headline = R.string.patch_selection_reset_all,
+                                description = R.string.patch_selection_reset_all_description
+                            )
 
-                    if (patchBundles.isNotEmpty()) {
-                        GroupItem(
-                            onClick = {
-                                selectorDialog = {
-                                    BundleSelector(sources = patchBundles) { src ->
-                                        src?.also {
-                                            coroutineScope.launch {
+                            GroupItem(
+                                onClick = {
+                                    selectorDialog = {
+                                        PackageSelector(packages = packagesWithSelections) { packageName ->
+                                            packageName?.also {
                                                 vm.resetDialogState =
-                                                    ResetDialogState.PatchSelectionBundle(it.displayTitle) {
-                                                        vm.resetSelectionForPatchBundle(it)
+                                                    ResetDialogState.PatchSelectionPackage(packageName) {
+                                                        vm.resetSelectionForPackage(packageName)
                                                     }
                                             }
+                                            selectorDialog = null
                                         }
-                                        selectorDialog = null
                                     }
-                                }
-                            },
-                            headline = R.string.patch_selection_reset_patches,
-                            description = R.string.patch_selection_reset_patches_description
-                        )
-                    }
-                    }
-                )
+                                },
+                                headline = R.string.patch_selection_reset_package,
+                                description = R.string.patch_selection_reset_package_description
+                            )
+
+                            if (patchBundles.isNotEmpty()) {
+                                GroupItem(
+                                    onClick = {
+                                        selectorDialog = {
+                                            BundleSelector(sources = patchBundles) { src ->
+                                                src?.also {
+                                                    coroutineScope.launch {
+                                                        vm.resetDialogState =
+                                                            ResetDialogState.PatchSelectionBundle(it.displayTitle) {
+                                                                vm.resetSelectionForPatchBundle(it)
+                                                            }
+                                                    }
+                                                }
+                                                selectorDialog = null
+                                            }
+                                        }
+                                    },
+                                    headline = R.string.patch_selection_reset_patches,
+                                    description = R.string.patch_selection_reset_patches_description
+                                )
+                            }
+                        }
+                    )
+                }
 
                 ExpressiveSettingsDivider()
 
-                ExpandableSettingListItem(
-                    headlineContent = stringResource(R.string.reset_patch_options),
-                    supportingContent = stringResource(R.string.reset_patch_options_description),
-                    expandableContent = {
-                    GroupItem(
-                        onClick = {
-                            vm.resetDialogState = ResetDialogState.PatchOptionsAll {
-                                vm.resetOptions()
-                            }
-                        }, // TODO: patch options import/export.
-                        headline = R.string.patch_options_reset_all,
-                        description = R.string.patch_options_reset_all_description,
-                    )
-
-                    GroupItem(
-                        onClick = {
-                            selectorDialog = {
-                                PackageSelector(packages = packagesWithOptions) { packageName ->
-                                    packageName?.also {
-                                        vm.resetDialogState =
-                                            ResetDialogState.PatchOptionPackage(packageName) {
-                                                vm.resetOptionsForPackage(packageName)
-                                            }
+                SettingsSearchHighlight(
+                    targetKey = R.string.reset_patch_options,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpandableSettingListItem(
+                        headlineContent = stringResource(R.string.reset_patch_options),
+                        supportingContent = stringResource(R.string.reset_patch_options_description),
+                        modifier = highlightModifier,
+                        expandableContent = {
+                            GroupItem(
+                                onClick = {
+                                    vm.resetDialogState = ResetDialogState.PatchOptionsAll {
+                                        vm.resetOptions()
                                     }
-                                    selectorDialog = null
-                                }
-                            }
-                        },
-                        headline = R.string.patch_options_reset_package,
-                        description = R.string.patch_options_reset_package_description
-                    )
+                                }, // TODO: patch options import/export.
+                                headline = R.string.patch_options_reset_all,
+                                description = R.string.patch_options_reset_all_description,
+                            )
 
-                    if (patchBundles.isNotEmpty()) {
-                        GroupItem(
-                            onClick = {
-                                selectorDialog = {
-                                    BundleSelector(sources = patchBundles) { src ->
-                                        src?.also {
-                                            coroutineScope.launch {
-                                            vm.resetDialogState =
-                                                ResetDialogState.PatchOptionBundle(src.displayTitle) {
-                                                    vm.resetOptionsForBundle(src)
+                            GroupItem(
+                                onClick = {
+                                    selectorDialog = {
+                                        PackageSelector(packages = packagesWithOptions) { packageName ->
+                                            packageName?.also {
+                                                vm.resetDialogState =
+                                                    ResetDialogState.PatchOptionPackage(packageName) {
+                                                        vm.resetOptionsForPackage(packageName)
+                                                    }
+                                            }
+                                            selectorDialog = null
+                                        }
+                                    }
+                                },
+                                headline = R.string.patch_options_reset_package,
+                                description = R.string.patch_options_reset_package_description
+                            )
+
+                            if (patchBundles.isNotEmpty()) {
+                                GroupItem(
+                                    onClick = {
+                                        selectorDialog = {
+                                            BundleSelector(sources = patchBundles) { src ->
+                                                src?.also {
+                                                    coroutineScope.launch {
+                                                        vm.resetDialogState =
+                                                            ResetDialogState.PatchOptionBundle(src.displayTitle) {
+                                                                vm.resetOptionsForBundle(src)
+                                                            }
+                                                    }
                                                 }
+                                                selectorDialog = null
                                             }
                                         }
-                                        selectorDialog = null
-                                    }
-                                }
-                            },
-                            headline = R.string.patch_options_reset_patches,
-                            description = R.string.patch_options_reset_patches_description,
-                        )
-                    }
-                    }
-                )
+                                    },
+                                    headline = R.string.patch_options_reset_patches,
+                                    description = R.string.patch_options_reset_patches_description,
+                                )
+                            }
+                        }
+                    )
+                }
             }
         }
     }
@@ -649,9 +753,11 @@ private fun GroupItem(
     onClick: () -> Unit,
     @StringRes headline: Int,
     @StringRes description: Int? = null,
-    supportingContent: (@Composable () -> Unit)? = null
+    supportingContent: (@Composable () -> Unit)? = null,
+    modifier: Modifier = Modifier
 ) {
     ExpressiveSettingsItem(
+        modifier = modifier,
         headlineContent = stringResource(headline),
         supportingContent = description?.let { stringResource(it) },
         supportingContentSlot = supportingContent,

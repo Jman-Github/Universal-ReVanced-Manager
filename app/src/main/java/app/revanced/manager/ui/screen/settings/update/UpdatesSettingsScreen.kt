@@ -4,7 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.net.Uri
 import android.os.PowerManager
-import android.provider.Settings
+import android.provider.Settings as AndroidSettings
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -23,6 +23,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
@@ -46,12 +47,16 @@ import app.revanced.manager.ui.component.settings.BooleanItem
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsCard
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsDivider
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsItem
+import app.revanced.manager.ui.component.settings.SettingsSearchHighlight
 import app.revanced.manager.ui.viewmodel.UpdatesSettingsViewModel
+import app.revanced.manager.ui.model.navigation.Settings
+import app.revanced.manager.ui.screen.settings.SettingsSearchState
 import app.revanced.manager.util.permission.hasNotificationPermission
 import app.revanced.manager.util.toast
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,6 +70,8 @@ fun UpdatesSettingsScreen(
     val coroutineScope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
     val backgroundInterval by vm.backgroundBundleUpdateInterval.getAsState()
+    val searchTarget by SettingsSearchState.target.collectAsStateWithLifecycle()
+    var highlightTarget by rememberSaveable { mutableStateOf<Int?>(null) }
     var showBackgroundUpdateDialog by rememberSaveable { mutableStateOf(false) }
     var pendingInterval by rememberSaveable {
         mutableStateOf<SearchForUpdatesBackgroundInterval?>(null)
@@ -72,6 +79,14 @@ fun UpdatesSettingsScreen(
     var showNotificationPermissionDialog by rememberSaveable { mutableStateOf(false) }
     var showBatteryOptimizationDialog by rememberSaveable { mutableStateOf(false) }
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    LaunchedEffect(searchTarget) {
+        val target = searchTarget
+        if (target?.destination == Settings.Updates) {
+            highlightTarget = target.targetId
+            SettingsSearchState.clear()
+        }
+    }
     val batteryOptimizationLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
             val powerManager = context.getSystemService(PowerManager::class.java)
@@ -198,7 +213,7 @@ fun UpdatesSettingsScreen(
                         showBatteryOptimizationDialog = false
                         batteryOptimizationLauncher.launch(
                             Intent(
-                                Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                AndroidSettings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
                                 Uri.fromParts("package", context.packageName, null)
                             )
                         )
@@ -230,11 +245,18 @@ fun UpdatesSettingsScreen(
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                BooleanItem(
-                    preference = vm.allowMeteredUpdates,
-                    headline = R.string.update_on_metered_connections,
-                    description = R.string.update_on_metered_connections_description
-                )
+                SettingsSearchHighlight(
+                    targetKey = R.string.update_on_metered_connections,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = vm.allowMeteredUpdates,
+                        headline = R.string.update_on_metered_connections,
+                        description = R.string.update_on_metered_connections_description
+                    )
+                }
             }
 
             GroupHeader(stringResource(R.string.manager))
@@ -242,55 +264,101 @@ fun UpdatesSettingsScreen(
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                ExpressiveSettingsItem(
-                    headlineContent = stringResource(R.string.manual_update_check),
-                    supportingContent = stringResource(R.string.manual_update_check_description),
-                    onClick = {
-                        coroutineScope.launch {
+                SettingsSearchHighlight(
+                    targetKey = R.string.manual_update_check,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(R.string.manual_update_check),
+                        supportingContent = stringResource(R.string.manual_update_check_description),
+                        onClick = {
+                            coroutineScope.launch {
+                                if (!vm.isConnected) {
+                                    context.toast(context.getString(R.string.no_network_toast))
+                                    return@launch
+                                }
+                                if (vm.checkForUpdates()) onUpdateClick()
+                            }
+                        }
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.changelog,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(R.string.changelog),
+                        supportingContent = stringResource(R.string.changelog_description),
+                        onClick = {
                             if (!vm.isConnected) {
                                 context.toast(context.getString(R.string.no_network_toast))
-                                return@launch
+                                return@ExpressiveSettingsItem
                             }
-                            if (vm.checkForUpdates()) onUpdateClick()
+                            onChangelogClick()
                         }
-                    }
-                )
+                    )
+                }
                 ExpressiveSettingsDivider()
-                ExpressiveSettingsItem(
-                    headlineContent = stringResource(R.string.changelog),
-                    supportingContent = stringResource(R.string.changelog_description),
-                    onClick = {
-                        if (!vm.isConnected) {
-                            context.toast(context.getString(R.string.no_network_toast))
-                            return@ExpressiveSettingsItem
-                        }
-                        onChangelogClick()
-                    }
-                )
+                SettingsSearchHighlight(
+                    targetKey = R.string.update_checking_manager,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = vm.managerAutoUpdates,
+                        headline = R.string.update_checking_manager,
+                        description = R.string.update_checking_manager_description
+                    )
+                }
                 ExpressiveSettingsDivider()
-                BooleanItem(
-                    preference = vm.managerAutoUpdates,
-                    headline = R.string.update_checking_manager,
-                    description = R.string.update_checking_manager_description
-                )
+                SettingsSearchHighlight(
+                    targetKey = R.string.show_manager_update_dialog_on_launch,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = vm.showManagerUpdateDialogOnLaunch,
+                        headline = R.string.show_manager_update_dialog_on_launch,
+                        description = R.string.show_manager_update_dialog_on_launch_description
+                    )
+                }
                 ExpressiveSettingsDivider()
-                BooleanItem(
-                    preference = vm.showManagerUpdateDialogOnLaunch,
-                    headline = R.string.show_manager_update_dialog_on_launch,
-                    description = R.string.show_manager_update_dialog_on_launch_description
-                )
+                SettingsSearchHighlight(
+                    targetKey = R.string.manager_prereleases,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = vm.useManagerPrereleases,
+                        headline = R.string.manager_prereleases,
+                        description = R.string.manager_prereleases_description
+                    )
+                }
                 ExpressiveSettingsDivider()
-                BooleanItem(
-                    preference = vm.useManagerPrereleases,
-                    headline = R.string.manager_prereleases,
-                    description = R.string.manager_prereleases_description
-                )
-                ExpressiveSettingsDivider()
-                ExpressiveSettingsItem(
-                    headlineContent = stringResource(R.string.background_bundle_update),
-                    supportingContent = stringResource(R.string.background_bundle_update_description),
-                    onClick = { showBackgroundUpdateDialog = true }
-                )
+                SettingsSearchHighlight(
+                    targetKey = R.string.background_bundle_update,
+                    activeKey = highlightTarget,
+                    extraKeys = setOf(
+                        R.string.background_radio_menu_title,
+                        R.string.background_bundle_ask_notification
+                    ),
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(R.string.background_bundle_update),
+                        supportingContent = stringResource(R.string.background_bundle_update_description),
+                        onClick = { showBackgroundUpdateDialog = true }
+                    )
+                }
             }
         }
     }

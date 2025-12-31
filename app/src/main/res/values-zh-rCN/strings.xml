@@ -16,6 +16,10 @@
 
     <string name="dashboard">仪表盘</string>
     <string name="settings">设置</string>
+    <!-- Needs translation -->
+    <string name="settings_search_hint">Search settings</string>
+    <!-- Needs translation -->
+    <string name="settings_search_no_results">No settings found.</string>
     <string name="select_app">选择一个应用</string>
     <!-- Translation needed -->
     <string name="app_filter_title">Filter apps</string>

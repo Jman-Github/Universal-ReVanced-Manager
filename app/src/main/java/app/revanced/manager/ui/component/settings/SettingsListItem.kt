@@ -93,7 +93,8 @@ fun SettingsListItem(
 fun ExpandableSettingListItem(
     headlineContent: String,
     supportingContent: String,
-    expandableContent: @Composable () -> Unit
+    expandableContent: @Composable () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -101,6 +102,7 @@ fun ExpandableSettingListItem(
         modifier = Modifier
             .fillMaxWidth()
             .animateContentSize()
+            .then(modifier)
     ) {
         ExpressiveSettingsItem(
             modifier = Modifier.clickable { expanded = !expanded },

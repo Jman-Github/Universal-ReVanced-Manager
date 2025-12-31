@@ -480,6 +480,10 @@
 Вам нужно включить \"Разрешить изменение выбора и параметров патча\" в дополнительных настройках перед переключением патчей."</string>
     <string name="selection_warning_title">Перестать использовать настройки по умолчанию?</string>
     <string name="settings">Настройки</string>
+    <!-- Needs translation -->
+    <string name="settings_search_hint">Search settings</string>
+    <!-- Needs translation -->
+    <string name="settings_search_no_results">No settings found.</string>
     <string name="share">Поделиться</string>
     <string name="show">Показать</string>
     <string name="show_manager_update_dialog_on_launch">Показывать сообщение об обновлении при запуске</string>

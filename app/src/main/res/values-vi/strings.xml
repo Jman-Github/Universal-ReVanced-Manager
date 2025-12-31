@@ -14,6 +14,10 @@
     <string name="copy_to_clipboard">Sao chép vào bảng nhớ tạm</string>
     <string name="dashboard">Tổng quan</string>
     <string name="settings">Cài đặt</string>
+    <!-- Needs translation -->
+    <string name="settings_search_hint">Search settings</string>
+    <!-- Needs translation -->
+    <string name="settings_search_no_results">No settings found.</string>
     <string name="select_app">Chọn ứng dụng</string>
     <string name="app_filter_title">Lọc ứng dụng</string>
     <string name="app_filter_installed_only">Chỉ ứng dụng đã cài</string>

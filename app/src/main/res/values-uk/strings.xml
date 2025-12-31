@@ -480,6 +480,10 @@
 Вам потрібно включити \"Дозволити змінювати вибрані патчі та параметри\" у розширених налаштуваннях перед перемиканням патчів."</string>
     <string name="selection_warning_title">Перестати використовувати налаштування за умовчанням?</string>
     <string name="settings">Налаштування</string>
+    <!-- Needs translation -->
+    <string name="settings_search_hint">Search settings</string>
+    <!-- Needs translation -->
+    <string name="settings_search_no_results">No settings found.</string>
     <string name="share">Поділитися</string>
     <string name="show">Показати</string>
     <string name="show_manager_update_dialog_on_launch">Показувати повідомлення про оновлення під час запуску</string>
