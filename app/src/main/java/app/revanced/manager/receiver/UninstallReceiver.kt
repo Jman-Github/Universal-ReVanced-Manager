@@ -27,7 +27,20 @@ class UninstallReceiver : BroadcastReceiver() {
                     intent.getParcelableExtra(Intent.EXTRA_INTENT) as? Intent
                 }
 
-                if (!tryStartUserAction(context, userActionIntent)) {
+                if (tryStartUserAction(context, userActionIntent)) {
+                    context.sendBroadcast(
+                        Intent().apply {
+                            action = UninstallService.APP_UNINSTALL_ACTION
+                            setPackage(context.packageName)
+                            putExtra(UninstallService.EXTRA_UNINSTALL_PACKAGE_NAME, targetPackage)
+                            putExtra(
+                                UninstallService.EXTRA_UNINSTALL_STATUS,
+                                PackageInstaller.STATUS_PENDING_USER_ACTION
+                            )
+                            putExtra(UninstallService.EXTRA_UNINSTALL_STATUS_MESSAGE, extraStatusMessage)
+                        }
+                    )
+                } else {
                     val fallback = Intent(
                         Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                         Uri.parse("package:${targetPackage.orEmpty()}")

@@ -31,13 +31,16 @@ import app.revanced.manager.domain.installer.ShizukuInstaller
 import app.revanced.manager.domain.repository.InstalledAppRepository
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.domain.repository.remapAndExtractSelection
+import app.revanced.manager.domain.repository.remapLocalBundles
+import app.revanced.manager.domain.repository.toPayload
 import app.revanced.manager.domain.repository.toSignatureMap
-import app.revanced.manager.service.InstallService
-import app.revanced.manager.service.UninstallService
+import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.revanced.manager.util.PM
 import app.revanced.manager.util.PatchSelection
+import app.revanced.manager.util.asCode
 import app.revanced.manager.util.simpleMessage
 import app.revanced.manager.util.tag
+import app.revanced.manager.util.awaitUserConfirmation
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.toastHandle
 import kotlinx.coroutines.CompletableDeferred
@@ -53,7 +56,17 @@ import kotlinx.coroutines.flow.first
 import java.io.File
 import java.io.IOException
 import org.koin.core.component.KoinComponent
+import org.koin.core.component.get
 import org.koin.core.component.inject
+import ru.solrudev.ackpine.installer.InstallFailure
+import ru.solrudev.ackpine.installer.PackageInstaller as AckpinePackageInstaller
+import ru.solrudev.ackpine.installer.createSession
+import ru.solrudev.ackpine.session.Session
+import ru.solrudev.ackpine.session.await
+import ru.solrudev.ackpine.session.parameters.Confirmation
+import ru.solrudev.ackpine.uninstaller.PackageUninstaller
+import ru.solrudev.ackpine.uninstaller.UninstallFailure
+import ru.solrudev.ackpine.uninstaller.createSession
 
 class InstalledAppInfoViewModel(
     packageName: String
@@ -66,6 +79,8 @@ class InstalledAppInfoViewModel(
     private val patchBundleRepository: PatchBundleRepository by inject()
     val rootInstaller: RootInstaller by inject()
     private val installerManager: InstallerManager by inject()
+    private val ackpineInstaller: AckpinePackageInstaller = get()
+    private val ackpineUninstaller: PackageUninstaller = get()
     private val shizukuInstaller: ShizukuInstaller by inject()
     private val filesystem: Filesystem by inject()
     private var launchedActivity: CompletableDeferred<ActivityResult>? = null
@@ -82,9 +97,9 @@ class InstalledAppInfoViewModel(
     private var installProgressToastJob: Job? = null
     private var uninstallProgressToastJob: Job? = null
     private var uninstallProgressToast: Toast? = null
-    private var pendingInternalInstallPackage: String? = null
+    private var deferInstallProgressToasts = false
+    private var deferUninstallProgressToasts = false
     private var pendingSignatureMismatchPackage: String? = null
-    private var signatureMismatchUninstallJob: Job? = null
     var isInstalling by mutableStateOf(false)
         private set
 
@@ -140,11 +155,8 @@ class InstalledAppInfoViewModel(
     fun cancelOngoingInstall() {
         pendingExternalInstall?.let(installerManager::cleanup)
         pendingExternalInstall = null
-        pendingInternalInstallPackage = null
         pendingSignatureMismatchPackage = null
         signatureMismatchPackage = null
-        signatureMismatchUninstallJob?.cancel()
-        signatureMismatchUninstallJob = null
         externalInstallTimeoutJob?.cancel()
         internalInstallTimeoutJob?.cancel()
         externalInstallBaseline = null
@@ -273,51 +285,8 @@ class InstalledAppInfoViewModel(
         signatureMismatchPackage = packageName
     }
 
-    private fun startSignatureMismatchUninstallTimeout(targetPackage: String) {
-        signatureMismatchUninstallJob?.cancel()
-        signatureMismatchUninstallJob = viewModelScope.launch {
-            val deadline = System.currentTimeMillis() + SIGNATURE_MISMATCH_UNINSTALL_TIMEOUT_MS
-            while (isActive && System.currentTimeMillis() < deadline) {
-                val pendingPackage = pendingSignatureMismatchPackage
-                if (pendingPackage.isNullOrBlank() || pendingPackage != targetPackage) {
-                    return@launch
-                }
-                if (pm.getPackageInfo(targetPackage) == null) {
-                    pendingSignatureMismatchPackage = null
-                    signatureMismatchPackage = null
-                    signatureMismatchUninstallJob = null
-                    stopUninstallProgressToasts()
-                    installSavedApp()
-                    return@launch
-                }
-                delay(SIGNATURE_MISMATCH_UNINSTALL_POLL_MS)
-            }
-            if (pendingSignatureMismatchPackage == targetPackage) {
-                stopUninstallProgressToasts()
-                val failureMessage = this@InstalledAppInfoViewModel.context.getString(
-                    R.string.uninstall_app_fail,
-                    this@InstalledAppInfoViewModel.context.getString(R.string.install_timeout_message)
-                )
-                pendingSignatureMismatchPackage = null
-                signatureMismatchPackage = null
-                this@InstalledAppInfoViewModel.context.toast(failureMessage)
-                markInstallFailure(failureMessage)
-            }
-        }
-    }
-
-    private fun scheduleInternalInstallTimeout(packageName: String) {
-        internalInstallTimeoutJob?.cancel()
-        internalInstallTimeoutJob = viewModelScope.launch {
-            delay(EXTERNAL_INSTALL_TIMEOUT_MS)
-            if (pendingInternalInstallPackage == packageName) {
-                pendingInternalInstallPackage = null
-                markInstallFailure(context.getString(R.string.install_timeout_message))
-            }
-        }
-    }
-
     private fun startInstallProgressToasts() {
+        if (deferInstallProgressToasts) return
         if (installProgressToastJob?.isActive == true) return
         isInstalling = true
         installProgressToastJob = viewModelScope.launch {
@@ -332,12 +301,27 @@ class InstalledAppInfoViewModel(
         installProgressToastJob?.cancel()
         installProgressToastJob = null
         internalInstallTimeoutJob?.cancel()
-        if (pendingExternalInstall == null && pendingInternalInstallPackage == null) {
+        deferInstallProgressToasts = false
+        if (pendingExternalInstall == null) {
             isInstalling = false
         }
     }
 
+    private fun enableInstallProgressToasts() {
+        if (!deferInstallProgressToasts) return
+        deferInstallProgressToasts = false
+        startInstallProgressToasts()
+    }
+
+    private fun launchInstallConfirmationToast(session: Session<*>): Job =
+        viewModelScope.launch {
+            if (session.awaitUserConfirmation()) {
+                enableInstallProgressToasts()
+            }
+        }
+
     private fun startUninstallProgressToasts() {
+        if (deferUninstallProgressToasts) return
         if (uninstallProgressToastJob?.isActive == true) return
         uninstallProgressToastJob = viewModelScope.launch {
             while (isActive) {
@@ -353,6 +337,36 @@ class InstalledAppInfoViewModel(
         uninstallProgressToastJob = null
         uninstallProgressToast?.cancel()
         uninstallProgressToast = null
+        deferUninstallProgressToasts = false
+    }
+
+    private fun enableUninstallProgressToasts() {
+        if (!deferUninstallProgressToasts) return
+        deferUninstallProgressToasts = false
+        startUninstallProgressToasts()
+    }
+
+    private fun launchUninstallConfirmationToast(session: Session<*>): Job =
+        viewModelScope.launch {
+            if (session.awaitUserConfirmation()) {
+                enableUninstallProgressToasts()
+            }
+        }
+
+    private suspend fun runAckpineUninstall(
+        packageName: String
+    ): Session.State.Completed<UninstallFailure> {
+        val session = ackpineUninstaller.createSession(packageName) {
+            confirmation = Confirmation.IMMEDIATE
+        }
+        val toastJob = launchUninstallConfirmationToast(session)
+        return try {
+            withContext(Dispatchers.IO) {
+                session.await()
+            }
+        } finally {
+            toastJob.cancel()
+        }
     }
 
     fun handleActivityResult(result: ActivityResult) {
@@ -386,25 +400,54 @@ class InstalledAppInfoViewModel(
             showSignatureMismatchPrompt(app.currentPackageName)
             return@launch
         }
-        startInstallProgressToasts()
         isInstalling = true
+        deferInstallProgressToasts = plan is InstallerManager.InstallPlan.Internal
+        startInstallProgressToasts()
         if (plan is InstallerManager.InstallPlan.External) {
             runCatching { apk.copyTo(plan.sharedFile, overwrite = true) }
         }
         when (plan) {
             is InstallerManager.InstallPlan.Internal -> {
-                pendingInternalInstallPackage = app.currentPackageName
-                val success = runCatching {
-                    pm.installApp(listOf(apk))
-                }.onFailure {
-                    Log.e(tag, "Failed to install saved app", it)
-                }.isSuccess
-                if (!success) {
-                    pendingInternalInstallPackage = null
-                    internalInstallTimeoutJob?.cancel()
-                    markInstallFailure(context.getString(R.string.saved_app_install_failed))
-                } else {
-                    scheduleInternalInstallTimeout(app.currentPackageName)
+                if (!pm.requestInstallPackagesPermission()) {
+                    val hint = installerManager.formatFailureHint(PackageInstaller.STATUS_FAILURE_BLOCKED, null)
+                        ?: context.getString(R.string.installer_hint_blocked)
+                    markInstallFailure(context.getString(R.string.install_app_fail, hint))
+                    return@launch
+                }
+                val session = ackpineInstaller.createSession(Uri.fromFile(apk)) {
+                    confirmation = Confirmation.IMMEDIATE
+                }
+                val toastJob = launchInstallConfirmationToast(session)
+                val result = try {
+                    withContext(Dispatchers.IO) {
+                        session.await()
+                    }
+                } finally {
+                    toastJob.cancel()
+                }
+                when (result) {
+                    is Session.State.Failed<InstallFailure> -> {
+                        val failure = result.failure
+                        if (failure is InstallFailure.Aborted) {
+                            stopInstallProgressToasts()
+                            isInstalling = false
+                            return@launch
+                        }
+                        val failureMessage = failure.message
+                        if (installerManager.isSignatureMismatch(failureMessage)) {
+                            showSignatureMismatchPrompt(app.currentPackageName)
+                            return@launch
+                        }
+                        val hint = installerManager.formatFailureHint(failure.asCode(), failureMessage)
+                        val message = hint ?: failureMessage ?: failure.asCode().toString()
+                        markInstallFailure(context.getString(R.string.install_app_fail, message))
+                    }
+
+                    Session.State.Succeeded -> {
+                        persistInstallMetadata(InstallType.DEFAULT, app.version)
+                        isMounted = false
+                        markInstallSuccess(context.getString(R.string.saved_app_install_success))
+                    }
                 }
             }
 
@@ -723,7 +766,62 @@ class InstalledAppInfoViewModel(
     fun uninstallSavedInstallation() = viewModelScope.launch {
         val app = installedApp ?: return@launch
         if (!isInstalledOnDevice) return@launch
-        pm.uninstallPackage(app.currentPackageName)
+        deferUninstallProgressToasts = true
+        startUninstallProgressToasts()
+        when (val result = runAckpineUninstall(app.currentPackageName)) {
+            is Session.State.Failed<UninstallFailure> -> {
+                stopUninstallProgressToasts()
+                if (result.failure is UninstallFailure.Aborted) return@launch
+                val message = result.failure.message.orEmpty()
+                context.toast(context.getString(R.string.uninstall_app_fail, message))
+            }
+
+            Session.State.Succeeded -> {
+                stopUninstallProgressToasts()
+                handleUninstallSuccess(app)
+            }
+        }
+    }
+
+    private suspend fun handleUninstallSuccess(currentApp: InstalledApp) {
+        if (currentApp.installType == InstallType.SAVED) {
+            refreshAppState(currentApp)
+            return
+        }
+
+        val hasLocalCopy = withContext(Dispatchers.IO) {
+            savedApkFile(currentApp) != null
+        }
+
+        if (!hasLocalCopy) {
+            installedAppRepository.delete(currentApp)
+            onBackClick()
+            return
+        }
+
+        val selection = appliedPatches ?: resolveAppliedSelection(currentApp)
+
+        withContext(Dispatchers.IO) {
+            val sourcesSnapshot = patchBundleRepository.sources.first()
+            val availableIds = sourcesSnapshot.map { it.uid }.toSet()
+            val persistableSelection = selection.filterKeys { it in availableIds }
+            val payload = patchBundleRepository.snapshotSelection(selection)
+            installedAppRepository.addOrUpdate(
+                currentApp.currentPackageName,
+                currentApp.originalPackageName,
+                currentApp.version,
+                InstallType.SAVED,
+                persistableSelection,
+                payload
+            )
+        }
+
+        val updatedApp = currentApp.copy(installType = InstallType.SAVED)
+        installedApp = updatedApp
+        appliedPatches = selection
+        isMounted = false
+        hasSavedCopy = true
+        refreshAppState(updatedApp)
     }
 
     fun remountSavedInstallation() = viewModelScope.launch {
@@ -801,8 +899,25 @@ class InstalledAppInfoViewModel(
     fun uninstall() {
         val app = installedApp ?: return
         when (app.installType) {
-            InstallType.DEFAULT, InstallType.CUSTOM -> pm.uninstallPackage(app.currentPackageName)
-            InstallType.SHIZUKU -> pm.uninstallPackage(app.currentPackageName)
+            InstallType.DEFAULT,
+            InstallType.CUSTOM,
+            InstallType.SHIZUKU -> viewModelScope.launch {
+                deferUninstallProgressToasts = true
+                startUninstallProgressToasts()
+                when (val result = runAckpineUninstall(app.currentPackageName)) {
+                    is Session.State.Failed<UninstallFailure> -> {
+                        stopUninstallProgressToasts()
+                        if (result.failure is UninstallFailure.Aborted) return@launch
+                        val message = result.failure.message.orEmpty()
+                        context.toast(context.getString(R.string.uninstall_app_fail, message))
+                    }
+
+                    Session.State.Succeeded -> {
+                        stopUninstallProgressToasts()
+                        handleUninstallSuccess(app)
+                    }
+                }
+            }
 
             InstallType.MOUNT -> viewModelScope.launch {
                 rootInstaller.uninstall(app.currentPackageName)
@@ -903,7 +1018,7 @@ class InstalledAppInfoViewModel(
         }
     }
 
-    private val installBroadcastReceiver = object : BroadcastReceiver() {
+    private val packageChangeReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 Intent.ACTION_PACKAGE_ADDED,
@@ -911,16 +1026,6 @@ class InstalledAppInfoViewModel(
                     val pkg = intent.data?.schemeSpecificPart ?: return
                     val currentApp = installedApp ?: return
                     if (pkg != currentApp.currentPackageName) return
-
-                    if (pendingInternalInstallPackage == pkg) {
-                        pendingInternalInstallPackage = null
-                        internalInstallTimeoutJob?.cancel()
-                        viewModelScope.launch {
-                            persistInstallMetadata(InstallType.DEFAULT)
-                            markInstallSuccess(this@InstalledAppInfoViewModel.context.getString(R.string.saved_app_install_success))
-                        }
-                        return
-                    }
 
                     if (pendingExternalInstall != null) {
                         handleExternalInstallSuccess(pkg)
@@ -930,49 +1035,13 @@ class InstalledAppInfoViewModel(
                 }
 
                 Intent.ACTION_PACKAGE_REMOVED -> {
-                    if (intent?.getBooleanExtra(Intent.EXTRA_REPLACING, false) == true) return
-                    val pkg = intent?.data?.schemeSpecificPart ?: return
+                    if (intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) return
+                    val pkg = intent.data?.schemeSpecificPart ?: return
                     val currentApp = installedApp ?: return
                     if (pkg != currentApp.currentPackageName) return
                     viewModelScope.launch {
                         refreshAppState(currentApp)
                         isMounted = false
-                    }
-                }
-
-                InstallService.APP_INSTALL_ACTION -> {
-                    val pkg = intent.getStringExtra(InstallService.EXTRA_PACKAGE_NAME) ?: return
-                    val status = intent.getIntExtra(
-                        InstallService.EXTRA_INSTALL_STATUS,
-                        PackageInstaller.STATUS_FAILURE
-                    )
-                    val statusMessage = intent.getStringExtra(InstallService.EXTRA_INSTALL_STATUS_MESSAGE)
-                    val currentApp = installedApp ?: return
-                    if (pkg != currentApp.currentPackageName) return
-
-                    when (status) {
-                        PackageInstaller.STATUS_SUCCESS -> {
-                            viewModelScope.launch {
-                                persistInstallMetadata(InstallType.DEFAULT)
-                                markInstallSuccess(this@InstalledAppInfoViewModel.context.getString(R.string.saved_app_install_success))
-                            }
-                        }
-
-                        PackageInstaller.STATUS_FAILURE_ABORTED -> Unit
-
-                        else -> {
-                            if (installerManager.isSignatureMismatch(statusMessage)) {
-                                showSignatureMismatchPrompt(currentApp.currentPackageName)
-                                return
-                            }
-                            val reason = installerManager.formatFailureHint(status, statusMessage)
-                            markInstallFailure(
-                                this@InstalledAppInfoViewModel.context.getString(
-                                    R.string.install_app_fail,
-                                    reason ?: statusMessage ?: status.toString()
-                                )
-                            )
-                        }
                     }
                 }
             }
@@ -982,7 +1051,6 @@ class InstalledAppInfoViewModel(
             context,
             it,
             IntentFilter().apply {
-                addAction(InstallService.APP_INSTALL_ACTION)
                 addAction(Intent.ACTION_PACKAGE_ADDED)
                 addAction(Intent.ACTION_PACKAGE_REPLACED)
                 addAction(Intent.ACTION_PACKAGE_REMOVED)
@@ -992,107 +1060,9 @@ class InstalledAppInfoViewModel(
         )
     }
 
-    private val uninstallBroadcastReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            when (intent?.action) {
-                UninstallService.APP_UNINSTALL_ACTION -> {
-                    val targetPackage =
-                        intent.getStringExtra(UninstallService.EXTRA_UNINSTALL_PACKAGE_NAME)
-                            ?: return
-                    val extraStatus =
-                        intent.getIntExtra(UninstallService.EXTRA_UNINSTALL_STATUS, -999)
-                    val extraStatusMessage =
-                        intent.getStringExtra(UninstallService.EXTRA_UNINSTALL_STATUS_MESSAGE)
-                    val currentApp = installedApp ?: return
-                    if (targetPackage != currentApp.currentPackageName) return
-
-                    val pendingSignature = pendingSignatureMismatchPackage
-                    if (pendingSignature != null && pendingSignature == targetPackage) {
-                        signatureMismatchUninstallJob?.cancel()
-                        signatureMismatchUninstallJob = null
-                        stopUninstallProgressToasts()
-                        if (extraStatus == PackageInstaller.STATUS_SUCCESS) {
-                            pendingSignatureMismatchPackage = null
-                            viewModelScope.launch {
-                                installSavedApp()
-                            }
-                        } else {
-                            val failureMessage = this@InstalledAppInfoViewModel.context.getString(
-                                R.string.uninstall_app_fail,
-                                extraStatusMessage ?: extraStatus.toString()
-                            )
-                            pendingSignatureMismatchPackage = null
-                            this@InstalledAppInfoViewModel.context.toast(failureMessage)
-                            markInstallFailure(failureMessage)
-                        }
-                        return
-                    }
-
-                    if (extraStatus == PackageInstaller.STATUS_SUCCESS) {
-                        viewModelScope.launch {
-                            if (currentApp.installType == InstallType.SAVED) {
-                                refreshAppState(currentApp)
-                                return@launch
-                            }
-
-                            val hasLocalCopy = withContext(Dispatchers.IO) {
-                                savedApkFile(currentApp) != null
-                            }
-
-                            if (!hasLocalCopy) {
-                                installedAppRepository.delete(currentApp)
-                                onBackClick()
-                                return@launch
-                            }
-
-                            val selection = appliedPatches ?: resolveAppliedSelection(currentApp)
-
-                            withContext(Dispatchers.IO) {
-                                val sourcesSnapshot = patchBundleRepository.sources.first()
-                                val availableIds = sourcesSnapshot.map { it.uid }.toSet()
-                                val persistableSelection = selection.filterKeys { it in availableIds }
-                                val payload = patchBundleRepository.snapshotSelection(selection)
-                                installedAppRepository.addOrUpdate(
-                                    currentApp.currentPackageName,
-                                    currentApp.originalPackageName,
-                                    currentApp.version,
-                                    InstallType.SAVED,
-                                    persistableSelection,
-                                    payload
-                                )
-                            }
-
-                            val updatedApp = currentApp.copy(installType = InstallType.SAVED)
-                            installedApp = updatedApp
-                            appliedPatches = selection
-                            isMounted = false
-                            hasSavedCopy = true
-                            refreshAppState(updatedApp)
-                        }
-                    } else if (extraStatus != PackageInstaller.STATUS_FAILURE_ABORTED) {
-                        this@InstalledAppInfoViewModel.context.toast(
-                            this@InstalledAppInfoViewModel.context.getString(
-                                R.string.uninstall_app_fail,
-                                extraStatusMessage
-                            )
-                        )
-                    }
-                }
-            }
-        }
-    }.also {
-        ContextCompat.registerReceiver(
-            context,
-            it,
-            IntentFilter(UninstallService.APP_UNINSTALL_ACTION),
-            ContextCompat.RECEIVER_NOT_EXPORTED
-        )
-    }
-
     override fun onCleared() {
         super.onCleared()
-        context.unregisterReceiver(installBroadcastReceiver)
-        context.unregisterReceiver(uninstallBroadcastReceiver)
+        context.unregisterReceiver(packageChangeReceiver)
         pendingExternalInstall?.let(installerManager::cleanup)
         pendingExternalInstall = null
         launchedActivity = null
@@ -1111,20 +1081,120 @@ class InstalledAppInfoViewModel(
         installResult = null
     }
 
+    enum class ReplaceSavedBundleResult {
+        SUCCESS,
+        APP_NOT_FOUND,
+        TARGET_NOT_FOUND,
+        INCOMPATIBLE,
+        FAILED
+    }
+
+    suspend fun replaceSavedBundle(
+        currentUid: Int,
+        targetUid: Int,
+        requiredPatchesLowercase: Set<String>,
+        allowIncompatible: Boolean = false
+    ): ReplaceSavedBundleResult = withContext(Dispatchers.Default) {
+        val app = installedApp ?: return@withContext ReplaceSavedBundleResult.APP_NOT_FOUND
+        if (app.installType != InstallType.SAVED) {
+            return@withContext ReplaceSavedBundleResult.APP_NOT_FOUND
+        }
+        if (requiredPatchesLowercase.isEmpty() && !allowIncompatible) {
+            return@withContext ReplaceSavedBundleResult.INCOMPATIBLE
+        }
+
+        if (!allowIncompatible) {
+            val bundleInfoSnapshot = patchBundleRepository.bundleInfoFlow.first()
+            val targetInfo = bundleInfoSnapshot[targetUid]
+                ?: return@withContext ReplaceSavedBundleResult.INCOMPATIBLE
+            val availablePatches = targetInfo.patches
+                .mapTo(mutableSetOf()) { it.name.trim().lowercase() }
+            if (!requiredPatchesLowercase.all { it in availablePatches }) {
+                return@withContext ReplaceSavedBundleResult.INCOMPATIBLE
+            }
+        }
+
+        val sourcesList = patchBundleRepository.sources.first()
+        val targetSource = sourcesList.firstOrNull { it.uid == targetUid }
+            ?: return@withContext ReplaceSavedBundleResult.TARGET_NOT_FOUND
+
+        val selection = appliedPatches ?: resolveAppliedSelection(app)
+        val updatedSelection = selection.toMutableMap()
+        val removedPatches = updatedSelection.remove(currentUid).orEmpty()
+        if (removedPatches.isEmpty()) {
+            return@withContext ReplaceSavedBundleResult.APP_NOT_FOUND
+        }
+        val merged = updatedSelection[targetUid]?.toMutableSet() ?: mutableSetOf()
+        merged.addAll(removedPatches)
+        if (merged.isNotEmpty()) {
+            updatedSelection[targetUid] = merged
+        } else {
+            updatedSelection.remove(targetUid)
+        }
+
+        val bundleInfoSnapshot = patchBundleRepository.allBundlesInfoFlow.first()
+        val updatedPayload = app.selectionPayload?.let { payload ->
+            val remapped = payload.remapLocalBundles(sourcesList)
+            val bundles = remapped.bundles.toMutableList()
+            val bundleIndex = bundles.indexOfFirst { it.bundleUid == currentUid }
+            if (bundleIndex == -1) return@let remapped
+
+            val updatedBundle = bundles[bundleIndex].copy(
+                bundleUid = targetSource.uid,
+                displayName = targetSource.displayTitle,
+                sourceName = targetSource.patchBundle?.manifestAttributes?.name ?: targetSource.name,
+                sourceEndpoint = targetSource.asRemoteOrNull?.endpoint
+            )
+            bundles[bundleIndex] = updatedBundle
+            remapped.copy(bundles = bundles)
+        } ?: updatedSelection.toPayload(sourcesList, bundleInfoSnapshot)
+
+        installedAppRepository.addOrUpdate(
+            currentPackageName = app.currentPackageName,
+            originalPackageName = app.originalPackageName,
+            version = app.version,
+            installType = app.installType,
+            patchSelection = updatedSelection,
+            selectionPayload = updatedPayload
+        )
+
+        installedApp = app.copy(selectionPayload = updatedPayload)
+        appliedPatches = updatedSelection
+
+        ReplaceSavedBundleResult.SUCCESS
+    }
+
     fun dismissSignatureMismatchPrompt() {
         signatureMismatchPackage = null
         pendingSignatureMismatchPackage = null
-        signatureMismatchUninstallJob?.cancel()
-        signatureMismatchUninstallJob = null
     }
 
     fun confirmSignatureMismatchInstall() {
         val targetPackage = pendingSignatureMismatchPackage ?: return
         signatureMismatchPackage = null
+        pendingSignatureMismatchPackage = null
         stopInstallProgressToasts()
+        deferUninstallProgressToasts = true
         startUninstallProgressToasts()
-        startSignatureMismatchUninstallTimeout(targetPackage)
-        pm.uninstallPackage(targetPackage)
+        viewModelScope.launch {
+            when (val result = runAckpineUninstall(targetPackage)) {
+                is Session.State.Failed<UninstallFailure> -> {
+                    stopUninstallProgressToasts()
+                    if (result.failure is UninstallFailure.Aborted) return@launch
+                    val failureMessage = context.getString(
+                        R.string.uninstall_app_fail,
+                        result.failure.message.orEmpty()
+                    )
+                    context.toast(failureMessage)
+                    markInstallFailure(failureMessage)
+                }
+
+                Session.State.Succeeded -> {
+                    stopUninstallProgressToasts()
+                    installSavedApp()
+                }
+            }
+        }
     }
 
     companion object {
@@ -1133,8 +1203,6 @@ class InstalledAppInfoViewModel(
         private const val EXTERNAL_INSTALLER_POST_CLOSE_TIMEOUT_MS = 30_000L
         private const val INSTALL_MONITOR_POLL_MS = 1000L
         private const val INSTALL_PROGRESS_TOAST_INTERVAL_MS = 2500L
-        private const val SIGNATURE_MISMATCH_UNINSTALL_TIMEOUT_MS = 30_000L
-        private const val SIGNATURE_MISMATCH_UNINSTALL_POLL_MS = 750L
     }
 }
 

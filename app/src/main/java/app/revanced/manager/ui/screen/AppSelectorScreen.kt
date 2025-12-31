@@ -4,6 +4,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.ExperimentalFoundationApi
 import android.content.pm.PackageInfo
 import android.net.Uri
+import android.os.Build
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -104,6 +105,8 @@ fun AppSelectorScreen(
     val allowIncompatiblePatches by prefs.disablePatchVersionCompatCheck.getAsState()
     val suggestedVersionSafeguard by prefs.suggestedVersionSafeguard.getAsState()
     val bundleRecommendationsEnabled = allowIncompatiblePatches && !suggestedVersionSafeguard
+    val allowUniversalPatches by prefs.disableUniversalPatchCheck.getAsState()
+    val searchEngineHost by prefs.searchEngineHost.getAsState()
 
     EventEffect(flow = vm.storageSelectionFlow) {
         onStorageSelect(it)
@@ -167,12 +170,19 @@ fun AppSelectorScreen(
     var showFilterMenu by rememberSaveable { mutableStateOf(false) }
 
     val appList by vm.appList.collectAsStateWithLifecycle(initialValue = emptyList())
-    val filteredAppList = remember(appList, filterText, filterInstalledOnly, filterPatchesAvailable) {
+    val filteredAppList = remember(
+        appList,
+        filterText,
+        filterInstalledOnly,
+        filterPatchesAvailable,
+        allowUniversalPatches
+    ) {
         appList
             .asSequence()
             .filter { app ->
                 if (filterInstalledOnly && app.packageInfo == null) return@filter false
                 if (filterPatchesAvailable && (app.patches ?: 0) <= 0) return@filter false
+                if (!allowUniversalPatches && (app.patches ?: 0) <= 0) return@filter false
                 true
             }
             .filter { app ->
@@ -392,6 +402,7 @@ fun AppSelectorScreen(
                                             BundleSuggestionCard(
                                                 suggestion = suggestion,
                                                 packageName = app.packageName,
+                                                searchEngineHost = searchEngineHost,
                                                 enabled = bundleRecommendationsEnabled,
                                                 modifier = Modifier
                                                     .fillMaxWidth()
@@ -417,6 +428,7 @@ fun AppSelectorScreen(
                                             recommendedVersion = suggestion.recommendedVersion,
                                             otherVersions = suggestion.otherSupportedVersions,
                                             supportsAllVersions = suggestion.supportsAllVersions,
+                                            searchEngineHost = searchEngineHost,
                                             onDismissRequest = { dialogBundleUid = null }
                                         )
                                     }
@@ -592,6 +604,7 @@ private fun VersionSearchRow(
     label: String,
     packageName: String,
     version: String?,
+    searchEngineHost: String,
     modifier: Modifier = Modifier,
     highlighted: Boolean = false
 ) {
@@ -604,6 +617,7 @@ private fun VersionSearchRow(
             label = label,
             packageName = packageName,
             version = version,
+            searchEngineHost = searchEngineHost,
             highlighted = highlighted
         )
     }
@@ -614,6 +628,7 @@ private fun VersionSearchChip(
     label: String,
     packageName: String,
     version: String?,
+    searchEngineHost: String,
     modifier: Modifier = Modifier,
     highlighted: Boolean = false,
 ) {
@@ -629,7 +644,7 @@ private fun VersionSearchChip(
         MaterialTheme.colorScheme.onSurfaceVariant
     }
     Surface(
-        onClick = { context.openUrl(buildSearchUrl(packageName, version)) },
+                        onClick = { context.openUrl(buildSearchUrl(packageName, version, searchEngineHost)) },
         modifier = modifier.widthIn(max = 220.dp),
         shape = RoundedCornerShape(999.dp),
         color = background,
@@ -655,14 +670,26 @@ private fun VersionSearchChip(
     }
 }
 
-private fun buildSearchUrl(packageName: String, version: String?): String {
+private fun buildSearchUrl(packageName: String, version: String?, searchEngineHost: String): String {
     val encodedPackage = Uri.encode(packageName)
-    val encodedVersion = version?.takeIf { it.isNotBlank() }?.let(Uri::encode)
-    return if (encodedVersion == null) {
-        "https://www.google.com/search?q=$encodedPackage"
-    } else {
-        "https://www.google.com/search?q=$encodedPackage+$encodedVersion"
+    val encodedVersion = version?.takeIf { it.isNotBlank() }?.let {
+        val formatted = if (it.startsWith("v", ignoreCase = true)) it else "v$it"
+        Uri.encode(formatted)
     }
+    val encodedArch = Build.SUPPORTED_ABIS.firstOrNull()
+        ?.takeIf { it.isNotBlank() }
+        ?.let(Uri::encode)
+    val query = listOfNotNull(encodedPackage, encodedVersion, encodedArch).joinToString("+")
+    val host = normalizeSearchHost(searchEngineHost)
+    return "https://$host/search?q=$query"
+}
+
+private fun normalizeSearchHost(value: String): String {
+    val trimmed = value.trim()
+    if (trimmed.isBlank()) return "google.com"
+    val noScheme = trimmed.removePrefix("https://").removePrefix("http://")
+    val noPath = noScheme.substringBefore('/').substringBefore('?').substringBefore('#')
+    return noPath.trim().trimEnd('/').ifBlank { "google.com" }
 }
 
 @Composable
@@ -672,6 +699,7 @@ private fun OtherSupportedVersionsInfoDialog(
     recommendedVersion: String?,
     otherVersions: List<String>,
     supportsAllVersions: Boolean,
+    searchEngineHost: String,
     onDismissRequest: () -> Unit
 ) {
     AlertDialog(
@@ -692,6 +720,7 @@ private fun OtherSupportedVersionsInfoDialog(
                         ),
                         packageName = packageName,
                         version = version,
+                        searchEngineHost = searchEngineHost,
                         modifier = Modifier.align(Alignment.Start),
                         highlighted = true
                     )
@@ -709,6 +738,7 @@ private fun OtherSupportedVersionsInfoDialog(
                                             label = stringResource(R.string.version_label, version),
                                             packageName = packageName,
                                             version = version,
+                                            searchEngineHost = searchEngineHost,
                                             modifier = Modifier
                                                 .weight(1f)
                                                 .wrapContentWidth(Alignment.Start)
@@ -726,6 +756,7 @@ private fun OtherSupportedVersionsInfoDialog(
                             label = stringResource(R.string.other_supported_versions_all),
                             packageName = packageName,
                             version = null,
+                            searchEngineHost = searchEngineHost,
                             modifier = Modifier.align(Alignment.Start),
                             highlighted = true
                         )
@@ -747,6 +778,7 @@ private fun OtherSupportedVersionsInfoDialog(
 private fun BundleSuggestionCard(
     suggestion: BundleVersionSuggestion,
     packageName: String,
+    searchEngineHost: String,
     enabled: Boolean,
     modifier: Modifier = Modifier,
     onShowOtherVersions: () -> Unit
@@ -782,6 +814,7 @@ private fun BundleSuggestionCard(
                         label = versionLabel,
                         packageName = packageName,
                         version = suggestion.recommendedVersion,
+                        searchEngineHost = searchEngineHost,
                         modifier = Modifier,
                         highlighted = true
                     )
@@ -790,6 +823,7 @@ private fun BundleSuggestionCard(
                         label = versionLabel,
                         packageName = packageName,
                         version = null,
+                        searchEngineHost = searchEngineHost,
                         modifier = Modifier,
                         highlighted = true
                     )
@@ -804,29 +838,34 @@ private fun BundleSuggestionCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            TextButton(
-                onClick = onShowOtherVersions,
-                enabled = enabled,
-                shape = RoundedCornerShape(50),
-                colors = ButtonDefaults.textButtonColors(
-                    containerColor = if (enabled) {
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-                    } else {
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-                    },
-                    contentColor = if (enabled) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-                ),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                modifier = Modifier.clip(RoundedCornerShape(50))
-            ) {
-                Text(
-                    text = stringResource(R.string.show_other_versions),
-                    style = MaterialTheme.typography.labelLarge
-                )
+            val showOtherVersionsButton = !suggestion.supportsAllVersions ||
+                suggestion.recommendedVersion != null ||
+                suggestion.otherSupportedVersions.isNotEmpty()
+            if (showOtherVersionsButton) {
+                TextButton(
+                    onClick = onShowOtherVersions,
+                    enabled = enabled,
+                    shape = RoundedCornerShape(50),
+                    colors = ButtonDefaults.textButtonColors(
+                        containerColor = if (enabled) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                        } else {
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                        },
+                        contentColor = if (enabled) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    ),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    modifier = Modifier.clip(RoundedCornerShape(50))
+                ) {
+                    Text(
+                        text = stringResource(R.string.show_other_versions),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
             }
         }
     }

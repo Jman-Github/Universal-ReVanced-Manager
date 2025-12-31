@@ -64,11 +64,51 @@
     <string name="auto_updates_dialog_description">Хотите, чтобы ReVanced Manager периодически проверял наличие обновлений для следующих компонентов?</string>
     <string name="auto_updates_dialog_manager">ReVanced Manager</string>
     <string name="auto_updates_dialog_note">Эти настройки можно изменить позже.</string>
-    <string name="auto_updates_dialog_patches">Обновленные патчи</string>
+    <!-- Needs translation -->
+    <string name="background_bundle_update">Background bundle updates</string>
+    <!-- Needs translation -->
+    <string name="background_bundle_update_description">Controls the patcher and bundle update notifications. When enabled, bundle updates download in the background. If notifications are allowed, you will see progress and completion updates along with the patching in progress notification.</string>
+    <!-- Needs translation -->
+    <string name="background_radio_menu_title">Background updates</string>
+    <!-- Needs translation -->
+    <string name="background_bundle_ask_notification">Allow notifications?</string>
+    <!-- Needs translation -->
+    <string name="background_bundle_ask_notification_description">Enable notifications so the manager can alert you when patch bundle updates are available.</string>
+    <!-- Needs translation -->
+    <string name="notification_channel_bundle_updates_name">Background bundle updates</string>
+    <!-- Needs translation -->
+    <string name="notification_channel_bundle_updates_description">Shows progress for background patch bundle updates.</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_summary_title">Patch bundle updates available</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_summary_description">Tap to view the manager and review bundle updates.</string>
+    <!-- Needs translation -->
+    <string name="never">Never</string>
+    <!-- Needs translation -->
+    <string name="minutes_15">Every 15 minutes</string>
+    <!-- Needs translation -->
+    <string name="hourly">Hourly</string>
+    <!-- Needs translation -->
+    <string name="daily">Daily</string>
+    <string name="auto_updates_dialog_patches">Официальные патчи ReVanced</string>
     <string name="auto_updates_dialog_title">Настройка обновлений</string>
     <string name="autofill">Автозаполнение</string>
     <string name="back">Назад</string>
     <string name="battery_optimization_notification">Оптимизацию батареи необходимо отключить, чтобы ReVanced Manager корректно работал в фоновом режиме. Нажмите здесь, чтобы отключить оптимизацию.</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_dialog_description">To receive background bundle update notifications reliably, disable battery optimization for URV Manager.</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_dialog_title">Battery optimization</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_title">Battery optimization banner</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_description">Show the battery optimization warning banner on the dashboard.</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_disable_title">Hide battery optimization warning?</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_disable_description">Disabling this warning can make it harder to notice background restrictions. Only hide it if you understand the risk.</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_disable_confirm">Hide banner</string>
     <string name="call_notification_answer_action">Ответ</string>
     <string name="call_notification_answer_video_action">Видео</string>
     <string name="call_notification_decline_action">Отклонить</string>
@@ -118,6 +158,12 @@
     <string name="device_memory_limit_format">%1$dMB (Нормальный) - %2$dMB (Большой)</string>
     <string name="device_model">Модель</string>
     <string name="dialog_input_placeholder">Значение</string>
+    <!-- Needs translation -->
+    <string name="file_name">File name</string>
+    <!-- Needs translation -->
+    <string name="export_overwrite_title">Replace file?</string>
+    <!-- Needs translation -->
+    <string name="export_overwrite_description">A file named %1$s already exists. Replace it?</string>
     <string name="disable_battery_optimization">Отключить оптимизацию батареи</string>
     <string name="dismiss">Отклонить</string>
     <string name="dismiss_temporary">Не сейчас</string>
@@ -144,16 +190,14 @@
     <string name="downloader_plugin_state_failed">Не удалось загрузить. Нажмите, чтобы узнать больше</string>
     <string name="downloader_plugin_state_trusted">Надежный</string>
     <string name="downloader_plugin_state_untrusted">Ненадежный</string>
-    <string name="downloader_plugin_trust_dialog_body">"Продолжение позволит этому плагину работать в вашей системе.
-
-Включайте этот плагин только в том случае, если вы ему доверяете. Плагины могут выполнять произвольный код и могут поставить под угрозу ваше устройство."</string>
-    <string name="downloader_plugin_trust_dialog_plugin">"Плагин:
-%s"</string>
-    <string name="downloader_plugin_trust_dialog_signature">"Подпись:
-
-%s"</string>
-    <string name="downloader_plugin_trust_dialog_title">Доверять плагину?</string>
-    <string name="downloader_plugins">Плагины</string>
+<string name="downloader_plugin_trust_dialog_title">Доверять плагину?</string>
+<!-- Needs translation -->
+<string name="downloader_plugin_trust_dialog_body">Continuing will allow this plugin to run on your system.\n\nOnly enable this plugin if you trust it. Plugins can execute arbitrary code and may compromise your device.</string>
+<!-- Needs translation -->
+<string name="downloader_plugin_trust_dialog_signature">Signature:\n\n%s</string>
+<!-- Needs translation -->
+<string name="downloader_plugin_trust_dialog_plugin">Plugin:\n%s</string>
+<string name="downloader_plugins">Плагины</string>
     <string name="downloader_settings_no_apps">Загруженных приложений не найдено</string>
     <string name="downloading_manager_update">Загрузка обновления…</string>
     <string name="downloading_patches">Загрузка патчей…</string>
@@ -338,6 +382,10 @@
     <string name="patcher">Патчер</string>
     <string name="patcher_install_in_progress">Установка продолжается. пожалуйста, подождите</string>
     <string name="patcher_notification_text">Нажмите, чтобы вернуться в патчер</string>
+    <!-- Needs translation -->
+    <string name="notification_channel_patching_name">Patching</string>
+    <!-- Needs translation -->
+    <string name="notification_channel_patching_description">Shows progress while patching an app.</string>
     <string name="patcher_notification_title">Выполняется установка исправлений…</string>
     <string name="patcher_step_group_patching">Исправление</string>
     <string name="patcher_step_group_preparing">Подготовка</string>
@@ -375,6 +423,16 @@
     <string name="path_selector_dirs">Каталоги</string>
     <string name="path_selector_files">Файлы</string>
     <string name="path_selector_parent_dir">Предыдущий каталог</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorites">Favorites</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorite_added">Added to favorites</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorite_removed">Removed from favorites</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorite_remove_title">Remove favorite?</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorite_remove_description">Remove “%1$s” from favorites?</string>
     <string name="plugin_activity_dialog_body">Для продолжения работы с этим плагином требуется взаимодействие с пользователем.</string>
     <string name="plugin_host_permission_description">Используется для контроля доступа к плагинам ReVanced Manager. Это есть только у ReVanced Manager.</string>
     <string name="plugin_host_permission_label">Хост плагина ReVanced Manager</string>
@@ -382,6 +440,10 @@
     <string name="process_runtime_description">Это быстрее и позволяет Patcher использовать больше памяти.</string>
     <string name="process_runtime_memory_limit">Ограничение памяти процесса патчера</string>
     <string name="process_runtime_memory_limit_description">Максимальный объем памяти, который может использовать процесс Патчера (в мегабайтах).</string>
+    <!-- Needs translation -->
+    <string name="process_runtime_memory_aggressive">Aggressive patcher memory limit</string>
+    <!-- Needs translation -->
+    <string name="process_runtime_memory_aggressive_description">Use the highest memory limit allowed by your device for the experimental patcher</string>
     <string name="pure_black_theme">Чисто черная тема</string>
     <string name="pure_black_theme_description">Используйте чисто черный фон для темной темы</string>
     <string name="range_end">Конец диапазона</string>
@@ -430,6 +492,10 @@
 Вам нужно включить \"Разрешить изменение выбора и параметров патча\" в дополнительных настройках перед переключением патчей."</string>
     <string name="selection_warning_title">Перестать использовать настройки по умолчанию?</string>
     <string name="settings">Настройки</string>
+    <!-- Needs translation -->
+    <string name="settings_search_hint">Search settings</string>
+    <!-- Needs translation -->
+    <string name="settings_search_no_results">No settings found.</string>
     <string name="share">Поделиться</string>
     <string name="show">Показать</string>
     <string name="show_manager_update_dialog_on_launch">Показывать сообщение об обновлении при запуске</string>
@@ -566,6 +632,24 @@
     <string name="bundle_update_progress">%1$d/%2$d bundles processed</string>
     <!-- Needs translation -->
     <string name="bundle_update_banner_title">Updating patch bundles</string>
+    <!-- Needs translation -->
+    <string name="bundle_update_available">Patch bundle update available</string>
+    <!-- Needs translation -->
+    <string name="bundle_update_description_available">New version for %1$s: %2$s</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_notification_progress">Updating %1$d of %2$d: %3$s</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_notification_completed">Update completed</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_notification_completed_with_available">Update completed. %1$d updates available.</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_notification_available">%1$d updates available.</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_notification_failed">Update failed</string>
+    <!-- Needs translation -->
+    <string name="bundle_search_update">Search for updates</string>
+    <!-- Needs translation -->
+    <string name="bundle_search_update_description">Check this bundle for updates in the background</string>
     <!-- Needs translation -->
     <string name="bundle_reorder">Organize bundles</string>
     <!-- Needs translation -->
@@ -855,6 +939,10 @@
     <!-- Needs translation -->
     <string name="patch_selection_action_order_description">Choose the layout order for the patch selection action buttons</string>
     <!-- Needs translation -->
+    <string name="patch_selection_version_tags_title">Patch version tags</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_version_tags_description">Show version tags on patches in the selection screen</string>
+    <!-- Needs translation -->
     <string name="patch_selection_action_visibility_title">Hide patch selection action buttons</string>
     <!-- Needs translation -->
     <string name="patch_selection_action_visibility_description">Choose which patch selection action buttons are shown</string>
@@ -928,6 +1016,14 @@
     <string name="patcher_auto_collapse_steps">Auto-collapse completed patcher steps</string>
     <!-- Needs translation -->
     <string name="patcher_auto_collapse_steps_description">Automatically collapse each patcher progress widget after all of its steps finish</string>
+    <!-- Needs translation -->
+    <string name="patcher_auto_expand_steps">Auto-expand running steps</string>
+    <!-- Needs translation -->
+    <string name="patcher_auto_expand_steps_description">Automatically expand a patcher progress widget when it starts running</string>
+    <!-- Needs translation -->
+    <string name="patcher_saved_apps_title">Save patched apps for later</string>
+    <!-- Needs translation -->
+    <string name="patcher_saved_apps_description">When enabled, the manager saves a patched app entry and APK so it stays in the Apps tab and can be reinstalled later. Turning this off skips saving and hides the delete option</string>
     <!-- Needs translation -->
     <string name="patch_bundle_rename">Rename patch bundle</string>
     <!-- Needs translation -->
@@ -1148,6 +1244,48 @@
     <string name="patch_profile_bundle_change_uid_success">Bundle UID updated to %1$d.</string>
     <!-- Needs translation -->
     <string name="patch_profile_bundle_change_uid_not_found">No local patch bundle found with UID %1$d.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote">Select bundle</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_title">Select bundle for %1$s</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_description">Choose a remote patch bundle to replace the unavailable one.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_empty">No available remote bundles found.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_success">Profile updated to use %1$s.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_incompatible_title">Bundle incompatible</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_incompatible_message">%1$s does not contain the required patches. It was not applied. Select a different bundle.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_override">Use anyway</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_error">Failed to update the profile bundle.</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_missing_title">Bundle not detected</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_action">Select bundle</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_title">Select bundle for %1$s</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_description">Choose a patch bundle to replace the missing one.</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_empty">No patch bundles available.</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_success">Saved app updated to use %1$s.</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_incompatible_title">Bundle incompatible</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_incompatible_message">%1$s does not contain the required patches. It was not applied. Select a different bundle.</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_override">Use anyway</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_error">Failed to update the saved app bundle.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_override_title">Allow incompatible bundle override</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_override_description">Show a developer-only override button when a patch profile bundle is incompatible.</string>
     <!-- Needs translation -->
     <string name="patcher_process_exit_message">Patcher process exited with code %1$d.</string>
     <!-- Needs translation -->
@@ -1459,6 +1597,16 @@
     <!-- Needs translation -->
     <string name="patch_bundle_urls">Get patch bundle imports</string>
     <!-- Needs translation -->
+    <string name="search_engine_host_title">Search engine domain</string>
+    <!-- Needs translation -->
+    <string name="search_engine_host_description">Version search links use %1$s</string>
+    <!-- Needs translation -->
+    <string name="search_engine_host_dialog_title">Search engine domain</string>
+    <!-- Needs translation -->
+    <string name="search_engine_host_dialog_description">Change the domain used for version search links. Example: google.com or duckduckgo.com</string>
+    <!-- Needs translation -->
+    <string name="search_engine_host_label">Search domain</string>
+    <!-- Needs translation -->
     <string name="unique_features_label">here.</string>
     <!-- Needs translation -->
     <string name="here">here.</string>
@@ -1492,4 +1640,38 @@
     <string name="patch_bundle_urls_link">Get patch bundle URLs here</string>
     <!-- Needs translation -->
     <string name="saved_app_install_cancelled">Installation cancelled</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_title">Discover patch bundles</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_description">Browse external patch bundles and add them to the URV Manager.</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_search_label">Search bundles</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_empty">No patch bundles found.</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_error">Failed to load patch bundles.</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_imported">Added</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_patch_count">%1$d patches</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_release">Release</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_prerelease">Prerelease</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_v3_warning">Bundle V3 is not supported yet.</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_open_site">Open bundle catalog</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_open_github">Open catalog on GitHub</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_view_patches">View patches</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_patches_title">Patches · %1$s/%2$s</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_patches_title_fallback">Bundle patches</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_patches_empty">No patches found for this bundle.</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_patch_unnamed">Unnamed patch</string>
 </resources>

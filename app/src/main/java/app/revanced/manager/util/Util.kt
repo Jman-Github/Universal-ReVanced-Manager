@@ -34,6 +34,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import app.universal.revanced.manager.R
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
@@ -86,6 +87,8 @@ fun Context.toast(string: String, duration: Int = Toast.LENGTH_SHORT) {
 inline fun uiSafe(context: Context, @StringRes toastMsg: Int, logMsg: String, block: () -> Unit) {
     try {
         block()
+    } catch (error: CancellationException) {
+        throw error
     } catch (error: Exception) {
         // You can only toast on the main thread.
         GlobalScope.launch(Dispatchers.Main) {

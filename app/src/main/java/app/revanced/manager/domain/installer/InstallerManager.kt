@@ -323,6 +323,9 @@ class InstallerManager(
             } else null
 
             is Token.Component -> {
+                if (isDefaultComponent(token.componentName)) {
+                    return InstallPlan.Internal(target)
+                }
                 if (!availabilityFor(token, target).available) {
                     null
                 } else {

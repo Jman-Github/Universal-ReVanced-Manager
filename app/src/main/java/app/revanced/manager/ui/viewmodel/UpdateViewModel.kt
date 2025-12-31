@@ -6,7 +6,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.pm.PackageInstaller
+import android.net.Uri
 import androidx.annotation.StringRes
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -24,7 +24,6 @@ import app.revanced.manager.network.dto.ReVancedAsset
 import app.revanced.manager.network.service.HttpService
 import app.revanced.manager.domain.installer.InstallerManager
 import app.revanced.manager.domain.installer.ShizukuInstaller
-import app.revanced.manager.service.InstallService
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.util.PM
 import app.revanced.manager.util.toast
@@ -39,6 +38,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
+import org.koin.core.component.get
+import ru.solrudev.ackpine.installer.InstallFailure
+import ru.solrudev.ackpine.installer.PackageInstaller
+import ru.solrudev.ackpine.installer.createSession
+import ru.solrudev.ackpine.session.Session
+import ru.solrudev.ackpine.session.await
+import ru.solrudev.ackpine.session.parameters.Confirmation
 
 class UpdateViewModel(
     private val downloadOnScreenEntry: Boolean
@@ -52,6 +58,7 @@ class UpdateViewModel(
     private val fs: Filesystem by inject()
     private val prefs: PreferencesManager by inject()
     private val installerManager: InstallerManager by inject()
+    private val ackpineInstaller: PackageInstaller = get()
 
     private var pendingExternalInstall: InstallerManager.InstallPlan.External? = null
     private var externalInstallTimeoutJob: Job? = null
@@ -152,11 +159,13 @@ class UpdateViewModel(
     }
 
     fun installUpdate() = viewModelScope.launch {
+        if (state == State.INSTALLING) return@launch
         pendingExternalInstall?.let(installerManager::cleanup)
         pendingExternalInstall = null
         externalInstallTimeoutJob?.cancel()
         externalInstallTimeoutJob = null
         installError = ""
+        prefs.pendingManagerUpdateVersionCode.update(-1)
 
         val plan = installerManager.resolvePlan(
             InstallerManager.InstallTarget.MANAGER_UPDATE,
@@ -167,8 +176,33 @@ class UpdateViewModel(
 
         when (plan) {
             is InstallerManager.InstallPlan.Internal -> {
+                if (!pm.requestInstallPackagesPermission()) {
+                    state = State.CAN_INSTALL
+                    return@launch
+                }
                 state = State.INSTALLING
-                pm.installApp(listOf(location))
+                val result = withContext(Dispatchers.IO) {
+                    ackpineInstaller.createSession(Uri.fromFile(location)) {
+                        confirmation = Confirmation.IMMEDIATE
+                    }.await()
+                }
+                when (result) {
+                    is Session.State.Failed<InstallFailure> -> when (val failure = result.failure) {
+                        is InstallFailure.Aborted -> state = State.CAN_INSTALL
+                        else -> {
+                            val msg = failure.message.orEmpty()
+                            app.toast(app.getString(R.string.install_app_fail, msg))
+                            installError = msg
+                            state = State.FAILED
+                        }
+                    }
+
+                    Session.State.Succeeded -> {
+                        installError = ""
+                        state = State.SUCCESS
+                        app.toast(app.getString(R.string.update_completed))
+                    }
+                }
             }
 
             is InstallerManager.InstallPlan.Mount -> {
@@ -249,70 +283,34 @@ class UpdateViewModel(
         state = State.SUCCESS
     }
 
-    private val installBroadcastReceiver = object : BroadcastReceiver() {
+    private val externalInstallReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            when (intent?.action) {
-                Intent.ACTION_PACKAGE_ADDED,
-                Intent.ACTION_PACKAGE_REPLACED -> {
-                    val pkg = intent.data?.schemeSpecificPart ?: return
+            val plan = pendingExternalInstall ?: return
+            val pkg = intent?.data?.schemeSpecificPart ?: return
+            if (intent.action == Intent.ACTION_PACKAGE_ADDED || intent.action == Intent.ACTION_PACKAGE_REPLACED) {
+                if (pkg == plan.expectedPackage) {
                     handleExternalInstallSuccess(pkg)
-                }
-
-                InstallService.APP_INSTALL_ACTION -> {
-                    val pmStatus = intent.getIntExtra(InstallService.EXTRA_INSTALL_STATUS, -999)
-                    val extra =
-                        intent.getStringExtra(InstallService.EXTRA_INSTALL_STATUS_MESSAGE) ?: ""
-
-                    when (pmStatus) {
-                        PackageInstaller.STATUS_SUCCESS -> {
-                            pendingExternalInstall?.let(installerManager::cleanup)
-                            pendingExternalInstall = null
-                            externalInstallTimeoutJob?.cancel()
-                            externalInstallTimeoutJob = null
-                            installError = ""
-                            app.toast(app.getString(R.string.install_app_success))
-                            state = State.SUCCESS
-                        }
-                        PackageInstaller.STATUS_FAILURE_ABORTED -> {
-                            pendingExternalInstall?.let(installerManager::cleanup)
-                            pendingExternalInstall = null
-                            externalInstallTimeoutJob?.cancel()
-                            externalInstallTimeoutJob = null
-                            state = State.CAN_INSTALL
-                        }
-                        else -> {
-                            val hint = installerManager.formatFailureHint(pmStatus, extra)
-                            val message = app.getString(
-                                R.string.install_app_fail,
-                                hint ?: extra.ifBlank { pmStatus.toString() }
-                            )
-                            pendingExternalInstall?.let(installerManager::cleanup)
-                            pendingExternalInstall = null
-                            externalInstallTimeoutJob?.cancel()
-                            externalInstallTimeoutJob = null
-                            app.toast(message)
-                            installError = hint ?: extra
-                            state = State.FAILED
-                        }
-                    }
                 }
             }
         }
     }
 
     init {
-        ContextCompat.registerReceiver(app, installBroadcastReceiver, IntentFilter().apply {
-            addAction(InstallService.APP_INSTALL_ACTION)
-            addAction(Intent.ACTION_PACKAGE_ADDED)
-            addAction(Intent.ACTION_PACKAGE_REPLACED)
-            addDataScheme("package")
-        }, ContextCompat.RECEIVER_NOT_EXPORTED)
+        ContextCompat.registerReceiver(
+            app,
+            externalInstallReceiver,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_PACKAGE_ADDED)
+                addAction(Intent.ACTION_PACKAGE_REPLACED)
+                addDataScheme("package")
+            },
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
     }
 
     override fun onCleared() {
         super.onCleared()
-        app.unregisterReceiver(installBroadcastReceiver)
-
+        app.unregisterReceiver(externalInstallReceiver)
         pendingExternalInstall?.let(installerManager::cleanup)
         pendingExternalInstall = null
         externalInstallTimeoutJob?.cancel()

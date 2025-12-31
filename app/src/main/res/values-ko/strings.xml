@@ -436,6 +436,10 @@
     <string name="process_runtime_memory_limit">패처 프로세스 메모리 제한</string>
     <string name="process_runtime_memory_limit_description">패처 프로세스가 사용할 수 있는 최대 메모리 용량을 지정할 수 있습니다 (메가바이트)</string>
     <string name="process_runtime_memory_limit_description_detailed">패처 프로세스에서 사용할 수 있는 최대 메모리 용량을 지정할 수 있습니다 (메가바이트). 
+    <!-- Needs translation -->
+    <string name="process_runtime_memory_aggressive">Aggressive patcher memory limit</string>
+    <!-- Needs translation -->
+    <string name="process_runtime_memory_aggressive_description">Use the highest memory limit allowed by your device for the experimental patcher</string>
 이 기기에 권장된 메모리 용량: %1$d MB.</string>
     <string name="process_runtime_memory_aggressive">공격적인 패처 메모리 제한</string>
     <string name="process_runtime_memory_aggressive_description">실험적인 패처에 대하여 이 기기에서 허용하는 최대 메모리 제한을 사용합니다</string>
@@ -1036,4 +1040,38 @@
     <string name="export">내보내기</string>
     <string name="confirm">확인하기</string>
     <string name="saved_app_install_cancelled">설치를 취소하였습니다</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_title">Discover patch bundles</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_description">Browse external patch bundles and add them to the URV Manager.</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_search_label">Search bundles</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_empty">No patch bundles found.</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_error">Failed to load patch bundles.</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_imported">Added</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_patch_count">%1$d patches</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_release">Release</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_prerelease">Prerelease</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_v3_warning">Bundle V3 is not supported yet.</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_open_site">Open bundle catalog</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_open_github">Open catalog on GitHub</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_view_patches">View patches</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_patches_title">Patches · %1$s/%2$s</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_patches_title_fallback">Bundle patches</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_patches_empty">No patches found for this bundle.</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_patch_unnamed">Unnamed patch</string>
 </resources>
