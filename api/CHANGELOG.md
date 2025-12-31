@@ -25,11 +25,11 @@
 - Improved downloader plugin trust dialog design https://github.com/ReVanced/revanced-manager/pull/2420
 - Added background bundle updates that can auto-download with a single progress notification, plus availability alerts for bundles set to manual updates. Enable in Settings > Updates. This also includes a background patching notification if you leave the app during patching https://github.com/ReVanced/revanced-manager/pull/2561
 - Added individual patcher steps in the patcher screen https://github.com/ReVanced/revanced-manager/pull/2889
-- Improved the experimental patcher with a faster APK write path during patching. ZIP sanitization before signing now runs only if initial signing 
+- Improved the experimental patcher with a faster APK write path during patching. ZIP sanitization before signing now runs only if initial signing fails
 - Patch profiles empty state text now matches the apps tab styling
 - Added a toggle to disable saving patched apps and hide saved‑app delete actions when disabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/91
-- Made the system installer detect failures or interruptions for accurately https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/92
-- With the custom file picker, you can now see APK file's app icons
+- Made the system installer more accurately detect failures or interruptions https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/92
+- With the custom file picker, you can now see APK file app icons
 - Added the ability to manually select a patch bundle from a dialog for patch profiles using remote patch bundles that are marked as unavailable
 - Added the ability to manually select a patch bundle for saved patched apps when the bundle is missing or unnamed
 - Added a search bar to Settings https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/93
@@ -43,7 +43,8 @@
 # Docs
 
 - Fixed the app icon in the `README.md` not showing
-- Added a star history graph to the `README.d`
+- Added a star history graph to the `README.md`
+- Added new unique features to the `README.md`
 
 
 # v1.6.1 (2025-12-19)
@@ -100,7 +101,7 @@
 - Updated the "Uninstall" button to "Unmount" and the "Update" button to "Remount" for saved patched apps in the "Apps" tab for apps installed by the rooted mount installer
 - Added ability for users with root to mount patched apps by changing your primary installer to "Rooted mount installer" https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/40
 - Added a button to the installation in progress dialog on the patcher screen allowing the user to "Leave anyway" and not wait for the installer to finish or timeout/fail
-- Added a "External installer", "Rooted mount installer", "System installer" and "Shizuku" installation types to the app info page for saved patched apps in the "Apps" tab
+- Added an "External installer", "Rooted mount installer", "System installer" and "Shizuku" installation types to the app info page for saved patched apps in the "Apps" tab
 - Added a confirmation dialog when tapping the back button during an install on the "App info" page for saved patched apps in the "Apps" tab
 - Removed the "Default" app selection page filter and replaced it with a "Installed only" and "Patches available" filter, along with making them multiselectable https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/54
 - Added new options under "Patch selection buttons order" in Settings > Advanced which allows the user to hide patch selection page action buttons
