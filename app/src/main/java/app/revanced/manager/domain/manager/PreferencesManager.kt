@@ -2,14 +2,26 @@ package app.revanced.manager.domain.manager
 
 import android.content.ComponentName
 import android.content.Context
+import app.universal.revanced.manager.R
 import app.revanced.manager.domain.manager.base.BasePreferencesManager
 import app.revanced.manager.domain.manager.base.EditorContext
+import app.revanced.manager.patcher.runtime.MemoryLimitConfig
 import app.revanced.manager.ui.theme.Theme
 import app.revanced.manager.util.ExportNameFormatter
 import app.revanced.manager.util.isDebuggable
 import kotlinx.serialization.Serializable
+import java.nio.file.Paths
+import kotlin.io.path.isDirectory
+import kotlin.io.path.isReadable
 
 import app.revanced.manager.ui.model.PatchSelectionActionKey
+
+enum class SearchForUpdatesBackgroundInterval(val displayName: Int, val value: Long) {
+    NEVER(R.string.never, 0),
+    MIN15(R.string.minutes_15, 15),
+    HOUR(R.string.hourly, 60),
+    DAY(R.string.daily, 60 * 24)
+}
 
 class PreferencesManager(
     context: Context
@@ -34,7 +46,14 @@ class PreferencesManager(
 
     val useProcessRuntime = booleanPreference("use_process_runtime", false)
     val stripUnusedNativeLibs = booleanPreference("strip_unused_native_libs", false)
-    val patcherProcessMemoryLimit = intPreference("process_runtime_memory_limit", 700)
+    val patcherProcessMemoryLimit = intPreference(
+        "process_runtime_memory_limit",
+        MemoryLimitConfig.recommendedLimitMb(context)
+    )
+    val patcherProcessMemoryAggressive = booleanPreference(
+        "process_runtime_memory_aggressive",
+        false
+    )
     val patchedAppExportFormat = stringPreference(
         "patched_app_export_format",
         ExportNameFormatter.DEFAULT_TEMPLATE
@@ -43,6 +62,8 @@ class PreferencesManager(
     val officialBundleSortOrder = intPreference("official_bundle_sort_order", -1)
     val officialBundleCustomDisplayName = stringPreference("official_bundle_custom_display_name", "")
     val autoCollapsePatcherSteps = booleanPreference("auto_collapse_patcher_steps", false)
+    val autoExpandRunningSteps = booleanPreference("auto_expand_running_steps", true)
+    val enableSavedApps = booleanPreference("enable_saved_apps", true)
 
     val allowMeteredUpdates = booleanPreference("allow_metered_updates", true)
     val installerPrimary = stringPreference("installer_primary", InstallerPreferenceTokens.INTERNAL)
@@ -58,6 +79,16 @@ class PreferencesManager(
     val showManagerUpdateDialogOnLaunch = booleanPreference("show_manager_update_dialog_on_launch", true)
     val useManagerPrereleases = booleanPreference("manager_prereleases", false)
     val usePatchesPrereleases = booleanPreference("patches_prereleases", false)
+    val showBatteryOptimizationBanner = booleanPreference("show_battery_optimization_banner", true)
+    val allowPatchProfileBundleOverride = booleanPreference(
+        "allow_patch_profile_bundle_override",
+        false
+    )
+    val searchForUpdatesBackgroundInterval = enumPreference(
+        "background_bundle_update_time",
+        SearchForUpdatesBackgroundInterval.NEVER
+    )
+    val pendingManagerUpdateVersionCode = intPreference("pending_manager_update_version_code", -1)
 
     val disablePatchVersionCompatCheck = booleanPreference("disable_patch_version_compatibility_check", false)
     val disableSelectionWarning = booleanPreference("disable_selection_warning", false)
@@ -72,9 +103,15 @@ class PreferencesManager(
         stringPreference("patch_selection_action_order", PATCH_ACTION_ORDER_DEFAULT)
     val patchSelectionHiddenActions =
         stringSetPreference("patch_selection_hidden_actions", emptySet())
+    val patchSelectionShowVersionTags = booleanPreference("patch_selection_show_version_tags", true)
+    val pathSelectorFavorites = stringSetPreference("path_selector_favorites", emptySet())
+    val pathSelectorLastDirectory = stringPreference("path_selector_last_directory", "")
+    val patchBundleDiscoveryShowRelease = booleanPreference("patch_bundle_discovery_show_release", false)
+    val patchBundleDiscoveryShowPrerelease = booleanPreference("patch_bundle_discovery_show_prerelease", false)
 
     val acknowledgedDownloaderPlugins = stringSetPreference("acknowledged_downloader_plugins", emptySet())
     val autoSaveDownloaderApks = booleanPreference("auto_save_downloader_apks", true)
+    val searchEngineHost = stringPreference("search_engine_host", "google.com")
 
     @Serializable
     data class SettingsSnapshot(
@@ -92,7 +129,10 @@ class PreferencesManager(
         val includeGitHubPatInExports: Boolean? = null,
         val useProcessRuntime: Boolean? = null,
         val patcherProcessMemoryLimit: Int? = null,
+        val patcherProcessMemoryAggressive: Boolean? = null,
         val autoCollapsePatcherSteps: Boolean? = null,
+        val autoExpandRunningSteps: Boolean? = null,
+        val enableSavedApps: Boolean? = null,
         val patchedAppExportFormat: String? = null,
         val officialBundleRemoved: Boolean? = null,
         val officialBundleCustomDisplayName: String? = null,
@@ -107,6 +147,9 @@ class PreferencesManager(
         val managerAutoUpdates: Boolean? = null,
         val showManagerUpdateDialogOnLaunch: Boolean? = null,
         val useManagerPrereleases: Boolean? = null,
+        val showBatteryOptimizationBanner: Boolean? = null,
+        val allowPatchProfileBundleOverride: Boolean? = null,
+        val searchForUpdatesBackgroundInterval: SearchForUpdatesBackgroundInterval? = null,
         val disablePatchVersionCompatCheck: Boolean? = null,
         val disableSelectionWarning: Boolean? = null,
         val disableUniversalPatchCheck: Boolean? = null,
@@ -118,8 +161,14 @@ class PreferencesManager(
         val patchSelectionSortSettingsMode: String? = null,
         val patchSelectionActionOrder: String? = null,
         val patchSelectionHiddenActions: Set<String>? = null,
+        val patchSelectionShowVersionTags: Boolean? = null,
         val acknowledgedDownloaderPlugins: Set<String>? = null,
-        val autoSaveDownloaderApks: Boolean? = null
+        val autoSaveDownloaderApks: Boolean? = null,
+        val pathSelectorFavorites: Set<String>? = null,
+        val pathSelectorLastDirectory: String? = null,
+        val patchBundleDiscoveryShowRelease: Boolean? = null,
+        val patchBundleDiscoveryShowPrerelease: Boolean? = null,
+        val searchEngineHost: String? = null,
     )
 
     suspend fun exportSettings() = SettingsSnapshot(
@@ -137,7 +186,10 @@ class PreferencesManager(
         includeGitHubPatInExports = includeGitHubPatInExports.get(),
         useProcessRuntime = useProcessRuntime.get(),
         patcherProcessMemoryLimit = patcherProcessMemoryLimit.get(),
+        patcherProcessMemoryAggressive = patcherProcessMemoryAggressive.get(),
         autoCollapsePatcherSteps = autoCollapsePatcherSteps.get(),
+        autoExpandRunningSteps = autoExpandRunningSteps.get(),
+        enableSavedApps = enableSavedApps.get(),
         patchedAppExportFormat = patchedAppExportFormat.get(),
         officialBundleRemoved = officialBundleRemoved.get(),
         officialBundleCustomDisplayName = officialBundleCustomDisplayName.get(),
@@ -152,6 +204,9 @@ class PreferencesManager(
         managerAutoUpdates = managerAutoUpdates.get(),
         showManagerUpdateDialogOnLaunch = showManagerUpdateDialogOnLaunch.get(),
         useManagerPrereleases = useManagerPrereleases.get(),
+        showBatteryOptimizationBanner = showBatteryOptimizationBanner.get(),
+        allowPatchProfileBundleOverride = allowPatchProfileBundleOverride.get(),
+        searchForUpdatesBackgroundInterval = searchForUpdatesBackgroundInterval.get(),
         disablePatchVersionCompatCheck = disablePatchVersionCompatCheck.get(),
         disableSelectionWarning = disableSelectionWarning.get(),
         disableUniversalPatchCheck = disableUniversalPatchCheck.get(),
@@ -163,8 +218,14 @@ class PreferencesManager(
         patchSelectionSortSettingsMode = patchSelectionSortSettingsMode.get(),
         patchSelectionActionOrder = patchSelectionActionOrder.get(),
         patchSelectionHiddenActions = patchSelectionHiddenActions.get(),
+        patchSelectionShowVersionTags = patchSelectionShowVersionTags.get(),
         acknowledgedDownloaderPlugins = acknowledgedDownloaderPlugins.get(),
-        autoSaveDownloaderApks = autoSaveDownloaderApks.get()
+        autoSaveDownloaderApks = autoSaveDownloaderApks.get(),
+        pathSelectorFavorites = pathSelectorFavorites.get(),
+        pathSelectorLastDirectory = pathSelectorLastDirectory.get().takeIf { it.isNotBlank() },
+        patchBundleDiscoveryShowRelease = patchBundleDiscoveryShowRelease.get(),
+        patchBundleDiscoveryShowPrerelease = patchBundleDiscoveryShowPrerelease.get(),
+        searchEngineHost = searchEngineHost.get(),
     )
 
     suspend fun importSettings(snapshot: SettingsSnapshot) = edit {
@@ -182,7 +243,10 @@ class PreferencesManager(
         snapshot.includeGitHubPatInExports?.let { includeGitHubPatInExports.value = it }
         snapshot.useProcessRuntime?.let { useProcessRuntime.value = it }
         snapshot.patcherProcessMemoryLimit?.let { patcherProcessMemoryLimit.value = it }
+        snapshot.patcherProcessMemoryAggressive?.let { patcherProcessMemoryAggressive.value = it }
         snapshot.autoCollapsePatcherSteps?.let { autoCollapsePatcherSteps.value = it }
+        snapshot.autoExpandRunningSteps?.let { autoExpandRunningSteps.value = it }
+        snapshot.enableSavedApps?.let { enableSavedApps.value = it }
         snapshot.patchedAppExportFormat?.let { patchedAppExportFormat.value = it }
         snapshot.officialBundleRemoved?.let { officialBundleRemoved.value = it }
         snapshot.officialBundleCustomDisplayName?.let { officialBundleCustomDisplayName.value = it }
@@ -199,6 +263,11 @@ class PreferencesManager(
             showManagerUpdateDialogOnLaunch.value = it
         }
         snapshot.useManagerPrereleases?.let { useManagerPrereleases.value = it }
+        snapshot.showBatteryOptimizationBanner?.let { showBatteryOptimizationBanner.value = it }
+        snapshot.allowPatchProfileBundleOverride?.let { allowPatchProfileBundleOverride.value = it }
+        snapshot.searchForUpdatesBackgroundInterval?.let {
+            searchForUpdatesBackgroundInterval.value = it
+        }
         snapshot.disablePatchVersionCompatCheck?.let { disablePatchVersionCompatCheck.value = it }
         snapshot.disableSelectionWarning?.let { disableSelectionWarning.value = it }
         snapshot.disableUniversalPatchCheck?.let { disableUniversalPatchCheck.value = it }
@@ -210,8 +279,30 @@ class PreferencesManager(
         snapshot.patchSelectionSortSettingsMode?.let { patchSelectionSortSettingsMode.value = it }
         snapshot.patchSelectionActionOrder?.let { patchSelectionActionOrder.value = it }
         snapshot.patchSelectionHiddenActions?.let { patchSelectionHiddenActions.value = it }
+        snapshot.patchSelectionShowVersionTags?.let { patchSelectionShowVersionTags.value = it }
         snapshot.acknowledgedDownloaderPlugins?.let { acknowledgedDownloaderPlugins.value = it }
         snapshot.autoSaveDownloaderApks?.let { autoSaveDownloaderApks.value = it }
+        snapshot.pathSelectorFavorites?.let { favorites ->
+            val sanitized = favorites.filter { path ->
+                runCatching { Paths.get(path).isReadable() }.getOrDefault(false)
+            }.toSet()
+            pathSelectorFavorites.value = sanitized
+        }
+        snapshot.pathSelectorLastDirectory?.let { lastDir ->
+            val resolved = runCatching { Paths.get(lastDir) }.getOrNull()
+            val target = when {
+                resolved == null -> null
+                resolved.isDirectory() -> resolved
+                resolved.parent?.isDirectory() == true -> resolved.parent
+                else -> null
+            }
+            if (target != null && target.isReadable()) {
+                pathSelectorLastDirectory.value = target.toString()
+            }
+        }
+        snapshot.patchBundleDiscoveryShowRelease?.let { patchBundleDiscoveryShowRelease.value = it }
+        snapshot.patchBundleDiscoveryShowPrerelease?.let { patchBundleDiscoveryShowPrerelease.value = it }
+        snapshot.searchEngineHost?.let { searchEngineHost.value = it }
     }
 
 }

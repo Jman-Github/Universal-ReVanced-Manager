@@ -44,6 +44,7 @@ import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,11 +69,15 @@ import app.revanced.manager.ui.component.GroupHeader
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsCard
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsDivider
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsItem
+import app.revanced.manager.ui.component.settings.SettingsSearchHighlight
+import app.revanced.manager.ui.model.navigation.Settings
 import app.revanced.manager.ui.theme.Theme
 import app.revanced.manager.ui.viewmodel.GeneralSettingsViewModel
 import app.revanced.manager.ui.viewmodel.ThemePreset
+import app.revanced.manager.ui.screen.settings.SettingsSearchState
 import app.revanced.manager.util.toColorOrNull
 import app.revanced.manager.util.toHexString
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.koin.androidx.compose.koinViewModel
 import kotlin.math.roundToInt
 
@@ -83,6 +88,8 @@ fun GeneralSettingsScreen(
     viewModel: GeneralSettingsViewModel = koinViewModel()
 ) {
     val prefs = viewModel.prefs
+    val searchTarget by SettingsSearchState.target.collectAsStateWithLifecycle()
+    var highlightTarget by rememberSaveable { mutableStateOf<Int?>(null) }
     var showAccentPicker by rememberSaveable { mutableStateOf(false) }
     var showThemeColorPicker by rememberSaveable { mutableStateOf(false) }
 
@@ -97,6 +104,14 @@ fun GeneralSettingsScreen(
     val themePresetSelectionEnabled by prefs.themePresetSelectionEnabled.getAsState()
     val selectedThemePresetName by prefs.themePresetSelectionName.getAsState()
     val supportsDynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
+    LaunchedEffect(searchTarget) {
+        val target = searchTarget
+        if (target?.destination == Settings.General) {
+            highlightTarget = target.targetId
+            SettingsSearchState.clear()
+        }
+    }
     val selectedThemePreset = remember(selectedThemePresetName, themePresetSelectionEnabled, supportsDynamicColor) {
         if (!themePresetSelectionEnabled) null else selectedThemePresetName.takeIf { it.isNotBlank() }?.let {
             val preset = runCatching { ThemePreset.valueOf(it) }.getOrNull()
@@ -201,40 +216,48 @@ fun GeneralSettingsScreen(
                 }
             }
 
-            ExpressiveSettingsCard(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)
-            ) {
-                Text(
-                    text = stringResource(R.string.theme_presets),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = stringResource(R.string.theme_presets_description),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            SettingsSearchHighlight(
+                targetKey = R.string.theme_presets,
+                activeKey = highlightTarget,
+                extraKeys = setOf(R.string.dynamic_color),
+                onHighlightComplete = { highlightTarget = null },
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+            ) { highlightModifier ->
+                ExpressiveSettingsCard(
+                    modifier = highlightModifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)
                 ) {
-                    baseThemeSwatches.forEach { option ->
-                        Box(
-                            modifier = Modifier.weight(1f),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            ThemeSwatchChip(
-                                modifier = Modifier.fillMaxWidth(),
-                                label = stringResource(option.labelRes),
-                                colors = option.colors,
-                                isSelected = selectedThemePreset == option.preset,
-                                enabled = option.preset != ThemePreset.PURE_BLACK || allowPureBlackPreset,
-                                onClick = { viewModel.toggleThemePreset(option.preset) }
-                            )
+                    Text(
+                        text = stringResource(R.string.theme_presets),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = stringResource(R.string.theme_presets_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        baseThemeSwatches.forEach { option ->
+                            Box(
+                                modifier = Modifier.weight(1f),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                ThemeSwatchChip(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    label = stringResource(option.labelRes),
+                                    colors = option.colors,
+                                    isSelected = selectedThemePreset == option.preset,
+                                    enabled = option.preset != ThemePreset.PURE_BLACK || allowPureBlackPreset,
+                                    onClick = { viewModel.toggleThemePreset(option.preset) }
+                                )
+                            }
                         }
                     }
                 }
@@ -245,50 +268,61 @@ fun GeneralSettingsScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
             ) {
-                ExpressiveSettingsItem(
-                    modifier = Modifier
-                        .alpha(themeControlsAlpha),
-                    headlineContent = stringResource(R.string.theme_color),
-                    supportingContent = stringResource(R.string.theme_color_description),
-                    trailingContent = {
-                        val previewColor = customThemeColorHex.toColorOrNull() ?: MaterialTheme.colorScheme.surface
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .border(
-                                    width = 1.dp,
-                                    color = MaterialTheme.colorScheme.outline,
-                                    shape = RoundedCornerShape(12.dp)
-                                )
-                                .background(previewColor, RoundedCornerShape(12.dp))
-                        )
-                    },
-                    enabled = canAdjustThemeColor,
-                    onClick = { showThemeColorPicker = true }
-                )
+                SettingsSearchHighlight(
+                    targetKey = R.string.theme_color,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsItem(
+                        modifier = highlightModifier.alpha(themeControlsAlpha),
+                        headlineContent = stringResource(R.string.theme_color),
+                        supportingContent = stringResource(R.string.theme_color_description),
+                        trailingContent = {
+                            val previewColor = customThemeColorHex.toColorOrNull() ?: MaterialTheme.colorScheme.surface
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .border(
+                                        width = 1.dp,
+                                        color = MaterialTheme.colorScheme.outline,
+                                        shape = RoundedCornerShape(12.dp)
+                                    )
+                                    .background(previewColor, RoundedCornerShape(12.dp))
+                            )
+                        },
+                        enabled = canAdjustThemeColor,
+                        onClick = { showThemeColorPicker = true }
+                    )
+                }
                 ExpressiveSettingsDivider()
-                ExpressiveSettingsItem(
-                    modifier = Modifier.alpha(accentControlsAlpha),
-                    headlineContent = stringResource(R.string.accent_color),
-                    supportingContent = stringResource(R.string.accent_color_description),
-                    trailingContent = {
-                        val previewColor = customAccentColorHex.toColorOrNull() ?: MaterialTheme.colorScheme.primary
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .border(
-                                    width = 1.dp,
-                                    color = MaterialTheme.colorScheme.outline,
-                                    shape = RoundedCornerShape(12.dp)
-                                )
-                                .background(previewColor, RoundedCornerShape(12.dp))
-                        )
-                    },
-                    enabled = canAdjustAccentColor,
-                    onClick = { showAccentPicker = true }
-                )
+                SettingsSearchHighlight(
+                    targetKey = R.string.accent_color,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsItem(
+                        modifier = highlightModifier.alpha(accentControlsAlpha),
+                        headlineContent = stringResource(R.string.accent_color),
+                        supportingContent = stringResource(R.string.accent_color_description),
+                        trailingContent = {
+                            val previewColor = customAccentColorHex.toColorOrNull() ?: MaterialTheme.colorScheme.primary
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .border(
+                                        width = 1.dp,
+                                        color = MaterialTheme.colorScheme.outline,
+                                        shape = RoundedCornerShape(12.dp)
+                                    )
+                                    .background(previewColor, RoundedCornerShape(12.dp))
+                            )
+                        },
+                        enabled = canAdjustAccentColor,
+                        onClick = { showAccentPicker = true }
+                    )
+                }
             }
             val accentPresets = remember {
                 listOf(
@@ -309,14 +343,20 @@ fun GeneralSettingsScreen(
                 )
             }
             val selectedAccentArgb = customAccentColorHex.toColorOrNull()?.toArgb()
-            Text(
-                text = stringResource(R.string.accent_color_presets),
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .alpha(accentControlsAlpha)
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.accent_color_presets,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                Text(
+                    text = stringResource(R.string.accent_color_presets),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = highlightModifier
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .alpha(accentControlsAlpha)
+                )
+            }
             Text(
                 text = stringResource(R.string.accent_color_presets_description),
                 style = MaterialTheme.typography.bodySmall,
@@ -353,12 +393,18 @@ fun GeneralSettingsScreen(
             }
             Spacer(modifier = Modifier.height(16.dp))
 
-            Text(
-                text = stringResource(R.string.theme_preview_title),
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.theme_preview_title,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                Text(
+                    text = stringResource(R.string.theme_preview_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = highlightModifier.padding(horizontal = 16.dp)
+                )
+            }
             Text(
                 text = stringResource(R.string.theme_preview_description),
                 style = MaterialTheme.typography.bodySmall,
@@ -376,13 +422,29 @@ fun GeneralSettingsScreen(
                     .padding(horizontal = 16.dp, vertical = 0.dp)
             )
 
-            FilledTonalButton(
-                onClick = { viewModel.resetThemeSettings() },
+            Spacer(modifier = Modifier.height(20.dp))
+            Box(
                 modifier = Modifier
-                    .padding(horizontal = 16.dp)
                     .fillMaxWidth()
-            ) {
-                Text(stringResource(R.string.theme_reset))
+                    .padding(horizontal = 16.dp)
+                    .height(1.dp)
+                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            SettingsSearchHighlight(
+                targetKey = R.string.theme_reset,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                FilledTonalButton(
+                    onClick = { viewModel.resetThemeSettings() },
+                    modifier = highlightModifier
+                        .padding(horizontal = 16.dp)
+                        .fillMaxWidth()
+                ) {
+                    Text(stringResource(R.string.theme_reset))
+                }
             }
 
             GroupHeader(stringResource(R.string.language_settings))
@@ -390,11 +452,18 @@ fun GeneralSettingsScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
             ) {
-                ExpressiveSettingsItem(
-                    headlineContent = stringResource(R.string.app_language),
-                    supportingContent = stringResource(selectedLanguageLabel),
-                    onClick = { showLanguageDialog = true }
-                )
+                SettingsSearchHighlight(
+                    targetKey = R.string.app_language,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(R.string.app_language),
+                        supportingContent = stringResource(selectedLanguageLabel),
+                        onClick = { showLanguageDialog = true }
+                    )
+                }
             }
             Spacer(modifier = Modifier.height(16.dp))
         }
@@ -751,20 +820,6 @@ private fun ThemePreview(modifier: Modifier = Modifier) {
                     )
                 }
             }
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(onClick = { }) {
-                    Text(stringResource(R.string.apply))
-                }
-                TextButton(onClick = { }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            }
         }
     }
 }
@@ -854,14 +909,6 @@ private fun ExpressiveThemePreview(modifier: Modifier = Modifier) {
                         tonalElevation = 1.dp,
                         modifier = Modifier.size(18.dp)
                     ) {}
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                FilledTonalButton(onClick = { }) {
-                    Text(stringResource(R.string.apply))
-                }
-                OutlinedButton(onClick = { }) {
-                    Text(stringResource(R.string.cancel))
                 }
             }
         }

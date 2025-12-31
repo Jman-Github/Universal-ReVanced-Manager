@@ -16,8 +16,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -28,6 +31,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -75,11 +79,15 @@ fun PatchProfilesScreen(
     viewModel: PatchProfilesViewModel
 ) {
     val profiles by viewModel.profiles.collectAsStateWithLifecycle()
+    val remoteBundleOptions by viewModel.remoteBundleOptions.collectAsStateWithLifecycle(emptyList())
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val prefs = koinInject<PreferencesManager>()
     val allowUniversal by prefs.disableUniversalPatchCheck.flow.collectAsStateWithLifecycle(
         initialValue = prefs.disableUniversalPatchCheck.default
+    )
+    val allowBundleOverride by prefs.allowPatchProfileBundleOverride.flow.collectAsStateWithLifecycle(
+        initialValue = prefs.allowPatchProfileBundleOverride.default
     )
     var loadingProfileId by remember { mutableStateOf<Int?>(null) }
     var blockedProfile by remember { mutableStateOf<PatchProfileLaunchData?>(null) }
@@ -91,6 +99,22 @@ fun PatchProfilesScreen(
     var versionDialogSaving by remember { mutableStateOf(false) }
     data class ChangeUidTarget(val profileId: Int, val bundleUid: Int, val bundleName: String?)
     var changeUidTarget by remember { mutableStateOf<ChangeUidTarget?>(null) }
+    data class RemoteBundleTarget(
+        val profileId: Int,
+        val bundleUid: Int,
+        val bundleName: String?,
+        val requiredPatchesLowercase: Set<String>
+    )
+    var remoteBundleTarget by remember { mutableStateOf<RemoteBundleTarget?>(null) }
+    var remoteBundleSelectionUid by rememberSaveable { mutableStateOf<Int?>(null) }
+    var remoteBundleSaving by remember { mutableStateOf(false) }
+    data class RemoteBundleOverrideTarget(
+        val profileId: Int,
+        val bundleUid: Int,
+        val targetUid: Int,
+        val displayName: String
+    )
+    var remoteBundleIncompatibleTarget by remember { mutableStateOf<RemoteBundleOverrideTarget?>(null) }
     val expandedProfiles = remember { mutableStateMapOf<Int, Boolean>() }
     val selectionActive = viewModel.selectedProfiles.isNotEmpty()
     data class OptionDialogData(val patchName: String, val entries: List<BundleOptionDisplay>)
@@ -166,26 +190,14 @@ fun PatchProfilesScreen(
             modifier = modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Bookmarks,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.outline,
-                    modifier = Modifier.size(48.dp)
-                )
-                Text(
-                    text = stringResource(R.string.patch_profile_empty_state),
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.outline,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 32.dp)
-                )
-            }
+            Text(
+                text = stringResource(R.string.patch_profile_empty_state),
+                style = MaterialTheme.typography.titleLarge,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 32.dp)
+            )
         }
         return
     }
@@ -424,6 +436,21 @@ fun PatchProfilesScreen(
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.outline
                                     )
+                                    if (!detail.isAvailable && detail.type == BundleSourceType.Remote && !selectionActive) {
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        ProfileActionText(
+                                            text = stringResource(R.string.patch_profile_bundle_select_remote)
+                                        ) {
+                                            remoteBundleTarget = RemoteBundleTarget(
+                                                profileId = profile.id,
+                                                bundleUid = detail.uid,
+                                                bundleName = detail.displayName ?: detail.uid.toString(),
+                                                requiredPatchesLowercase = detail.patches
+                                                    .mapTo(mutableSetOf()) { it.trim().lowercase() }
+                                            )
+                                            remoteBundleSelectionUid = null
+                                        }
+                                    }
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Divider(color = MaterialTheme.colorScheme.outlineVariant)
                                     Spacer(modifier = Modifier.height(4.dp))
@@ -522,6 +549,160 @@ fun PatchProfilesScreen(
         )
     }
 
+    remoteBundleTarget?.let { target ->
+        val options = remoteBundleOptions
+        AlertDialog(
+            onDismissRequest = {
+                if (remoteBundleSaving) return@AlertDialog
+                remoteBundleTarget = null
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val selectedId = remoteBundleSelectionUid ?: return@TextButton
+                        val selected = options.firstOrNull { it.uid == selectedId } ?: return@TextButton
+                        if (remoteBundleSaving) return@TextButton
+                        val isCompatible = target.requiredPatchesLowercase.all {
+                            it in selected.patchNamesLowercase
+                        }
+                        if (!isCompatible) {
+                            remoteBundleIncompatibleTarget = RemoteBundleOverrideTarget(
+                                profileId = target.profileId,
+                                bundleUid = target.bundleUid,
+                                targetUid = selected.uid,
+                                displayName = selected.displayName
+                            )
+                            return@TextButton
+                        }
+                        remoteBundleSaving = true
+                        scope.launch {
+                            try {
+                                when (
+                                    viewModel.replaceRemoteBundle(
+                                        target.profileId,
+                                        target.bundleUid,
+                                        selected.uid,
+                                        target.requiredPatchesLowercase,
+                                        false
+                                    )
+                                ) {
+                                    PatchProfilesViewModel.ReplaceRemoteBundleResult.SUCCESS -> context.toast(
+                                        context.getString(
+                                            R.string.patch_profile_bundle_select_remote_success,
+                                            selected.displayName
+                                        )
+                                    )
+                                    PatchProfilesViewModel.ReplaceRemoteBundleResult.INCOMPATIBLE -> {
+                                        remoteBundleIncompatibleTarget = RemoteBundleOverrideTarget(
+                                            profileId = target.profileId,
+                                            bundleUid = target.bundleUid,
+                                            targetUid = selected.uid,
+                                            displayName = selected.displayName
+                                        )
+                                    }
+                                    PatchProfilesViewModel.ReplaceRemoteBundleResult.TARGET_NOT_FOUND,
+                                    PatchProfilesViewModel.ReplaceRemoteBundleResult.PROFILE_OR_BUNDLE_NOT_FOUND,
+                                    PatchProfilesViewModel.ReplaceRemoteBundleResult.FAILED -> context.toast(
+                                        context.getString(R.string.patch_profile_bundle_select_remote_error)
+                                    )
+                                }
+                            } finally {
+                                remoteBundleSaving = false
+                                remoteBundleTarget = null
+                            }
+                        }
+                    },
+                    enabled = !remoteBundleSaving && remoteBundleSelectionUid != null && options.isNotEmpty()
+                ) {
+                    Text(stringResource(R.string.confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        if (remoteBundleSaving) return@TextButton
+                        remoteBundleTarget = null
+                    }
+                ) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+            title = {
+                Text(
+                    stringResource(
+                        R.string.patch_profile_bundle_select_remote_title,
+                        target.bundleName ?: target.bundleUid.toString()
+                    )
+                )
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .heightIn(max = 360.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Text(
+                        text = stringResource(R.string.patch_profile_bundle_select_remote_description),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (options.isEmpty()) {
+                        Text(
+                            text = stringResource(R.string.patch_profile_bundle_select_remote_empty),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        options.forEach { option ->
+                            val patchCountText = pluralStringResource(
+                                R.plurals.patch_profile_bundle_patch_count,
+                                option.patchCount,
+                                option.patchCount
+                            )
+                            val versionLabel = option.version?.let { version ->
+                                if (version.startsWith("v", ignoreCase = true)) version else "v$version"
+                            }
+                            val subtitle = if (versionLabel != null) {
+                                "$versionLabel - $patchCountText"
+                            } else {
+                                patchCountText
+                            }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        remoteBundleSelectionUid = option.uid
+                                    }
+                                    .padding(vertical = 6.dp)
+                            ) {
+                                RadioButton(
+                                    selected = remoteBundleSelectionUid == option.uid,
+                                    onClick = { remoteBundleSelectionUid = option.uid }
+                                )
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = option.displayName,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Text(
+                                        text = subtitle,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        )
+    }
+
     versionDialogProfile?.let { profile ->
         AlertDialog(
             onDismissRequest = {
@@ -606,6 +787,76 @@ fun PatchProfilesScreen(
                         Text(text = stringResource(R.string.patch_profile_version_override_all_versions))
                     }
                 }
+            }
+        )
+    }
+
+    remoteBundleIncompatibleTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { remoteBundleIncompatibleTarget = null },
+            confirmButton = {
+                if (allowBundleOverride) {
+                    TextButton(
+                        onClick = {
+                            if (remoteBundleSaving) return@TextButton
+                            remoteBundleSaving = true
+                            scope.launch {
+                                try {
+                                    when (
+                                        viewModel.replaceRemoteBundle(
+                                            target.profileId,
+                                            target.bundleUid,
+                                            target.targetUid,
+                                            emptySet(),
+                                            true
+                                        )
+                                    ) {
+                                        PatchProfilesViewModel.ReplaceRemoteBundleResult.SUCCESS -> context.toast(
+                                            context.getString(
+                                                R.string.patch_profile_bundle_select_remote_success,
+                                                target.displayName
+                                            )
+                                        )
+                                        PatchProfilesViewModel.ReplaceRemoteBundleResult.FAILED,
+                                        PatchProfilesViewModel.ReplaceRemoteBundleResult.PROFILE_OR_BUNDLE_NOT_FOUND,
+                                        PatchProfilesViewModel.ReplaceRemoteBundleResult.TARGET_NOT_FOUND,
+                                        PatchProfilesViewModel.ReplaceRemoteBundleResult.INCOMPATIBLE -> context.toast(
+                                            context.getString(R.string.patch_profile_bundle_select_remote_error)
+                                        )
+                                    }
+                                } finally {
+                                    remoteBundleSaving = false
+                                    remoteBundleIncompatibleTarget = null
+                                    remoteBundleTarget = null
+                                }
+                            }
+                        }
+                    ) {
+                        Text(stringResource(R.string.patch_profile_bundle_select_remote_override))
+                    }
+                } else {
+                    TextButton(onClick = { remoteBundleIncompatibleTarget = null }) {
+                        Text(stringResource(R.string.ok))
+                    }
+                }
+            },
+            dismissButton = {
+                if (allowBundleOverride) {
+                    TextButton(onClick = { remoteBundleIncompatibleTarget = null }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+            },
+            title = { Text(stringResource(R.string.patch_profile_bundle_select_remote_incompatible_title)) },
+            text = {
+                Text(
+                    text = stringResource(
+                        R.string.patch_profile_bundle_select_remote_incompatible_message,
+                        target.displayName
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         )
     }

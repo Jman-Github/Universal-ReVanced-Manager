@@ -14,6 +14,10 @@
     <string name="copy_to_clipboard">Sao chép vào bảng nhớ tạm</string>
     <string name="dashboard">Tổng quan</string>
     <string name="settings">Cài đặt</string>
+    <!-- Needs translation -->
+    <string name="settings_search_hint">Search settings</string>
+    <!-- Needs translation -->
+    <string name="settings_search_no_results">No settings found.</string>
     <string name="select_app">Chọn ứng dụng</string>
     <string name="app_filter_title">Lọc ứng dụng</string>
     <string name="app_filter_installed_only">Chỉ ứng dụng đã cài</string>
@@ -65,6 +69,24 @@
     <string name="bundle_update_manual_available_with_version">Đã có bản cập nhật: %1$s</string>
     <string name="bundle_update_progress">Đã xử lý %1$d/%2$d gói</string>
     <string name="bundle_update_banner_title">Đang cập nhật gói vá</string>
+    <!-- Needs translation -->
+    <string name="bundle_update_available">Patch bundle update available</string>
+    <!-- Needs translation -->
+    <string name="bundle_update_description_available">New version for %1$s: %2$s</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_notification_progress">Updating %1$d of %2$d: %3$s</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_notification_completed">Update completed</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_notification_completed_with_available">Update completed. %1$d updates available.</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_notification_available">%1$d updates available.</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_notification_failed">Update failed</string>
+    <!-- Needs translation -->
+    <string name="bundle_search_update">Search for updates</string>
+    <!-- Needs translation -->
+    <string name="bundle_search_update_description">Check this bundle for updates in the background</string>
     <string name="bundle_reorder">Sắp xếp các gói</string>
     <string name="bundle_reorder_title">Sắp xếp gói vá</string>
     <string name="bundle_reorder_description">Ấn giữ và kéo để sắp xếp các gói trong danh sách và menu chọn bản vá.</string>
@@ -113,8 +135,34 @@
     <string name="auto_updates_dialog_title">Cấu hình cập nhật</string>
     <string name="auto_updates_dialog_description">Bạn có muốn Universal ReVanced Manager kiểm tra cập nhật định kỳ cho các thành phần sau không?</string>
     <string name="auto_updates_dialog_manager">Universal ReVanced Manager</string>
-    <string name="auto_updates_dialog_patches">ReVanced Patches</string>
+    <string name="auto_updates_dialog_patches">Official ReVanced Patches</string>
     <string name="auto_updates_dialog_note">Bạn có thể thay đổi các cài đặt này sau.</string>
+    <!-- Needs translation -->
+    <string name="background_bundle_update">Background bundle updates</string>
+    <!-- Needs translation -->
+    <string name="background_bundle_update_description">Controls the patcher and bundle update notifications. When enabled, bundle updates download in the background. If notifications are allowed, you will see progress and completion updates along with the patching in progress notification.</string>
+    <!-- Needs translation -->
+    <string name="background_radio_menu_title">Background updates</string>
+    <!-- Needs translation -->
+    <string name="background_bundle_ask_notification">Allow notifications?</string>
+    <!-- Needs translation -->
+    <string name="background_bundle_ask_notification_description">Enable notifications so the manager can alert you when patch bundle updates are available.</string>
+    <!-- Needs translation -->
+    <string name="notification_channel_bundle_updates_name">Background bundle updates</string>
+    <!-- Needs translation -->
+    <string name="notification_channel_bundle_updates_description">Shows progress for background patch bundle updates.</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_summary_title">Patch bundle updates available</string>
+    <!-- Needs translation -->
+    <string name="bundle_updates_summary_description">Tap to view the manager and review bundle updates.</string>
+    <!-- Needs translation -->
+    <string name="never">Never</string>
+    <!-- Needs translation -->
+    <string name="minutes_15">Every 15 minutes</string>
+    <!-- Needs translation -->
+    <string name="hourly">Hourly</string>
+    <!-- Needs translation -->
+    <string name="daily">Daily</string>
     <string name="general">Chung</string>
     <string name="general_description">Chủ đề, màu động</string>
     <string name="updates">Cập nhật</string>
@@ -301,6 +349,10 @@
     <string name="patch_selection_collapse_on_toggle_description">Tự động ẩn bảng thao tác trong màn hình chọn bản vá mỗi khi bạn chọn hoặc bỏ chọn bản vá.</string>
     <string name="patch_selection_action_order_title">Thứ tự các nút thao tác</string>
     <string name="patch_selection_action_order_description">Chọn thứ tự hiển thị các nút thao tác chọn bản vá</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_version_tags_title">Patch version tags</string>
+    <!-- Needs translation -->
+    <string name="patch_selection_version_tags_description">Show version tags on patches in the selection screen</string>
     <string name="patch_selection_action_visibility_title">Ẩn nút thao tác chọn bản vá</string>
     <string name="patch_selection_action_visibility_description">Chọn các nút thao tác chọn bản vá sẽ hiển thị.</string>
     <string name="patch_selection_action_visibility_reset">Hiện toàn bộ nút thao tác</string>
@@ -352,13 +404,14 @@
     <string name="downloader_plugin_state_failed">Không thể tải được. Nhấn để biết thêm chi tiết</string>
     <string name="downloader_plugin_state_untrusted">Không đáng tin</string>
     <string name="downloader_plugin_trust_dialog_title">Tin tưởng tiện ích?</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_trust_dialog_body">Continuing will allow this plugin to run on your system.\n\nOnly enable this plugin if you trust it. Plugins can execute arbitrary code and may compromise your device.</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_trust_dialog_signature">Signature:\n\n%s</string>
+    <!-- Needs translation -->
+    <string name="downloader_plugin_trust_dialog_plugin">Plugin:\n%s</string>
     <string name="downloader_plugin_revoke_trust_dialog_title">Thu hồi quyền?</string>
-    <string name="downloader_plugin_trust_dialog_body">Tên gói: %1$s\n\nChữ ký (SHA-256): %2$s</string>
-    <!-- Needs translation -->
-    <string name="downloader_plugin_trust_dialog_plugin">"Plugin:\n%s"</string>
-    <!-- Needs translation -->
-    <string name="downloader_plugin_trust_dialog_signature">"Signature:\n\n%s"</string>
-    <string name="downloader_plugin_view_error">Xem chi tiết lỗi</string>
+<string name="downloader_plugin_view_error">Xem chi tiết lỗi</string>
     <string name="downloader_plugin_failed_dialog_body">Không thể tải %1$s. Bạn có thể xem chi tiết lỗi hoặc gỡ cài đặt tiện tích này.</string>
     <string name="downloader_plugin_uninstall_title">Gỡ cài đặt tiện ích?</string>
     <string name="downloader_plugin_uninstall_description">Bạn có chắn chắn muốn gỡ cài đặt %1$s?</string>
@@ -374,6 +427,12 @@
     <string name="no">Không</string>
     <string name="edit">Chỉnh sửa</string>
     <string name="dialog_input_placeholder">Giá trị</string>
+    <!-- Needs translation -->
+    <string name="file_name">File name</string>
+    <!-- Needs translation -->
+    <string name="export_overwrite_title">Replace file?</string>
+    <!-- Needs translation -->
+    <string name="export_overwrite_description">A file named %1$s already exists. Replace it?</string>
     <string name="reset">Đặt lại</string>
     <string name="share">Chia sẻ</string>
     <string name="patch">Vá</string>
@@ -401,9 +460,21 @@
     <string name="process_runtime_memory_limit">Giới hạn bộ nhớ cho tiến trình vá</string>
     <string name="process_runtime_memory_limit_description">Nhập dung lượng bộ nhớ tối đa mà tiến trình vá sử dụng (tính bằng megabyte).</string>
     <string name="process_runtime_memory_limit_description_detailed">Nhập dung lượng bộ nhớ tối đa mà tiến trình vá sử dụng (tính bằng megabyte).\nĐề xuất cho thiết bị này: %1$d MB.</string>
+    <!-- Needs translation -->
+    <string name="process_runtime_memory_aggressive">Aggressive patcher memory limit</string>
+    <!-- Needs translation -->
+    <string name="process_runtime_memory_aggressive_description">Use the highest memory limit allowed by your device for the experimental patcher</string>
     <string name="reset_to_recommended">Đặt lại về đề xuất</string>
     <string name="patcher_auto_collapse_steps">Tự thu gọn bước đã hoàn tất</string>
     <string name="patcher_auto_collapse_steps_description">Tự động thu gọn từng tiến trình vá sau khi chúng kết thúc.</string>
+    <!-- Needs translation -->
+    <string name="patcher_auto_expand_steps">Auto-expand running steps</string>
+    <!-- Needs translation -->
+    <string name="patcher_auto_expand_steps_description">Automatically expand a patcher progress widget when it starts running</string>
+    <!-- Needs translation -->
+    <string name="patcher_saved_apps_title">Save patched apps for later</string>
+    <!-- Needs translation -->
+    <string name="patcher_saved_apps_description">When enabled, the manager saves a patched app entry and APK so it stays in the Apps tab and can be reinstalled later. Turning this off skips saving and hides the delete option</string>
     <string name="patch_bundle_rename">Đổi tên gói vá</string>
     <string name="patch_profile_view_options">Xem tùy chọn</string>
     <string name="patch_profile_patch_options_title">Tùy chọn cho %1$s</string>
@@ -568,6 +639,48 @@
     <string name="patch_profile_bundle_change_uid_invalid">Nhập mã định danh hợp lệ.</string>
     <string name="patch_profile_bundle_change_uid_success">Đã cập nhật mã định danh gói đến %1$d.</string>
     <string name="patch_profile_bundle_change_uid_not_found">Không tìm thấy gói vá nào từ bộ nhớ với UID %1$d.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote">Select bundle</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_title">Select bundle for %1$s</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_description">Choose a remote patch bundle to replace the unavailable one.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_empty">No available remote bundles found.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_success">Profile updated to use %1$s.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_incompatible_title">Bundle incompatible</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_incompatible_message">%1$s does not contain the required patches. It was not applied. Select a different bundle.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_override">Use anyway</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_select_remote_error">Failed to update the profile bundle.</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_missing_title">Bundle not detected</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_action">Select bundle</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_title">Select bundle for %1$s</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_description">Choose a patch bundle to replace the missing one.</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_empty">No patch bundles available.</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_success">Saved app updated to use %1$s.</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_incompatible_title">Bundle incompatible</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_incompatible_message">%1$s does not contain the required patches. It was not applied. Select a different bundle.</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_override">Use anyway</string>
+    <!-- Needs translation -->
+    <string name="saved_app_bundle_select_error">Failed to update the saved app bundle.</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_override_title">Allow incompatible bundle override</string>
+    <!-- Needs translation -->
+    <string name="patch_profile_bundle_override_description">Show a developer-only override button when a patch profile bundle is incompatible.</string>
     <string name="patcher_process_exit_message">Tiến trình vá bị thoát với mã %1$d.</string>
     <string name="patcher_memory_adjustment_title">Không đủ RAM cho trình vá.</string>
     <string name="patcher_memory_adjustment_message_reduced">Tiến trình vá thử nghiệm đã dừng vì hết bộ nhớ RAM. Chúng tôi đã giảm giới hạn bộ nhớ của nó từ %1$d MB xuống còn %2$d MB để bạn có thể thử lại ngay.</string>
@@ -657,6 +770,16 @@ Bạn có thể tự xóa chúng, điều chỉnh lựa chọn, hoặc cứ ti�
     <string name="path_selector_parent_dir">Thư mục trước đó</string>
     <string name="path_selector_dirs">Thư mục</string>
     <string name="path_selector_files">Tập tin</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorites">Favorites</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorite_added">Added to favorites</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorite_removed">Removed from favorites</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorite_remove_title">Remove favorite?</string>
+    <!-- Needs translation -->
+    <string name="path_selector_favorite_remove_description">Remove “%1$s” from favorites?</string>
     <string name="show_password_field">Hiện mật khẩu</string>
     <string name="hide_password_field">Ẩn mật khẩu</string>
     <string name="installer">Trình cài đặt</string>
@@ -794,6 +917,10 @@ Bạn có thể tự xóa chúng, điều chỉnh lựa chọn, hoặc cứ ti�
     <string name="patcher_step_sign_apk">Ký APK đã vá</string>
     <string name="patcher_notification_title">Đang vá…</string>
     <string name="patcher_notification_text">Chạm để quay trở lại trình vá</string>
+    <!-- Needs translation -->
+    <string name="notification_channel_patching_name">Patching</string>
+    <!-- Needs translation -->
+    <string name="notification_channel_patching_description">Shows progress while patching an app.</string>
     <string name="patcher_stop_confirm_title">Ngừng vá</string>
     <string name="patcher_stop_confirm_description">Bạn có chắc chắn muốn ngừng tiến trình vá không?</string>
     <string name="patcher_install_in_progress_title">Quá trình cài đặt đang diễn ra</string>
@@ -831,6 +958,16 @@ Bạn có thể tự xóa chúng, điều chỉnh lựa chọn, hoặc cứ ti�
     <string name="github">Universal ReVanced Manager</string>
     <string name="original_revanced_manager_github">ReVanced Manager chính thức</string>
     <string name="patch_bundle_urls">URL gói vá</string>
+    <!-- Needs translation -->
+    <string name="search_engine_host_title">Search engine domain</string>
+    <!-- Needs translation -->
+    <string name="search_engine_host_description">Version search links use %1$s</string>
+    <!-- Needs translation -->
+    <string name="search_engine_host_dialog_title">Search engine domain</string>
+    <!-- Needs translation -->
+    <string name="search_engine_host_dialog_description">Change the domain used for version search links. Example: google.com or duckduckgo.com</string>
+    <!-- Needs translation -->
+    <string name="search_engine_host_label">Search domain</string>
     <string name="contact">Liên hệ</string>
     <string name="version">Phiên bản</string>
     <string name="submit_feedback">Gửi phản hồi hoặc báo lỗi</string>
@@ -869,6 +1006,20 @@ Bạn có thể tự xóa chúng, điều chỉnh lựa chọn, hoặc cứ ti�
     <string name="manager_prereleases_description">Dùng phiên bản phát hành trước của Universal ReVanced Manager</string>
     <string name="update_published">Đã phát hành %s</string>
     <string name="battery_optimization_notification">Hãy tắt tối ưu hóa pin để Universal ReVanced Manager có thể hoạt động chính xác hơn trong nền. Nhấn vào đây để tắt tối ưu hóa.</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_dialog_description">To receive background bundle update notifications reliably, disable battery optimization for URV Manager.</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_dialog_title">Battery optimization</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_title">Battery optimization banner</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_description">Show the battery optimization warning banner on the dashboard.</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_disable_title">Hide battery optimization warning?</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_disable_description">Disabling this warning can make it harder to notice background restrictions. Only hide it if you understand the risk.</string>
+    <!-- Needs translation -->
+    <string name="battery_optimization_banner_disable_confirm">Hide banner</string>
     <string name="installing_manager_update">Đang cài đặt bản cập nhật…</string>
     <string name="downloading_manager_update">Đang tải xuống bản cập nhật…</string>
     <string name="manager_update_banner_title">Đang tải xuống bản cập nhật trình quản lý</string>
@@ -954,6 +1105,40 @@ Bạn có thể tự xóa chúng, điều chỉnh lựa chọn, hoặc cứ ti�
     <string name="export">Xuất</string>
     <string name="confirm">Xác nhận</string>
     <string name="saved_app_install_cancelled">Đã huỷ cài đặt</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_title">Discover patch bundles</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_description">Browse external patch bundles and add them to the URV Manager.</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_search_label">Search bundles</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_empty">No patch bundles found.</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_error">Failed to load patch bundles.</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_imported">Added</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_patch_count">%1$d patches</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_release">Release</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_prerelease">Prerelease</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_v3_warning">Bundle V3 is not supported yet.</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_open_site">Open bundle catalog</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_open_github">Open catalog on GitHub</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_view_patches">View patches</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_patches_title">Patches · %1$s/%2$s</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_patches_title_fallback">Bundle patches</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_patches_empty">No patches found for this bundle.</string>
+    <!-- Needs translation -->
+    <string name="patch_bundle_discovery_patch_unnamed">Unnamed patch</string>
 </resources>
 
 
