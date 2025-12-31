@@ -14,16 +14,14 @@
     <string name="copy_to_clipboard">클립보드에 복사하였습니다</string>
     <string name="dashboard">대시보드</string>
     <string name="settings">설정</string>
-    <!-- Needs translation -->
-    <string name="settings_search_hint">Search settings</string>
-    <!-- Needs translation -->
-    <string name="settings_search_no_results">No settings found.</string>
+    <string name="settings_search_hint">설정 검색</string>
+    <string name="settings_search_no_results">설정을 찾을 수 없습니다.</string>
     <string name="select_app">앱 선택하기</string>
     <string name="app_filter_title">앱 필터</string>
     <string name="app_filter_installed_only">설치된 앱만</string>
     <string name="app_filter_patches_available">사용 가능한 패치</string>
     <string name="app_filter_no_results">필터와 일치하는 앱이 없습니다.</string>
-    <string name="patches_count_selected">%1$d/%2$d 개를 선택하였습니다</string>
+    <string name="patches_count_selected">%1$d/%2$d 개가 선택됨</string>
     <string name="new_downloader_plugins_notification">새로운 다운로더 플러그인을 사용할 수 있습니다. 설정하려면 여기를 탭하세요.</string>
     <string name="unsupported_architecture_warning">이 기기 아키텍처에 대한 패치는 지원되지 않으므로 실패할 가능성이 높습니다.</string>
     <string name="import_">가져오기</string>
@@ -68,25 +66,16 @@
     <string name="bundle_update_manual_available">업데이트 사용 가능</string>
     <string name="bundle_update_manual_available_with_version">업데이트 사용 가능: %1$s</string>
     <string name="bundle_update_progress">%1$d/%2$d 개의 번들이 처리됨</string>
-    <string name="bundle_update_banner_title">패치 번들 업데이트하는 중</string>
-    <!-- Needs translation -->
-    <string name="bundle_update_available">Patch bundle update available</string>
-    <!-- Needs translation -->
-    <string name="bundle_update_description_available">New version for %1$s: %2$s</string>
-    <!-- Needs translation -->
-    <string name="bundle_updates_notification_progress">Updating %1$d of %2$d: %3$s</string>
-    <!-- Needs translation -->
-    <string name="bundle_updates_notification_completed">Update completed</string>
-    <!-- Needs translation -->
-    <string name="bundle_updates_notification_completed_with_available">Update completed. %1$d updates available.</string>
-    <!-- Needs translation -->
-    <string name="bundle_updates_notification_available">%1$d updates available.</string>
-    <!-- Needs translation -->
-    <string name="bundle_updates_notification_failed">Update failed</string>
-    <!-- Needs translation -->
-    <string name="bundle_search_update">Search for updates</string>
-    <!-- Needs translation -->
-    <string name="bundle_search_update_description">Check this bundle for updates in the background</string>
+    <string name="bundle_update_banner_title">패치 번들을 업데이트하는 중</string>
+    <string name="bundle_update_available">새로운 패치 번들 업데이트가 있습니다</string>
+    <string name="bundle_update_description_available">%1$s 새로운 업데이트: %2$s</string>
+    <string name="bundle_updates_notification_progress">%2$d 개 중 %1$d 번째를 업데이트하는 중: %3$s</string>
+    <string name="bundle_updates_notification_completed">업데이트 완료</string>
+    <string name="bundle_updates_notification_completed_with_available">업데이트 완료. %1$d 개의 업데이트가 있습니다.</string>
+    <string name="bundle_updates_notification_available">%1$d 개의 업데이트가 있습니다.</string>
+    <string name="bundle_updates_notification_failed">업데이트할 수 없습니다</string>
+    <string name="bundle_search_update">업데이트 검색</string>
+    <string name="bundle_search_update_description">백그라운드에서 이 번들의 업데이트를 확인합니다</string>
     <string name="bundle_reorder">번들 정리</string>
     <string name="bundle_reorder_title">패치 번들 정리</string>
     <string name="bundle_reorder_description">핸들을 드래그하여 목록과 패치 선택목록 메뉴에 나타나는 번들 순서를 정렬하세요.</string>
@@ -136,32 +125,19 @@
     <string name="auto_updates_dialog_manager">Universal ReVanced Manager</string>
     <string name="auto_updates_dialog_patches">공식 ReVanced 패치</string>
     <string name="auto_updates_dialog_note">이 설정은 나중에 변경할 수 있습니다.</string>
-    <!-- Needs translation -->
-    <string name="background_bundle_update">Background bundle updates</string>
-    <!-- Needs translation -->
-    <string name="background_bundle_update_description">Controls the patcher and bundle update notifications. When enabled, bundle updates download in the background. If notifications are allowed, you will see progress and completion updates along with the patching in progress notification.</string>
-    <!-- Needs translation -->
-    <string name="background_radio_menu_title">Background updates</string>
-    <!-- Needs translation -->
-    <string name="background_bundle_ask_notification">Allow notifications?</string>
-    <!-- Needs translation -->
-    <string name="background_bundle_ask_notification_description">Enable notifications so the manager can alert you when patch bundle updates are available.</string>
-    <!-- Needs translation -->
-    <string name="notification_channel_bundle_updates_name">Background bundle updates</string>
-    <!-- Needs translation -->
-    <string name="notification_channel_bundle_updates_description">Shows progress for background patch bundle updates.</string>
-    <!-- Needs translation -->
-    <string name="bundle_updates_summary_title">Patch bundle updates available</string>
-    <!-- Needs translation -->
-    <string name="bundle_updates_summary_description">Tap to view the manager and review bundle updates.</string>
-    <!-- Needs translation -->
-    <string name="never">Never</string>
-    <!-- Needs translation -->
-    <string name="minutes_15">Every 15 minutes</string>
-    <!-- Needs translation -->
-    <string name="hourly">Hourly</string>
-    <!-- Needs translation -->
-    <string name="daily">Daily</string>
+    <string name="background_bundle_update">백그라운드 번들 업데이트</string>
+    <string name="background_bundle_update_description">패처 및 번들 업데이트 알림을 제어할 수 있습니다. 활성화하면 번들 업데이트가 백그라운드에서 다운로드됩니다. 알림이 허용되면 패치 진행 중 알림과 함께 진행률 및 완료 업데이트가 표시됩니다.</string>
+    <string name="background_radio_menu_title">백그라운드 업데이트</string>
+    <string name="background_bundle_ask_notification">알림을 허용하시겠습니까?</string>
+    <string name="background_bundle_ask_notification_description">이 기능을 활성화하면, 패치 번들 업데이트가 있을 경우에 매니저가 사용자에게 알려줄 수 있습니다.</string>
+    <string name="notification_channel_bundle_updates_name">백그라운드 번들 업데이트</string>
+    <string name="notification_channel_bundle_updates_description">백그라운드 패치 번들 업데이트 진행 상황을 표시합니다.</string>
+    <string name="bundle_updates_summary_title">패치 번들 업데이트가 있습니다</string>
+    <string name="bundle_updates_summary_description">매니저를 보고 번들 업데이트를 검토하려면 탭하세요.</string>
+    <string name="never">사용 안 함</string>
+    <string name="minutes_15">15분마다</string>
+    <string name="hourly">매시간마다</string>
+    <string name="daily">날마다</string>
     <string name="general">일반</string>
     <string name="general_description">테마 및 동적 색상를 설정할 수 있습니다</string>
     <string name="updates">업데이트</string>
@@ -204,7 +180,7 @@
     <string name="theme_preview_title">테마 프리셋</string>
     <string name="theme_preview_description">테마 설정을 변경하면 즉시 업데이트할 수 있습니다</string>
     <string name="theme_presets">테마 프리셋</string>
-    <string name="theme_presets_description">테마를 기기 테마, 밝은, 어두운, Material You 또는 검은색으로 선택하세요</string>
+    <string name="theme_presets_description">테마를 기기 테마, 밝은, 어두운, Material You 또는 검은색으로 변경하세요</string>
     <string name="theme_preset_default">기기 테마</string>
     <string name="theme_preset_sunset">일몰</string>
     <string name="theme_preset_forest">숲</string>
@@ -231,13 +207,11 @@
     <string name="patch_selection_safeguard_description">패치를 선택하거나 선택 해제할 수 있고 옵션을 변경할 수 있습니다</string>
     <string name="patch_selection_safeguard_confirmation">패치 선택목록을 변경하면 예상되지 않은 문제점이 발생할 수 있습니다.\n\n그래도 활성화하시겠습니까?</string>
     <string name="universal_patches_safeguard">범용 패치 표시 및 사용 허용</string>
-    <!-- Needs translation -->
-    <string name="universal_patches_safeguard_confirmation">"Universal patches are not as well tested as those meant for specific apps.\n\nEnable anyway?"</string>
+    <string name="universal_patches_safeguard_confirmation">"범용 패치는 특정 앱에 대한 패치만큼 테스트가 잘 되어 있지 않습니다.\n\n그래도 계속하시겠습니까?"</string>
     <!-- PR #36: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/36 -->
     <string name="universal_patches_safeguard_description">범용 패치를 표시하거나 사용할 수 있습니다</string>
     <string name="universal_patches_profile_blocked_title">범용 패치가 비활성화되어 있음</string>
-    <string name="universal_patches_profile_blocked_description">이 패치 프로필에는 범용 패치가 포함되어 있습니다.
-사용하려면 고급 설정에서 \"%1$s\"를 활성화하세요.</string>
+    <string name="universal_patches_profile_blocked_description">이 패치 프로필에는 범용 패치가 포함되어 있습니다. 사용하려면 고급 설정에서 \"%1$s\"를 활성화하세요.</string>
     <string name="universal_patches_app_blocked_description">이 앱에는 범용 패치가 포함되어 있습니다. 계속하려면 고급 설정에서 \"%1$s\"를 활성화하세요.</string>
     <string name="import_keystore">키스토어 가져오기</string>
     <string name="import_keystore_description">사용자 정의 키스토어를 가져옵니다</string>
@@ -261,7 +235,7 @@
     <string name="import_patch_selection_fail">패치 선택목록을 가져올 수 없습니다: %s</string>
     <string name="import_patch_selection_success">패치 선택목록을 가져왔습니다</string>
     <string name="import_patch_bundles">패치 번들 가져오기</string>
-    <string name="import_patch_bundles_description">JSON 파일에서 원격 패치 번들을 복원합니다</string>
+    <string name="import_patch_bundles_description">JSON 파일에서 수동 패치 번들을 복원합니다</string>
     <string name="import_patch_bundles_fail">패치 번들을 가져올 수 없습니다: %s</string>
     <string name="import_patch_bundles_in_progress">가져오는 중 ...</string>
     <string name="import_patch_bundles_success">%d 개의 패치 번들을 가져왔습니다</string>
@@ -286,20 +260,20 @@
     <string name="export_patch_selection_fail">패치 선택목록을 내보낼 수 없습니다: %s</string>
     <string name="export_patch_selection_success">패치 선택목록을 내보냈습니다</string>
     <string name="export_patch_bundles">패치 번들 내보내기</string>
-    <string name="export_patch_bundles_description">JSON 파일에 가져온 원격 패치 번들을 저장합니다</string>
+    <string name="export_patch_bundles_description">JSON 파일에 가져온 수동 패치 번들을 저장합니다</string>
     <string name="export_patch_bundles_fail">패치 번들을 내보낼 수 없습니다: %s</string>
     <string name="export_patch_bundles_empty">내보낼 수 있는 패치 번들이 없습니다</string>
     <string name="export_patch_bundles_success">%d 개의 패치 번들을 내보냈습니다</string>
     <string name="export_patch_bundles_partial">%1$d 개의 패치 번들을 내보냈습니다. 일부 번들은 기기에 추가되어있기 때문에 내보낼 수 없습니다.</string>
     <string name="export_patch_bundles_local_not_supported">URL에서 가져온 패치 번들만 내보낼 수 있습다</string>
-    <string name="bundle_type_remote">원격</string>
+    <string name="bundle_type_remote">수동 설치됨</string>
     <string name="bundle_type_local">기기</string>
     <string name="bundle_type_preinstalled">미리 설치됨</string>
-    <string name="bundle_created_at">%1$s에 생성됨</string>
-    <string name="bundle_updated_at">%1$s에 업데이트됨</string>
+    <string name="bundle_created_at">%1$s 생성됨</string>
+    <string name="bundle_updated_at">%1$s 업데이트됨</string>
     <string name="bundle_changelog">변경 사항</string>
-    <string name="bundle_view_changelog">최신 변경 사항을 볼 수 있습니다</string>
-    <string name="bundle_changelog_error">변경 사항을 로드할 수 없습니다:%s</string>
+    <string name="bundle_view_changelog">최신 변경 사항을 확인할 수 있습니다</string>
+    <string name="bundle_changelog_error">변경 사항을 로드할 수 없습니다: %s</string>
     <string name="bundle_changelog_retry">다시 시도</string>
     <string name="bundle_changelog_empty">변경 사항이 없습니다</string>
     <string name="export_patch_profiles">패치 프로필 내보내기</string>
@@ -347,10 +321,8 @@
     <string name="patch_selection_collapse_on_toggle_description">패치를 선택하거나 선택 해제할 때마다 패치 선택 동작 버튼을 자동으로 숨깁니다</string>
     <string name="patch_selection_action_order_title">패치 선택 동작 버튼 순서</string>
     <string name="patch_selection_action_order_description">패치 선택 동작 버튼에 대한 레이아웃 순서를 선택하세요</string>
-    <!-- Needs translation -->
-    <string name="patch_selection_version_tags_title">Patch version tags</string>
-    <!-- Needs translation -->
-    <string name="patch_selection_version_tags_description">Show version tags on patches in the selection screen</string>
+    <string name="patch_selection_version_tags_title">패치 버전 태그 표시</string>
+    <string name="patch_selection_version_tags_description">패치 선택 화면에서 버전 태그를 표시합니다</string>
     <string name="patch_selection_action_visibility_title">패치 선택 동작 버튼 숨기기</string>
     <string name="patch_selection_action_visibility_description">표시할 패치 선택 액션 버튼을 선택하세요</string>
     <string name="patch_selection_action_visibility_reset">모든 동작 버튼 표시</string>
@@ -385,12 +357,12 @@
     <string name="patch_selection_reset_package_dialog_description">\"%s\"에 대한 패치 선택목록을 초기화합니다. 개별적으로 패치를 수동으로 다시 선택해야 합니다.
 
 패치 프로필은 영향을 받지 않습니다.</string>
-    <string name="patch_selection_reset_package_description">단일 앱에 대한 패치 선택목록을 초기화합니다.</string>
+    <string name="patch_selection_reset_package_description">단일 앱에 대한 패치 선택목록을 초기화합니다</string>
     <string name="patch_selection_reset_patches">번들 패치 선택목록 초기화</string>
     <string name="patch_selection_reset_patches_dialog_description">\"%s\"에 대한 패치 선택목록을 초기화합니다. 개별적으로 패치를 수동으로 다시 선택해야 합니다.
 
 패치 프로필은 영향을 받지 않습니다.</string>
-    <string name="patch_selection_reset_patches_description">단일 패치 번들에 대한 패치 선택목록을 초기화합니다.</string>
+    <string name="patch_selection_reset_patches_description">단일 패치 번들에 대한 패치 선택목록을 초기화합니다</string>
     <string name="patch_options_reset_package">앱 패치 옵션 초기화</string>
     <string name="patch_options_reset_package_dialog_description">\"%s\"에 대한 패치 옵션을 초기화합니다. 개별적으로 옵션을 다시 적용해야 합니다.
 
@@ -413,15 +385,12 @@
     <string name="downloader_plugin_state_trusted">신뢰함</string>
     <string name="downloader_plugin_state_failed">로드할 수 없습니다. 자세한 내용을 보려면 여기를 탭하세요</string>
     <string name="downloader_plugin_state_untrusted">신뢰하지 않음</string>
-    <string name="downloader_plugin_trust_dialog_title">플러그인을 신뢰하시겠습니까?</string>
-    <!-- Needs translation -->
-    <string name="downloader_plugin_trust_dialog_body">Continuing will allow this plugin to run on your system.\n\nOnly enable this plugin if you trust it. Plugins can execute arbitrary code and may compromise your device.</string>
-    <!-- Needs translation -->
-    <string name="downloader_plugin_trust_dialog_signature">Signature:\n\n%s</string>
-    <!-- Needs translation -->
-    <string name="downloader_plugin_trust_dialog_plugin">Plugin:\n%s</string>
+    <string name="downloader_plugin_trust_dialog_title">신뢰하시겠습니까?</string>
     <string name="downloader_plugin_revoke_trust_dialog_title">신뢰하지 않으시겠습니까?</string>
-<string name="downloader_plugin_view_error">오류 세부 정보 보기</string>
+    <string name="downloader_plugin_trust_dialog_body">계속하면 이 플러그인이 시스템에서 실행됩니다.\n\n신뢰할 수 있는 경우에만 이 플러그인을 활성화하십시오. 플러그인은 임의의 코드를 실행할 수 있으며 기기를 손상시킬 수 있습니다.</string>
+    <string name="downloader_plugin_trust_dialog_signature">서명:\n\n%s</string>
+    <string name="downloader_plugin_trust_dialog_plugin">플러그인:\n%s</string>
+    <string name="downloader_plugin_view_error">오류 세부 정보 보기</string>
     <string name="downloader_plugin_failed_dialog_body">\"%1$s\"를 로드할 수 없습니다. 오류 세부 정보를 보거나 플러그인을 삭제할 수 있습니다.</string>
     <string name="downloader_plugin_uninstall_title">플러그인을 삭제하시겠습니까?</string>
     <string name="downloader_plugin_uninstall_description">\"%1$s\"를 삭제하시겠습니까?</string>
@@ -432,17 +401,14 @@
     <string name="loading_body">로드하는 중 …</string>
     <string name="downloading_patches">패치를 다운로드하는 중 …</string>
     <string name="options">옵션</string>
-    <string name="ok">확인</string>
+    <string name="ok">확인하기</string>
     <string name="yes">예</string>
     <string name="no">아니요</string>
     <string name="edit">편집</string>
     <string name="dialog_input_placeholder">값</string>
-    <!-- Needs translation -->
-    <string name="file_name">File name</string>
-    <!-- Needs translation -->
-    <string name="export_overwrite_title">Replace file?</string>
-    <!-- Needs translation -->
-    <string name="export_overwrite_description">A file named %1$s already exists. Replace it?</string>
+    <string name="file_name">파일 이름</string>
+    <string name="export_overwrite_title">파일을 교체하시겠습니까?</string>
+    <string name="export_overwrite_description">%1$s 라는 파일이 이미 있습니다. 교체하시겠습니까?</string>
     <string name="reset">초기화</string>
     <string name="share">공유</string>
     <string name="patch">패치하기</string>
@@ -475,17 +441,15 @@
     <!-- Needs translation -->
     <string name="process_runtime_memory_aggressive_description">Use the highest memory limit allowed by your device for the experimental patcher</string>
 이 기기에 권장된 메모리 용량: %1$d MB.</string>
+    <string name="process_runtime_memory_aggressive">공격적인 패처 메모리 제한</string>
+    <string name="process_runtime_memory_aggressive_description">실험적인 패처에 대하여 이 기기에서 허용하는 최대 메모리 제한을 사용합니다</string>
     <string name="reset_to_recommended">권장값으로 초기화</string>
     <string name="patcher_auto_collapse_steps">완료된 패처 단계 자동 접기</string>
     <string name="patcher_auto_collapse_steps_description">모든 단계가 완료된 후에 각 패처 진행 위젯을 자동으로 접습니다</string>
-    <!-- Needs translation -->
-    <string name="patcher_auto_expand_steps">Auto-expand running steps</string>
-    <!-- Needs translation -->
-    <string name="patcher_auto_expand_steps_description">Automatically expand a patcher progress widget when it starts running</string>
-    <!-- Needs translation -->
-    <string name="patcher_saved_apps_title">Save patched apps for later</string>
-    <!-- Needs translation -->
-    <string name="patcher_saved_apps_description">When enabled, the manager saves a patched app entry and APK so it stays in the Apps tab and can be reinstalled later. Turning this off skips saving and hides the delete option</string>
+    <string name="patcher_auto_expand_steps">실행 중인 패처 단계 자동 펼치기</string>
+    <string name="patcher_auto_expand_steps_description">패처 진행 위젯이 실행되기 시작하면 자동으로 펼칩니다</string>
+    <string name="patcher_saved_apps_title">나중에 사용할 패치된 앱 저장</string>
+    <string name="patcher_saved_apps_description">이 기능을 활성화하면, 매니저가 패치된 앱 항목과 APK를 저장하여 앱 탭에 유지되고 나중에 다시 설치할 수 있습니다. 이 기능을 비활성화하면 저장을 건너뛰어지고 삭제 옵션을 숨겨집니다</string>
     <string name="patch_bundle_rename">패치 번들 이름 변경</string>
     <string name="patch_profile_view_options">옵션 보기</string>
     <string name="patch_profile_patch_options_title">%1$s 옵션</string>
@@ -519,7 +483,7 @@
     <string name="export_name_variable_bundle_names">패치 번들 이름</string>
     <string name="export_name_variable_bundle_names_description">적용된 패치 번들 이름으로 변경합니다.</string>
     <string name="export_name_variable_manager_version">매니저 버전</string>
-    <string name="export_name_variable_manager_version_description">매니저 버전을 변경하였습니다.</string>
+    <string name="export_name_variable_manager_version_description">매니저 버전으로 변경합니다.</string>
     <string name="export_name_variable_timestamp">타임스탬프</string>
     <string name="export_name_variable_timestamp_description">현재 시간으로 변경합니다 (yyyyMMdd-HHmmss).</string>
     <string name="export_name_variable_date">날짜</string>
@@ -554,10 +518,8 @@
     <!-- From PR #38: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/38 -->
     <string name="language_option_vietnamese">베트남어</string>
     <string name="language_option_japanese">일본어</string>
-    <!-- Needs translation -->
-    <string name="language_option_russian">Russian</string>
-    <!-- Needs translation -->
-    <string name="language_option_ukrainian">Ukrainian</string>
+    <string name="language_option_russian">러시아어</string>
+    <string name="language_option_ukrainian">우크라이나어</string>
     <string name="device">기기</string>
     <string name="device_android_version">Android 버전</string>
     <string name="device_model">모델</string>
@@ -581,7 +543,7 @@
     <string name="patches_disable_single_dialog_description">\"%s\"를 비활성화하시겠습니까?</string>
     <string name="patches_enable_single_dialog_description">\"%s\"를 활성화하시겠습니까?</string>
     <string name="refresh">새로고침</string>
-    <string name="continue_anyways">계속</string>
+    <string name="continue_anyways">계속하기</string>
     <string name="download_another_version">다른 버전을 다운로드하는 중</string>
     <string name="download_app">앱을 다운로드하는 중</string>
     <string name="download_apk">APK 파일을 다운로드하는 중</string>
@@ -589,8 +551,8 @@
     <string name="patches_replace_fail">패치를 가져올 수 없습니다: %s</string>
     <string name="no_patched_apps_found">패치된 앱을 찾을 수 없습니다</string>
     <string name="tap_on_patches">자세한 정보를 확인하려면 여기를 탭하세요</string>
-    <string name="patches_selected">%s 개의 Patch 번들이 선택됨</string>
-    <string name="patch_profiles_selected">%1$d 개의 패치 프로필이 선택됨</string>
+    <string name="patches_selected">%s 개의 패치 번들</string>
+    <string name="patch_profiles_selected">%1$d 개의 패치 프로필</string>
     <string name="selected_apps_count">%1$d 개의 앱이 선택됨</string>
     <string name="selected_apps_delete_dialog_description">매니저에서 선택된 앱을 삭제하시겠습니까?
 기기에 설치된 앱은 그대로 유지됩니다.</string>
@@ -604,7 +566,7 @@
     <string name="selection_warning_description">기본 패치 선택목록 및 옵션을 사용하는 것이 좋습니다. 변경하면 예상되지 않은 문제점이 발생할 수 있습니다.\n\n패치를 전환하기 전에 고급 설정에서 \"패치 선택 및 옵션 변경 허용\"을 활성화해야 합니다.</string>
     <string name="patch_profile_save_action">패치 프로필 저장</string>
     <string name="patch_profile_select_bundles_title">패치 번들 선택</string>
-    <string name="patch_profile_select_bundles_description">이 프로필에 포함할 패치 번들을 선택할 수 있습니다.</string>
+    <string name="patch_profile_select_bundles_description">이 프로필에 포함될 패치 번들을 선택할 수 있습니다.</string>
     <string name="patch_profile_select_bundles_empty">저장할 수 있는 패치 번들이 없습니다.</string>
     <string name="patch_profile_name_title">패치 프로필 이름 지정</string>
     <string name="patch_profile_name_description">이 패치 프로필 이름을 입력하거나 아래에서 이름을 선택하여 업데이트할 수 있습니다</string>
@@ -619,7 +581,7 @@
     <string name="patch_profile_rename_title">패치 프로필 이름 변경</string>
     <string name="patch_profile_version_override_action">패치 프로필 버전 설정</string>
     <string name="patch_profile_version_override_title">\"%1$s\" 버전 설정</string>
-    <string name="patch_profile_version_override_message">프로필과 함께 저장될 특정 앱 버전을 설정하거나 모든 버전을 대상으로 지정합니다.</string>
+    <string name="patch_profile_version_override_message">프로필과 함께 저장될 특정 앱 버전을 설정하거나 모든 버전을 대상으로 지정할 수 있습니다.</string>
     <string name="patch_profile_version_override_label">앱 버전</string>
     <string name="patch_profile_version_override_hint">예) 18.27.35</string>
     <string name="patch_profile_version_override_all_versions">모든 버전 사용</string>
@@ -629,65 +591,44 @@
     <string name="patch_profile_version_conflict_title">버전 재정의를 유지하시겠습니까?</string>
     <string name="patch_profile_version_conflict_message">현재 버전: %1$s\n수신 버전: %2$s\n이 프로필에 무엇을 저장해야 합니까?</string>
     <string name="patch_profile_version_conflict_use_new">수신 버전 사용</string>
-    <string name="patch_profile_version_conflict_keep_existing">기존 버전 사용</string>
-    <string name="patch_profile_empty_state">패치 선택 화면에서 설정을 저장하면 여기에서 확인할 수 있습니다.</string>
+    <string name="patch_profile_version_conflict_keep_existing">기존 버전 유지</string>
+    <string name="patch_profile_empty_state">패치 선택 화면에서 프로필 설정을 저장하면 여기에서 확인할 수 있습니다.</string>
     <string name="patch_profile_missing_bundles_toast">이 프로필의 일부 번들을 사용할 수 없으므로 건너뜁니다.</string>
     <string name="patch_profile_changed_patches_toast">이 프로필의 일부 패치 또는 옵션이 더 이상 번들과 일치하지 않아서 건너뜁니다.</string>
     <string name="patch_profile_no_available_bundles_toast">이 프로필에는 사용할 수 있는 번들이 없습니다. 번들을 업데이트하고 다시 시도하세요.</string>
     <string name="patch_profile_launch_error">이 패치 프로필을 열 수 없습니다.</string>
-    <string name="patch_profile_show_more">더보기</string>
-    <string name="patch_profile_show_less">덜보기</string>
+    <string name="patch_profile_show_more">자세히 보기</string>
+    <string name="patch_profile_show_less">간략히 보기</string>
     <string name="patch_profile_created_at">%1$s에 생성됨</string>
     <string name="patch_profile_bundle_header">%1$s • %2$s</string>
     <string name="patch_profile_bundle_unavailable_suffix">%1$s (사용할 수 없음)</string>
     <string name="patch_profile_bundle_uid_label">UID: %1$d</string>
     <string name="patch_profile_bundle_change_uid">UID 변경</string>
-    <string name="patch_profile_bundle_change_uid_title">\"%1$s\" UID 변경</string>
+    <string name="patch_profile_bundle_change_uid_title">\"%1$s\"에 대한 UID 변경</string>
     <string name="patch_profile_bundle_change_uid_invalid">유효한 숫자 UID를 입력하세요.</string>
     <string name="patch_profile_bundle_change_uid_success">번들 UID를 %1$d 로 업데이트하였습니다.</string>
     <string name="patch_profile_bundle_change_uid_not_found">UID가 %1$d 인 기기 패치 번들을 찾을 수 없습니다.</string>
-    <!-- Needs translation -->
-    <string name="patch_profile_bundle_select_remote">Select bundle</string>
-    <!-- Needs translation -->
-    <string name="patch_profile_bundle_select_remote_title">Select bundle for %1$s</string>
-    <!-- Needs translation -->
-    <string name="patch_profile_bundle_select_remote_description">Choose a remote patch bundle to replace the unavailable one.</string>
-    <!-- Needs translation -->
-    <string name="patch_profile_bundle_select_remote_empty">No available remote bundles found.</string>
-    <!-- Needs translation -->
-    <string name="patch_profile_bundle_select_remote_success">Profile updated to use %1$s.</string>
-    <!-- Needs translation -->
-    <string name="patch_profile_bundle_select_remote_incompatible_title">Bundle incompatible</string>
-    <!-- Needs translation -->
-    <string name="patch_profile_bundle_select_remote_incompatible_message">%1$s does not contain the required patches. It was not applied. Select a different bundle.</string>
-    <!-- Needs translation -->
-    <string name="patch_profile_bundle_select_remote_override">Use anyway</string>
-    <!-- Needs translation -->
-    <string name="patch_profile_bundle_select_remote_error">Failed to update the profile bundle.</string>
-    <!-- Needs translation -->
-    <string name="saved_app_bundle_missing_title">Bundle not detected</string>
-    <!-- Needs translation -->
-    <string name="saved_app_bundle_select_action">Select bundle</string>
-    <!-- Needs translation -->
-    <string name="saved_app_bundle_select_title">Select bundle for %1$s</string>
-    <!-- Needs translation -->
-    <string name="saved_app_bundle_select_description">Choose a patch bundle to replace the missing one.</string>
-    <!-- Needs translation -->
-    <string name="saved_app_bundle_select_empty">No patch bundles available.</string>
-    <!-- Needs translation -->
-    <string name="saved_app_bundle_select_success">Saved app updated to use %1$s.</string>
-    <!-- Needs translation -->
-    <string name="saved_app_bundle_select_incompatible_title">Bundle incompatible</string>
-    <!-- Needs translation -->
-    <string name="saved_app_bundle_select_incompatible_message">%1$s does not contain the required patches. It was not applied. Select a different bundle.</string>
-    <!-- Needs translation -->
-    <string name="saved_app_bundle_select_override">Use anyway</string>
-    <!-- Needs translation -->
-    <string name="saved_app_bundle_select_error">Failed to update the saved app bundle.</string>
-    <!-- Needs translation -->
-    <string name="patch_profile_bundle_override_title">Allow incompatible bundle override</string>
-    <!-- Needs translation -->
-    <string name="patch_profile_bundle_override_description">Show a developer-only override button when a patch profile bundle is incompatible.</string>
+    <string name="patch_profile_bundle_select_remote">번들 선택</string>
+    <string name="patch_profile_bundle_select_remote_title">%1$s 에 대한 번들 선택하기</string>
+    <string name="patch_profile_bundle_select_remote_description">사용할 수 없는 수동 패치 번들을 대체할 번들을 선택하세요.</string>
+    <string name="patch_profile_bundle_select_remote_empty">사용 가능한 수동 번들을 찾을 수 없습니다.</string>
+    <string name="patch_profile_bundle_select_remote_success">프로필이 %1$s 를 사용하도록 업데이트하였습니다.</string>
+    <string name="patch_profile_bundle_select_remote_incompatible_title">번들 호환 안 됨</string>
+    <string name="patch_profile_bundle_select_remote_incompatible_message">%1$s 에는 필요한 패치가 포함되어 있지 않았고 적용도 되어있지 않았습니다. 다른 번들을 선택하세오.</string>
+    <string name="patch_profile_bundle_select_remote_override">그래도 사용</string>
+    <string name="patch_profile_bundle_select_remote_error">프로필 번들을 ​​업데이트할 수 없습니다.</string>
+    <string name="saved_app_bundle_missing_title">번들을 찾을 수 없습니다</string>
+    <string name="saved_app_bundle_select_action">번들 선택</string>
+    <string name="saved_app_bundle_select_title">%1$s 에 대한 번들 선택</string>
+    <string name="saved_app_bundle_select_description">누락된 번들을 대체할 패치 번들을 선택하세요.</string>
+    <string name="saved_app_bundle_select_empty">사용 가능한 패치 번들이 없습니다.</string>
+    <string name="saved_app_bundle_select_success">저장된 앱이 %1$s 를 사용하도록 업데이트하였습니다.</string>
+    <string name="saved_app_bundle_select_incompatible_title">번들 호환 안 됨</string>
+    <string name="saved_app_bundle_select_incompatible_message">%1$s 에는 필요한 패치가 포함되어 있지 않았고 적용도 되어있지 않았습니다. 다른 번들을 선택하세오.</string>
+    <string name="saved_app_bundle_select_override">그래도 사용</string>
+    <string name="saved_app_bundle_select_error">저장된 앱 번들을 업데이트할 수 없습니다.</string>
+    <string name="patch_profile_bundle_override_title">호환되지 않는 번들 재정의 허용</string>
+    <string name="patch_profile_bundle_override_description">패치 프로필 번들이 호환되지 않을 경우에 개발자 전용 재정의 버튼을 표시합니다.</string>
     <string name="patcher_process_exit_message">패처 프로세스를 코드 %1$d 로 종료하였습니다.</string>
     <string name="patcher_memory_adjustment_title">패처의 메모리가 부족합니다</string>
     <string name="patcher_memory_adjustment_message_reduced">실험용 패처 프로세스가 메모리 부족으로 중지되었습니다. 즉시 다시 시도할 수 있도록 메모리 제한을 %1$d MB에서 %2$d MB로 줄였습니다.</string>
@@ -708,7 +649,7 @@
     <string name="delete_profile_confirmation">\"%1$s\"를 삭제하시겠습니까?</string>
     <string name="patch_profile_delete_multiple_dialog_description">선택된 패치 프로필을 삭제하시겠습니까?</string>
     <plurals name="patch_profile_bundle_patch_count">
-        <item quantity="other">%d 개의 Patch</item>
+        <item quantity="other">%d 개의 패치</item>
     </plurals>
     <plurals name="patch_profile_bundle_count">
         <item quantity="other">%d 개의 번들</item>
@@ -727,7 +668,7 @@
     <string name="not_installed">설치되지 않음</string>
     <string name="installed">설치됨</string>
     <string name="app_info">앱 정보</string>
-    <string name="uninstall">삭제</string>
+    <string name="uninstall">삭제하기</string>
     <string name="unpatch">패치 해제</string>
     <string name="repatch">다시 패치</string>
     <string name="install_type">설치 유형</string>
@@ -751,7 +692,7 @@
     <string name="mount">마운트</string>
     <string name="unmount">마운트 해제</string>
     <string name="unmount_confirm_description">앱을 마운트 해제하시겠습니까?</string>
-    <string name="saved_install">저장하였습니다</string>
+    <string name="saved_install">저장됨</string>
     <string name="failed_to_mount">마운트를 할 수 없습니다: %s</string>
     <string name="failed_to_unmount">마운트를 해제할 수 없습니다: %s</string>
     <string name="unpatch_app">앱을 패치 해제하시겠습니까?</string>
@@ -779,16 +720,11 @@
     <string name="path_selector_parent_dir">이전 디렉터리</string>
     <string name="path_selector_dirs">디렉터리</string>
     <string name="path_selector_files">파일</string>
-    <!-- Needs translation -->
-    <string name="path_selector_favorites">Favorites</string>
-    <!-- Needs translation -->
-    <string name="path_selector_favorite_added">Added to favorites</string>
-    <!-- Needs translation -->
-    <string name="path_selector_favorite_removed">Removed from favorites</string>
-    <!-- Needs translation -->
-    <string name="path_selector_favorite_remove_title">Remove favorite?</string>
-    <!-- Needs translation -->
-    <string name="path_selector_favorite_remove_description">Remove “%1$s” from favorites?</string>
+    <string name="path_selector_favorites">즐겨찾기</string>
+    <string name="path_selector_favorite_added">즐겨찾기에 추가하였습니다</string>
+    <string name="path_selector_favorite_removed">즐겨찾기에서 삭제하였습니다</string>
+    <string name="path_selector_favorite_remove_title">즐겨찾기를 삭제?</string>
+    <string name="path_selector_favorite_remove_description">즐겨찾기에서 \"%1$s\"를 삭제하시겠습니까?</string>
     <string name="show_password_field">비밀번호 표시</string>
     <string name="hide_password_field">비밀번호 숨기기</string>
     <string name="installer">설치 프로그램</string>
@@ -827,7 +763,7 @@
     <string name="installer_custom_tab_saved">저장됨</string>
     <string name="installer_custom_saved_note">사용자가 수동으로 추가한 설치 프로그램이 기본 및 대체 설치 프로그램 선택 메뉴에 포함됩니다.</string>
     <string name="installer_custom_tab_auto_saved">자동 저장됨</string>
-    <string name="installer_custom_auto_note">설치 프로그램이 자동으로 감지되어 기본 및 대체 설치 프로그램 선택 메뉴에 추가되었습니다.</string>
+    <string name="installer_custom_auto_note">설치 프로그램이 자동으로 감지되어 기본 및 대체 설치 프로그램 선택 메뉴에 추가됩니다.</string>
     <string name="installer_custom_tab_discover">검색</string>
     <string name="installer_custom_close">닫기</string>
     <string name="installer_custom_manage_description">기본 또는 대체 설치 프로그램으로 사용될 서드파티 설치 프로그램 액티비티를 저장합니다</string>
@@ -867,7 +803,7 @@
     <string name="mounting_ellipsis">마운트하는 중 ...</string>
     <string name="unmounting">마운트 해제하는 중 ...</string>
     <string name="install_app">설치하기</string>
-    <string name="install_app_success">성공적으로 설치히였습니다</string>
+    <string name="install_app_success">성공적으로 설치하였습니다</string>
     <string name="install_app_fail_title">설치할 수 없습니다</string>
     <string name="install_app_fail">앱을 설치할 수 없습니다: %s</string>
     <string name="install_app_fail_missing_stock">마운트 설치를 위한 원본 APK가 누락되어 있습니다.</string>
@@ -917,10 +853,8 @@
     <string name="patcher_step_sign_apk">패치된 APK 파일에 서명하는 중</string>
     <string name="patcher_notification_title">패치 진행하는 중 …</string>
     <string name="patcher_notification_text">탭하여 패처로 돌아가기</string>
-    <!-- Needs translation -->
-    <string name="notification_channel_patching_name">Patching</string>
-    <!-- Needs translation -->
-    <string name="notification_channel_patching_description">Shows progress while patching an app.</string>
+    <string name="notification_channel_patching_name">패치하는 중</string>
+    <string name="notification_channel_patching_description">앱 패치 진행 상황을 표시합니다.</string>
     <string name="patcher_stop_confirm_title">패처 중지</string>
     <string name="patcher_stop_confirm_description">패치 프로세스를 중지하시겠습니까?</string>
     <string name="patcher_install_in_progress_title">설치가 진행 중입니다</string>
@@ -930,7 +864,7 @@
     <string name="patcher_mount_in_progress_title">마운트가 진행중 입니다</string>
     <string name="patcher_mount_in_progress">마운트가 진행중 입니다. 잠시만 기다리세요</string>
     <string name="execute_patches">패치를 실행하는 중</string>
-    <string name="executing_patch">%s 을 실행하는 중</string>
+    <string name="executing_patch">%s 를 실행하는 중</string>
     <string name="failed_to_execute_patch">%s 을 실행할 수 없습니다</string>
     <string name="save_patched_app_dialog_title">패처를 종료하시겠습니까?</string>
     <string name="save_patched_app_dialog_message">패처를 종료하려고 합니다. 패치된 앱은 나중에 사용할 수 있도록 저장하지 않으면 손실됩니다.</string>
@@ -955,19 +889,14 @@
     <string name="permanent_dismiss">다시 표시 안함</string>
     <string name="donate">기부</string>
     <string name="website">웹사이트</string>
-    <string name="github">GitHub</string>
+    <string name="github">Universal ReVanced Manager GitHub</string>
     <string name="original_revanced_manager_github">공식 ReVanced Manager GitHub</string>
     <string name="patch_bundle_urls">패치 번들 가져오기</string>
-    <!-- Needs translation -->
-    <string name="search_engine_host_title">Search engine domain</string>
-    <!-- Needs translation -->
-    <string name="search_engine_host_description">Version search links use %1$s</string>
-    <!-- Needs translation -->
-    <string name="search_engine_host_dialog_title">Search engine domain</string>
-    <!-- Needs translation -->
-    <string name="search_engine_host_dialog_description">Change the domain used for version search links. Example: google.com or duckduckgo.com</string>
-    <!-- Needs translation -->
-    <string name="search_engine_host_label">Search domain</string>
+    <string name="search_engine_host_title">검색 엔진 도메인</string>
+    <string name="search_engine_host_description">버전 검색 링크를 %1$s 로 사용합니다</string>
+    <string name="search_engine_host_dialog_title">검색 엔진 도메인</string>
+    <string name="search_engine_host_dialog_description">버전 검색 링크에 사용되는 도메인을 변경할 수 있습니다. 예) google.com 또는 duckduckgo.com</string>
+    <string name="search_engine_host_label">검색 도메인</string>
     <string name="contact">문의</string>
     <string name="version">버전</string>
     <string name="submit_feedback">문제점 또는 피드백 제출</string>
@@ -975,8 +904,8 @@
     <string name="developer_options">개발자 옵션</string>
     <string name="developer_options_description">디버그 옵션을 설정할 수 있습니다</string>
     <string name="patches_update_success">업데이트를 성공하였습니다</string>
-    <string name="patches_update_unavailable">사용 가능한 업데이트가 없습니다</string>
-    <string name="view_patches">패치를 자세하게 볼 수 있습니다</string>
+    <string name="patches_update_unavailable">새로운 업데이트가 없습니다</string>
+    <string name="view_patches">패치 내역를 자세하게 확인할 수 있습니다</string>
     <string name="patches_view_any_version">모든 버전</string>
     <string name="patches_view_any_package">모든 패키지</string>
     <string name="patches_delete_single_dialog_description">\"%s\"를 삭제하시겠습니까?</string>
@@ -1002,24 +931,17 @@
     <string name="update_on_metered_connections_description">모바일 네트워크에서 패치 및 매니저를 업데이트를 허용합니다</string>
     <string name="update_checking_manager">시작 시 업데이트 확인</string>
     <string name="update_checking_manager_description">앱이 시작될 때마다 Universal ReVanced Manager의 새로운 버전을 확인합니다</string>
-    <string name="manager_prereleases">Pre-releases 버전 사용</string>
-    <string name="manager_prereleases_description">Universal ReVanced Manager의 Pre-release 버전을 사용합니다</string>
+    <string name="manager_prereleases">개발자 버전 사용</string>
+    <string name="manager_prereleases_description">Universal ReVanced Manager의 개발자 버전을 사용합니다</string>
     <string name="update_published">%s 을 게시하였습니다</string>
     <string name="battery_optimization_notification">Universal ReVanced Manager가 백그라운드에서 정상적으로 작동하려면 배터리 최적화를 비활성화해야 합니다. 배터리 최적화를 비활성화하려면 여기를 탭하세요.</string>
-    <!-- Needs translation -->
-    <string name="battery_optimization_dialog_description">To receive background bundle update notifications reliably, disable battery optimization for URV Manager.</string>
-    <!-- Needs translation -->
-    <string name="battery_optimization_dialog_title">Battery optimization</string>
-    <!-- Needs translation -->
-    <string name="battery_optimization_banner_title">Battery optimization banner</string>
-    <!-- Needs translation -->
-    <string name="battery_optimization_banner_description">Show the battery optimization warning banner on the dashboard.</string>
-    <!-- Needs translation -->
-    <string name="battery_optimization_banner_disable_title">Hide battery optimization warning?</string>
-    <!-- Needs translation -->
-    <string name="battery_optimization_banner_disable_description">Disabling this warning can make it harder to notice background restrictions. Only hide it if you understand the risk.</string>
-    <!-- Needs translation -->
-    <string name="battery_optimization_banner_disable_confirm">Hide banner</string>
+    <string name="battery_optimization_dialog_description">백그라운드 번들 업데이트 알림을 안정적으로 받으려면 URV 매니저의 배터리 최적화를 비활성화하세요.</string>
+    <string name="battery_optimization_dialog_title">배터리 최적화</string>
+    <string name="battery_optimization_banner_title">배터리 최적화 배너 표시</string>
+    <string name="battery_optimization_banner_description">대시보드에 배터리 최적화 경고 배너를 표시합니다.</string>
+    <string name="battery_optimization_banner_disable_title">배터리 최적화 경고를 숨기시겠습니까?</string>
+    <string name="battery_optimization_banner_disable_description">이 경고를 비활성화하면 백그라운드 제한 사항을 알아차리기 어려울 수 있습니다. 위험을 이해한 경우에만 숨기세요.</string>
+    <string name="battery_optimization_banner_disable_confirm">배너 숨기기</string>
     <string name="installing_manager_update">업데이트를 설치하는 중 …</string>
     <string name="downloading_manager_update">업데이트를 다운로드하는 중 …</string>
     <string name="manager_update_banner_title">매니저 업데이트를 다운로드하는 중</string>
@@ -1027,7 +949,7 @@
     <string name="download_manager_failed">업데이트를 다운로드할 수 없습니다: %s</string>
     <string name="cancel">취소하기</string>
     <string name="save">저장하기</string>
-    <string name="save_with_count">저장 (%1$s)</string>
+    <string name="save_with_count">저장하기 (%1$s)</string>
     <string name="update">업데이트</string>
     <string name="empty">비어있음</string>
     <string name="installing_message">요청 메시지가 표시되면 <b>업데이트</b>를 탭하세요.\n업데이트가 진행되면 Universal ReVanced Manager가 종료됩니다.</string>
@@ -1041,7 +963,7 @@
     <string name="option_required">이 옵션은 필수입니다</string>
     <string name="required_options_screen">필수 옵션</string>
     <string name="failed_to_check_updates">업데이트를 확인할 수 없습니다: %s</string>
-    <string name="no_update_available">사용 가능한 업데이트가 없습니다</string>
+    <string name="no_update_available">새로운 업데이트가 없습니다</string>
     <string name="update_check">업데이트 확인하는 중 …</string>
     <string name="dismiss_temporary">나중에</string>
     <string name="update_available_dialog_description">Universal ReVanced Manager의 새로운 버전 (%s) 을 사용할 수 있습니다.</string>
@@ -1087,11 +1009,27 @@
     <string name="auto_update">자동 업데이트</string>
     <string name="add_patches">패치 번들 추가</string>
     <string name="auto_update_description">새로운 버전이 릴리즈되었을 경우에 자동으로 업데이트합니다</string>
-    <string name="patches_prereleases">Pre-release 버전 사용</string>
-    <string name="patches_prereleases_description">%s 의 Pre-release 버전을 사용할 수 있습니다</string>
+    <string name="patches_prereleases">개발자 버전 사용</string>
+    <string name="patches_prereleases_description">%s 의 개발자 버전을 사용합니다</string>
     <string name="patches_url">패치 번들 URL</string>
-    <!-- Needs translation -->
-    <string name="patch_bundle_urls_link">Get patch bundle URLs here</string>
+    <string name="patch_bundle_urls_link">여기에서 패치 번들 URL을 가져오세요</string>
+    <string name="patch_bundle_discovery_title">패치 번들 검색</string>
+    <string name="patch_bundle_discovery_description">외부에서 패치 번들을 검색하여 URV Manager에 추가할 수 있습니다.</string>
+    <string name="patch_bundle_discovery_search_label">번들 검색</string>
+    <string name="patch_bundle_discovery_empty">검색된 패치 번들이 없습니다.</string>
+    <string name="patch_bundle_discovery_error">패치 번들을 로드할 수 없습니다.</string>
+    <string name="patch_bundle_discovery_imported">추가됨</string>
+    <string name="patch_bundle_discovery_patch_count">%1$d 개의 패치</string>
+    <string name="patch_bundle_discovery_release">안정</string>
+    <string name="patch_bundle_discovery_prerelease">개발자</string>
+    <string name="patch_bundle_discovery_v3_warning">번들 V3는 아직 지원되지 않습니다.</string>
+    <string name="patch_bundle_discovery_open_site">번들 카탈로그 열기</string>
+    <string name="patch_bundle_discovery_open_github">GitHub에서 카탈로그 열기</string>
+    <string name="patch_bundle_discovery_view_patches">패치 보기</string>
+    <string name="patch_bundle_discovery_patches_title">패치 · %1$s/%2$s</string>
+    <string name="patch_bundle_discovery_patches_title_fallback">패치 번들</string>
+    <string name="patch_bundle_discovery_patches_empty">이 번들에 대한 패치를 찾을 수 없습니다.</string>
+    <string name="patch_bundle_discovery_patch_unnamed">이름 없는 패치</string>
     <string name="incompatible_patches_dialog">이 패치는 선택된 앱 버전 (%1$s) 과 호환되지 않습니다.\n\n자세한 정보를 보려면 패치를 탭하세요.</string>
     <string name="incompatible_patch">호환되지 않는 패치</string>
     <string name="any_version">모든 앱 버전</string>
@@ -1100,7 +1038,7 @@
     <string name="show_manager_update_dialog_on_launch_description">새로운 업데이트가 있을 경우에 시작 시 팝업 메시지를 표시합니다</string>
     <string name="failed_to_import_keystore">키스토어를 가져올 수 없습니다</string>
     <string name="export">내보내기</string>
-    <string name="confirm">확인</string>
+    <string name="confirm">확인하기</string>
     <string name="saved_app_install_cancelled">설치를 취소하였습니다</string>
     <!-- Needs translation -->
     <string name="patch_bundle_discovery_title">Discover patch bundles</string>
@@ -1137,5 +1075,3 @@
     <!-- Needs translation -->
     <string name="patch_bundle_discovery_patch_unnamed">Unnamed patch</string>
 </resources>
-
-
