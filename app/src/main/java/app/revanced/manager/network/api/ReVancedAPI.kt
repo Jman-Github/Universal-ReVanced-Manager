@@ -158,7 +158,7 @@ class ReVancedAPI(
     }
 
     private fun isUpdateAvailable(installedVersion: String, releasedVersion: String): Boolean {
-        val installed = parseVersion(installedVersion, stripDev = true)
+        val installed = parseVersion(installedVersion, stripDev = false)
         val released = parseVersion(releasedVersion, stripDev = false)
         return compareVersions(installed, released) < 0
     }
