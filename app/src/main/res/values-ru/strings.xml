@@ -883,10 +883,6 @@ Universal ReVanced Manager закроется при обновлении."</str
     <string name="patcher_mount_in_progress">Монтирование в процессе. пожалуйста, подождите</string>
     <string name="patcher_mount_in_progress_title">Выполняется монтирование</string>
     <string name="patcher_notification_text">Нажмите, чтобы вернуться в патчер</string>
-    <!-- Needs translation -->
-    <string name="notification_channel_patching_name">Patching</string>
-    <!-- Needs translation -->
-    <string name="notification_channel_patching_description">Shows progress while patching an app.</string>
     <string name="patcher_notification_title">Выполняется установка исправлений…</string>
     <string name="patcher_preflight_missing_patch_message">Следующие патчи недоступны в текущем пакете: %1$s Вы можете удалить их автоматически, изменить выбор или продолжить.</string>
     <string name="patcher_preflight_missing_patch_proceed">Продолжить в любом случае</string>
