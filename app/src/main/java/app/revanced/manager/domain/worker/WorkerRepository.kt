@@ -1,11 +1,25 @@
 package app.revanced.manager.domain.worker
 
 import android.app.Application
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.graphics.drawable.Icon
+import android.util.Log
+import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequest
 import androidx.work.OutOfQuotaPolicy
+import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import app.universal.revanced.manager.R
+import app.revanced.manager.domain.manager.SearchForUpdatesBackgroundInterval
+import app.revanced.manager.patcher.worker.BundleUpdateNotificationWorker
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 class WorkerRepository(app: Application) {
     val workManager = WorkManager.getInstance(app)
@@ -32,5 +46,68 @@ class WorkerRepository(app: Application) {
         workerInputs[request.id] = input
         workManager.enqueueUniqueWork(name, ExistingWorkPolicy.REPLACE, request)
         return request.id
+    }
+
+    inline fun <reified T> createNotification(
+        context: Context,
+        notificationChannel: NotificationChannel,
+        title: String,
+        description: String,
+        groupKey: String? = null,
+        isGroupSummary: Boolean = false
+    ): Pair<Notification, NotificationManager> {
+        val notificationIntent = Intent(context, T::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            0,
+            notificationIntent,
+            PendingIntent.FLAG_IMMUTABLE
+        )
+        val notificationManager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.createNotificationChannel(notificationChannel)
+        val builder = Notification.Builder(context, notificationChannel.id)
+            .setContentTitle(title)
+            .setContentText(description)
+            .setLargeIcon(Icon.createWithResource(context, R.drawable.ic_notification))
+            .setSmallIcon(Icon.createWithResource(context, R.drawable.ic_notification))
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+        if (groupKey != null) {
+            builder.setGroup(groupKey)
+            if (isGroupSummary) {
+                builder.setGroupSummary(true)
+            }
+        }
+        return builder.build() to notificationManager
+    }
+
+    fun scheduleBundleUpdateNotificationWork(
+        bundleUpdateTime: SearchForUpdatesBackgroundInterval
+    ) {
+        val workId = "BundleUpdateNotificationWork"
+        if (bundleUpdateTime == SearchForUpdatesBackgroundInterval.NEVER) {
+            workManager.cancelUniqueWork(workId)
+            Log.d("WorkManager", "Cancelled job with workId $workId.")
+            return
+        }
+
+        val workRequest =
+            PeriodicWorkRequestBuilder<BundleUpdateNotificationWorker>(
+                bundleUpdateTime.value,
+                TimeUnit.MINUTES
+            ).build()
+
+        workManager.enqueueUniquePeriodicWork(
+            workId,
+            ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE,
+            workRequest
+        )
+        Log.d(
+            "WorkManager",
+            "Periodic work $workId updated with time ${bundleUpdateTime.value}."
+        )
     }
 }

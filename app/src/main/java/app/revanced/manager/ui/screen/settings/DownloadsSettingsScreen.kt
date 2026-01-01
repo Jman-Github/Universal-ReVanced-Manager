@@ -5,6 +5,7 @@ import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
 import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,10 +16,13 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -26,6 +30,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,6 +57,9 @@ import app.revanced.manager.ui.component.settings.BooleanItem
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsCard
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsDivider
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsItem
+import app.revanced.manager.ui.component.settings.SettingsSearchHighlight
+import app.revanced.manager.ui.model.navigation.Settings
+import app.revanced.manager.ui.screen.settings.SettingsSearchState
 import app.revanced.manager.ui.viewmodel.DownloadsViewModel
 import app.revanced.manager.util.APK_MIMETYPE
 import app.revanced.manager.ui.component.AnnotatedLinkText // From PR #37: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/37
@@ -70,9 +78,18 @@ fun DownloadsSettingsScreen(
     val downloadedApps by viewModel.downloadedApps.collectAsStateWithLifecycle(emptyList())
     val pluginStates by viewModel.downloaderPluginStates.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
-    var showDeleteConfirmationDialog by rememberSaveable { mutableStateOf(false) }
+    val searchTarget by SettingsSearchState.target.collectAsStateWithLifecycle()
+    var highlightTarget by rememberSaveable { mutableStateOf<Int?>(null) }
     var showHelpDialog by rememberSaveable { mutableStateOf(false) } // From PR #37: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/37
     val context = LocalContext.current
+
+    LaunchedEffect(searchTarget) {
+        val target = searchTarget
+        if (target?.destination == Settings.Downloads) {
+            highlightTarget = target.targetId
+            SettingsSearchState.clear()
+        }
+    }
 
     val exportApkLauncher =
         rememberLauncherForActivityResult(CreateDocument(APK_MIMETYPE)) { uri ->
@@ -82,19 +99,6 @@ fun DownloadsSettingsScreen(
         rememberLauncherForActivityResult(CreateDocument("application/zip")) { uri ->
             uri?.let { viewModel.exportSelectedApps(context, it, asArchive = true) }
         }
-
-    if (showDeleteConfirmationDialog) {
-        ConfirmDialog(
-            onDismiss = { showDeleteConfirmationDialog = false },
-            onConfirm = {
-                showDeleteConfirmationDialog = false
-                viewModel.deleteApps()
-            },
-            title = stringResource(R.string.downloader_plugin_delete_apps_title),
-            description = stringResource(R.string.downloader_plugin_delete_apps_description),
-            icon = Icons.Outlined.Delete
-        )
-    }
 
     if (showHelpDialog) {
         AlertDialog(
@@ -139,7 +143,7 @@ fun DownloadsSettingsScreen(
                         }) {
                             Icon(Icons.Outlined.Save, stringResource(R.string.downloaded_apps_export))
                         }
-                        IconButton(onClick = { showDeleteConfirmationDialog = true }) {
+                        IconButton(onClick = { viewModel.deleteApps() }) {
                             Icon(Icons.Default.Delete, stringResource(R.string.delete))
                         }
                     }
@@ -163,15 +167,31 @@ fun DownloadsSettingsScreen(
                     ExpressiveSettingsCard(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     ) {
-                        BooleanItem(
-                            preference = prefs.autoSaveDownloaderApks,
-                            headline = R.string.downloader_auto_save_title,
-                            description = R.string.downloader_auto_save_description
-                        )
+                        SettingsSearchHighlight(
+                            targetKey = R.string.downloader_auto_save_title,
+                            activeKey = highlightTarget,
+                            onHighlightComplete = { highlightTarget = null }
+                        ) { highlightModifier ->
+                            BooleanItem(
+                                modifier = highlightModifier,
+                                preference = prefs.autoSaveDownloaderApks,
+                                headline = R.string.downloader_auto_save_title,
+                                description = R.string.downloader_auto_save_description
+                            )
+                        }
                     }
                 }
                 item {
-                    GroupHeader(stringResource(R.string.downloader_plugins))
+                    SettingsSearchHighlight(
+                        targetKey = R.string.downloader_plugins,
+                        activeKey = highlightTarget,
+                        onHighlightComplete = { highlightTarget = null }
+                    ) { highlightModifier ->
+                        GroupHeader(
+                            stringResource(R.string.downloader_plugins),
+                            modifier = highlightModifier
+                        )
+                    }
                 }
                 pluginStates.forEach { (packageName, state) ->
                     item(key = packageName) {
@@ -191,16 +211,21 @@ fun DownloadsSettingsScreen(
                                 hash.toHexString(format = HexFormat.UpperCase)
                             }.getOrNull()
                         }
+                        val appName = remember(packageName) {
+                            packageInfo.applicationInfo?.loadLabel(context.packageManager)
+                                ?.toString()
+                                ?: packageName
+                        }
 
                         when (dialogType) {
                             PluginDialogType.Trust -> {
                                 PluginActionDialog(
                                     title = R.string.downloader_plugin_trust_dialog_title,
                                     body = stringResource(
-                                        R.string.downloader_plugin_trust_dialog_body,
-                                        packageName,
-                                        signature.orEmpty()
+                                        R.string.downloader_plugin_trust_dialog_body
                                     ),
+                                    pluginName = appName,
+                                    signature = signature.orEmpty(),
                                     primaryLabel = R.string.continue_,
                                     onPrimary = {
                                         viewModel.trustPlugin(packageName)
@@ -217,10 +242,10 @@ fun DownloadsSettingsScreen(
                                 PluginActionDialog(
                                     title = R.string.downloader_plugin_revoke_trust_dialog_title,
                                     body = stringResource(
-                                        R.string.downloader_plugin_trust_dialog_body,
-                                        packageName,
-                                        signature.orEmpty()
+                                        R.string.downloader_plugin_trust_dialog_body
                                     ),
+                                    pluginName = appName,
+                                    signature = signature.orEmpty(),
                                     primaryLabel = R.string.continue_,
                                     onPrimary = {
                                         viewModel.revokePluginTrust(packageName)
@@ -313,7 +338,17 @@ fun DownloadsSettingsScreen(
                 }
 
                 item {
-                    GroupHeader(stringResource(R.string.downloaded_apps))
+                    SettingsSearchHighlight(
+                        targetKey = R.string.downloaded_apps,
+                        activeKey = highlightTarget,
+                        extraKeys = setOf(R.string.downloaded_apps_export),
+                        onHighlightComplete = { highlightTarget = null }
+                    ) { highlightModifier ->
+                        GroupHeader(
+                            stringResource(R.string.downloaded_apps),
+                            modifier = highlightModifier
+                        )
+                    }
                 }
                 items(downloadedApps, key = { it.packageName to it.version }) { app ->
                     val selected = app in viewModel.appSelection
@@ -366,6 +401,8 @@ private enum class PluginDialogType {
 private fun PluginActionDialog(
     @StringRes title: Int,
     body: String,
+    pluginName: String,
+    signature: String,
     @StringRes primaryLabel: Int,
     onPrimary: () -> Unit,
     onUninstall: () -> Unit,
@@ -374,7 +411,37 @@ private fun PluginActionDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(title)) },
-        text = { Text(body) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(body)
+                Card {
+                    Column(
+                        Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            stringResource(
+                                R.string.downloader_plugin_trust_dialog_plugin,
+                                pluginName
+                            )
+                        )
+                        OutlinedCard(
+                            colors = CardDefaults.outlinedCardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                            )
+                        ) {
+                            Text(
+                                stringResource(
+                                    R.string.downloader_plugin_trust_dialog_signature,
+                                    signature.chunked(2).joinToString(" ")
+                                ),
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        },
         dismissButton = {
             TextButton(onClick = onUninstall) {
                 Text(stringResource(R.string.uninstall))
@@ -383,7 +450,7 @@ private fun PluginActionDialog(
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.dismiss))
+                    Text(stringResource(R.string.cancel))
                 }
                 TextButton(onClick = onPrimary) {
                     Text(stringResource(primaryLabel))

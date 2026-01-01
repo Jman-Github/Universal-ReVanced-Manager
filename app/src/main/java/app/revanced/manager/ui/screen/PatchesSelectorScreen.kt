@@ -114,6 +114,7 @@ import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.net.Uri
+import android.os.Build
 import java.util.Locale
 import app.universal.revanced.manager.R
 import app.revanced.manager.patcher.patch.Option
@@ -178,6 +179,8 @@ fun PatchesSelectorScreen(
     val hiddenActionsPref by viewModel.prefs.patchSelectionHiddenActions.getAsState()
     val sortAlphabeticallyPref by viewModel.prefs.patchSelectionSortAlphabetical.getAsState()
     val sortSettingsModePref by viewModel.prefs.patchSelectionSortSettingsMode.getAsState()
+    val searchEngineHost by viewModel.prefs.searchEngineHost.getAsState()
+    val showVersionTags by viewModel.prefs.patchSelectionShowVersionTags.getAsState()
     val orderedActionKeys = remember(actionOrderPref) {
         val parsed = actionOrderPref
             .split(',')
@@ -707,6 +710,8 @@ fun PatchesSelectorScreen(
                         uid,
                         patch
                     ),
+                    searchEngineHost = searchEngineHost,
+                    showVersionTags = showVersionTags,
                     onToggle = {
                         when {
                             // Open incompatible dialog if the patch is not supported
@@ -1208,7 +1213,9 @@ private fun PatchItem(
     onToggle: () -> Unit,
     compatible: Boolean = true,
     packageName: String,
-    suggestedVersion: String?
+    suggestedVersion: String?,
+    searchEngineHost: String,
+    showVersionTags: Boolean
 ): Unit {
     val supportedPackage = patch.compatiblePackages?.firstOrNull { it.packageName == packageName }
     val supportsAllVersions = patch.compatiblePackages == null || supportedPackage?.versions == null
@@ -1263,6 +1270,7 @@ private fun PatchItem(
             packageName = packageName,
             versions = dialogVersions,
             suggestedVersion = suggestedVersionInfo,
+            searchEngineHost = searchEngineHost,
             onDismiss = { showVersionsDialog = false }
         )
     }
@@ -1313,7 +1321,7 @@ private fun PatchItem(
                     }
                 }
             }
-            if (hasChips) {
+            if (showVersionTags && hasChips) {
                 FlowRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -1324,6 +1332,7 @@ private fun PatchItem(
                             label = info.label,
                             packageName = packageName,
                             version = info.version,
+                            searchEngineHost = searchEngineHost,
                             highlighted = true
                         )
                     }
@@ -1332,6 +1341,7 @@ private fun PatchItem(
                             label = version.label,
                             packageName = packageName,
                             version = version.version,
+                            searchEngineHost = searchEngineHost,
                             outlined = true
                         )
                     }
@@ -1361,6 +1371,7 @@ private fun PatchVersionSearchChip(
     label: String,
     packageName: String,
     version: String?,
+    searchEngineHost: String,
     highlighted: Boolean = false,
     outlined: Boolean = false,
     modifier: Modifier = Modifier
@@ -1372,7 +1383,7 @@ private fun PatchVersionSearchChip(
         highlighted = highlighted,
         outlined = outlined,
         modifier = modifier,
-        onClick = { context.openUrl(buildSearchUrl(packageName, version)) }
+        onClick = { context.openUrl(buildSearchUrl(packageName, version, searchEngineHost)) }
     )
 }
 
@@ -1381,6 +1392,7 @@ private fun PatchVersionChipWithSearch(
     label: String,
     packageName: String,
     version: String?,
+    searchEngineHost: String,
     highlighted: Boolean = false,
     outlined: Boolean = false,
     modifier: Modifier = Modifier
@@ -1397,7 +1409,8 @@ private fun PatchVersionChipWithSearch(
         )
         PatchVersionSearchButton(
             packageName = packageName,
-            version = version
+            version = version,
+            searchEngineHost = searchEngineHost
         )
     }
 }
@@ -1458,6 +1471,7 @@ private fun PatchVersionsDialog(
     packageName: String,
     versions: List<PatchVersionChipInfo>,
     suggestedVersion: PatchVersionChipInfo?,
+    searchEngineHost: String,
     onDismiss: () -> Unit
 ) {
     val scrollState = rememberScrollState()
@@ -1483,6 +1497,7 @@ private fun PatchVersionsDialog(
                         label = info.label,
                         packageName = packageName,
                         version = info.version,
+                        searchEngineHost = searchEngineHost,
                         highlighted = true
                     )
                 }
@@ -1505,6 +1520,7 @@ private fun PatchVersionsDialog(
                                             label = info.label,
                                             packageName = packageName,
                                             version = info.version,
+                                            searchEngineHost = searchEngineHost,
                                             outlined = true
                                         )
                                     }
@@ -1528,11 +1544,12 @@ private fun formatPatchVersionLabel(version: String): String =
 private fun PatchVersionSearchButton(
     packageName: String,
     version: String?,
+    searchEngineHost: String,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     IconButton(
-        onClick = { context.openUrl(buildSearchUrl(packageName, version)) },
+        onClick = { context.openUrl(buildSearchUrl(packageName, version, searchEngineHost)) },
         modifier = modifier.size(24.dp)
     ) {
         Icon(
@@ -1543,14 +1560,25 @@ private fun PatchVersionSearchButton(
     }
 }
 
-private fun buildSearchUrl(packageName: String, version: String?): String {
+private fun buildSearchUrl(packageName: String, version: String?, searchEngineHost: String): String {
     val encodedPackage = Uri.encode(packageName)
-    val encodedVersion = version?.takeIf { it.isNotBlank() }?.let(Uri::encode)
-    return if (encodedVersion == null) {
-        "https://www.google.com/search?q=$encodedPackage"
-    } else {
-        "https://www.google.com/search?q=$encodedPackage+$encodedVersion"
+    val encodedVersion = version?.takeIf { it.isNotBlank() }?.let {
+        Uri.encode(formatPatchVersionLabel(it))
     }
+    val encodedArch = Build.SUPPORTED_ABIS.firstOrNull()
+        ?.takeIf { it.isNotBlank() }
+        ?.let(Uri::encode)
+    val query = listOfNotNull(encodedPackage, encodedVersion, encodedArch).joinToString("+")
+    val host = normalizeSearchHost(searchEngineHost)
+    return "https://$host/search?q=$query"
+}
+
+private fun normalizeSearchHost(value: String): String {
+    val trimmed = value.trim()
+    if (trimmed.isBlank()) return "google.com"
+    val noScheme = trimmed.removePrefix("https://").removePrefix("http://")
+    val noPath = noScheme.substringBefore('/').substringBefore('?').substringBefore('#')
+    return noPath.trim().trimEnd('/').ifBlank { "google.com" }
 }
 
 @Composable
@@ -2117,24 +2145,63 @@ private fun OptionsDialog(
         }
     ) { paddingValues ->
         LazyColumnWithScrollbar(
-            modifier = Modifier.padding(paddingValues)
+            modifier = Modifier.padding(paddingValues),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (patch.options == null) return@LazyColumnWithScrollbar
 
+            item(key = "options_header") {
+                ListHeader(
+                    title = stringResource(R.string.options)
+                )
+            }
+            item(key = "options_summary") {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    tonalElevation = 2.dp
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = patch.name,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        patch.description?.let { description ->
+                            Text(
+                                text = description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
             items(patch.options, key = { it.key }) { option ->
                 val key = option.key
                 val value =
                     if (values == null || !values.contains(key)) option.default else values[key]
 
                 @Suppress("UNCHECKED_CAST")
-                OptionItem(
-                    option = option as Option<Any>,
-                    value = value,
-                    setValue = {
-                        set(key, it)
-                    },
-                    selectionWarningEnabled = selectionWarningEnabled
-                )
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    tonalElevation = 2.dp
+                ) {
+                    OptionItem(
+                        option = option as Option<Any>,
+                        value = value,
+                        setValue = {
+                            set(key, it)
+                        },
+                        selectionWarningEnabled = selectionWarningEnabled
+                    )
+                }
             }
         }
     }
