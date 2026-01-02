@@ -1,3 +1,20 @@
+# v1.7.1 (TBD)
+**Minimal changes & bug fixes**
+
+
+# Features
+
+- Removed the `Discover patch bundles` banner and added a FAB button next to the plus button instead to access the `Discover patch bundles` page
+
+
+# Bug fixes
+
+- Fixed dev builds not being prompted to update when there are new releases
+
+
+# Docs
+
+
 # v1.7.0 (2025-12-31)
 
 
