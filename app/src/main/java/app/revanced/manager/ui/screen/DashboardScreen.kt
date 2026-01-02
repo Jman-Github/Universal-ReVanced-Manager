@@ -32,6 +32,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Sort
 import androidx.compose.material.icons.outlined.Source
@@ -476,14 +477,27 @@ fun DashboardScreen(
         floatingActionButton = {
             when (pagerState.currentPage) {
                 DashboardPage.BUNDLES.ordinal -> {
-                    HapticFloatingActionButton(
-                        onClick = {
-                            vm.cancelSourceSelection()
-                            installedAppsViewModel.clearSelection()
-                            patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
-                            showAddBundleDialog = true
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        HapticFloatingActionButton(
+                            onClick = onBundleDiscoveryClick
+                        ) {
+                            Icon(
+                                Icons.Outlined.Public,
+                                stringResource(R.string.patch_bundle_discovery_title)
+                            )
                         }
-                    ) { Icon(Icons.Default.Add, stringResource(R.string.add)) }
+                        HapticFloatingActionButton(
+                            onClick = {
+                                vm.cancelSourceSelection()
+                                installedAppsViewModel.clearSelection()
+                                patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
+                                showAddBundleDialog = true
+                            }
+                        ) { Icon(Icons.Default.Add, stringResource(R.string.add)) }
+                    }
                 }
 
                 DashboardPage.DASHBOARD.ordinal -> {
@@ -713,7 +727,6 @@ fun DashboardScreen(
                                 setSelectedSourceHasEnabled = { selectedSourcesHasEnabled = it },
                                 showOrderDialog = showBundleOrderDialog,
                                 onDismissOrderDialog = { showBundleOrderDialog = false },
-                                onDiscoverBundles = onBundleDiscoveryClick,
                                 onScrollStateChange = {}
                             )
                         }
