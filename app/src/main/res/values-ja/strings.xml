@@ -17,10 +17,8 @@
 
     <string name="dashboard">ダッシュボード</string>
     <string name="settings">設定</string>
-    <!-- Needs translation -->
-    <string name="settings_search_hint">Search settings</string>
-    <!-- Needs translation -->
-    <string name="settings_search_no_results">No settings found.</string>
+    <string name="settings_search_hint">設定を検索</string>
+    <string name="settings_search_no_results">設定が見つかりません。</string>
     <string name="select_app">アプリを選択</string>
     <string name="app_filter_title">アプリの絞り込み</string>
     <string name="app_filter_installed_only">インストール済みのみ</string>
@@ -79,24 +77,15 @@
     <string name="bundle_update_manual_available_with_version">アップデート利用可能: %1$s</string>
     <string name="bundle_update_progress">%1$d/%2$d バンドルを処理しました</string>
     <string name="bundle_update_banner_title">パッチソースを更新中</string>
-    <!-- Needs translation -->
-    <string name="bundle_update_available">Patch bundle update available</string>
-    <!-- Needs translation -->
-    <string name="bundle_update_description_available">New version for %1$s: %2$s</string>
-    <!-- Needs translation -->
-    <string name="bundle_updates_notification_progress">Updating %1$d of %2$d: %3$s</string>
-    <!-- Needs translation -->
-    <string name="bundle_updates_notification_completed">Update completed</string>
-    <!-- Needs translation -->
-    <string name="bundle_updates_notification_completed_with_available">Update completed. %1$d updates available.</string>
-    <!-- Needs translation -->
-    <string name="bundle_updates_notification_available">%1$d updates available.</string>
-    <!-- Needs translation -->
-    <string name="bundle_updates_notification_failed">Update failed</string>
-    <!-- Needs translation -->
-    <string name="bundle_search_update">Search for updates</string>
-    <!-- Needs translation -->
-    <string name="bundle_search_update_description">Check this bundle for updates in the background</string>
+    <string name="bundle_update_available">パッチソースの更新が利用可能</string>
+    <string name="bundle_update_description_available">%1$s の新しいバージョン: %2$s</string>
+    <string name="bundle_updates_notification_progress">%1$d/%2$d を更新中: %3$s</string>
+    <string name="bundle_updates_notification_completed">更新完了</string>
+    <string name="bundle_updates_notification_completed_with_available">更新完了。%1$d 件の更新が利用可能です。</string>
+    <string name="bundle_updates_notification_available">%1$d 件の更新が利用可能です。</string>
+    <string name="bundle_updates_notification_failed">更新失敗</string>
+    <string name="bundle_search_update">更新を確認</string>
+    <string name="bundle_search_update_description">バックグラウンドでこのバンドルの更新を確認する</string>
     <string name="bundle_reorder">バンドルを整理</string>
     <string name="bundle_reorder_title">パッチソースの整理</string>
     <string name="bundle_reorder_description">ハンドルをドラッグして、リストやパッチ選択メニューに表示されるバンドルの順序を並べ替えます。</string>
@@ -126,8 +115,7 @@
     <string name="bundle_version_dialog_other_title">サポートされている別のバージョンを選択:</string>
     <string name="bundle_version_dialog_locked_title">バージョンセーフガードが有効です</string>
     <string name="bundle_version_dialog_locked_hint">「設定」&gt;「詳細設定」&gt;「セーフガード」に移動し、「推奨アプリバージョンを必須にする」をオフ、「バージョン互換性チェックを無効化」をオンにすると、バンドル固有のバージョンを選択できるようになります。</string>
-    <!-- Needs translation -->
-    <string name="patch_versions_dialog_title">Supported versions for %1$s</string>
+    <string name="patch_versions_dialog_title">%1$s のサポート対象バージョン</string>
     <string name="patch_item_description">アプリケーションへのパッチ適用を開始</string>
     <string name="patch_selector_item">パッチを選択</string>
     <string name="patch_selector_item_description">%d 個のパッチを選択済み</string>
@@ -151,32 +139,19 @@
     <string name="auto_updates_dialog_manager">Universal ReVanced Manager</string>
     <string name="auto_updates_dialog_patches">公式 ReVanced パッチ</string>
     <string name="auto_updates_dialog_note">これらの設定は後で変更できます。</string>
-    <!-- Needs translation -->
-    <string name="background_bundle_update">Background bundle updates</string>
-    <!-- Needs translation -->
-    <string name="background_bundle_update_description">Controls the patcher and bundle update notifications. When enabled, bundle updates download in the background. If notifications are allowed, you will see progress and completion updates along with the patching in progress notification.</string>
-    <!-- Needs translation -->
-    <string name="background_radio_menu_title">Background updates</string>
-    <!-- Needs translation -->
-    <string name="background_bundle_ask_notification">Allow notifications?</string>
-    <!-- Needs translation -->
-    <string name="background_bundle_ask_notification_description">Enable notifications so the manager can alert you when patch bundle updates are available.</string>
-    <!-- Needs translation -->
-    <string name="notification_channel_bundle_updates_name">Background bundle updates</string>
-    <!-- Needs translation -->
-    <string name="notification_channel_bundle_updates_description">Shows progress for background patch bundle updates.</string>
-    <!-- Needs translation -->
-    <string name="bundle_updates_summary_title">Patch bundle updates available</string>
-    <!-- Needs translation -->
-    <string name="bundle_updates_summary_description">Tap to view the manager and review bundle updates.</string>
-    <!-- Needs translation -->
-    <string name="never">Never</string>
-    <!-- Needs translation -->
-    <string name="minutes_15">Every 15 minutes</string>
-    <!-- Needs translation -->
-    <string name="hourly">Hourly</string>
-    <!-- Needs translation -->
-    <string name="daily">Daily</string>
+    <string name="background_bundle_update">バックグラウンドでのパッチソース更新</string>
+    <string name="background_bundle_update_description">パッチャーおよびバンドルの更新通知を制御します。有効にすると、バンドルの更新がバックグラウンドでダウンロードされます。通知が許可されている場合、進行状況や完了の更新、およびパッチ適用の進行状況が表示されます。</string>
+    <string name="background_radio_menu_title">バックグラウンド更新</string>
+    <string name="background_bundle_ask_notification">通知を許可しますか？</string>
+    <string name="background_bundle_ask_notification_description">通知を有効にして、パッチソースの更新が利用可能な場合にマネージャーが通知できるようにします。</string>
+    <string name="notification_channel_bundle_updates_name">バックグラウンドでのパッチソース更新</string>
+    <string name="notification_channel_bundle_updates_description">バックグラウンドでのパッチソース更新の進行状況を表示します。</string>
+    <string name="bundle_updates_summary_title">パッチソースの更新が利用可能です</string>
+    <string name="bundle_updates_summary_description">タップしてマネージャーを表示し、バンドルの更新を確認します。</string>
+    <string name="never">しない</string>
+    <string name="minutes_15">15分ごと</string>
+    <string name="hourly">1時間ごと</string>
+    <string name="daily">毎日</string>
 
     <string name="general">一般</string>
     <string name="general_description">テーマ、ダイナミックカラー</string>
@@ -247,8 +222,7 @@
     <string name="patch_selection_safeguard_description">パッチの選択・解除やオプションのカスタマイズを制限しない</string>
     <string name="patch_selection_safeguard_confirmation">パッチの選択を変更すると、予期しない問題が発生する可能性があります。\n\nそれでも有効にしますか？</string>
     <string name="universal_patches_safeguard">ユニバーサルパッチの表示と使用を許可</string>
-    <!-- Needs translation -->
-    <string name="universal_patches_safeguard_confirmation">"Universal patches are not as well tested as those meant for specific apps.\n\nEnable anyway?"</string>
+    <string name="universal_patches_safeguard_confirmation">"ユニバーサルパッチは、特定のアプリ向けのパッチほど十分にテストされていません。\n\nそれでも有効にしますか？"</string>
     <string name="universal_patches_safeguard_description">ユニバーサルパッチを非表示にせず、使用も制限しない</string>
     <string name="universal_patches_profile_blocked_title">ユニバーサルパッチが無効です</string>
     <string name="universal_patches_profile_blocked_description">このパッチ設定にはユニバーサルパッチが含まれています。使用するには詳細設定で「%1$s」を有効にしてください。</string>
@@ -360,10 +334,8 @@
     <string name="patch_selection_collapse_on_toggle_description">パッチを選択または解除したときに、パッチ選択アクションボタンを自動的に隠す</string>
     <string name="patch_selection_action_order_title">パッチ選択アクションボタンの順序</string>
     <string name="patch_selection_action_order_description">パッチ選択アクションボタンのレイアウト順序を選択</string>
-    <!-- Needs translation -->
-    <string name="patch_selection_version_tags_title">Patch version tags</string>
-    <!-- Needs translation -->
-    <string name="patch_selection_version_tags_description">Show version tags on patches in the selection screen</string>
+    <string name="patch_selection_version_tags_title">パッチバージョンタグ</string>
+    <string name="patch_selection_version_tags_description">選択画面のパッチにバージョンタグを表示する</string>
     <string name="patch_selection_action_visibility_title">パッチ選択アクションボタンを隠す</string>
     <string name="patch_selection_action_visibility_description">どのパッチ選択アクションボタンを表示するかを選択</string>
     <string name="patch_selection_action_visibility_reset">すべてのアクションボタンを表示</string>
@@ -415,14 +387,11 @@
     <string name="downloader_plugin_state_failed">読み込みに失敗しました。詳細はクリックしてください</string>
     <string name="downloader_plugin_state_untrusted">信頼されていない</string>
     <string name="downloader_plugin_trust_dialog_title">プラグインを信頼しますか？</string>
-    <!-- Needs translation -->
-    <string name="downloader_plugin_trust_dialog_body">Continuing will allow this plugin to run on your system.\n\nOnly enable this plugin if you trust it. Plugins can execute arbitrary code and may compromise your device.</string>
-    <!-- Needs translation -->
-    <string name="downloader_plugin_trust_dialog_signature">Signature:\n\n%s</string>
-    <!-- Needs translation -->
-    <string name="downloader_plugin_trust_dialog_plugin">Plugin:\n%s</string>
+    <string name="downloader_plugin_trust_dialog_body">続行すると、このプラグインがシステム上で実行されることが許可されます。\n\n信頼できるプラグインの場合のみ有効にしてください。プラグインは任意のコードを実行でき、デバイスを侵害する可能性があります。</string>
+    <string name="downloader_plugin_trust_dialog_signature">署名:\n\n%s</string>
+    <string name="downloader_plugin_trust_dialog_plugin">プラグイン:\n%s</string>
     <string name="downloader_plugin_revoke_trust_dialog_title">信頼を取り消しますか？</string>
-<string name="downloader_plugin_view_error">エラー詳細を表示</string>
+    <string name="downloader_plugin_view_error">エラー詳細を表示</string>
     <string name="downloader_plugin_failed_dialog_body">「%1$s」の読み込みに失敗しました。エラー詳細を表示するか、プラグインをアンインストールできます。</string>
     <string name="downloader_plugin_uninstall_title">プラグインをアンインストールしますか？</string>
     <string name="downloader_plugin_uninstall_description">本当に「%1$s」をアンインストールしますか？</string>
@@ -440,12 +409,9 @@
     <string name="no">いいえ</string>
     <string name="edit">編集</string>
     <string name="dialog_input_placeholder">値</string>
-    <!-- Needs translation -->
-    <string name="file_name">File name</string>
-    <!-- Needs translation -->
-    <string name="export_overwrite_title">Replace file?</string>
-    <!-- Needs translation -->
-    <string name="export_overwrite_description">A file named %1$s already exists. Replace it?</string>
+    <string name="file_name">ファイル名</string>
+    <string name="export_overwrite_title">ファイルを置き換えますか？</string>
+    <string name="export_overwrite_description">ファイル「%1$s」はすでに存在します。置き換えますか？</string>
     <string name="reset">リセット</string>
     <string name="share">共有</string>
     <string name="patch">パッチ</string>
@@ -473,21 +439,15 @@
     <string name="process_runtime_memory_limit">パッチャープロセスのメモリ制限</string>
     <string name="process_runtime_memory_limit_description">パッチャープロセスが使用できるメモリの最大量（メガバイト単位）</string>
     <string name="process_runtime_memory_limit_description_detailed">パッチャープロセスが使用できるメモリの最大量（メガバイト単位）。\nこのデバイスの推奨値: %1$d MB。</string>
-    <!-- Needs translation -->
-    <string name="process_runtime_memory_aggressive">Aggressive patcher memory limit</string>
-    <!-- Needs translation -->
-    <string name="process_runtime_memory_aggressive_description">Use the highest memory limit allowed by your device for the experimental patcher</string>
+    <string name="process_runtime_memory_aggressive">パッチャーの積極的なメモリ制限</string>
+    <string name="process_runtime_memory_aggressive_description">実験的なパッチャーに対して、デバイスで許可される最大のメモリ制限を使用する</string>
     <string name="reset_to_recommended">推奨値にリセット</string>
     <string name="patcher_auto_collapse_steps">完了したパッチャーステップを自動的に折りたたむ</string>
     <string name="patcher_auto_collapse_steps_description">すべてのステップが完了した後、各 Patcher 進捗ウィジェットを自動的に折りたたみます</string>
-    <!-- Needs translation -->
-    <string name="patcher_auto_expand_steps">Auto-expand running steps</string>
-    <!-- Needs translation -->
-    <string name="patcher_auto_expand_steps_description">Automatically expand a patcher progress widget when it starts running</string>
-    <!-- Needs translation -->
-    <string name="patcher_saved_apps_title">Save patched apps for later</string>
-    <!-- Needs translation -->
-    <string name="patcher_saved_apps_description">When enabled, the manager saves a patched app entry and APK so it stays in the Apps tab and can be reinstalled later. Turning this off skips saving and hides the delete option</string>
+    <string name="patcher_auto_expand_steps">実行中のステップを自動展開</string>
+    <string name="patcher_auto_expand_steps_description">実行開始時に Patcher 進捗ウィジェットを自動的に展開する</string>
+    <string name="patcher_saved_apps_title">パッチ済みアプリを保存</string>
+    <string name="patcher_saved_apps_description">有効にすると、マネージャーはパッチ適用済みアプリのエントリと APK を保存し、「アプリ」タブに残って後で再インストールできるようになります。オフにすると保存されず、削除オプションも非表示になります。</string>
     <string name="patch_bundle_rename">パッチソースの名前変更</string>
     <string name="patch_profile_view_options">オプションを表示</string>
     <string name="patch_profile_patch_options_title">%1$s のオプション</string>
@@ -554,10 +514,8 @@
     <string name="language_option_korean">韓国語</string>
     <string name="language_option_vietnamese">ベトナム語</string>
     <string name="language_option_japanese">日本語</string>
-    <!-- Needs translation -->
-    <string name="language_option_russian">Russian</string>
-    <!-- Needs translation -->
-    <string name="language_option_ukrainian">Ukrainian</string>
+    <string name="language_option_russian">ロシア語</string>
+    <string name="language_option_ukrainian">ウクライナ語</string>
     <string name="device">デバイス</string>
     <string name="device_android_version">Android バージョン</string>
     <string name="device_model">モデル</string>
@@ -574,18 +532,12 @@
     <string name="tab_patches">パッチソース</string>
     <string name="tab_profiles">パッチ設定</string>
     <string name="delete">削除</string>
-    <!-- Needs translation -->
-    <string name="disable">Disable</string>
-    <!-- Needs translation -->
-    <string name="enable">Enable</string>
-    <!-- Needs translation -->
-    <string name="patch_bundle_enabled_toast">Enabled %d bundle(s)</string>
-    <!-- Needs translation -->
-    <string name="patches_enable_single_dialog_description">Enable "%s"?</string>
-    <!-- Needs translation -->
-    <string name="patch_bundle_disabled_toast">Disabled %d bundle(s)</string>
-    <!-- Needs translation -->
-    <string name="patches_disable_single_dialog_description">Disable "%s"?</string>
+    <string name="disable">無効化</string>
+    <string name="enable">有効化</string>
+    <string name="patch_bundle_enabled_toast">%d 個のバンドルを有効にしました</string>
+    <string name="patches_enable_single_dialog_description">「%s」を有効にしますか？</string>
+    <string name="patch_bundle_disabled_toast">%d 個のバンドルを無効にしました</string>
+    <string name="patches_disable_single_dialog_description">「%s」を無効にしますか？</string>
     <string name="refresh">更新</string>
     <string name="continue_anyways">それでも続行</string>
     <string name="download_another_version">別のバージョンをダウンロード</string>
@@ -651,48 +603,27 @@
     <string name="patch_profile_bundle_change_uid_invalid">有効な数値の UID を入力してください。</string>
     <string name="patch_profile_bundle_change_uid_success">バンドル UID を %1$d に更新しました。</string>
     <string name="patch_profile_bundle_change_uid_not_found">UID %1$d のローカルパッチソースが見つかりません。</string>
-    <!-- Needs translation -->
-    <string name="patch_profile_bundle_select_remote">Select bundle</string>
-    <!-- Needs translation -->
-    <string name="patch_profile_bundle_select_remote_title">Select bundle for %1$s</string>
-    <!-- Needs translation -->
-    <string name="patch_profile_bundle_select_remote_description">Choose a remote patch bundle to replace the unavailable one.</string>
-    <!-- Needs translation -->
-    <string name="patch_profile_bundle_select_remote_empty">No available remote bundles found.</string>
-    <!-- Needs translation -->
-    <string name="patch_profile_bundle_select_remote_success">Profile updated to use %1$s.</string>
-    <!-- Needs translation -->
-    <string name="patch_profile_bundle_select_remote_incompatible_title">Bundle incompatible</string>
-    <!-- Needs translation -->
-    <string name="patch_profile_bundle_select_remote_incompatible_message">%1$s does not contain the required patches. It was not applied. Select a different bundle.</string>
-    <!-- Needs translation -->
-    <string name="patch_profile_bundle_select_remote_override">Use anyway</string>
-    <!-- Needs translation -->
-    <string name="patch_profile_bundle_select_remote_error">Failed to update the profile bundle.</string>
-    <!-- Needs translation -->
-    <string name="saved_app_bundle_missing_title">Bundle not detected</string>
-    <!-- Needs translation -->
-    <string name="saved_app_bundle_select_action">Select bundle</string>
-    <!-- Needs translation -->
-    <string name="saved_app_bundle_select_title">Select bundle for %1$s</string>
-    <!-- Needs translation -->
-    <string name="saved_app_bundle_select_description">Choose a patch bundle to replace the missing one.</string>
-    <!-- Needs translation -->
-    <string name="saved_app_bundle_select_empty">No patch bundles available.</string>
-    <!-- Needs translation -->
-    <string name="saved_app_bundle_select_success">Saved app updated to use %1$s.</string>
-    <!-- Needs translation -->
-    <string name="saved_app_bundle_select_incompatible_title">Bundle incompatible</string>
-    <!-- Needs translation -->
-    <string name="saved_app_bundle_select_incompatible_message">%1$s does not contain the required patches. It was not applied. Select a different bundle.</string>
-    <!-- Needs translation -->
-    <string name="saved_app_bundle_select_override">Use anyway</string>
-    <!-- Needs translation -->
-    <string name="saved_app_bundle_select_error">Failed to update the saved app bundle.</string>
-    <!-- Needs translation -->
-    <string name="patch_profile_bundle_override_title">Allow incompatible bundle override</string>
-    <!-- Needs translation -->
-    <string name="patch_profile_bundle_override_description">Show a developer-only override button when a patch profile bundle is incompatible.</string>
+    <string name="patch_profile_bundle_select_remote">バンドルを選択</string>
+    <string name="patch_profile_bundle_select_remote_title">%1$s のバンドルを選択</string>
+    <string name="patch_profile_bundle_select_remote_description">利用できないパッチソースを置き換えるリモートパッチソースを選択してください。</string>
+    <string name="patch_profile_bundle_select_remote_empty">利用可能なリモートバンドルが見つかりません。</string>
+    <string name="patch_profile_bundle_select_remote_success">プロファイルが %1$s を使用するように更新されました。</string>
+    <string name="patch_profile_bundle_select_remote_incompatible_title">バンドルに互換性がありません</string>
+    <string name="patch_profile_bundle_select_remote_incompatible_message">%1$s には必要なパッチが含まれていません。適用されませんでした。別のバンドルを選択してください。</string>
+    <string name="patch_profile_bundle_select_remote_override">とにかく使用</string>
+    <string name="patch_profile_bundle_select_remote_error">プロファイルバンドルの更新に失敗しました。</string>
+    <string name="saved_app_bundle_missing_title">バンドルが検出されません</string>
+    <string name="saved_app_bundle_select_action">バンドルを選択</string>
+    <string name="saved_app_bundle_select_title">%1$s のバンドルを選択</string>
+    <string name="saved_app_bundle_select_description">不足しているバンドルを置き換えるパッチソースを選択してください。</string>
+    <string name="saved_app_bundle_select_empty">利用可能なパッチソースがありません。</string>
+    <string name="saved_app_bundle_select_success">保存されたアプリが %1$s を使用するように更新されました。</string>
+    <string name="saved_app_bundle_select_incompatible_title">バンドルに互換性がありません</string>
+    <string name="saved_app_bundle_select_incompatible_message">%1$s には必要なパッチが含まれていません。適用されませんでした。別のバンドルを選択してください。</string>
+    <string name="saved_app_bundle_select_override">とにかく使用</string>
+    <string name="saved_app_bundle_select_error">保存されたアプリバンドルの更新に失敗しました。</string>
+    <string name="patch_profile_bundle_override_title">互換性のないバンドルの上書きを許可</string>
+    <string name="patch_profile_bundle_override_description">パッチプロファイルバンドルに互換性がない場合に、開発者専用の上書きボタンを表示する。</string>
     <string name="patcher_process_exit_message">Patcher プロセスはコード %1$d で終了しました。</string>
     <string name="patcher_memory_adjustment_title">Patcher がメモリ不足になりました</string>
     <string name="patcher_memory_adjustment_message_reduced">実験的な Patcher プロセスはメモリ不足のため停止しました。すぐに再試行できるように、メモリ制限を %1$d MB から %2$d MB に下げました。</string>
@@ -708,6 +639,14 @@
     <string name="patch_selector_missing_patch_message">これらのパッチを再選択する必要があります:\n%1$s\nこれらを再度有効にする（または代替を選択する）か、もう一度パッチ適用を試みてください。</string>
     <string name="delete_profile_confirmation">「%1$s」を削除しますか？</string>
     <string name="patch_profile_delete_multiple_dialog_description">選択したパッチ設定を削除しますか？</string>
+    <plurals name="patch_profile_bundle_patch_count">
+        <item quantity="one">%d 個のパッチ</item>
+        <item quantity="other">%d 個のパッチ</item>
+    </plurals>
+    <plurals name="patch_profile_bundle_count">
+        <item quantity="one">%d 個のバンドル</item>
+        <item quantity="other">%d 個のバンドル</item>
+    </plurals>
     <string name="universal_patch_warning_description">ユニバーサルパッチは一般的な用途向けであり、特定のアプリをターゲットとしたパッチほど信頼性が高くありません。使用中に問題が発生する可能性があります。\n\nユニバーサルパッチを使用する前に、詳細設定で「ユニバーサルパッチの表示と使用を許可」をオンにする必要があります。</string>
     <string name="this_version">このバージョン</string>
     <string name="universal">任意のアプリ</string>
@@ -779,16 +718,11 @@
     <string name="path_selector_parent_dir">前のディレクトリ</string>
     <string name="path_selector_dirs">ディレクトリ</string>
     <string name="path_selector_files">ファイル</string>
-    <!-- Needs translation -->
-    <string name="path_selector_favorites">Favorites</string>
-    <!-- Needs translation -->
-    <string name="path_selector_favorite_added">Added to favorites</string>
-    <!-- Needs translation -->
-    <string name="path_selector_favorite_removed">Removed from favorites</string>
-    <!-- Needs translation -->
-    <string name="path_selector_favorite_remove_description">Remove “%1$s” from favorites?</string>
-    <!-- Needs translation -->
-    <string name="path_selector_favorite_remove_title">Remove favorite?</string>
+    <string name="path_selector_favorites">お気に入り</string>
+    <string name="path_selector_favorite_added">お気に入りに追加しました</string>
+    <string name="path_selector_favorite_removed">お気に入りから削除しました</string>
+    <string name="path_selector_favorite_remove_description">「%1$s」をお気に入りから削除しますか？</string>
+    <string name="path_selector_favorite_remove_title">お気に入りを削除しますか？</string>
 
     <string name="show_password_field">パスワードを表示</string>
     <string name="hide_password_field">パスワードを隠す</string>
@@ -865,17 +799,19 @@
     <string name="installer_external_success">%1$s がインストールの成功を報告しました。</string>
     <string name="installer_external_finished_no_change">%1$s はアプリをインストールせずに終了しました。インストーラーのエラーメッセージを確認して再試行してください。</string>
     <string name="installing_ellipsis">インストール中…</string>
+    <string name="uninstalling_ellipsis">アンインストール中…</string>
     <string name="mounting_ellipsis">マウント中…</string>
     <string name="unmounting">マウント解除中…</string>
     <string name="install_app">インストール</string>
     <string name="install_app_success">アプリをインストールしました</string>
     <string name="install_app_fail_title">インストール失敗</string>
     <string name="install_app_fail">アプリのインストールに失敗しました: %s</string>
+    <string name="install_app_fail_missing_stock">マウントインストール用のオリジナル APK が見つかりません。</string>
+    <string name="mount_split_not_supported">ルートマウントインストーラーは分割 APK をサポートしていません。代わりにシステムインストーラーを使用してください。</string>
     <string name="mount_app_fail_title">マウント失敗</string>
     <string name="mount_app_fail">アプリのマウントに失敗しました: %1$s</string>
     <string name="install_timeout_message">インストールが完了しませんでした。システムインストーラーのダイアログを確認して再試行してください。</string>
-    <!-- Needs translation -->
-    <string name="uninstall_timeout_message">Uninstallation did not finish. Check the uninstall dialog and try again.</string>
+    <string name="uninstall_timeout_message">アンインストールが完了しませんでした。アンインストールダイアログを確認して再試行してください。</string>
     <string name="reinstall_app_fail">アプリの再インストールに失敗しました: %s</string>
     <string name="uninstall_app_fail">アプリのアンインストールに失敗しました: %s</string>
     <string name="open_app">開く</string>
@@ -918,10 +854,8 @@
     <string name="patcher_step_sign_apk">パッチ済み APK ファイルの署名</string>
     <string name="patcher_notification_title">パッチ適用中…</string>
     <string name="patcher_notification_text">タップして Patcher に戻る</string>
-    <!-- Needs translation -->
-    <string name="notification_channel_patching_name">Patching</string>
-    <!-- Needs translation -->
-    <string name="notification_channel_patching_description">Shows progress while patching an app.</string>
+    <string name="notification_channel_patching_name">パッチ適用</string>
+    <string name="notification_channel_patching_description">アプリのパッチ適用中の進行状況を表示します。</string>
     <string name="patcher_stop_confirm_title">Patcher を停止</string>
     <string name="patcher_stop_confirm_description">本当にパッチ適用プロセスを停止しますか？</string>
     <string name="patcher_install_in_progress_title">インストール進行中</string>
@@ -962,16 +896,11 @@
     <string name="github">Universal ReVanced Manager GitHub</string>
     <string name="original_revanced_manager_github">公式ReVanced Manager GitHub</string>
     <string name="patch_bundle_urls">パッチソースのインポート先を取得</string>
-    <!-- Needs translation -->
-    <string name="search_engine_host_title">Search engine domain</string>
-    <!-- Needs translation -->
-    <string name="search_engine_host_description">Version search links use %1$s</string>
-    <!-- Needs translation -->
-    <string name="search_engine_host_dialog_title">Search engine domain</string>
-    <!-- Needs translation -->
-    <string name="search_engine_host_dialog_description">Change the domain used for version search links. Example: google.com or duckduckgo.com</string>
-    <!-- Needs translation -->
-    <string name="search_engine_host_label">Search domain</string>
+    <string name="search_engine_host_title">検索エンジンのドメイン</string>
+    <string name="search_engine_host_description">バージョン検索リンクは %1$s を使用します</string>
+    <string name="search_engine_host_dialog_title">検索エンジンのドメイン</string>
+    <string name="search_engine_host_dialog_description">バージョン検索リンクに使用されるドメインを変更します。例: google.com または duckduckgo.com</string>
+    <string name="search_engine_host_label">検索ドメイン</string>
     <string name="contact">お問い合わせ</string>
     <string name="version">バージョン</string>
     <string name="submit_feedback">問題またはフィードバックを送信</string>
@@ -1010,20 +939,13 @@
     <string name="manager_prereleases_description">Universal ReVanced Manager のプレリリースバージョンを使用する</string>
     <string name="update_published">公開日: %s</string>
     <string name="battery_optimization_notification">Universal ReVanced Manager がバックグラウンドで正しく動作するには、バッテリーの最適化をオフにする必要があります。ここをクリックして最適化をオフにしてください。</string>
-    <!-- Needs translation -->
-    <string name="battery_optimization_dialog_description">To receive background bundle update notifications reliably, disable battery optimization for URV Manager.</string>
-    <!-- Needs translation -->
-    <string name="battery_optimization_dialog_title">Battery optimization</string>
-    <!-- Needs translation -->
-    <string name="battery_optimization_banner_title">Battery optimization banner</string>
-    <!-- Needs translation -->
-    <string name="battery_optimization_banner_description">Show the battery optimization warning banner on the dashboard.</string>
-    <!-- Needs translation -->
-    <string name="battery_optimization_banner_disable_title">Hide battery optimization warning?</string>
-    <!-- Needs translation -->
-    <string name="battery_optimization_banner_disable_description">Disabling this warning can make it harder to notice background restrictions. Only hide it if you understand the risk.</string>
-    <!-- Needs translation -->
-    <string name="battery_optimization_banner_disable_confirm">Hide banner</string>
+    <string name="battery_optimization_dialog_description">パッチソース更新の通知を確実に受け取るには、URV Manager のバッテリー最適化を無効にしてください。</string>
+    <string name="battery_optimization_dialog_title">バッテリーの最適化</string>
+    <string name="battery_optimization_banner_title">バッテリー最適化バナー</string>
+    <string name="battery_optimization_banner_description">ダッシュボードにバッテリー最適化の警告バナーを表示する。</string>
+    <string name="battery_optimization_banner_disable_title">バッテリー最適化の警告を隠しますか？</string>
+    <string name="battery_optimization_banner_disable_description">この警告を無効にすると、バックグラウンド制限に気付きにくくなる可能性があります。リスクを理解している場合のみ非表示にしてください。</string>
+    <string name="battery_optimization_banner_disable_confirm">バナーを隠す</string>
     <string name="installing_manager_update">アップデートをインストール中…</string>
     <string name="downloading_manager_update">アップデートをダウンロード中…</string>
     <string name="manager_update_banner_title">マネージャーアップデートをダウンロード中</string>
@@ -1077,17 +999,14 @@
     <string name="installation_aborted_description">インストールが手動でキャンセルされました。再試行しますか？</string>
     <string name="installation_blocked_description">インストールがブロックされました。デバイスのセキュリティ設定を確認して再試行してください。</string>
     <string name="installation_conflict_description">アプリの既存のインストールにより、インストールが妨げられました。インストールされているアプリをアンインストールして再試行しますか？</string>
-    <!-- Needs translation -->
-    <string name="installation_signature_mismatch_dialog_title">Signature mismatch</string>
-    <!-- Needs translation -->
-    <string name="installation_signature_mismatch_description">The installed app is signed differently. Uninstall the installed app and install this one?</string>
+    <string name="installation_signature_mismatch_dialog_title">署名の不一致</string>
+    <string name="installation_signature_mismatch_description">インストールされているアプリは異なる署名を持っています。インストール済みアプリをアンインストールして、これをインストールしますか？</string>
     <string name="installation_incompatible_description">アプリはこのデバイスと互換性がありません。このデバイスと互換性のある APK を使用して再試行してください。</string>
     <string name="installation_invalid_description">アプリが無効です。アプリをアンインストールして再試行しますか？</string>
     <string name="installation_storage_issue_description">ストレージ不足のため、アプリをインストールできませんでした。空き容量を増やして再試行してください。</string>
     <string name="installation_timeout_description">インストールに時間がかかりすぎました。再試行しますか？</string>
     <string name="reinstall">再インストール</string>
-    <!-- Needs translation -->
-    <string name="installation_signature_mismatch_confirm">Uninstall and install</string>
+    <string name="installation_signature_mismatch_confirm">アンインストールしてインストール</string>
     <string name="show">表示</string>
     <string name="debugging">デバッグ</string>
     <string name="about_device">デバイスについて</string>
@@ -1099,6 +1018,24 @@
     <string name="patches_prereleases">プレリリースを使用</string>
     <string name="patches_prereleases_description">%s のプレリリースバージョンを使用する</string>
     <string name="patches_url">パッチソース URL</string>
+    <string name="patch_bundle_urls_link">ここからパッチソースの URL を取得</string>
+    <string name="patch_bundle_discovery_title">パッチソースを探す</string>
+    <string name="patch_bundle_discovery_description">外部パッチソースを閲覧し、URV Manager に追加します。</string>
+    <string name="patch_bundle_discovery_search_label">バンドルを検索</string>
+    <string name="patch_bundle_discovery_empty">パッチソースが見つかりません。</string>
+    <string name="patch_bundle_discovery_error">パッチソースの読み込みに失敗しました。</string>
+    <string name="patch_bundle_discovery_imported">追加済み</string>
+    <string name="patch_bundle_discovery_patch_count">%1$d 個のパッチ</string>
+    <string name="patch_bundle_discovery_release">リリース</string>
+    <string name="patch_bundle_discovery_prerelease">プレリリース</string>
+    <string name="patch_bundle_discovery_v3_warning">Bundle V3 はまだサポートされていません。</string>
+    <string name="patch_bundle_discovery_open_site">バンドルカタログを開く</string>
+    <string name="patch_bundle_discovery_open_github">GitHub でカタログを開く</string>
+    <string name="patch_bundle_discovery_view_patches">パッチを表示</string>
+    <string name="patch_bundle_discovery_patches_title">パッチ · %1$s/%2$s</string>
+    <string name="patch_bundle_discovery_patches_title_fallback">バンドルパッチ</string>
+    <string name="patch_bundle_discovery_patches_empty">このバンドルにはパッチが見つかりません。</string>
+    <string name="patch_bundle_discovery_patch_unnamed">名称未設定のパッチ</string>
     <string name="incompatible_patches_dialog">これらのパッチは、選択されたアプリバージョン (%1$s) と互換性がありません。\n\n詳細を表示するにはパッチをクリックしてください。</string>
     <string name="incompatible_patch">互換性のないパッチ</string>
     <string name="any_version">任意</string>
@@ -1109,40 +1046,4 @@
     <string name="export">エクスポート</string>
     <string name="confirm">確認</string>
     <string name="saved_app_install_cancelled">インストールはキャンセルされました</string>
-    <!-- Needs translation -->
-    <string name="patch_bundle_discovery_title">Discover patch bundles</string>
-    <!-- Needs translation -->
-    <string name="patch_bundle_discovery_description">Browse external patch bundles and add them to the URV Manager.</string>
-    <!-- Needs translation -->
-    <string name="patch_bundle_discovery_search_label">Search bundles</string>
-    <!-- Needs translation -->
-    <string name="patch_bundle_discovery_empty">No patch bundles found.</string>
-    <!-- Needs translation -->
-    <string name="patch_bundle_discovery_error">Failed to load patch bundles.</string>
-    <!-- Needs translation -->
-    <string name="patch_bundle_discovery_imported">Added</string>
-    <!-- Needs translation -->
-    <string name="patch_bundle_discovery_patch_count">%1$d patches</string>
-    <!-- Needs translation -->
-    <string name="patch_bundle_discovery_release">Release</string>
-    <!-- Needs translation -->
-    <string name="patch_bundle_discovery_prerelease">Prerelease</string>
-    <!-- Needs translation -->
-    <string name="patch_bundle_discovery_v3_warning">Bundle V3 is not supported yet.</string>
-    <!-- Needs translation -->
-    <string name="patch_bundle_discovery_open_site">Open bundle catalog</string>
-    <!-- Needs translation -->
-    <string name="patch_bundle_discovery_open_github">Open catalog on GitHub</string>
-    <!-- Needs translation -->
-    <string name="patch_bundle_discovery_view_patches">View patches</string>
-    <!-- Needs translation -->
-    <string name="patch_bundle_discovery_patches_title">Patches · %1$s/%2$s</string>
-    <!-- Needs translation -->
-    <string name="patch_bundle_discovery_patches_title_fallback">Bundle patches</string>
-    <!-- Needs translation -->
-    <string name="patch_bundle_discovery_patches_empty">No patches found for this bundle.</string>
-    <!-- Needs translation -->
-    <string name="patch_bundle_discovery_patch_unnamed">Unnamed patch</string>
 </resources>
-
-
