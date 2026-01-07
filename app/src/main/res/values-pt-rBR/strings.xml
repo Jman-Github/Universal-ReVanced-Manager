@@ -535,7 +535,7 @@ Recomendado para esse dispositivo: %1$d MB.</string>
     <string name="language_option_japanese">Japonês</string>
     <string name="language_option_russian">Russo</string>
     <string name="language_option_ukrainian">Ucraniano</string>
-    <string name="language_option_portuguese">Português (BR)</string>
+    <string name="language_option_brazilian_portuguese">Português (BR)</string>
     <string name="device">Dispositivo</string>
     <string name="device_android_version">Versão do android</string>
     <string name="device_model">Modelo</string>
