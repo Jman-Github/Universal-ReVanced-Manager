@@ -133,7 +133,8 @@ fun GeneralSettingsScreen(
             LanguageOption("ko", R.string.language_option_korean),
             LanguageOption("ja", R.string.language_option_japanese),
             LanguageOption("ru", R.string.language_option_russian),
-            LanguageOption("uk", R.string.language_option_ukrainian)
+            LanguageOption("uk", R.string.language_option_ukrainian),
+            LanguageOption("pt-BR", R.string.language_option_brazilian_portuguese)
         )
     }
 
