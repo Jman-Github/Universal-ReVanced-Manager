@@ -795,7 +795,7 @@ class SelectedAppInfoViewModel(
                         ?: downloadedAppRepository.getLatest(app.packageName)
                     else -> downloadedAppRepository.getLatest(app.packageName)
                 }
-                downloaded?.let { resolvePackageInfo(downloadedAppRepository.getPreparedApkFile(it)) }
+                downloaded?.let { resolvePackageInfo(downloadedAppRepository.getApkFileForApp(it)) }
                     ?: pm.getPackageInfo(app.packageName)
             }
             else -> null

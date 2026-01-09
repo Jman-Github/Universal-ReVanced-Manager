@@ -6,6 +6,7 @@ import app.revanced.manager.data.room.profile.PatchProfilePayload
 import app.revanced.manager.domain.bundles.PatchBundleSource
 import app.revanced.manager.domain.bundles.RemotePatchBundle
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
+import app.revanced.manager.patcher.morphe.MorpheRuntimeBridge
 import app.revanced.manager.patcher.patch.PatchBundle
 import app.revanced.manager.patcher.patch.PatchBundleInfo
 import app.revanced.manager.util.Options
@@ -170,8 +171,12 @@ fun PatchProfilePayload.remapLocalBundles(
     localSources.forEach { source ->
         if (resolvedSignatures.containsKey(source.uid)) return@forEach
         val bundle = source.patchBundle ?: return@forEach
-        val names = runCatching { PatchBundle.Loader.metadata(bundle) }
+        val revancedNames = runCatching { PatchBundle.Loader.metadata(bundle) }
             .getOrNull()
+        val morpheNames = if (revancedNames == null) {
+            runCatching { MorpheRuntimeBridge.loadMetadata(bundle.patchesJar) }.getOrNull()
+        } else null
+        val names = (revancedNames ?: morpheNames)
             ?.map { it.name.trim().lowercase() }
             ?.toSet()
         if (!names.isNullOrEmpty()) resolvedSignatures[source.uid] = names

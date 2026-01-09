@@ -131,6 +131,8 @@
     <string name="patch_selector_item">选择补丁</string>
     <string name="patch_selector_item_description">已选择 %d 个补丁</string>
     <string name="no_patches_selected">未选择任何补丁</string>
+    <!-- Needs translation -->
+    <string name="mixed_patch_bundles_description">ReVanced (.rvp) and Morphe (.mpp) patches cannot be combined. Select patches from only one bundle type. If you want to use both, you will have to patch a second time using the other patches you want.</string>
 
     <string name="network_unavailable_warning">您的设备未连接到互联网。稍后下载将失败。</string>
     <string name="network_metered_warning">您当前使用的是计量连接。可能会产生服务提供商的数据费用。</string>

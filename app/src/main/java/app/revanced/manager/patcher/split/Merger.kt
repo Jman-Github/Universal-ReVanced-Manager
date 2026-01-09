@@ -6,6 +6,8 @@ import com.reandroid.apk.ApkBundle
 import com.reandroid.apk.ApkModule
 import com.reandroid.app.AndroidManifest
 import java.io.Closeable
+import java.io.IOException
+import java.nio.charset.CoderMalfunctionError
 import java.nio.file.Path
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -31,11 +33,26 @@ internal object Merger {
         val closeables = mutableSetOf<Closeable>()
         try {
             val merged = withContext(Dispatchers.Default) {
-                with(ApkBundle()) {
-                    setAPKLogger(ArscLogger)
-                    loadApkDirectory(apkDir.toFile())
-                    closeables.addAll(modules)
-                    mergeModules().also(closeables::add)
+                try {
+                    with(ApkBundle()) {
+                        setAPKLogger(ArscLogger)
+                        loadApkDirectory(apkDir.toFile())
+                        closeables.addAll(modules)
+                        mergeModules().also(closeables::add)
+                    }
+                } catch (error: Throwable) {
+                    val cause = error.cause
+                    if (error is CoderMalfunctionError ||
+                        error is IllegalArgumentException && error.message?.contains("newPosition > limit") == true ||
+                        cause is CoderMalfunctionError ||
+                        cause is IllegalArgumentException && cause.message?.contains("newPosition > limit") == true
+                    ) {
+                        throw IOException(
+                            "Failed to merge split APK resources. The split set may be incomplete, corrupted, or unsupported.",
+                            error
+                        )
+                    }
+                    throw error
                 }
             }
 

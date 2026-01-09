@@ -110,6 +110,8 @@
     <string name="patch_selector_item">Chọn bản vá</string>
     <string name="patch_selector_item_description">Đã chọn %d bản vá</string>
     <string name="no_patches_selected">Không có bản vá nào được chọn</string>
+    <!-- Needs translation -->
+    <string name="mixed_patch_bundles_description">ReVanced (.rvp) and Morphe (.mpp) patches cannot be combined. Select patches from only one bundle type. If you want to use both, you will have to patch a second time using the other patches you want.</string>
     <string name="network_unavailable_warning">Thiết bị của bạn chưa kết nối mạng. Quá trình tải về bị gián đoạn.</string>
     <string name="network_metered_warning">Bạn đang dùng gói data tính theo lưu lượng. Và có thể phát sinh phí cước dữ liệu.</string>
     <string name="apk_source_selector_item">Nguồn APK</string>

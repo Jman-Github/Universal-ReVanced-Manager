@@ -93,7 +93,7 @@ import app.revanced.manager.ui.viewmodel.AppSelectorViewModel
 import app.revanced.manager.util.RequestInstallAppsContract
 import app.revanced.manager.util.EventEffect
 import app.revanced.manager.util.isAllowedApkFile
-import app.revanced.manager.util.isAllowedRvpFile
+import app.revanced.manager.util.isAllowedPatchBundleFile
 import app.revanced.manager.util.toast
 import java.io.File
 import kotlinx.coroutines.launch
@@ -220,7 +220,7 @@ fun DashboardScreen(
                 showBundleFilePicker = false
                 path?.let { selectedBundlePath = it.toString() }
             },
-            fileFilter = ::isAllowedRvpFile,
+            fileFilter = ::isAllowedPatchBundleFile,
             allowDirectorySelection = false
         )
     }

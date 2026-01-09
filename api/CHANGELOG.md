@@ -5,11 +5,16 @@
 # Features
 
 - Removed the `Discover patch bundles` banner and added a FAB button next to the plus button instead to access the `Discover patch bundles` page
+- Added support for Morphe Patches (mixing of ReVanced and Morphe Patches in a single patch instance is not feasible, and not currently supported)
+- Improved patcher logging/profiling and error surfacing
+- Improved metadata reading for split APKs on the app info page
+- Imrpoved metedata reading for regular APKs on the app info page
 
 
 # Bug fixes
 
 - Fixed dev builds not being prompted to update when there are new releases
+- Fixed crashes the would occur occasionally for apps when loading metadata on the app info page
 
 
 # Docs

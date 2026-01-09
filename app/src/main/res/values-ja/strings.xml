@@ -132,6 +132,8 @@
     <string name="patch_selector_item">パッチを選択</string>
     <string name="patch_selector_item_description">%d 個のパッチを選択済み</string>
     <string name="no_patches_selected">パッチが選択されていません</string>
+    <!-- Needs translation -->
+    <string name="mixed_patch_bundles_description">ReVanced (.rvp) and Morphe (.mpp) patches cannot be combined. Select patches from only one bundle type. If you want to use both, you will have to patch a second time using the other patches you want.</string>
 
     <string name="network_unavailable_warning">デバイスがインターネットに接続されていません。ダウンロードは後で失敗します。</string>
     <string name="network_metered_warning">現在、従量制課金接続を使用しています。サービスプロバイダからデータ通信料が請求される場合があります。</string>

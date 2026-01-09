@@ -23,6 +23,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
+import java.util.logging.Handler
+import java.util.logging.Level
+import java.util.logging.LogRecord
+import java.util.logging.Logger as JavaLogger
 import kotlin.system.exitProcess
 
 /**
@@ -62,34 +66,45 @@ class PatcherProcess : IPatcherProcess.Stub() {
 
             logger.info("Memory limit: ${Runtime.getRuntime().maxMemory() / (1024 * 1024)}MB")
 
-            val patchList = runStep(StepId.LoadPatches, ::onEvent) {
-                val allPatches = PatchBundle.Loader.patches(
-                    parameters.configurations.map { it.bundle },
-                    parameters.packageName
-                )
+            val aaptLogs = AaptLogCapture().apply { start() }
 
-                parameters.configurations.flatMap { config ->
-                    val patches = (allPatches[config.bundle] ?: return@flatMap emptyList())
-                        .filter { it.name in config.patches }
-                        .associateBy { it.name }
+            try {
+                val patchList = runStep(StepId.LoadPatches, ::onEvent) {
+                    val allPatches = PatchBundle.Loader.patches(
+                        parameters.configurations.map { it.bundle },
+                        parameters.packageName
+                    )
 
-                    val filteredOptions = config.options.filterKeys { it in patches }
-                    filteredOptions.forEach { (patchName, opts) ->
-                        val patchOptions = patches[patchName]?.options
-                            ?: throw Exception("Patch with name $patchName does not exist.")
+                    parameters.configurations.flatMap { config ->
+                        val patches = (allPatches[config.bundle] ?: return@flatMap emptyList())
+                            .filter { it.name in config.patches }
+                            .associateBy { it.name }
 
-                        opts.forEach { (key, value) ->
-                            patchOptions[key] = value
+                        val filteredOptions = config.options.filterKeys { it in patches }
+                        filteredOptions.forEach { (patchName, opts) ->
+                            val patchOptions = patches[patchName]?.options
+                                ?: throw Exception("Patch with name $patchName does not exist.")
+
+                            opts.forEach { (key, value) ->
+                                patchOptions[key] = value
+                            }
                         }
+
+                        patches.values
                     }
-
-                    patches.values
                 }
-            }
 
-            val input = File(parameters.inputFile)
-            val preparation = if (SplitApkPreparer.isSplitArchive(input)) {
-                runStep(StepId.PrepareSplitApk, ::onEvent) {
+                val input = File(parameters.inputFile)
+                val preparation = if (SplitApkPreparer.isSplitArchive(input)) {
+                    runStep(StepId.PrepareSplitApk, ::onEvent) {
+                        SplitApkPreparer.prepareIfNeeded(
+                            input,
+                            File(parameters.cacheDir),
+                            logger,
+                            parameters.stripNativeLibs
+                        )
+                    }
+                } else {
                     SplitApkPreparer.prepareIfNeeded(
                         input,
                         File(parameters.cacheDir),
@@ -97,35 +112,39 @@ class PatcherProcess : IPatcherProcess.Stub() {
                         parameters.stripNativeLibs
                     )
                 }
-            } else {
-                SplitApkPreparer.prepareIfNeeded(
-                    input,
-                    File(parameters.cacheDir),
-                    logger,
-                    parameters.stripNativeLibs
-                )
-            }
 
-            try {
-                val session = runStep(StepId.ReadAPK, ::onEvent) {
-                    Session(
-                        cacheDir = parameters.cacheDir,
-                        aaptPath = parameters.aaptPath,
-                        frameworkDir = parameters.frameworkDir,
-                        logger = logger,
-                        input = preparation.file,
-                        onEvent = ::onEvent,
-                    )
+                try {
+                    val session = runStep(StepId.ReadAPK, ::onEvent) {
+                        Session(
+                            cacheDir = parameters.cacheDir,
+                            aaptPath = parameters.aaptPath,
+                            frameworkDir = parameters.frameworkDir,
+                            logger = logger,
+                            input = preparation.file,
+                            onEvent = ::onEvent,
+                        )
+                    }
+
+                    session.use {
+                        it.run(File(parameters.outputFile), patchList)
+                    }
+                } finally {
+                    preparation.cleanup()
                 }
 
-                session.use {
-                    it.run(File(parameters.outputFile), patchList)
+                events.finished(null)
+            } catch (throwable: Throwable) {
+                val extra = aaptLogs.dump()
+                val stack = throwable.stackTraceToString()
+                val report = if (extra.isNotBlank()) {
+                    "$stack\n\nAAPT2 output:\n$extra"
+                } else {
+                    stack
                 }
+                events.finished(report)
             } finally {
-                preparation.cleanup()
+                aaptLogs.stop()
             }
-
-            events.finished(null)
         }
     }
 
@@ -166,6 +185,45 @@ class PatcherProcess : IPatcherProcess.Stub() {
 
             Looper.loop()
             exitProcess(1) // Shouldn't happen
+        }
+    }
+
+    private class AaptLogCapture {
+        private val logger = JavaLogger.getLogger("")
+        private val lines = ArrayDeque<String>()
+        private var originalLevel: Level? = null
+        private val handler = object : Handler() {
+            override fun publish(record: LogRecord) {
+                val message = record.message?.trim().orEmpty()
+                if (message.isEmpty()) return
+                synchronized(lines) {
+                    if (lines.size >= MAX_LINES) {
+                        lines.removeFirst()
+                    }
+                    lines.addLast(message)
+                }
+            }
+
+            override fun flush() {}
+            override fun close() {}
+        }
+
+        fun start() {
+            originalLevel = logger.level
+            logger.level = Level.ALL
+            handler.level = Level.ALL
+            logger.addHandler(handler)
+        }
+
+        fun stop() {
+            logger.removeHandler(handler)
+            logger.level = originalLevel
+        }
+
+        fun dump(): String = synchronized(lines) { lines.joinToString("\n") }
+
+        companion object {
+            private const val MAX_LINES = 200
         }
     }
 }

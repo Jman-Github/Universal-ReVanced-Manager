@@ -650,6 +650,8 @@ Universal ReVanced Manager закриється під час оновлення
     <string name="no_patch_found">Патч не знайдено. Перевірте свої патчі</string>
     <string name="no_patched_apps_found">Патчених додатків не виявлено</string>
     <string name="no_patches_selected">Патчі не вибрано</string>
+    <!-- Needs translation -->
+    <string name="mixed_patch_bundles_description">ReVanced (.rvp) and Morphe (.mpp) patches cannot be combined. Select patches from only one bundle type. If you want to use both, you will have to patch a second time using the other patches you want.</string>
     <string name="no_update_available">Немає оновлень</string>
     <string name="non_suggested_version_warning_description">"Вибрана вами версія програми не відповідає запропонованій версії.
 Будь ласка, використовуйте запропоновану версію: %s

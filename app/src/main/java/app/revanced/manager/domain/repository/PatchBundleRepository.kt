@@ -4,8 +4,8 @@ import android.app.Application
 import android.content.Context
 import android.util.Log
 import androidx.annotation.StringRes
-import app.revanced.library.mostCommonCompatibleVersions
-import app.revanced.patcher.patch.Patch
+import app.revanced.library.mostCommonCompatibleVersions as revancedMostCommonCompatibleVersions
+import app.revanced.patcher.patch.Patch as RevancedPatch
 import app.universal.revanced.manager.R
 import app.revanced.manager.data.platform.NetworkInfo
 import app.revanced.manager.data.redux.Action
@@ -27,9 +27,11 @@ import app.revanced.manager.domain.bundles.RemotePatchBundle
 import app.revanced.manager.domain.bundles.PatchBundleSource
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
 import app.revanced.manager.domain.manager.PreferencesManager
+import app.revanced.manager.patcher.morphe.MorpheRuntimeBridge
 import app.revanced.manager.patcher.patch.PatchInfo
 import app.revanced.manager.patcher.patch.PatchBundle
 import app.revanced.manager.patcher.patch.PatchBundleInfo
+import app.revanced.manager.patcher.patch.PatchBundleType
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.simpleMessage
 import app.revanced.manager.util.tag
@@ -95,6 +97,31 @@ class PatchBundleRepository(
     }
     val bundleInfoFlow = enabledBundlesInfoFlow
 
+    fun bundlesByType(type: PatchBundleType) = store.state.map { state ->
+        state.sources.mapNotNull { (uid, src) ->
+            val bundle = src.patchBundle ?: return@mapNotNull null
+            val info = state.info[uid] ?: return@mapNotNull null
+            if (info.bundleType != type) return@mapNotNull null
+            uid to bundle
+        }.toMap()
+    }
+
+    suspend fun selectionBundleTypes(selection: PatchSelection): Set<PatchBundleType> {
+        if (selection.isEmpty()) return emptySet()
+        val activeSelection = selection.filterValues { it.isNotEmpty() }
+        if (activeSelection.isEmpty()) return emptySet()
+        val info = allBundlesInfoFlow.first()
+        return activeSelection.keys.mapNotNull { uid -> info[uid]?.bundleType }.toSet()
+    }
+
+    suspend fun selectionBundleType(selection: PatchSelection): PatchBundleType? {
+        val types = selectionBundleTypes(selection)
+        return if (types.size == 1) types.first() else null
+    }
+
+    suspend fun selectionHasMixedBundleTypes(selection: PatchSelection): Boolean =
+        selectionBundleTypes(selection).size > 1
+
     fun scopedBundleInfoFlow(packageName: String, version: String?) = enabledBundlesInfoFlow.map {
         it.map { (_, bundleInfo) ->
             bundleInfo.forPackage(
@@ -106,17 +133,31 @@ class PatchBundleRepository(
 
     val patchCountsFlow = allBundlesInfoFlow.map { it.mapValues { (_, info) -> info.patches.size } }
 
-    val suggestedVersions = enabledBundlesInfoFlow.map {
-        val allPatches =
-            it.values.flatMap { bundle -> bundle.patches.map(PatchInfo::toPatcherPatch) }.toSet()
+    val suggestedVersions = enabledBundlesInfoFlow.map { bundleInfos ->
+        val revancedPatches = bundleInfos.values
+            .filter { it.bundleType == PatchBundleType.REVANCED }
+            .flatMap { info -> info.patches.map(PatchInfo::toPatcherPatch) }
+            .toSet()
+        val morphePatches = bundleInfos.values
+            .filter { it.bundleType == PatchBundleType.MORPHE }
+            .flatMap { info -> info.patches }
 
-        suggestedVersionsFor(allPatches)
+        val morpheSuggested = suggestedVersionsForMorphe(morphePatches)
+        val revancedSuggested = suggestedVersionsForRevanced(revancedPatches)
+        morpheSuggested + revancedSuggested
     }
 
     val suggestedVersionsByBundle = enabledBundlesInfoFlow.map { bundleInfos ->
         bundleInfos.mapValues { (_, info) ->
-            val patches = info.patches.map(PatchInfo::toPatcherPatch).toSet()
-            suggestedVersionsFor(patches)
+            when (info.bundleType) {
+                PatchBundleType.REVANCED -> {
+                    val patches = info.patches.map(PatchInfo::toPatcherPatch).toSet()
+                    suggestedVersionsForRevanced(patches)
+                }
+                PatchBundleType.MORPHE -> {
+                    suggestedVersionsForMorphe(info.patches)
+                }
+            }
         }
     }
 
@@ -451,6 +492,32 @@ class PatchBundleRepository(
         return all
     }
 
+    private fun loadBundleMetadata(bundle: PatchBundle): Pair<PatchBundleType, List<PatchInfo>> {
+        val bundlePath = bundle.patchesJar
+        val extension = File(bundlePath).extension.lowercase(Locale.US)
+        if (extension == "rvp") {
+            return PatchBundleType.REVANCED to PatchBundle.Loader.metadata(bundle)
+        }
+        if (extension == "mpp") {
+            return PatchBundleType.MORPHE to MorpheRuntimeBridge.loadMetadata(bundlePath)
+        }
+
+        val revancedResult = runCatching { PatchBundle.Loader.metadata(bundle) }
+        if (revancedResult.isSuccess) {
+            return PatchBundleType.REVANCED to revancedResult.getOrThrow()
+        }
+
+        val morpheResult = runCatching { MorpheRuntimeBridge.loadMetadata(bundlePath) }
+        if (morpheResult.isSuccess) {
+            return PatchBundleType.MORPHE to morpheResult.getOrThrow()
+        }
+
+        val error = IllegalStateException("Failed to load patch bundle metadata")
+        revancedResult.exceptionOrNull()?.let(error::addSuppressed)
+        morpheResult.exceptionOrNull()?.let(error::addSuppressed)
+        throw error
+    }
+
     private suspend fun loadMetadata(sources: Map<Int, PatchBundleSource>): Map<Int, PatchBundleInfo.Global> {
         // Map bundles -> sources
         val map = sources.mapNotNull { (_, src) ->
@@ -463,12 +530,14 @@ class PatchBundleRepository(
 
         val metadata = map.mapNotNull { (bundle, src) ->
             try {
+                val (bundleType, patches) = loadBundleMetadata(bundle)
                 src.uid to PatchBundleInfo.Global(
                     src.displayTitle,
                     bundle.manifestAttributes?.version,
                     src.uid,
+                    bundleType,
                     src.enabled,
-                    PatchBundle.Loader.metadata(bundle)
+                    patches
                 )
             } catch (error: Throwable) {
                 failures += src.uid to error
@@ -1663,13 +1732,40 @@ class PatchBundleRepository(
         }
     }
 
-    private fun suggestedVersionsFor(patches: Set<Patch<*>>): Map<String, String?> {
-        val versionCounts = patches.mostCommonCompatibleVersions(countUnusedPatches = true)
+    private fun suggestedVersionsForRevanced(patches: Set<RevancedPatch<*>>): Map<String, String?> {
+        val versionCounts = patches.revancedMostCommonCompatibleVersions(countUnusedPatches = true)
 
         return versionCounts.mapValues { (_, versions) ->
             if (versions.keys.size < 2) {
                 return@mapValues versions.keys.firstOrNull()
             }
+
+            var currentHighestPatchCount = -1
+            versions.entries.last { (_, patchCount) ->
+                if (patchCount >= currentHighestPatchCount) {
+                    currentHighestPatchCount = patchCount
+                    true
+                } else false
+            }.key
+        }
+    }
+
+    private fun suggestedVersionsForMorphe(patches: Iterable<PatchInfo>): Map<String, String?> {
+        val versionCounts = mutableMapOf<String, MutableMap<String, Int>>()
+
+        patches.forEach { patch ->
+            patch.compatiblePackages?.forEach { pkg ->
+                val versions = pkg.versions ?: return@forEach
+                val counts = versionCounts.getOrPut(pkg.packageName) { linkedMapOf() }
+                versions.sorted().forEach { version ->
+                    counts[version] = (counts[version] ?: 0) + 1
+                }
+            }
+        }
+
+        return versionCounts.mapValues { (_, versions) ->
+            if (versions.isEmpty()) return@mapValues null
+            if (versions.keys.size < 2) return@mapValues versions.keys.firstOrNull()
 
             var currentHighestPatchCount = -1
             versions.entries.last { (_, patchCount) ->

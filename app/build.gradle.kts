@@ -1,6 +1,7 @@
 import io.github.z4kn4fein.semver.toVersion
 import kotlin.random.Random
 import org.gradle.api.file.DuplicatesStrategy
+import org.gradle.api.tasks.Copy
 import org.gradle.jvm.tasks.Jar
 
 plugins {
@@ -15,6 +16,7 @@ plugins {
 }
 
 val outputApkFileName = "universal-revanced-manager-$version.apk"
+val morpheRuntimeAssetsDir = layout.buildDirectory.dir("generated/morphe-runtime")
 
 val arscLib by configurations.creating
 
@@ -70,8 +72,13 @@ dependencies {
     ksp(libs.room.compiler)
 
     // ReVanced (PR #39: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/39)
-    implementation(libs.revanced.patcher)
-    implementation(libs.revanced.library)
+    implementation(libs.revanced.patcher) {
+        exclude(group = "xpp3", module = "xpp3")
+    }
+    implementation(libs.revanced.library) {
+        exclude(group = "xpp3", module = "xpp3")
+    }
+    implementation(libs.xpp3)
     arscLib("io.github.reandroid:ARSCLib:1.3.8")
     implementation(files(strippedArscLib))
     implementation("androidx.documentfile:documentfile:1.0.1")
@@ -190,11 +197,9 @@ android {
             initWith(getByName("release"))
             versionNameSuffix = "-dev"
             signingConfig = releaseSigningConfig
-            if (!project.hasProperty("noProguard")) {
-                isMinifyEnabled = true
-                isShrinkResources = true
-                proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            }
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             buildConfigField("long", "BUILD_ID", "${Random.nextLong()}L")
         }
 
@@ -265,6 +270,10 @@ android {
         }
     }
 
+    sourceSets {
+        getByName("main").assets.srcDir(morpheRuntimeAssetsDir)
+    }
+
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
@@ -304,5 +313,20 @@ tasks {
                 sign(apk.get().asFile)
             }
         }
+    }
+
+    val copyMorpheRuntimeApk by registering(Copy::class) {
+        val runtimeProject = project(":morphe-runtime")
+        val runtimeApk = runtimeProject.layout.buildDirectory.file(
+            "outputs/apk/release/morphe-runtime-release.apk"
+        )
+        dependsOn("${runtimeProject.path}:assembleRelease")
+        from(runtimeApk)
+        into(morpheRuntimeAssetsDir)
+        rename { "morphe-runtime.apk" }
+    }
+
+    named("preBuild") {
+        dependsOn(copyMorpheRuntimeApk)
     }
 }

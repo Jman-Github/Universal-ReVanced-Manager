@@ -106,6 +106,7 @@ fun InstalledAppInfoScreen(
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
     var showAppliedPatchesDialog by rememberSaveable { mutableStateOf(false) }
     var showUniversalBlockedDialog by rememberSaveable { mutableStateOf(false) }
+    var showMixedBundleDialog by rememberSaveable { mutableStateOf(false) }
     var showLeaveInstallDialog by rememberSaveable { mutableStateOf(false) }
     val appliedSelection = viewModel.appliedPatches
     val isInstalledOnDevice = viewModel.isInstalledOnDevice
@@ -217,6 +218,22 @@ fun InstalledAppInfoScreen(
         } ?: false
     }
 
+    fun handleRepatchClick(targetPackageName: String) {
+        if (!allowUniversalPatches && (appliedBundlesContainUniversal || appliedSelectionContainsUniversal)) {
+            showUniversalBlockedDialog = true
+            return
+        }
+
+        val selection = appliedSelection ?: return
+        scope.launch {
+            if (patchBundleRepository.selectionHasMixedBundleTypes(selection)) {
+                showMixedBundleDialog = true
+                return@launch
+            }
+            onPatchClick(targetPackageName, selection)
+        }
+    }
+
     val bundlesUsedSummary = remember(appliedBundles) {
         if (appliedBundles.isEmpty()) ""
         else appliedBundles.joinToString("\n") { bundle ->
@@ -276,6 +293,19 @@ fun InstalledAppInfoScreen(
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
+        )
+    }
+
+    if (showMixedBundleDialog) {
+        AlertDialog(
+            onDismissRequest = { showMixedBundleDialog = false },
+            confirmButton = {
+                TextButton(onClick = { showMixedBundleDialog = false }) {
+                    Text(stringResource(R.string.close))
+                }
+            },
+            title = { Text(stringResource(R.string.mixed_patch_bundles_title)) },
+            text = { Text(stringResource(R.string.mixed_patch_bundles_description)) }
         )
     }
 
@@ -749,11 +779,7 @@ fun InstalledAppInfoScreen(
                         icon = Icons.Outlined.Update,
                         text = stringResource(R.string.repatch),
                         onClick = {
-                            if (!allowUniversalPatches && (appliedBundlesContainUniversal || appliedSelectionContainsUniversal)) {
-                                showUniversalBlockedDialog = true
-                            } else {
-                                onPatchClick(installedApp.originalPackageName, appliedSelection)
-                            }
+                            handleRepatchClick(installedApp.originalPackageName)
                         }
                     )
                 }
@@ -837,11 +863,7 @@ fun InstalledAppInfoScreen(
                     icon = Icons.Outlined.Update,
                     text = stringResource(R.string.repatch),
                     onClick = {
-                        if (!allowUniversalPatches && (appliedBundlesContainUniversal || appliedSelectionContainsUniversal)) {
-                            showUniversalBlockedDialog = true
-                        } else {
-                            onPatchClick(installedApp.originalPackageName, appliedSelection)
-                        }
+                        handleRepatchClick(installedApp.originalPackageName)
                     }
                 )
             }
@@ -932,11 +954,7 @@ fun InstalledAppInfoScreen(
                         icon = Icons.Outlined.Update,
                         text = stringResource(R.string.repatch),
                         onClick = {
-                            if (!allowUniversalPatches && (appliedBundlesContainUniversal || appliedSelectionContainsUniversal)) {
-                                showUniversalBlockedDialog = true
-                            } else {
-                                onPatchClick(installedApp.originalPackageName, appliedSelection)
-                            }
+                            handleRepatchClick(installedApp.originalPackageName)
                         }
                     )
                 }

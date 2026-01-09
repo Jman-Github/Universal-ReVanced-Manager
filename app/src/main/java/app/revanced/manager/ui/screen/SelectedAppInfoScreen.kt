@@ -65,6 +65,7 @@ import app.revanced.manager.data.platform.NetworkInfo
 import app.revanced.manager.data.room.apps.downloaded.DownloadedApp
 import app.revanced.manager.data.room.apps.installed.InstallType
 import app.revanced.manager.data.room.apps.installed.InstalledApp
+import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.network.downloader.LoadedDownloaderPlugin
 import app.revanced.manager.ui.component.AlertDialogExtended
 import app.revanced.manager.ui.component.AppInfo
@@ -102,6 +103,7 @@ fun SelectedAppInfoScreen(
 ) {
     val context = LocalContext.current
     val networkInfo = koinInject<NetworkInfo>()
+    val patchBundleRepository: PatchBundleRepository = koinInject()
     val networkConnected = remember { networkInfo.isConnected() }
     val networkMetered = remember { !networkInfo.isUnmetered() }
 
@@ -114,6 +116,7 @@ fun SelectedAppInfoScreen(
     val preferredBundleVersion by vm.preferredBundleVersionFlow.collectAsStateWithLifecycle(null)
     val bundleRecommendationDetails by vm.bundleRecommendationDetailsFlow.collectAsStateWithLifecycle(emptyList())
     var showBundleRecommendationDialog by rememberSaveable { mutableStateOf(false) }
+    var showMixedBundleDialog by rememberSaveable { mutableStateOf(false) }
 
     val allowIncompatiblePatches by vm.prefs.disablePatchVersionCompatCheck.getAsState()
     val suggestedVersionSafeguard by vm.prefs.suggestedVersionSafeguard.getAsState()
@@ -217,6 +220,10 @@ fun SelectedAppInfoScreen(
                     }
 
                     composableScope.launch {
+                        if (patchBundleRepository.selectionHasMixedBundleTypes(patches)) {
+                            showMixedBundleDialog = true
+                            return@launch
+                        }
                         if (!vm.hasSetRequiredOptions(patches)) {
                             val optionsSnapshot = vm.awaitOptions()
                             onRequiredOptions(
@@ -408,6 +415,19 @@ fun SelectedAppInfoScreen(
                 vm.selectBundleRecommendation(uid, override, targetsAllVersions)
             },
             onDismissRequest = { showBundleRecommendationDialog = false }
+        )
+    }
+
+    if (showMixedBundleDialog) {
+        AlertDialogExtended(
+            onDismissRequest = { showMixedBundleDialog = false },
+            confirmButton = {
+                TextButton(onClick = { showMixedBundleDialog = false }) {
+                    Text(stringResource(R.string.close))
+                }
+            },
+            title = { Text(stringResource(R.string.mixed_patch_bundles_title)) },
+            text = { Text(stringResource(R.string.mixed_patch_bundles_description)) }
         )
     }
 }

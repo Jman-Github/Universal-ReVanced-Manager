@@ -110,6 +110,8 @@
     <string name="patch_selector_item">패치 선택하기</string>
     <string name="patch_selector_item_description">%d 개의 패치를 선택하였습니다</string>
     <string name="no_patches_selected">선택된 패치가 없습니다</string>
+    <!-- Needs translation -->
+    <string name="mixed_patch_bundles_description">ReVanced (.rvp) and Morphe (.mpp) patches cannot be combined. Select patches from only one bundle type. If you want to use both, you will have to patch a second time using the other patches you want.</string>
     <string name="network_unavailable_warning">기기가 인터넷에 연결되어 있지 않습니다. 나중에 다운로드가 실패할 수 있습니다.</string>
     <string name="network_metered_warning">현재 모바일 네트워크에 연결되어 있습니다. 통신사 데이터 요금이 부과될 수 있습니다.</string>
     <string name="apk_source_selector_item">APK 소스 선택하기</string>
