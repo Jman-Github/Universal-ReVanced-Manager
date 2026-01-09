@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="abc_action_bar_home_description">Перейти додому</string>
-	<string name="abc_action_bar_up_description">Перейти вгору</string>
-	<string name="abc_action_menu_overflow_description">Більше опцій</string>
+    <string name="abc_action_bar_up_description">Перейти вгору</string>
+    <string name="abc_action_menu_overflow_description">Більше опцій</string>
     <string name="abc_action_mode_done">Готово</string>
     <string name="abc_activity_chooser_view_see_all">Переглянути всі</string>
     <string name="abc_activitychooserview_choose_application">Виберіть додаток</string>
@@ -20,11 +20,11 @@
     <string name="abc_prepend_shortcut_label">Menu+</string>
     <string name="abc_search_hint">Пошук…</string>
     <string name="abc_searchview_description_clear">Очистити запит</string>
-	<string name="abc_searchview_description_query">Search query</string>
+    <string name="abc_searchview_description_query">Search query</string>
     <string name="abc_searchview_description_search">Пошук</string>
     <string name="abc_searchview_description_submit">Надіслати запит</string>
     <string name="abc_searchview_description_voice">Голосовий пошук</string>
-	<string name="abc_shareactionprovider_share_with">Поділіться з</string>
+    <string name="abc_shareactionprovider_share_with">Поділіться з</string>
     <string name="abc_shareactionprovider_share_with_application">Поділіться з %s</string>
     <string name="abc_toolbar_collapse_description">Згорнути</string>
     <string name="about">Про нас</string>
@@ -37,7 +37,7 @@
     <string name="accent_color_presets_description">Торкніться кольору, щоб застосувати його миттєво</string>
     <string name="accent_color_preview">Попередній перегляд</string>
     <string name="accent_color_reset">Скинути акцент</string>
-	<string name="ackpine_notification_channel_description">Вимкнення цього параметра порушує функціональність встановлення пакета</string>
+    <string name="ackpine_notification_channel_description">Вимкнення цього параметра порушує функціональність встановлення пакета</string>
     <string name="ackpine_notification_channel_id">ru.solrudev.ackpine.notification_channel</string>
     <string name="ackpine_notification_channel_name">Встановити і видалити</string>
     <string name="ackpine_prompt_install_message">Будь ласка, підтвердьте встановлення.</string>
@@ -75,8 +75,6 @@
     <string name="app_filter_title">Фільтр програм</string>
     <string name="app_info">Інформація про заявку</string>
     <string name="app_language">Мова додатку</string>
-    <string name="app_name">Universal ReVanced Manager</string>
-    <string name="app_not_installed">"Вибрана вами програма не встановлена. Ви хочете завантажити його?"</string>
     <string name="app_source_dialog_option_auto">Авто</string>
     <string name="app_source_dialog_option_auto_description">Для завантаження програми використовуйте всі доступні завантажувачі.</string>
     <string name="app_source_dialog_option_auto_unavailable">Немає доступних плагінів</string>
@@ -115,8 +113,6 @@
     <string name="battery_optimization_dialog_description">Щоб надійно отримувати фонові сповіщення про оновлення пакетів, вимкніть оптимізацію батареї для URV Manager.</string>
     <string name="battery_optimization_dialog_title">Оптимізація батареї</string>
     <string name="battery_optimization_notification">Щоб Universal ReVanced Manager правильно працював у фоновому режимі, потрібно вимкнути оптимізацію акумулятора. Натисніть тут, щоб вимкнути оптимізацію.</string>
-    <string name="bundle_actions_collapse">Приховати дії пакета</string>
-    <string name="bundle_actions_expand">Показати дії пакета</string>
     <string name="bundle_catalog_unavailable">Каталог списку виправлень недоступний</string>
     <string name="bundle_changelog">Журнал змін</string>
     <string name="bundle_changelog_empty">Немає журналу змін</string>
@@ -131,48 +127,38 @@
     <string name="bundle_release_page_unavailable">Сторінка випуску для цього пакета недоступна.</string>
     <string name="bundle_reorder">Організуйте пакети</string>
     <string name="bundle_reorder_description">Перетягніть повзунок, щоб змінити порядок відображення пакетів у списку та меню вибору патчів.</string>
-    <string name="bundle_reorder_move_down">Перемістіть пакет вниз</string>
-    <string name="bundle_reorder_move_up">Перемістити пакет вгору</string>
     <string name="bundle_reorder_title">Організація пакетів виправлень</string>
-	<string name="bundle_search_update">Пошук оновлень</string>
-	<string name="bundle_search_update_description">Перевірте цей пакет на наявність оновлень у фоновому режимі</string>
+    <string name="bundle_search_update">Пошук оновлень</string>
+    <string name="bundle_search_update_description">Перевірте цей пакет на наявність оновлень у фоновому режимі</string>
     <string name="bundle_type_local">Локальний</string>
     <string name="bundle_type_preinstalled">Попередньо встановлено</string>
     <string name="bundle_type_remote">Віддалений</string>
     <string name="bundle_uid">UID пакета</string>
-	<string name="bundle_update_available">Доступне оновлення пакету патчів</string>												  
     <string name="bundle_update_banner_title">Оновлення пакетів патчів</string>
-	<string name="bundle_update_description_available">Нова версія для %1$s: %2$s</string>
     <string name="bundle_update_manual_available">Доступне оновлення</string>
     <string name="bundle_update_manual_available_with_version">Доступне оновлення: %1$s</string>
     <string name="bundle_update_progress">%1$d/%2$d оброблені пакети</string>
     <string name="bundle_updated_at">Оновлено %1$s</string>
-	<string name="bundle_updates_notification_available">%1$d доступні оновлення.</string>
+    <string name="bundle_updates_notification_available">%1$d доступні оновлення.</string>
     <string name="bundle_updates_notification_completed">Оновлення завершено</string>
     <string name="bundle_updates_notification_completed_with_available">Оновлення завершено. %1$d доступні оновлення.</string>
     <string name="bundle_updates_notification_failed">Не вдалося оновити</string>
     <string name="bundle_updates_notification_progress">Оновити %1$d з %2$d: %3$s</string>
-    <string name="bundle_updates_summary_description">Натисніть, щоб переглянути менеджер і переглянути оновлення пакетів.</string>
-    <string name="bundle_updates_summary_title">Доступні оновлення пакетів виправлень</string>
     <string name="bundle_version_all_versions">Всі версії</string>
     <string name="bundle_version_dialog_default">Використовуйте рекомендацію за умовчанням</string>
     <string name="bundle_version_dialog_default_subtitle">Автоматичний вибір найпоширенішої сумісної версії.</string>
     <string name="bundle_version_dialog_description">Виберіть, який пакет використовувати під час завантаження APK.</string>
-    <string name="bundle_version_dialog_locked_hint">Перейдіть до Налаштувань > Розширений > Запобіжні заходи та встановлення обох \"Потрібна рекомендована версія програми\" (перемикач вимк) та \"Вимкнути перевірку сумісності версій\" (перемикач увім) щоб вибрати версії для конкретного пакета.</string>
+    <string name="bundle_version_dialog_locked_hint">Перейдіть до Налаштувань &gt; Розширений &gt; Запобіжні заходи та встановлення обох \"Потрібна рекомендована версія програми\" (перемикач вимк) та \"Вимкнути перевірку сумісності версій\" (перемикач увім) щоб вибрати версії для конкретного пакета.</string>
     <string name="bundle_version_dialog_locked_title">Захист версій увімкнено</string>
-    <string name="bundle_version_dialog_option_subtitle">Використовуйте версію %1$s</string>
     <string name="bundle_version_dialog_other_title">Виберіть іншу підтримувану версію:</string>
     <string name="bundle_version_dialog_recommended">Рекомендована версія: %1$s</string>
     <string name="bundle_version_dialog_selected_indicator">Вибрано</string>
-    <string name="bundle_version_dialog_selected_indicator_inline">%1$s (вибрано)</string>
     <string name="bundle_version_dialog_selected_override">Вибрана версія: %1$s</string>
     <string name="bundle_version_dialog_title">Виберіть рекомендований пакет</string>
     <string name="bundle_version_item">Рекомендація щодо пакету</string>
     <string name="bundle_version_item_description_default">Використання стандартної рекомендації</string>
     <string name="bundle_version_item_description_selected">Нижчеперелічений %1$s (%2$s)</string>
-    <string name="bundle_version_line">%1$s: %2$s</string>
     <string name="bundle_version_no_version">Немає запропонованої версії</string>
-    <string name="bundle_version_other_heading">Інші підтримувані версії</string>
     <string name="bundle_version_suggested_label">Рекомендована версія: %1$s</string>
     <string name="bundle_view_changelog">Переглянути останній журнал змін</string>
     <string name="call_notification_answer_action">Відповісти</string>
@@ -188,7 +174,6 @@
     <string name="changelog_download_fail">Не вдалося завантажити журнал змін: %s</string>
     <string name="changelog_loading">Завантаження журналу змін</string>
     <string name="clear">Очистити</string>
-	<string name="cli">CLI</string>
     <string name="close">Закрити</string>
     <string name="close_drawer">Закрити навігаційне меню</string>
     <string name="close_sheet">Закрити лист</string>
@@ -197,17 +182,11 @@
     <string name="color_channel_green">Зелений</string>
     <string name="color_channel_red">Червоний</string>
     <string name="confirm">Підтвердити</string>
-    <string name="contact">Контакт</string>
     <string name="continue_">Продовжити</string>
-    <string name="continue_anyways">Продовжити у будь-якому випадку</string>
-    <string name="continue_with_version">Продовжити цю версію?</string>
     <string name="contributors">Автори</string>
-    <string name="contributors_description">Переглянути членів ReVanced</string>
     <string name="copy_to_clipboard">Копіювати в буфер обміну</string>
-    <string name="current_version">Поточна версія: %s</string>
-	<string name="daily">Щодня</string>
+    <string name="daily">Щодня</string>
     <string name="dark">Темний</string>
-	<string name="dashboard">Панель керування</string>
     <string name="days_ago">%sd тому</string>
     <string name="debug_logs_export">Експорт журналів налагодження</string>
     <string name="debug_logs_export_failed">Не вдалося експортувати журнали</string>
@@ -215,42 +194,26 @@
     <string name="debug_logs_export_success">Експортовані журнали</string>
     <string name="debugging">Налагодження</string>
     <string name="default_error_message">Невірний вхід</string>
-    <string name="default_install">За замовчуванням</string>
     <string name="default_popup_window_title">Спливаюче вікно</string>
     <string name="delete">Видалити</string>
-    <string name="delete_profile_confirmation">Видалити %1$s?</string>
     <string name="delete_saved_app_description">Це призведе до видалення збереженого запису програми та збереженого APK.</string>
     <string name="delete_saved_app_title">Видалити збережену програму</string>
-    <string name="delete_saved_copy">Видалити збережену копію</string>
     <string name="delete_saved_entry_description">Це призведе до видалення збереженого запису програми та її збереженого APK. Програма залишиться встановленою.</string>
     <string name="delete_saved_entry_title">Видалити збережений запис програми</string>
     <string name="deselect_all">Зняти вибір із усіх</string>
     <string name="deselect_bundle">Скасувати вибір поточного пакета</string>
     <string name="developer_options">Опції розробника</string>
-    <string name="developer_options_already_enabled">Параметри розробника вже ввімкнено</string>
     <string name="developer_options_description">Варіанти усунення проблем</string>
-    <string name="developer_options_enabled">Параметри розробника ввімкнено</string>
-    <string name="developer_options_taps">%d taps remaining</string>
-    <string name="device">Пристрій</string>
-    <string name="device_android_version">Android версія</string>
-    <string name="device_architectures">Архітектури ЦП</string>
-    <string name="device_memory_limit">"Обмеження пам'яті"</string>
     <string name="device_memory_limit_format">%1$dMB (Нормальний) - %2$dMB (Великий)</string>
-    <string name="device_model">Модель</string>
     <string name="dialog_input_placeholder">Значення</string>
-	<string name="disable">Вимкнути</string>
+    <string name="disable">Вимкнути</string>
     <string name="disable_battery_optimization">Вимкнути оптимізацію акумулятора</string>
     <string name="disable_patch_selection_confirmations">Вимкнути підтвердження дії</string>
     <string name="disable_patch_selection_confirmations_description">Пропустити діалогові вікна підтвердження для дій вибору виправлення</string>
     <string name="disable_patch_selection_confirmations_warning">Вимкнення підтвердження може призвести до ненавмисних групових змін.</string>
     <string name="dismiss">Відхилити</string>
-    <string name="dismiss_temporary">Не зараз</string>
-    <string name="donate">Задонатити</string>
     <string name="download">Завантажити</string>
-    <string name="download_another_version">Завантажте іншу версію</string>
     <string name="download_apk">Завантажте файл APK</string>
-    <string name="download_app">Завантажити додаток</string>
-    <string name="download_application">Завантажити програму?</string>
     <string name="download_confirmation_metered">"Зараз ви використовуєте лімітне з’єднання, і ваш постачальник послуг може стягувати з вас плату за передачу даних.
 
 Ви все ще хочете продовжити?"</string>
@@ -265,11 +228,8 @@
     <string name="downloader_auto_save_description">Зберігати APKs файли, завантажується через плагіни для повторного використання. Вимкніть їх після встановлення патча.</string>
     <string name="downloader_auto_save_title">Автоматично зберігати завантажені APKs</string>
     <string name="downloader_error">Помилка завантажувача: %s</string>
-    <string name="downloader_invalid_version">Завантажувач не отримав правильну версію</string>
     <string name="downloader_no_plugins_available">Завантажувачі встановлені, але жоден із них не є надійним. Перевірте налаштування.</string>
     <string name="downloader_no_plugins_installed">Завантажувач не встановлений.</string>
-    <string name="downloader_plugin_delete_apps_description">Ви впевнені, що бажаєте видалити вибрані програми?</string>
-    <string name="downloader_plugin_delete_apps_title">Видалити вибрані програми</string>
     <string name="downloader_plugin_failed_dialog_body">Не вдалося завантажити %1$s. Ви можете переглянути детальну інформацію про помилку або видалити плагін.</string>
     <string name="downloader_plugin_revoke_trust_dialog_title">Скасувати довіру?</string>
     <string name="downloader_plugin_state_failed">Не вдалося завантажити. Натисніть, щоб дізнатися більше</string>
@@ -278,7 +238,7 @@
     <string name="downloader_plugin_trust_dialog_body">"Продовження дозволить цьому плагіну працювати у вашій системі.
 
 Включайте цей плагін тільки в тому випадку, якщо ви довіряєте йому. Плагіни можуть виконувати довільний код і можуть поставити під загрозу ваш пристрій."</string>
-	<string name="downloader_plugin_trust_dialog_plugin">"Плагін:
+    <string name="downloader_plugin_trust_dialog_plugin">"Плагін:
 %s"</string>
     <string name="downloader_plugin_trust_dialog_signature">"Підпис:
 
@@ -292,7 +252,6 @@
     <string name="downloader_plugins">Плагіни</string>
     <string name="downloader_settings_no_apps">Завантажених програм не знайдено.</string>
     <string name="downloading_manager_update">Завантаження оновлення…</string>
-    <string name="downloading_patches">Завантаження патчів…</string>
     <string name="downloads">Завантаження</string>
     <string name="downloads_description">Плагіни завантажувача та завантажені програми</string>
     <string name="drag_handle">перевпорядкувати</string>
@@ -301,10 +260,9 @@
     <string name="dynamic_color_description">Адаптуйте кольори до шпалер</string>
     <string name="edit">Редагувати</string>
     <string name="empty">Порожній</string>
-	<string name="enable">Увімкнуть</string>
+    <string name="enable">Увімкнуть</string>
     <string name="enter_url">Введіть URL</string>
     <string name="execute_patches">Виконання патчів</string>
-    <string name="executing_patch">Виконання %s</string>
     <string name="expand_content">розширити</string>
     <string name="export">Експорт</string>
     <string name="export_keystore">Експортувати сховище ключів</string>
@@ -322,7 +280,6 @@
     <string name="export_name_format_dialog_title">Формат імені файлу експорту</string>
     <string name="export_name_format_error_blank">Формат імені файлу не може бути порожнім.</string>
     <string name="export_name_format_insert">Вставка</string>
-    <string name="export_name_format_preview">Попередній перегляд: %1$s</string>
     <string name="export_name_format_preview_label">Попередній перегляд</string>
     <string name="export_name_format_reset">Скинути налаштування за замовчуванням</string>
     <string name="export_name_format_variables">Змінні</string>
@@ -342,13 +299,11 @@
     <string name="export_name_variable_patches_version_description">Замінено застосованою версією пакета виправлень.</string>
     <string name="export_name_variable_timestamp">Позначка часу</string>
     <string name="export_name_variable_timestamp_description">Замінено поточним часом (yyyyMMdd-HHmmss).</string>
-	<string name="export_overwrite_description">Файл під назвою %1$s вже існує. Замінити?</string>
+    <string name="export_overwrite_description">Файл під назвою %1$s вже існує. Замінити?</string>
     <string name="export_overwrite_title">Замінити файл?</string>
     <string name="export_patch_bundles">Експорт пакетів виправлень</string>
     <string name="export_patch_bundles_description">Збережіть імпортовані пакети віддалених виправлень у файл JSON</string>
-    <string name="export_patch_bundles_empty">Немає пакетів виправлень для експорту</string>
     <string name="export_patch_bundles_fail">Не вдалося експортувати пакети виправлень: %s</string>
-    <string name="export_patch_bundles_local_not_supported">Експорт доступний лише для пакетів виправлень, імпортованих із URL-адрес</string>
     <string name="export_patch_bundles_partial">Експортовано %1$d пакетів виправлень. Деякі пакети не вдалося експортувати, оскільки вони були додані локально.</string>
     <string name="export_patch_bundles_success">Експортовано %d пакетів виправлень</string>
     <string name="export_patch_profiles">Експорт профілів виправлень</string>
@@ -362,15 +317,13 @@
     <string name="export_patch_selection_success">Експортований вибір патча</string>
     <string name="failed_to_check_updates">Не вдалося перевірити наявність оновлень: %s</string>
     <string name="failed_to_download_update">Не вдалося завантажити оновлення: %s</string>
-    <string name="failed_to_execute_patch">Не вдалося виконати %s</string>
     <string name="failed_to_import_keystore">Не вдалося імпортувати сховище ключів.</string>
     <string name="failed_to_load_apk">Не вдалося завантажити APK</string>
     <string name="failed_to_mount">Не вдалося змонтувати: %s</string>
     <string name="failed_to_unmount">Не вдалося розмонтувати: %s</string>
     <string name="field_not_set">Не вказано</string>
     <string name="file_field_not_set">Не вибрано</string>
-    <string name="file_field_set">Вибрано</string>
-	<string name="file_name">"Ім'я файлу"</string>
+    <string name="file_name">"Ім'я файлу"</string>
     <string name="general">Загальні</string>
     <string name="general_description">Тема, динамічний колір</string>
     <string name="github">Universal ReVanced Manager GitHub</string>
@@ -380,7 +333,7 @@
     <string name="here">тут.</string>
     <string name="hide_password_field">Приховати пароль</string>
     <string name="hide_suggested_versions">Сховати запропоновані версії</string>
-	<string name="hourly">Щогодини</string>
+    <string name="hourly">Щогодини</string>
     <string name="hours_ago">%sh тому</string>
     <string name="import_">Імпорт</string>
     <string name="import_export">Імпорт &amp; Експорт</string>
@@ -399,7 +352,7 @@
     <string name="import_manager_settings_fail">Не вдалося імпортувати налаштування менеджера: %s</string>
     <string name="import_manager_settings_success">Імпортовані налаштування менеджера</string>
     <string name="import_patch_bundles">Імпорт пакетів виправлень</string>
-	<string name="import_patch_bundles_banner_steps">Крок %1$d з %2$d</string>
+    <string name="import_patch_bundles_banner_steps">Крок %1$d з %2$d</string>
     <string name="import_patch_bundles_banner_subtitle">%1$d з %2$d оброблені</string>
     <string name="import_patch_bundles_banner_title">Імпорт пакетів патчів</string>
     <string name="import_patch_bundles_description">Відновлення віддалених пакетів виправлень із файлу JSON</string>
@@ -419,7 +372,6 @@
     <string name="import_patch_selection_description">Імпортувати вибраний патч із файлу JSON</string>
     <string name="import_patch_selection_fail">Не вдалося імпортувати вибраний патч: %s</string>
     <string name="import_patch_selection_success">Вибір імпортованого патча</string>
-	<string name="import_patches">Імпорт патчів</string>
     <string name="in_progress">В ході виконання</string>
     <string name="include_github_pat_in_exports_label">Увімкніть експорт у налаштуваннях</string>
     <string name="include_github_pat_in_exports_supporting">Додає цей PAT до експортованих налаштувань менеджера</string>
@@ -433,7 +385,7 @@
     <string name="input_dialog_value_invalid">Неприпустиме значення</string>
     <string name="install_app">Встановити</string>
     <string name="install_app_fail">Не вдалося встановити додаток: %s</string>
-	<string name="install_app_fail_missing_stock">Відсутній оригінальний APK для встановлення монтування.</string>
+    <string name="install_app_fail_missing_stock">Відсутній оригінальний APK для встановлення монтування.</string>
     <string name="install_app_fail_title">Установка не вдалася</string>
     <string name="install_app_success">Успішно встановлено</string>
     <string name="install_saved_app">Встановити</string>
@@ -456,7 +408,7 @@
     <string name="installation_incompatible_dialog_title">Установка несумісна</string>
     <string name="installation_invalid_description">Додаток недійсний. Видалити програму та спробувати ще раз?</string>
     <string name="installation_invalid_dialog_title">Встановлення недійсне</string>
-	<string name="installation_signature_mismatch_confirm">Видалити та встановити</string>
+    <string name="installation_signature_mismatch_confirm">Видалити та встановити</string>
     <string name="installation_signature_mismatch_description">Встановлений додаток підписано по-іншому. Видалити встановлену програму та встановити це?</string>
     <string name="installation_signature_mismatch_dialog_title">Невідповідність підписів</string>
     <string name="installation_storage_issue_description">"Програму не вдалося встановити через брак пам'яті. Звільніть місце та повторіть спробу."</string>
@@ -464,7 +416,6 @@
     <string name="installation_timeout_description">Встановлення тривало занадто довго. Спробувати знову?</string>
     <string name="installation_timeout_dialog_title">Час встановлення минув</string>
     <string name="installed">Встановлено</string>
-    <string name="installer">Встановлювач</string>
     <string name="installer_action_open_shizuku">Відкрити Shizuku</string>
     <string name="installer_auto_saved_description">Встановлює виправлений APK поверх встановленої програми (потрібен root).</string>
     <string name="installer_auto_saved_name">Встановлювач root монтування</string>
@@ -499,7 +450,6 @@
     <string name="installer_external_launched">Відкриття %1$s…</string>
     <string name="installer_external_success">%1$s повідомив про успішне встановлення.</string>
     <string name="installer_external_timeout">%1$s не підтвердив встановлення. Перевірте іншу програму та повторіть спробу.</string>
-    <string name="installer_fallback_description">Використовується автоматично, коли основний інсталятор недоступний.</string>
     <string name="installer_fallback_title">Резервний встановлювач</string>
     <string name="installer_hint_aborted">Встановлення скасовано.</string>
     <string name="installer_hint_blocked">Встановлення заблоковано Android. Перевірте налаштування Play Protect або безпеки.</string>
@@ -522,7 +472,6 @@
     <string name="installer_mount_warning_update">Ваш основний інсталятор налаштований на кореневий інсталятор. Ця збережена програма не була встановлена ​​за допомогою монтування.</string>
     <string name="installer_none_description">Резервний інсталятор не налаштовано</string>
     <string name="installer_option_none">Немає резервного варіанту</string>
-    <string name="installer_primary_description">Використовується спочатку під час встановлення виправлених програм.</string>
     <string name="installer_primary_title">Основний інсталятор</string>
     <string name="installer_shizuku_description">Встановити автоматично за допомогою Shizuku або Sui.</string>
     <string name="installer_shizuku_launch_failed">Неможливо відкрити Shizuku. Запустіть його вручну та повторіть спробу.</string>
@@ -535,9 +484,6 @@
     <string name="installer_status_shizuku_unsupported">Встановлена ​​версія Shizuku не підтримується.</string>
     <string name="installing_ellipsis">Встановлення…</string>
     <string name="installing_manager_update">Встановлення оновлення…</string>
-    <string name="installing_message">Натисніть на <b>Оновлення</b>" коли буде запропоновано.
-Universal ReVanced Manager закриється під час оновлення."</string>
-    <string name="installing_saved_app">Встановлення збереженої програми…</string>
     <string name="invalid_date">Недійсна дата</string>
     <string name="just_now">Прямо зараз</string>
     <string name="language_dialog_title">Виберіть мову програми</string>
@@ -545,23 +491,22 @@ Universal ReVanced Manager закриється під час оновлення
     <string name="language_option_english">Англійська</string>
     <string name="language_option_japanese">Японський</string>
     <string name="language_option_korean">Корейська</string>
-	<string name="language_option_russian">Російська</string>
-	<string name="language_option_system">Використовувати мову пристрою</string>
-	<string name="language_option_ukrainian">Українська</string>
+    <string name="language_option_russian">Російська</string>
+    <string name="language_option_system">Використовувати мову пристрою</string>
+    <string name="language_option_ukrainian">Українська</string>
     <string name="language_option_vietnamese">"В'єтнамська"</string>
     <string name="language_settings">Мова</string>
     <string name="legacy_import_failed">Не вдалося імпортувати застарілі налаштування.</string>
     <string name="less">Менше</string>
     <string name="light">Світла</string>
     <string name="loading">Завантаження…</string>
-    <string name="loading_body">Завантаження…</string>
     <string name="local_patches_description">Додайте пакети виправлень із локального сховища.</string>
     <string name="m3c_bottom_sheet_collapse_description">Згорнути нижній лист</string>
     <string name="m3c_bottom_sheet_dismiss_description">Закрити нижній лист</string>
     <string name="m3c_bottom_sheet_drag_handle_description">Перетягніть маркер</string>
     <string name="m3c_bottom_sheet_expand_description">Розгорнути нижній лист</string>
     <string name="m3c_bottom_sheet_pane_title">Нижній лист</string>
-	<string name="m3c_date_input_headline">Дата введення</string>
+    <string name="m3c_date_input_headline">Дата введення</string>
     <string name="m3c_date_input_headline_description">Введена дата: %1$s</string>
     <string name="m3c_date_input_invalid_for_pattern">Дата не відповідає очікуваній моделі: %1$s</string>
     <string name="m3c_date_input_invalid_not_allowed">Недійсна дата: %1$s</string>
@@ -593,13 +538,13 @@ Universal ReVanced Manager закриється під час оновлення
     <string name="m3c_date_range_picker_start_headline">Дата початку</string>
     <string name="m3c_date_range_picker_title">Выберите даты</string>
     <string name="m3c_dialog">Діалог</string>
-	<string name="m3c_dropdown_menu_collapsed">Згорнутий</string>
+    <string name="m3c_dropdown_menu_collapsed">Згорнутий</string>
     <string name="m3c_dropdown_menu_expanded">Розгорнутий</string>
     <string name="m3c_dropdown_menu_toggle">Переключити розкриваюче меню</string>
     <string name="m3c_search_bar_search">Пошук</string>
-	<string name="m3c_snackbar_dismiss">Відхилити</string>
+    <string name="m3c_snackbar_dismiss">Відхилити</string>
     <string name="m3c_suggestions_available">Пропозиції нижче</string>
-	<string name="m3c_time_picker_am">AM</string>
+    <string name="m3c_time_picker_am">AM</string>
     <string name="m3c_time_picker_hour">Година</string>
     <string name="m3c_time_picker_hour_24h_suffix">%1$d години</string>
     <string name="m3c_time_picker_hour_selection">Виберіть годину</string>
@@ -613,7 +558,6 @@ Universal ReVanced Manager закриється під час оновлення
     <string name="m3c_time_picker_pm">PM</string>
     <string name="m3c_tooltip_long_press_label">Показати підказку</string>
     <string name="m3c_tooltip_pane_description">Підказка</string>
-    <string name="main_top_title">URV Manager</string>
     <string name="manager">Менеджер</string>
     <string name="manager_prereleases">Використовуйте попередні версії</string>
     <string name="manager_prereleases_description">Використати попередні версії Universal ReVanced Manager</string>
@@ -621,36 +565,30 @@ Universal ReVanced Manager закриється під час оновлення
     <string name="manager_update_progress_detail">%1$.1f MB / %2$.1f MB (%3$d%%)</string>
     <string name="manual_update_check">Перевірте наявність оновлень</string>
     <string name="manual_update_check_description">Перевірка оновлень вручну</string>
-	<string name="mc2_snackbar_pane_title">Сповіщення</string>
+    <string name="mc2_snackbar_pane_title">Сповіщення</string>
     <string name="minutes_15">Кожні 15 хвилин</string>
     <string name="minutes_ago">%sm тому</string>
     <string name="more">Більше</string>
     <string name="mount">Монтувати</string>
-    <string name="mount_app_fail">Не вдалося змонтувати програму: %1$s</string>
     <string name="mount_app_fail_title">Монтування не вдалося</string>
     <string name="mount_install">Інсталятор root монтування</string>
-	<string name="mount_split_not_supported">Установщик корневого монтирования не поддерживает разделенные APKs-файлы. Вместо этого используйте установщик системы.</string>
-    <string name="mount_version_mismatch_message">Стандартна версія програми (%2$s) не відповідає виправленій версії програми (%1$s). Встановіть відповідну стандартну версію та повторіть спробу.</string>
+    <string name="mount_split_not_supported">Установщик корневого монтирования не поддерживает разделенные APKs-файлы. Вместо этого используйте установщик системы.</string>
     <string name="mount_version_mismatch_title">Монтування не вдалося</string>
     <string name="mounted">Змонтований</string>
     <string name="mounting_ellipsis">Монтування…</string>
     <string name="navigation_menu">Навігаційне меню</string>
     <string name="network_metered_warning">"Зараз ви використовуєте обмежене з’єднання. Ваш постачальник послуг може стягувати плату за передачу даних."</string>
     <string name="network_unavailable_warning">Ваш пристрій не підключено до Інтернету. Пізніше завантажити не вдасться.</string>
-	<string name="never">Ніколи</string>
+    <string name="never">Ніколи</string>
     <string name="never_show_again">Ніколи більше не показувати</string>
     <string name="new_downloader_plugins_notification">Нові плагіни доступні для завантаження. Натисніть тут, щоб налаштувати їх.</string>
-	<string name="new_version">Нова версія: %s</string>
     <string name="next">Далі</string>
-    <string name="no">Ні</string>
-    <string name="no_changelogs_found">Журнали змін не знайдено</string>
     <string name="no_contributors_found">Співавторів не знайдено</string>
     <string name="no_network_toast">Немає підключення до Інтернету</string>
     <string name="no_patch_bundles_tracked">Для цієї програми не зареєстровано пакетів виправлень.</string>
     <string name="no_patch_found">Патч не знайдено. Перевірте свої патчі</string>
     <string name="no_patched_apps_found">Патчених додатків не виявлено</string>
     <string name="no_patches_selected">Патчі не вибрано</string>
-    <!-- Needs translation -->
     <string name="mixed_patch_bundles_description">ReVanced (.rvp) and Morphe (.mpp) patches cannot be combined. Select patches from only one bundle type. If you want to use both, you will have to patch a second time using the other patches you want.</string>
     <string name="no_update_available">Немає оновлень</string>
     <string name="non_suggested_version_warning_description">"Вибрана вами версія програми не відповідає запропонованій версії.
@@ -661,14 +599,12 @@ Universal ReVanced Manager закриється під час оновлення
     <string name="not_installed">Не встановлено</string>
     <string name="not_mounted">Не змонтовано</string>
     <string name="not_selected">Не вибрано</string>
-	<string name="notification_channel_bundle_updates_description">Показує перебіг фонового оновлення пакета виправлень.</string>
+    <string name="notification_channel_bundle_updates_description">Показує перебіг фонового оновлення пакета виправлень.</string>
     <string name="notification_channel_bundle_updates_name">Фонове оновлення пакетів</string>
     <string name="notification_channel_patching_description">Показує прогрес під час оновлення програми.</string>
     <string name="notification_channel_patching_name">Виправлення</string>
     <string name="ok">ОК</string>
     <string name="open_app">Відкрити</string>
-    <string name="opensource_licenses">Ліцензії з відкритим кодом</string>
-    <string name="opensource_licenses_description">Переглянути всі бібліотеки, використані для створення цієї програми.</string>
     <string name="option_preset_custom_value">Значення користувача</string>
     <string name="option_required">"Ця опція обов’язкова"</string>
     <string name="options">Опції</string>
@@ -680,8 +616,8 @@ Universal ReVanced Manager закриється під час оновлення
     <string name="package_name">"Ім'я пакету"</string>
     <string name="patch">Патч</string>
     <string name="patch_bundle">Пакет патчів</string>
-	<string name="patch_bundle_disabled_toast">Вимкнено %d пакетів</string>
-	<string name="patch_bundle_discovery_description">Перегляньте зовнішні пакети виправлень і додайте їх до URV Manager.</string>
+    <string name="patch_bundle_disabled_toast">Вимкнено %d пакетів</string>
+    <string name="patch_bundle_discovery_description">Перегляньте зовнішні пакети виправлень і додайте їх до URV Manager.</string>
     <string name="patch_bundle_discovery_empty">Пакетів виправлень не знайдено.</string>
     <string name="patch_bundle_discovery_error">Не вдалося завантажити пакети виправлень.</string>
     <string name="patch_bundle_discovery_imported">Додано</string>
@@ -699,11 +635,11 @@ Universal ReVanced Manager закриється під час оновлення
     <string name="patch_bundle_discovery_v3_warning">Пакет V3 поки що не підтримується.</string>
     <string name="patch_bundle_discovery_view_patches">Переглянути патчі</string>
     <string name="patch_bundle_duplicate_name_error">Пакет виправлення з такою назвою вже існує</string>
-	<string name="patch_bundle_enabled_toast">Увімкнено %d пакетів</string>
+    <string name="patch_bundle_enabled_toast">Увімкнено %d пакетів</string>
     <string name="patch_bundle_missing_error">Не вдалося оновити цей пакет виправлень.</string>
     <string name="patch_bundle_rename">Перейменування пакету патчів</string>
     <string name="patch_bundle_urls">Отримати імпорт пакетів патчів</string>
-	<string name="patch_bundle_urls_link">Отримайте URL пакетів патчів тут</string>
+    <string name="patch_bundle_urls_link">Отримайте URL пакетів патчів тут</string>
     <string name="patch_bundles">Пакети патчів</string>
     <string name="patch_bundles_used">Використовувані пакети патчів</string>
     <string name="patch_compat_check">Вимкнути перевірку сумісності версій</string>
@@ -711,7 +647,6 @@ Universal ReVanced Manager закриється під час оновлення
 
 Ви все ще хочете продовжити?"</string>
     <string name="patch_compat_check_description">Не обмежуйте виправлення сумісними версіями програми</string>
-    <string name="patch_item_description">Почніть виправляти додаток</string>
     <string name="patch_options_reset_all">Глобально скинути налаштування виправлення</string>
     <string name="patch_options_reset_all_description">Скидає всі параметри виправлення</string>
     <string name="patch_options_reset_all_dialog_description">Ви збираєтеся скинути всі параметри виправлення. Вам доведеться повторно застосувати кожен варіант. Профілі виправлення не впливають.</string>
@@ -728,7 +663,7 @@ Universal ReVanced Manager закриється під час оновлення
     <string name="patch_profile_bundle_change_uid_success">UID пакета оновлено до %1$d.</string>
     <string name="patch_profile_bundle_change_uid_title">Змінити UID для %1$s</string>
     <string name="patch_profile_bundle_header">%1$s • %2$s</string>
-	<string name="patch_profile_bundle_override_description">Показувати кнопку перевизначення лише для розробника, якщо пакет профілю виправлення несумісний.</string>
+    <string name="patch_profile_bundle_override_description">Показувати кнопку перевизначення лише для розробника, якщо пакет профілю виправлення несумісний.</string>
     <string name="patch_profile_bundle_override_title">Дозволити перевизначення несумісного пакета</string>
     <string name="patch_profile_bundle_select_remote">Виберіть пакет</string>
     <string name="patch_profile_bundle_select_remote_description">Виберіть видалений пакет виправлень, щоб замінити недоступний.</string>
@@ -788,12 +723,7 @@ Universal ReVanced Manager закриється під час оновлення
     <string name="patch_selection_action_bundle_defaults">налаштування пакета за замовчуванням для “%1$s”</string>
     <string name="patch_selection_action_deselect_all">скасувати вибір усіх</string>
     <string name="patch_selection_action_deselect_bundle">скасувати вибір пакета “%1$s”</string>
-    <string name="patch_selection_action_move_down">Перемістити вниз</string>
-    <string name="patch_selection_action_move_up">Перемістити вгору</string>
     <string name="patch_selection_action_order_description">Виберіть порядок розташування кнопок дій вибору патча</string>
-    <string name="patch_selection_action_order_dialog_description">Перемістіть записи, щоб змінити спосіб відображення кнопок вибору патча. Попередній перегляд оновлюється в реальному часі.</string>
-    <string name="patch_selection_action_order_dialog_title">Зміна порядку дій патча</string>
-    <string name="patch_selection_action_order_preview_label">Попередній перегляд</string>
     <string name="patch_selection_action_order_reset">Скинути за умовчанням</string>
     <string name="patch_selection_action_order_title">Порядок кнопок дій під час вибору патча</string>
     <string name="patch_selection_action_select_all">вибрати все</string>
@@ -851,7 +781,7 @@ Universal ReVanced Manager закриється під час оновлення
     <string name="patch_selection_selected_bundle_toast">Вибрано всі патчі в %s</string>
     <string name="patch_selection_toggle_collapse">Приховати дії</string>
     <string name="patch_selection_toggle_expand">Показати дії</string>
-	<string name="patch_selection_version_tags_description">Показати теги версії виправлення на екрані вибору</string>
+    <string name="patch_selection_version_tags_description">Показати теги версії виправлення на екрані вибору</string>
     <string name="patch_selection_version_tags_title">Теги версії патча</string>
     <string name="patch_selector_item">Виберіть патчі</string>
     <string name="patch_selector_item_description">%d вибраних патчів</string>
@@ -863,13 +793,13 @@ Universal ReVanced Manager закриється під час оновлення
     <string name="patch_selector_sheet_filter_sort_no_settings">Без налаштувань</string>
     <string name="patch_selector_sheet_filter_sort_title">Сортування</string>
     <string name="patch_selector_sheet_filter_title">фільтр</string>
-	<string name="patch_versions_dialog_title">Підтримувані версії для %1$s</string>
+    <string name="patch_versions_dialog_title">Підтримувані версії для %1$s</string>
     <string name="patched_app_save_failed_toast">Не вдалося зберегти виправлену програму</string>
     <string name="patched_app_saved_toast">Виправлена ​​заявка зберігається на потім</string>
     <string name="patcher">Патчер</string>
     <string name="patcher_auto_collapse_steps">Автоматично згортати виконані кроки патчера</string>
     <string name="patcher_auto_collapse_steps_description">Автоматично згортати кожен віджет прогресу виправлення після завершення всіх його кроків</string>
-	<string name="patcher_auto_expand_steps">Автоматично розгортати кроки виконання</string>
+    <string name="patcher_auto_expand_steps">Автоматично розгортати кроки виконання</string>
     <string name="patcher_auto_expand_steps_description">Автоматично розгортати віджет прогресу патчера під час його запуску</string>
     <string name="patcher_install_in_progress">Монтаж триває. будь ласка, зачекайте</string>
     <string name="patcher_install_in_progress_leave">Все одно вийти</string>
@@ -890,13 +820,12 @@ Universal ReVanced Manager закриється під час оновлення
     <string name="patcher_preflight_missing_patch_proceed">Продовжити у будь-якому випадку</string>
     <string name="patcher_preflight_missing_patch_remove">Видалити відсутні патчі</string>
     <string name="patcher_process_exit_message">Процес патчера завершився з кодом %1$d.</string>
-	<string name="patcher_saved_apps_description">Якщо цей параметр увімкнено, менеджер зберігає запис із виправленою програмою та APK, щоб вони залишалися на вкладці «Програми» та могли бути перевстановлені пізніше. Якщо вимкнути цю функцію, збереження буде пропущено, а параметр видалення буде приховано</string>
+    <string name="patcher_saved_apps_description">Якщо цей параметр увімкнено, менеджер зберігає запис із виправленою програмою та APK, щоб вони залишалися на вкладці «Програми» та могли бути перевстановлені пізніше. Якщо вимкнути цю функцію, збереження буде пропущено, а параметр видалення буде приховано</string>
     <string name="patcher_saved_apps_title">Збережіть виправлені програми на потім</string>
     <string name="patcher_step_group_patching">Виправлення</string>
     <string name="patcher_step_group_preparing">Підготовка</string>
     <string name="patcher_step_group_saving">Збереження</string>
     <string name="patcher_step_load_patches">Завантаження патчів</string>
-    <string name="patcher_step_merge_not_required">Разделение слияния не требуется</string>
     <string name="patcher_step_prepare_split_apk">"Об’єднати розділений APK"</string>
     <string name="patcher_step_sign_apk">Підписати виправлений APK-файл</string>
     <string name="patcher_step_unpack">Читання файлу APK</string>
@@ -905,13 +834,12 @@ Universal ReVanced Manager закриється під час оновлення
     <string name="patcher_stop_confirm_title">Зупинити патчер</string>
     <string name="patches">Патчі</string>
     <string name="patches_and_manager">Пакети патчів &amp; Менеджер</string>
-    <string name="patches_count_selected">%1$d/%2$d вибрано</string>
     <string name="patches_delete_multiple_dialog_description">Ви впевнені, що бажаєте видалити вибрані пакети виправлень?</string>
     <string name="patches_delete_single_dialog_description">Ви впевнені, що хочете видалити \"%s\"?</string>
-	<string name="patches_disable_single_dialog_description">Вимкнути \"%s\"?</string>
+    <string name="patches_disable_single_dialog_description">Вимкнути \"%s\"?</string>
     <string name="patches_display_name">"Відображуване ім'я"</string>
     <string name="patches_download_fail">Неможливо завантажити патчі: %s</string>
-	<string name="patches_enable_single_dialog_description">Увімкнути \"%s\"?</string>
+    <string name="patches_enable_single_dialog_description">Увімкнути \"%s\"?</string>
     <string name="patches_error">Помилка</string>
     <string name="patches_error_description">Не вдалося завантажити виправлення. Натисніть, щоб переглянути помилку</string>
     <string name="patches_force_download">Примусово завантажити всі пакети патчів</string>
@@ -929,17 +857,15 @@ Universal ReVanced Manager закриється під час оновлення
     <string name="patches_url">URL пакета патчів</string>
     <string name="patches_view_any_package">Будь-який пакет</string>
     <string name="patches_view_any_version">Будь-яка версія</string>
-    <string name="patching">Виправлення</string>
     <string name="path_selector">Виберіть зі сховища</string>
     <string name="path_selector_dirs">Каталоги</string>
-	<string name="path_selector_favorite_added">Додано до обраних</string>
+    <string name="path_selector_favorite_added">Додано до обраних</string>
     <string name="path_selector_favorite_remove_description">Видалити “%1$s” з обраних?</string>
     <string name="path_selector_favorite_remove_title">Видалити обране?</string>
     <string name="path_selector_favorite_removed">Видалено з обраного</string>
     <string name="path_selector_favorites">Обране</string>
     <string name="path_selector_files">Файли</string>
     <string name="path_selector_parent_dir">Попередній каталог</string>
-	<string name="permanent_dismiss">Не показувати це знову</string>
     <string name="plugin_activity_dialog_body">Для продовження використання цього плагіна потрібна взаємодія користувача.</string>
     <string name="plugin_host_permission_description">Використовується для контролю доступу до плагінів Universal ReVanced Manager. Це є лише в Universal ReVanced Manager.</string>
     <string name="plugin_host_permission_label">Universal ReVanced Manager плагіна хост</string>
@@ -951,9 +877,6 @@ Universal ReVanced Manager закриється під час оновлення
     <string name="process_runtime_description">"Це швидше і дозволяє Patcher використовувати більше пам’яті."</string>
     <string name="process_runtime_memory_limit">"Обмеження пам'яті процесу Патчера"</string>
     <string name="process_runtime_memory_limit_description">"Максимальний обсяг пам’яті, який може використовувати процес Patcher (у мегабайтах)."</string>
-    <string name="process_runtime_memory_limit_description_detailed">"Максимальний обсяг пам’яті, який може використовувати процес Patcher (у мегабайтах). Рекомендовано для цього пристрою: %1$d МБ."</string>
-    <string name="pure_black_theme">Черный</string>
-    <string name="pure_black_theme_description">Використовуйте чистий чорний фон для темної теми</string>
     <string name="range_end">Кінець діапазону</string>
     <string name="range_start">Початок діапазону</string>
     <string name="ready_to_install_update">Готовий до встановлення оновлення</string>
@@ -999,7 +922,7 @@ Universal ReVanced Manager закриється під час оновлення
     <string name="save_patched_app_dialog_save">Зберегти виправлену програму</string>
     <string name="save_patched_app_dialog_title">Зупинити патчер?</string>
     <string name="save_with_count">Зберегти (%1$s)</string>
-	<string name="saved_app_bundle_missing_title">Пакет не знайдено</string>
+    <string name="saved_app_bundle_missing_title">Пакет не знайдено</string>
     <string name="saved_app_bundle_select_action">Виберіть пакет</string>
     <string name="saved_app_bundle_select_description">Виберіть пакет виправлень, щоб замінити відсутній.</string>
     <string name="saved_app_bundle_select_empty">Немає доступних пакетів виправлень.</string>
@@ -1012,7 +935,6 @@ Universal ReVanced Manager закриється під час оновлення
     <string name="saved_app_copy_removed_toast">Збережену копію видалено</string>
     <string name="saved_app_export_failed">Не вдалося експортувати виправлену програму</string>
     <string name="saved_app_export_success">Експортовано виправлену програму</string>
-    <string name="saved_app_install_cancelled">Встановлення скасовано</string>
     <string name="saved_app_install_failed">Не вдалося встановити збережену програму</string>
     <string name="saved_app_install_missing">Збережений APK не знайдено</string>
     <string name="saved_app_install_success">Збережена програма встановлена</string>
@@ -1020,12 +942,10 @@ Universal ReVanced Manager закриється під час оновлення
     <string name="saved_app_removed_toast">Збережену виправлену програму видалено.</string>
     <string name="saved_app_uninstall_description">Це призведе до видалення лише встановленої версії. Збережений файл APK залишиться недоторканим.</string>
     <string name="saved_app_uninstall_title">Видалити встановлену копію?</string>
-    <string name="saved_app_unmount_description">Це відключить виправлений APK. Збережений файл APK залишиться недоторканим.</string>
-    <string name="saved_app_unmount_title">Розмонтувати встановлену копію?</string>
     <string name="saved_install">Збережено</string>
     <string name="search">Пошук патчів…</string>
     <string name="search_apps">Пошук додатків…</string>
-	<string name="search_engine_host_description">Використовуйте посилання для пошуку версій %1$s</string>
+    <string name="search_engine_host_description">Використовуйте посилання для пошуку версій %1$s</string>
     <string name="search_engine_host_dialog_description">Змініть домен, який використовується для посилань пошуку версій. приклад: google.com або duckduckgo.com</string>
     <string name="search_engine_host_dialog_title">Домен пошукової системи</string>
     <string name="search_engine_host_label">Пошук домену</string>
@@ -1046,11 +966,10 @@ Universal ReVanced Manager закриється під час оновлення
     <string name="selection_warning_description">"Рекомендовано використовувати стандартний вибір патча та параметри. Їх зміна може призвести до несподіваних проблем.
 
 Вам потрібно включити \"Дозволити змінювати вибрані патчі та параметри\" у розширених налаштуваннях перед перемиканням патчів."</string>
-    <string name="selection_warning_title">Перестати використовувати налаштування за умовчанням?</string>
     <string name="set_github_pat_dialog_description">Установіть особистий маркер доступу GitHub, щоб мати можливість додавати запити на отримання як зовнішні джерела. Створіть PAT із областю public_repo.</string>
     <string name="set_github_pat_dialog_title">Встановити GitHub PAT</string>
     <string name="settings">Налаштування</string>
-	<string name="settings_search_hint">Пошук налаштувань</string>
+    <string name="settings_search_hint">Пошук налаштувань</string>
     <string name="settings_search_no_results">Налаштування не знайдено.</string>
     <string name="share">Поділитися</string>
     <string name="show">Показати</string>
@@ -1059,8 +978,6 @@ Universal ReVanced Manager закриється під час оновлення
     <string name="show_other_versions">Показати інші версії</string>
     <string name="show_password_field">Показати пароль</string>
     <string name="show_suggested_versions">Показати запропоновані версії</string>
-    <string name="sign_fail">Не вдалося підписати APK: %s</string>
-    <string name="signing">Підписання</string>
     <string name="snackbar_pane_title">Тривога</string>
     <string name="state_empty">Порожній</string>
     <string name="state_off">ВИМК</string>
@@ -1074,10 +991,6 @@ Universal ReVanced Manager закриється під час оновлення
     <string name="string_option_menu_description">Більше можливостей</string>
     <string name="strip_unused_libs">Видаліть невикористані власні бібліотеки</string>
     <string name="strip_unused_libs_description">Видаліть рідні бібліотеки для непідтримуваних архітектур ЦП із виправлених програм</string>
-    <string name="submit_feedback">Надішліть запитання або залиште відгук</string>
-    <string name="submit_feedback_description">Допоможіть нам покращити цю програму</string>
-    <string name="suggested_version_bundle_info">%1$s · v%2$s</string>
-    <string name="suggested_version_info">Рекомендована версія: %s</string>
     <string name="suggested_version_safeguard">Вимагати рекомендовану версію програми</string>
     <string name="suggested_version_safeguard_confirmation">"Вибір програми, версія якої відрізняється від запропонованої, може спричинити несподівані проблеми.
 
@@ -1089,24 +1002,15 @@ Universal ReVanced Manager закриється під час оновлення
     <string name="tab_apps">Додатки</string>
     <string name="tab_patches">Пакети патчів</string>
     <string name="tab_profiles">Профілі виправлень</string>
-	<string name="tap_on_patches">Натисніть на патчі, щоб дізнатися більше про них</string>
     <string name="template_percent">%1$d відсотків.</string>
-    <string name="theme">Тема</string>
     <string name="theme_color">Колір теми</string>
     <string name="theme_color_description">Фарбування поверхонь і фону у свій колір</string>
     <string name="theme_color_picker_title">Колір теми</string>
-    <string name="theme_color_presets">Попередні налаштування кольорів теми</string>
-    <string name="theme_color_presets_description">Торкніться кольору, щоб перефарбувати фон і картки</string>
     <string name="theme_color_preview">Попередній перегляд</string>
     <string name="theme_color_reset">Скинути колір теми</string>
-    <string name="theme_description">Виберіть світлу або темну тему</string>
     <string name="theme_preset_amoled">Чорний</string>
     <string name="theme_preset_default">Системна</string>
     <string name="theme_preset_dynamic">Material You</string>
-    <string name="theme_preset_forest">Ліс</string>
-    <string name="theme_preset_midnight">Опівночі</string>
-    <string name="theme_preset_ocean">Океан</string>
-    <string name="theme_preset_sunset">Захід сонця</string>
     <string name="theme_presets">Пресеты тем</string>
     <string name="theme_presets_description">Виберіть, як виглядатиме додаток: Системна, Світла, Темний, Material You або Чорний</string>
     <string name="theme_preview_description">Миттєве оновлення при зміні налаштувань теми</string>
@@ -1119,27 +1023,18 @@ Universal ReVanced Manager закриється під час оновлення
     <string name="type_anything">Введіть щось, щоб продовжити</string>
     <string name="uninstall">Видалити</string>
     <string name="uninstall_app_fail">Не вдалося видалити програму: %s</string>
-	<string name="uninstall_timeout_message">Видалення не завершено. Перевірте діалогове вікно видалення та повторіть спробу.</string>
     <string name="uninstalling_ellipsis">Видалення…</string>
-    <string name="unique_features_label">тут.</string>
     <string name="universal">Будь-який додаток</string>
-    <string name="universal_patch_warning_description">"Загальні патчі мають ширше застосування та не працюють так надійно, як патчі для окремих програм. Ви можете зіткнутися з проблемами під час їх використання.
-
-Потрібно Увімкнути Показати &amp; Дозвольте використання універсальних патчів у розширених налаштуваннях перед використанням універсальних патчів."</string>
     <string name="universal_patches">Універсальні патчі</string>
     <string name="universal_patches_app_blocked_description">Ця програма містить універсальні патчі. Щоб продовжити, увімкніть %1$s у додаткових налаштуваннях.</string>
     <string name="universal_patches_profile_blocked_description">Цей профіль виправлень містить загальні виправлення. Увімкніть "%1$s" у розширених налаштуваннях, щоб використовувати його.</string>
     <string name="universal_patches_profile_blocked_title">Універсальні патчі вимкнено</string>
     <string name="universal_patches_safeguard">Показати &amp; дозволити використання універсальних патчів</string>
-	<string name="universal_patches_safeguard_confirmation">"Загальні патчі не перевіряються так ретельно, як патчі для окремих програм.
-
-Увімкнути все одно?"</string>
     <string name="universal_patches_safeguard_description">Не приховуйте універсальні патчі та не забороняйте їх використання</string>
     <string name="unmount">Розмонтувати</string>
     <string name="unmount_confirm_description">Ви хочете відключити програму?</string>
     <string name="unmounted">Розмонтований</string>
     <string name="unmounting">Розмонтування…</string>
-	<string name="unpatch">Скасувати виправлення</string>
     <string name="unpatch_app">Скасувати оновлення програми?</string>
     <string name="unpatch_description">Ви впевнені, що бажаєте видалити оновлення для цієї програми?</string>
     <string name="unsupported_architecture_warning">Патчі для цієї архітектури пристрою не підтримуються та, ймовірно, не вдасться.</string>
@@ -1158,10 +1053,7 @@ Universal ReVanced Manager закриється під час оновлення
     <string name="updates_description">Перевірте наявність оновлень і перегляньте журнал змін</string>
     <string name="version">Версія</string>
     <string name="version_label">v%1$s</string>
-    <string name="version_not_compatible">Не всі патчі сумісні з цією версією (%s). Ви все ще хочете продовжити?</string>
     <string name="view_applied_patches">Переглянути застосовані виправлення</string>
     <string name="view_patches">Переглянути патчі</string>
     <string name="warning">Попередження</string>
-    <string name="website">Веб-сайт</string>
-    <string name="yes">Так</string>
-</resources>
+    </resources>

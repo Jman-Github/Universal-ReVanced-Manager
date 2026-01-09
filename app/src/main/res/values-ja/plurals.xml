@@ -3,12 +3,8 @@
     <plurals name="patch_count">
         <item quantity="one">%d 個のパッチ</item>
         <item quantity="other">%d 個のパッチ</item>
-    </plurals>
-    <plurals name="patches_executed">
-        <item quantity="one">%d 個のパッチを実行</item>
-        <item quantity="other">%d 個のパッチを実行</item>
-    </plurals>
+        </plurals>
     <plurals name="selected_count">
         <item quantity="other">%d 個選択済み</item>
-    </plurals>
-</resources>
+        </plurals>
+    </resources>
