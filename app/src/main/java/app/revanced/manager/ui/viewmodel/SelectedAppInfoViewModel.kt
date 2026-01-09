@@ -395,19 +395,21 @@ class SelectedAppInfoViewModel(
                 .associateBy { it.uid }
             val allowUniversal = prefs.disableUniversalPatchCheck.get()
             if (!allowUniversal) {
-                val universalPatchNames = bundleInfoSnapshot
-                    .values
-                    .flatMap { it.patches }
-                    .filter { it.compatiblePackages == null }
-                    .mapTo(mutableSetOf()) { it.name.lowercase() }
+                val universalPatchNamesByUid = bundleInfoSnapshot.mapValues { (_, info) ->
+                    info.patches
+                        .asSequence()
+                        .filter { it.compatiblePackages == null }
+                        .mapTo(mutableSetOf()) { it.name.trim().lowercase() }
+                }
                 val containsUniversal = workingProfile.payload.bundles.any { bundle ->
                     val info = scopedBundles[bundle.bundleUid]
+                    val universalNames = universalPatchNamesByUid[bundle.bundleUid].orEmpty()
                     bundle.patches.any { patchName ->
-                        val normalized = patchName.lowercase()
+                        val normalized = patchName.trim().lowercase()
                         val matchesScoped = info?.patches?.any {
                             it.name.equals(patchName, true) && it.compatiblePackages == null
                         } == true
-                        matchesScoped || universalPatchNames.contains(normalized)
+                        matchesScoped || universalNames.contains(normalized)
                     }
                 }
                 if (containsUniversal) {

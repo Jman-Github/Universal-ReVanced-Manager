@@ -195,26 +195,30 @@ fun InstalledAppInfoScreen(
         }.sortedBy { it.displayName.lowercase(Locale.ROOT) }
     }
 
-    val globalUniversalPatchNames = remember(bundleInfo) {
-        bundleInfo.values
-            .flatMap { it.patches }
-            .filter { it.compatiblePackages == null }
-            .mapTo(mutableSetOf()) { it.name.lowercase() }
+    val universalPatchNamesByUid = remember(bundleInfo) {
+        bundleInfo.mapValues { (_, info) ->
+            info.patches
+                .asSequence()
+                .filter { it.compatiblePackages == null }
+                .mapTo(mutableSetOf()) { it.name.trim().lowercase(Locale.ROOT) }
+        }
     }
 
-    val appliedBundlesContainUniversal = remember(appliedBundles, globalUniversalPatchNames) {
+    val appliedBundlesContainUniversal = remember(appliedBundles, universalPatchNamesByUid) {
         appliedBundles.any { bundle ->
+            val universalNames = universalPatchNamesByUid[bundle.uid].orEmpty()
             val hasByMetadata = bundle.patchInfos.any { it.compatiblePackages == null }
             val fallbackMatch = bundle.fallbackNames.any { name ->
-                globalUniversalPatchNames.contains(name.lowercase())
+                universalNames.contains(name.trim().lowercase(Locale.ROOT))
             }
             hasByMetadata || fallbackMatch
         }
     }
 
-    val appliedSelectionContainsUniversal = remember(appliedSelection, globalUniversalPatchNames) {
-        appliedSelection?.values?.any { patches ->
-            patches.any { globalUniversalPatchNames.contains(it.lowercase()) }
+    val appliedSelectionContainsUniversal = remember(appliedSelection, universalPatchNamesByUid) {
+        appliedSelection?.any { (bundleUid, patches) ->
+            val universalNames = universalPatchNamesByUid[bundleUid].orEmpty()
+            patches.any { universalNames.contains(it.trim().lowercase(Locale.ROOT)) }
         } ?: false
     }
 

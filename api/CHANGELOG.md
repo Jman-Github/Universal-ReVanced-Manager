@@ -15,7 +15,7 @@
 
 - Fixed dev builds not being prompted to update when there are new releases
 - Fixed crashes the would occur occasionally for apps when loading metadata on the app info page
-
+- Fixed false "Universal patches disabled" and "This patch profile contains universal patches. Enable universal patches..." toast/dialogs
 
 # Docs
 
