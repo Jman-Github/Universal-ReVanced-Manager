@@ -1,0 +1,33 @@
+name: Crowdin Download Translations
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - uses: crowdin/github-action@v2
+        with:
+          download_translations: true
+          upload_sources: false
+          create_pull_request: true
+          pull_request_title: chore: update translations
+          pull_request_body: Sync translations from Crowdin.
+          pull_request_branch_name: crowdin/translations
+          pull_request_base_branch_name: dev
+          localization_branch_name: l10n_crowdin_translations
+          config: crowdin.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
+          CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
+      - name: Assemble Debug
+        run: ./gradlew :app:assembleDebug
