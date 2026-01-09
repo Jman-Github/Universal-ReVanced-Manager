@@ -1,18 +1,25 @@
 name: Crowdin Upload Sources
+
 on:
   workflow_dispatch:
+
 permissions:
   contents: read
+
 jobs:
   upload:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: dev
+
       - uses: crowdin/github-action@v2
         with:
           upload_sources: true
           upload_translations: false
-          config: crowdin.yml
+          download_translations: false
+          config: "crowdin.yml"
         env:
           CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
           CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
