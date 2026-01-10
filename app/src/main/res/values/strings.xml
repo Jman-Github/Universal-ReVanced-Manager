@@ -61,6 +61,8 @@
     <string name="bundle_updates_notification_progress">Updating %1$d of %2$d: %3$s</string>
     <string name="bundle_updates_notification_completed">Update completed</string>
     <string name="bundle_updates_notification_completed_with_available">Update completed. %1$d updates available.</string>
+    <string name="bundle_updates_notification_completed_named">Updated: %1$s</string>
+    <string name="bundle_updates_notification_completed_named_with_available">Updated: %1$s. %2$d updates available.</string>
     <string name="bundle_updates_notification_available">%1$d updates available.</string>
     <string name="bundle_updates_notification_failed">Update failed</string>
     <string name="bundle_search_update">Search for updates</string>

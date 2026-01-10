@@ -1319,6 +1319,7 @@ class PatchBundleRepository(
         force: Boolean = false,
         allowUnsafeNetwork: Boolean = false,
         onPerBundleProgress: ((bundle: RemotePatchBundle, bytesRead: Long, bytesTotal: Long?) -> Unit)? = null,
+        onBundleUpdated: ((bundle: RemotePatchBundle, updatedName: String?) -> Unit)? = null,
         predicate: (bundle: RemotePatchBundle) -> Boolean = { true },
     ): Boolean {
         while (true) {
@@ -1340,6 +1341,7 @@ class PatchBundleRepository(
                 showToast = false,
                 allowUnsafeNetwork = allowUnsafeNetwork,
                 onPerBundleProgress = onPerBundleProgress,
+                onBundleUpdated = onBundleUpdated,
                 predicate = predicate
             )
         } finally {
@@ -1490,6 +1492,7 @@ class PatchBundleRepository(
                             showToast = request.showToast,
                             allowUnsafeNetwork = request.allowUnsafeNetwork,
                             onPerBundleProgress = request.onPerBundleProgress,
+                            onBundleUpdated = null,
                             predicate = request.predicate
                         )
                     } finally {
@@ -1520,6 +1523,7 @@ class PatchBundleRepository(
         showToast: Boolean,
         allowUnsafeNetwork: Boolean,
         onPerBundleProgress: ((bundle: RemotePatchBundle, bytesRead: Long, bytesTotal: Long?) -> Unit)?,
+        onBundleUpdated: ((bundle: RemotePatchBundle, updatedName: String?) -> Unit)?,
         predicate: (bundle: RemotePatchBundle) -> Boolean,
     ): Boolean = coroutineScope {
         try {
@@ -1617,6 +1621,7 @@ class PatchBundleRepository(
 
                     if (result != null) {
                         results[bundle] = result
+                        onBundleUpdated?.invoke(bundle, downloadedName)
                     }
                 }
 
