@@ -22,8 +22,10 @@ import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -127,6 +129,22 @@ fun PathSelectorDialog(
     val files = remember(entries, fileFilter) {
         entries.filterNot(Path::isDirectory).filter(fileFilter)
     }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    val normalizedQuery = searchQuery.trim()
+    val filteredDirectories = remember(directories, normalizedQuery) {
+        if (normalizedQuery.isBlank()) {
+            directories
+        } else {
+            directories.filter { it.name.contains(normalizedQuery, ignoreCase = true) }
+        }
+    }
+    val filteredFiles = remember(files, normalizedQuery) {
+        if (normalizedQuery.isBlank()) {
+            files
+        } else {
+            files.filter { it.name.contains(normalizedQuery, ignoreCase = true) }
+        }
+    }
     val favoriteSet: Set<String> by prefs.pathSelectorFavorites.getAsState()
     val favorites: List<Path> = remember(favoriteSet, fileFilter) {
         favoriteSet.mapNotNull { runCatching { Paths.get(it) }.getOrNull() }
@@ -203,6 +221,28 @@ fun PathSelectorDialog(
                         icon = Icons.Outlined.Folder,
                         name = currentDirectory.toString(),
                         enabled = allowDirectorySelection
+                    )
+                }
+
+                item(key = "search") {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        label = { Text(stringResource(R.string.path_selector_search)) },
+                        singleLine = true,
+                        trailingIcon = {
+                            if (searchQuery.isNotBlank()) {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(
+                                        Icons.Filled.Close,
+                                        contentDescription = stringResource(R.string.clear)
+                                    )
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 8.dp)
                     )
                 }
 
@@ -295,12 +335,12 @@ fun PathSelectorDialog(
                     }
                 }
 
-                if (directories.isNotEmpty()) {
+                if (filteredDirectories.isNotEmpty()) {
                     item(key = "dirs_header") {
                         GroupHeader(title = stringResource(R.string.path_selector_dirs))
                     }
                 }
-                items(directories, key = { it.absolutePathString() }) {
+                items(filteredDirectories, key = { it.absolutePathString() }) {
                     PathItem(
                         onClick = { currentDirectory = it },
                         onLongClick = { handleFavoritePress(it) },
@@ -309,7 +349,7 @@ fun PathSelectorDialog(
                     )
                 }
 
-                if (files.isNotEmpty()) {
+                if (filteredFiles.isNotEmpty()) {
                     item(key = "files_header") {
                         val header = if (!fileTypeLabel.isNullOrBlank()) {
                             "${stringResource(R.string.path_selector_files)} ($fileTypeLabel)"
@@ -319,7 +359,7 @@ fun PathSelectorDialog(
                         GroupHeader(title = header)
                     }
                 }
-                items(files, key = { it.absolutePathString() }) {
+                items(filteredFiles, key = { it.absolutePathString() }) {
                     PathItem(
                         onClick = { onSelect(it) },
                         onLongClick = { handleFavoritePress(it) },
