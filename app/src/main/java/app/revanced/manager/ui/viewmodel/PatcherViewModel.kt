@@ -106,6 +106,8 @@ import ru.solrudev.ackpine.uninstaller.createSession
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import java.time.Duration
 import java.util.UUID
 
@@ -1031,16 +1033,42 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 return@launch
             }
 
-            val wasAlreadySaved = hasSavedPatchedApp
-            val saved = persistPatchedApp(null, InstallType.SAVED)
-            if (!saved) {
-                app.toast(app.getString(R.string.patched_app_save_failed_toast))
-            } else if (!wasAlreadySaved) {
-                app.toast(app.getString(R.string.patched_app_saved_toast))
-            }
-
-            app.toast(app.getString(R.string.save_apk_success))
+            finalizeExport()
         }
+    }
+
+    fun exportToPath(
+        target: Path,
+        onResult: (Boolean) -> Unit = {}
+    ) = viewModelScope.launch {
+        ensureExportMetadata()
+        val exportSucceeded = runCatching {
+            withContext(Dispatchers.IO) {
+                target.parent?.let { Files.createDirectories(it) }
+                Files.copy(outputFile.toPath(), target, StandardCopyOption.REPLACE_EXISTING)
+            }
+        }.isSuccess
+
+        if (!exportSucceeded) {
+            app.toast(app.getString(R.string.saved_app_export_failed))
+            onResult(false)
+            return@launch
+        }
+
+        finalizeExport()
+        onResult(true)
+    }
+
+    private suspend fun finalizeExport() {
+        val wasAlreadySaved = hasSavedPatchedApp
+        val saved = persistPatchedApp(null, InstallType.SAVED)
+        if (!saved) {
+            app.toast(app.getString(R.string.patched_app_save_failed_toast))
+        } else if (!wasAlreadySaved) {
+            app.toast(app.getString(R.string.patched_app_saved_toast))
+        }
+
+        app.toast(app.getString(R.string.save_apk_success))
     }
 
     fun exportLogs(context: Context) {

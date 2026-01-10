@@ -4,7 +4,6 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult
-import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -28,10 +27,13 @@ import androidx.compose.material.icons.outlined.InstallMobile
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.SettingsBackupRestore
 import androidx.compose.material.icons.outlined.Update
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -58,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.activity.compose.BackHandler
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.revanced.manager.R
+import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.data.room.apps.installed.InstallType
 import app.revanced.manager.domain.installer.InstallerManager
 import app.revanced.manager.domain.manager.PreferencesManager
@@ -69,23 +72,26 @@ import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.ColumnWithScrollbar
 import app.revanced.manager.ui.component.SegmentedButton
 import app.revanced.manager.ui.component.ConfirmDialog
+import app.revanced.manager.ui.component.patches.PathSelectorDialog
 import app.revanced.manager.ui.component.settings.SettingsListItem
 import app.revanced.manager.ui.viewmodel.InstalledAppInfoViewModel
 import app.revanced.manager.ui.viewmodel.InstalledAppInfoViewModel.ReplaceSavedBundleResult
 import app.revanced.manager.ui.viewmodel.InstallResult
 import app.revanced.manager.ui.viewmodel.MountWarningAction
 import app.revanced.manager.ui.viewmodel.MountWarningReason
-import app.revanced.manager.util.APK_MIMETYPE
 import app.revanced.manager.util.EventEffect
 import app.revanced.manager.util.ExportNameFormatter
 import app.revanced.manager.util.PatchedAppExportData
 import app.revanced.manager.util.PatchSelection
+import app.revanced.manager.util.isAllowedApkFile
 import app.revanced.manager.util.tag
 import app.revanced.manager.util.toast
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import java.util.Locale
 import androidx.compose.runtime.rememberCoroutineScope
+import java.nio.file.Files
+import java.nio.file.Path
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -98,6 +104,7 @@ fun InstalledAppInfoScreen(
     val scope = rememberCoroutineScope()
     val patchBundleRepository: PatchBundleRepository = koinInject()
     val prefs: PreferencesManager = koinInject()
+    val fs: Filesystem = koinInject()
     val bundleInfo by patchBundleRepository.allBundlesInfoFlow.collectAsStateWithLifecycle(emptyMap())
     val bundleSources by patchBundleRepository.sources.collectAsStateWithLifecycle(emptyList())
     val allowUniversalPatches by prefs.disableUniversalPatchCheck.getAsState()
@@ -108,8 +115,27 @@ fun InstalledAppInfoScreen(
     var showUniversalBlockedDialog by rememberSaveable { mutableStateOf(false) }
     var showMixedBundleDialog by rememberSaveable { mutableStateOf(false) }
     var showLeaveInstallDialog by rememberSaveable { mutableStateOf(false) }
+    var showExportPicker by rememberSaveable { mutableStateOf(false) }
+    var exportFileDialogState by remember { mutableStateOf<ExportSavedApkDialogState?>(null) }
+    var pendingExportConfirmation by remember { mutableStateOf<PendingSavedExportConfirmation?>(null) }
+    var exportInProgress by rememberSaveable { mutableStateOf(false) }
     val appliedSelection = viewModel.appliedPatches
     val isInstalledOnDevice = viewModel.isInstalledOnDevice
+    val storageRoots = remember { fs.storageRoots() }
+    val (permissionContract, permissionName) = remember { fs.permissionContract() }
+    val permissionLauncher =
+        rememberLauncherForActivityResult(permissionContract) { granted ->
+            if (granted) {
+                showExportPicker = true
+            }
+        }
+    fun openExportPicker() {
+        if (fs.hasStoragePermission()) {
+            showExportPicker = true
+        } else {
+            permissionLauncher.launch(permissionName)
+        }
+    }
     val selectionPayload = viewModel.installedApp?.selectionPayload
     val savedBundleVersions = remember(selectionPayload) {
         selectionPayload?.bundles.orEmpty().associate { it.bundleUid to it.version }
@@ -245,11 +271,6 @@ fun InstalledAppInfoScreen(
             if (version != null) "${bundle.title} ($version)" else bundle.title
         }
     }
-
-    val exportSavedLauncher =
-        rememberLauncherForActivityResult(CreateDocument(APK_MIMETYPE)) { uri ->
-            viewModel.exportSavedApp(uri)
-        }
 
     val activityLauncher = rememberLauncherForActivityResult(
         contract = StartActivityForResult(),
@@ -688,6 +709,80 @@ fun InstalledAppInfoScreen(
     val exportFileName = remember(exportMetadata, exportFormat) {
         ExportNameFormatter.format(exportFormat, exportMetadata)
     }
+    if (showExportPicker) {
+        PathSelectorDialog(
+            roots = storageRoots,
+            onSelect = { path ->
+                if (path == null) {
+                    showExportPicker = false
+                }
+            },
+            fileFilter = ::isAllowedApkFile,
+            allowDirectorySelection = false,
+            fileTypeLabel = ".apk",
+            confirmButtonText = stringResource(R.string.save),
+            onConfirm = { directory ->
+                exportFileDialogState = ExportSavedApkDialogState(directory, exportFileName)
+            }
+        )
+    }
+    exportFileDialogState?.let { state ->
+        ExportSavedApkFileNameDialog(
+            initialName = state.fileName,
+            onDismiss = { exportFileDialogState = null },
+            onConfirm = { fileName ->
+                val trimmedName = fileName.trim()
+                if (trimmedName.isBlank()) return@ExportSavedApkFileNameDialog
+                exportFileDialogState = null
+                val target = state.directory.resolve(trimmedName)
+                if (Files.exists(target)) {
+                    pendingExportConfirmation = PendingSavedExportConfirmation(
+                        directory = state.directory,
+                        fileName = trimmedName
+                    )
+                } else {
+                    exportInProgress = true
+                    viewModel.exportSavedAppToPath(target) { success ->
+                        exportInProgress = false
+                        if (success) {
+                            showExportPicker = false
+                        }
+                    }
+                }
+            }
+        )
+    }
+    pendingExportConfirmation?.let { state ->
+        ConfirmDialog(
+            onDismiss = {
+                pendingExportConfirmation = null
+                exportFileDialogState = ExportSavedApkDialogState(state.directory, state.fileName)
+            },
+            onConfirm = {
+                pendingExportConfirmation = null
+                exportInProgress = true
+                viewModel.exportSavedAppToPath(state.directory.resolve(state.fileName)) { success ->
+                    exportInProgress = false
+                    if (success) {
+                        showExportPicker = false
+                    }
+                }
+            },
+            title = stringResource(R.string.export_overwrite_title),
+            description = stringResource(R.string.export_overwrite_description, state.fileName),
+            icon = Icons.Outlined.WarningAmber
+        )
+    }
+    if (exportInProgress) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text(stringResource(R.string.export)) },
+            text = { Text(stringResource(R.string.patcher_step_group_saving)) },
+            icon = { CircularProgressIndicator() },
+            confirmButton = {},
+            dismissButton = {}
+        )
+    }
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(2.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -734,7 +829,7 @@ fun InstalledAppInfoScreen(
                         SegmentedButton(
                             icon = Icons.Outlined.Save,
                             text = stringResource(R.string.export),
-                            onClick = { exportSavedLauncher.launch(exportFileName) }
+                            onClick = { openExportPicker() }
                         )
                     }
                     key("update_or_install") {
@@ -841,7 +936,7 @@ fun InstalledAppInfoScreen(
                 SegmentedButton(
                     icon = Icons.Outlined.Save,
                     text = stringResource(R.string.export),
-                    onClick = { exportSavedLauncher.launch(exportFileName) }
+                    onClick = { openExportPicker() }
                 )
                 if (savedAppsEnabled) {
                     var showDeleteConfirmation by rememberSaveable { mutableStateOf(false) }
@@ -877,7 +972,7 @@ fun InstalledAppInfoScreen(
                     SegmentedButton(
                         icon = Icons.Outlined.Save,
                         text = stringResource(R.string.export),
-                        onClick = { exportSavedLauncher.launch(exportFileName) }
+                        onClick = { openExportPicker() }
                     )
                 }
 
@@ -1126,3 +1221,48 @@ fun UninstallDialog(
         }
     }
 )
+
+private data class ExportSavedApkDialogState(
+    val directory: Path,
+    val fileName: String
+)
+
+private data class PendingSavedExportConfirmation(
+    val directory: Path,
+    val fileName: String
+)
+
+@Composable
+private fun ExportSavedApkFileNameDialog(
+    initialName: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var fileName by rememberSaveable(initialName) { mutableStateOf(initialName) }
+    val trimmedName = fileName.trim()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(trimmedName) },
+                enabled = trimmedName.isNotEmpty()
+            ) {
+                Text(stringResource(R.string.save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+        title = { Text(stringResource(R.string.export)) },
+        text = {
+            OutlinedTextField(
+                value = fileName,
+                onValueChange = { fileName = it },
+                label = { Text(stringResource(R.string.file_name)) },
+                placeholder = { Text(stringResource(R.string.dialog_input_placeholder)) }
+            )
+        }
+    )
+}

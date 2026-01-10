@@ -55,6 +55,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.first
 import java.io.File
 import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
 import org.koin.core.component.inject
@@ -951,6 +954,32 @@ class InstalledAppInfoViewModel(
                 if (success) R.string.saved_app_export_success else R.string.saved_app_export_failed
             )
         )
+    }
+
+    fun exportSavedAppToPath(
+        target: Path,
+        onResult: (Boolean) -> Unit = {}
+    ) = viewModelScope.launch {
+        val file = savedApkFile()
+        if (file == null) {
+            context.toast(context.getString(R.string.saved_app_export_failed))
+            onResult(false)
+            return@launch
+        }
+
+        val success = runCatching {
+            withContext(Dispatchers.IO) {
+                target.parent?.let { Files.createDirectories(it) }
+                Files.copy(file.toPath(), target, StandardCopyOption.REPLACE_EXISTING)
+            }
+        }.isSuccess
+
+        context.toast(
+            context.getString(
+                if (success) R.string.saved_app_export_success else R.string.saved_app_export_failed
+            )
+        )
+        onResult(success)
     }
 
     fun removeSavedApp() = viewModelScope.launch {

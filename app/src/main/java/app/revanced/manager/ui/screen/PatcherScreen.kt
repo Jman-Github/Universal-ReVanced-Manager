@@ -5,7 +5,6 @@ import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,17 +25,18 @@ import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.PostAdd
 import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomAppBar
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -55,11 +55,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
+import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.ui.component.AppScaffold
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.ConfirmDialog
 import app.revanced.manager.ui.component.InstallerStatusDialog
 import app.revanced.manager.ui.component.haptics.HapticExtendedFloatingActionButton
+import app.revanced.manager.ui.component.patches.PathSelectorDialog
 import app.revanced.manager.ui.component.patcher.Steps
 import app.revanced.manager.ui.model.StepCategory
 import app.revanced.manager.ui.model.SelectedApp
@@ -68,14 +70,15 @@ import app.revanced.manager.data.room.apps.installed.InstallType
 import app.revanced.manager.util.Options
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.domain.manager.PreferencesManager
-import app.revanced.manager.util.APK_MIMETYPE
 import app.revanced.manager.util.ExportNameFormatter
 import app.revanced.manager.util.EventEffect
 import app.revanced.manager.util.PatchedAppExportData
+import app.revanced.manager.util.isAllowedApkFile
 import app.revanced.manager.util.mutableStateSetOf
 import app.revanced.manager.util.saver.snapshotStateSetSaver
-import app.revanced.manager.util.toast
 import org.koin.compose.koinInject
+import java.nio.file.Files
+import java.nio.file.Path
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -107,8 +110,6 @@ fun PatcherScreen(
     val exportFileName = remember(exportFormat, exportMetadata, fallbackExportMetadata) {
         ExportNameFormatter.format(exportFormat, exportMetadata ?: fallbackExportMetadata)
     }
-    val exportApkLauncher =
-        rememberLauncherForActivityResult(CreateDocument(APK_MIMETYPE), viewModel::export)
 
     val patcherSucceeded by viewModel.patcherSucceeded.observeAsState(null)
     val isMounting = viewModel.activeInstallType == InstallType.MOUNT
@@ -116,6 +117,26 @@ fun PatcherScreen(
     var showDismissConfirmationDialog by rememberSaveable { mutableStateOf(false) }
     var showInstallInProgressDialog by rememberSaveable { mutableStateOf(false) }
     var showSavePatchedAppDialog by rememberSaveable { mutableStateOf(false) }
+    var exportInProgress by rememberSaveable { mutableStateOf(false) }
+    val fs: Filesystem = koinInject()
+    val storageRoots = remember { fs.storageRoots() }
+    val (permissionContract, permissionName) = remember { fs.permissionContract() }
+    var showExportPicker by rememberSaveable { mutableStateOf(false) }
+    var exportFileDialogState by remember { mutableStateOf<ExportApkDialogState?>(null) }
+    var pendingExportConfirmation by remember { mutableStateOf<PendingExportConfirmation?>(null) }
+    val permissionLauncher =
+        rememberLauncherForActivityResult(permissionContract) { granted ->
+            if (granted) {
+                showExportPicker = true
+            }
+        }
+    fun openExportPicker() {
+        if (fs.hasStoragePermission()) {
+            showExportPicker = true
+        } else {
+            permissionLauncher.launch(permissionName)
+        }
+    }
 
     fun onPageBack() = when {
         patcherSucceeded == null -> showDismissConfirmationDialog = true
@@ -214,6 +235,81 @@ fun PatcherScreen(
                     }
                 })
             }
+        )
+    }
+
+    if (showExportPicker) {
+        PathSelectorDialog(
+            roots = storageRoots,
+            onSelect = { path ->
+                if (path == null) {
+                    showExportPicker = false
+                }
+            },
+            fileFilter = ::isAllowedApkFile,
+            allowDirectorySelection = false,
+            fileTypeLabel = ".apk",
+            confirmButtonText = stringResource(R.string.save),
+            onConfirm = { directory ->
+                exportFileDialogState = ExportApkDialogState(directory, exportFileName)
+            }
+        )
+    }
+    exportFileDialogState?.let { state ->
+        ExportApkFileNameDialog(
+            initialName = state.fileName,
+            onDismiss = { exportFileDialogState = null },
+            onConfirm = { fileName ->
+                val trimmedName = fileName.trim()
+                if (trimmedName.isBlank()) return@ExportApkFileNameDialog
+                exportFileDialogState = null
+                val target = state.directory.resolve(trimmedName)
+                if (Files.exists(target)) {
+                    pendingExportConfirmation = PendingExportConfirmation(
+                        directory = state.directory,
+                        fileName = trimmedName
+                    )
+                } else {
+                    exportInProgress = true
+                    viewModel.exportToPath(target) { success ->
+                        exportInProgress = false
+                        if (success) {
+                            showExportPicker = false
+                        }
+                    }
+                }
+            }
+        )
+    }
+    pendingExportConfirmation?.let { state ->
+        ConfirmDialog(
+            onDismiss = {
+                pendingExportConfirmation = null
+                exportFileDialogState = ExportApkDialogState(state.directory, state.fileName)
+            },
+            onConfirm = {
+                pendingExportConfirmation = null
+                exportInProgress = true
+                viewModel.exportToPath(state.directory.resolve(state.fileName)) { success ->
+                    exportInProgress = false
+                    if (success) {
+                        showExportPicker = false
+                    }
+                }
+            },
+            title = stringResource(R.string.export_overwrite_title),
+            description = stringResource(R.string.export_overwrite_description, state.fileName),
+            icon = Icons.Outlined.WarningAmber
+        )
+    }
+    if (exportInProgress) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text(stringResource(R.string.save_apk)) },
+            text = { Text(stringResource(R.string.patcher_step_group_saving)) },
+            icon = { CircularProgressIndicator() },
+            confirmButton = {},
+            dismissButton = {}
         )
     }
 
@@ -435,7 +531,7 @@ fun PatcherScreen(
             BottomAppBar(
                 actions = {
                     IconButton(
-                        onClick = { exportApkLauncher.launch(exportFileName) },
+                        onClick = ::openExportPicker,
                         enabled = patcherSucceeded == true
                     ) {
                         Icon(Icons.Outlined.Save, stringResource(id = R.string.save_apk))
@@ -634,5 +730,50 @@ private fun SavePatchedAppDialog(
             }
         },
         dismissButton = {}
+    )
+}
+
+private data class ExportApkDialogState(
+    val directory: Path,
+    val fileName: String
+)
+
+private data class PendingExportConfirmation(
+    val directory: Path,
+    val fileName: String
+)
+
+@Composable
+private fun ExportApkFileNameDialog(
+    initialName: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var fileName by rememberSaveable(initialName) { mutableStateOf(initialName) }
+    val trimmedName = fileName.trim()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(trimmedName) },
+                enabled = trimmedName.isNotEmpty()
+            ) {
+                Text(stringResource(R.string.save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+        title = { Text(stringResource(R.string.save_apk)) },
+        text = {
+            OutlinedTextField(
+                value = fileName,
+                onValueChange = { fileName = it },
+                label = { Text(stringResource(R.string.file_name)) },
+                placeholder = { Text(stringResource(R.string.dialog_input_placeholder)) }
+            )
+        }
     )
 }
