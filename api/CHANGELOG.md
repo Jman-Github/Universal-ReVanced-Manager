@@ -24,6 +24,7 @@
 - Fixed false "Universal patches disabled" and "This patch profile contains universal patches. Enable universal patches..." toast/dialogs
 - Fixed patcher steps under the `Patching` section not being checked off and left blank until after the entire step is `Patching` section is completed
 - Fixed an issue where canceling the patching process by tapping the back button on the `Patcher` screen was not actually immediately canceling/killing the patching process as it would continue to run in the background for a bit
+- Fixed the app crashing when certain patch option types are opened
 
 
 # Docs
