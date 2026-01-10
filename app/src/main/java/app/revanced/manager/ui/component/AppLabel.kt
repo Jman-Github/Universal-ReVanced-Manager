@@ -33,14 +33,27 @@ fun AppLabel(
 
     LaunchedEffect(packageInfo) {
         label = withContext(Dispatchers.IO) {
-            packageInfo?.applicationInfo?.loadLabel(context.packageManager)
-                ?.toString()
-                ?.let { raw ->
-                    val cleaned = cleanWeirdLabel(raw, packageInfo.packageName)
-                    cleaned.takeIf { it.isNotBlank() && cleaned != packageInfo.packageName }
-                }
-                ?: packageInfo?.applicationInfo?.nonLocalizedLabel?.toString()
-                ?.takeIf { it.isNotBlank() }
+            val packageName = packageInfo?.packageName
+            val localLabelResult = runCatching {
+                packageInfo?.applicationInfo?.loadLabel(context.packageManager)?.toString()
+            }
+            val localLabel = localLabelResult.getOrNull()
+            val cleanedLocal = localLabel?.let { raw ->
+                val cleaned = cleanWeirdLabel(raw, packageName)
+                cleaned.takeIf { it.isNotBlank() && cleaned != packageName }
+            }
+            if (!cleanedLocal.isNullOrBlank()) return@withContext cleanedLocal
+
+            val installedLabel = if (localLabelResult.isFailure) {
+                packageName?.let { loadInstalledLabel(context, it) }
+            } else {
+                packageInfo?.applicationInfo?.nonLocalizedLabel?.toString()
+                    ?.takeIf { it.isNotBlank() }
+                    ?: packageName?.let { loadInstalledLabel(context, it) }
+            }
+
+            installedLabel
+                ?: packageName
                 ?: defaultText
         }
     }
@@ -72,3 +85,10 @@ private fun cleanWeirdLabel(raw: String, packageName: String?): String {
     }
     return trimmed
 }
+
+@Suppress("DEPRECATION")
+private fun loadInstalledLabel(context: android.content.Context, packageName: String): String? =
+    runCatching {
+        val appInfo = context.packageManager.getApplicationInfo(packageName, 0)
+        appInfo.loadLabel(context.packageManager)?.toString()
+    }.getOrNull()?.takeIf { it.isNotBlank() }

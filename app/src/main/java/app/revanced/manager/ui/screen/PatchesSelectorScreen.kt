@@ -594,6 +594,30 @@ fun PatchesSelectorScreen(
             }
         )
     }
+    if (viewModel.showMixedPatchBundlesDialog) {
+        AlertDialogExtended(
+            onDismissRequest = viewModel::dismissMixedPatchBundlesDialog,
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissMixedPatchBundlesDialog) {
+                    Text(stringResource(R.string.ok))
+                }
+            },
+            title = {
+                Text(
+                    text = stringResource(R.string.mixed_patch_bundles_title),
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Start
+                )
+            },
+            text = {
+                Text(
+                    text = stringResource(R.string.mixed_patch_bundles_description),
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Start
+                )
+            }
+        )
+    }
     val disableActionConfirmations by viewModel.prefs.disablePatchSelectionConfirmations.getAsState()
     val collapseActionsOnSelection by viewModel.prefs.collapsePatchActionsOnSelection.getAsState()
 

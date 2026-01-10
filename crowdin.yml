@@ -1,0 +1,15 @@
+project_id_env: CROWDIN_PROJECT_ID
+api_token_env: CROWDIN_PERSONAL_TOKEN
+base_path: .
+preserve_hierarchy: true
+
+files:
+  - source: /app/src/main/res/values/*.xml
+    translation: /app/src/main/res/values-%android_code%/%original_file_name%
+    ignore:
+      - /app/src/main/res/values/colors.xml
+      - /app/src/main/res/values/themes.xml
+    languages_mapping:
+      android_code:
+        zh-CN: zh-rCN
+        zh-TW: zh-rTW

@@ -7,6 +7,7 @@ import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.patcher.ProgressEvent
 import app.revanced.manager.patcher.aapt.Aapt
 import app.revanced.manager.patcher.logger.Logger
+import app.revanced.manager.patcher.patch.PatchBundleType
 import app.revanced.manager.util.Options
 import app.revanced.manager.util.PatchSelection
 import kotlinx.coroutines.flow.first
@@ -25,7 +26,8 @@ sealed class Runtime(context: Context) : KoinComponent {
     protected val frameworkPath: String =
         context.cacheDir.resolve("framework").also { it.mkdirs() }.absolutePath
 
-    protected suspend fun bundles() = patchBundlesRepo.bundles.first()
+    protected suspend fun bundles() =
+        patchBundlesRepo.bundlesByType(PatchBundleType.REVANCED).first()
 
     abstract suspend fun execute(
         inputFile: String,

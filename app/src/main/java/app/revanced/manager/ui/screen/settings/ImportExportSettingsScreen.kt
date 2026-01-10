@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -90,6 +91,7 @@ fun ImportExportSettingsScreen(
     var activeExportPicker by rememberSaveable { mutableStateOf<ExportPicker?>(null) }
     var exportFileDialogState by remember { mutableStateOf<ExportFileDialogState?>(null) }
     var pendingExportConfirmation by remember { mutableStateOf<PendingExportConfirmation?>(null) }
+    var exportInProgress by rememberSaveable { mutableStateOf(false) }
     val permissionLauncher = rememberLauncherForActivityResult(permissionContract) { granted ->
         val pendingImport = pendingImportPicker
         val pendingExport = pendingExportPicker
@@ -124,6 +126,7 @@ fun ImportExportSettingsScreen(
         }
     }
     val runExport = { picker: ExportPicker, target: Path ->
+        exportInProgress = true
         val job = when (picker) {
             ExportPicker.Keystore -> vm.exportKeystore(target)
             ExportPicker.PatchBundles -> vm.exportPatchBundles(target)
@@ -133,6 +136,7 @@ fun ImportExportSettingsScreen(
         }
         coroutineScope.launch {
             job.join()
+            exportInProgress = false
             activeExportPicker = null
         }
     }
@@ -213,6 +217,16 @@ fun ImportExportSettingsScreen(
             title = stringResource(R.string.export_overwrite_title),
             description = stringResource(R.string.export_overwrite_description, state.fileName),
             icon = Icons.Outlined.WarningAmber
+        )
+    }
+    if (exportInProgress) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text(stringResource(R.string.export)) },
+            text = { Text(stringResource(R.string.patcher_step_group_saving)) },
+            icon = { CircularProgressIndicator() },
+            confirmButton = {},
+            dismissButton = {}
         )
     }
 

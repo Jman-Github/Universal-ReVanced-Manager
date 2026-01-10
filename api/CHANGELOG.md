@@ -1,3 +1,29 @@
+# v1.7.1 (TBD)
+**Minimal changes & bug fixes**
+
+
+# Features
+
+- Removed the `Discover patch bundles` banner and added a FAB button next to the plus button instead to access the `Discover patch bundles` page
+- Added support for Morphe Patches (mixing of ReVanced and Morphe Patches in a single patch instance is not feasible, and not currently supported)
+- Improved patcher logging/profiling and error surfacing
+- Improved metadata reading for split APKs on the app info page
+- Imrpoved metedata reading for regular APKs on the app info page
+- Converted the `Save patched app` button, `Export` button on the `App info` screen for saved patched apps, and the `Export` button on the Download settings page to use the custom file picker
+- Added a saving modal to the custom file picker
+- Added a search bar in the custom file picker that filters the current directory
+- Made the `Save patched apps for later` toggle in Settings > Advanced actually toggle the ability to save patched apps in the `Apps` tab
+
+
+# Bug fixes
+
+- Fixed dev builds not being prompted to update when there are new releases
+- Fixed crashes the would occur occasionally for apps when loading metadata on the app info page
+- Fixed false "Universal patches disabled" and "This patch profile contains universal patches. Enable universal patches..." toast/dialogs
+
+# Docs
+
+
 # v1.7.0 (2025-12-31)
 
 

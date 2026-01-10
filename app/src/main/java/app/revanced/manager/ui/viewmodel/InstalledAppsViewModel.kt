@@ -8,6 +8,7 @@ import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.data.room.apps.installed.InstallType
 import app.revanced.manager.data.room.apps.installed.InstalledApp
 import app.revanced.manager.data.room.profile.PatchProfilePayload
+import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.bundles.PatchBundleSource
 import app.revanced.manager.domain.installer.RootInstaller
 import app.revanced.manager.domain.installer.RootServiceException
@@ -29,9 +30,16 @@ class InstalledAppsViewModel(
     private val patchBundleRepository: PatchBundleRepository,
     private val pm: PM,
     private val rootInstaller: RootInstaller,
-    private val filesystem: Filesystem
+    private val filesystem: Filesystem,
+    private val prefs: PreferencesManager
 ) : ViewModel() {
-    val apps = installedAppsRepository.getAll().flowOn(Dispatchers.IO)
+    val apps = combine(
+        installedAppsRepository.getAll(),
+        prefs.enableSavedApps.flow
+    ) { installedApps, savedAppsEnabled ->
+        if (savedAppsEnabled) installedApps
+        else installedApps.filter { it.installType != InstallType.SAVED }
+    }.flowOn(Dispatchers.IO)
 
     val packageInfoMap = mutableStateMapOf<String, PackageInfo?>()
     val selectedApps = mutableStateSetOf<String>()

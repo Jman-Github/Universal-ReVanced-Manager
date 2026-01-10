@@ -3,20 +3,16 @@
     <plurals name="patch_count">
         <item quantity="one">%d патч</item>
         <item quantity="other">%d патчі</item>
-    </plurals>
+        </plurals>
     <plurals name="patch_profile_bundle_count">
         <item quantity="one">%d пакет</item>
         <item quantity="other">%d пакети</item>
-    </plurals>
+        </plurals>
     <plurals name="patch_profile_bundle_patch_count">
         <item quantity="one">%d патч</item>
         <item quantity="other">%d патчі</item>
-    </plurals>
-    <plurals name="patches_executed">
-        <item quantity="one">Виконати %d патч</item>
-        <item quantity="other">Виконати %d патчі</item>
-    </plurals>
+        </plurals>
     <plurals name="selected_count">
         <item quantity="other">%d вибрано</item>
-    </plurals>
-</resources>
+        </plurals>
+    </resources>

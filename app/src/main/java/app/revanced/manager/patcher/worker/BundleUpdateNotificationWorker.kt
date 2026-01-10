@@ -65,6 +65,7 @@ class BundleUpdateNotificationWorker(
 
             val totalAutoUpdates = autoUpdateTargets.size
             val seenUids = LinkedHashSet<Int>()
+            val updatedBundleNames = LinkedHashSet<String>()
             var progressNotified = false
             var downloadStarted = false
 
@@ -94,6 +95,10 @@ class BundleUpdateNotificationWorker(
                         )
                         notificationManager.notify(NOTIFICATION_ID, notification)
                     },
+                    onBundleUpdated = { bundle, updatedName ->
+                        val resolvedName = updatedName?.takeIf { it.isNotBlank() } ?: bundle.displayTitle
+                        updatedBundleNames.add(resolvedName)
+                    },
                     predicate = { bundle ->
                         bundle.autoUpdate &&
                             bundle.searchUpdate &&
@@ -119,13 +124,26 @@ class BundleUpdateNotificationWorker(
             if (canNotify) {
                 when {
                     updatedAny -> {
-                        val description = if (manualUpdates.isNotEmpty()) {
-                            applicationContext.getString(
-                                R.string.bundle_updates_notification_completed_with_available,
-                                manualUpdates.size
-                            )
-                        } else {
-                            applicationContext.getString(R.string.bundle_updates_notification_completed)
+                        val updatedNames = formatUpdatedBundleNames(updatedBundleNames)
+                        val description = when {
+                            updatedNames != null && manualUpdates.isNotEmpty() ->
+                                applicationContext.getString(
+                                    R.string.bundle_updates_notification_completed_named_with_available,
+                                    updatedNames,
+                                    manualUpdates.size
+                                )
+                            updatedNames != null ->
+                                applicationContext.getString(
+                                    R.string.bundle_updates_notification_completed_named,
+                                    updatedNames
+                                )
+                            manualUpdates.isNotEmpty() ->
+                                applicationContext.getString(
+                                    R.string.bundle_updates_notification_completed_with_available,
+                                    manualUpdates.size
+                                )
+                            else ->
+                                applicationContext.getString(R.string.bundle_updates_notification_completed)
                         }
                         val notification = buildNotification(
                             title = applicationContext.getString(R.string.bundle_update_banner_title),
@@ -211,5 +229,15 @@ class BundleUpdateNotificationWorker(
         }
 
         return builder.build()
+    }
+
+    private fun formatUpdatedBundleNames(names: Collection<String>): String? {
+        val cleaned = names.map { it.trim() }.filter { it.isNotBlank() }.distinct()
+        if (cleaned.isEmpty()) return null
+        val maxVisible = 3
+        val visible = cleaned.take(maxVisible)
+        val extra = cleaned.size - visible.size
+        val joined = visible.joinToString(", ")
+        return if (extra > 0) "$joined +$extra" else joined
     }
 }

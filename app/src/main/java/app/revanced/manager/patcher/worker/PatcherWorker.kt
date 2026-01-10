@@ -28,6 +28,7 @@ import app.revanced.manager.domain.repository.DownloadResult
 import app.revanced.manager.domain.repository.DownloadedAppRepository
 import app.revanced.manager.domain.repository.DownloaderPluginRepository
 import app.revanced.manager.domain.repository.InstalledAppRepository
+import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.domain.worker.Worker
 import app.revanced.manager.domain.worker.WorkerRepository
 import app.revanced.manager.network.downloader.LoadedDownloaderPlugin
@@ -38,9 +39,11 @@ import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.patcher.runtime.CoroutineRuntime
 import app.revanced.manager.patcher.runtime.ProcessRuntime
+import app.revanced.manager.patcher.runtime.morphe.MorpheProcessRuntime
 import app.revanced.manager.patcher.util.NativeLibStripper
 import app.revanced.manager.patcher.runStep
 import app.revanced.manager.patcher.toRemoteError
+import app.revanced.manager.patcher.patch.PatchBundleType
 import app.revanced.manager.plugin.downloader.GetScope
 import app.revanced.manager.plugin.downloader.PluginHostApi
 import app.revanced.manager.plugin.downloader.UserInteractionException
@@ -70,6 +73,7 @@ class PatcherWorker(
     private val fs: Filesystem by inject()
     private val installedAppRepository: InstalledAppRepository by inject()
     private val rootInstaller: RootInstaller by inject()
+    private val patchBundleRepository: PatchBundleRepository by inject()
 
     class Args(
         val input: SelectedApp,
@@ -248,12 +252,8 @@ class PatcherWorker(
             downloadCleanup = downloadResult.cleanup
             val inputFile = downloadResult.file
 
-            val runtime = if (prefs.useProcessRuntime.get()) {
-                ProcessRuntime(applicationContext)
-            } else {
-                CoroutineRuntime(applicationContext)
-            }
-
+            val bundleType = patchBundleRepository.selectionBundleType(args.selectedPatches)
+                ?: throw IllegalStateException("Cannot patch with mixed ReVanced and Morphe bundles.")
             val stripNativeLibs = prefs.stripUnusedNativeLibs.get()
             val inputIsSplitArchive = SplitApkPreparer.isSplitArchive(inputFile)
             val selectedCount = args.selectedPatches.values.sumOf { it.size }
@@ -265,16 +265,38 @@ class PatcherWorker(
                         "split=$inputIsSplitArchive patches=$selectedCount"
             )
 
-            runtime.execute(
-                inputFile.absolutePath,
-                patchedApk.absolutePath,
-                args.packageName,
-                args.selectedPatches,
-                args.options,
-                args.logger,
-                args.onEvent,
-                stripNativeLibs
-            )
+            when (bundleType) {
+                PatchBundleType.MORPHE -> {
+                    val runtime = MorpheProcessRuntime(applicationContext)
+                    runtime.execute(
+                        inputFile.absolutePath,
+                        patchedApk.absolutePath,
+                        args.packageName,
+                        args.selectedPatches,
+                        args.options,
+                        args.logger,
+                        args.onEvent,
+                        stripNativeLibs
+                    )
+                }
+                PatchBundleType.REVANCED -> {
+                    val runtime = if (prefs.useProcessRuntime.get()) {
+                        ProcessRuntime(applicationContext)
+                    } else {
+                        CoroutineRuntime(applicationContext)
+                    }
+                    runtime.execute(
+                        inputFile.absolutePath,
+                        patchedApk.absolutePath,
+                        args.packageName,
+                        args.selectedPatches,
+                        args.options,
+                        args.logger,
+                        args.onEvent,
+                        stripNativeLibs
+                    )
+                }
+            }
 
             if (stripNativeLibs && !inputIsSplitArchive) {
                 NativeLibStripper.strip(patchedApk)
@@ -319,6 +341,43 @@ class PatcherWorker(
             Log.e(
                 tag,
                 "An exception occurred in the remote process while patching. ${e.originalStackTrace}".logFmt()
+            )
+            args.onEvent(
+                ProgressEvent.Failed(
+                    null,
+                    RemoteError(
+                        type = e::class.java.name,
+                        message = e.message,
+                        stackTrace = e.originalStackTrace
+                    )
+                )
+            )
+            Result.failure(
+                workDataOf(PROCESS_FAILURE_MESSAGE_KEY to e.originalStackTrace)
+            )
+        } catch (e: MorpheProcessRuntime.ProcessExitException) {
+            Log.e(
+                tag,
+                "Morphe patcher process exited with code ${e.exitCode}".logFmt(),
+                e
+            )
+            val message = applicationContext.getString(
+                R.string.patcher_process_exit_message,
+                e.exitCode
+            )
+            args.onEvent(ProgressEvent.Failed(null, Exception(message).toRemoteError()))
+            val previousLimit = prefs.patcherProcessMemoryLimit.get()
+            Result.failure(
+                workDataOf(
+                    PROCESS_EXIT_CODE_KEY to e.exitCode,
+                    PROCESS_PREVIOUS_LIMIT_KEY to previousLimit,
+                    PROCESS_FAILURE_MESSAGE_KEY to message
+                )
+            )
+        } catch (e: MorpheProcessRuntime.RemoteFailureException) {
+            Log.e(
+                tag,
+                "An exception occurred in the Morphe remote process while patching. ${e.originalStackTrace}".logFmt()
             )
             args.onEvent(
                 ProgressEvent.Failed(
