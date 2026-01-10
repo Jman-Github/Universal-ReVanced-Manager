@@ -851,70 +851,78 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private suspend fun persistPatchedApp(
         currentPackageName: String?,
         installType: InstallType
-    ): Boolean = withContext(Dispatchers.IO) {
-        val installedPackageInfo = currentPackageName?.let(pm::getPackageInfo)
-        val patchedPackageInfo = pm.getPackageInfo(outputFile)
-        val packageInfo = installedPackageInfo ?: patchedPackageInfo
-        if (packageInfo == null) {
-            Log.e(TAG, "Failed to resolve package info for patched APK")
-            return@withContext false
-        }
-
-        val finalPackageName = packageInfo.packageName
-        val finalVersion = packageInfo.versionName?.takeUnless { it.isBlank() } ?: version ?: "unspecified"
-
-        val savedCopy = fs.getPatchedAppFile(finalPackageName, finalVersion)
-        try {
-            savedCopy.parentFile?.mkdirs()
-            outputFile.copyTo(savedCopy, overwrite = true)
-        } catch (error: IOException) {
-            if (installType == InstallType.SAVED) {
-                Log.e(TAG, "Failed to copy patched APK for later", error)
+    ): Boolean {
+        val savedAppsEnabled = prefs.enableSavedApps.get()
+        return withContext(Dispatchers.IO) {
+            val installedPackageInfo = currentPackageName?.let(pm::getPackageInfo)
+            val patchedPackageInfo = pm.getPackageInfo(outputFile)
+            val packageInfo = installedPackageInfo ?: patchedPackageInfo
+            if (packageInfo == null) {
+                Log.e(TAG, "Failed to resolve package info for patched APK")
                 return@withContext false
-            } else {
-                Log.w(TAG, "Failed to update saved copy for $finalPackageName", error)
             }
+
+            val finalPackageName = packageInfo.packageName
+            val finalVersion = packageInfo.versionName?.takeUnless { it.isBlank() } ?: version ?: "unspecified"
+
+            val savedCopy = fs.getPatchedAppFile(finalPackageName, finalVersion)
+            if (savedAppsEnabled) {
+                try {
+                    savedCopy.parentFile?.mkdirs()
+                    outputFile.copyTo(savedCopy, overwrite = true)
+                } catch (error: IOException) {
+                    if (installType == InstallType.SAVED) {
+                        Log.e(TAG, "Failed to copy patched APK for later", error)
+                        return@withContext false
+                    } else {
+                        Log.w(TAG, "Failed to update saved copy for $finalPackageName", error)
+                    }
+                }
+            }
+
+            val metadata = buildExportMetadata(patchedPackageInfo ?: packageInfo)
+            withContext(Dispatchers.Main) {
+                exportMetadata = metadata
+            }
+
+            val scopedBundlesFinal = patchBundleRepository.scopedBundleInfoFlow(finalPackageName, finalVersion)
+                .first()
+                .associateBy { it.uid }
+            val sanitizedSelectionFinal = sanitizeSelection(appliedSelection, scopedBundlesFinal)
+            val sanitizedOptionsFinal = sanitizeOptions(appliedOptions, scopedBundlesFinal)
+            val scopedBundlesOriginal = patchBundleRepository.scopedBundleInfoFlow(
+                packageName,
+                input.selectedApp.version
+            ).first().associateBy { it.uid }
+            val sanitizedSelectionOriginal = sanitizeSelection(appliedSelection, scopedBundlesOriginal)
+            val sanitizedOptionsOriginal = sanitizeOptions(appliedOptions, scopedBundlesOriginal)
+
+            val selectionPayload = patchBundleRepository.snapshotSelection(sanitizedSelectionFinal)
+
+            if (savedAppsEnabled || installType != InstallType.SAVED) {
+                installedAppRepository.addOrUpdate(
+                    finalPackageName,
+                    packageName,
+                    finalVersion,
+                    installType,
+                    sanitizedSelectionFinal,
+                    selectionPayload
+                )
+            }
+
+            if (finalPackageName != packageName) {
+                patchSelectionRepository.updateSelection(finalPackageName, sanitizedSelectionFinal)
+                patchOptionsRepository.saveOptions(finalPackageName, sanitizedOptionsFinal)
+            }
+            patchSelectionRepository.updateSelection(packageName, sanitizedSelectionOriginal)
+            patchOptionsRepository.saveOptions(packageName, sanitizedOptionsOriginal)
+            appliedSelection = sanitizedSelectionOriginal
+            appliedOptions = sanitizedOptionsOriginal
+
+            savedPatchedApp = savedPatchedApp ||
+                (savedAppsEnabled && (installType == InstallType.SAVED || savedCopy.exists()))
+            true
         }
-
-        val metadata = buildExportMetadata(patchedPackageInfo ?: packageInfo)
-        withContext(Dispatchers.Main) {
-            exportMetadata = metadata
-        }
-
-        val scopedBundlesFinal = patchBundleRepository.scopedBundleInfoFlow(finalPackageName, finalVersion)
-            .first()
-            .associateBy { it.uid }
-        val sanitizedSelectionFinal = sanitizeSelection(appliedSelection, scopedBundlesFinal)
-        val sanitizedOptionsFinal = sanitizeOptions(appliedOptions, scopedBundlesFinal)
-        val scopedBundlesOriginal = patchBundleRepository.scopedBundleInfoFlow(
-            packageName,
-            input.selectedApp.version
-        ).first().associateBy { it.uid }
-        val sanitizedSelectionOriginal = sanitizeSelection(appliedSelection, scopedBundlesOriginal)
-        val sanitizedOptionsOriginal = sanitizeOptions(appliedOptions, scopedBundlesOriginal)
-
-        val selectionPayload = patchBundleRepository.snapshotSelection(sanitizedSelectionFinal)
-
-        installedAppRepository.addOrUpdate(
-            finalPackageName,
-            packageName,
-            finalVersion,
-            installType,
-            sanitizedSelectionFinal,
-            selectionPayload
-        )
-
-        if (finalPackageName != packageName) {
-            patchSelectionRepository.updateSelection(finalPackageName, sanitizedSelectionFinal)
-            patchOptionsRepository.saveOptions(finalPackageName, sanitizedOptionsFinal)
-        }
-        patchSelectionRepository.updateSelection(packageName, sanitizedSelectionOriginal)
-        patchOptionsRepository.saveOptions(packageName, sanitizedOptionsOriginal)
-        appliedSelection = sanitizedSelectionOriginal
-        appliedOptions = sanitizedOptionsOriginal
-
-        savedPatchedApp = savedPatchedApp || installType == InstallType.SAVED || savedCopy.exists()
-        true
     }
 
     fun savePatchedAppForLater(
@@ -928,6 +936,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
 
         viewModelScope.launch {
+            if (!prefs.enableSavedApps.get()) {
+                onResult(false)
+                return@launch
+            }
             val success = persistPatchedApp(null, InstallType.SAVED)
             if (success) {
                 if (showToast) {
@@ -1060,12 +1072,14 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
 
     private suspend fun finalizeExport() {
-        val wasAlreadySaved = hasSavedPatchedApp
-        val saved = persistPatchedApp(null, InstallType.SAVED)
-        if (!saved) {
-            app.toast(app.getString(R.string.patched_app_save_failed_toast))
-        } else if (!wasAlreadySaved) {
-            app.toast(app.getString(R.string.patched_app_saved_toast))
+        if (prefs.enableSavedApps.get()) {
+            val wasAlreadySaved = hasSavedPatchedApp
+            val saved = persistPatchedApp(null, InstallType.SAVED)
+            if (!saved) {
+                app.toast(app.getString(R.string.patched_app_save_failed_toast))
+            } else if (!wasAlreadySaved) {
+                app.toast(app.getString(R.string.patched_app_saved_toast))
+            }
         }
 
         app.toast(app.getString(R.string.save_apk_success))

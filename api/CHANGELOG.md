@@ -12,6 +12,7 @@
 - Converted the `Save patched app` button, `Export` button on the `App info` screen for saved patched apps, and the `Export` button on the Download settings page to use the custom file picker
 - Added a saving modal to the custom file picker
 - Added a search bar in the custom file picker that filters the current directory
+- Made the `Save patched apps for later` toggle in Settings > Advanced actually toggle the ability to save patched apps in the `Apps` tab
 
 
 # Bug fixes
