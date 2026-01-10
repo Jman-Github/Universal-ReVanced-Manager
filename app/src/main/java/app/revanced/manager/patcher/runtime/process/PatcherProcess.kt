@@ -23,6 +23,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
+import java.io.OutputStream
+import java.io.PrintStream
 import java.util.logging.Handler
 import java.util.logging.Level
 import java.util.logging.LogRecord
@@ -59,14 +61,38 @@ class PatcherProcess : IPatcherProcess.Stub() {
         eventBinder = events
 
         scope.launch {
+            val dexCompilePattern =
+                Regex("(Compiling|Compiled)\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
+            val dexWritePattern =
+                Regex("Write\\s+\\[[^\\]]+\\]\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
+            val seenDexCompiles = mutableSetOf<String>()
+            fun handleDexCompileLine(rawLine: String) {
+                val line = rawLine.trim()
+                if (line.isEmpty()) return
+                val match = dexCompilePattern.find(line)
+                    ?: dexWritePattern.find(line)
+                    ?: return
+                val dexName = match.groupValues.lastOrNull()?.takeIf { it.endsWith(".dex") } ?: return
+                if (!seenDexCompiles.add(dexName)) return
+                onEvent(
+                    ProgressEvent.Progress(
+                        stepId = StepId.WriteAPK,
+                        message = "Compiling $dexName"
+                    )
+                )
+            }
+
             val logger = object : Logger() {
-                override fun log(level: LogLevel, message: String) =
+                override fun log(level: LogLevel, message: String) {
+                    handleDexCompileLine(message)
                     events.log(level.name, message)
+                }
             }
 
             logger.info("Memory limit: ${Runtime.getRuntime().maxMemory() / (1024 * 1024)}MB")
 
-            val aaptLogs = AaptLogCapture().apply { start() }
+            val aaptLogs = AaptLogCapture(onLine = ::handleDexCompileLine).apply { start() }
+            val stdioCapture = StdIoCapture(onLine = ::handleDexCompileLine).apply { start() }
 
             try {
                 val patchList = runStep(StepId.LoadPatches, ::onEvent) {
@@ -101,7 +127,13 @@ class PatcherProcess : IPatcherProcess.Stub() {
                             input,
                             File(parameters.cacheDir),
                             logger,
-                            parameters.stripNativeLibs
+                            parameters.stripNativeLibs,
+                            onProgress = { message ->
+                                onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
+                            },
+                            onSubSteps = { subSteps ->
+                                onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
+                            }
                         )
                     }
                 } else {
@@ -109,7 +141,13 @@ class PatcherProcess : IPatcherProcess.Stub() {
                         input,
                         File(parameters.cacheDir),
                         logger,
-                        parameters.stripNativeLibs
+                        parameters.stripNativeLibs,
+                        onProgress = { message ->
+                            onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
+                        },
+                        onSubSteps = { subSteps ->
+                            onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
+                        }
                     )
                 }
 
@@ -126,7 +164,12 @@ class PatcherProcess : IPatcherProcess.Stub() {
                     }
 
                     session.use {
-                        it.run(File(parameters.outputFile), patchList)
+                        it.run(
+                            File(parameters.outputFile),
+                            patchList,
+                            parameters.stripNativeLibs,
+                            preparation.merged
+                        )
                     }
                 } finally {
                     preparation.cleanup()
@@ -143,6 +186,7 @@ class PatcherProcess : IPatcherProcess.Stub() {
                 }
                 events.finished(report)
             } finally {
+                stdioCapture.close()
                 aaptLogs.stop()
             }
         }
@@ -188,7 +232,9 @@ class PatcherProcess : IPatcherProcess.Stub() {
         }
     }
 
-    private class AaptLogCapture {
+    private class AaptLogCapture(
+        private val onLine: ((String) -> Unit)? = null
+    ) {
         private val logger = JavaLogger.getLogger("")
         private val lines = ArrayDeque<String>()
         private var originalLevel: Level? = null
@@ -196,6 +242,7 @@ class PatcherProcess : IPatcherProcess.Stub() {
             override fun publish(record: LogRecord) {
                 val message = record.message?.trim().orEmpty()
                 if (message.isEmpty()) return
+                onLine?.invoke(message)
                 synchronized(lines) {
                     if (lines.size >= MAX_LINES) {
                         lines.removeFirst()
@@ -224,6 +271,84 @@ class PatcherProcess : IPatcherProcess.Stub() {
 
         companion object {
             private const val MAX_LINES = 200
+        }
+    }
+
+    private class StdIoCapture(
+        private val onLine: (String) -> Unit
+    ) {
+        private val originalOut = System.out
+        private val originalErr = System.err
+        private val outBuffer = LineBufferOutputStream(onLine)
+        private val errBuffer = LineBufferOutputStream(onLine)
+        private val outStream = PrintStream(TeeOutputStream(originalOut, outBuffer), true)
+        private val errStream = PrintStream(TeeOutputStream(originalErr, errBuffer), true)
+
+        fun start() {
+            System.setOut(outStream)
+            System.setErr(errStream)
+        }
+
+        fun close() {
+            outBuffer.flushPending()
+            errBuffer.flushPending()
+            System.setOut(originalOut)
+            System.setErr(originalErr)
+        }
+    }
+
+    private class TeeOutputStream(
+        private val first: OutputStream,
+        private val second: OutputStream
+    ) : OutputStream() {
+        override fun write(b: Int) {
+            first.write(b)
+            second.write(b)
+        }
+
+        override fun write(bytes: ByteArray, off: Int, len: Int) {
+            first.write(bytes, off, len)
+            second.write(bytes, off, len)
+        }
+
+        override fun flush() {
+            first.flush()
+            second.flush()
+        }
+    }
+
+    private class LineBufferOutputStream(
+        private val onLine: (String) -> Unit
+    ) : OutputStream() {
+        private val buffer = StringBuilder()
+
+        override fun write(b: Int) {
+            appendChar(b.toChar())
+        }
+
+        override fun write(bytes: ByteArray, off: Int, len: Int) {
+            for (index in off until off + len) {
+                appendChar(bytes[index].toInt().toChar())
+            }
+        }
+
+        override fun flush() {
+            flushPending()
+        }
+
+        fun flushPending() {
+            if (buffer.isEmpty()) return
+            val line = buffer.toString()
+            buffer.setLength(0)
+            onLine(line)
+        }
+
+        private fun appendChar(ch: Char) {
+            when (ch) {
+                '\n' -> flushPending()
+                '\r' -> Unit
+                else -> buffer.append(ch)
+            }
         }
     }
 }

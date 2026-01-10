@@ -580,19 +580,10 @@ fun PatcherScreen(
                 .padding(paddingValues)
                 .fillMaxSize()
         ) {
-            var expandedCategory by rememberSaveable { mutableStateOf<StepCategory?>(null) }
             val expandedCategories = rememberSaveable(
                 saver = snapshotStateSetSaver()
             ) {
                 mutableStateSetOf<StepCategory>()
-            }
-
-            LaunchedEffect(autoCollapsePatcherSteps) {
-                if (autoCollapsePatcherSteps) {
-                    expandedCategory = expandedCategory ?: expandedCategories.firstOrNull()
-                } else {
-                    expandedCategory?.let { expandedCategories.add(it) }
-                }
             }
 
             LinearProgressIndicator(
@@ -612,28 +603,17 @@ fun PatcherScreen(
                     Steps(
                         category = category,
                         steps = steps,
-                        isExpanded = if (autoCollapsePatcherSteps) {
-                            expandedCategory == category
-                        } else {
-                            expandedCategories.contains(category)
-                        },
+                        subStepsById = viewModel.stepSubSteps,
+                        isExpanded = expandedCategories.contains(category),
                         autoExpandRunning = autoExpandRunningSteps,
                         onExpand = {
-                            if (autoCollapsePatcherSteps) {
-                                expandedCategory = category
-                            } else {
-                                expandedCategories.add(category)
-                            }
+                            expandedCategories.add(category)
                         },
                         onClick = {
-                            if (autoCollapsePatcherSteps) {
-                                expandedCategory = if (expandedCategory == category) null else category
+                            if (expandedCategories.contains(category)) {
+                                expandedCategories.remove(category)
                             } else {
-                                if (expandedCategories.contains(category)) {
-                                    expandedCategories.remove(category)
-                                } else {
-                                    expandedCategories.add(category)
-                                }
+                                expandedCategories.add(category)
                             }
                         },
                         autoCollapseCompleted = autoCollapsePatcherSteps

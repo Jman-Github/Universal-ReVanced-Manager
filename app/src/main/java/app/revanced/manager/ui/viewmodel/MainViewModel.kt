@@ -58,7 +58,7 @@ class MainViewModel(
         return SelectedApp.Local(
             downloadedApp.packageName,
             downloadedApp.version,
-            downloadedAppRepository.getPreparedApkFile(downloadedApp),
+            downloadedAppRepository.getApkFileForApp(downloadedApp),
             false
         )
     }

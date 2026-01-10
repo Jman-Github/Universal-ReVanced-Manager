@@ -644,9 +644,7 @@ class SelectedAppInfoViewModel(
         cancelPluginAction()
         viewModelScope.launch {
             val result = runCatching {
-                val apkFile = withContext(Dispatchers.IO) {
-                    downloadedAppRepository.getPreparedApkFile(downloadedApp)
-                }
+                val apkFile = downloadedAppRepository.getApkFileForApp(downloadedApp)
                 withContext(Dispatchers.IO) {
                     downloadedAppRepository.get(
                         downloadedApp.packageName,

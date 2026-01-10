@@ -13,6 +13,8 @@
 - Added a saving modal to the custom file picker
 - Added a search bar in the custom file picker that filters the current directory
 - Made the `Save patched apps for later` toggle in Settings > Advanced actually toggle the ability to save patched apps in the `Apps` tab
+- Added expandable/collapsable sub-steps to the `Merging split APKs` step in the patcher, along with sub-steps for the `Writing patched APK` step
+- Overall improved the patcher screen
 
 
 # Bug fixes
@@ -20,6 +22,9 @@
 - Fixed dev builds not being prompted to update when there are new releases
 - Fixed crashes the would occur occasionally for apps when loading metadata on the app info page
 - Fixed false "Universal patches disabled" and "This patch profile contains universal patches. Enable universal patches..." toast/dialogs
+- Fixed patcher steps under the `Patching` section not being checked off and left blank until after the entire step is `Patching` section is completed
+- Fixed an issue where canceling the patching process by tapping the back button on the `Patcher` screen was not actually immediately canceling/killing the patching process as it would continue to run in the background for a bit
+
 
 # Docs
 

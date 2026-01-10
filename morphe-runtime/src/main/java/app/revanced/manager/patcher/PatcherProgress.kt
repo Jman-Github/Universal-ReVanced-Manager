@@ -14,6 +14,7 @@ sealed class ProgressEvent : Parcelable {
         val current: Long? = null,
         val total: Long? = null,
         val message: String? = null,
+        val subSteps: List<String>? = null,
     ) : ProgressEvent()
 
     data class Completed(

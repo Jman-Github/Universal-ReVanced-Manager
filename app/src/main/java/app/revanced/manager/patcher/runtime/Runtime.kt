@@ -39,4 +39,6 @@ sealed class Runtime(context: Context) : KoinComponent {
         onEvent: (ProgressEvent) -> Unit,
         stripNativeLibs: Boolean,
     )
+
+    open fun cancel() = Unit
 }

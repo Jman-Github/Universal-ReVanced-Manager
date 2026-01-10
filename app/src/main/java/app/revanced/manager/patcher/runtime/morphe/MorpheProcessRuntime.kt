@@ -25,11 +25,20 @@ import com.github.pgreze.process.Redirect
 import com.github.pgreze.process.process
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import java.util.concurrent.atomic.AtomicReference
 
 class MorpheProcessRuntime(private val context: Context) : MorpheRuntime(context) {
+    private val binderRef = AtomicReference<IMorphePatcherProcess?>()
+
+    override fun cancel() {
+        runCatching { binderRef.getAndSet(null)?.exit() }
+    }
+
     private suspend fun awaitBinderConnection(): IMorphePatcherProcess {
         val binderFuture = CompletableDeferred<IMorphePatcherProcess>()
         val receiver = object : BroadcastReceiver() {
@@ -64,6 +73,9 @@ class MorpheProcessRuntime(private val context: Context) : MorpheRuntime(context
         onEvent: (ProgressEvent) -> Unit,
         stripNativeLibs: Boolean,
     ) = coroutineScope {
+        currentCoroutineContext()[Job]?.invokeOnCompletion {
+            runCatching { binderRef.get()?.exit() }
+        }
         onEvent(ProgressEvent.Started(app.revanced.manager.patcher.StepId.LoadPatches))
         val runtimeApk = MorpheRuntimeAssets.ensureRuntimeApk(context).absolutePath
 
@@ -121,6 +133,7 @@ class MorpheProcessRuntime(private val context: Context) : MorpheRuntime(context
 
         launch(Dispatchers.IO) {
             val binder = awaitBinderConnection()
+            binderRef.set(binder)
             val remoteBuildId = binder.buildId()
             if (remoteBuildId != 0L && remoteBuildId != BuildConfig.BUILD_ID) {
                 throw Exception("app_process is running outdated code. Clear the app cache or disable Android 11 deployment optimizations in your IDE")
@@ -134,7 +147,7 @@ class MorpheProcessRuntime(private val context: Context) : MorpheRuntime(context
                 }
 
                 override fun finished(exceptionStackTrace: String?) {
-                    binder.exit()
+                    runCatching { binder.exit() }
 
                     exceptionStackTrace?.let {
                         patching.completeExceptionally(RemoteFailureException(it))

@@ -25,9 +25,12 @@ import com.github.pgreze.process.Redirect
 import com.github.pgreze.process.process
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import java.util.concurrent.atomic.AtomicReference
 import org.koin.core.component.inject
 
 /**
@@ -35,6 +38,11 @@ import org.koin.core.component.inject
  */
 class ProcessRuntime(private val context: Context) : Runtime(context) {
     private val pm: PM by inject()
+    private val binderRef = AtomicReference<IPatcherProcess?>()
+
+    override fun cancel() {
+        runCatching { binderRef.getAndSet(null)?.exit() }
+    }
 
     private suspend fun awaitBinderConnection(): IPatcherProcess {
         val binderFuture = CompletableDeferred<IPatcherProcess>()
@@ -70,6 +78,9 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
         onEvent: (ProgressEvent) -> Unit,
         stripNativeLibs: Boolean,
     ) = coroutineScope {
+        currentCoroutineContext()[Job]?.invokeOnCompletion {
+            runCatching { binderRef.get()?.exit() }
+        }
         // Get the location of our own Apk.
         val managerBaseApk = pm.getPackageInfo(context.packageName)!!.applicationInfo!!.sourceDir
 
@@ -129,6 +140,7 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
 
         launch(Dispatchers.IO) {
             val binder = awaitBinderConnection()
+            binderRef.set(binder)
 
             // Android Studio's fast deployment feature causes an issue where the other process will be running older code compared to the main process.
             // The patcher process is running outdated code if the randomly generated BUILD_ID numbers don't match.
@@ -143,7 +155,7 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
                 }
 
                 override fun finished(exceptionStackTrace: String?) {
-                    binder.exit()
+                    runCatching { binder.exit() }
 
                     exceptionStackTrace?.let {
                         patching.completeExceptionally(RemoteFailureException(it))

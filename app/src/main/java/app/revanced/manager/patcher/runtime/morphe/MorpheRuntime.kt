@@ -38,4 +38,6 @@ sealed class MorpheRuntime(context: Context) : KoinComponent {
         onEvent: (ProgressEvent) -> Unit,
         stripNativeLibs: Boolean,
     )
+
+    open fun cancel() = Unit
 }

@@ -1,5 +1,6 @@
 package app.revanced.manager.patcher.split
 
+import android.os.Build
 import android.util.Log
 import app.revanced.manager.patcher.logger.LogLevel
 import app.revanced.manager.patcher.logger.Logger
@@ -10,10 +11,13 @@ import java.nio.file.Files
 import java.util.Locale
 import java.util.zip.ZipFile
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 
 object SplitApkPreparer {
     private val SUPPORTED_EXTENSIONS = setOf("apks", "apkm", "xapk")
+    private const val SKIPPED_STEP_PREFIX = "[skipped]"
+    private val KNOWN_ABIS = setOf("armeabi", "armeabi-v7a", "arm64-v8a", "x86", "x86_64")
 
     fun isSplitArchive(file: File?): Boolean {
         if (file == null || !file.exists()) return false
@@ -26,7 +30,9 @@ object SplitApkPreparer {
         source: File,
         workspace: File,
         logger: Logger = defaultLogger,
-        stripNativeLibs: Boolean = false
+        stripNativeLibs: Boolean = false,
+        onProgress: ((String) -> Unit)? = null,
+        onSubSteps: ((List<String>) -> Unit)? = null
     ): PreparationResult {
         if (!isSplitArchive(source)) {
             return PreparationResult(source, merged = false)
@@ -40,21 +46,34 @@ object SplitApkPreparer {
         return try {
             val sourceSize = source.length()
             logger.info("Preparing split APK bundle from ${source.name} (size=${sourceSize} bytes)")
-            val entries = extractSplitEntries(source, modulesDir)
+            val entries = extractSplitEntries(source, modulesDir, onProgress)
             logger.info("Found ${entries.size} split modules: ${entries.joinToString { it.name }}")
             logger.info("Module sizes: ${entries.joinToString { "${it.name}=${it.file.length()} bytes" }}")
+            val mergeOrder = Merger.listMergeOrder(modulesDir.toPath())
+            val skippedModules = if (stripNativeLibs) {
+                val supportedTokens = supportedAbiTokens()
+                mergeOrder.filter { shouldSkipModule(it, supportedTokens) }.toSet()
+            } else {
+                emptySet()
+            }
+            onSubSteps?.invoke(buildSplitSubSteps(mergeOrder, skippedModules, stripNativeLibs))
 
-            val module = Merger.merge(modulesDir.toPath())
+            val module = Merger.merge(modulesDir.toPath(), skippedModules) { message ->
+                onProgress?.invoke(message)
+            }
             module.use {
-                withContext(Dispatchers.IO) {
+                runInterruptible(Dispatchers.IO) {
+                    onProgress?.invoke("Writing merged APK")
                     it.writeApk(mergedApk)
                 }
             }
 
             if (stripNativeLibs) {
+                onProgress?.invoke("Stripping native libraries")
                 NativeLibStripper.strip(mergedApk)
             }
 
+            onProgress?.invoke("Finalizing merged APK")
             persistMergedIfDownloaded(source, mergedApk, logger)
 
             logger.info(
@@ -84,8 +103,67 @@ object SplitApkPreparer {
 
     private data class ExtractedModule(val name: String, val file: File)
 
-    private suspend fun extractSplitEntries(source: File, targetDir: File): List<ExtractedModule> =
-        withContext(Dispatchers.IO) {
+    private fun buildSplitSubSteps(
+        mergeOrder: List<String>,
+        skippedModules: Set<String>,
+        stripNativeLibs: Boolean
+    ): List<String> {
+        val steps = mutableListOf<String>()
+        steps.add("Extracting split APKs")
+        val skippedLookup = skippedModules
+            .map { it.lowercase(Locale.ROOT) }
+            .toSet()
+        val (skipped, remaining) = mergeOrder.partition {
+            skippedLookup.contains(it.lowercase(Locale.ROOT))
+        }
+        (skipped + remaining).forEach { name ->
+            val label = "Merging $name"
+            val entry = if (skippedLookup.contains(name.lowercase(Locale.ROOT))) {
+                "$SKIPPED_STEP_PREFIX$label"
+            } else {
+                label
+            }
+            steps.add(entry)
+        }
+        steps.add("Writing merged APK")
+        if (stripNativeLibs) {
+            steps.add("Stripping native libraries")
+        }
+        steps.add("Finalizing merged APK")
+        return steps
+    }
+
+    private fun supportedAbiTokens(): Set<String> =
+        Build.SUPPORTED_ABIS
+            .flatMap { abi -> buildAbiTokens(abi) }
+            .map { it.lowercase(Locale.ROOT) }
+            .toSet()
+
+    private fun buildAbiTokens(abi: String): Set<String> {
+        val normalized = abi.lowercase(Locale.ROOT)
+        return setOf(
+            normalized,
+            normalized.replace('-', '_'),
+            normalized.replace('_', '-')
+        )
+    }
+
+    private fun shouldSkipModule(
+        moduleName: String,
+        supportedTokens: Set<String>
+    ): Boolean {
+        val lower = moduleName.lowercase(Locale.ROOT)
+        val knownTokens = KNOWN_ABIS.flatMap { buildAbiTokens(it) }.toSet()
+        if (knownTokens.none { lower.contains(it) }) return false
+        return supportedTokens.none { lower.contains(it) }
+    }
+
+    private suspend fun extractSplitEntries(
+        source: File,
+        targetDir: File,
+        onProgress: ((String) -> Unit)? = null
+    ): List<ExtractedModule> =
+        runInterruptible(Dispatchers.IO) {
             val extracted = mutableListOf<ExtractedModule>()
             ZipFile(source).use { zip ->
                 val apkEntries = zip.entries().asSequence()
@@ -97,8 +175,10 @@ object SplitApkPreparer {
                     throw IOException("Split archive does not contain any APK entries.")
                 }
 
+                onProgress?.invoke("Extracting split APKs")
                 apkEntries.forEach { entry ->
-                    val destination = targetDir.resolve(entry.name.substringAfterLast('/'))
+                    val entryName = entry.name.substringAfterLast('/')
+                    val destination = targetDir.resolve(entryName)
                     destination.parentFile?.mkdirs()
                     zip.getInputStream(entry).use { input ->
                         Files.newOutputStream(destination.toPath()).use { output ->
