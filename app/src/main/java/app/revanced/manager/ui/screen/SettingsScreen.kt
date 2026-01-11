@@ -186,6 +186,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.theme_presets, R.string.theme_presets_description, R.string.general, Settings.General),
             SearchEntry(R.string.theme_color, R.string.theme_color_description, R.string.general, Settings.General),
             SearchEntry(R.string.accent_color, R.string.accent_color_description, R.string.general, Settings.General),
+            SearchEntry(R.string.pure_black_follow_system, R.string.pure_black_follow_system_description, R.string.general, Settings.General),
             SearchEntry(R.string.theme_preview_title, R.string.theme_preview_description, R.string.general, Settings.General),
             SearchEntry(R.string.theme_reset, null, R.string.general, Settings.General),
             SearchEntry(R.string.app_language, null, R.string.general, Settings.General),

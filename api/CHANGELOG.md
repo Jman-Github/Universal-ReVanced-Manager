@@ -29,6 +29,8 @@
 - Fixed bundle recommendation selection and compatibility issues https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/104
 - Fixed issues with the custom file picker and the `Downloads` folder on certain devices
 - Fixed app startup crashes and crashes with the custom file picker on devices running older Android versions
+- Added a toggle to use the `Pure Black` theme instead of the `Dark` theme for the `Follow system` theme
+
 
 # Docs
 

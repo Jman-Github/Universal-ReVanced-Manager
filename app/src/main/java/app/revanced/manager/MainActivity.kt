@@ -87,8 +87,12 @@ class MainActivity : AppCompatActivity() {
             val theme by vm.prefs.theme.getAsState()
             val dynamicColor by vm.prefs.dynamicColor.getAsState()
             val pureBlackTheme by vm.prefs.pureBlackTheme.getAsState()
+            val pureBlackOnSystemDark by vm.prefs.pureBlackOnSystemDark.getAsState()
             val customAccentColor by vm.prefs.customAccentColor.getAsState()
             val customThemeColor by vm.prefs.customThemeColor.getAsState()
+            val systemDark = isSystemInDarkTheme()
+            val darkThemeEnabled = theme == Theme.SYSTEM && systemDark || theme == Theme.DARK
+            val pureBlackEnabled = pureBlackTheme || (pureBlackOnSystemDark && theme == Theme.SYSTEM && systemDark)
 
             EventEffect(vm.legacyImportActivityFlow) {
                 try {
@@ -98,9 +102,9 @@ class MainActivity : AppCompatActivity() {
             }
 
             ReVancedManagerTheme(
-                darkTheme = theme == Theme.SYSTEM && isSystemInDarkTheme() || theme == Theme.DARK,
+                darkTheme = darkThemeEnabled,
                 dynamicColor = dynamicColor,
-                pureBlackTheme = pureBlackTheme,
+                pureBlackTheme = pureBlackEnabled,
                 accentColorHex = customAccentColor.takeUnless { it.isBlank() },
                 themeColorHex = customThemeColor.takeUnless { it.isBlank() }
             ) {

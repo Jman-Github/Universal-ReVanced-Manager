@@ -144,6 +144,8 @@
     <string name="dynamic_color_description">Adapt colors to the wallpaper</string>
     <string name="accent_color">Accent color</string>
     <string name="accent_color_description">Choose a custom accent color for the app</string>
+    <string name="pure_black_follow_system">Use pure black for system dark theme</string>
+    <string name="pure_black_follow_system_description">When following system theme, use the pure black palette for dark mode</string>
     <string name="accent_color_picker_title">Accent color</string>
     <string name="accent_color_preview">Preview</string>
     <string name="accent_color_reset">Reset accent</string>

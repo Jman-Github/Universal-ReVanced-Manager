@@ -32,6 +32,7 @@ class PreferencesManager(
     }
     val dynamicColor = booleanPreference("dynamic_color", false)
     val pureBlackTheme = booleanPreference("pure_black_theme", false)
+    val pureBlackOnSystemDark = booleanPreference("pure_black_on_system_dark", false)
     val themePresetSelectionEnabled = booleanPreference("theme_preset_selection_enabled", true)
     val themePresetSelectionName = stringPreference("theme_preset_selection_name", "DEFAULT")
     val customAccentColor = stringPreference("custom_accent_color", "")
@@ -117,6 +118,7 @@ class PreferencesManager(
     data class SettingsSnapshot(
         val dynamicColor: Boolean? = null,
         val pureBlackTheme: Boolean? = null,
+        val pureBlackOnSystemDark: Boolean? = null,
         val customAccentColor: String? = null,
         val customThemeColor: String? = null,
         val themePresetSelectionName: String? = null,
@@ -174,6 +176,7 @@ class PreferencesManager(
     suspend fun exportSettings() = SettingsSnapshot(
         dynamicColor = dynamicColor.get(),
         pureBlackTheme = pureBlackTheme.get(),
+        pureBlackOnSystemDark = pureBlackOnSystemDark.get(),
         customAccentColor = customAccentColor.get(),
         customThemeColor = customThemeColor.get(),
         themePresetSelectionName = themePresetSelectionName.get(),
@@ -231,6 +234,7 @@ class PreferencesManager(
     suspend fun importSettings(snapshot: SettingsSnapshot) = edit {
         snapshot.dynamicColor?.let { dynamicColor.value = it }
         snapshot.pureBlackTheme?.let { pureBlackTheme.value = it }
+        snapshot.pureBlackOnSystemDark?.let { pureBlackOnSystemDark.value = it }
         snapshot.customAccentColor?.let { customAccentColor.value = it }
         snapshot.customThemeColor?.let { customThemeColor.value = it }
         snapshot.themePresetSelectionName?.let { themePresetSelectionName.value = it }
