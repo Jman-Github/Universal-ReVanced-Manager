@@ -20,6 +20,7 @@
 - Updated the `Remove unused native libraries` toggle in Settings > Advanced to strip all native libraries but one (so only keep one supported library if applicable)
 - Added a per bundle patch selection counter
 - Made the `View patches` button auto-scroll on the Discover patch bundles page
+- Added the ability to export patcher logs from the patcher screen as a `.txt`
 
 
 # Bug fixes
@@ -38,6 +39,11 @@
 
 
 # Docs
+
+- Added the Discord server invite link to the `README.md`
+- Added the new unique features of this release to the `README.md`
+- Added the new translators to the Contributors section of the `README.md`
+- Redesign the Unique Features section of the `README.md`
 
 
 # v1.7.0 (2025-12-31)

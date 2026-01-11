@@ -763,6 +763,15 @@ Details: %2$s</string>
     <string name="saved_app_uninstall_description">This removes the installed version only. Your saved APK stays intact.</string>
     <string name="saved_app_install_missing">Saved APK not found</string>
     <string name="save_logs">Save logs</string>
+    <string name="patcher_log_dialog_title">Patch log</string>
+    <string name="patcher_log_dialog_description">Choose how you want to share or save the patch log.</string>
+    <string name="patcher_log_dialog_copy">Copy to clipboard</string>
+    <string name="patcher_log_dialog_copy_description">Copy the full patch log so you can paste it anywhere.</string>
+    <string name="patcher_log_dialog_export">Export as TXT</string>
+    <string name="patcher_log_dialog_export_description">Save the patch log to storage using the custom file picker.</string>
+    <string name="patcher_log_export_success">Patch log exported</string>
+    <string name="patcher_log_export_failed">Failed to export patch log</string>
+    <string name="patcher_log_exporting">Exporting patch log</string>
     <string name="plugin_activity_dialog_body">User interaction is required in order to proceed with this plugin.</string>
     <string name="select_install_type">Select installation type</string>
     <string name="patcher_step_group_preparing">Preparing</string>

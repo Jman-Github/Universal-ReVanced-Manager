@@ -109,9 +109,11 @@ import ru.solrudev.ackpine.uninstaller.UninstallFailure
 import ru.solrudev.ackpine.uninstaller.createSession
 import java.io.File
 import java.io.IOException
+import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.nio.file.StandardOpenOption
 import java.time.Duration
 import java.util.UUID
 
@@ -1103,7 +1105,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         app.toast(app.getString(R.string.save_apk_success))
     }
 
-    fun exportLogs(context: Context) {
+    private fun buildLogContent(context: Context): String {
         val stepLines = steps.mapIndexed { index, step ->
             buildString {
                 append(index + 1)
@@ -1122,7 +1124,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
         val logLines = logs.toList().map { (level, msg) -> "[${level.name}]: $msg" }
 
-        val content = buildString {
+        return buildString {
             appendLine("=== Patcher Steps ===")
             if (stepLines.isEmpty()) {
                 appendLine("No steps recorded.")
@@ -1137,6 +1139,41 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 logLines.forEach { appendLine(it) }
             }
         }
+    }
+
+    fun getLogContent(context: Context): String = buildLogContent(context)
+
+    fun exportLogsToPath(
+        context: Context,
+        target: Path,
+        onResult: (Boolean) -> Unit = {}
+    ) = viewModelScope.launch {
+        val exportSucceeded = runCatching {
+            withContext(Dispatchers.IO) {
+                target.parent?.let { Files.createDirectories(it) }
+                Files.newBufferedWriter(
+                    target,
+                    StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING
+                ).use { writer ->
+                    writer.write(buildLogContent(context))
+                }
+            }
+        }.isSuccess
+
+        if (!exportSucceeded) {
+            app.toast(app.getString(R.string.patcher_log_export_failed))
+            onResult(false)
+            return@launch
+        }
+
+        app.toast(app.getString(R.string.patcher_log_export_success))
+        onResult(true)
+    }
+
+    fun exportLogs(context: Context) {
+        val content = buildLogContent(context)
 
         val sendIntent: Intent = Intent().apply {
             action = Intent.ACTION_SEND
