@@ -902,7 +902,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             val scopedBundlesFinal = patchBundleRepository.scopedBundleInfoFlow(finalPackageName, finalVersion)
                 .first()
                 .associateBy { it.uid }
-            val sanitizedSelectionFinal = sanitizeSelection(appliedSelection, scopedBundlesFinal)
+            val globalBundlesFinal = patchBundleRepository.allBundlesInfoFlow.first()
+            val sanitizedSelectionFinal = sanitizeSelection(appliedSelection, globalBundlesFinal)
             val sanitizedOptionsFinal = sanitizeOptions(appliedOptions, scopedBundlesFinal)
             val scopedBundlesOriginal = patchBundleRepository.scopedBundleInfoFlow(
                 packageName,
@@ -2304,7 +2305,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private fun sanitizeSelection(
         selection: PatchSelection,
-        bundles: Map<Int, PatchBundleInfo.Scoped>
+        bundles: Map<Int, PatchBundleInfo>
     ): PatchSelection = buildMap {
         selection.forEach { (uid, patches) ->
             val bundle = bundles[uid]

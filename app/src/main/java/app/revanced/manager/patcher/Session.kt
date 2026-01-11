@@ -23,6 +23,11 @@ import java.nio.file.StandardCopyOption
 import java.io.BufferedInputStream
 import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
+import javax.xml.parsers.DocumentBuilderFactory
+import javax.xml.transform.OutputKeys
+import javax.xml.transform.TransformerFactory
+import javax.xml.transform.dom.DOMSource
+import javax.xml.transform.stream.StreamResult
 
 internal typealias PatchList = List<Patch<*>>
 
@@ -148,6 +153,9 @@ class Session(
                 )
             )
             logger.info("Writing patched files...")
+            runInterruptible(Dispatchers.IO) {
+                dedupeResourceValues()
+            }
             val result = patcher.get()
             val updatedDexNames = mergeDexNames(initialDexNames, result)
             if (updatedDexNames != initialDexNames) {
@@ -258,6 +266,68 @@ class Session(
             return listDexNamesFromApk(file)
         }
         return listDexNamesFromSplitArchive(file)
+    }
+
+    private fun dedupeResourceValues() {
+        val resDir = tempDir.resolve("apk").resolve("res")
+        if (!resDir.exists()) return
+        val valuesDirs = resDir.listFiles()
+            ?.filter { it.isDirectory && it.name.startsWith("values") }
+            .orEmpty()
+        valuesDirs.forEach { dir ->
+            val files = dir.listFiles()
+                ?.filter { it.isFile && it.extension.equals("xml", ignoreCase = true) }
+                ?.sortedBy { it.name.lowercase(java.util.Locale.ROOT) }
+                .orEmpty()
+            val seen = HashSet<String>()
+            files.asReversed().forEach { file ->
+                val removed = runCatching { dedupeResourceFile(file, seen) }.getOrDefault(0)
+                if (removed > 0) {
+                    logger.warn("Removed $removed duplicate resources from ${file.name}")
+                }
+            }
+        }
+    }
+
+    private fun dedupeResourceFile(file: File, seen: MutableSet<String>): Int {
+        val factory = DocumentBuilderFactory.newInstance().apply {
+            isNamespaceAware = false
+            runCatching { setFeature("http://apache.org/xml/features/disallow-doctype-decl", true) }
+            runCatching { setFeature("http://xml.org/sax/features/external-general-entities", false) }
+            runCatching { setFeature("http://xml.org/sax/features/external-parameter-entities", false) }
+            runCatching { isXIncludeAware = false }
+            runCatching { isExpandEntityReferences = false }
+        }
+        val builder = factory.newDocumentBuilder()
+        val document = builder.parse(file)
+        val root = document.documentElement ?: return 0
+        if (!root.tagName.equals("resources", ignoreCase = true)) return 0
+        var removed = 0
+        val nodes = root.childNodes
+        var index = nodes.length - 1
+        while (index >= 0) {
+            val node = nodes.item(index)
+            if (node.nodeType == org.w3c.dom.Node.ELEMENT_NODE) {
+                val element = node as org.w3c.dom.Element
+                val name = element.getAttribute("name")
+                if (name.isNotBlank()) {
+                    val type = if (element.tagName == "item") element.getAttribute("type") else ""
+                    val key = "${element.tagName}|$type|$name"
+                    if (!seen.add(key)) {
+                        root.removeChild(element)
+                        removed += 1
+                    }
+                }
+            }
+            index -= 1
+        }
+        if (removed == 0) return 0
+        val transformer = TransformerFactory.newInstance().newTransformer().apply {
+            setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "no")
+            setOutputProperty(OutputKeys.ENCODING, "utf-8")
+        }
+        transformer.transform(DOMSource(document), StreamResult(file))
+        return removed
     }
 
     private fun mergeDexNames(
