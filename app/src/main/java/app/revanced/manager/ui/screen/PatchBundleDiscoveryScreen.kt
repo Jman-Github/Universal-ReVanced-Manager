@@ -1,5 +1,7 @@
 package app.revanced.manager.ui.screen
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -68,6 +70,8 @@ import app.revanced.manager.domain.manager.PreferencesManager
 import compose.icons.FontAwesomeIcons
 import compose.icons.fontawesomeicons.Brands
 import compose.icons.fontawesomeicons.brands.Github
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import coil.compose.AsyncImage
@@ -522,6 +526,30 @@ private fun BundleDiscoveryItem(
                     )
                 }
                 val viewScrollState = rememberScrollState()
+                LaunchedEffect(viewScrollState.maxValue) {
+                    if (viewScrollState.maxValue <= 0) {
+                        return@LaunchedEffect
+                    }
+                    viewScrollState.scrollTo(0)
+                    while (isActive) {
+                        viewScrollState.animateScrollTo(
+                            value = viewScrollState.maxValue,
+                            animationSpec = tween(
+                                durationMillis = 2200,
+                                easing = LinearEasing
+                            )
+                        )
+                        delay(600)
+                        viewScrollState.animateScrollTo(
+                            value = 0,
+                            animationSpec = tween(
+                                durationMillis = 2200,
+                                easing = LinearEasing
+                            )
+                        )
+                        delay(1000)
+                    }
+                }
                 FilledTonalButton(
                     enabled = viewPatchesEnabled,
                     onClick = { onViewPatches(bundle) },

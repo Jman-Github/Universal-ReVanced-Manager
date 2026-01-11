@@ -19,6 +19,7 @@
 - Added a toggle in Settings > Advanced that when enabled skips all unused splits when patching with a split APK (like locale/density splits)
 - Updated the `Remove unused native libraries` toggle in Settings > Advanced to strip all native libraries but one (so only keep one supported library if applicable)
 - Added a per bundle patch selection counter
+- Made the `View patches` button auto-scroll on the Discover patch bundles page
 
 
 # Bug fixes
