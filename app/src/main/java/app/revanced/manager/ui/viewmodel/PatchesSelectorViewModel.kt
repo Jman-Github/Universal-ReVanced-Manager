@@ -150,7 +150,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
             initialValue = persistentMapOf()
         )
 
-    private var currentDefaultSelection: PersistentPatchSelection = persistentMapOf()
+    private var currentDefaultSelection: PersistentPatchSelection by mutableStateOf(persistentMapOf())
 
     val defaultSelectionCount = defaultPatchSelection.map { selection ->
         selection.values.sumOf { it.size }
@@ -310,6 +310,11 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
     fun bundleHasSelection(bundleUid: Int): Boolean {
         customPatchSelection?.get(bundleUid)?.let { return it.isNotEmpty() }
         return customPatchSelection == null && (currentDefaultSelection[bundleUid]?.isNotEmpty() == true)
+    }
+
+    fun bundleSelectionCount(bundleUid: Int): Int {
+        val selection = customPatchSelection ?: currentDefaultSelection
+        return selection[bundleUid]?.size ?: 0
     }
 
     fun isSelected(bundle: Int, patch: PatchInfo): Boolean {

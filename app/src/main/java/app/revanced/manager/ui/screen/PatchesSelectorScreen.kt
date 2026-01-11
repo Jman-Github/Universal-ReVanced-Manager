@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
@@ -96,6 +97,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -112,6 +114,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.net.Uri
 import android.os.Build
@@ -191,6 +194,7 @@ fun PatchesSelectorScreen(
         orderedActionKeys.filterNot { it.storageId in hiddenActionsPref }
     }
     val context = LocalContext.current
+    val density = LocalDensity.current
     val selectedBundleUids = remember { mutableStateListOf<Int>() }
     var showBundleDialog by rememberSaveable { mutableStateOf(false) }
     var showProfileNameDialog by rememberSaveable { mutableStateOf(false) }
@@ -764,6 +768,22 @@ fun PatchesSelectorScreen(
     val currentBundle = bundles.getOrNull(pagerState.currentPage)
     val currentBundleDisplayName = currentBundle?.let { bundleDisplayNames[it.uid] ?: it.name }
     val warningEnabled = viewModel.selectionWarningEnabled
+    val currentBundleUid by remember {
+        derivedStateOf { bundles.getOrNull(pagerState.currentPage)?.uid }
+    }
+    val currentBundleSelectionCount by remember {
+        derivedStateOf {
+            currentBundleUid?.let { viewModel.bundleSelectionCount(it) } ?: 0
+        }
+    }
+    val showBundleCounter by remember {
+        derivedStateOf { bundles.size > 1 && currentBundleUid != null }
+    }
+    var tabRowHeightPx by remember { mutableStateOf(0) }
+    var bundleCounterHeightPx by remember(density) {
+        mutableStateOf(with(density) { 24.dp.roundToPx() })
+    }
+    val bundleCounterOffsetPx = remember(density) { with(density) { 6.dp.roundToPx() } }
 
     val actionSpecs = visibleActionKeys.mapNotNull { key ->
         when (key) {
@@ -1137,94 +1157,131 @@ fun PatchesSelectorScreen(
                 .padding(paddingValues)
                 .padding(top = 16.dp)
         ) {
-            if (bundles.size > 1) {
-                ScrollableTabRow(
-                    selectedTabIndex = pagerState.currentPage,
-                    containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp)
-                ) {
-                    bundles.forEachIndexed { index, bundle ->
-                        HapticTab(
-                            selected = pagerState.currentPage == index,
-                            onClick = {
-                                composableScope.launch {
-                                    pagerState.animateScrollToPage(
-                                        index
-                                    )
+            Box(modifier = Modifier.fillMaxSize()) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    if (bundles.size > 1) {
+                        ScrollableTabRow(
+                            selectedTabIndex = pagerState.currentPage,
+                            containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp),
+                            modifier = Modifier.onSizeChanged { tabRowHeightPx = it.height }
+                        ) {
+                            bundles.forEachIndexed { index, bundle ->
+                                HapticTab(
+                                    selected = pagerState.currentPage == index,
+                                    onClick = {
+                                        composableScope.launch {
+                                            pagerState.animateScrollToPage(
+                                                index
+                                            )
+                                        }
+                                    },
+                                    text = {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text(
+                                                text = bundleDisplayNames[bundle.uid] ?: bundle.name,
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                            Text(
+                                                text = bundle.version.orEmpty(),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Text(
+                                                text = stringResource(bundleTypeLabelRes(bundleTypes[bundle.uid])),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.outline
+                                            )
+                                        }
+                                    },
+                                    selectedContentColor = MaterialTheme.colorScheme.primary,
+                                    unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    HorizontalPager(
+                        state = pagerState,
+                        userScrollEnabled = true,
+                        pageContent = { index ->
+                            // Avoid crashing if the lists have not been fully initialized yet.
+                            if (index > bundles.lastIndex || bundles.size != patchLazyListStates.size) return@HorizontalPager
+                        val bundle = bundles[index]
+                        val suggestedVersion = suggestedVersionsByBundle[bundle.uid]?.get(viewModel.appPackageName)
+
+                            LazyColumnWithScrollbar(
+                                modifier = Modifier.fillMaxSize(),
+                                state = patchLazyListStates[index],
+                                contentPadding = PaddingValues(
+                                    start = 16.dp,
+                                    end = 16.dp,
+                                    top = if (showBundleCounter) {
+                                        12.dp + with(density) { bundleCounterHeightPx.toDp() } + 6.dp
+                                    } else {
+                                        12.dp
+                                    },
+                                    bottom = 12.dp
+                                ),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                            patchList(
+                                uid = bundle.uid,
+                                patches = bundle.compatible,
+                                visible = true,
+                                compatible = true,
+                                suggestedVersion = suggestedVersion
+                            )
+                            patchList(
+                                uid = bundle.uid,
+                                patches = bundle.universal,
+                                visible = viewModel.filter and SHOW_UNIVERSAL != 0,
+                                compatible = true,
+                                suggestedVersion = suggestedVersion
+                            ) {
+                                ListHeader(
+                                    title = stringResource(R.string.universal_patches),
+                                )
+                            }
+                            patchList(
+                                uid = bundle.uid,
+                                patches = bundle.incompatible,
+                                visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
+                                compatible = viewModel.allowIncompatiblePatches,
+                                suggestedVersion = suggestedVersion
+                            ) {
+                                ListHeader(
+                                    title = stringResource(R.string.incompatible_patches),
+                                    onHelpClick = { showIncompatiblePatchesDialog = true }
+                                )
                                 }
-                            },
-                            text = {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(
-                                        text = bundleDisplayNames[bundle.uid] ?: bundle.name,
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                    Text(
-                                        text = bundle.version.orEmpty(),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Text(
-                                        text = stringResource(bundleTypeLabelRes(bundleTypes[bundle.uid])),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.outline
-                                    )
-                                }
-                            },
-                            selectedContentColor = MaterialTheme.colorScheme.primary,
-                            unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        }
+                    )
+                }
+                if (showBundleCounter) {
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp),
+                        tonalElevation = 1.dp,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(end = 16.dp)
+                            .offset { IntOffset(0, tabRowHeightPx + bundleCounterOffsetPx) }
+                            .onSizeChanged { bundleCounterHeightPx = it.height }
+                            .zIndex(1f)
+                    ) {
+                        Text(
+                            text = stringResource(
+                                R.string.patch_selector_bundle_selected_count,
+                                currentBundleSelectionCount
+                            ),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                         )
                     }
                 }
             }
-
-            HorizontalPager(
-                state = pagerState,
-                userScrollEnabled = true,
-                pageContent = { index ->
-                    // Avoid crashing if the lists have not been fully initialized yet.
-                    if (index > bundles.lastIndex || bundles.size != patchLazyListStates.size) return@HorizontalPager
-                val bundle = bundles[index]
-                val suggestedVersion = suggestedVersionsByBundle[bundle.uid]?.get(viewModel.appPackageName)
-
-                    LazyColumnWithScrollbar(
-                        modifier = Modifier.fillMaxSize(),
-                        state = patchLazyListStates[index],
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                    patchList(
-                        uid = bundle.uid,
-                        patches = bundle.compatible,
-                        visible = true,
-                        compatible = true,
-                        suggestedVersion = suggestedVersion
-                    )
-                    patchList(
-                        uid = bundle.uid,
-                        patches = bundle.universal,
-                        visible = viewModel.filter and SHOW_UNIVERSAL != 0,
-                        compatible = true,
-                        suggestedVersion = suggestedVersion
-                    ) {
-                        ListHeader(
-                            title = stringResource(R.string.universal_patches),
-                        )
-                    }
-                    patchList(
-                        uid = bundle.uid,
-                        patches = bundle.incompatible,
-                        visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
-                        compatible = viewModel.allowIncompatiblePatches,
-                        suggestedVersion = suggestedVersion
-                    ) {
-                        ListHeader(
-                            title = stringResource(R.string.incompatible_patches),
-                            onHelpClick = { showIncompatiblePatchesDialog = true }
-                        )
-                        }
-                    }
-                }
-            )
         }
     }
 }
