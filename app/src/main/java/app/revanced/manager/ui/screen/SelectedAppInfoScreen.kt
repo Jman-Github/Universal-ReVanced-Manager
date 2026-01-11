@@ -124,9 +124,24 @@ fun SelectedAppInfoScreen(
     val patches = vm.getPatches(bundles, allowIncompatiblePatches)
     val selectedPatchCount = patches.values.sumOf { it.size }
     val downloadedApps by vm.downloadedApps.collectAsStateWithLifecycle(emptyList())
-    val resolveNavigationVersion: (SelectedApp) -> SelectedApp = remember(downloadedApps, vm.selectedAppInfo, vm.selectedApp) {
+    val resolveNavigationVersion: (SelectedApp) -> SelectedApp = remember(
+        downloadedApps,
+        vm.selectedAppInfo,
+        vm.selectedApp,
+        selectedBundleOverride,
+        preferredBundleVersion,
+        bundleTargetsAllVersions,
+        selectedBundleUid
+    ) {
         { app ->
-            val versionOverride = vm.selectedAppInfo?.versionName?.takeUnless { it.isNullOrBlank() }
+            val preferredVersion = if (bundleTargetsAllVersions && selectedBundleUid != null) {
+                null
+            } else {
+                selectedBundleOverride?.takeUnless { it.isBlank() }
+                    ?: preferredBundleVersion?.takeUnless { it.isBlank() }
+            }
+            val versionOverride = preferredVersion
+                ?: vm.selectedAppInfo?.versionName?.takeUnless { it.isNullOrBlank() }
                 ?: app.version?.takeUnless { it.isNullOrBlank() }
                 ?: downloadedApps.firstOrNull()?.version?.takeUnless { it.isNullOrBlank() }
             if (versionOverride.isNullOrBlank()) return@remember app

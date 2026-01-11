@@ -174,12 +174,15 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
                 prefs.patchSelectionFilterFlags.update(filterState.value)
             }
         }
-        setAppVersion(
-            input.app.version?.takeUnless { it.isBlank() }
-                ?: preferredBundleOverride
+        val initialVersion = when {
+            preferredBundleUid != null && preferredBundleTargetsAllVersions -> null
+            preferredBundleUid != null -> preferredBundleOverride
                 ?: preferredBundleVersion
                 ?: preferredAppVersionHint
-        )
+                ?: input.app.version
+            else -> input.app.version ?: preferredAppVersionHint
+        }
+        setAppVersion(initialVersion)
         viewModelScope.launch {
             prefs.disablePatchVersionCompatCheck.flow
                 .distinctUntilChanged()

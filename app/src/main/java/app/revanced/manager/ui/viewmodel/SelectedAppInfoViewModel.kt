@@ -702,6 +702,21 @@ class SelectedAppInfoViewModel(
 
             else -> Unit
         }
+
+        if (bundleUid != null) {
+            applyBundleRecommendationSelection(bundleUid)
+        }
+    }
+
+    private fun applyBundleRecommendationSelection(bundleUid: Int) = viewModelScope.launch {
+        val bundles = bundleInfoFlow.first()
+        val bundle = bundles.firstOrNull { it.uid == bundleUid } ?: return@launch
+        val allowIncompatible = prefs.disablePatchVersionCompatCheck.get()
+        val selectedPatches = bundle.patchSequence(allowIncompatible)
+            .filter { it.include }
+            .map { it.name }
+            .toSet()
+        selectionState = SelectionState.Customized(mapOf(bundleUid to selectedPatches))
     }
 
     fun searchUsingPlugin(plugin: LoadedDownloaderPlugin) {
