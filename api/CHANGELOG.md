@@ -28,6 +28,7 @@
 - Fixed applied patches list for saved patched apps not showing all applied patches under certain circumstances https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/105
 - Fixed bundle recommendation selection and compatibility issues https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/104
 - Fixed issues with the custom file picker and the `Downloads` folder on certain devices
+- Fixed app startup crashes and crashes with the custom file picker on devices running older Android versions
 
 # Docs
 

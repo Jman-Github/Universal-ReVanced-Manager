@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Environment
 import android.os.storage.StorageManager
+import android.os.storage.StorageVolume
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
 import app.revanced.manager.util.FilenameUtils
@@ -42,7 +43,7 @@ class Filesystem(private val app: Application) {
         val roots = LinkedHashMap<String, StorageRoot>()
         val storageManager = app.getSystemService(Context.STORAGE_SERVICE) as StorageManager
         storageManager.storageVolumes.forEach { volume ->
-            val directory = volume.directory ?: return@forEach
+            val directory = resolveStorageVolumeDirectory(volume) ?: return@forEach
             val path = directory.toPath()
             val label = volume.getDescription(app).takeIf { it.isNotBlank() } ?: path.toString()
             roots.putIfAbsent(
@@ -60,10 +61,29 @@ class Filesystem(private val app: Application) {
         return roots.values.toList()
     }
 
+    private fun resolveStorageVolumeDirectory(volume: StorageVolume): File? {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            return volume.directory
+        }
+        val pathFile = runCatching {
+            val method = StorageVolume::class.java.getDeclaredMethod("getPathFile")
+            method.isAccessible = true
+            method.invoke(volume) as? File
+        }.getOrNull()
+        if (pathFile != null) return pathFile
+
+        val path = runCatching {
+            val method = StorageVolume::class.java.getDeclaredMethod("getPath")
+            method.isAccessible = true
+            method.invoke(volume) as? String
+        }.getOrNull()
+        return path?.let(::File)
+    }
+
     private fun usesManagePermission() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
 
     private val storagePermissionName =
-        if (usesManagePermission()) Manifest.permission.MANAGE_EXTERNAL_STORAGE else Manifest.permission.READ_EXTERNAL_STORAGE
+        if (usesManagePermission()) Manifest.permission.MANAGE_EXTERNAL_STORAGE else Manifest.permission.WRITE_EXTERNAL_STORAGE
 
     fun permissionContract(): Pair<ActivityResultContract<String, Boolean>, String> {
         val contract =

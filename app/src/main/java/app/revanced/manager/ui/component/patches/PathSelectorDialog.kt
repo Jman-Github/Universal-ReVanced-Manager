@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.items
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
@@ -36,8 +37,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -90,6 +91,13 @@ fun PathSelectorDialog(
     val pm = koinInject<PM>()
     val filesystem = koinInject<Filesystem>()
     val scope = rememberCoroutineScope()
+    val (permissionContract, permissionName) = remember { filesystem.permissionContract() }
+    var permissionGranted by remember { mutableStateOf(filesystem.hasStoragePermission()) }
+    var permissionRequested by rememberSaveable { mutableStateOf(false) }
+    val permissionLauncher =
+        rememberLauncherForActivityResult(permissionContract) { granted ->
+            permissionGranted = granted || filesystem.hasStoragePermission()
+        }
     val availableRoots = remember(roots) {
         roots.filter { runCatching { it.path.isReadable() }.getOrDefault(true) }.ifEmpty { roots }
     }
@@ -120,9 +128,14 @@ fun PathSelectorDialog(
     val notAtRootDir = remember(currentDirectory, currentRoot) {
         currentDirectory != currentRoot.path
     }
-    val entries = remember(currentDirectory) {
-        runCatching { currentDirectory.listDirectoryEntries().filter(Path::isReadable) }
-            .getOrDefault(emptyList())
+    LaunchedEffect(permissionGranted) {
+        if (!permissionGranted && !permissionRequested) {
+            permissionRequested = true
+            permissionLauncher.launch(permissionName)
+        }
+    }
+    val entries = remember(currentDirectory, permissionGranted) {
+        if (!permissionGranted) emptyList() else listDirectoryEntriesSafe(currentDirectory)
     }
     val directories = remember(entries) {
         entries.filter(Path::isDirectory).sortedWith(PathNameComparator)
@@ -156,7 +169,7 @@ fun PathSelectorDialog(
     val favoriteSet: Set<String> by prefs.pathSelectorFavorites.getAsState()
     val favorites: List<Path> = remember(favoriteSet, fileFilter) {
         favoriteSet.mapNotNull { runCatching { Paths.get(it) }.getOrNull() }
-            .filter { it.isReadable() }
+            .filter { isReadableSafe(it) }
             .sortedBy { it.absolutePathString() }
             .filter { it.isDirectory() || fileFilter(it) }
     }
@@ -418,6 +431,17 @@ private fun fileIconForPath(path: Path): ImageVector {
 
 private val PathNameComparator = compareBy<Path> { it.name.lowercase(Locale.ROOT) }
     .thenBy { it.name }
+
+private fun listDirectoryEntriesSafe(path: Path): List<Path> {
+    val rawEntries = runCatching { path.listDirectoryEntries() }.getOrNull()
+        ?: runCatching { path.toFile().listFiles()?.map { it.toPath() }.orEmpty() }.getOrElse { emptyList() }
+    if (rawEntries.isEmpty()) return emptyList()
+    val readable = rawEntries.filter { isReadableSafe(it) }
+    return if (readable.isEmpty()) rawEntries else readable
+}
+
+private fun isReadableSafe(path: Path): Boolean =
+    runCatching { path.isReadable() }.getOrDefault(true)
 
 @Composable
 private fun ApkFileIcon(
