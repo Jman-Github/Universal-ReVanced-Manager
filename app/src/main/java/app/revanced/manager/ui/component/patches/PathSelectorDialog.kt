@@ -64,6 +64,7 @@ import app.revanced.manager.util.saver.PathSaver
 import org.koin.compose.koinInject
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.util.Locale
 import kotlin.io.path.absolutePathString
 import kotlin.io.path.isDirectory
 import kotlin.io.path.isReadable
@@ -124,10 +125,10 @@ fun PathSelectorDialog(
             .getOrDefault(emptyList())
     }
     val directories = remember(entries) {
-        entries.filter(Path::isDirectory)
+        entries.filter(Path::isDirectory).sortedWith(PathNameComparator)
     }
     val files = remember(entries, fileFilter) {
-        entries.filterNot(Path::isDirectory).filter(fileFilter)
+        entries.filterNot(Path::isDirectory).filter(fileFilter).sortedWith(PathNameComparator)
     }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     val normalizedQuery = searchQuery.trim()
@@ -144,6 +145,13 @@ fun PathSelectorDialog(
         } else {
             files.filter { it.name.contains(normalizedQuery, ignoreCase = true) }
         }
+    }
+    val duplicateDirectoryNames = remember(directories) {
+        directories
+            .groupingBy { it.name.lowercase(Locale.ROOT) }
+            .eachCount()
+            .filterValues { it > 1 }
+            .keys
     }
     val favoriteSet: Set<String> by prefs.pathSelectorFavorites.getAsState()
     val favorites: List<Path> = remember(favoriteSet, fileFilter) {
@@ -341,11 +349,17 @@ fun PathSelectorDialog(
                     }
                 }
                 items(filteredDirectories, key = { it.absolutePathString() }) {
+                    val nameKey = it.name.lowercase(Locale.ROOT)
                     PathItem(
                         onClick = { currentDirectory = it },
                         onLongClick = { handleFavoritePress(it) },
                         icon = Icons.Outlined.Folder,
-                        name = it.name
+                        name = it.name,
+                        supportingText = if (nameKey in duplicateDirectoryNames) {
+                            it.absolutePathString()
+                        } else {
+                            null
+                        }
                     )
                 }
 
@@ -401,6 +415,9 @@ private fun fileIconForPath(path: Path): ImageVector {
         Icons.AutoMirrored.Outlined.InsertDriveFile
     }
 }
+
+private val PathNameComparator = compareBy<Path> { it.name.lowercase(Locale.ROOT) }
+    .thenBy { it.name }
 
 @Composable
 private fun ApkFileIcon(
