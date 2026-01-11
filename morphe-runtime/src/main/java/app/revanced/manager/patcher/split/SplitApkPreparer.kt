@@ -1,7 +1,9 @@
 package app.revanced.manager.patcher.split
 
+import android.content.res.Resources
 import android.os.Build
 import android.util.Log
+import android.util.DisplayMetrics
 import app.revanced.manager.patcher.logger.LogLevel
 import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.util.NativeLibStripper
@@ -18,6 +20,8 @@ object SplitApkPreparer {
     private val SUPPORTED_EXTENSIONS = setOf("apks", "apkm", "xapk")
     private const val SKIPPED_STEP_PREFIX = "[skipped]"
     private val KNOWN_ABIS = setOf("armeabi", "armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+    private val DENSITY_QUALIFIERS =
+        setOf("ldpi", "mdpi", "tvdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi")
 
     fun isSplitArchive(file: File?): Boolean {
         if (file == null || !file.exists()) return false
@@ -31,6 +35,7 @@ object SplitApkPreparer {
         workspace: File,
         logger: Logger = defaultLogger,
         stripNativeLibs: Boolean = false,
+        skipUnneededSplits: Boolean = false,
         onProgress: ((String) -> Unit)? = null,
         onSubSteps: ((List<String>) -> Unit)? = null
     ): PreparationResult {
@@ -54,11 +59,24 @@ object SplitApkPreparer {
             }.getOrElse {
                 entries.map { it.name }
             }
-            val skippedModules = if (stripNativeLibs) {
-                val supportedTokens = supportedAbiTokens()
-                mergeOrder.filter { shouldSkipModule(it, supportedTokens) }.toSet()
-            } else {
-                emptySet()
+            val supportedTokens = supportedAbiTokens()
+            val skippedModules = buildSet {
+                if (stripNativeLibs) {
+                    addAll(mergeOrder.filter { shouldSkipModule(it, supportedTokens) })
+                }
+                if (skipUnneededSplits) {
+                    val localeTokens = deviceLocaleTokens()
+                    val densityQualifier = deviceDensityQualifier()
+                    addAll(
+                        mergeOrder.filter {
+                            shouldSkipModuleForDevice(
+                                moduleName = it,
+                                localeTokens = localeTokens,
+                                densityQualifier = densityQualifier
+                            )
+                        }
+                    )
+                }
             }
             onSubSteps?.invoke(buildSplitSubSteps(mergeOrder, skippedModules, stripNativeLibs))
 
@@ -136,10 +154,16 @@ object SplitApkPreparer {
     }
 
     private fun supportedAbiTokens(): Set<String> =
-        Build.SUPPORTED_ABIS
-            .flatMap { abi -> buildAbiTokens(abi) }
-            .map { it.lowercase(Locale.ROOT) }
-            .toSet()
+        selectPrimaryAbi(Build.SUPPORTED_ABIS.toList())
+            ?.let { primary ->
+                buildAbiTokens(primary)
+                    .map { it.lowercase(Locale.ROOT) }
+                    .toSet()
+            }
+            ?: Build.SUPPORTED_ABIS
+                .flatMap { abi -> buildAbiTokens(abi) }
+                .map { it.lowercase(Locale.ROOT) }
+                .toSet()
 
     private fun buildAbiTokens(abi: String): Set<String> {
         val normalized = abi.lowercase(Locale.ROOT)
@@ -150,6 +174,9 @@ object SplitApkPreparer {
         )
     }
 
+    private fun selectPrimaryAbi(supportedAbis: List<String>): String? =
+        supportedAbis.firstOrNull { it.isNotBlank() }
+
     private fun shouldSkipModule(
         moduleName: String,
         supportedTokens: Set<String>
@@ -158,6 +185,124 @@ object SplitApkPreparer {
         val knownTokens = KNOWN_ABIS.flatMap { buildAbiTokens(it) }.toSet()
         if (knownTokens.none { lower.contains(it) }) return false
         return supportedTokens.none { lower.contains(it) }
+    }
+
+    private fun shouldSkipModuleForDevice(
+        moduleName: String,
+        localeTokens: Set<String>,
+        densityQualifier: String?
+    ): Boolean {
+        val qualifiers = splitConfigQualifiers(moduleName)
+        if (qualifiers.isEmpty()) return false
+        if (isAbiSplit(moduleName)) return false
+
+        for (qualifier in qualifiers) {
+            if (isDensityQualifier(qualifier)) {
+                val deviceDensity = densityQualifier ?: continue
+                if (qualifier != deviceDensity) return true
+                continue
+            }
+            val localeQualifier = parseLocaleQualifier(qualifier) ?: continue
+            if (!matchesLocaleQualifier(localeQualifier, localeTokens)) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun isAbiSplit(moduleName: String): Boolean {
+        val lower = moduleName.lowercase(Locale.ROOT)
+        val knownTokens = KNOWN_ABIS.flatMap { buildAbiTokens(it) }.toSet()
+        return knownTokens.any { lower.contains(it) }
+    }
+
+    private fun splitConfigQualifiers(moduleName: String): List<String> {
+        val normalized = moduleName.lowercase(Locale.ROOT).removeSuffix(".apk")
+        val splitIndex = normalized.indexOf("split_config.")
+        val configIndex = normalized.indexOf("config.")
+        val startIndex = when {
+            splitIndex != -1 -> splitIndex + "split_config.".length
+            configIndex != -1 -> configIndex + "config.".length
+            else -> return emptyList()
+        }
+        val tail = normalized.substring(startIndex)
+        return tail.split('.').filter { it.isNotBlank() }
+    }
+
+    private fun isDensityQualifier(token: String): Boolean = token in DENSITY_QUALIFIERS
+
+    private data class LocaleQualifier(val language: String, val region: String?)
+
+    private fun parseLocaleQualifier(rawToken: String): LocaleQualifier? {
+        val token = rawToken.replace('-', '_')
+        val parts = token.split('_').filter { it.isNotBlank() }
+        if (parts.isEmpty()) return null
+        val language = parts[0]
+        if (language.length !in 2..3 || !language.all { it.isLetter() }) return null
+        val region = parts.getOrNull(1)
+            ?.removePrefix("r")
+            ?.takeIf { it.length in 2..3 && it.all { ch -> ch.isLetterOrDigit() } }
+        return LocaleQualifier(language.lowercase(Locale.ROOT), region?.lowercase(Locale.ROOT))
+    }
+
+    private fun matchesLocaleQualifier(
+        qualifier: LocaleQualifier,
+        localeTokens: Set<String>
+    ): Boolean {
+        val language = qualifier.language
+        val region = qualifier.region
+        return if (region == null) {
+            localeTokens.contains(language)
+        } else {
+            localeTokens.contains("${language}_r$region") ||
+                localeTokens.contains("${language}_$region") ||
+                localeTokens.contains("${language}-$region")
+        }
+    }
+
+    private fun deviceLocaleTokens(): Set<String> {
+        val locales = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            val list = Resources.getSystem().configuration.locales
+            (0 until list.size()).map { index -> list[index] }
+        } else {
+            listOf(Locale.getDefault())
+        }
+
+        return locales.flatMap { locale ->
+            buildLocaleTokens(locale)
+        }.map { it.lowercase(Locale.ROOT) }.toSet()
+    }
+
+    private fun buildLocaleTokens(locale: Locale): Set<String> {
+        val tokens = LinkedHashSet<String>()
+        val language = locale.language.lowercase(Locale.ROOT)
+        if (language.isBlank()) return tokens
+        tokens.add(language)
+        val region = locale.country.lowercase(Locale.ROOT)
+        if (region.isNotBlank()) {
+            tokens.add("${language}_r$region")
+            tokens.add("${language}_$region")
+            tokens.add("${language}-$region")
+        }
+        val script = locale.script.lowercase(Locale.ROOT)
+        if (script.isNotBlank()) {
+            tokens.add("${language}_$script")
+            tokens.add("${language}-$script")
+        }
+        return tokens
+    }
+
+    private fun deviceDensityQualifier(): String? {
+        val density = Resources.getSystem().displayMetrics?.densityDpi ?: return null
+        return when {
+            density <= DisplayMetrics.DENSITY_LOW -> "ldpi"
+            density <= DisplayMetrics.DENSITY_MEDIUM -> "mdpi"
+            density <= DisplayMetrics.DENSITY_TV -> "tvdpi"
+            density <= DisplayMetrics.DENSITY_HIGH -> "hdpi"
+            density <= DisplayMetrics.DENSITY_XHIGH -> "xhdpi"
+            density <= DisplayMetrics.DENSITY_XXHIGH -> "xxhdpi"
+            else -> "xxxhdpi"
+        }
     }
 
     private suspend fun extractSplitEntries(

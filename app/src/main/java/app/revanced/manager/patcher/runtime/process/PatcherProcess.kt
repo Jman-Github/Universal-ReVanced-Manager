@@ -128,6 +128,7 @@ class PatcherProcess : IPatcherProcess.Stub() {
                             File(parameters.cacheDir),
                             logger,
                             parameters.stripNativeLibs,
+                            parameters.skipUnneededSplits,
                             onProgress = { message ->
                                 onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
                             },
@@ -142,6 +143,7 @@ class PatcherProcess : IPatcherProcess.Stub() {
                         File(parameters.cacheDir),
                         logger,
                         parameters.stripNativeLibs,
+                        parameters.skipUnneededSplits,
                         onProgress = { message ->
                             onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
                         },

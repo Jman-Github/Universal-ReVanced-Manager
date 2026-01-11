@@ -37,6 +37,7 @@ sealed class MorpheRuntime(context: Context) : KoinComponent {
         logger: Logger,
         onEvent: (ProgressEvent) -> Unit,
         stripNativeLibs: Boolean,
+        skipUnneededSplits: Boolean,
     )
 
     open fun cancel() = Unit

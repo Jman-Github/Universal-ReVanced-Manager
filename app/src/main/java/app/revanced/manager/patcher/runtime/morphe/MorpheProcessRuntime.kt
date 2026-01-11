@@ -72,6 +72,7 @@ class MorpheProcessRuntime(private val context: Context) : MorpheRuntime(context
         logger: Logger,
         onEvent: (ProgressEvent) -> Unit,
         stripNativeLibs: Boolean,
+        skipUnneededSplits: Boolean,
     ) = coroutineScope {
         currentCoroutineContext()[Job]?.invokeOnCompletion {
             runCatching { binderRef.get()?.exit() }
@@ -171,7 +172,8 @@ class MorpheProcessRuntime(private val context: Context) : MorpheRuntime(context
                         options[uid].orEmpty()
                     )
                 },
-                stripNativeLibs = stripNativeLibs
+                stripNativeLibs = stripNativeLibs,
+                skipUnneededSplits = skipUnneededSplits
             )
 
             binder.start(parameters, eventHandler)

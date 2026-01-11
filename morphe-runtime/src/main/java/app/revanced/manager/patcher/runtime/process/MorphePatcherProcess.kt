@@ -125,6 +125,7 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
                             File(parameters.cacheDir),
                             logger,
                             parameters.stripNativeLibs,
+                            parameters.skipUnneededSplits,
                             onProgress = { message ->
                                 onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
                             },
@@ -139,6 +140,7 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
                         File(parameters.cacheDir),
                         logger,
                         parameters.stripNativeLibs,
+                        parameters.skipUnneededSplits,
                         onProgress = { message ->
                             onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
                         },

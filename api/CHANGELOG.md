@@ -16,6 +16,8 @@
 - Added expandable/collapsable sub-steps to the `Merging split APKs` step in the patcher, along with sub-steps for the `Writing patched APK` step
 - Overall improved the patcher screen
 - Added the ability to see previous changelogs within the app which are cached by the it everytime your imported patch bundle updates https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/108
+- Added a toggle in Settings > Advanced that when enabled skips all unused splits when patching with a split APK (like locale/density splits)
+- Updated the `Remove unused native libraries` toggle in Settings > Advanced to strip all native libraries but one (so only keep one supported library if applicable)
 
 
 # Bug fixes

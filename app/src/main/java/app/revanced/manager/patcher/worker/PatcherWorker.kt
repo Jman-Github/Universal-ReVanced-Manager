@@ -262,6 +262,7 @@ class PatcherWorker(
             val bundleType = patchBundleRepository.selectionBundleType(args.selectedPatches)
                 ?: throw IllegalStateException("Cannot patch with mixed ReVanced and Morphe bundles.")
             val stripNativeLibs = prefs.stripUnusedNativeLibs.get()
+            val skipUnneededSplits = prefs.skipUnneededSplitApks.get()
             val inputIsSplitArchive = SplitApkPreparer.isSplitArchive(inputFile)
             val selectedCount = args.selectedPatches.values.sumOf { it.size }
 
@@ -284,7 +285,8 @@ class PatcherWorker(
                         args.options,
                         args.logger,
                         args.onEvent,
-                        stripNativeLibs
+                        stripNativeLibs,
+                        skipUnneededSplits
                     )
                 }
                 PatchBundleType.REVANCED -> {
@@ -298,7 +300,8 @@ class PatcherWorker(
                         args.options,
                         args.logger,
                         args.onEvent,
-                        stripNativeLibs
+                        stripNativeLibs,
+                        skipUnneededSplits
                     )
                 }
             }

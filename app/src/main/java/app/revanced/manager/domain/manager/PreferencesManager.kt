@@ -47,6 +47,7 @@ class PreferencesManager(
 
     val useProcessRuntime = booleanPreference("use_process_runtime", false)
     val stripUnusedNativeLibs = booleanPreference("strip_unused_native_libs", false)
+    val skipUnneededSplitApks = booleanPreference("skip_unneeded_split_apks", false)
     val patcherProcessMemoryLimit = intPreference(
         "process_runtime_memory_limit",
         MemoryLimitConfig.recommendedLimitMb(context)
@@ -124,6 +125,7 @@ class PreferencesManager(
         val themePresetSelectionName: String? = null,
         val themePresetSelectionEnabled: Boolean? = null,
         val stripUnusedNativeLibs: Boolean? = null,
+        val skipUnneededSplitApks: Boolean? = null,
         val theme: Theme? = null,
         val appLanguage: String? = null,
         val api: String? = null,
@@ -182,6 +184,7 @@ class PreferencesManager(
         themePresetSelectionName = themePresetSelectionName.get(),
         themePresetSelectionEnabled = themePresetSelectionEnabled.get(),
         stripUnusedNativeLibs = stripUnusedNativeLibs.get(),
+        skipUnneededSplitApks = skipUnneededSplitApks.get(),
         theme = theme.get(),
         appLanguage = appLanguage.get(),
         api = api.get(),
@@ -240,6 +243,7 @@ class PreferencesManager(
         snapshot.themePresetSelectionName?.let { themePresetSelectionName.value = it }
         snapshot.themePresetSelectionEnabled?.let { themePresetSelectionEnabled.value = it }
         snapshot.stripUnusedNativeLibs?.let { stripUnusedNativeLibs.value = it }
+        snapshot.skipUnneededSplitApks?.let { skipUnneededSplitApks.value = it }
         snapshot.theme?.let { theme.value = it }
         snapshot.appLanguage?.let { appLanguage.value = it }
         snapshot.api?.let { api.value = it }
