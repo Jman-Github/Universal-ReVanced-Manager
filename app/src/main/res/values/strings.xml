@@ -239,10 +239,14 @@
     <string name="bundle_created_at">Created %1$s</string>
     <string name="bundle_updated_at">Updated %1$s</string>
     <string name="bundle_changelog">Changelog</string>
+    <string name="bundle_latest_changelog">Latest Changelog</string>
+    <string name="bundle_previous_changelogs">Previous Changelogs</string>
     <string name="bundle_view_changelog">View the latest changelog</string>
+    <string name="bundle_view_previous_changelogs">View cached changelogs</string>
     <string name="bundle_changelog_error">Failed to load changelog: %s</string>
     <string name="bundle_changelog_retry">Retry</string>
     <string name="bundle_changelog_empty">No changelog available</string>
+    <string name="bundle_previous_changelogs_empty">No previous changelogs</string>
     <string name="export_patch_profiles">Export patch profiles</string>
     <string name="export_patch_profiles_description">Export all patch profiles to a JSON file</string>
     <string name="export_patch_profiles_fail">Could not export patch profiles: %s</string>

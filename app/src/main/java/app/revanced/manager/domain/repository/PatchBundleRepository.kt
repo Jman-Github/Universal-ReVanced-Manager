@@ -21,6 +21,7 @@ import app.revanced.manager.domain.bundles.GitHubPullRequestBundle
 import app.revanced.manager.domain.bundles.JsonPatchBundle
 import app.revanced.manager.data.room.bundles.Source as SourceInfo
 import app.revanced.manager.domain.bundles.LocalPatchBundle
+import app.revanced.manager.domain.bundles.PatchBundleChangelogEntry
 import app.revanced.manager.domain.bundles.PatchBundleDownloadProgress
 import app.revanced.manager.domain.bundles.PatchBundleDownloadResult
 import app.revanced.manager.domain.bundles.RemotePatchBundle
@@ -72,6 +73,9 @@ import kotlin.collections.LinkedHashSet
 import kotlin.collections.joinToString
 import kotlin.collections.map
 import kotlin.text.ifEmpty
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 class PatchBundleRepository(
     private val app: Application,
@@ -173,6 +177,7 @@ class PatchBundleRepository(
     private val updateJobMutex = Mutex()
     private var updateJob: Job? = null
     private val updateStateMutex = Mutex()
+    private val changelogHistoryMutex = Mutex()
     @Volatile
     private var activeUpdateUids: Set<Int> = emptySet()
     @Volatile
@@ -187,6 +192,10 @@ class PatchBundleRepository(
     private var localImportTotalSteps = 0
 
     private var bundleImportAutoClearJob: Job? = null
+    private val changelogHistoryJson = Json {
+        encodeDefaults = true
+        ignoreUnknownKeys = true
+    }
 
     fun setBundleImportProgress(progress: ImportProgress?) {
         bundleImportProgressFlow.value = progress
@@ -298,6 +307,76 @@ class PatchBundleRepository(
     private fun localImportBaseSteps(): Int = localImportProcessedSteps
 
     private fun localImportTotalSteps(): Int = localImportTotalSteps.coerceAtLeast(LOCAL_IMPORT_STEPS)
+
+    private fun changelogHistoryFile(uid: Int): File =
+        directoryOf(uid).resolve("changelog_history.json")
+
+    suspend fun getChangelogHistory(uid: Int): List<PatchBundleChangelogEntry> =
+        withContext(Dispatchers.IO) {
+            changelogHistoryMutex.withLock {
+                readChangelogHistoryInternal(uid)
+            }
+        }
+
+    suspend fun setChangelogHistory(uid: Int, entries: List<PatchBundleChangelogEntry>) {
+        withContext(Dispatchers.IO) {
+            changelogHistoryMutex.withLock {
+                writeChangelogHistoryInternal(uid, entries)
+            }
+        }
+    }
+
+    suspend fun recordChangelog(uid: Int, asset: app.revanced.manager.network.dto.ReVancedAsset) {
+        val entry = PatchBundleChangelogEntry.fromAsset(asset)
+        withContext(Dispatchers.IO) {
+            changelogHistoryMutex.withLock {
+                val current = readChangelogHistoryInternal(uid)
+                val updated = current
+                    .filterNot { isSameChangelogEntry(it, entry) }
+                    .toMutableList()
+                updated.add(0, entry)
+                writeChangelogHistoryInternal(uid, updated)
+            }
+        }
+    }
+
+    private fun isSameChangelogEntry(
+        existing: PatchBundleChangelogEntry,
+        candidate: PatchBundleChangelogEntry
+    ): Boolean {
+        val existingVersion = existing.version.trim()
+        val candidateVersion = candidate.version.trim()
+        if (candidateVersion.isNotBlank() && existingVersion.equals(candidateVersion, ignoreCase = true)) {
+            return true
+        }
+        val published = candidate.publishedAtMillis
+        return published != null &&
+            published > 0 &&
+            existing.publishedAtMillis == published &&
+            existing.description.trim() == candidate.description.trim()
+    }
+
+    private fun readChangelogHistoryInternal(uid: Int): List<PatchBundleChangelogEntry> {
+        val file = changelogHistoryFile(uid)
+        if (!file.exists()) return emptyList()
+        val content = runCatching { file.readText() }.getOrDefault("")
+        if (content.isBlank()) return emptyList()
+        return runCatching {
+            changelogHistoryJson.decodeFromString<List<PatchBundleChangelogEntry>>(content)
+        }.getOrDefault(emptyList())
+    }
+
+    private fun writeChangelogHistoryInternal(uid: Int, entries: List<PatchBundleChangelogEntry>) {
+        val file = changelogHistoryFile(uid)
+        if (entries.isEmpty()) {
+            runCatching { file.delete() }
+            return
+        }
+        file.parentFile?.mkdirs()
+        runCatching {
+            file.writeText(changelogHistoryJson.encodeToString(entries))
+        }
+    }
 
     private fun setLocalImportProgress(
         baseProcessed: Int,
@@ -1621,6 +1700,7 @@ class PatchBundleRepository(
 
                     if (result != null) {
                         results[bundle] = result
+                        runCatching { recordChangelog(bundle.uid, bundle.fetchLatestReleaseInfo()) }
                         onBundleUpdated?.invoke(bundle, downloadedName)
                     }
                 }

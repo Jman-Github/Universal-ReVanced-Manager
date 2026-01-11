@@ -23,6 +23,7 @@ import app.revanced.manager.domain.repository.SerializedSelection
 import app.revanced.manager.domain.bundles.PatchBundleSource
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
+import app.revanced.manager.domain.bundles.PatchBundleChangelogEntry
 import app.revanced.manager.domain.repository.remapLocalBundles
 import app.revanced.manager.data.room.bundles.Source as SourceInfo
 import app.revanced.manager.util.tag
@@ -123,7 +124,8 @@ data class PatchBundleSnapshot(
     val officialAutoUpdate: Boolean? = null,
     val officialUsePrereleases: Boolean? = null,
     val createdAt: Long? = null,
-    val updatedAt: Long? = null
+    val updatedAt: Long? = null,
+    val changelogHistory: List<PatchBundleChangelogEntry> = emptyList()
 )
 
 @Serializable
@@ -528,6 +530,13 @@ class ImportExportViewModel(
                                         )
                                         changed = true
                                     }
+                                    if (snapshot.changelogHistory.isNotEmpty()) {
+                                        patchBundleRepository.setChangelogHistory(
+                                            current.uid,
+                                            snapshot.changelogHistory
+                                        )
+                                        changed = true
+                                    }
                                     if (changed) updatedCount += 1
                                     finishImportItem()
                                     continue
@@ -581,6 +590,12 @@ class ImportExportViewModel(
                                 if (created.enabled != snapshotEnabled) {
                                     pendingEnabledUpdates[created.uid] = snapshotEnabled
                                 }
+                                if (snapshot.changelogHistory.isNotEmpty()) {
+                                    patchBundleRepository.setChangelogHistory(
+                                        created.uid,
+                                        snapshot.changelogHistory
+                                    )
+                                }
 
                                 finishImportItem()
                             }
@@ -617,6 +632,13 @@ class ImportExportViewModel(
                                                 if (result == PatchBundleRepository.DisplayNameUpdateResult.SUCCESS) {
                                                     officialUpdated = true
                                                 }
+                                            }
+                                            if (snapshot.changelogHistory.isNotEmpty()) {
+                                                patchBundleRepository.setChangelogHistory(
+                                                    source.uid,
+                                                    snapshot.changelogHistory
+                                                )
+                                                officialUpdated = true
                                             }
                                             desiredAutoUpdate?.let { autoUpdate ->
                                                 if (source.asRemoteOrNull?.autoUpdate != autoUpdate) {
@@ -796,6 +818,7 @@ class ImportExportViewModel(
 
         val bundles = buildList {
             remoteSources.mapTo(this) {
+                val changelogHistory = patchBundleRepository.getChangelogHistory(it.uid)
                 PatchBundleSnapshot(
                     endpoint = it.endpoint,
                     name = it.name,
@@ -805,7 +828,8 @@ class ImportExportViewModel(
                     enabled = it.enabled,
                     position = positionLookup[it.uid],
                     createdAt = it.createdAt,
-                    updatedAt = it.updatedAt
+                    updatedAt = it.updatedAt,
+                    changelogHistory = changelogHistory
                 )
             }
             add(
@@ -821,7 +845,10 @@ class ImportExportViewModel(
                     officialAutoUpdate = officialAutoUpdate,
                     officialUsePrereleases = officialUsePrereleases,
                     createdAt = officialSource?.createdAt,
-                    updatedAt = officialSource?.updatedAt
+                    updatedAt = officialSource?.updatedAt,
+                    changelogHistory = officialSource?.let {
+                        patchBundleRepository.getChangelogHistory(it.uid)
+                    }.orEmpty()
                 )
             )
         }

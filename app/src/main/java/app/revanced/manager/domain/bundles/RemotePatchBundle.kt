@@ -113,11 +113,11 @@ sealed class RemotePatchBundle(
      * Downloads the latest version regardless if there is a new update available.
      */
     suspend fun downloadLatest(onProgress: PatchBundleDownloadProgress? = null): PatchBundleDownloadResult =
-        download(getLatestInfo(), onProgress)
+        download(fetchLatestReleaseInfo(), onProgress)
 
     suspend fun update(onProgress: PatchBundleDownloadProgress? = null): PatchBundleDownloadResult? =
         withContext(Dispatchers.IO) {
-        val info = getLatestInfo()
+        val info = fetchLatestReleaseInfo()
         if (hasInstalled() && info.version == installedVersionSignatureInternal)
             return@withContext null
 
