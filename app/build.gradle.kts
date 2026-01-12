@@ -193,7 +193,7 @@ android {
     buildTypes {
         debug {
             isPseudoLocalesEnabled = true
-            versionNameSuffix = "-dev"
+            versionNameSuffix = "-$devVersionSuffix"
             signingConfig = releaseSigningConfig
             buildConfigField("long", "BUILD_ID", "${Random.nextLong()}L")
         }
