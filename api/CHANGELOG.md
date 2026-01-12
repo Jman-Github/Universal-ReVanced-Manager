@@ -1,5 +1,4 @@
 # v1.7.1 (TBD)
-**Minimal changes & bug fixes**
 
 
 # Features

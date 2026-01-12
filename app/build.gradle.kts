@@ -17,6 +17,11 @@ plugins {
 
 val outputApkFileName = "universal-revanced-manager-$version.apk"
 val morpheRuntimeAssetsDir = layout.buildDirectory.dir("generated/morphe-runtime")
+val devVersionSuffix = providers.gradleProperty("devVersionSuffix")
+    .orNull
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?: "dev"
 
 val arscLib by configurations.creating
 
@@ -195,7 +200,7 @@ android {
 
         create("dev") {
             initWith(getByName("release"))
-            versionNameSuffix = "-dev"
+            versionNameSuffix = "-$devVersionSuffix"
             signingConfig = releaseSigningConfig
             isMinifyEnabled = true
             isShrinkResources = true
