@@ -25,19 +25,19 @@ Application for using ReVanced on Android.
   </a>
   &nbsp;
   <a href="https://crowdin.com/project/universal-revanced-manager">
-    <img height="24px" src="https://support.crowdin.com/assets/logos/crowdin-dark-symbol.png" alt="Crowdin" />
+    <img src="https://img.shields.io/badge/Crowdin-Join-2E3340?logo=crowdin&logoColor=white" alt="Crowdin" />
   </a>
   &nbsp;
   <a href="https://t.me/urv_chat">
-    <img height="24px" src="https://user-images.githubusercontent.com/13122796/178032213-faf25ab8-0bc3-4a94-a730-b524c96df124.png" alt="Telegram" />
+    <img src="https://img.shields.io/badge/Telegram-Chat-2CA5E0?logo=telegram&logoColor=white" alt="Telegram" />
   </a>
   &nbsp;
   <a href="https://discord.gg/xZAqRHSp3V">
-    <img height="24px" src="https://cdn.prod.website-files.com/6257adef93867e50d84d30e2/66e3d80db9971f10a9757c99_Symbol.svg" alt="Discord" />
+    <img src="https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white" alt="Discord" />
   </a>
 </p>
 
-## Unique Features
+## 💪 Unique Features
 
 Universal ReVanced Manager includes powerful features that the official ReVanced Manager does not:
 
@@ -149,13 +149,15 @@ Universal ReVanced Manager includes powerful features that the official ReVanced
 <details>
 <summary><strong>Localization</strong></summary>
 <ul>
-  <li><strong>Simplified Chinese (zh-CN):</strong> User-selectable language option in settings.</li>
+  <li><strong>Chinese Simplified (zh-CN):</strong> User-selectable language option in settings.</li>
   <li><strong>Vietnamese (vi):</strong> User-selectable language option in settings.</li>
   <li><strong>Korean (ko):</strong> User-selectable language option in settings.</li>
   <li><strong>Japanese (ja):</strong> User-selectable language option in settings.</li>
   <li><strong>Russian (ru):</strong> User-selectable language option in settings.</li>
   <li><strong>Ukrainian (uk):</strong> User-selectable language option in settings.</li>
   <li><strong>Brazilian Portuguese (pt-BR):</strong> User-selectable language option in settings.</li>
+  <li><strong>Indonesian (id):</strong> User-selectable language option in settings.</li>
+  <li><strong>Fillipino (fil):</strong> User-selectable language option in settings.</li>
 </ul>
 </details>
 
@@ -248,8 +250,29 @@ To import patch bundles into Universal ReVanced Manager, use my [ReVanced Patch 
       <a href="https://github.com/r7reiz">r7reiz</a><br />
       Brazilian Portuguese localization
     </td>
-    <td style="vertical-align:middle;padding-right:8px;"></td>
-    <td style="vertical-align:middle;"></td>
+    <td style="vertical-align:middle;padding-right:8px;">
+      <img src="https://images.weserv.nl/?url=crowdin-static.cf-downloads.crowdin.com/avatar/13430318/large/73204ec2b41cc713d81dc88824059dea.jpg&h=36&w=36&fit=cover&mask=circle" alt="naokoshoto avatar" width="36" height="36" />
+    </td>
+    <td style="vertical-align:middle;padding-right:0;">
+      <a href="https://crowdin.com/profile/naokoshoto">naokoshoto</a><br />
+      Indonesian localization
+    </td>
+  </tr>
+  <tr>
+    <td style="vertical-align:middle;padding-right:8px;">
+      <img src="https://images.weserv.nl/?url=crowdin-static.cf-downloads.crowdin.com/avatar/16366724/large/e0afadb935d2fa9b972ca1697169c806.png&h=36&w=36&fit=cover&mask=circle" alt="mesazane avatar" width="36" height="36" />
+    </td>
+    <td style="vertical-align:middle;padding-right:24px;">
+      <a href="https://crowdin.com/profile/mesazane">Mesazane</a><br />
+      Indonesian localization
+    </td>
+    <td style="vertical-align:middle;padding-right:8px;">
+      <img src="https://images.weserv.nl/?url=crowdin-static.cf-downloads.crowdin.com/avatar/17524508/large/b5f2c910b17aae07cdfc69bcd973fe31.png&h=36&w=36&fit=cover&mask=circle" alt="fielph avatar" width="36" height="36" />
+    </td>
+    <td style="vertical-align:middle;padding-right:0;">
+      <a href="https://crowdin.com/profile/fielph">fielph</a><br />
+      Fillipino localization
+    </td>
   </tr>
 </table>
 

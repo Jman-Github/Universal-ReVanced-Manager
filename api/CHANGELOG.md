@@ -21,6 +21,7 @@
 - Added a per bundle patch selection counter
 - Made the `View patches` button auto-scroll on the Discover patch bundles page
 - Added the ability to export patcher logs from the patcher screen as a `.txt`
+- Added a filter option on the patch selection page to filter by universal patches, and by regular (non universal) patches
 
 
 # Bug fixes

@@ -497,6 +497,7 @@ Patch profiles are not affected.</string>
     <string name="selected_apps_delete_dialog_description">Remove the selected apps from the manager? Installed apps on your device will stay untouched.</string>
     <string name="incompatible_patches">Incompatible patches</string>
     <string name="universal_patches">Universal patches</string>
+    <string name="regular_patches">Regular patches</string>
     <string name="patch_selection_reset_toast">Patch selection and options has been reset to recommended defaults</string>
     <string name="patch_options_reset_toast">Patch options have been reset</string>
     <string name="non_suggested_version_warning_title">Non suggested version</string>
@@ -595,6 +596,7 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
         </plurals>
     <string name="this_version">This version</string>
     <string name="universal">Any app</string>
+    <string name="non_universal">Non-universal</string>
     <string name="search_patches">Search patches</string>
     <string name="app_version_not_compatible">This patch is not compatible with the selected app version (%1$s).\n\nIt is only compatible with the following version(s): %2$s.</string>
     <string name="failed_to_load_apk">Failed to load APK</string>
@@ -641,6 +643,7 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="already_patched">Already patched</string>
     <string name="patch_selector_sheet_filter_title">Filter</string>
     <string name="patch_selector_sheet_filter_compat_title">Compatibility</string>
+    <string name="patch_selector_sheet_filter_type_title">Patch type</string>
     <string name="patch_selector_sheet_filter_sort_title">Sorting</string>
     <string name="patch_selector_sheet_filter_sort_alphabetical">Alphabetical</string>
     <string name="patch_selector_sheet_filter_sort_has_settings">Has settings</string>

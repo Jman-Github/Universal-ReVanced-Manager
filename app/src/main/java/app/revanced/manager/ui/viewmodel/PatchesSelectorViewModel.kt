@@ -812,6 +812,22 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         filter = filter xor flag
     }
 
+    fun toggleTypeFlag(flag: Int) {
+        val typeMask = SHOW_UNIVERSAL or SHOW_NON_UNIVERSAL
+        val typeActive = filter and SHOW_TYPE_FILTER != 0
+        val next = if (!typeActive) {
+            (filter and typeMask.inv()) or SHOW_TYPE_FILTER or flag
+        } else {
+            val toggled = filter xor flag
+            if (toggled and typeMask == 0) {
+                toggled and SHOW_TYPE_FILTER.inv()
+            } else {
+                toggled
+            }
+        }
+        filter = next
+    }
+
     private fun resolveInitialFilter(handle: SavedStateHandle, prefs: PreferencesManager): Int {
         val prefValue = prefs.patchSelectionFilterFlags.getBlocking()
         val stored = handle.get<Any?>("filter")
@@ -824,8 +840,9 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
                 else -> defaultFilterFlags()
             }
         }
-        handle["filter"] = resolved
-        return resolved
+        val normalized = normalizeTypeFilter(resolved)
+        handle["filter"] = normalized
+        return normalized
     }
 
     fun undoAction() {
@@ -882,13 +899,24 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
 
     private fun defaultFilterFlags(): Int =
         if (allowIncompatiblePatches || !suggestedVersionSafeguardEnabled)
-            SHOW_UNIVERSAL or SHOW_INCOMPATIBLE
+            SHOW_INCOMPATIBLE
         else
-            SHOW_UNIVERSAL
+            0
+
+    private fun normalizeTypeFilter(flags: Int): Int {
+        val typeMask = SHOW_UNIVERSAL or SHOW_NON_UNIVERSAL
+        return if (flags and typeMask != 0) {
+            flags or SHOW_TYPE_FILTER
+        } else {
+            flags
+        }
+    }
 
     companion object {
         const val SHOW_INCOMPATIBLE = 1 // 2^0
         const val SHOW_UNIVERSAL = 2 // 2^1
+        const val SHOW_NON_UNIVERSAL = 4 // 2^2
+        const val SHOW_TYPE_FILTER = 8 // 2^3
 
         private val optionsSaver: Saver<PersistentOptions, Options> = snapshotStateMapSaver(
             // Patch name -> Options
