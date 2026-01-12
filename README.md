@@ -33,7 +33,7 @@ Application for using ReVanced on Android.
 
 Universal ReVanced Manager includes powerful features that the official ReVanced Manager does not:
 
-<details open>
+<details>
 <summary><strong>Patch Bundles & Customization</strong></summary>
 <ul>
   <li><strong>Third-party patch support:</strong> Import any third-party API v4 patch bundle you want (including popular ones like inotia00's or anddea's), which the official ReVanced Manager does not support.</li>
