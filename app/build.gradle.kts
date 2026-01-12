@@ -15,7 +15,12 @@ plugins {
 }
 
 val outputApkFileName = "universal-revanced-manager-$version.apk"
-
+val devVersionSuffix = providers.gradleProperty("devVersionSuffix")
+    .orNull
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?: "dev"
+    
 val arscLib by configurations.creating
 
 val strippedArscLib by tasks.registering(Jar::class) {
@@ -181,7 +186,7 @@ android {
     buildTypes {
         debug {
             isPseudoLocalesEnabled = true
-            versionNameSuffix = "-dev"
+            versionNameSuffix = "-$devVersionSuffix"
             signingConfig = releaseSigningConfig
             buildConfigField("long", "BUILD_ID", "${Random.nextLong()}L")
         }
