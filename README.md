@@ -20,19 +20,19 @@ Application for using ReVanced on Android.
 <p align="center">
   <img src="https://img.shields.io/badge/License-GPL%20v3-yellow.svg" alt="GPLv3 License" />
   &nbsp;
-  <a href="https://crowdin.com/project/universal-revanced-manager">
+  <a href="https://crowdin.com/project/universal-revanced-manager" style="text-decoration:none;">
     <img src="https://badges.crowdin.net/universal-revanced-manager/localized.svg" alt="Crowdin" />
   </a>
   &nbsp;
-  <a href="https://crowdin.com/project/universal-revanced-manager">
+  <a href="https://crowdin.com/project/universal-revanced-manager" style="text-decoration:none;">
     <img src="https://img.shields.io/badge/Crowdin-Join-2E3340?logo=crowdin&logoColor=white" alt="Crowdin" />
   </a>
   &nbsp;
-  <a href="https://t.me/urv_chat">
+  <a href="https://t.me/urv_chat" style="text-decoration:none;">
     <img src="https://img.shields.io/badge/Telegram-Chat-2CA5E0?logo=telegram&logoColor=white" alt="Telegram" />
   </a>
   &nbsp;
-  <a href="https://discord.gg/xZAqRHSp3V">
+  <a href="https://discord.gg/xZAqRHSp3V" style="text-decoration:none;">
     <img src="https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white" alt="Discord" />
   </a>
 </p>
