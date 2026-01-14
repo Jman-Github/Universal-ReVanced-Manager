@@ -36,6 +36,7 @@
 - Fixed bundle recommendation selection and compatibility issues https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/104
 - Fixed issues with the custom file picker and the `Downloads` folder on certain devices
 - Fixed app startup crashes and crashes with the custom file picker and other parts of the app on devices running older Android versions
+- Fixed issues with patching on older Android versions
 
 
 # Docs

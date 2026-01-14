@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
 import app.universal.revanced.manager.BuildConfig
@@ -31,6 +32,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import java.util.concurrent.atomic.AtomicReference
+import java.io.File
 
 class MorpheProcessRuntime(private val context: Context) : MorpheRuntime(context) {
     private val binderRef = AtomicReference<IMorphePatcherProcess?>()
@@ -95,24 +97,31 @@ class MorpheProcessRuntime(private val context: Context) : MorpheRuntime(context
             Log.w(tag, "Requested process memory limit ${runtimeLimit}MB exceeded device capabilities; clamped to ${sanitizedLimit}MB")
         }
         val limit = "${sanitizedLimit}M"
-        val propOverride = resolvePropOverride(context)?.absolutePath
-            ?: throw Exception("Couldn't find prop override library")
+        val usePropOverride = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+        val propOverride = if (usePropOverride) {
+            resolvePropOverride(context)?.absolutePath
+                ?: throw Exception("Couldn't find prop override library")
+        } else {
+            null
+        }
 
         val env =
             System.getenv().toMutableMap().apply {
-                putAll(
-                    mapOf(
-                        "CLASSPATH" to runtimeApk,
-                        "LD_PRELOAD" to propOverride,
-                        "PROP_dalvik.vm.heapgrowthlimit" to limit,
-                        "PROP_dalvik.vm.heapsize" to limit,
-                    )
-                )
+                put("CLASSPATH", runtimeApk)
+                if (propOverride != null) {
+                    put("LD_PRELOAD", propOverride)
+                    put("PROP_dalvik.vm.heapgrowthlimit", limit)
+                    put("PROP_dalvik.vm.heapsize", limit)
+                } else {
+                    Log.w(tag, "Skipping prop override on Android ${Build.VERSION.SDK_INT}")
+                }
             }
+
+        val appProcessBin = resolveAppProcessBin(context)
 
         launch(Dispatchers.IO) {
             val result = process(
-                APP_PROCESS_BIN_PATH,
+                appProcessBin,
                 "-Djava.io.tmpdir=$cacheDir",
                 "/",
                 "--nice-name=${context.packageName}:MorphePatcher",
@@ -184,6 +193,8 @@ class MorpheProcessRuntime(private val context: Context) : MorpheRuntime(context
 
     companion object : LibraryResolver() {
         private const val APP_PROCESS_BIN_PATH = "/system/bin/app_process"
+        private const val APP_PROCESS_BIN_PATH_64 = "/system/bin/app_process64"
+        private const val APP_PROCESS_BIN_PATH_32 = "/system/bin/app_process32"
         const val OOM_EXIT_CODE = 134
         private const val MORPHE_PROCESS_CLASS_NAME =
             "app.revanced.manager.patcher.runtime.process.MorphePatcherProcess"
@@ -193,6 +204,11 @@ class MorpheProcessRuntime(private val context: Context) : MorpheRuntime(context
         const val BUNDLE_BINDER_KEY = "BINDER"
 
         private fun resolvePropOverride(context: Context) = findLibrary(context, "prop_override")
+        private fun resolveAppProcessBin(context: Context): String {
+            val is64Bit = context.applicationInfo.nativeLibraryDir.contains("64")
+            val preferred = if (is64Bit) APP_PROCESS_BIN_PATH_64 else APP_PROCESS_BIN_PATH_32
+            return if (File(preferred).exists()) preferred else APP_PROCESS_BIN_PATH
+        }
     }
 
     class RemoteFailureException(val originalStackTrace: String) : Exception()

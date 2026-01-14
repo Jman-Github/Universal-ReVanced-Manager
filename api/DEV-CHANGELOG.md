@@ -21,6 +21,7 @@
 - Made the `View patches` button auto-scroll on the Discover patch bundles page
 - Added the ability to export patcher logs from the patcher screen as a `.txt`
 - Added a filter option on the patch selection page to filter by universal patches, and by regular (non universal) patches
+- Added a toggle to use the `Pure Black` theme instead of the `Dark` theme for the `Follow system` theme https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/109
 
 
 # Bug fixes
@@ -34,13 +35,13 @@
 - Fixed applied patches list for saved patched apps not showing all applied patches under certain circumstances https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/105
 - Fixed bundle recommendation selection and compatibility issues https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/104
 - Fixed issues with the custom file picker and the `Downloads` folder on certain devices
-- Fixed app startup crashes and crashes with the custom file picker on devices running older Android versions
-- Added a toggle to use the `Pure Black` theme instead of the `Dark` theme for the `Follow system` theme
+- Fixed app startup crashes and crashes with the custom file picker and other parts of the app on devices running older Android versions
 
 
 # Docs
 
 - Added the Discord server invite link to the `README.md`
+- Added a Crowdin badge to the `README.md`
 - Added the new unique features of this release to the `README.md`
 - Added the new translators to the Contributors section of the `README.md`
 - Redesign the Unique Features section of the `README.md`

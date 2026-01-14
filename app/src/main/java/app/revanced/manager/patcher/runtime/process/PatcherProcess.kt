@@ -210,11 +210,15 @@ class PatcherProcess : IPatcherProcess.Stub() {
             val appContext = systemContext.createPackageContext(managerPackageName, 0)
 
             // Avoid annoying logs. See https://github.com/robolectric/robolectric/blob/ad0484c6b32c7d11176c711abeb3cb4a900f9258/robolectric/src/main/java/org/robolectric/android/internal/AndroidTestEnvironment.java#L376-L388
-            Class.forName("android.app.AppCompatCallbacks").apply {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
-                    getDeclaredMethod("install", longArrayClass, longArrayClass).also { it.isAccessible = true }(null, emptyLongArray, emptyLongArray)
-                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    getDeclaredMethod("install", longArrayClass).also { it.isAccessible = true }(null, emptyLongArray)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                runCatching {
+                    Class.forName("android.app.AppCompatCallbacks").apply {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+                            getDeclaredMethod("install", longArrayClass, longArrayClass).also { it.isAccessible = true }(null, emptyLongArray, emptyLongArray)
+                        } else {
+                            getDeclaredMethod("install", longArrayClass).also { it.isAccessible = true }(null, emptyLongArray)
+                        }
+                    }
                 }
             }
 

@@ -292,17 +292,38 @@ class PatcherWorker(
                 PatchBundleType.REVANCED -> {
                     val runtime = ProcessRuntime(applicationContext)
                     activeRuntime = runtime
-                    runtime.execute(
-                        inputFile.absolutePath,
-                        patchedApk.absolutePath,
-                        args.packageName,
-                        args.selectedPatches,
-                        args.options,
-                        args.logger,
-                        args.onEvent,
-                        stripNativeLibs,
-                        skipUnneededSplits
-                    )
+                    try {
+                        runtime.execute(
+                            inputFile.absolutePath,
+                            patchedApk.absolutePath,
+                            args.packageName,
+                            args.selectedPatches,
+                            args.options,
+                            args.logger,
+                            args.onEvent,
+                            stripNativeLibs,
+                            skipUnneededSplits
+                        )
+                    } catch (e: ProcessRuntime.ProcessExitException) {
+                        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
+                            Log.w(tag, "app_process exited with code ${e.exitCode}; retrying in-process runtime".logFmt())
+                            val fallback = CoroutineRuntime(applicationContext)
+                            activeRuntime = fallback
+                            fallback.execute(
+                                inputFile.absolutePath,
+                                patchedApk.absolutePath,
+                                args.packageName,
+                                args.selectedPatches,
+                                args.options,
+                                args.logger,
+                                args.onEvent,
+                                stripNativeLibs,
+                                skipUnneededSplits
+                            )
+                        } else {
+                            throw e
+                        }
+                    }
                 }
             }
 
