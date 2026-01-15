@@ -15,7 +15,7 @@ object MorpheRuntimeBridge {
     @Volatile
     private var appContext: Context? = null
     @Volatile
-    private var runtimeApkPath: String? = null
+    private var runtimeClassPath: String? = null
     @Volatile
     private var classLoader: DexClassLoader? = null
     @Volatile
@@ -82,21 +82,21 @@ object MorpheRuntimeBridge {
 
     private fun ensureClassLoader(): DexClassLoader {
         val context = appContext ?: error("MorpheRuntimeBridge is not initialized.")
-        val runtimeApk = MorpheRuntimeAssets.ensureRuntimeApk(context)
-        val path = runtimeApk.absolutePath
+        val runtimeClassPathFile = MorpheRuntimeAssets.ensureRuntimeClassPath(context)
+        val path = runtimeClassPathFile.absolutePath
         val existing = classLoader
-        if (existing != null && runtimeApkPath == path) return existing
+        if (existing != null && runtimeClassPath == path) return existing
 
         synchronized(lock) {
             val current = classLoader
-            if (current != null && runtimeApkPath == path) return current
+            if (current != null && runtimeClassPath == path) return current
 
             val optimizedDir = File(context.codeCacheDir, "morphe-runtime-dex").apply { mkdirs() }
             // Use the boot classloader as parent to avoid app classpath conflicts.
             val parent = context.classLoader.parent ?: context.classLoader
             val loader = DexClassLoader(path, optimizedDir.absolutePath, null, parent)
             classLoader = loader
-            runtimeApkPath = path
+            runtimeClassPath = path
             entryClass = null
             loadMetadataMethod = null
             loadMetadataForBundleMethod = null

@@ -17,10 +17,10 @@ serialization = "1.8.0"
 collection = "0.3.8"
 datetime = "0.6.1"
 room-version = "2.7.1"
-revanced-patcher = "1.2.1"
-revanced-library = "1.1.0"
-morphe-patcher = "1.0.0"
-morphe-library = "1.0.0"
+revanced-patcher = "21.0.0"
+revanced-library = "3.0.2"
+morphe-patcher = "1.0.1"
+morphe-library = "1.0.1"
 koin = "3.5.3"
 ktor = "2.3.9"
 markdown-renderer = "0.30.0"
@@ -87,8 +87,8 @@ room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room-ver
 room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room-version" }
 
 # Patcher
-revanced-patcher = { group = "app.brosssh", name = "revanced-patcher", version.ref = "revanced-patcher" } # From PR #39: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/39
-revanced-library = { group = "app.brosssh", name = "revanced-library", version.ref = "revanced-library" } # From PR #39: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/39
+revanced-patcher = { group = "app.revanced", name = "revanced-patcher", version.ref = "revanced-patcher" }
+revanced-library = { group = "app.revanced", name = "revanced-library", version.ref = "revanced-library" }
 morphe-patcher = { group = "app.morphe", name = "morphe-patcher", version.ref = "morphe-patcher" }
 morphe-library = { group = "app.morphe", name = "morphe-library", version.ref = "morphe-library" }
 

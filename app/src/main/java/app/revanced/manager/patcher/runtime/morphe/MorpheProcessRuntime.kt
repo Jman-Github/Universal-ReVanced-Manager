@@ -80,7 +80,7 @@ class MorpheProcessRuntime(private val context: Context) : MorpheRuntime(context
             runCatching { binderRef.get()?.exit() }
         }
         onEvent(ProgressEvent.Started(app.revanced.manager.patcher.StepId.LoadPatches))
-        val runtimeApk = MorpheRuntimeAssets.ensureRuntimeApk(context).absolutePath
+        val runtimeClassPath = MorpheRuntimeAssets.ensureRuntimeClassPath(context).absolutePath
 
         val requestedLimit = prefs.patcherProcessMemoryLimit.get()
         val aggressiveLimit = prefs.patcherProcessMemoryAggressive.get()
@@ -107,7 +107,7 @@ class MorpheProcessRuntime(private val context: Context) : MorpheRuntime(context
 
         val env =
             System.getenv().toMutableMap().apply {
-                put("CLASSPATH", runtimeApk)
+                put("CLASSPATH", runtimeClassPath)
                 if (propOverride != null) {
                     put("LD_PRELOAD", propOverride)
                     put("PROP_dalvik.vm.heapgrowthlimit", limit)

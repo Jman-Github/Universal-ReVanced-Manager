@@ -23,6 +23,7 @@
 - Added a filter option on the patch selection page to filter by universal patches, and by regular (non universal) patches
 - Added a toggle to use the `Pure Black` theme instead of the `Dark` theme for the `Follow system` theme https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/109
 - Tapping patch bundle updating/updated notifications now highlights the corresponding bundle in the patch bundles tab
+- Switched back to the official ReVanced Patcher and Library from Brosssh's Patcher and Library (as using theres is no longer needed)
 
 
 # Bug fixes

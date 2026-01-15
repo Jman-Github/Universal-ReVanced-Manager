@@ -263,18 +263,18 @@ fun proceedAfterMissingPatchWarning() {
     }
 }
 
-fun removeMissingPatchesAndStart() {
-    val warning = missingPatchWarning ?: return
-    viewModelScope.launch {
-        val scopedBundles = gatherScopedBundles()
-        val sanitizedSelection = sanitizeSelection(appliedSelection, scopedBundles)
-        val sanitizedOptions = sanitizeOptions(appliedOptions, scopedBundles)
-        appliedSelection = sanitizedSelection
-        appliedOptions = sanitizedOptions
-        missingPatchWarning = null
-        startWorker()
+    fun removeMissingPatchesAndStart() {
+        val warning = missingPatchWarning ?: return
+        viewModelScope.launch {
+            val scopedBundles = gatherScopedBundles()
+            val sanitizedSelection = sanitizeSelection(appliedSelection, scopedBundles)
+            val sanitizedOptions = sanitizeOptions(appliedOptions, scopedBundles)
+            appliedSelection = sanitizedSelection
+            appliedOptions = sanitizedOptions
+            missingPatchWarning = null
+            startWorker()
+        }
     }
-}
 
     private var currentActivityRequest: Pair<CompletableDeferred<Boolean>, String>? by mutableStateOf(
         null
@@ -784,14 +784,14 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             exportMetadata = metadata
         }
     }
-    val steps by savedStateHandle.saveable(saver = snapshotStateListSaver()) {
-        generateSteps(
-            app,
-            input.selectedApp,
-            input.selectedPatches,
-            requiresSplitPreparation
-        ).toMutableStateList()
-    }
+        val steps by savedStateHandle.saveable(saver = snapshotStateListSaver()) {
+            generateSteps(
+                app,
+                input.selectedApp,
+                input.selectedPatches,
+                requiresSplitPreparation
+            ).toMutableStateList()
+        }
     val stepSubSteps = mutableStateMapOf<StepId, SnapshotStateList<StepDetail>>()
     private var dexSubStepsReady = false
     private val pendingDexCompileLines = mutableListOf<String>()
