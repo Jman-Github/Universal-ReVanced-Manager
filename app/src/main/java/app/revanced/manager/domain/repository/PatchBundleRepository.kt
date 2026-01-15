@@ -1455,7 +1455,7 @@ class PatchBundleRepository(
     suspend fun fetchUpdatesAndNotify(
         context: Context,
         predicate: (bundle: RemotePatchBundle) -> Boolean = { true },
-        onNotification: (bundleName: String, bundleVersion: String) -> Boolean
+        onNotification: (bundle: RemotePatchBundle, bundleVersion: String) -> Boolean
     ): Boolean = coroutineScope {
         val allowMeteredUpdates = prefs.allowMeteredUpdates.get()
         if (!allowMeteredUpdates && !networkInfo.isSafe()) {
@@ -1484,7 +1484,7 @@ class PatchBundleRepository(
                 val versionLabel = latestSignature ?: bundle.version ?: return@forEach
                 if (bundle.lastNotifiedVersion == versionLabel) return@forEach
 
-                val notified = onNotification(bundle.displayTitle, versionLabel)
+                val notified = onNotification(bundle, versionLabel)
                 if (notified) {
                     updateLastNotifiedVersion(bundle.uid, versionLabel)
                     notifiedAny = true
@@ -1655,6 +1655,7 @@ class PatchBundleRepository(
                         bytesRead = 0L,
                         bytesTotal = null,
                     )
+                    onPerBundleProgress?.invoke(bundle, 0L, null)
 
                     val onProgress: PatchBundleDownloadProgress = { bytesRead, bytesTotal ->
                         if (isRemoteUpdateCancelled(bundle.uid)) {

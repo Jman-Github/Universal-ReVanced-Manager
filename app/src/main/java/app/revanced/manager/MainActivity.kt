@@ -1,6 +1,7 @@
 package app.revanced.manager
 
 import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.os.Bundle
 import android.os.Parcelable
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -13,7 +14,9 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
@@ -78,6 +81,7 @@ class MainActivity : AppCompatActivity() {
         installSplashScreen()
 
         val vm: MainViewModel = getActivityViewModel()
+        vm.handleIntent(intent)
 
         setContent {
             val launcher = rememberLauncherForActivityResult(
@@ -113,6 +117,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val vm: MainViewModel = getActivityViewModel()
+        vm.handleIntent(intent)
+    }
+
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         AppForeground.onWindowFocusChanged(hasFocus)
@@ -122,12 +132,21 @@ class MainActivity : AppCompatActivity() {
 @Composable
 private fun ReVancedManager(vm: MainViewModel) {
     val navController = rememberNavController()
+    var pendingBundleDeepLink by remember { mutableStateOf<app.revanced.manager.util.BundleDeepLink?>(null) }
 
     EventEffect(vm.appSelectFlow) { params ->
         navController.navigateComplex(
             SelectedApplicationInfo,
             params
         )
+    }
+
+    EventEffect(vm.bundleDeepLinkFlow) { deepLink ->
+        pendingBundleDeepLink = deepLink
+        navController.navigate(Dashboard) {
+            launchSingleTop = true
+            popUpTo(Dashboard) { inclusive = false }
+        }
     }
 
     NavHost(
@@ -170,7 +189,9 @@ private fun ReVancedManager(vm: MainViewModel) {
                             requiresSourceSelection = true
                         )
                     )
-                }
+                },
+                bundleDeepLink = pendingBundleDeepLink,
+                onBundleDeepLinkConsumed = { pendingBundleDeepLink = null }
             )
         }
 

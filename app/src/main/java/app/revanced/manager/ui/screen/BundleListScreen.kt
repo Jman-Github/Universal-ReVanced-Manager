@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
 import app.revanced.manager.ui.component.bundle.BundleItem
+import app.revanced.manager.ui.component.settings.SettingsSearchHighlight
 import app.revanced.manager.ui.viewmodel.BundleListViewModel
 import app.revanced.manager.util.EventEffect
 import app.universal.revanced.manager.R
@@ -57,7 +58,9 @@ fun BundleListScreen(
     setSelectedSourceHasEnabled: (Boolean) -> Unit,
     showOrderDialog: Boolean = false,
     onDismissOrderDialog: () -> Unit = {},
-    onScrollStateChange: (Boolean) -> Unit = {}
+    onScrollStateChange: (Boolean) -> Unit = {},
+    highlightBundleUid: Int? = null,
+    onHighlightConsumed: () -> Unit = {}
 ) {
     val patchCounts by viewModel.patchCounts.collectAsStateWithLifecycle(emptyMap())
     val sources by viewModel.sources.collectAsStateWithLifecycle(emptyList())
@@ -81,6 +84,16 @@ fun BundleListScreen(
             .collect { onScrollStateChange(it) }
     }
 
+    LaunchedEffect(highlightBundleUid, sources) {
+        val uid = highlightBundleUid ?: return@LaunchedEffect
+        val index = sources.indexOfFirst { it.uid == uid }
+        if (index >= 0) {
+            listState.animateScrollToItem(index)
+        } else if (sources.isNotEmpty()) {
+            onHighlightConsumed()
+        }
+    }
+
     PullToRefreshBox(
         onRefresh = viewModel::refresh,
         isRefreshing = viewModel.isRefreshing
@@ -95,32 +108,47 @@ fun BundleListScreen(
                 sources,
                 key = { it.uid }
             ) { source ->
-                BundleItem(
-                    src = source,
-                    patchCount = patchCounts[source.uid] ?: 0,
-                    manualUpdateInfo = manualUpdateInfo[source.uid],
-                    onDelete = {
-                        viewModel.delete(source)
-                    },
-                    onDisable = {
-                        viewModel.disable(source)
-                    },
-                    onUpdate = {
-                        viewModel.update(source)
-                    },
-                    selectable = viewModel.selectedSources.size > 0,
-                    onSelect = {
-                        viewModel.selectedSources.add(source.uid)
-                    },
-                    isBundleSelected = source.uid in viewModel.selectedSources,
-                    toggleSelection = { bundleIsNotSelected ->
-                        if (bundleIsNotSelected) {
+                val content: @Composable (Modifier) -> Unit = { modifier ->
+                    BundleItem(
+                        src = source,
+                        patchCount = patchCounts[source.uid] ?: 0,
+                        manualUpdateInfo = manualUpdateInfo[source.uid],
+                        onDelete = {
+                            viewModel.delete(source)
+                        },
+                        onDisable = {
+                            viewModel.disable(source)
+                        },
+                        onUpdate = {
+                            viewModel.update(source)
+                        },
+                        selectable = viewModel.selectedSources.size > 0,
+                        onSelect = {
                             viewModel.selectedSources.add(source.uid)
-                        } else {
-                            viewModel.selectedSources.remove(source.uid)
-                        }
+                        },
+                        isBundleSelected = source.uid in viewModel.selectedSources,
+                        toggleSelection = { bundleIsNotSelected ->
+                            if (bundleIsNotSelected) {
+                                viewModel.selectedSources.add(source.uid)
+                            } else {
+                                viewModel.selectedSources.remove(source.uid)
+                            }
+                        },
+                        modifier = modifier
+                    )
+                }
+
+                if (highlightBundleUid != null) {
+                    SettingsSearchHighlight(
+                        targetKey = source.uid,
+                        activeKey = highlightBundleUid,
+                        onHighlightComplete = onHighlightConsumed
+                    ) { modifier ->
+                        content(modifier)
                     }
-                )
+                } else {
+                    content(Modifier)
+                }
             }
         }
     }

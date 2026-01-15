@@ -91,6 +91,7 @@ import app.revanced.manager.domain.repository.PatchBundleRepository.BundleImport
 import app.revanced.manager.ui.viewmodel.InstalledAppsViewModel
 import app.revanced.manager.ui.viewmodel.AppSelectorViewModel
 import app.revanced.manager.util.RequestInstallAppsContract
+import app.revanced.manager.util.BundleDeepLink
 import app.revanced.manager.util.EventEffect
 import app.revanced.manager.util.isAllowedApkFile
 import app.revanced.manager.util.isAllowedPatchBundleFile
@@ -121,7 +122,9 @@ fun DashboardScreen(
     onDownloaderPluginClick: () -> Unit,
     onBundleDiscoveryClick: () -> Unit,
     onAppClick: (String) -> Unit,
-    onProfileLaunch: (PatchProfileLaunchData) -> Unit
+    onProfileLaunch: (PatchProfileLaunchData) -> Unit,
+    bundleDeepLink: BundleDeepLink? = null,
+    onBundleDeepLinkConsumed: () -> Unit = {}
 ) {
     val installedAppsViewModel: InstalledAppsViewModel = koinViewModel()
     val patchProfilesViewModel: PatchProfilesViewModel = koinViewModel()
@@ -166,6 +169,7 @@ fun DashboardScreen(
         initialPage = DashboardPage.DASHBOARD.ordinal,
         initialPageOffsetFraction = 0f
     ) { DashboardPage.entries.size }
+    var highlightBundleUid by rememberSaveable { mutableStateOf<Int?>(null) }
     val appsSelectionActive = installedAppsViewModel.selectedApps.isNotEmpty()
     val selectedAppCount = installedAppsViewModel.selectedApps.size
 
@@ -197,6 +201,13 @@ fun DashboardScreen(
         if (pagerState.currentPage != DashboardPage.PROFILES.ordinal) {
             patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
         }
+    }
+
+    LaunchedEffect(bundleDeepLink) {
+        val deepLink = bundleDeepLink ?: return@LaunchedEffect
+        highlightBundleUid = deepLink.bundleUid
+        onBundleDeepLinkConsumed()
+        pagerState.animateScrollToPage(DashboardPage.BUNDLES.ordinal)
     }
 
     val firstLaunch by vm.prefs.firstLaunch.getAsState()
@@ -727,7 +738,9 @@ fun DashboardScreen(
                                 setSelectedSourceHasEnabled = { selectedSourcesHasEnabled = it },
                                 showOrderDialog = showBundleOrderDialog,
                                 onDismissOrderDialog = { showBundleOrderDialog = false },
-                                onScrollStateChange = {}
+                                onScrollStateChange = {},
+                                highlightBundleUid = highlightBundleUid,
+                                onHighlightConsumed = { highlightBundleUid = null }
                             )
                         }
 
