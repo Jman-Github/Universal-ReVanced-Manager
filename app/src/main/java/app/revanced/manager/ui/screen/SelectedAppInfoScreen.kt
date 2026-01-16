@@ -140,7 +140,12 @@ fun SelectedAppInfoScreen(
                 selectedBundleOverride?.takeUnless { it.isBlank() }
                     ?: preferredBundleVersion?.takeUnless { it.isBlank() }
             }
-            val versionOverride = preferredVersion
+            val fileVersion = when (app) {
+                is SelectedApp.Local, is SelectedApp.Download -> app.version?.takeUnless { it.isNullOrBlank() }
+                else -> null
+            }
+            val versionOverride = fileVersion
+                ?: preferredVersion
                 ?: vm.selectedAppInfo?.versionName?.takeUnless { it.isNullOrBlank() }
                 ?: app.version?.takeUnless { it.isNullOrBlank() }
                 ?: downloadedApps.firstOrNull()?.version?.takeUnless { it.isNullOrBlank() }
