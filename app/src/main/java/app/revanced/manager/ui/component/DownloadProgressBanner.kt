@@ -1,5 +1,6 @@
 package app.revanced.manager.ui.component
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -23,8 +24,10 @@ fun DownloadProgressBanner(
     val clampedProgress = progress?.coerceIn(0f, 1f)
     Surface(
         modifier = modifier,
-        color = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp),
-        tonalElevation = 1.dp,
+        color = MaterialTheme.colorScheme.surfaceColorAtElevation(6.dp),
+        tonalElevation = 2.dp,
+        shadowElevation = 6.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         shape = RoundedCornerShape(14.dp)
     ) {
         Column(
@@ -33,7 +36,7 @@ fun DownloadProgressBanner(
             Text(
                 text = title,
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurface
             )
             subtitle?.let { sub ->
                 Text(

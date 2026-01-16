@@ -25,6 +25,8 @@
 - Tapping patch bundle updating/updated notifications now highlights the corresponding bundle in the patch bundles tab
 - Switched back to the official ReVanced Patcher and Library from Brosssh's Patcher and Library (as using theres is no longer needed)
 - The `Rooted mount installer` now auto-remounts at device startup https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/112
+- Moved the progress banner so it hangs below the nav bar https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/117
+- Stabilize patch bunlde progress banners and make them clearler and more consistent
 
 
 # Bug fixes

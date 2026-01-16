@@ -388,7 +388,7 @@ fun ImportExportSettingsScreen(
                 }
                 DownloadProgressBanner(
                     title = stringResource(R.string.import_patch_bundles_banner_title),
-                    subtitle = subtitleParts.joinToString(" • "),
+                    subtitle = subtitleParts.joinToString(" - "),
                     progress = progress.ratio,
                     modifier = Modifier
                         .fillMaxWidth()

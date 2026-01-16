@@ -193,6 +193,7 @@ class PatchBundleRepository(
     private var localImportTotalSteps = 0
 
     private var bundleImportAutoClearJob: Job? = null
+    private var bundleUpdateAutoClearJob: Job? = null
     private val changelogHistoryJson = Json {
         encodeDefaults = true
         ignoreUnknownKeys = true
@@ -222,6 +223,25 @@ class PatchBundleRepository(
                 (current.phase != BundleImportPhase.Downloading || currentDownloadComplete)
             if (currentDone) {
                 bundleImportProgressFlow.value = null
+            }
+        }
+    }
+
+    private fun cancelBundleUpdateAutoClear() {
+        bundleUpdateAutoClearJob?.cancel()
+        bundleUpdateAutoClearJob = null
+    }
+
+    private fun scheduleBundleUpdateProgressClear() {
+        cancelBundleUpdateAutoClear()
+        val current = bundleUpdateProgressFlow.value ?: return
+        if (current.total <= 0 || current.completed < current.total) return
+
+        bundleUpdateAutoClearJob = scope.launch {
+            delay(8_000)
+            val progress = bundleUpdateProgressFlow.value ?: return@launch
+            if (progress.total > 0 && progress.completed >= progress.total) {
+                bundleUpdateProgressFlow.value = null
             }
         }
     }
@@ -268,6 +288,7 @@ class PatchBundleRepository(
     private suspend fun updateProgressAfterRemoval(affectedCount: Int, remaining: Int) {
         if (affectedCount <= 0) return
         if (remaining <= 0) {
+            cancelBundleUpdateAutoClear()
             bundleUpdateProgressFlow.value = null
             cancelUpdateJob()
             return
@@ -1622,9 +1643,11 @@ class PatchBundleRepository(
         predicate: (bundle: RemotePatchBundle) -> Boolean,
     ): Boolean = coroutineScope {
         try {
+            cancelBundleUpdateAutoClear()
             val allowMeteredUpdates = prefs.allowMeteredUpdates.get()
             if (!allowUnsafeNetwork && !allowMeteredUpdates && !networkInfo.isSafe()) {
                 Log.d(tag, "Skipping update check because the network is down or metered.")
+                cancelBundleUpdateAutoClear()
                 bundleUpdateProgressFlow.value = null
                 return@coroutineScope false
             }
@@ -1635,6 +1658,7 @@ class PatchBundleRepository(
 
             if (targets.isEmpty()) {
                 if (showToast) toast(R.string.patches_update_unavailable)
+                cancelBundleUpdateAutoClear()
                 bundleUpdateProgressFlow.value = null
                 return@coroutineScope false
             }
@@ -1728,7 +1752,7 @@ class PatchBundleRepository(
                 toast(R.string.patches_download_fail, e.simpleMessage())
                 emptyMap()
             } finally {
-                bundleUpdateProgressFlow.value = null
+                scheduleBundleUpdateProgressClear()
             }
 
             if (updated.isEmpty()) {
