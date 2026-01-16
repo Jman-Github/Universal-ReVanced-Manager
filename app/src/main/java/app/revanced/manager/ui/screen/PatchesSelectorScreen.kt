@@ -990,7 +990,7 @@ fun PatchesSelectorScreen(
                     val rotation by animateFloatAsState(
                         targetValue = if (searchExpanded) 360f else 0f,
                         animationSpec = tween(durationMillis = 400, easing = EaseInOut),
-                        label = "SearchBar back button"
+                        label = stringResource(R.string.search_bar_back_button_label)
                     )
                     IconButton(
                         onClick = {
@@ -1011,7 +1011,7 @@ fun PatchesSelectorScreen(
                 trailingIcon = {
                     AnimatedContent(
                         targetState = searchExpanded,
-                        label = "Filter/Clear",
+                        label = stringResource(R.string.patch_selector_filter_clear_label),
                         transitionSpec = { fadeIn() togetherWith fadeOut() }
                     ) { expanded ->
                         if (expanded) {
@@ -1823,8 +1823,9 @@ private fun bundleTypeLabelRes(type: BundleSourceType?): Int = when (type) {
     else -> R.string.bundle_type_local
 }
 
+@Composable
 private fun formatPatchCountForBadge(count: Int): String =
-    if (count > 999) "999+" else count.toString()
+    if (count > 999) stringResource(R.string.patch_count_overflow) else count.toString()
 
 @Composable
 private fun PatchProfileBundleDialog(

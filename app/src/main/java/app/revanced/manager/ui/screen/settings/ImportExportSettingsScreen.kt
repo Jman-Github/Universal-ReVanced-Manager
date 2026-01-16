@@ -353,15 +353,21 @@ fun ImportExportSettingsScreen(
                     val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList
                     val phaseText = if (progress.isStepBased) {
                         when (progress.phase) {
-                            BundleImportPhase.Downloading -> "Copying bundle"
-                            BundleImportPhase.Processing -> "Writing bundle"
-                            BundleImportPhase.Finalizing -> "Finalizing import"
+                            BundleImportPhase.Downloading ->
+                                stringResource(R.string.bundle_import_phase_copying)
+                            BundleImportPhase.Processing ->
+                                stringResource(R.string.bundle_import_phase_writing)
+                            BundleImportPhase.Finalizing ->
+                                stringResource(R.string.bundle_import_phase_finalizing)
                         }
                     } else {
                         when (progress.phase) {
-                            BundleImportPhase.Processing -> "Processing"
-                            BundleImportPhase.Downloading -> "Downloading"
-                            BundleImportPhase.Finalizing -> "Finalizing"
+                            BundleImportPhase.Processing ->
+                                stringResource(R.string.bundle_import_phase_processing)
+                            BundleImportPhase.Downloading ->
+                                stringResource(R.string.bundle_import_phase_downloading)
+                            BundleImportPhase.Finalizing ->
+                                stringResource(R.string.bundle_import_phase_finalizing_short)
                         }
                     }
                     val detail = buildString {
@@ -713,7 +719,7 @@ private fun PackageSelector(packages: Set<String>, onFinish: (String?) -> Unit) 
 
     LaunchedEffect(noPackages) {
         if (noPackages) {
-            context.toast("No packages available.")
+            context.toast(context.getString(R.string.no_packages_available))
             onFinish(null)
         }
     }
@@ -735,7 +741,7 @@ private fun PackageSelector(packages: Set<String>, onFinish: (String?) -> Unit) 
                     .fillMaxWidth()
             ) {
                 Text(
-                    text = "Select package",
+                    text = stringResource(R.string.select_package),
                     style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.onSurface
                 )

@@ -35,6 +35,7 @@
     <string name="android_11_bug_dialog_description">The app installation permission must be granted ahead of time to avoid a bug in the Android 11 system that will negatively affect the user experience.</string>
     <string name="no_network_toast">No internet connection available</string>
     <string name="selected_app_meta_any_version">Any available version</string>
+    <string name="app_version_unspecified">unspecified</string>
     <string name="app_source_dialog_title">Select source</string>
     <string name="app_source_dialog_option_auto">Auto</string>
     <string name="app_source_dialog_option_auto_description">Use all available downloaders to download the app</string>
@@ -95,6 +96,8 @@
     <string name="patch_selector_item">Select patches</string>
     <string name="patch_selector_item_description">%d patches selected</string>
     <string name="patch_selector_bundle_selected_count">Selected in this bundle: %d</string>
+    <string name="patch_selector_filter_clear_label">Filter/Clear</string>
+    <string name="patch_count_overflow">999+</string>
     <string name="no_patches_selected">No patches selected</string>
     <string name="mixed_patch_bundles_title">Mixed patch bundles</string>
     <string name="mixed_patch_bundles_description">ReVanced (.rvp) and Morphe (.mpp) patches cannot be combined. Select patches from only one bundle type. If you want to use both, you will have to patch a second time using the other patches you want.</string>
@@ -214,6 +217,8 @@
     <string name="import_patch_bundles_banner_title">Importing patch bundles</string>
     <string name="import_patch_bundles_banner_subtitle">%1$d of %2$d processed</string>
     <string name="import_patch_bundles_banner_steps">Step %1$d of %2$d</string>
+    <string name="no_packages_available">No packages available.</string>
+    <string name="select_package">Select package</string>
     <string name="import_patch_profiles">Import patch profiles</string>
     <string name="import_patch_profiles_description">Import saved patch profiles from a JSON file</string>
     <string name="import_patch_profiles_fail">Could not import patch profiles: %s</string>
@@ -598,6 +603,7 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="universal">Any app</string>
     <string name="non_universal">Non-universal</string>
     <string name="search_patches">Search patches</string>
+    <string name="search_bar_back_button_label">SearchBar back button</string>
     <string name="app_version_not_compatible">This patch is not compatible with the selected app version (%1$s).\n\nIt is only compatible with the following version(s): %2$s.</string>
     <string name="failed_to_load_apk">Failed to load APK</string>
     <string name="loading">Loading…</string>
@@ -883,6 +889,15 @@ Details: %2$s</string>
     <string name="failed_to_check_updates">Failed to check for updates: %s</string>
     <string name="no_update_available">No update available</string>
     <string name="update_check">Checking for updates…</string>
+    <string name="bundle_import_phase_copying">Copying bundle</string>
+    <string name="bundle_import_phase_writing">Writing bundle</string>
+    <string name="bundle_import_phase_finalizing">Finalizing import</string>
+    <string name="bundle_import_phase_processing">Processing</string>
+    <string name="bundle_import_phase_downloading">Downloading</string>
+    <string name="bundle_import_phase_finalizing_short">Finalizing</string>
+    <string name="bundle_update_phase_checking">Checking</string>
+    <string name="bundle_update_phase_downloading">Downloading</string>
+    <string name="bundle_update_phase_finalizing">Finalizing</string>
     <string name="update_available_dialog_description">A new version of Universal ReVanced Manager (%s) is available.</string>
     <string name="failed_to_download_update">Failed to download update: %s</string>
     <string name="download">Download</string>

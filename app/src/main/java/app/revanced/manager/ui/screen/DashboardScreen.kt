@@ -546,15 +546,21 @@ fun DashboardScreen(
                     val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList
                     val phaseText = if (progress.isStepBased) {
                         when (progress.phase) {
-                            BundleImportPhase.Downloading -> "Copying bundle"
-                            BundleImportPhase.Processing -> "Writing bundle"
-                            BundleImportPhase.Finalizing -> "Finalizing import"
+                            BundleImportPhase.Downloading ->
+                                stringResource(R.string.bundle_import_phase_copying)
+                            BundleImportPhase.Processing ->
+                                stringResource(R.string.bundle_import_phase_writing)
+                            BundleImportPhase.Finalizing ->
+                                stringResource(R.string.bundle_import_phase_finalizing)
                         }
                     } else {
                         when (progress.phase) {
-                            BundleImportPhase.Processing -> "Processing"
-                            BundleImportPhase.Downloading -> "Downloading"
-                            BundleImportPhase.Finalizing -> "Finalizing"
+                            BundleImportPhase.Processing ->
+                                stringResource(R.string.bundle_import_phase_processing)
+                            BundleImportPhase.Downloading ->
+                                stringResource(R.string.bundle_import_phase_downloading)
+                            BundleImportPhase.Finalizing ->
+                                stringResource(R.string.bundle_import_phase_finalizing_short)
                         }
                     }
                     val detail = buildString {
@@ -608,9 +614,12 @@ fun DashboardScreen(
                         )
                         val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList
                         val phaseText = when (progress.phase) {
-                            BundleUpdatePhase.Checking -> "Checking"
-                            BundleUpdatePhase.Downloading -> "Downloading"
-                            BundleUpdatePhase.Finalizing -> "Finalizing"
+                            BundleUpdatePhase.Checking ->
+                                stringResource(R.string.bundle_update_phase_checking)
+                            BundleUpdatePhase.Downloading ->
+                                stringResource(R.string.bundle_update_phase_downloading)
+                            BundleUpdatePhase.Finalizing ->
+                                stringResource(R.string.bundle_update_phase_finalizing)
                         }
 
                         val detail = buildString {
