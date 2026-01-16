@@ -502,6 +502,17 @@ class PatchBundleRepository(
         val entities = loadEntitiesEnforcingOfficialOrder()
 
         val sources = entities.associate { it.uid to it.load() }.toMutableMap()
+        val entityByUid = entities.associateBy { it.uid }
+        sources.forEach { (uid, source) ->
+            val remote = source as? RemotePatchBundle ?: return@forEach
+            val entity = entityByUid[uid] ?: return@forEach
+            val bundleVersion = remote.version?.takeUnless { it.isBlank() } ?: return@forEach
+            val bundleNormalized = normalizeVersionForCompare(bundleVersion) ?: return@forEach
+            val storedNormalized = normalizeVersionForCompare(entity.versionHash)
+            if (storedNormalized == bundleNormalized) return@forEach
+            updateDb(uid) { it.copy(versionHash = bundleVersion) }
+            sources[uid] = entity.copy(versionHash = bundleVersion).load()
+        }
 
         val hasOutOfDateNames = sources.values.any { it.isNameOutOfDate }
         if (hasOutOfDateNames) dispatchAction(
@@ -1480,15 +1491,16 @@ class PatchBundleRepository(
                     return@forEach
                 }
 
-                val latestSignature = info.version.takeUnless { it.isBlank() }
-                val installedSignature = bundle.installedVersionSignature
-                val hasUpdate = latestSignature == null || installedSignature != latestSignature
-                if (!hasUpdate) return@forEach
+                val latestSignature = normalizeVersionForCompare(info.version) ?: return@forEach
+                val installedSignature = normalizeVersionForCompare(bundle.installedVersionSignature)
+                val manifestSignature = normalizeVersionForCompare(bundle.version)
+                val currentSignature = installedSignature ?: manifestSignature ?: return@forEach
+                if (currentSignature == latestSignature) return@forEach
 
-                val versionLabel = latestSignature ?: bundle.version ?: return@forEach
-                if (bundle.lastNotifiedVersion == versionLabel) return@forEach
+                val versionLabel = latestSignature
+                if (normalizeVersionForCompare(bundle.lastNotifiedVersion) == versionLabel) return@forEach
 
-                val notified = onNotification(bundle, versionLabel)
+                val notified = onNotification(bundle, info.version)
                 if (notified) {
                     updateLastNotifiedVersion(bundle.uid, versionLabel)
                     notifiedAny = true
@@ -1792,12 +1804,14 @@ class PatchBundleRepository(
                     async {
                         try {
                             val info = bundle.fetchLatestReleaseInfo()
-                            val latestSignature = info.version.takeUnless { it.isBlank() }
-                            val installedSignature = bundle.installedVersionSignature
-                            val hasUpdate = latestSignature == null || installedSignature != latestSignature
-                            if (!hasUpdate) return@async bundle.uid to null
+                            val latestSignature = normalizeVersionForCompare(info.version)
+                                ?: return@async bundle.uid to null
+                            val installedSignature = normalizeVersionForCompare(bundle.installedVersionSignature)
+                                ?: normalizeVersionForCompare(bundle.version)
+                                ?: return@async bundle.uid to null
+                            if (installedSignature == latestSignature) return@async bundle.uid to null
                             bundle.uid to ManualBundleUpdateInfo(
-                                latestVersion = latestSignature ?: bundle.version,
+                                latestVersion = info.version,
                                 pageUrl = info.pageUrl
                             )
                         } catch (t: Throwable) {
@@ -1920,6 +1934,14 @@ class PatchBundleRepository(
         val latestVersion: String?,
         val pageUrl: String?,
     )
+
+    private fun normalizeVersionForCompare(raw: String?): String? {
+        val trimmed = raw?.trim().orEmpty()
+        if (trimmed.isEmpty()) return null
+        val noPrefix = trimmed.removePrefix("v").removePrefix("V")
+        val noBuild = noPrefix.substringBefore('+')
+        return noBuild.ifBlank { null }
+    }
 
     private companion object {
         const val DEFAULT_SOURCE_UID = 0

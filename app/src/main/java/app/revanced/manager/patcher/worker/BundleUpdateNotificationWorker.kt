@@ -51,7 +51,7 @@ class BundleUpdateNotificationWorker(
                     flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
                     BundleDeepLinkIntent.addBundleUid(this, bundleUid)
                 }
-                val requestCode = bundleUid ?: 0
+                val requestCode = bundleUid?.plus(1) ?: 0
                 return PendingIntent.getActivity(
                     applicationContext,
                     requestCode,
@@ -80,9 +80,9 @@ class BundleUpdateNotificationWorker(
                 patchBundleRepository.updateNow(
                     allowUnsafeNetwork = false,
                     onPerBundleProgress = { bundle, bytesRead, bytesTotal ->
-                        if (bytesRead > 0L || (bytesTotal ?: 0L) > 0L) {
-                            downloadStarted = true
-                        }
+                        val shouldNotify = bytesRead > 0L || (bytesTotal ?: 0L) > 0L
+                        if (!shouldNotify) return@updateNow
+                        downloadStarted = true
                         if (!canNotify) return@updateNow
 
                         if (seenUids.add(bundle.uid)) {
@@ -133,7 +133,11 @@ class BundleUpdateNotificationWorker(
             }
 
             if (canNotify) {
-                val deepLinkUid = updatedBundleUids.firstOrNull() ?: manualUpdates.firstOrNull()?.uid
+                val deepLinkUid = when {
+                    updatedBundleUids.size == 1 -> updatedBundleUids.first()
+                    manualUpdates.size == 1 -> manualUpdates.first().uid
+                    else -> null
+                }
                 when {
                     updatedAny -> {
                         val updatedNames = formatUpdatedBundleNames(updatedBundleNames)
@@ -173,7 +177,9 @@ class BundleUpdateNotificationWorker(
                                 R.string.bundle_updates_notification_available,
                                 manualUpdates.size
                             ),
-                            pendingIntent = buildPendingIntent(manualUpdates.firstOrNull()?.uid),
+                            pendingIntent = buildPendingIntent(
+                                if (manualUpdates.size == 1) manualUpdates.first().uid else null
+                            ),
                             ongoing = false,
                             progress = null
                         )

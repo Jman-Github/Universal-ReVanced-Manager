@@ -206,8 +206,8 @@ fun DashboardScreen(
     LaunchedEffect(bundleDeepLink) {
         val deepLink = bundleDeepLink ?: return@LaunchedEffect
         highlightBundleUid = deepLink.bundleUid
-        onBundleDeepLinkConsumed()
         pagerState.animateScrollToPage(DashboardPage.BUNDLES.ordinal)
+        onBundleDeepLinkConsumed()
     }
 
     val firstLaunch by vm.prefs.firstLaunch.getAsState()

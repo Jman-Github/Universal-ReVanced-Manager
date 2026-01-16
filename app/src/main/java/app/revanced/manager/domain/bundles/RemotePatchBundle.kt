@@ -118,7 +118,11 @@ sealed class RemotePatchBundle(
     suspend fun update(onProgress: PatchBundleDownloadProgress? = null): PatchBundleDownloadResult? =
         withContext(Dispatchers.IO) {
         val info = fetchLatestReleaseInfo()
-        if (hasInstalled() && info.version == installedVersionSignatureInternal)
+        val latestSignature = normalizeVersionForCompare(info.version)
+            ?: return@withContext null
+        val installedSignature = normalizeVersionForCompare(installedVersionSignatureInternal)
+            ?: normalizeVersionForCompare(version)
+        if (hasInstalled() && installedSignature != null && latestSignature == installedSignature)
             return@withContext null
 
         download(info, onProgress)
@@ -147,6 +151,14 @@ sealed class RemotePatchBundle(
     }
 
     val installedVersionSignature: String? get() = installedVersionSignatureInternal
+
+    private fun normalizeVersionForCompare(raw: String?): String? {
+        val trimmed = raw?.trim().orEmpty()
+        if (trimmed.isEmpty()) return null
+        val noPrefix = trimmed.removePrefix("v").removePrefix("V")
+        val noBuild = noPrefix.substringBefore('+')
+        return noBuild.ifBlank { null }
+    }
 }
 
 class JsonPatchBundle(
