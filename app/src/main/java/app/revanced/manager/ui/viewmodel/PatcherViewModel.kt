@@ -901,20 +901,16 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 exportMetadata = metadata
             }
 
-            val scopedBundlesFinal = patchBundleRepository.scopedBundleInfoFlow(finalPackageName, finalVersion)
-                .first()
-                .associateBy { it.uid }
             val globalBundlesFinal = patchBundleRepository.allBundlesInfoFlow.first()
             val sanitizedSelectionFinal = sanitizeSelection(appliedSelection, globalBundlesFinal)
-            val sanitizedOptionsFinal = sanitizeOptions(appliedOptions, scopedBundlesFinal)
-            val scopedBundlesOriginal = patchBundleRepository.scopedBundleInfoFlow(
-                packageName,
-                input.selectedApp.version
-            ).first().associateBy { it.uid }
-            val sanitizedSelectionOriginal = sanitizeSelection(appliedSelection, scopedBundlesOriginal)
-            val sanitizedOptionsOriginal = sanitizeOptions(appliedOptions, scopedBundlesOriginal)
+            val sanitizedOptionsFinal = sanitizeOptions(appliedOptions, globalBundlesFinal)
+            val sanitizedSelectionOriginal = sanitizeSelection(appliedSelection, globalBundlesFinal)
+            val sanitizedOptionsOriginal = sanitizeOptions(appliedOptions, globalBundlesFinal)
 
-            val selectionPayload = patchBundleRepository.snapshotSelection(sanitizedSelectionFinal)
+            val selectionPayload = patchBundleRepository.snapshotSelection(
+                sanitizedSelectionFinal,
+                sanitizedOptionsFinal
+            )
 
             if (savedAppsEnabled || installType != InstallType.SAVED) {
                 installedAppRepository.addOrUpdate(
@@ -2366,7 +2362,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private fun sanitizeOptions(
         options: Options,
-        bundles: Map<Int, PatchBundleInfo.Scoped>
+        bundles: Map<Int, PatchBundleInfo>
     ): Options = buildMap {
         options.forEach { (uid, patchOptions) ->
             val bundle = bundles[uid] ?: return@forEach

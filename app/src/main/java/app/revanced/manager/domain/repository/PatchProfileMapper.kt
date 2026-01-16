@@ -44,6 +44,54 @@ fun PatchSelection.toPayload(
     )
 }
 
+fun PatchSelection.toPayload(
+    sources: List<PatchBundleSource>,
+    bundleInfo: Map<Int, PatchBundleInfo.Global>,
+    options: Options
+): PatchProfilePayload? {
+    if (isEmpty()) return null
+    val sourceMap = sources.associateBy { it.uid }
+    return PatchProfilePayload(
+        entries.map { (uid, patches) ->
+            val source = sourceMap[uid]
+            val info = bundleInfo[uid]
+            val trimmedPatches = patches.map { it.trim() }.filter { it.isNotEmpty() }.sorted()
+            val selected = trimmedPatches.toSet()
+            val bundleOptions = options[uid].orEmpty()
+            val serializedOptions = buildMap<String, Map<String, Option.SerializedValue>> {
+                bundleOptions.forEach { (patchName, optionValues) ->
+                    if (selected.isNotEmpty() && patchName !in selected) return@forEach
+                    val serializedForPatch = mutableMapOf<String, Option.SerializedValue>()
+                    optionValues.forEach { (key, value) ->
+                        try {
+                            serializedForPatch[key] = Option.SerializedValue.fromValue(value)
+                        } catch (e: Option.SerializationException) {
+                            Log.w(
+                                tag,
+                                "Failed to serialize option $uid:$patchName:$key",
+                                e
+                            )
+                        }
+                    }
+                    if (serializedForPatch.isNotEmpty()) {
+                        put(patchName, serializedForPatch.toMap())
+                    }
+                }
+            }
+            PatchProfilePayload.Bundle(
+                bundleUid = uid,
+                patches = trimmedPatches,
+                options = serializedOptions,
+                displayName = source?.displayTitle ?: info?.name,
+                sourceEndpoint = (source as? RemotePatchBundle)?.endpoint,
+                sourceName = source?.patchBundle?.manifestAttributes?.name ?: source?.name ?: info?.name,
+                version = info?.version,
+                optionDisplayInfo = emptyMap()
+            )
+        }
+    )
+}
+
 fun PatchProfilePayload.remapAndExtractSelection(
     sources: List<PatchBundleSource>,
     signatures: Map<Int, Set<String>>

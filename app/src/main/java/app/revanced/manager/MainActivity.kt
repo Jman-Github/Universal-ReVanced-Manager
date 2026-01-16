@@ -135,6 +135,7 @@ private fun ReVancedManager(vm: MainViewModel) {
     var pendingBundleDeepLink by remember { mutableStateOf<app.revanced.manager.util.BundleDeepLink?>(null) }
 
     EventEffect(vm.appSelectFlow) { params ->
+        navController.popBackStack(SelectedApplicationInfo.Main, inclusive = true)
         navController.navigateComplex(
             SelectedApplicationInfo,
             params
@@ -199,8 +200,8 @@ private fun ReVancedManager(vm: MainViewModel) {
             val data = it.toRoute<InstalledApplicationInfo>()
 
             InstalledAppInfoScreen(
-                onPatchClick = { packageName, selection ->
-                    vm.selectApp(packageName, selection)
+                onPatchClick = { packageName, selection, selectionPayload, persistConfiguration ->
+                    vm.selectApp(packageName, selection, selectionPayload, persistConfiguration)
                 },
                 onBackClick = navController::popBackStack,
                 viewModel = koinViewModel { parametersOf(data.packageName) }

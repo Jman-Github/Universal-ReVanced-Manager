@@ -65,6 +65,7 @@ import app.revanced.manager.data.room.apps.installed.InstallType
 import app.revanced.manager.domain.installer.InstallerManager
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.repository.PatchBundleRepository
+import app.revanced.manager.data.room.profile.PatchProfilePayload
 import app.revanced.manager.ui.component.AppInfo
 import app.revanced.manager.ui.component.AppliedPatchBundleUi
 import app.revanced.manager.ui.component.AppliedPatchesDialog
@@ -96,7 +97,12 @@ import java.nio.file.Path
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun InstalledAppInfoScreen(
-    onPatchClick: (packageName: String, selection: PatchSelection?) -> Unit,
+    onPatchClick: (
+        packageName: String,
+        selection: PatchSelection?,
+        selectionPayload: PatchProfilePayload?,
+        persistConfiguration: Boolean
+    ) -> Unit,
     onBackClick: () -> Unit,
     viewModel: InstalledAppInfoViewModel
 ) {
@@ -255,12 +261,13 @@ fun InstalledAppInfoScreen(
         }
 
         val selection = appliedSelection ?: return
+        val persistConfiguration = viewModel.installedApp?.installType != InstallType.SAVED
         scope.launch {
             if (patchBundleRepository.selectionHasMixedBundleTypes(selection)) {
                 showMixedBundleDialog = true
                 return@launch
             }
-            onPatchClick(targetPackageName, selection)
+            onPatchClick(targetPackageName, selection, selectionPayload, persistConfiguration)
         }
     }
 

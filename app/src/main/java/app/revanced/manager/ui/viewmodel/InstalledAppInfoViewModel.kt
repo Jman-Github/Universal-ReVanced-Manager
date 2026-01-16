@@ -808,7 +808,8 @@ class InstalledAppInfoViewModel(
             val sourcesSnapshot = patchBundleRepository.sources.first()
             val availableIds = sourcesSnapshot.map { it.uid }.toSet()
             val persistableSelection = selection.filterKeys { it in availableIds }
-            val payload = patchBundleRepository.snapshotSelection(selection)
+            val payload = currentApp.selectionPayload
+                ?: patchBundleRepository.snapshotSelection(selection)
             installedAppRepository.addOrUpdate(
                 currentApp.currentPackageName,
                 currentApp.originalPackageName,

@@ -34,6 +34,7 @@ import app.revanced.manager.patcher.patch.PatchBundle
 import app.revanced.manager.patcher.patch.PatchBundleInfo
 import app.revanced.manager.patcher.patch.PatchBundleType
 import app.revanced.manager.util.PatchSelection
+import app.revanced.manager.util.Options
 import app.revanced.manager.util.simpleMessage
 import app.revanced.manager.util.tag
 import app.revanced.manager.util.toast
@@ -480,6 +481,9 @@ class PatchBundleRepository(
 
     suspend fun snapshotSelection(selection: PatchSelection) =
         selection.toPayload(sources.first(), bundleInfoFlow.first())
+
+    suspend fun snapshotSelection(selection: PatchSelection, options: Options) =
+        selection.toPayload(sources.first(), bundleInfoFlow.first(), options)
 
     private suspend inline fun dispatchAction(
         name: String,
