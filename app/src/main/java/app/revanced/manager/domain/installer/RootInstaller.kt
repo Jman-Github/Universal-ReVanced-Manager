@@ -97,8 +97,11 @@ class RootInstaller(
         File(path, "su").canExecute()
     } ?: false
 
-    suspend fun isAppInstalled(packageName: String) =
-        awaitRemoteFS().getFile("$modulesPath/$packageName-revanced").exists()
+    suspend fun isAppInstalled(packageName: String): Boolean {
+        val remoteFS = awaitRemoteFS()
+        return remoteFS.getFile("$revancedPath/$packageName/$packageName.apk").exists()
+            || remoteFS.getFile("$modulesPath/$packageName-revanced").exists()
+    }
 
     suspend fun isAppMounted(packageName: String) = withContext(Dispatchers.IO) {
         pm.getPackageInfo(packageName)?.applicationInfo?.sourceDir?.let {
@@ -112,7 +115,7 @@ class RootInstaller(
         withContext(Dispatchers.IO) {
             val stockAPK = pm.getPackageInfo(packageName)?.applicationInfo?.sourceDir
                 ?: throw Exception("Failed to load application info")
-            val patchedAPK = "$modulesPath/$packageName-revanced/$packageName.apk"
+            val patchedAPK = resolvePatchedApkPath(packageName)
 
             execute("mount -o bind \"$patchedAPK\" \"$stockAPK\"").assertSuccess("Failed to mount APK")
         }
@@ -139,6 +142,8 @@ class RootInstaller(
         val remoteFS = awaitRemoteFS()
         val assets = app.assets
         val modulePath = "$modulesPath/$packageName-revanced"
+        val revancedDir = "$revancedPath/$packageName"
+        val serviceScriptPath = "$serviceDirPath/urv-$packageName.sh"
 
         unmount(packageName)
 
@@ -155,6 +160,12 @@ class RootInstaller(
 
             execute("pm install \"${stockApp.absolutePath}\"").assertSuccess("Failed to install stock app")
         }
+
+        execute(
+            "mkdir -p \"$revancedPath\"",
+            "mkdir -p \"$serviceDirPath\"",
+            "mkdir -p \"$revancedDir\""
+        ).assertSuccess("Failed to prepare root mount directories")
 
         remoteFS.getFile(modulePath).mkdir()
 
@@ -176,7 +187,19 @@ class RootInstaller(
             }
         }
 
-        "$modulePath/$packageName.apk".let { apkPath ->
+        assets.open("root/service.sh").use { inputStream ->
+            remoteFS.getFile(serviceScriptPath).newOutputStream().use { outputStream ->
+                val content = String(inputStream.readBytes())
+                    .replace("__PKG_NAME__", packageName)
+                    .replace("__VERSION__", version)
+                    .replace("__LABEL__", label)
+                    .toByteArray()
+
+                outputStream.write(content)
+            }
+        }
+
+        "$revancedDir/$packageName.apk".let { apkPath ->
 
             remoteFS.getFile(patchedAPK.absolutePath)
                 .also { if (!it.exists()) throw Exception("File doesn't exist") }
@@ -190,7 +213,9 @@ class RootInstaller(
                 "chmod 644 $apkPath",
                 "chown system:system $apkPath",
                 "chcon u:object_r:apk_data_file:s0 $apkPath",
-                "chmod +x $modulePath/service.sh"
+                "chmod +x $modulePath/service.sh",
+                "chmod 755 $serviceScriptPath",
+                "chown root:root $serviceScriptPath"
             ).assertSuccess("Failed to set file permissions")
         }
     }
@@ -201,6 +226,11 @@ class RootInstaller(
             unmount(packageName)
 
         val moduleDir = remoteFS.getFile("$modulesPath/$packageName-revanced")
+        val revancedDir = remoteFS.getFile("$revancedPath/$packageName")
+        val serviceScript = remoteFS.getFile("$serviceDirPath/urv-$packageName.sh")
+
+        if (serviceScript.exists()) serviceScript.delete()
+        if (revancedDir.exists()) revancedDir.deleteRecursively()
         if (!moduleDir.exists()) return
 
         moduleDir.deleteRecursively().also { deleted ->
@@ -210,12 +240,22 @@ class RootInstaller(
 
     companion object {
         const val modulesPath = "/data/adb/modules"
+        private const val revancedPath = "/data/adb/revanced"
+        private const val serviceDirPath = "/data/adb/service.d"
 
         private fun Shell.Result.assertSuccess(errorMessage: String) {
             if (!isSuccess) throw Exception(errorMessage)
         }
 
         private const val ROOT_CHECK_INTERVAL_MS = 1_000L
+    }
+
+    private suspend fun resolvePatchedApkPath(packageName: String): String {
+        val remoteFS = awaitRemoteFS()
+        val revancedApk = "$revancedPath/$packageName/$packageName.apk"
+        if (remoteFS.getFile(revancedApk).exists()) return revancedApk
+
+        return "$modulesPath/$packageName-revanced/$packageName.apk"
     }
 }
 

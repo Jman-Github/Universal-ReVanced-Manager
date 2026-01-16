@@ -1,17 +1,19 @@
 #!/system/bin/sh
-DIR=${0%/*}
-
 package_name="__PKG_NAME__"
 version="__VERSION__"
+base_dir="/data/adb/revanced/$package_name"
+log="$base_dir/log"
+base_path="$base_dir/$package_name.apk"
 
-rm "$DIR/log"
+rm "$log"
 
 {
 
 until [ "$(getprop sys.boot_completed)" = 1 ]; do sleep 5; done
 sleep 5
 
-base_path="$DIR/$package_name.apk"
+mkdir -p "$base_dir"
+
 stock_path="$(pm path "$package_name" | grep base | sed 's/package://g')"
 stock_version="$(dumpsys package "$package_name" | grep versionName | cut -d "=" -f2)"
 
@@ -37,4 +39,4 @@ fi
 
 mount -o bind "$base_path" "$stock_path"
 
-} >> "$DIR/log"
+} >> "$log"

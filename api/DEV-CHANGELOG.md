@@ -1,4 +1,4 @@
-# v1.7.1-dev.01 (TBD)
+# v1.7.1-dev.01 (2026-01-16)
 
 
 # Features
@@ -24,6 +24,7 @@
 - Added a toggle to use the `Pure Black` theme instead of the `Dark` theme for the `Follow system` theme https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/109
 - Tapping patch bundle updating/updated notifications now highlights the corresponding bundle in the patch bundles tab
 - Switched back to the official ReVanced Patcher and Library from Brosssh's Patcher and Library (as using theres is no longer needed)
+- The `Rooted mount installer` now auto-remounts at device startup https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/112
 
 
 # Bug fixes
@@ -42,6 +43,7 @@
 - Fixed update patch bundle notifactions not always appearing
 - Fixed patched apps being incorrectly patched resulting in startup crashes
 - Fix saved patched apps in the `Apps` tab and the restore button not restoring patch options correctly
+- Increased stability of the `Rooted mount installer` by fixing issues such as `Exception thrown on remote process`
 
 
 # Docs
