@@ -1,11 +1,16 @@
-# v1.7.1-dev.02 (TBD)
+# v1.7.1-dev.03 (2026-01-17)
 
 
 # Features
 
 - Added the ability to reorder/organize the listing order of saved patched apps in the `Apps` tab and patch profiles in the `Patch profiles` tabcollapsible/expandable
-- Make the progress banner collapsiable/expandable and give it an animation
+- Make the progress banner collapsiable/expandable and gave it animations
 - Made the `Apps`, `Patch Bundles` and `Patch Profiles` tabs items searchable via a button on the nav bar
+
+
+# Bug fixes
+
+- Fixed issues with the auto-remount system for after restarts on some devices
 
 
 # v1.7.1-dev.02 (2026-01-16)

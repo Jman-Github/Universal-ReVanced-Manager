@@ -5,7 +5,7 @@ base_dir="/data/adb/revanced/$package_name"
 log="$base_dir/log"
 base_path="$base_dir/$package_name.apk"
 
-rm "$log"
+rm -f "$log"
 
 {
 
@@ -19,8 +19,25 @@ grep "$package_name" /proc/mounts | while read -r line; do
   echo "$line" | cut -d " " -f 2 | sed "s/apk.*/apk/" | xargs -r umount -l
 done
 
-stock_path="$(pm path "$package_name" | grep base | sed 's/package://g')"
-stock_version="$(dumpsys package "$package_name" | grep versionName | cut -d "=" -f2)"
+waited=0
+max_wait=60
+stock_path=""
+stock_version=""
+while [ "$waited" -lt "$max_wait" ]; do
+  stock_path_data="$(pm path "$package_name" | grep base | grep /data/app/ | head -n 1 | sed 's/package://g')"
+  stock_path_fallback="$(pm path "$package_name" | grep base | head -n 1 | sed 's/package://g')"
+  stock_path="${stock_path_data:-$stock_path_fallback}"
+  stock_version="$(dumpsys package "$package_name" | awk -v pkg="$package_name" '
+    $0 ~ ("Package \\[" pkg "\\]") { in_pkg = 1 }
+    $0 ~ /Hidden system package/ { in_pkg = 0 }
+    in_pkg && /versionName=/ { sub(/.*versionName=/, ""); print; exit }
+  ' | tr -d '\r' | xargs)"
+  if [ -n "$stock_path" ] && [ -f "$stock_path" ] && [ -n "$stock_version" ]; then
+    break
+  fi
+  waited=$((waited + 1))
+  sleep 1
+done
 
 echo "base_path: $base_path"
 echo "stock_path: $stock_path"
@@ -32,7 +49,7 @@ if [ "$version" != "$stock_version" ]; then
   exit 1
 fi
 
-if [ -z "$stock_path" ]; then
+if [ -z "$stock_path" ] || [ -z "$stock_version" ]; then
   echo "Not mounting as app info could not be loaded"
   exit 1
 fi

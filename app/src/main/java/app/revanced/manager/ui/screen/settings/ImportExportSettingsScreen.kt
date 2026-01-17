@@ -3,6 +3,12 @@ package app.revanced.manager.ui.screen.settings
 import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.annotation.StringRes
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -340,60 +346,74 @@ fun ImportExportSettingsScreen(
                 )
             }
 
-            importProgress?.let { progress ->
-                val subtitleParts = buildList {
-                    val total = progress.total.coerceAtLeast(1)
-                    val stepLabel = if (progress.isStepBased) {
-                        val step = (progress.processed + 1).coerceAtMost(total)
-                        stringResource(R.string.import_patch_bundles_banner_steps, step, total)
-                    } else {
-                        stringResource(R.string.import_patch_bundles_banner_subtitle, progress.processed, total)
-                    }
-                    add(stepLabel)
-                    val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList
-                    val phaseText = if (progress.isStepBased) {
-                        when (progress.phase) {
-                            BundleImportPhase.Downloading ->
-                                stringResource(R.string.bundle_import_phase_copying)
-                            BundleImportPhase.Processing ->
-                                stringResource(R.string.bundle_import_phase_writing)
-                            BundleImportPhase.Finalizing ->
-                                stringResource(R.string.bundle_import_phase_finalizing)
+            AnimatedVisibility(
+                visible = importProgress != null,
+                enter = fadeIn(animationSpec = spring(stiffness = 400f)) +
+                    expandVertically(
+                        expandFrom = Alignment.Top,
+                        animationSpec = spring(stiffness = 400f)
+                    ),
+                exit = fadeOut(animationSpec = spring(stiffness = 400f)) +
+                    shrinkVertically(
+                        shrinkTowards = Alignment.Top,
+                        animationSpec = spring(stiffness = 400f)
+                    )
+            ) {
+                importProgress?.let { progress ->
+                    val subtitleParts = buildList {
+                        val total = progress.total.coerceAtLeast(1)
+                        val stepLabel = if (progress.isStepBased) {
+                            val step = (progress.processed + 1).coerceAtMost(total)
+                            stringResource(R.string.import_patch_bundles_banner_steps, step, total)
+                        } else {
+                            stringResource(R.string.import_patch_bundles_banner_subtitle, progress.processed, total)
                         }
-                    } else {
-                        when (progress.phase) {
-                            BundleImportPhase.Processing ->
-                                stringResource(R.string.bundle_import_phase_processing)
-                            BundleImportPhase.Downloading ->
-                                stringResource(R.string.bundle_import_phase_downloading)
-                            BundleImportPhase.Finalizing ->
-                                stringResource(R.string.bundle_import_phase_finalizing_short)
-                        }
-                    }
-                    val detail = buildString {
-                        append(phaseText)
-                        append(": ")
-                        append(name)
-                        if (progress.bytesTotal?.takeIf { it > 0L } != null) {
-                            append(" (")
-                            append(Formatter.formatShortFileSize(context, progress.bytesRead))
-                            progress.bytesTotal?.takeIf { it > 0L }?.let { total ->
-                                append("/")
-                                append(Formatter.formatShortFileSize(context, total))
+                        add(stepLabel)
+                        val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList
+                        val phaseText = if (progress.isStepBased) {
+                            when (progress.phase) {
+                                BundleImportPhase.Downloading ->
+                                    stringResource(R.string.bundle_import_phase_copying)
+                                BundleImportPhase.Processing ->
+                                    stringResource(R.string.bundle_import_phase_writing)
+                                BundleImportPhase.Finalizing ->
+                                    stringResource(R.string.bundle_import_phase_finalizing)
                             }
-                            append(")")
+                        } else {
+                            when (progress.phase) {
+                                BundleImportPhase.Processing ->
+                                    stringResource(R.string.bundle_import_phase_processing)
+                                BundleImportPhase.Downloading ->
+                                    stringResource(R.string.bundle_import_phase_downloading)
+                                BundleImportPhase.Finalizing ->
+                                    stringResource(R.string.bundle_import_phase_finalizing_short)
+                            }
                         }
+                        val detail = buildString {
+                            append(phaseText)
+                            append(": ")
+                            append(name)
+                            if (progress.bytesTotal?.takeIf { it > 0L } != null) {
+                                append(" (")
+                                append(Formatter.formatShortFileSize(context, progress.bytesRead))
+                                progress.bytesTotal?.takeIf { it > 0L }?.let { total ->
+                                    append("/")
+                                    append(Formatter.formatShortFileSize(context, total))
+                                }
+                                append(")")
+                            }
+                        }
+                        add(detail)
                     }
-                    add(detail)
+                    DownloadProgressBanner(
+                        title = stringResource(R.string.import_patch_bundles_banner_title),
+                        subtitle = subtitleParts.joinToString(" - "),
+                        progress = progress.ratio,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
                 }
-                DownloadProgressBanner(
-                    title = stringResource(R.string.import_patch_bundles_banner_title),
-                    subtitle = subtitleParts.joinToString(" - "),
-                    progress = progress.ratio,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                )
             }
 
             GroupHeader(stringResource(R.string.import_))
