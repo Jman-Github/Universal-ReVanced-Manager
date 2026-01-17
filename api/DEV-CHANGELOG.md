@@ -1,3 +1,11 @@
+# v1.7.1-dev.02 (2026-01-16)
+
+
+# Bug fixes
+
+- Fixed false update prompts and incorrect update detection
+
+
 # v1.7.1-dev.01 (2026-01-16)
 
 

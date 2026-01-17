@@ -66,7 +66,6 @@ class ReVancedAPI(
         val normalizedPath = path.trimStart('/')
         val pat = prefs.gitHubPat.get()
         return client.request {
-            // PR #35: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35
             pat.takeIf { it.isNotBlank() }?.let { header("Authorization", "Bearer $it") }
             url("${config.apiBase}/$normalizedPath")
         }
@@ -153,52 +152,10 @@ class ReVancedAPI(
     }
 
     suspend fun getAppUpdate(): ReVancedAsset? {
-        val asset = getLatestAppInfo().getOrNull() ?: return null
-        return asset.takeIf { isUpdateAvailable(BuildConfig.VERSION_NAME, it.version) }
+        return getLatestAppInfo()
+            .getOrNull()
+            ?.takeIf { it.version.removePrefix("v") != BuildConfig.VERSION_NAME }
     }
-
-    private fun isUpdateAvailable(installedVersion: String, releasedVersion: String): Boolean {
-        val installed = parseVersion(installedVersion, stripDev = false)
-        val released = parseVersion(releasedVersion, stripDev = false)
-        return compareVersions(installed, released) < 0
-    }
-
-    private fun parseVersion(raw: String, stripDev: Boolean): VersionParts {
-        val normalized = normalizeVersion(raw, stripDev)
-        val base = normalized.substringBefore('-')
-        val suffix = normalized.substringAfter('-', "").takeIf { it.isNotBlank() }
-        val numbers = base.split('.')
-            .mapNotNull { it.toIntOrNull() }
-            .ifEmpty { listOf(0) }
-        return VersionParts(numbers, suffix)
-    }
-
-    private fun normalizeVersion(raw: String, stripDev: Boolean): String {
-        val trimmed = raw.trim().removePrefix("v").removePrefix("V")
-        val noBuild = trimmed.substringBefore('+')
-        if (!stripDev) return noBuild
-        return noBuild.replace(Regex("(?i)-dev.*$"), "")
-    }
-
-    private fun compareVersions(left: VersionParts, right: VersionParts): Int {
-        val maxSize = maxOf(left.numbers.size, right.numbers.size)
-        for (index in 0 until maxSize) {
-            val lhs = left.numbers.getOrElse(index) { 0 }
-            val rhs = right.numbers.getOrElse(index) { 0 }
-            if (lhs != rhs) return lhs.compareTo(rhs)
-        }
-        val leftSuffix = left.suffix
-        val rightSuffix = right.suffix
-        if (leftSuffix == null && rightSuffix == null) return 0
-        if (leftSuffix == null) return 1
-        if (rightSuffix == null) return -1
-        return leftSuffix.compareTo(rightSuffix)
-    }
-
-    private data class VersionParts(
-        val numbers: List<Int>,
-        val suffix: String?
-    )
 
     suspend fun getPatchesUpdate(): APIResponse<ReVancedAsset> =
         apiRequest("patches?prerelease=${prefs.usePatchesPrereleases.get()}")
@@ -226,7 +183,6 @@ class ReVancedAPI(
         }
     }
 
-    // PR #35: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35
     suspend fun getAssetFromPullRequest(owner: String, repo: String, pullRequestNumber: String): ReVancedAsset {
         suspend fun getPullWithRun(
             pullRequestNumber: String,
@@ -283,7 +239,6 @@ class ReVancedAPI(
     }
 }
 
-// PR #35: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35
 fun <T> APIResponse<T>.successOrThrow(context: String): T {
     return when (this) {
         is APIResponse.Success -> data
@@ -292,4 +247,4 @@ fun <T> APIResponse<T>.successOrThrow(context: String): T {
     }
 }
 
-private const val MANAGER_REPO_URL = "https://github.com/Jman-Github/universal-revanced-manager"
+private const val MANAGER_REPO_URL = "https://github.com/Jman-Github/Universal-ReVanced-Manager"
