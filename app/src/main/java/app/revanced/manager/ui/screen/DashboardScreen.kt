@@ -8,6 +8,7 @@ import android.text.format.Formatter
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,8 +19,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Storage
@@ -33,9 +43,11 @@ import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Sort
 import androidx.compose.material.icons.outlined.Source
 import androidx.compose.material.icons.outlined.Update
@@ -47,9 +59,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -63,6 +78,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -138,6 +154,12 @@ fun DashboardScreen(
     val installedApps by installedAppsViewModel.apps.collectAsStateWithLifecycle(initialValue = emptyList())
     val profiles by patchProfilesViewModel.profiles.collectAsStateWithLifecycle(emptyList())
     val bundleSources by patchBundleRepository.sources.collectAsStateWithLifecycle(emptyList())
+    var appsSearchActive by rememberSaveable { mutableStateOf(false) }
+    var appsSearchQuery by rememberSaveable { mutableStateOf("") }
+    var bundlesSearchActive by rememberSaveable { mutableStateOf(false) }
+    var bundlesSearchQuery by rememberSaveable { mutableStateOf("") }
+    var profilesSearchActive by rememberSaveable { mutableStateOf(false) }
+    var profilesSearchQuery by rememberSaveable { mutableStateOf("") }
     var selectedSourceCount by rememberSaveable { mutableIntStateOf(0) }
     var selectedSourcesHasEnabled by rememberSaveable { mutableStateOf(true) }
     val bundlesSelectable by remember { derivedStateOf { selectedSourceCount > 0 } }
@@ -206,126 +228,167 @@ fun DashboardScreen(
 
     val tabRowHeight = with(density) { tabRowHeightPx.toDp() }
     val bannerOffset = 6.dp
+    val dashboardSidePadding = 16.dp
 
     @Composable
     fun BundleProgressBanner(modifier: Modifier = Modifier) {
+        var importCollapsed by rememberSaveable { mutableStateOf(false) }
+        var updateCollapsed by rememberSaveable { mutableStateOf(false) }
         Column(
             modifier = modifier,
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            bundleImportProgress?.let { progress ->
-                val context = LocalContext.current
-                val subtitleParts = buildList {
-                    val total = progress.total.coerceAtLeast(1)
-                    val stepLabel = if (progress.isStepBased) {
-                        val step = (progress.processed + 1).coerceAtMost(total)
-                        stringResource(R.string.import_patch_bundles_banner_steps, step, total)
-                    } else {
-                        stringResource(R.string.import_patch_bundles_banner_subtitle, progress.processed, total)
-                    }
-                    add(stepLabel)
-                    val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList
-                    val phaseText = if (progress.isStepBased) {
-                        when (progress.phase) {
-                            BundleImportPhase.Downloading ->
-                                stringResource(R.string.bundle_import_phase_copying)
-                            BundleImportPhase.Processing ->
-                                stringResource(R.string.bundle_import_phase_writing)
-                            BundleImportPhase.Finalizing ->
-                                stringResource(R.string.bundle_import_phase_finalizing)
+            LaunchedEffect(bundleImportProgress != null) {
+                if (bundleImportProgress != null) importCollapsed = false
+            }
+            AnimatedVisibility(
+                visible = bundleImportProgress != null,
+                enter = fadeIn(animationSpec = spring(stiffness = 400f)) +
+                    slideInVertically(
+                        initialOffsetY = { height -> -height / 2 },
+                        animationSpec = spring(stiffness = 400f)
+                    ),
+                exit = fadeOut(animationSpec = spring(stiffness = 400f)) +
+                    slideOutVertically(
+                        targetOffsetY = { height -> -height / 2 },
+                        animationSpec = spring(stiffness = 400f)
+                    )
+            ) {
+                bundleImportProgress?.let { progress ->
+                    val context = LocalContext.current
+                    val subtitleParts = buildList {
+                        val total = progress.total.coerceAtLeast(1)
+                        val stepLabel = if (progress.isStepBased) {
+                            val step = (progress.processed + 1).coerceAtMost(total)
+                            stringResource(R.string.import_patch_bundles_banner_steps, step, total)
+                        } else {
+                            stringResource(R.string.import_patch_bundles_banner_subtitle, progress.processed, total)
                         }
-                    } else {
-                        when (progress.phase) {
-                            BundleImportPhase.Processing ->
-                                stringResource(R.string.bundle_import_phase_processing)
-                            BundleImportPhase.Downloading ->
-                                stringResource(R.string.bundle_import_phase_downloading)
-                            BundleImportPhase.Finalizing ->
-                                stringResource(R.string.bundle_import_phase_finalizing_short)
-                        }
-                    }
-                    val detail = buildString {
-                        append(phaseText)
-                        append(": ")
-                        append(name)
-                        if (progress.bytesTotal?.takeIf { it > 0L } != null) {
-                            append(" (")
-                            append(Formatter.formatShortFileSize(context, progress.bytesRead))
-                            progress.bytesTotal?.takeIf { it > 0L }?.let { total ->
-                                append("/")
-                                append(Formatter.formatShortFileSize(context, total))
+                        add(stepLabel)
+                        val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList
+                        val phaseText = if (progress.isStepBased) {
+                            when (progress.phase) {
+                                BundleImportPhase.Downloading ->
+                                    stringResource(R.string.bundle_import_phase_copying)
+                                BundleImportPhase.Processing ->
+                                    stringResource(R.string.bundle_import_phase_writing)
+                                BundleImportPhase.Finalizing ->
+                                    stringResource(R.string.bundle_import_phase_finalizing)
                             }
-                            append(")")
+                        } else {
+                            when (progress.phase) {
+                                BundleImportPhase.Processing ->
+                                    stringResource(R.string.bundle_import_phase_processing)
+                                BundleImportPhase.Downloading ->
+                                    stringResource(R.string.bundle_import_phase_downloading)
+                                BundleImportPhase.Finalizing ->
+                                    stringResource(R.string.bundle_import_phase_finalizing_short)
+                            }
                         }
+                        val detail = buildString {
+                            append(phaseText)
+                            append(": ")
+                            append(name)
+                            if (progress.bytesTotal?.takeIf { it > 0L } != null) {
+                                append(" (")
+                                append(Formatter.formatShortFileSize(context, progress.bytesRead))
+                                progress.bytesTotal?.takeIf { it > 0L }?.let { total ->
+                                    append("/")
+                                    append(Formatter.formatShortFileSize(context, total))
+                                }
+                                append(")")
+                            }
+                        }
+                        add(detail)
                     }
-                    add(detail)
+                    DownloadProgressBanner(
+                        title = stringResource(R.string.import_patch_bundles_banner_title),
+                        subtitle = subtitleParts.joinToString(" - "),
+                        progress = progress.ratio,
+                        collapsed = importCollapsed,
+                        onToggleCollapsed = { importCollapsed = !importCollapsed },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = dashboardSidePadding, vertical = 8.dp)
+                    )
                 }
-                DownloadProgressBanner(
-                    title = stringResource(R.string.import_patch_bundles_banner_title),
-                    subtitle = subtitleParts.joinToString(" - "),
-                    progress = progress.ratio,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                )
             }
 
-            bundleUpdateProgress?.let { progress ->
-                val context = LocalContext.current
-                val perBundleFraction = progress.bytesTotal
-                    ?.takeIf { it > 0L }
-                    ?.let { total -> (progress.bytesRead.toFloat() / total).coerceIn(0f, 1f) }
-
-                val progressFraction: Float? = when {
-                    progress.total == 0 -> 0f
-                    progress.phase == BundleUpdatePhase.Downloading && perBundleFraction != null ->
-                        ((progress.completed.toFloat() + perBundleFraction) / progress.total).coerceIn(0f, 1f)
-
-                    else -> (progress.completed.toFloat() / progress.total).coerceIn(0f, 1f)
-                }
-
-                val subtitleParts = buildList {
-                    add(
-                        stringResource(
-                            R.string.bundle_update_progress,
-                            progress.completed,
-                            progress.total
-                        )
+            LaunchedEffect(bundleUpdateProgress != null) {
+                if (bundleUpdateProgress != null) updateCollapsed = false
+            }
+            AnimatedVisibility(
+                visible = bundleUpdateProgress != null,
+                enter = fadeIn(animationSpec = spring(stiffness = 400f)) +
+                    slideInVertically(
+                        initialOffsetY = { height -> -height / 2 },
+                        animationSpec = spring(stiffness = 400f)
+                    ),
+                exit = fadeOut(animationSpec = spring(stiffness = 400f)) +
+                    slideOutVertically(
+                        targetOffsetY = { height -> -height / 2 },
+                        animationSpec = spring(stiffness = 400f)
                     )
-                    val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList
-                    val phaseText = when (progress.phase) {
-                        BundleUpdatePhase.Checking ->
-                            stringResource(R.string.bundle_update_phase_checking)
-                        BundleUpdatePhase.Downloading ->
-                            stringResource(R.string.bundle_update_phase_downloading)
-                        BundleUpdatePhase.Finalizing ->
-                            stringResource(R.string.bundle_update_phase_finalizing)
+            ) {
+                bundleUpdateProgress?.let { progress ->
+                    val context = LocalContext.current
+                    val perBundleFraction = progress.bytesTotal
+                        ?.takeIf { it > 0L }
+                        ?.let { total -> (progress.bytesRead.toFloat() / total).coerceIn(0f, 1f) }
+
+                    val progressFraction: Float? = when {
+                        progress.total == 0 -> 0f
+                        progress.phase == BundleUpdatePhase.Downloading && perBundleFraction != null ->
+                            ((progress.completed.toFloat() + perBundleFraction) / progress.total).coerceIn(0f, 1f)
+
+                        else -> (progress.completed.toFloat() / progress.total).coerceIn(0f, 1f)
                     }
 
-                    val detail = buildString {
-                        append(phaseText)
-                        append(": ")
-                        append(name)
-                        if (progress.phase == BundleUpdatePhase.Downloading && progress.bytesRead > 0L) {
-                            append(" (")
-                            append(Formatter.formatShortFileSize(context, progress.bytesRead))
-                            progress.bytesTotal?.takeIf { it > 0L }?.let { total ->
-                                append("/")
-                                append(Formatter.formatShortFileSize(context, total))
-                            }
-                            append(")")
+                    val subtitleParts = buildList {
+                        add(
+                            stringResource(
+                                R.string.bundle_update_progress,
+                                progress.completed,
+                                progress.total
+                            )
+                        )
+                        val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList
+                        val phaseText = when (progress.phase) {
+                            BundleUpdatePhase.Checking ->
+                                stringResource(R.string.bundle_update_phase_checking)
+                            BundleUpdatePhase.Downloading ->
+                                stringResource(R.string.bundle_update_phase_downloading)
+                            BundleUpdatePhase.Finalizing ->
+                                stringResource(R.string.bundle_update_phase_finalizing)
                         }
+
+                        val detail = buildString {
+                            append(phaseText)
+                            append(": ")
+                            append(name)
+                            if (progress.phase == BundleUpdatePhase.Downloading && progress.bytesRead > 0L) {
+                                append(" (")
+                                append(Formatter.formatShortFileSize(context, progress.bytesRead))
+                                progress.bytesTotal?.takeIf { it > 0L }?.let { total ->
+                                    append("/")
+                                    append(Formatter.formatShortFileSize(context, total))
+                                }
+                                append(")")
+                            }
+                        }
+                        add(detail)
                     }
-                    add(detail)
+                    DownloadProgressBanner(
+                        title = stringResource(R.string.bundle_update_banner_title),
+                        subtitle = subtitleParts.joinToString(" - "),
+                        progress = progressFraction,
+                        collapsed = updateCollapsed,
+                        onToggleCollapsed = { updateCollapsed = !updateCollapsed },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = dashboardSidePadding, vertical = 8.dp)
+                    )
                 }
-                DownloadProgressBanner(
-                    title = stringResource(R.string.bundle_update_banner_title),
-                    subtitle = subtitleParts.joinToString(" - "),
-                    progress = progressFraction,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                )
             }
         }
     }
@@ -607,6 +670,40 @@ fun DashboardScreen(
                                     }
                                 }
                             }
+                            val isAppsTab = pagerState.currentPage == DashboardPage.DASHBOARD.ordinal
+                            val isBundlesTab = pagerState.currentPage == DashboardPage.BUNDLES.ordinal
+                            val isProfilesTab = pagerState.currentPage == DashboardPage.PROFILES.ordinal
+                            val searchActive = when {
+                                isAppsTab -> appsSearchActive
+                                isBundlesTab -> bundlesSearchActive
+                                isProfilesTab -> profilesSearchActive
+                                else -> false
+                            }
+                            if (isAppsTab || isBundlesTab || isProfilesTab) {
+                                IconButton(
+                                    onClick = {
+                                        when {
+                                            isAppsTab -> {
+                                                appsSearchActive = !appsSearchActive
+                                                if (!appsSearchActive) appsSearchQuery = ""
+                                            }
+                                            isBundlesTab -> {
+                                                bundlesSearchActive = !bundlesSearchActive
+                                                if (!bundlesSearchActive) bundlesSearchQuery = ""
+                                            }
+                                            isProfilesTab -> {
+                                                profilesSearchActive = !profilesSearchActive
+                                                if (!profilesSearchActive) profilesSearchQuery = ""
+                                            }
+                                        }
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = if (searchActive) Icons.Outlined.Close else Icons.Outlined.Search,
+                                        contentDescription = stringResource(if (searchActive) R.string.close else R.string.search)
+                                    )
+                                }
+                            }
                             if (pagerState.currentPage == DashboardPage.BUNDLES.ordinal && !bundlesSelectable) {
                                 IconButton(
                                     onClick = {
@@ -778,6 +875,65 @@ fun DashboardScreen(
                 } else null
             )
 
+            val isAppsTab = pagerState.currentPage == DashboardPage.DASHBOARD.ordinal
+            val isBundlesTab = pagerState.currentPage == DashboardPage.BUNDLES.ordinal
+            val isProfilesTab = pagerState.currentPage == DashboardPage.PROFILES.ordinal
+            val searchActive = when {
+                isAppsTab -> appsSearchActive
+                isBundlesTab -> bundlesSearchActive
+                isProfilesTab -> profilesSearchActive
+                else -> false
+            }
+            AnimatedVisibility(
+                visible = searchActive,
+                enter = fadeIn(animationSpec = spring(stiffness = 400f)) +
+                    expandVertically(
+                        expandFrom = Alignment.Top,
+                        animationSpec = spring(stiffness = 400f)
+                    ),
+                exit = fadeOut(animationSpec = spring(stiffness = 400f)) +
+                    shrinkVertically(
+                        shrinkTowards = Alignment.Top,
+                        animationSpec = spring(stiffness = 400f)
+                    )
+            ) {
+                val (query, onQueryChange, placeholderRes) = when {
+                    isAppsTab -> Triple(
+                        appsSearchQuery,
+                        { value: String -> appsSearchQuery = value },
+                        R.string.apps_search_hint
+                    )
+                    isBundlesTab -> Triple(
+                        bundlesSearchQuery,
+                        { value: String -> bundlesSearchQuery = value },
+                        R.string.bundles_search_hint
+                    )
+                    else -> Triple(
+                        profilesSearchQuery,
+                        { value: String -> profilesSearchQuery = value },
+                        R.string.profiles_search_hint
+                    )
+                }
+                DashboardSearchField(
+                    query = query,
+                    onQueryChange = onQueryChange,
+                    onClear = {
+                        when {
+                            isAppsTab -> appsSearchQuery = ""
+                            isBundlesTab -> bundlesSearchQuery = ""
+                            else -> profilesSearchQuery = ""
+                        }
+                    },
+                    placeholderRes = placeholderRes,
+                    modifier = Modifier.padding(
+                        start = dashboardSidePadding,
+                        end = dashboardSidePadding,
+                        top = 12.dp,
+                        bottom = 0.dp
+                    )
+                )
+            }
+
             HorizontalPager(
                 state = pagerState,
                 userScrollEnabled = true,
@@ -793,6 +949,7 @@ fun DashboardScreen(
                                     installedAppsViewModel.clearSelection()
                                     onAppClick(it.currentPackageName)
                                 },
+                                searchQuery = appsSearchQuery,
                                 showOrderDialog = showAppsOrderDialog,
                                 onDismissOrderDialog = { showAppsOrderDialog = false },
                                 viewModel = installedAppsViewModel
@@ -812,6 +969,7 @@ fun DashboardScreen(
                                 eventsFlow = vm.bundleListEventsFlow,
                                 setSelectedSourceCount = { selectedSourceCount = it },
                                 setSelectedSourceHasEnabled = { selectedSourcesHasEnabled = it },
+                                searchQuery = bundlesSearchQuery,
                                 showOrderDialog = showBundleOrderDialog,
                                 onDismissOrderDialog = { showBundleOrderDialog = false },
                                 onScrollStateChange = {},
@@ -824,6 +982,7 @@ fun DashboardScreen(
                             PatchProfilesScreen(
                                 onProfileClick = onProfileLaunch,
                                 modifier = Modifier.fillMaxSize(),
+                                searchQuery = profilesSearchQuery,
                                 showOrderDialog = showProfilesOrderDialog,
                                 onDismissOrderDialog = { showProfilesOrderDialog = false },
                                 viewModel = patchProfilesViewModel
@@ -859,6 +1018,55 @@ fun Notifications(
                 notification()
             }
         }
+    }
+}
+
+@Composable
+private fun DashboardSearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onClear: () -> Unit,
+    placeholderRes: Int,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        tonalElevation = 3.dp,
+        shadowElevation = 10.dp,
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        ),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        TextField(
+            value = query,
+            onValueChange = onQueryChange,
+            placeholder = { Text(stringResource(placeholderRes)) },
+            leadingIcon = { Icon(Icons.Outlined.Search, null) },
+            trailingIcon = {
+                if (query.isNotBlank()) {
+                    IconButton(onClick = onClear) {
+                        Icon(Icons.Outlined.Close, stringResource(R.string.clear))
+                    }
+                }
+            },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(6.dp),
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(6.dp),
+                disabledContainerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(6.dp),
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                disabledIndicatorColor = Color.Transparent,
+                focusedLeadingIconColor = MaterialTheme.colorScheme.primary,
+                unfocusedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                focusedTrailingIconColor = MaterialTheme.colorScheme.primary,
+                unfocusedTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        )
     }
 }
 

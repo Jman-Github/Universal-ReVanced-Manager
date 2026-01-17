@@ -87,7 +87,8 @@ fun PatchProfilesScreen(
     modifier: Modifier = Modifier,
     viewModel: PatchProfilesViewModel,
     showOrderDialog: Boolean = false,
-    onDismissOrderDialog: () -> Unit = {}
+    onDismissOrderDialog: () -> Unit = {},
+    searchQuery: String = ""
 ) {
     val profiles by viewModel.profiles.collectAsStateWithLifecycle()
     val remoteBundleOptions by viewModel.remoteBundleOptions.collectAsStateWithLifecycle(emptyList())
@@ -130,6 +131,27 @@ fun PatchProfilesScreen(
     val selectionActive = viewModel.selectedProfiles.isNotEmpty()
     data class OptionDialogData(val patchName: String, val entries: List<BundleOptionDisplay>)
     var optionDialogData by remember { mutableStateOf<OptionDialogData?>(null) }
+    val normalizedQuery = searchQuery.trim().lowercase()
+    val filteredProfiles = if (normalizedQuery.isBlank()) {
+        profiles
+    } else {
+        profiles.filter { profile ->
+            val searchText = buildString {
+                append(profile.name)
+                append(' ')
+                append(profile.packageName)
+                profile.appVersion?.let { version ->
+                    append(' ')
+                    append(version)
+                }
+                profile.bundleNames.forEach { name ->
+                    append(' ')
+                    append(name)
+                }
+            }.lowercase()
+            searchText.contains(normalizedQuery)
+        }
+    }
 
     BackHandler(enabled = selectionActive) { viewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL) }
 
@@ -213,12 +235,26 @@ fun PatchProfilesScreen(
         return
     }
 
+    if (filteredProfiles.isEmpty() && normalizedQuery.isNotBlank()) {
+        Box(
+            modifier = modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = stringResource(R.string.search_no_results),
+                style = MaterialTheme.typography.titleLarge,
+                textAlign = TextAlign.Center
+            )
+        }
+        return
+    }
+
     LazyColumnWithScrollbar(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        items(profiles, key = { it.id }) { profile ->
+        items(filteredProfiles, key = { it.id }) { profile ->
             val bundleCountText = pluralStringResource(
                 R.plurals.patch_profile_bundle_count,
                 profile.bundleCount,

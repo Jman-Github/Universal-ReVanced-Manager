@@ -3,7 +3,9 @@
 
 # Features
 
-- Added the ability to reorder/organize the listing order of saved patched apps in the `Apps` tab and patch profiles in the `Patch profiles` tab
+- Added the ability to reorder/organize the listing order of saved patched apps in the `Apps` tab and patch profiles in the `Patch profiles` tabcollapsible/expandable
+- Make the progress banner collapsiable/expandable and give it an animation
+- Made the `Apps`, `Patch Bundles` and `Patch Profiles` tabs items searchable via a button on the nav bar
 
 
 # v1.7.1-dev.02 (2026-01-16)

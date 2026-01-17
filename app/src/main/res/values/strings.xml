@@ -72,6 +72,10 @@
     <string name="bundle_reorder_title">Organize patch bundles</string>
     <string name="bundle_reorder_description">Drag the handle to arrange the order bundles appear in the list and the patch selection menu.</string>
     <string name="bundle_reorder_empty_toast">Add a patch bundle to organize it.</string>
+    <string name="apps_search_hint">Search apps</string>
+    <string name="bundles_search_hint">Search bundles</string>
+    <string name="profiles_search_hint">Search profiles</string>
+    <string name="search_no_results">No results found.</string>
     <string name="apps_reorder">Organize apps</string>
     <string name="apps_reorder_title">Organize apps</string>
     <string name="apps_reorder_description">Drag the handle to arrange the order apps appear in the list.</string>

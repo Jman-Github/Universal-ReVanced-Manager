@@ -1,6 +1,7 @@
 package app.revanced.manager.ui.screen
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -56,6 +57,7 @@ fun BundleListScreen(
     eventsFlow: Flow<BundleListViewModel.Event>,
     setSelectedSourceCount: (Int) -> Unit,
     setSelectedSourceHasEnabled: (Boolean) -> Unit,
+    searchQuery: String = "",
     showOrderDialog: Boolean = false,
     onDismissOrderDialog: () -> Unit = {},
     onScrollStateChange: (Boolean) -> Unit = {},
@@ -66,6 +68,29 @@ fun BundleListScreen(
     val sources by viewModel.sources.collectAsStateWithLifecycle(emptyList())
     val manualUpdateInfo by viewModel.manualUpdateInfo.collectAsStateWithLifecycle(emptyMap())
     val listState = rememberLazyListState()
+    val normalizedQuery = searchQuery.trim().lowercase()
+    val filteredSources = if (normalizedQuery.isBlank()) {
+        sources
+    } else {
+        sources.filter { source ->
+            val searchText = buildString {
+                append(source.displayTitle)
+                source.displayName?.let { displayName ->
+                    append(' ')
+                    append(displayName)
+                }
+                source.name.let { name ->
+                    append(' ')
+                    append(name)
+                }
+                source.version?.let { version ->
+                    append(' ')
+                    append(version)
+                }
+            }.lowercase()
+            searchText.contains(normalizedQuery)
+        }
+    }
 
     EventEffect(eventsFlow) {
         viewModel.handleEvent(it)
@@ -84,12 +109,12 @@ fun BundleListScreen(
             .collect { onScrollStateChange(it) }
     }
 
-    LaunchedEffect(highlightBundleUid, sources) {
+    LaunchedEffect(highlightBundleUid, filteredSources) {
         val uid = highlightBundleUid ?: return@LaunchedEffect
-        val index = sources.indexOfFirst { it.uid == uid }
+        val index = filteredSources.indexOfFirst { it.uid == uid }
         if (index >= 0) {
             listState.animateScrollToItem(index)
-        } else if (sources.isNotEmpty()) {
+        } else if (filteredSources.isNotEmpty()) {
             onHighlightConsumed()
         }
     }
@@ -98,56 +123,68 @@ fun BundleListScreen(
         onRefresh = viewModel::refresh,
         isRefreshing = viewModel.isRefreshing
     ) {
-        LazyColumnWithScrollbar(
-            modifier = Modifier.fillMaxSize(),
-            state = listState,
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Top,
-        ) {
-            items(
-                sources,
-                key = { it.uid }
-            ) { source ->
-                val content: @Composable (Modifier) -> Unit = { modifier ->
-                    BundleItem(
-                        src = source,
-                        patchCount = patchCounts[source.uid] ?: 0,
-                        manualUpdateInfo = manualUpdateInfo[source.uid],
-                        onDelete = {
-                            viewModel.delete(source)
-                        },
-                        onDisable = {
-                            viewModel.disable(source)
-                        },
-                        onUpdate = {
-                            viewModel.update(source)
-                        },
-                        selectable = viewModel.selectedSources.size > 0,
-                        onSelect = {
-                            viewModel.selectedSources.add(source.uid)
-                        },
-                        isBundleSelected = source.uid in viewModel.selectedSources,
-                        toggleSelection = { bundleIsNotSelected ->
-                            if (bundleIsNotSelected) {
+        if (filteredSources.isEmpty() && normalizedQuery.isNotBlank()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = stringResource(R.string.search_no_results),
+                    style = MaterialTheme.typography.titleLarge
+                )
+            }
+        } else {
+            LazyColumnWithScrollbar(
+                modifier = Modifier.fillMaxSize(),
+                state = listState,
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Top,
+            ) {
+                items(
+                    filteredSources,
+                    key = { it.uid }
+                ) { source ->
+                    val content: @Composable (Modifier) -> Unit = { modifier ->
+                        BundleItem(
+                            src = source,
+                            patchCount = patchCounts[source.uid] ?: 0,
+                            manualUpdateInfo = manualUpdateInfo[source.uid],
+                            onDelete = {
+                                viewModel.delete(source)
+                            },
+                            onDisable = {
+                                viewModel.disable(source)
+                            },
+                            onUpdate = {
+                                viewModel.update(source)
+                            },
+                            selectable = viewModel.selectedSources.size > 0,
+                            onSelect = {
                                 viewModel.selectedSources.add(source.uid)
-                            } else {
-                                viewModel.selectedSources.remove(source.uid)
-                            }
-                        },
-                        modifier = modifier
-                    )
-                }
-
-                if (highlightBundleUid != null) {
-                    SettingsSearchHighlight(
-                        targetKey = source.uid,
-                        activeKey = highlightBundleUid,
-                        onHighlightComplete = onHighlightConsumed
-                    ) { modifier ->
-                        content(modifier)
+                            },
+                            isBundleSelected = source.uid in viewModel.selectedSources,
+                            toggleSelection = { bundleIsNotSelected ->
+                                if (bundleIsNotSelected) {
+                                    viewModel.selectedSources.add(source.uid)
+                                } else {
+                                    viewModel.selectedSources.remove(source.uid)
+                                }
+                            },
+                            modifier = modifier
+                        )
                     }
-                } else {
-                    content(Modifier)
+
+                    if (highlightBundleUid != null) {
+                        SettingsSearchHighlight(
+                            targetKey = source.uid,
+                            activeKey = highlightBundleUid,
+                            onHighlightComplete = onHighlightConsumed
+                        ) { modifier ->
+                            content(modifier)
+                        }
+                    } else {
+                        content(Modifier)
+                    }
                 }
             }
         }

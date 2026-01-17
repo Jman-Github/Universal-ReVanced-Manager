@@ -35,6 +35,7 @@ import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -60,10 +61,32 @@ fun InstalledAppsScreen(
     onAppClick: (InstalledApp) -> Unit,
     viewModel: InstalledAppsViewModel = koinViewModel(),
     showOrderDialog: Boolean = false,
-    onDismissOrderDialog: () -> Unit = {}
+    onDismissOrderDialog: () -> Unit = {},
+    searchQuery: String = ""
 ) {
+    val context = LocalContext.current
     val installedApps by viewModel.apps.collectAsStateWithLifecycle(initialValue = null)
     val selectionActive = viewModel.selectedApps.isNotEmpty()
+    val normalizedQuery = searchQuery.trim().lowercase()
+    val filteredApps = installedApps?.let { apps ->
+        if (normalizedQuery.isBlank()) {
+            apps
+        } else {
+            apps.filter { app ->
+                val packageName = app.currentPackageName
+                val packageInfo = viewModel.packageInfoMap[packageName]
+                val label = packageInfo?.applicationInfo?.loadLabel(context.packageManager)?.toString().orEmpty()
+                val searchText = buildString {
+                    append(packageName)
+                    if (label.isNotBlank()) {
+                        append(' ')
+                        append(label)
+                    }
+                }.lowercase()
+                searchText.contains(normalizedQuery)
+            }
+        }
+    }
 
     when {
         installedApps == null -> {
@@ -87,6 +110,18 @@ fun InstalledAppsScreen(
             }
         }
 
+        filteredApps.isNullOrEmpty() && normalizedQuery.isNotBlank() -> {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = stringResource(R.string.app_filter_no_results),
+                    style = MaterialTheme.typography.titleLarge
+                )
+            }
+        }
+
         else -> {
             LazyColumnWithScrollbar(
                 modifier = Modifier.fillMaxSize(),
@@ -95,7 +130,7 @@ fun InstalledAppsScreen(
                 contentPadding = PaddingValues(vertical = 12.dp)
             ) {
                 items(
-                    installedApps!!,
+                    filteredApps.orEmpty(),
                     key = { it.currentPackageName }
                 ) { installedApp ->
                         val packageName = installedApp.currentPackageName

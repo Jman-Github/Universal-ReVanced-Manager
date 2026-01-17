@@ -31,6 +31,8 @@
 - Added the ability to edit exisiting remote patch bundles URLs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/122
 - Improved the `Rooted mount installer`'s auto remount handling
 - Added the ability to reorder/organize the listing order of saved patched apps in the `Apps` tab and patch profiles in the `Patch profiles` tab
+- Make the progress banner collapsiable/expandable and give it an animation
+- Made the `Apps`, `Patch Bundles` and `Patch Profiles` tabs items searchable via a button on the nav bar
 
 
 # Bug fixes
