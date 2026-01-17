@@ -14,6 +14,7 @@ import app.revanced.manager.domain.installer.RootInstaller
 import app.revanced.manager.domain.installer.RootServiceException
 import app.revanced.manager.domain.repository.InstalledAppRepository
 import app.revanced.manager.domain.repository.PatchBundleRepository
+import app.revanced.manager.util.FilenameUtils
 import app.revanced.manager.util.PM
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.mutableStateSetOf
@@ -211,11 +212,31 @@ class InstalledAppsViewModel(
             when (installedApp.installType) {
                 InstallType.SAVED -> {
                     val savedFile = filesystem.getPatchedAppFile(packageName, installedApp.version)
-                    if (!savedFile.exists()) {
-                        installedAppsRepository.delete(installedApp)
+                    val resolvedFile = if (savedFile.exists()) {
+                        savedFile
+                    } else {
+                        filesystem.findPatchedAppFile(packageName)
+                    }
+                    if (resolvedFile == null) {
                         return@withContext null
                     }
-                    pm.getPackageInfo(savedFile)
+                    if (resolvedFile != savedFile) {
+                        val safePackage = FilenameUtils.sanitize(packageName)
+                        val recoveredVersion = resolvedFile.name
+                            .removePrefix("${safePackage}_")
+                            .removeSuffix(".apk")
+                            .ifBlank { installedApp.version }
+                        val selection = installedAppsRepository.getAppliedPatches(packageName)
+                        installedAppsRepository.addOrUpdate(
+                            currentPackageName = installedApp.currentPackageName,
+                            originalPackageName = installedApp.originalPackageName,
+                            version = recoveredVersion,
+                            installType = installedApp.installType,
+                            patchSelection = selection,
+                            selectionPayload = installedApp.selectionPayload
+                        )
+                    }
+                    pm.getPackageInfo(resolvedFile)
                 }
 
                 else -> {

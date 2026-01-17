@@ -1028,7 +1028,9 @@ class InstalledAppInfoViewModel(
             filesystem.getPatchedAppFile(target.currentPackageName, target.version),
             filesystem.getPatchedAppFile(target.originalPackageName, target.version)
         ).distinct()
-        return candidates.firstOrNull { it.exists() }
+        candidates.firstOrNull { it.exists() }?.let { return it }
+        return filesystem.findPatchedAppFile(target.currentPackageName)
+            ?: filesystem.findPatchedAppFile(target.originalPackageName)
     }
 
     private suspend fun refreshAppState(app: InstalledApp) {

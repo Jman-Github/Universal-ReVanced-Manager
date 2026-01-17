@@ -117,7 +117,11 @@ class RootInstaller(
                 ?: throw Exception("Failed to load application info")
             val patchedAPK = resolvePatchedApkPath(packageName)
 
-            execute("mount -o bind \"$patchedAPK\" \"$stockAPK\"").assertSuccess("Failed to mount APK")
+            execute(
+                "chcon u:object_r:apk_data_file:s0 \"$patchedAPK\"; " +
+                    "mount -o bind \"$patchedAPK\" \"$stockAPK\"; " +
+                    "am force-stop \"$packageName\""
+            ).assertSuccess("Failed to mount APK")
         }
     }
 
@@ -166,6 +170,17 @@ class RootInstaller(
             "mkdir -p \"$serviceDirPath\"",
             "mkdir -p \"$revancedDir\""
         ).assertSuccess("Failed to prepare root mount directories")
+
+        execute(
+            "for f in \"$serviceDirPath\"/urv-*.sh; do " +
+                "[ -e \"\$f\" ] || continue; " +
+                "pkg=\"${'$'}{f#$serviceDirPath/urv-}\"; " +
+                "pkg=\"${'$'}{pkg%.sh}\"; " +
+                "if [ ! -d \"$revancedPath/${'$'}pkg\" ] && [ ! -d \"$modulesPath/${'$'}pkg-revanced\" ]; then " +
+                "rm -f \"\$f\"; " +
+                "fi; " +
+                "done"
+        ).assertSuccess("Failed to clean service scripts")
 
         remoteFS.getFile(modulePath).mkdir()
 
@@ -255,7 +270,10 @@ class RootInstaller(
         val revancedApk = "$revancedPath/$packageName/$packageName.apk"
         if (remoteFS.getFile(revancedApk).exists()) return revancedApk
 
-        return "$modulesPath/$packageName-revanced/$packageName.apk"
+        val moduleApk = "$modulesPath/$packageName-revanced/$packageName.apk"
+        if (remoteFS.getFile(moduleApk).exists()) return moduleApk
+
+        throw Exception("Patched APK not found for mount")
     }
 }
 

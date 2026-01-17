@@ -1,6 +1,11 @@
 # v1.7.1-dev.02 (2026-01-16)
 
 
+# Features
+
+- Improved the `Rooted mount installer`'s auto remount handling
+
+
 # Bug fixes
 
 - Fixed false update prompts and incorrect update detection

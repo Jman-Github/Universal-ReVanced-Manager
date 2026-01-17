@@ -29,6 +29,7 @@
 - Stabilize patch bunlde progress banners and make them clearler and more consistent
 - Removed the redundant filter button from the `Select an app` screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/121
 - Added the ability to edit exisiting remote patch bundles URLs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/122
+- Improved the `Rooted mount installer`'s auto remount handling
 
 
 # Bug fixes

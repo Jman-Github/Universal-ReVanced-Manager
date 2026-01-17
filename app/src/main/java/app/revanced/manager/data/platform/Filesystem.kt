@@ -101,4 +101,15 @@ class Filesystem(private val app: Application) {
         val safeVersion = FilenameUtils.sanitize(version.ifBlank { "unspecified" })
         return patchedAppsDir.resolve("${safePackage}_${safeVersion}.apk")
     }
+
+    fun findPatchedAppFile(packageName: String): File? {
+        val safePackage = FilenameUtils.sanitize(packageName)
+        return patchedAppsDir
+            .listFiles { file ->
+                file.isFile &&
+                    file.name.startsWith("${safePackage}_") &&
+                    file.name.endsWith(".apk")
+            }
+            ?.maxByOrNull { it.lastModified() }
+    }
 }
