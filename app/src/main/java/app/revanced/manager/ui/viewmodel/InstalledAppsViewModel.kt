@@ -137,6 +137,10 @@ class InstalledAppsViewModel(
         selectedApps.clear()
     }
 
+    fun reorderApps(orderedPackageNames: List<String>) = viewModelScope.launch(Dispatchers.IO) {
+        installedAppsRepository.reorderApps(orderedPackageNames)
+    }
+
     fun deleteSelectedApps() = viewModelScope.launch {
         if (selectedApps.isEmpty()) return@launch
 

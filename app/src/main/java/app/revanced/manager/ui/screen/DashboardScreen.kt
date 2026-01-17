@@ -91,6 +91,7 @@ import app.revanced.manager.ui.viewmodel.DashboardViewModel
 import app.revanced.manager.ui.model.SelectedApp
 import app.revanced.manager.ui.viewmodel.PatchProfileLaunchData
 import app.revanced.manager.ui.viewmodel.PatchProfilesViewModel
+import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.domain.repository.PatchBundleRepository.BundleUpdatePhase
 import app.revanced.manager.domain.repository.PatchBundleRepository.BundleImportPhase
 import app.revanced.manager.ui.viewmodel.InstalledAppsViewModel
@@ -133,6 +134,10 @@ fun DashboardScreen(
 ) {
     val installedAppsViewModel: InstalledAppsViewModel = koinViewModel()
     val patchProfilesViewModel: PatchProfilesViewModel = koinViewModel()
+    val patchBundleRepository: PatchBundleRepository = koinInject()
+    val installedApps by installedAppsViewModel.apps.collectAsStateWithLifecycle(initialValue = emptyList())
+    val profiles by patchProfilesViewModel.profiles.collectAsStateWithLifecycle(emptyList())
+    val bundleSources by patchBundleRepository.sources.collectAsStateWithLifecycle(emptyList())
     var selectedSourceCount by rememberSaveable { mutableIntStateOf(0) }
     var selectedSourcesHasEnabled by rememberSaveable { mutableStateOf(true) }
     val bundlesSelectable by remember { derivedStateOf { selectedSourceCount > 0 } }
@@ -171,6 +176,8 @@ fun DashboardScreen(
     val density = LocalDensity.current
     val composableScope = rememberCoroutineScope()
     var showBundleOrderDialog by rememberSaveable { mutableStateOf(false) }
+    var showAppsOrderDialog by rememberSaveable { mutableStateOf(false) }
+    var showProfilesOrderDialog by rememberSaveable { mutableStateOf(false) }
     val pagerState = rememberPagerState(
         initialPage = DashboardPage.DASHBOARD.ordinal,
         initialPageOffsetFraction = 0f
@@ -326,6 +333,7 @@ fun DashboardScreen(
     LaunchedEffect(pagerState.currentPage) {
         if (pagerState.currentPage != DashboardPage.DASHBOARD.ordinal) {
             installedAppsViewModel.clearSelection()
+            showAppsOrderDialog = false
         }
         if (pagerState.currentPage != DashboardPage.BUNDLES.ordinal) {
             vm.cancelSourceSelection()
@@ -333,6 +341,7 @@ fun DashboardScreen(
         }
         if (pagerState.currentPage != DashboardPage.PROFILES.ordinal) {
             patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
+            showProfilesOrderDialog = false
         }
     }
 
@@ -603,10 +612,48 @@ fun DashboardScreen(
                                     onClick = {
                                         installedAppsViewModel.clearSelection()
                                         patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
+                                        if (bundleSources.isEmpty()) {
+                                            androidContext.toast(
+                                                androidContext.getString(R.string.bundle_reorder_empty_toast)
+                                            )
+                                            return@IconButton
+                                        }
                                         showBundleOrderDialog = true
                                     }
                                 ) {
                                     Icon(Icons.Outlined.Sort, stringResource(R.string.bundle_reorder))
+                                }
+                            }
+                            if (pagerState.currentPage == DashboardPage.DASHBOARD.ordinal && !appsSelectionActive) {
+                                IconButton(
+                                    onClick = {
+                                        installedAppsViewModel.clearSelection()
+                                        if (installedApps.isEmpty()) {
+                                            androidContext.toast(
+                                                androidContext.getString(R.string.apps_reorder_empty_toast)
+                                            )
+                                            return@IconButton
+                                        }
+                                        showAppsOrderDialog = true
+                                    }
+                                ) {
+                                    Icon(Icons.Outlined.Sort, stringResource(R.string.apps_reorder))
+                                }
+                            }
+                            if (pagerState.currentPage == DashboardPage.PROFILES.ordinal && !profilesSelectable) {
+                                IconButton(
+                                    onClick = {
+                                        patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
+                                        if (profiles.isEmpty()) {
+                                            androidContext.toast(
+                                                androidContext.getString(R.string.patch_profiles_reorder_empty_toast)
+                                            )
+                                            return@IconButton
+                                        }
+                                        showProfilesOrderDialog = true
+                                    }
+                                ) {
+                                    Icon(Icons.Outlined.Sort, stringResource(R.string.patch_profiles_reorder))
                                 }
                             }
                             IconButton(onClick = onSettingsClick) {
@@ -746,6 +793,8 @@ fun DashboardScreen(
                                     installedAppsViewModel.clearSelection()
                                     onAppClick(it.currentPackageName)
                                 },
+                                showOrderDialog = showAppsOrderDialog,
+                                onDismissOrderDialog = { showAppsOrderDialog = false },
                                 viewModel = installedAppsViewModel
                             )
                         }
@@ -775,6 +824,8 @@ fun DashboardScreen(
                             PatchProfilesScreen(
                                 onProfileClick = onProfileLaunch,
                                 modifier = Modifier.fillMaxSize(),
+                                showOrderDialog = showProfilesOrderDialog,
+                                onDismissOrderDialog = { showProfilesOrderDialog = false },
                                 viewModel = patchProfilesViewModel
                             )
                         }

@@ -1,3 +1,11 @@
+# v1.7.1-dev.02 (TBD)
+
+
+# Features
+
+- Added the ability to reorder/organize the listing order of saved patched apps in the `Apps` tab and patch profiles in the `Patch profiles` tab
+
+
 # v1.7.1-dev.02 (2026-01-16)
 
 

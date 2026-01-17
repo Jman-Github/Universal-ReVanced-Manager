@@ -71,6 +71,15 @@
     <string name="bundle_reorder">Organize bundles</string>
     <string name="bundle_reorder_title">Organize patch bundles</string>
     <string name="bundle_reorder_description">Drag the handle to arrange the order bundles appear in the list and the patch selection menu.</string>
+    <string name="bundle_reorder_empty_toast">Add a patch bundle to organize it.</string>
+    <string name="apps_reorder">Organize apps</string>
+    <string name="apps_reorder_title">Organize apps</string>
+    <string name="apps_reorder_description">Drag the handle to arrange the order apps appear in the list.</string>
+    <string name="apps_reorder_empty_toast">Add a patched app to organize it.</string>
+    <string name="patch_profiles_reorder">Organize profiles</string>
+    <string name="patch_profiles_reorder_title">Organize patch profiles</string>
+    <string name="patch_profiles_reorder_description">Drag the handle to arrange the order patch profiles appear in the list.</string>
+    <string name="patch_profiles_reorder_empty_toast">Create a patch profile to organize it.</string>
     <string name="patch_bundle_duplicate_name_error">A patch bundle with this name already exists</string>
     <string name="patch_bundle_missing_error">Could not update this patch bundle.</string>
     <string name="bundle_release_page">Open release page</string>

@@ -28,13 +28,15 @@ class PatchProfileRepository(
         if (existing != null) {
             throw DuplicatePatchProfileNameException(packageName, name)
         }
+        val sortOrder = (dao.getMaxSortOrder() ?: -1) + 1
         val entity = PatchProfileEntity(
             uid = AppDatabase.generateUid(),
             packageName = packageName,
             appVersion = appVersion,
             name = name,
             payload = payload,
-            createdAt = System.currentTimeMillis()
+            createdAt = System.currentTimeMillis(),
+            sortOrder = sortOrder
         )
         dao.upsert(entity)
         return entity.toDomain()
@@ -63,7 +65,8 @@ class PatchProfileRepository(
             packageName = packageName,
             appVersion = appVersion,
             name = name,
-            payload = payload
+            payload = payload,
+            sortOrder = existing.sortOrder
         )
         dao.upsert(entity)
         return entity.toDomain()
@@ -78,6 +81,7 @@ class PatchProfileRepository(
         if (entries.isEmpty()) return ImportProfilesResult(0, 0)
         var imported = 0
         var skipped = 0
+        var nextSortOrder = (dao.getMaxSortOrder() ?: -1) + 1
         for (entry in entries) {
             val existing = dao.findByPackageAndName(entry.packageName, entry.name)
             if (existing != null) {
@@ -90,12 +94,20 @@ class PatchProfileRepository(
                 appVersion = entry.appVersion,
                 name = entry.name,
                 payload = entry.payload,
-                createdAt = entry.createdAt ?: System.currentTimeMillis()
+                createdAt = entry.createdAt ?: System.currentTimeMillis(),
+                sortOrder = nextSortOrder
             )
             dao.upsert(entity)
             imported++
+            nextSortOrder += 1
         }
         return ImportProfilesResult(imported, skipped)
+    }
+
+    suspend fun reorderProfiles(orderedUids: List<Int>) {
+        orderedUids.forEachIndexed { index, uid ->
+            dao.updateSortOrder(uid, index)
+        }
     }
 }
 

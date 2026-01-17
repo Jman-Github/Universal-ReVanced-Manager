@@ -485,6 +485,10 @@ class PatchProfilesViewModel(
         }
     }
 
+    fun reorderProfiles(orderedUids: List<Int>) = viewModelScope.launch(Dispatchers.IO) {
+        patchProfileRepository.reorderProfiles(orderedUids)
+    }
+
 }
 
 private fun PatchBundleSource?.determineType(bundle: PatchProfilePayload.Bundle): BundleSourceType {

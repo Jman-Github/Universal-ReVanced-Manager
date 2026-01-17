@@ -72,3 +72,31 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
         db.execSQL("ALTER TABLE patch_bundles ADD COLUMN last_notified_version TEXT")
     }
 }
+
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE installed_app ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE patch_profiles ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0")
+
+        db.query("SELECT current_package_name FROM installed_app ORDER BY rowid ASC").use { cursor ->
+            var index = 0
+            while (cursor.moveToNext()) {
+                val packageName = cursor.getString(0)
+                db.execSQL(
+                    "UPDATE installed_app SET sort_order = ? WHERE current_package_name = ?",
+                    arrayOf(index, packageName)
+                )
+                index += 1
+            }
+        }
+
+        db.query("SELECT uid FROM patch_profiles ORDER BY created_at DESC, uid DESC").use { cursor ->
+            var index = 0
+            while (cursor.moveToNext()) {
+                val uid = cursor.getInt(0)
+                db.execSQL("UPDATE patch_profiles SET sort_order = ? WHERE uid = ?", arrayOf(index, uid))
+                index += 1
+            }
+        }
+    }
+}
