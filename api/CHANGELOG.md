@@ -28,6 +28,7 @@
 - Moved the progress banner so it hangs below the nav bar https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/117
 - Stabilize patch bunlde progress banners and make them clearler and more consistent
 - Removed the redundant filter button from the `Select an app` screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/121
+- Added the ability to edit exisiting remote patch bundles URLs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/122
 
 
 # Bug fixes
@@ -46,7 +47,8 @@
 - Fixed update patch bundle notifactions not always appearing
 - Fixed patched apps being incorrectly patched resulting in startup crashes
 - Fix saved patched apps in the `Apps` tab and the restore button not restoring patch options correctly
-- Increased stability of the `Rooted mount installer` by fixing issues such as `Exception thrown on remote process` 
+- Increased stability of the `Rooted mount installer` by fixing issues such as `Exception thrown on remote process`
+- Fixed false reimport toasts and adjusted official bundle restore logic with importing patch bundles from a patch bundles export
 
 
 # Docs

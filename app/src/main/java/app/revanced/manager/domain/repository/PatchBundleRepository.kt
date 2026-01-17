@@ -1070,6 +1070,71 @@ class PatchBundleRepository(
         return result
     }
 
+    suspend fun updateRemoteEndpoint(
+        src: RemotePatchBundle,
+        newUrl: String,
+        onProgress: PatchBundleDownloadProgress? = null,
+    ): Boolean {
+        val normalizedUrl = try {
+            normalizeRemoteBundleUrl(newUrl)
+        } catch (e: IllegalArgumentException) {
+            withContext(Dispatchers.Main) {
+                app.toast(e.message ?: "Invalid bundle URL")
+            }
+            return false
+        }
+
+        if (normalizedUrl == src.endpoint) return false
+
+        dispatchAction("Update bundle url (${src.uid})") { state ->
+            val props = dao.getProps(src.uid) ?: return@dispatchAction state
+            val now = System.currentTimeMillis()
+            updateDb(src.uid) {
+                it.copy(
+                    source = SourceInfo.from(normalizedUrl),
+                    versionHash = null,
+                    lastNotifiedVersion = null,
+                    updatedAt = now
+                )
+            }
+            val updatedProps = props.copy(
+                source = SourceInfo.from(normalizedUrl),
+                versionHash = null,
+                lastNotifiedVersion = null,
+                updatedAt = now
+            )
+            val entity = PatchBundleEntity(
+                uid = src.uid,
+                name = updatedProps.name,
+                displayName = updatedProps.displayName,
+                versionHash = updatedProps.versionHash,
+                source = updatedProps.source,
+                autoUpdate = updatedProps.autoUpdate,
+                searchUpdate = updatedProps.searchUpdate,
+                lastNotifiedVersion = updatedProps.lastNotifiedVersion,
+                enabled = updatedProps.enabled,
+                sortOrder = updatedProps.sortOrder,
+                createdAt = updatedProps.createdAt,
+                updatedAt = updatedProps.updatedAt
+            )
+            val updatedSource = entity.load()
+            State(
+                sources = state.sources.put(src.uid, updatedSource),
+                info = state.info.remove(src.uid)
+            )
+        }
+
+        val updatedSource = store.state.value.sources[src.uid] as? RemotePatchBundle ?: return false
+        val allowUnsafeDownload = prefs.allowMeteredUpdates.get()
+        return updateNow(
+            force = true,
+            allowUnsafeNetwork = allowUnsafeDownload,
+            onPerBundleProgress = { bundle, bytesRead, bytesTotal ->
+                if (bundle.uid == updatedSource.uid) onProgress?.invoke(bytesRead, bytesTotal)
+            }
+        ) { it.uid == updatedSource.uid }
+    }
+
     suspend fun updateTimestamps(src: PatchBundleSource, createdAt: Long?, updatedAt: Long?) {
         if (createdAt == null && updatedAt == null) return
 

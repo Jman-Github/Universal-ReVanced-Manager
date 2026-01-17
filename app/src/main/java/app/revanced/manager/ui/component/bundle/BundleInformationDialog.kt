@@ -16,6 +16,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Commit
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Gavel
@@ -436,6 +437,7 @@ fun BundleInformationDialog(
                 }
 
                 endpoint?.takeUnless { src.isDefault }?.let { url ->
+                    val remote = src.asRemoteOrNull
                     var showUrlInputDialog by rememberSaveable {
                         mutableStateOf(false)
                     }
@@ -444,9 +446,25 @@ fun BundleInformationDialog(
                             initial = url,
                             title = stringResource(patches_url),
                             onDismissRequest = { showUrlInputDialog = false },
-                            onConfirm = {
-                                showUrlInputDialog = false
-                                TODO("Not implemented.")
+                            onConfirm = { newUrl ->
+                                if (remote == null) {
+                                    showUrlInputDialog = false
+                                    return@TextInputDialog
+                                }
+                                val trimmed = newUrl.trim()
+                                if (trimmed.isEmpty() || trimmed == url) {
+                                    showUrlInputDialog = false
+                                    return@TextInputDialog
+                                }
+                                composableScope.launch {
+                                    val updated = bundleRepo.updateRemoteEndpoint(
+                                        src = remote,
+                                        newUrl = trimmed
+                                    )
+                                    if (updated) {
+                                        showUrlInputDialog = false
+                                    }
+                                }
                             },
                             validator = {
                                 if (it.isEmpty()) return@TextInputDialog false
@@ -457,33 +475,40 @@ fun BundleInformationDialog(
                     }
 
                     BundleListItem(
-                        modifier = Modifier.clickable(
-                            enabled = false,
-                            onClick = {
-                                showUrlInputDialog = true
-                            }
-                        ),
                         headlineText = stringResource(patches_url),
                         supportingText = url.ifEmpty {
                             stringResource(field_not_set)
                         },
                         trailingContent = {
-                            IconButton(
-                                onClick = {
-                                    clipboard?.setPrimaryClip(
-                                        ClipData.newPlainText(
-                                            context.getString(patches_url),
-                                            url
-                                        )
-                                    )
-                                    context.toast(context.getString(R.string.toast_copied_to_clipboard))
-                                },
-                                enabled = url.isNotEmpty()
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.ContentCopy,
-                                    contentDescription = stringResource(R.string.copy_to_clipboard)
-                                )
+                                IconButton(
+                                    onClick = {
+                                        clipboard?.setPrimaryClip(
+                                            ClipData.newPlainText(
+                                                context.getString(patches_url),
+                                                url
+                                            )
+                                        )
+                                        context.toast(context.getString(R.string.toast_copied_to_clipboard))
+                                    },
+                                    enabled = url.isNotEmpty()
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.ContentCopy,
+                                        contentDescription = stringResource(R.string.copy_to_clipboard)
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { showUrlInputDialog = true }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Edit,
+                                        contentDescription = stringResource(R.string.edit)
+                                    )
+                                }
                             }
                         }
                     )
