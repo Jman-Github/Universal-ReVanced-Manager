@@ -32,6 +32,7 @@ class PreferencesManager(
     }
     val dynamicColor = booleanPreference("dynamic_color", false)
     val pureBlackTheme = booleanPreference("pure_black_theme", false)
+    val pureBlackOnSystemDark = booleanPreference("pure_black_on_system_dark", false)
     val themePresetSelectionEnabled = booleanPreference("theme_preset_selection_enabled", true)
     val themePresetSelectionName = stringPreference("theme_preset_selection_name", "DEFAULT")
     val customAccentColor = stringPreference("custom_accent_color", "")
@@ -46,6 +47,7 @@ class PreferencesManager(
 
     val useProcessRuntime = booleanPreference("use_process_runtime", false)
     val stripUnusedNativeLibs = booleanPreference("strip_unused_native_libs", false)
+    val skipUnneededSplitApks = booleanPreference("skip_unneeded_split_apks", false)
     val patcherProcessMemoryLimit = intPreference(
         "process_runtime_memory_limit",
         MemoryLimitConfig.recommendedLimitMb(context)
@@ -61,6 +63,7 @@ class PreferencesManager(
     val officialBundleRemoved = booleanPreference("official_bundle_removed", false)
     val officialBundleSortOrder = intPreference("official_bundle_sort_order", -1)
     val officialBundleCustomDisplayName = stringPreference("official_bundle_custom_display_name", "")
+    val patchBundleCacheVersionCode = intPreference("patch_bundle_cache_version_code", -1)
     val autoCollapsePatcherSteps = booleanPreference("auto_collapse_patcher_steps", false)
     val autoExpandRunningSteps = booleanPreference("auto_expand_running_steps", true)
     val enableSavedApps = booleanPreference("enable_saved_apps", true)
@@ -117,11 +120,13 @@ class PreferencesManager(
     data class SettingsSnapshot(
         val dynamicColor: Boolean? = null,
         val pureBlackTheme: Boolean? = null,
+        val pureBlackOnSystemDark: Boolean? = null,
         val customAccentColor: String? = null,
         val customThemeColor: String? = null,
         val themePresetSelectionName: String? = null,
         val themePresetSelectionEnabled: Boolean? = null,
         val stripUnusedNativeLibs: Boolean? = null,
+        val skipUnneededSplitApks: Boolean? = null,
         val theme: Theme? = null,
         val appLanguage: String? = null,
         val api: String? = null,
@@ -174,11 +179,13 @@ class PreferencesManager(
     suspend fun exportSettings() = SettingsSnapshot(
         dynamicColor = dynamicColor.get(),
         pureBlackTheme = pureBlackTheme.get(),
+        pureBlackOnSystemDark = pureBlackOnSystemDark.get(),
         customAccentColor = customAccentColor.get(),
         customThemeColor = customThemeColor.get(),
         themePresetSelectionName = themePresetSelectionName.get(),
         themePresetSelectionEnabled = themePresetSelectionEnabled.get(),
         stripUnusedNativeLibs = stripUnusedNativeLibs.get(),
+        skipUnneededSplitApks = skipUnneededSplitApks.get(),
         theme = theme.get(),
         appLanguage = appLanguage.get(),
         api = api.get(),
@@ -231,11 +238,13 @@ class PreferencesManager(
     suspend fun importSettings(snapshot: SettingsSnapshot) = edit {
         snapshot.dynamicColor?.let { dynamicColor.value = it }
         snapshot.pureBlackTheme?.let { pureBlackTheme.value = it }
+        snapshot.pureBlackOnSystemDark?.let { pureBlackOnSystemDark.value = it }
         snapshot.customAccentColor?.let { customAccentColor.value = it }
         snapshot.customThemeColor?.let { customThemeColor.value = it }
         snapshot.themePresetSelectionName?.let { themePresetSelectionName.value = it }
         snapshot.themePresetSelectionEnabled?.let { themePresetSelectionEnabled.value = it }
         snapshot.stripUnusedNativeLibs?.let { stripUnusedNativeLibs.value = it }
+        snapshot.skipUnneededSplitApks?.let { skipUnneededSplitApks.value = it }
         snapshot.theme?.let { theme.value = it }
         snapshot.appLanguage?.let { appLanguage.value = it }
         snapshot.api?.let { api.value = it }

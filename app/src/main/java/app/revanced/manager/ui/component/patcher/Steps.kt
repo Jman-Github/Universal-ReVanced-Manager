@@ -33,15 +33,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
+import app.revanced.manager.patcher.StepId
 import app.revanced.manager.ui.component.ArrowButton
 import app.revanced.manager.ui.component.LoadingIndicator
 import app.revanced.manager.ui.model.State
 import app.revanced.manager.ui.model.Step
 import app.revanced.manager.ui.model.StepCategory
+import app.revanced.manager.ui.model.StepDetail
 import java.util.Locale
 import kotlin.math.floor
 
@@ -50,6 +53,7 @@ import kotlin.math.floor
 fun Steps(
     category: StepCategory,
     steps: List<Step>,
+    subStepsById: Map<StepId, List<StepDetail>> = emptyMap(),
     isExpanded: Boolean = false,
     autoExpandRunning: Boolean = true,
     onExpand: () -> Unit,
@@ -131,15 +135,128 @@ fun Steps(
                         if (total != null) current.toFloat() / total.toFloat() to "${current.megaBytes}/${total.megaBytes} MB"
                         else null to "${current.megaBytes} MB"
                     } ?: (null to null)
+                    val subSteps = subStepsById[step.id].orEmpty()
+
+                    if (subSteps.isNotEmpty()) {
+                        ExpandableSubStep(
+                            step = step,
+                            subSteps = subSteps,
+                            progress = progress,
+                            progressText = progressText,
+                            autoExpandRunning = autoExpandRunning,
+                            autoCollapseCompleted = autoCollapseCompleted,
+                            isFirst = index == 0,
+                            isLast = index == filteredSteps.lastIndex
+                        )
+                    } else {
+                        SubStep(
+                            name = step.title,
+                            state = step.state,
+                            message = step.message,
+                            progress = progress,
+                            progressText = progressText,
+                            isFirst = index == 0,
+                            isLast = index == filteredSteps.lastIndex,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExpandableSubStep(
+    step: Step,
+    subSteps: List<StepDetail>,
+    progress: Float?,
+    progressText: String?,
+    autoExpandRunning: Boolean,
+    autoCollapseCompleted: Boolean,
+    isFirst: Boolean,
+    isLast: Boolean,
+) {
+    var expanded by rememberSaveable(step.id.toString()) { mutableStateOf(false) }
+    var autoCollapsed by rememberSaveable("${step.id}-auto") { mutableStateOf(false) }
+
+    LaunchedEffect(step.state) {
+        if (step.state != State.COMPLETED) {
+            autoCollapsed = false
+        }
+        if ((autoExpandRunning && step.state == State.RUNNING) || step.state == State.FAILED) {
+            expanded = true
+        }
+    }
+
+    LaunchedEffect(autoCollapseCompleted, step.state, expanded) {
+        if (autoCollapseCompleted && step.state == State.COMPLETED && !autoCollapsed && expanded) {
+            expanded = false
+            autoCollapsed = true
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .clickable { expanded = !expanded }
+            .padding(top = if (isFirst) 10.dp else 8.dp, bottom = if (isLast) 20.dp else 8.dp)
+            .padding(horizontal = 20.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            StepIcon(
+                size = 18.dp,
+                state = step.state,
+                progress = progress,
+            )
+
+            Text(
+                text = step.title,
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, true),
+            )
+
+            if (progressText != null) {
+                Text(
+                    progressText,
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+
+            Box(
+                modifier = Modifier.size(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                ArrowButton(
+                    modifier = Modifier.size(20.dp),
+                    expanded = expanded,
+                    onClick = null
+                )
+            }
+        }
+
+        AnimatedVisibility(visible = expanded) {
+            Column(
+                modifier = Modifier.padding(start = 16.dp)
+            ) {
+                subSteps.forEachIndexed { index, detail ->
+                    val (subProgress, subProgressText) = detail.progress?.let { (current, total) ->
+                        if (total != null) current.toFloat() / total.toFloat() to "${current.megaBytes}/${total.megaBytes} MB"
+                        else null to "${current.megaBytes} MB"
+                    } ?: (null to null)
 
                     SubStep(
-                        name = step.title,
-                        state = step.state,
-                        message = step.message,
-                        progress = progress,
-                        progressText = progressText,
+                        name = detail.title,
+                        state = detail.state,
+                        message = detail.message,
+                        progress = subProgress,
+                        progressText = subProgressText,
+                        skipped = detail.skipped,
                         isFirst = index == 0,
-                        isLast = index == filteredSteps.lastIndex,
+                        isLast = index == subSteps.lastIndex,
                     )
                 }
             }
@@ -154,6 +271,7 @@ fun SubStep(
     message: String? = null,
     progress: Float? = null,
     progressText: String? = null,
+    skipped: Boolean = false,
     isFirst: Boolean = false,
     isLast: Boolean = false,
 ) {
@@ -181,7 +299,10 @@ fun SubStep(
 
             Text(
                 text = name,
-                style = MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.labelLarge.copy(
+                    textDecoration = if (skipped) TextDecoration.LineThrough else null
+                ),
+                color = if (skipped) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, true),

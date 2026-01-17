@@ -16,10 +16,13 @@ import app.revanced.manager.domain.repository.DownloadedAppRepository
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.domain.repository.PatchSelectionRepository
 import app.revanced.manager.domain.repository.SerializedSelection
+import app.revanced.manager.data.room.profile.PatchProfilePayload
 import app.revanced.manager.ui.model.SelectedApp
 import app.revanced.manager.ui.model.navigation.SelectedApplicationInfo
 import app.revanced.manager.ui.theme.Theme
 import app.revanced.manager.util.PatchSelection
+import app.revanced.manager.util.BundleDeepLink
+import app.revanced.manager.util.BundleDeepLinkIntent
 import app.revanced.manager.util.tag
 import app.revanced.manager.util.toast
 import kotlinx.coroutines.channels.Channel
@@ -43,6 +46,8 @@ class MainViewModel(
     val appSelectFlow = appSelectChannel.receiveAsFlow()
     private val legacyImportActivityChannel = Channel<Intent>()
     val legacyImportActivityFlow = legacyImportActivityChannel.receiveAsFlow()
+    private val bundleDeepLinkChannel = Channel<BundleDeepLink>(Channel.BUFFERED)
+    val bundleDeepLinkFlow = bundleDeepLinkChannel.receiveAsFlow()
 
     private suspend fun suggestedVersion(packageName: String) =
         patchBundleRepository.suggestedVersions.first()[packageName]
@@ -58,28 +63,50 @@ class MainViewModel(
         return SelectedApp.Local(
             downloadedApp.packageName,
             downloadedApp.version,
-            downloadedAppRepository.getPreparedApkFile(downloadedApp),
+            downloadedAppRepository.getApkFileForApp(downloadedApp),
             false
         )
     }
 
-    fun selectApp(app: SelectedApp, patches: PatchSelection? = null) = viewModelScope.launch {
+    fun selectApp(
+        app: SelectedApp,
+        patches: PatchSelection? = null,
+        selectionPayload: PatchProfilePayload? = null,
+        persistConfiguration: Boolean = true
+    ) = viewModelScope.launch {
         val resolved = findDownloadedApp(app) ?: app
         appSelectChannel.send(
             SelectedApplicationInfo.ViewModelParams(
                 app = resolved,
-                patches = patches
+                patches = patches,
+                selectionPayload = selectionPayload,
+                persistConfiguration = persistConfiguration
             )
         )
     }
 
-    fun selectApp(app: SelectedApp) = selectApp(app, null)
+    fun selectApp(app: SelectedApp) = selectApp(app, null, null, true)
 
-    fun selectApp(packageName: String, patches: PatchSelection? = null) = viewModelScope.launch {
-        selectApp(SelectedApp.Search(packageName, suggestedVersion(packageName)), patches)
+    fun selectApp(
+        packageName: String,
+        patches: PatchSelection? = null,
+        selectionPayload: PatchProfilePayload? = null,
+        persistConfiguration: Boolean = true
+    ) = viewModelScope.launch {
+        selectApp(
+            SelectedApp.Search(packageName, suggestedVersion(packageName)),
+            patches,
+            selectionPayload,
+            persistConfiguration
+        )
     }
 
-    fun selectApp(packageName: String) = selectApp(packageName, null)
+    fun selectApp(packageName: String) = selectApp(packageName, null, null, true)
+
+    fun handleIntent(intent: Intent?) {
+        val deepLink = BundleDeepLinkIntent.fromIntent(intent) ?: return
+        bundleDeepLinkChannel.trySend(deepLink)
+    }
 
     init {
         viewModelScope.launch {

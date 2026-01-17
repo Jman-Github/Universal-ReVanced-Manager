@@ -15,6 +15,7 @@ import app.revanced.manager.domain.bundles.PatchBundleSource
 import app.revanced.manager.domain.bundles.RemotePatchBundle
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.domain.worker.Worker
+import app.revanced.manager.util.BundleDeepLinkIntent
 import app.revanced.manager.util.permission.hasNotificationPermission
 import kotlinx.coroutines.flow.first
 import org.koin.core.component.KoinComponent
@@ -45,14 +46,19 @@ class BundleUpdateNotificationWorker(
                 applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(notificationChannel)
 
-            val pendingIntent = PendingIntent.getActivity(
-                applicationContext,
-                0,
-                Intent(applicationContext, MainActivity::class.java).apply {
+            fun buildPendingIntent(bundleUid: Int?): PendingIntent {
+                val intent = Intent(applicationContext, MainActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                },
-                PendingIntent.FLAG_IMMUTABLE
-            )
+                    BundleDeepLinkIntent.addBundleUid(this, bundleUid)
+                }
+                val requestCode = bundleUid?.plus(1) ?: 0
+                return PendingIntent.getActivity(
+                    applicationContext,
+                    requestCode,
+                    intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+            }
 
             val autoUpdateTargets = patchBundleRepository.sources.first()
                 .filterIsInstance<RemotePatchBundle>()
@@ -65,6 +71,8 @@ class BundleUpdateNotificationWorker(
 
             val totalAutoUpdates = autoUpdateTargets.size
             val seenUids = LinkedHashSet<Int>()
+            val updatedBundleNames = LinkedHashSet<String>()
+            val updatedBundleUids = LinkedHashSet<Int>()
             var progressNotified = false
             var downloadStarted = false
 
@@ -72,6 +80,8 @@ class BundleUpdateNotificationWorker(
                 patchBundleRepository.updateNow(
                     allowUnsafeNetwork = false,
                     onPerBundleProgress = { bundle, bytesRead, bytesTotal ->
+                        val shouldNotify = bytesRead > 0L || (bytesTotal ?: 0L) > 0L
+                        if (!shouldNotify) return@updateNow
                         downloadStarted = true
                         if (!canNotify) return@updateNow
 
@@ -88,11 +98,16 @@ class BundleUpdateNotificationWorker(
                         val notification = buildNotification(
                             title = applicationContext.getString(R.string.bundle_update_banner_title),
                             description = progressText,
-                            pendingIntent = pendingIntent,
+                            pendingIntent = buildPendingIntent(bundle.uid),
                             ongoing = true,
                             progress = ProgressInfo(bytesRead, bytesTotal)
                         )
                         notificationManager.notify(NOTIFICATION_ID, notification)
+                    },
+                    onBundleUpdated = { bundle, updatedName ->
+                        val resolvedName = updatedName?.takeIf { it.isNotBlank() } ?: bundle.displayTitle
+                        updatedBundleNames.add(resolvedName)
+                        updatedBundleUids.add(bundle.uid)
                     },
                     predicate = { bundle ->
                         bundle.autoUpdate &&
@@ -105,32 +120,51 @@ class BundleUpdateNotificationWorker(
                 false
             }
 
-            val manualUpdates = mutableListOf<Pair<String, String>>()
+            data class ManualUpdateEntry(val uid: Int, val name: String, val version: String)
+            val manualUpdates = mutableListOf<ManualUpdateEntry>()
             if (canNotify) {
                 patchBundleRepository.fetchUpdatesAndNotify(
                     applicationContext,
                     predicate = { bundle -> !bundle.autoUpdate }
-                ) { bundleName, bundleVersion ->
-                    manualUpdates += bundleName to bundleVersion
+                ) { bundle, bundleVersion ->
+                    manualUpdates += ManualUpdateEntry(bundle.uid, bundle.displayTitle, bundleVersion)
                     true
                 }
             }
 
             if (canNotify) {
+                val deepLinkUid = when {
+                    updatedBundleUids.size == 1 -> updatedBundleUids.first()
+                    manualUpdates.size == 1 -> manualUpdates.first().uid
+                    else -> null
+                }
                 when {
                     updatedAny -> {
-                        val description = if (manualUpdates.isNotEmpty()) {
-                            applicationContext.getString(
-                                R.string.bundle_updates_notification_completed_with_available,
-                                manualUpdates.size
-                            )
-                        } else {
-                            applicationContext.getString(R.string.bundle_updates_notification_completed)
+                        val updatedNames = formatUpdatedBundleNames(updatedBundleNames)
+                        val description = when {
+                            updatedNames != null && manualUpdates.isNotEmpty() ->
+                                applicationContext.getString(
+                                    R.string.bundle_updates_notification_completed_named_with_available,
+                                    updatedNames,
+                                    manualUpdates.size
+                                )
+                            updatedNames != null ->
+                                applicationContext.getString(
+                                    R.string.bundle_updates_notification_completed_named,
+                                    updatedNames
+                                )
+                            manualUpdates.isNotEmpty() ->
+                                applicationContext.getString(
+                                    R.string.bundle_updates_notification_completed_with_available,
+                                    manualUpdates.size
+                                )
+                            else ->
+                                applicationContext.getString(R.string.bundle_updates_notification_completed)
                         }
                         val notification = buildNotification(
                             title = applicationContext.getString(R.string.bundle_update_banner_title),
                             description = description,
-                            pendingIntent = pendingIntent,
+                            pendingIntent = buildPendingIntent(deepLinkUid),
                             ongoing = false,
                             progress = null
                         )
@@ -143,7 +177,9 @@ class BundleUpdateNotificationWorker(
                                 R.string.bundle_updates_notification_available,
                                 manualUpdates.size
                             ),
-                            pendingIntent = pendingIntent,
+                            pendingIntent = buildPendingIntent(
+                                if (manualUpdates.size == 1) manualUpdates.first().uid else null
+                            ),
                             ongoing = false,
                             progress = null
                         )
@@ -158,7 +194,7 @@ class BundleUpdateNotificationWorker(
                         val notification = buildNotification(
                             title = applicationContext.getString(R.string.bundle_update_banner_title),
                             description = description,
-                            pendingIntent = pendingIntent,
+                            pendingIntent = buildPendingIntent(seenUids.firstOrNull()),
                             ongoing = false,
                             progress = null
                         )
@@ -211,5 +247,15 @@ class BundleUpdateNotificationWorker(
         }
 
         return builder.build()
+    }
+
+    private fun formatUpdatedBundleNames(names: Collection<String>): String? {
+        val cleaned = names.map { it.trim() }.filter { it.isNotBlank() }.distinct()
+        if (cleaned.isEmpty()) return null
+        val maxVisible = 3
+        val visible = cleaned.take(maxVisible)
+        val extra = cleaned.size - visible.size
+        val joined = visible.joinToString(", ")
+        return if (extra > 0) "$joined +$extra" else joined
     }
 }

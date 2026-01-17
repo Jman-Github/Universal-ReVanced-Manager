@@ -11,5 +11,6 @@ data class PatchProfileEntity(
     @ColumnInfo(name = "app_version") val appVersion: String?,
     @ColumnInfo(name = "name") val name: String,
     @ColumnInfo(name = "payload") val payload: PatchProfilePayload,
-    @ColumnInfo(name = "created_at") val createdAt: Long
+    @ColumnInfo(name = "created_at") val createdAt: Long,
+    @ColumnInfo(name = "sort_order") val sortOrder: Int
 )

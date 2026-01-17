@@ -3,6 +3,12 @@ package app.revanced.manager.ui.screen.settings
 import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.annotation.StringRes
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -15,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -90,6 +97,7 @@ fun ImportExportSettingsScreen(
     var activeExportPicker by rememberSaveable { mutableStateOf<ExportPicker?>(null) }
     var exportFileDialogState by remember { mutableStateOf<ExportFileDialogState?>(null) }
     var pendingExportConfirmation by remember { mutableStateOf<PendingExportConfirmation?>(null) }
+    var exportInProgress by rememberSaveable { mutableStateOf(false) }
     val permissionLauncher = rememberLauncherForActivityResult(permissionContract) { granted ->
         val pendingImport = pendingImportPicker
         val pendingExport = pendingExportPicker
@@ -124,6 +132,7 @@ fun ImportExportSettingsScreen(
         }
     }
     val runExport = { picker: ExportPicker, target: Path ->
+        exportInProgress = true
         val job = when (picker) {
             ExportPicker.Keystore -> vm.exportKeystore(target)
             ExportPicker.PatchBundles -> vm.exportPatchBundles(target)
@@ -133,6 +142,7 @@ fun ImportExportSettingsScreen(
         }
         coroutineScope.launch {
             job.join()
+            exportInProgress = false
             activeExportPicker = null
         }
     }
@@ -213,6 +223,16 @@ fun ImportExportSettingsScreen(
             title = stringResource(R.string.export_overwrite_title),
             description = stringResource(R.string.export_overwrite_description, state.fileName),
             icon = Icons.Outlined.WarningAmber
+        )
+    }
+    if (exportInProgress) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text(stringResource(R.string.export)) },
+            text = { Text(stringResource(R.string.patcher_step_group_saving)) },
+            icon = { CircularProgressIndicator() },
+            confirmButton = {},
+            dismissButton = {}
         )
     }
 
@@ -326,54 +346,74 @@ fun ImportExportSettingsScreen(
                 )
             }
 
-            importProgress?.let { progress ->
-                val subtitleParts = buildList {
-                    val total = progress.total.coerceAtLeast(1)
-                    val stepLabel = if (progress.isStepBased) {
-                        val step = (progress.processed + 1).coerceAtMost(total)
-                        stringResource(R.string.import_patch_bundles_banner_steps, step, total)
-                    } else {
-                        stringResource(R.string.import_patch_bundles_banner_subtitle, progress.processed, total)
-                    }
-                    add(stepLabel)
-                    val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList
-                    val phaseText = if (progress.isStepBased) {
-                        when (progress.phase) {
-                            BundleImportPhase.Downloading -> "Copying bundle"
-                            BundleImportPhase.Processing -> "Writing bundle"
-                            BundleImportPhase.Finalizing -> "Finalizing import"
+            AnimatedVisibility(
+                visible = importProgress != null,
+                enter = fadeIn(animationSpec = spring(stiffness = 400f)) +
+                    expandVertically(
+                        expandFrom = Alignment.Top,
+                        animationSpec = spring(stiffness = 400f)
+                    ),
+                exit = fadeOut(animationSpec = spring(stiffness = 400f)) +
+                    shrinkVertically(
+                        shrinkTowards = Alignment.Top,
+                        animationSpec = spring(stiffness = 400f)
+                    )
+            ) {
+                importProgress?.let { progress ->
+                    val subtitleParts = buildList {
+                        val total = progress.total.coerceAtLeast(1)
+                        val stepLabel = if (progress.isStepBased) {
+                            val step = (progress.processed + 1).coerceAtMost(total)
+                            stringResource(R.string.import_patch_bundles_banner_steps, step, total)
+                        } else {
+                            stringResource(R.string.import_patch_bundles_banner_subtitle, progress.processed, total)
                         }
-                    } else {
-                        when (progress.phase) {
-                            BundleImportPhase.Processing -> "Processing"
-                            BundleImportPhase.Downloading -> "Downloading"
-                            BundleImportPhase.Finalizing -> "Finalizing"
-                        }
-                    }
-                    val detail = buildString {
-                        append(phaseText)
-                        append(": ")
-                        append(name)
-                        if (progress.bytesTotal?.takeIf { it > 0L } != null) {
-                            append(" (")
-                            append(Formatter.formatShortFileSize(context, progress.bytesRead))
-                            progress.bytesTotal?.takeIf { it > 0L }?.let { total ->
-                                append("/")
-                                append(Formatter.formatShortFileSize(context, total))
+                        add(stepLabel)
+                        val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList
+                        val phaseText = if (progress.isStepBased) {
+                            when (progress.phase) {
+                                BundleImportPhase.Downloading ->
+                                    stringResource(R.string.bundle_import_phase_copying)
+                                BundleImportPhase.Processing ->
+                                    stringResource(R.string.bundle_import_phase_writing)
+                                BundleImportPhase.Finalizing ->
+                                    stringResource(R.string.bundle_import_phase_finalizing)
                             }
-                            append(")")
+                        } else {
+                            when (progress.phase) {
+                                BundleImportPhase.Processing ->
+                                    stringResource(R.string.bundle_import_phase_processing)
+                                BundleImportPhase.Downloading ->
+                                    stringResource(R.string.bundle_import_phase_downloading)
+                                BundleImportPhase.Finalizing ->
+                                    stringResource(R.string.bundle_import_phase_finalizing_short)
+                            }
                         }
+                        val detail = buildString {
+                            append(phaseText)
+                            append(": ")
+                            append(name)
+                            if (progress.bytesTotal?.takeIf { it > 0L } != null) {
+                                append(" (")
+                                append(Formatter.formatShortFileSize(context, progress.bytesRead))
+                                progress.bytesTotal?.takeIf { it > 0L }?.let { total ->
+                                    append("/")
+                                    append(Formatter.formatShortFileSize(context, total))
+                                }
+                                append(")")
+                            }
+                        }
+                        add(detail)
                     }
-                    add(detail)
+                    DownloadProgressBanner(
+                        title = stringResource(R.string.import_patch_bundles_banner_title),
+                        subtitle = subtitleParts.joinToString(" - "),
+                        progress = progress.ratio,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
                 }
-                DownloadProgressBanner(
-                    title = stringResource(R.string.import_patch_bundles_banner_title),
-                    subtitle = subtitleParts.joinToString(" • "),
-                    progress = progress.ratio,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                )
             }
 
             GroupHeader(stringResource(R.string.import_))
@@ -699,7 +739,7 @@ private fun PackageSelector(packages: Set<String>, onFinish: (String?) -> Unit) 
 
     LaunchedEffect(noPackages) {
         if (noPackages) {
-            context.toast("No packages available.")
+            context.toast(context.getString(R.string.no_packages_available))
             onFinish(null)
         }
     }
@@ -721,7 +761,7 @@ private fun PackageSelector(packages: Set<String>, onFinish: (String?) -> Unit) 
                     .fillMaxWidth()
             ) {
                 Text(
-                    text = "Select package",
+                    text = stringResource(R.string.select_package),
                     style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.onSurface
                 )

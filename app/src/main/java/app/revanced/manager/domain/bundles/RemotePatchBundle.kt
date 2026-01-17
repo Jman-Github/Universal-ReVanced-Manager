@@ -113,12 +113,16 @@ sealed class RemotePatchBundle(
      * Downloads the latest version regardless if there is a new update available.
      */
     suspend fun downloadLatest(onProgress: PatchBundleDownloadProgress? = null): PatchBundleDownloadResult =
-        download(getLatestInfo(), onProgress)
+        download(fetchLatestReleaseInfo(), onProgress)
 
     suspend fun update(onProgress: PatchBundleDownloadProgress? = null): PatchBundleDownloadResult? =
         withContext(Dispatchers.IO) {
-        val info = getLatestInfo()
-        if (hasInstalled() && info.version == installedVersionSignatureInternal)
+        val info = fetchLatestReleaseInfo()
+        val latestSignature = normalizeVersionForCompare(info.version)
+            ?: return@withContext null
+        val installedSignature = normalizeVersionForCompare(installedVersionSignatureInternal)
+            ?: normalizeVersionForCompare(version)
+        if (hasInstalled() && installedSignature != null && latestSignature == installedSignature)
             return@withContext null
 
         download(info, onProgress)
@@ -147,6 +151,14 @@ sealed class RemotePatchBundle(
     }
 
     val installedVersionSignature: String? get() = installedVersionSignatureInternal
+
+    private fun normalizeVersionForCompare(raw: String?): String? {
+        val trimmed = raw?.trim().orEmpty()
+        if (trimmed.isEmpty()) return null
+        val noPrefix = trimmed.removePrefix("v").removePrefix("V")
+        val noBuild = noPrefix.substringBefore('+')
+        return noBuild.ifBlank { null }
+    }
 }
 
 class JsonPatchBundle(
@@ -350,7 +362,8 @@ class GitHubPullRequestBundle(
 
                             var entry = zis.nextEntry
                             while (entry != null) {
-                                if (!entry.isDirectory && entry.name.endsWith(".rvp")) {
+                                val entryName = entry.name.lowercase()
+                                if (!entry.isDirectory && (entryName.endsWith(".rvp") || entryName.endsWith(".mpp"))) {
                                     extractedTotal = entry.size.takeIf { it > 0 }
                                     while (true) {
                                         val read = zis.read(buffer)
@@ -371,7 +384,7 @@ class GitHubPullRequestBundle(
                             }
 
                             if (copiedBytes <= 0L) {
-                                throw IOException("No .rvp file found in the pull request artifact.")
+                                throw IOException("No .rvp or .mpp file found in the pull request artifact.")
                             }
                             onProgress?.invoke(copiedBytes, extractedTotal)
                         }

@@ -55,8 +55,19 @@ dependencyResolutionManagement {
                 password = gprKey.orEmpty()
             }
         }
+        maven {
+            // Morphe packages are published to GitHub Packages.
+            url = uri("https://maven.pkg.github.com/MorpheApp/registry")
+            credentials {
+                val gprUser: String? = githubUser()
+                val gprKey: String? = githubToken()
+
+                username = gprUser.orEmpty().ifBlank { "anonymous" }
+                password = gprKey.orEmpty()
+            }
+        }
     }
 }
 
 rootProject.name = "universal-revanced-manager"
-include(":app", ":api")
+include(":app", ":api", ":morphe-runtime")

@@ -27,6 +27,8 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import ru.solrudev.ackpine.session.Session
 import ru.solrudev.ackpine.uninstaller.UninstallFailure
+import java.nio.file.Files
+import java.nio.file.Path
 
 class DownloadsViewModel(
     private val downloadedAppRepository: DownloadedAppRepository,
@@ -147,6 +149,57 @@ class DownloadsViewModel(
                 context.toast(context.getString(R.string.downloaded_apps_export_failed))
             }
         }
+
+    fun exportSelectedAppsToPath(
+        context: Context,
+        target: Path,
+        asArchive: Boolean,
+        onResult: (Boolean) -> Unit = {}
+    ) = viewModelScope.launch {
+        val selection = appSelection.toList()
+        if (selection.isEmpty()) {
+            onResult(false)
+            return@launch
+        }
+
+        val success = runCatching {
+            withContext(Dispatchers.IO) {
+                target.parent?.let { Files.createDirectories(it) }
+                Files.newOutputStream(target).use { output ->
+                    if (asArchive) {
+                        ZipOutputStream(output).use { zipStream ->
+                            selection.forEach { app ->
+                                val apkFile = downloadedAppRepository.getPreparedApkFile(app)
+                                val baseName =
+                                    "${app.packageName}_${app.version}".replace('/', '_')
+                                val entry = ZipEntry("$baseName.apk")
+                                zipStream.putNextEntry(entry)
+                                apkFile.inputStream().use { it.copyTo(zipStream) }
+                                zipStream.closeEntry()
+                            }
+                        }
+                    } else {
+                        val app = selection.first()
+                        val apkFile =
+                            downloadedAppRepository.getPreparedApkFile(app)
+                        apkFile.inputStream().use { input -> input.copyTo(output) }
+                    }
+                }
+            }
+        }.isSuccess
+
+        if (success) {
+            context.toast(
+                context.getString(
+                    R.string.downloaded_apps_export_success,
+                    selection.size
+                )
+            )
+        } else {
+            context.toast(context.getString(R.string.downloaded_apps_export_failed))
+        }
+        onResult(success)
+    }
 
     companion object {
         private val TAG = DownloadsViewModel::class.java.simpleName ?: "DownloadsViewModel"

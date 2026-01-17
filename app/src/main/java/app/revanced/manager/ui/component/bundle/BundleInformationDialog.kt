@@ -16,6 +16,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Commit
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Gavel
@@ -59,6 +60,7 @@ import app.universal.revanced.manager.R.string.patches_url
 import app.universal.revanced.manager.R.string.view_patches
 import app.revanced.manager.data.platform.NetworkInfo
 import app.revanced.manager.domain.bundles.LocalPatchBundle
+import app.revanced.manager.domain.bundles.PatchBundleChangelogEntry
 import app.revanced.manager.domain.bundles.PatchBundleSource
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
@@ -104,7 +106,9 @@ fun BundleInformationDialog(
     val uriHandler = LocalUriHandler.current
     var viewCurrentBundlePatches by remember { mutableStateOf(false) }
     var viewBundleChangelog by remember { mutableStateOf(false) }
+    var viewBundleChangelogHistory by remember { mutableStateOf(false) }
     var showLinkSheet by rememberSaveable { mutableStateOf(false) }
+    var changelogHistory by remember { mutableStateOf<List<PatchBundleChangelogEntry>>(emptyList()) }
     val isLocal = src is LocalPatchBundle
     val bundleManifestAttributes = src.patchBundle?.manifestAttributes
     val manifestSource = bundleManifestAttributes?.source
@@ -185,6 +189,10 @@ fun BundleInformationDialog(
         }
     }
 
+    LaunchedEffect(src.uid, src.updatedAt) {
+        changelogHistory = bundleRepo.getChangelogHistory(src.uid)
+    }
+
     if (viewCurrentBundlePatches) {
         BundlePatchesDialog(
             src = src,
@@ -205,6 +213,12 @@ fun BundleInformationDialog(
         } else {
             viewBundleChangelog = false
         }
+    }
+    if (viewBundleChangelogHistory) {
+        BundleChangelogHistoryDialog(
+            entries = changelogHistory.drop(1),
+            onDismissRequest = { viewBundleChangelogHistory = false }
+        )
     }
 
     FullscreenDialog(
@@ -423,6 +437,7 @@ fun BundleInformationDialog(
                 }
 
                 endpoint?.takeUnless { src.isDefault }?.let { url ->
+                    val remote = src.asRemoteOrNull
                     var showUrlInputDialog by rememberSaveable {
                         mutableStateOf(false)
                     }
@@ -431,9 +446,25 @@ fun BundleInformationDialog(
                             initial = url,
                             title = stringResource(patches_url),
                             onDismissRequest = { showUrlInputDialog = false },
-                            onConfirm = {
-                                showUrlInputDialog = false
-                                TODO("Not implemented.")
+                            onConfirm = { newUrl ->
+                                if (remote == null) {
+                                    showUrlInputDialog = false
+                                    return@TextInputDialog
+                                }
+                                val trimmed = newUrl.trim()
+                                if (trimmed.isEmpty() || trimmed == url) {
+                                    showUrlInputDialog = false
+                                    return@TextInputDialog
+                                }
+                                composableScope.launch {
+                                    val updated = bundleRepo.updateRemoteEndpoint(
+                                        src = remote,
+                                        newUrl = trimmed
+                                    )
+                                    if (updated) {
+                                        showUrlInputDialog = false
+                                    }
+                                }
                             },
                             validator = {
                                 if (it.isEmpty()) return@TextInputDialog false
@@ -444,33 +475,40 @@ fun BundleInformationDialog(
                     }
 
                     BundleListItem(
-                        modifier = Modifier.clickable(
-                            enabled = false,
-                            onClick = {
-                                showUrlInputDialog = true
-                            }
-                        ),
                         headlineText = stringResource(patches_url),
                         supportingText = url.ifEmpty {
                             stringResource(field_not_set)
                         },
                         trailingContent = {
-                            IconButton(
-                                onClick = {
-                                    clipboard?.setPrimaryClip(
-                                        ClipData.newPlainText(
-                                            context.getString(patches_url),
-                                            url
-                                        )
-                                    )
-                                    context.toast(context.getString(R.string.toast_copied_to_clipboard))
-                                },
-                                enabled = url.isNotEmpty()
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.ContentCopy,
-                                    contentDescription = stringResource(R.string.copy_to_clipboard)
-                                )
+                                IconButton(
+                                    onClick = {
+                                        clipboard?.setPrimaryClip(
+                                            ClipData.newPlainText(
+                                                context.getString(patches_url),
+                                                url
+                                            )
+                                        )
+                                        context.toast(context.getString(R.string.toast_copied_to_clipboard))
+                                    },
+                                    enabled = url.isNotEmpty()
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.ContentCopy,
+                                        contentDescription = stringResource(R.string.copy_to_clipboard)
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { showUrlInputDialog = true }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Edit,
+                                        contentDescription = stringResource(R.string.edit)
+                                    )
+                                }
                             }
                         }
                     )
@@ -497,7 +535,7 @@ fun BundleInformationDialog(
 
                 src.asRemoteOrNull?.let {
                     BundleListItem(
-                        headlineText = stringResource(R.string.bundle_changelog),
+                        headlineText = stringResource(R.string.bundle_latest_changelog),
                         supportingText = stringResource(R.string.bundle_view_changelog),
                         modifier = Modifier.clickable {
                             viewBundleChangelog = true
@@ -505,8 +543,32 @@ fun BundleInformationDialog(
                     ) {
                         Icon(
                             Icons.AutoMirrored.Outlined.ArrowRight,
-                            stringResource(R.string.bundle_changelog)
+                            stringResource(R.string.bundle_latest_changelog)
                         )
+                    }
+
+                    val previousEntries = changelogHistory.drop(1)
+                    val hasPrevious = previousEntries.isNotEmpty()
+                    BundleListItem(
+                        headlineText = stringResource(R.string.bundle_previous_changelogs),
+                        supportingText = stringResource(
+                            if (hasPrevious) {
+                                R.string.bundle_view_previous_changelogs
+                            } else {
+                                R.string.bundle_previous_changelogs_empty
+                            }
+                        ),
+                        modifier = Modifier.clickable(
+                            enabled = hasPrevious,
+                            onClick = { viewBundleChangelogHistory = true }
+                        )
+                    ) {
+                        if (hasPrevious) {
+                            Icon(
+                                Icons.AutoMirrored.Outlined.ArrowRight,
+                                stringResource(R.string.bundle_previous_changelogs)
+                            )
+                        }
                     }
                 }
 

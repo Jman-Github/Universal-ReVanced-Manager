@@ -27,7 +27,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Storage
-import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.ExpandLess
@@ -38,8 +37,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -167,7 +164,6 @@ fun AppSelectorScreen(
     var search by rememberSaveable { mutableStateOf(false) }
     var filterInstalledOnly by rememberSaveable { mutableStateOf(false) }
     var filterPatchesAvailable by rememberSaveable { mutableStateOf(false) }
-    var showFilterMenu by rememberSaveable { mutableStateOf(false) }
 
     val appList by vm.appList.collectAsStateWithLifecycle(initialValue = emptyList())
     val filteredAppList = remember(
@@ -257,43 +253,6 @@ fun AppSelectorScreen(
                 scrollBehavior = scrollBehavior,
                 onBackClick = onBackClick,
                 actions = {
-                    Box {
-                        val filterTint =
-                            if (filterInstalledOnly || filterPatchesAvailable) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurface
-                        IconButton(onClick = { showFilterMenu = true }) {
-                            Icon(
-                                imageVector = Icons.Outlined.FilterList,
-                                contentDescription = stringResource(R.string.app_filter_title),
-                                tint = filterTint
-                            )
-                        }
-                        DropdownMenu(
-                            expanded = showFilterMenu,
-                            onDismissRequest = { showFilterMenu = false }
-                        ) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.app_filter_installed_only)) },
-                            trailingIcon = {
-                                if (filterInstalledOnly) Icon(Icons.Filled.Check, null)
-                            },
-                            onClick = {
-                                filterInstalledOnly = !filterInstalledOnly
-                                showFilterMenu = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.app_filter_patches_available)) },
-                            trailingIcon = {
-                                if (filterPatchesAvailable) Icon(Icons.Filled.Check, null)
-                            },
-                            onClick = {
-                                filterPatchesAvailable = !filterPatchesAvailable
-                                showFilterMenu = false
-                            }
-                        )
-                    }
-                    }
                     IconButton(onClick = { search = true }) {
                         Icon(Icons.Outlined.Search, stringResource(R.string.search))
                     }

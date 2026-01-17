@@ -1,6 +1,7 @@
 package app.revanced.manager
 
 import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.os.Bundle
 import android.os.Parcelable
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -13,7 +14,9 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
@@ -78,6 +81,7 @@ class MainActivity : AppCompatActivity() {
         installSplashScreen()
 
         val vm: MainViewModel = getActivityViewModel()
+        vm.handleIntent(intent)
 
         setContent {
             val launcher = rememberLauncherForActivityResult(
@@ -87,8 +91,12 @@ class MainActivity : AppCompatActivity() {
             val theme by vm.prefs.theme.getAsState()
             val dynamicColor by vm.prefs.dynamicColor.getAsState()
             val pureBlackTheme by vm.prefs.pureBlackTheme.getAsState()
+            val pureBlackOnSystemDark by vm.prefs.pureBlackOnSystemDark.getAsState()
             val customAccentColor by vm.prefs.customAccentColor.getAsState()
             val customThemeColor by vm.prefs.customThemeColor.getAsState()
+            val systemDark = isSystemInDarkTheme()
+            val darkThemeEnabled = theme == Theme.SYSTEM && systemDark || theme == Theme.DARK
+            val pureBlackEnabled = pureBlackTheme || (pureBlackOnSystemDark && theme == Theme.SYSTEM && systemDark)
 
             EventEffect(vm.legacyImportActivityFlow) {
                 try {
@@ -98,15 +106,21 @@ class MainActivity : AppCompatActivity() {
             }
 
             ReVancedManagerTheme(
-                darkTheme = theme == Theme.SYSTEM && isSystemInDarkTheme() || theme == Theme.DARK,
+                darkTheme = darkThemeEnabled,
                 dynamicColor = dynamicColor,
-                pureBlackTheme = pureBlackTheme,
+                pureBlackTheme = pureBlackEnabled,
                 accentColorHex = customAccentColor.takeUnless { it.isBlank() },
                 themeColorHex = customThemeColor.takeUnless { it.isBlank() }
             ) {
                 ReVancedManager(vm)
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val vm: MainViewModel = getActivityViewModel()
+        vm.handleIntent(intent)
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -118,12 +132,22 @@ class MainActivity : AppCompatActivity() {
 @Composable
 private fun ReVancedManager(vm: MainViewModel) {
     val navController = rememberNavController()
+    var pendingBundleDeepLink by remember { mutableStateOf<app.revanced.manager.util.BundleDeepLink?>(null) }
 
     EventEffect(vm.appSelectFlow) { params ->
+        navController.popBackStack(SelectedApplicationInfo.Main, inclusive = true)
         navController.navigateComplex(
             SelectedApplicationInfo,
             params
         )
+    }
+
+    EventEffect(vm.bundleDeepLinkFlow) { deepLink ->
+        pendingBundleDeepLink = deepLink
+        navController.navigate(Dashboard) {
+            launchSingleTop = true
+            popUpTo(Dashboard) { inclusive = false }
+        }
     }
 
     NavHost(
@@ -166,7 +190,9 @@ private fun ReVancedManager(vm: MainViewModel) {
                             requiresSourceSelection = true
                         )
                     )
-                }
+                },
+                bundleDeepLink = pendingBundleDeepLink,
+                onBundleDeepLinkConsumed = { pendingBundleDeepLink = null }
             )
         }
 
@@ -174,8 +200,8 @@ private fun ReVancedManager(vm: MainViewModel) {
             val data = it.toRoute<InstalledApplicationInfo>()
 
             InstalledAppInfoScreen(
-                onPatchClick = { packageName, selection ->
-                    vm.selectApp(packageName, selection)
+                onPatchClick = { packageName, selection, selectionPayload, persistConfiguration ->
+                    vm.selectApp(packageName, selection, selectionPayload, persistConfiguration)
                 },
                 onBackClick = navController::popBackStack,
                 viewModel = koinViewModel { parametersOf(data.packageName) }

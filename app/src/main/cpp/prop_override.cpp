@@ -37,6 +37,18 @@ extern "C" int property_get(const char *key, char *value, const char *default_va
         original = reinterpret_cast<property_get_ptr>(dlsym(RTLD_NEXT, "property_get"));
     }
 
+    if (!original) {
+        if (default_value) {
+            int len = strnlen(default_value, PROP_VALUE_MAX);
+            strncpy(value, default_value, len);
+            return len;
+        }
+        if (value) {
+            value[0] = '\0';
+        }
+        return 0;
+    }
+
     return original(key, value, default_value);
 }
 
@@ -56,6 +68,10 @@ std::string GetProperty(const std::string &key, const std::string &default_value
     static GetProperty_ptr original = NULL;
     if (!original) {
         original = reinterpret_cast<GetProperty_ptr>(dlsym(RTLD_NEXT, GET_PROPERTY_MANGLED_NAME));
+    }
+
+    if (!original) {
+        return default_value;
     }
 
     return original(key, default_value);

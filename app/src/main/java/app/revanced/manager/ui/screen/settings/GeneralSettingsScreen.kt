@@ -69,6 +69,7 @@ import app.revanced.manager.ui.component.GroupHeader
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsCard
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsDivider
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsItem
+import app.revanced.manager.ui.component.settings.ExpressiveSettingsSwitch
 import app.revanced.manager.ui.component.settings.SettingsSearchHighlight
 import app.revanced.manager.ui.model.navigation.Settings
 import app.revanced.manager.ui.theme.Theme
@@ -103,6 +104,7 @@ fun GeneralSettingsScreen(
     val dynamicColorEnabled by prefs.dynamicColor.getAsState()
     val themePresetSelectionEnabled by prefs.themePresetSelectionEnabled.getAsState()
     val selectedThemePresetName by prefs.themePresetSelectionName.getAsState()
+    val pureBlackOnSystemDark by prefs.pureBlackOnSystemDark.getAsState()
     val supportsDynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
     LaunchedEffect(searchTarget) {
@@ -321,6 +323,27 @@ fun GeneralSettingsScreen(
                         },
                         enabled = canAdjustAccentColor,
                         onClick = { showAccentPicker = true }
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.pure_black_follow_system,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(R.string.pure_black_follow_system),
+                        supportingContent = stringResource(R.string.pure_black_follow_system_description),
+                        trailingContent = {
+                            ExpressiveSettingsSwitch(
+                                checked = pureBlackOnSystemDark,
+                                onCheckedChange = viewModel::setPureBlackOnSystemDark,
+                                enabled = theme == Theme.SYSTEM
+                            )
+                        },
+                        enabled = theme == Theme.SYSTEM,
+                        onClick = { viewModel.setPureBlackOnSystemDark(!pureBlackOnSystemDark) }
                     )
                 }
             }

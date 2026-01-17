@@ -5,11 +5,17 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
 import app.universal.revanced.manager.R
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun TextInputDialog(
@@ -22,8 +28,12 @@ fun TextInputDialog(
     val (value, setValue) = rememberSaveable(initial) {
         mutableStateOf(initial)
     }
-    val valid = remember(value, validator) {
-        validator(value)
+    var valid by remember { mutableStateOf(false) }
+    val validatorRef by rememberUpdatedState(validator)
+    LaunchedEffect(value) {
+        valid = withContext(Dispatchers.Default) {
+            runCatching { validatorRef(value) }.getOrDefault(false)
+        }
     }
 
     AlertDialog(

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.items
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
@@ -22,8 +23,10 @@ import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -34,8 +37,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -62,6 +65,7 @@ import app.revanced.manager.util.saver.PathSaver
 import org.koin.compose.koinInject
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.util.Locale
 import kotlin.io.path.absolutePathString
 import kotlin.io.path.isDirectory
 import kotlin.io.path.isReadable
@@ -87,6 +91,13 @@ fun PathSelectorDialog(
     val pm = koinInject<PM>()
     val filesystem = koinInject<Filesystem>()
     val scope = rememberCoroutineScope()
+    val (permissionContract, permissionName) = remember { filesystem.permissionContract() }
+    var permissionGranted by remember { mutableStateOf(filesystem.hasStoragePermission()) }
+    var permissionRequested by rememberSaveable { mutableStateOf(false) }
+    val permissionLauncher =
+        rememberLauncherForActivityResult(permissionContract) { granted ->
+            permissionGranted = granted || filesystem.hasStoragePermission()
+        }
     val availableRoots = remember(roots) {
         roots.filter { runCatching { it.path.isReadable() }.getOrDefault(true) }.ifEmpty { roots }
     }
@@ -117,20 +128,48 @@ fun PathSelectorDialog(
     val notAtRootDir = remember(currentDirectory, currentRoot) {
         currentDirectory != currentRoot.path
     }
-    val entries = remember(currentDirectory) {
-        runCatching { currentDirectory.listDirectoryEntries().filter(Path::isReadable) }
-            .getOrDefault(emptyList())
+    LaunchedEffect(permissionGranted) {
+        if (!permissionGranted && !permissionRequested) {
+            permissionRequested = true
+            permissionLauncher.launch(permissionName)
+        }
+    }
+    val entries = remember(currentDirectory, permissionGranted) {
+        if (!permissionGranted) emptyList() else listDirectoryEntriesSafe(currentDirectory)
     }
     val directories = remember(entries) {
-        entries.filter(Path::isDirectory)
+        entries.filter(Path::isDirectory).sortedWith(PathNameComparator)
     }
     val files = remember(entries, fileFilter) {
-        entries.filterNot(Path::isDirectory).filter(fileFilter)
+        entries.filterNot(Path::isDirectory).filter(fileFilter).sortedWith(PathNameComparator)
+    }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    val normalizedQuery = searchQuery.trim()
+    val filteredDirectories = remember(directories, normalizedQuery) {
+        if (normalizedQuery.isBlank()) {
+            directories
+        } else {
+            directories.filter { it.name.contains(normalizedQuery, ignoreCase = true) }
+        }
+    }
+    val filteredFiles = remember(files, normalizedQuery) {
+        if (normalizedQuery.isBlank()) {
+            files
+        } else {
+            files.filter { it.name.contains(normalizedQuery, ignoreCase = true) }
+        }
+    }
+    val duplicateDirectoryNames = remember(directories) {
+        directories
+            .groupingBy { it.name.lowercase(Locale.ROOT) }
+            .eachCount()
+            .filterValues { it > 1 }
+            .keys
     }
     val favoriteSet: Set<String> by prefs.pathSelectorFavorites.getAsState()
     val favorites: List<Path> = remember(favoriteSet, fileFilter) {
         favoriteSet.mapNotNull { runCatching { Paths.get(it) }.getOrNull() }
-            .filter { it.isReadable() }
+            .filter { isReadableSafe(it) }
             .sortedBy { it.absolutePathString() }
             .filter { it.isDirectory() || fileFilter(it) }
     }
@@ -203,6 +242,28 @@ fun PathSelectorDialog(
                         icon = Icons.Outlined.Folder,
                         name = currentDirectory.toString(),
                         enabled = allowDirectorySelection
+                    )
+                }
+
+                item(key = "search") {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        label = { Text(stringResource(R.string.path_selector_search)) },
+                        singleLine = true,
+                        trailingIcon = {
+                            if (searchQuery.isNotBlank()) {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(
+                                        Icons.Filled.Close,
+                                        contentDescription = stringResource(R.string.clear)
+                                    )
+                                }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 8.dp)
                     )
                 }
 
@@ -295,21 +356,27 @@ fun PathSelectorDialog(
                     }
                 }
 
-                if (directories.isNotEmpty()) {
+                if (filteredDirectories.isNotEmpty()) {
                     item(key = "dirs_header") {
                         GroupHeader(title = stringResource(R.string.path_selector_dirs))
                     }
                 }
-                items(directories, key = { it.absolutePathString() }) {
+                items(filteredDirectories, key = { it.absolutePathString() }) {
+                    val nameKey = it.name.lowercase(Locale.ROOT)
                     PathItem(
                         onClick = { currentDirectory = it },
                         onLongClick = { handleFavoritePress(it) },
                         icon = Icons.Outlined.Folder,
-                        name = it.name
+                        name = it.name,
+                        supportingText = if (nameKey in duplicateDirectoryNames) {
+                            it.absolutePathString()
+                        } else {
+                            null
+                        }
                     )
                 }
 
-                if (files.isNotEmpty()) {
+                if (filteredFiles.isNotEmpty()) {
                     item(key = "files_header") {
                         val header = if (!fileTypeLabel.isNullOrBlank()) {
                             "${stringResource(R.string.path_selector_files)} ($fileTypeLabel)"
@@ -319,7 +386,7 @@ fun PathSelectorDialog(
                         GroupHeader(title = header)
                     }
                 }
-                items(files, key = { it.absolutePathString() }) {
+                items(filteredFiles, key = { it.absolutePathString() }) {
                     PathItem(
                         onClick = { onSelect(it) },
                         onLongClick = { handleFavoritePress(it) },
@@ -361,6 +428,20 @@ private fun fileIconForPath(path: Path): ImageVector {
         Icons.AutoMirrored.Outlined.InsertDriveFile
     }
 }
+
+private val PathNameComparator = compareBy<Path> { it.name.lowercase(Locale.ROOT) }
+    .thenBy { it.name }
+
+private fun listDirectoryEntriesSafe(path: Path): List<Path> {
+    val rawEntries = runCatching { path.listDirectoryEntries() }.getOrNull()
+        ?: runCatching { path.toFile().listFiles()?.map { it.toPath() }.orEmpty() }.getOrElse { emptyList() }
+    if (rawEntries.isEmpty()) return emptyList()
+    val readable = rawEntries.filter { isReadableSafe(it) }
+    return if (readable.isEmpty()) rawEntries else readable
+}
+
+private fun isReadableSafe(path: Path): Boolean =
+    runCatching { path.isReadable() }.getOrDefault(true)
 
 @Composable
 private fun ApkFileIcon(

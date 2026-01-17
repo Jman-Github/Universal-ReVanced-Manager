@@ -21,5 +21,6 @@ data class InstalledApp(
     @ColumnInfo(name = "original_package_name") val originalPackageName: String,
     @ColumnInfo(name = "version") val version: String,
     @ColumnInfo(name = "install_type") val installType: InstallType,
+    @ColumnInfo(name = "sort_order") val sortOrder: Int,
     @ColumnInfo(name = "selection_payload") val selectionPayload: PatchProfilePayload? = null
 )

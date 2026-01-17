@@ -108,7 +108,8 @@ class AppSelectorViewModel(
     var nonSuggestedVersionDialogSubject by mutableStateOf<SelectedApp.Local?>(null)
         private set
 
-    fun loadLabel(app: PackageInfo?) = with(pm) { app?.label() ?: "Not installed" }
+    fun loadLabel(app: PackageInfo?) =
+        with(pm) { app?.label() ?: this@AppSelectorViewModel.app.getString(R.string.not_installed) }
 
     fun dismissNonSuggestedVersionDialog() {
         nonSuggestedVersionDialogSubject = null
@@ -159,7 +160,7 @@ class AppSelectorViewModel(
             if (SplitApkPreparer.isSplitArchive(destination)) {
                 SelectedApp.Local(
                     packageName = destination.nameWithoutExtension,
-                    version = "unspecified",
+                    version = app.getString(R.string.app_version_unspecified),
                     file = destination,
                     temporary = true,
                     resolved = false
@@ -188,7 +189,7 @@ class AppSelectorViewModel(
         return if (SplitApkPreparer.isSplitArchive(destination)) {
             SelectedApp.Local(
                 packageName = destination.nameWithoutExtension,
-                version = "unspecified",
+                version = app.getString(R.string.app_version_unspecified),
                 file = destination,
                 temporary = true,
                 resolved = false

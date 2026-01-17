@@ -42,11 +42,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisallowComposableCalls
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
@@ -74,6 +76,8 @@ import app.revanced.manager.util.saver.snapshotStateSetSaver
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.transparentListItemColors
 import kotlinx.parcelize.Parcelize
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.koin.compose.koinInject
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
@@ -227,8 +231,13 @@ private object StringOptionEditor : OptionEditor<String> {
         var fieldValue by rememberSaveable(scope.value) {
             mutableStateOf(scope.value.orEmpty())
         }
-        val validatorFailed by remember {
-            derivedStateOf { !scope.option.validator(fieldValue) }
+        var validatorFailed by remember { mutableStateOf(false) }
+        val validatorRef by rememberUpdatedState(scope.option.validator)
+        LaunchedEffect(fieldValue) {
+            val failed = withContext(Dispatchers.Default) {
+                runCatching { !validatorRef(fieldValue) }.getOrDefault(true)
+            }
+            validatorFailed = failed
         }
 
         val fs: Filesystem = koinInject()

@@ -6,6 +6,7 @@ import app.revanced.manager.data.room.profile.PatchProfilePayload
 import app.revanced.manager.domain.bundles.PatchBundleSource
 import app.revanced.manager.domain.bundles.RemotePatchBundle
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
+import app.revanced.manager.patcher.morphe.MorpheRuntimeBridge
 import app.revanced.manager.patcher.patch.PatchBundle
 import app.revanced.manager.patcher.patch.PatchBundleInfo
 import app.revanced.manager.util.Options
@@ -33,6 +34,54 @@ fun PatchSelection.toPayload(
                 bundleUid = uid,
                 patches = patches.map { it.trim() }.filter { it.isNotEmpty() }.sorted(),
                 options = emptyMap(),
+                displayName = source?.displayTitle ?: info?.name,
+                sourceEndpoint = (source as? RemotePatchBundle)?.endpoint,
+                sourceName = source?.patchBundle?.manifestAttributes?.name ?: source?.name ?: info?.name,
+                version = info?.version,
+                optionDisplayInfo = emptyMap()
+            )
+        }
+    )
+}
+
+fun PatchSelection.toPayload(
+    sources: List<PatchBundleSource>,
+    bundleInfo: Map<Int, PatchBundleInfo.Global>,
+    options: Options
+): PatchProfilePayload? {
+    if (isEmpty()) return null
+    val sourceMap = sources.associateBy { it.uid }
+    return PatchProfilePayload(
+        entries.map { (uid, patches) ->
+            val source = sourceMap[uid]
+            val info = bundleInfo[uid]
+            val trimmedPatches = patches.map { it.trim() }.filter { it.isNotEmpty() }.sorted()
+            val selected = trimmedPatches.toSet()
+            val bundleOptions = options[uid].orEmpty()
+            val serializedOptions = buildMap<String, Map<String, Option.SerializedValue>> {
+                bundleOptions.forEach { (patchName, optionValues) ->
+                    if (selected.isNotEmpty() && patchName !in selected) return@forEach
+                    val serializedForPatch = mutableMapOf<String, Option.SerializedValue>()
+                    optionValues.forEach { (key, value) ->
+                        try {
+                            serializedForPatch[key] = Option.SerializedValue.fromValue(value)
+                        } catch (e: Option.SerializationException) {
+                            Log.w(
+                                tag,
+                                "Failed to serialize option $uid:$patchName:$key",
+                                e
+                            )
+                        }
+                    }
+                    if (serializedForPatch.isNotEmpty()) {
+                        put(patchName, serializedForPatch.toMap())
+                    }
+                }
+            }
+            PatchProfilePayload.Bundle(
+                bundleUid = uid,
+                patches = trimmedPatches,
+                options = serializedOptions,
                 displayName = source?.displayTitle ?: info?.name,
                 sourceEndpoint = (source as? RemotePatchBundle)?.endpoint,
                 sourceName = source?.patchBundle?.manifestAttributes?.name ?: source?.name ?: info?.name,
@@ -170,8 +219,12 @@ fun PatchProfilePayload.remapLocalBundles(
     localSources.forEach { source ->
         if (resolvedSignatures.containsKey(source.uid)) return@forEach
         val bundle = source.patchBundle ?: return@forEach
-        val names = runCatching { PatchBundle.Loader.metadata(bundle) }
+        val revancedNames = runCatching { PatchBundle.Loader.metadata(bundle) }
             .getOrNull()
+        val morpheNames = if (revancedNames == null) {
+            runCatching { MorpheRuntimeBridge.loadMetadata(bundle.patchesJar) }.getOrNull()
+        } else null
+        val names = (revancedNames ?: morpheNames)
             ?.map { it.name.trim().lowercase() }
             ?.toSet()
         if (!names.isNullOrEmpty()) resolvedSignatures[source.uid] = names

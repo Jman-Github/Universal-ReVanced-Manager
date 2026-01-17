@@ -4,9 +4,10 @@ import android.app.Application
 import android.content.Context
 import android.util.Log
 import androidx.annotation.StringRes
-import app.revanced.library.mostCommonCompatibleVersions
-import app.revanced.patcher.patch.Patch
+import app.revanced.library.mostCommonCompatibleVersions as revancedMostCommonCompatibleVersions
+import app.revanced.patcher.patch.Patch as RevancedPatch
 import app.universal.revanced.manager.R
+import app.universal.revanced.manager.BuildConfig
 import app.revanced.manager.data.platform.NetworkInfo
 import app.revanced.manager.data.redux.Action
 import app.revanced.manager.data.redux.ActionContext
@@ -21,16 +22,20 @@ import app.revanced.manager.domain.bundles.GitHubPullRequestBundle
 import app.revanced.manager.domain.bundles.JsonPatchBundle
 import app.revanced.manager.data.room.bundles.Source as SourceInfo
 import app.revanced.manager.domain.bundles.LocalPatchBundle
+import app.revanced.manager.domain.bundles.PatchBundleChangelogEntry
 import app.revanced.manager.domain.bundles.PatchBundleDownloadProgress
 import app.revanced.manager.domain.bundles.PatchBundleDownloadResult
 import app.revanced.manager.domain.bundles.RemotePatchBundle
 import app.revanced.manager.domain.bundles.PatchBundleSource
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
 import app.revanced.manager.domain.manager.PreferencesManager
+import app.revanced.manager.patcher.morphe.MorpheRuntimeBridge
 import app.revanced.manager.patcher.patch.PatchInfo
 import app.revanced.manager.patcher.patch.PatchBundle
 import app.revanced.manager.patcher.patch.PatchBundleInfo
+import app.revanced.manager.patcher.patch.PatchBundleType
 import app.revanced.manager.util.PatchSelection
+import app.revanced.manager.util.Options
 import app.revanced.manager.util.simpleMessage
 import app.revanced.manager.util.tag
 import app.revanced.manager.util.toast
@@ -70,6 +75,9 @@ import kotlin.collections.LinkedHashSet
 import kotlin.collections.joinToString
 import kotlin.collections.map
 import kotlin.text.ifEmpty
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 class PatchBundleRepository(
     private val app: Application,
@@ -95,6 +103,31 @@ class PatchBundleRepository(
     }
     val bundleInfoFlow = enabledBundlesInfoFlow
 
+    fun bundlesByType(type: PatchBundleType) = store.state.map { state ->
+        state.sources.mapNotNull { (uid, src) ->
+            val bundle = src.patchBundle ?: return@mapNotNull null
+            val info = state.info[uid] ?: return@mapNotNull null
+            if (info.bundleType != type) return@mapNotNull null
+            uid to bundle
+        }.toMap()
+    }
+
+    suspend fun selectionBundleTypes(selection: PatchSelection): Set<PatchBundleType> {
+        if (selection.isEmpty()) return emptySet()
+        val activeSelection = selection.filterValues { it.isNotEmpty() }
+        if (activeSelection.isEmpty()) return emptySet()
+        val info = allBundlesInfoFlow.first()
+        return activeSelection.keys.mapNotNull { uid -> info[uid]?.bundleType }.toSet()
+    }
+
+    suspend fun selectionBundleType(selection: PatchSelection): PatchBundleType? {
+        val types = selectionBundleTypes(selection)
+        return if (types.size == 1) types.first() else null
+    }
+
+    suspend fun selectionHasMixedBundleTypes(selection: PatchSelection): Boolean =
+        selectionBundleTypes(selection).size > 1
+
     fun scopedBundleInfoFlow(packageName: String, version: String?) = enabledBundlesInfoFlow.map {
         it.map { (_, bundleInfo) ->
             bundleInfo.forPackage(
@@ -106,17 +139,31 @@ class PatchBundleRepository(
 
     val patchCountsFlow = allBundlesInfoFlow.map { it.mapValues { (_, info) -> info.patches.size } }
 
-    val suggestedVersions = enabledBundlesInfoFlow.map {
-        val allPatches =
-            it.values.flatMap { bundle -> bundle.patches.map(PatchInfo::toPatcherPatch) }.toSet()
+    val suggestedVersions = enabledBundlesInfoFlow.map { bundleInfos ->
+        val revancedPatches = bundleInfos.values
+            .filter { it.bundleType == PatchBundleType.REVANCED }
+            .flatMap { info -> info.patches.map(PatchInfo::toPatcherPatch) }
+            .toSet()
+        val morphePatches = bundleInfos.values
+            .filter { it.bundleType == PatchBundleType.MORPHE }
+            .flatMap { info -> info.patches }
 
-        suggestedVersionsFor(allPatches)
+        val morpheSuggested = suggestedVersionsForMorphe(morphePatches)
+        val revancedSuggested = suggestedVersionsForRevanced(revancedPatches)
+        morpheSuggested + revancedSuggested
     }
 
     val suggestedVersionsByBundle = enabledBundlesInfoFlow.map { bundleInfos ->
         bundleInfos.mapValues { (_, info) ->
-            val patches = info.patches.map(PatchInfo::toPatcherPatch).toSet()
-            suggestedVersionsFor(patches)
+            when (info.bundleType) {
+                PatchBundleType.REVANCED -> {
+                    val patches = info.patches.map(PatchInfo::toPatcherPatch).toSet()
+                    suggestedVersionsForRevanced(patches)
+                }
+                PatchBundleType.MORPHE -> {
+                    suggestedVersionsForMorphe(info.patches)
+                }
+            }
         }
     }
 
@@ -132,6 +179,10 @@ class PatchBundleRepository(
     private val updateJobMutex = Mutex()
     private var updateJob: Job? = null
     private val updateStateMutex = Mutex()
+    private val changelogHistoryMutex = Mutex()
+    private val bundleCacheMutex = Mutex()
+    @Volatile
+    private var bundleCacheInitialized = false
     @Volatile
     private var activeUpdateUids: Set<Int> = emptySet()
     @Volatile
@@ -146,6 +197,11 @@ class PatchBundleRepository(
     private var localImportTotalSteps = 0
 
     private var bundleImportAutoClearJob: Job? = null
+    private var bundleUpdateAutoClearJob: Job? = null
+    private val changelogHistoryJson = Json {
+        encodeDefaults = true
+        ignoreUnknownKeys = true
+    }
 
     fun setBundleImportProgress(progress: ImportProgress?) {
         bundleImportProgressFlow.value = progress
@@ -171,6 +227,25 @@ class PatchBundleRepository(
                 (current.phase != BundleImportPhase.Downloading || currentDownloadComplete)
             if (currentDone) {
                 bundleImportProgressFlow.value = null
+            }
+        }
+    }
+
+    private fun cancelBundleUpdateAutoClear() {
+        bundleUpdateAutoClearJob?.cancel()
+        bundleUpdateAutoClearJob = null
+    }
+
+    private fun scheduleBundleUpdateProgressClear() {
+        cancelBundleUpdateAutoClear()
+        val current = bundleUpdateProgressFlow.value ?: return
+        if (current.total <= 0 || current.completed < current.total) return
+
+        bundleUpdateAutoClearJob = scope.launch {
+            delay(8_000)
+            val progress = bundleUpdateProgressFlow.value ?: return@launch
+            if (progress.total > 0 && progress.completed >= progress.total) {
+                bundleUpdateProgressFlow.value = null
             }
         }
     }
@@ -217,6 +292,7 @@ class PatchBundleRepository(
     private suspend fun updateProgressAfterRemoval(affectedCount: Int, remaining: Int) {
         if (affectedCount <= 0) return
         if (remaining <= 0) {
+            cancelBundleUpdateAutoClear()
             bundleUpdateProgressFlow.value = null
             cancelUpdateJob()
             return
@@ -257,6 +333,76 @@ class PatchBundleRepository(
     private fun localImportBaseSteps(): Int = localImportProcessedSteps
 
     private fun localImportTotalSteps(): Int = localImportTotalSteps.coerceAtLeast(LOCAL_IMPORT_STEPS)
+
+    private fun changelogHistoryFile(uid: Int): File =
+        directoryOf(uid).resolve("changelog_history.json")
+
+    suspend fun getChangelogHistory(uid: Int): List<PatchBundleChangelogEntry> =
+        withContext(Dispatchers.IO) {
+            changelogHistoryMutex.withLock {
+                readChangelogHistoryInternal(uid)
+            }
+        }
+
+    suspend fun setChangelogHistory(uid: Int, entries: List<PatchBundleChangelogEntry>) {
+        withContext(Dispatchers.IO) {
+            changelogHistoryMutex.withLock {
+                writeChangelogHistoryInternal(uid, entries)
+            }
+        }
+    }
+
+    suspend fun recordChangelog(uid: Int, asset: app.revanced.manager.network.dto.ReVancedAsset) {
+        val entry = PatchBundleChangelogEntry.fromAsset(asset)
+        withContext(Dispatchers.IO) {
+            changelogHistoryMutex.withLock {
+                val current = readChangelogHistoryInternal(uid)
+                val updated = current
+                    .filterNot { isSameChangelogEntry(it, entry) }
+                    .toMutableList()
+                updated.add(0, entry)
+                writeChangelogHistoryInternal(uid, updated)
+            }
+        }
+    }
+
+    private fun isSameChangelogEntry(
+        existing: PatchBundleChangelogEntry,
+        candidate: PatchBundleChangelogEntry
+    ): Boolean {
+        val existingVersion = existing.version.trim()
+        val candidateVersion = candidate.version.trim()
+        if (candidateVersion.isNotBlank() && existingVersion.equals(candidateVersion, ignoreCase = true)) {
+            return true
+        }
+        val published = candidate.publishedAtMillis
+        return published != null &&
+            published > 0 &&
+            existing.publishedAtMillis == published &&
+            existing.description.trim() == candidate.description.trim()
+    }
+
+    private fun readChangelogHistoryInternal(uid: Int): List<PatchBundleChangelogEntry> {
+        val file = changelogHistoryFile(uid)
+        if (!file.exists()) return emptyList()
+        val content = runCatching { file.readText() }.getOrDefault("")
+        if (content.isBlank()) return emptyList()
+        return runCatching {
+            changelogHistoryJson.decodeFromString<List<PatchBundleChangelogEntry>>(content)
+        }.getOrDefault(emptyList())
+    }
+
+    private fun writeChangelogHistoryInternal(uid: Int, entries: List<PatchBundleChangelogEntry>) {
+        val file = changelogHistoryFile(uid)
+        if (entries.isEmpty()) {
+            runCatching { file.delete() }
+            return
+        }
+        file.parentFile?.mkdirs()
+        runCatching {
+            file.writeText(changelogHistoryJson.encodeToString(entries))
+        }
+    }
 
     private fun setLocalImportProgress(
         baseProcessed: Int,
@@ -361,6 +507,9 @@ class PatchBundleRepository(
     suspend fun snapshotSelection(selection: PatchSelection) =
         selection.toPayload(sources.first(), bundleInfoFlow.first())
 
+    suspend fun snapshotSelection(selection: PatchSelection, options: Options) =
+        selection.toPayload(sources.first(), bundleInfoFlow.first(), options)
+
     private suspend inline fun dispatchAction(
         name: String,
         crossinline block: suspend ActionContext.(current: State) -> State
@@ -378,6 +527,17 @@ class PatchBundleRepository(
         val entities = loadEntitiesEnforcingOfficialOrder()
 
         val sources = entities.associate { it.uid to it.load() }.toMutableMap()
+        val entityByUid = entities.associateBy { it.uid }
+        sources.forEach { (uid, source) ->
+            val remote = source as? RemotePatchBundle ?: return@forEach
+            val entity = entityByUid[uid] ?: return@forEach
+            val bundleVersion = remote.version?.takeUnless { it.isBlank() } ?: return@forEach
+            val bundleNormalized = normalizeVersionForCompare(bundleVersion) ?: return@forEach
+            val storedNormalized = normalizeVersionForCompare(entity.versionHash)
+            if (storedNormalized == bundleNormalized) return@forEach
+            updateDb(uid) { it.copy(versionHash = bundleVersion) }
+            sources[uid] = entity.copy(versionHash = bundleVersion).load()
+        }
 
         val hasOutOfDateNames = sources.values.any { it.isNameOutOfDate }
         if (hasOutOfDateNames) dispatchAction(
@@ -451,6 +611,151 @@ class PatchBundleRepository(
         return all
     }
 
+    private data class BundleDigestInfo(
+        val hash: String,
+        val size: Long,
+        val lastModified: Long,
+    )
+
+    private fun bundleDigestFile(uid: Int) = directoryOf(uid).resolve("patches.sha256")
+
+    private fun readBundleDigestInfo(uid: Int): BundleDigestInfo? {
+        val file = bundleDigestFile(uid)
+        if (!file.exists()) return null
+        val content = runCatching { file.readText() }.getOrDefault("").trim()
+        if (content.isBlank()) return null
+        val parts = content.split('|')
+        if (parts.size < 3) return null
+        val hash = parts[0].trim().takeIf { it.isNotEmpty() } ?: return null
+        val size = parts[1].toLongOrNull() ?: return null
+        val lastModified = parts[2].toLongOrNull() ?: return null
+        return BundleDigestInfo(hash, size, lastModified)
+    }
+
+    private fun writeBundleDigestInfo(uid: Int, info: BundleDigestInfo) {
+        val file = bundleDigestFile(uid)
+        file.parentFile?.mkdirs()
+        runCatching { file.writeText("${info.hash}|${info.size}|${info.lastModified}") }
+    }
+
+    private fun computeBundleHash(file: File): String? {
+        return runCatching {
+            val digest = MessageDigest.getInstance("SHA-256")
+            file.inputStream().use { input ->
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read == -1) break
+                    digest.update(buffer, 0, read)
+                }
+            }
+            val bytes = digest.digest()
+            val hexChars = "0123456789abcdef".toCharArray()
+            val result = CharArray(bytes.size * 2)
+            var index = 0
+            for (byte in bytes) {
+                val value = byte.toInt() and 0xff
+                result[index++] = hexChars[value ushr 4]
+                result[index++] = hexChars[value and 0x0f]
+            }
+            String(result)
+        }.getOrNull()
+    }
+
+    private fun clearBundleOdex(uid: Int) {
+        runCatching {
+            val oatDir = directoryOf(uid).resolve("oat")
+            if (oatDir.exists()) oatDir.deleteRecursively()
+        }
+    }
+
+    private fun clearAllBundleOdex() {
+        runCatching {
+            bundlesDir.listFiles()?.forEach { dir ->
+                val oatDir = dir.resolve("oat")
+                if (oatDir.exists()) oatDir.deleteRecursively()
+            }
+        }
+    }
+
+    private suspend fun ensureBundleCacheInitialized() {
+        if (bundleCacheInitialized) return
+        bundleCacheMutex.withLock {
+            if (bundleCacheInitialized) return
+            val currentVersion = BuildConfig.VERSION_CODE
+            val cachedVersion = prefs.patchBundleCacheVersionCode.get()
+            if (cachedVersion != currentVersion) {
+                withContext(Dispatchers.IO) {
+                    clearAllBundleOdex()
+                }
+                prefs.patchBundleCacheVersionCode.update(currentVersion)
+            }
+            bundleCacheInitialized = true
+        }
+    }
+
+    private suspend fun ensureBundleCacheValid(uid: Int, bundle: PatchBundle) {
+        withContext(Dispatchers.IO) {
+            val file = File(bundle.patchesJar)
+            if (!file.exists()) return@withContext
+
+            val size = runCatching { file.length() }.getOrDefault(0L)
+            val lastModified = runCatching { file.lastModified() }.getOrDefault(0L)
+            val existing = readBundleDigestInfo(uid)
+            if (existing != null && existing.size == size && existing.lastModified == lastModified) {
+                return@withContext
+            }
+
+            val hash = computeBundleHash(file) ?: return@withContext
+            val changed = existing == null || existing.hash != hash
+            if (changed) {
+                clearBundleOdex(uid)
+            }
+            writeBundleDigestInfo(uid, BundleDigestInfo(hash, size, lastModified))
+        }
+    }
+
+    private fun loadBundleMetadataInternal(bundle: PatchBundle): Pair<PatchBundleType, List<PatchInfo>> {
+        val bundlePath = bundle.patchesJar
+        val extension = File(bundlePath).extension.lowercase(Locale.US)
+        if (extension == "rvp") {
+            return PatchBundleType.REVANCED to PatchBundle.Loader.metadata(bundle)
+        }
+        if (extension == "mpp") {
+            return PatchBundleType.MORPHE to MorpheRuntimeBridge.loadMetadata(bundlePath)
+        }
+
+        val revancedResult = runCatching { PatchBundle.Loader.metadata(bundle) }
+        if (revancedResult.isSuccess) {
+            return PatchBundleType.REVANCED to revancedResult.getOrThrow()
+        }
+
+        val morpheResult = runCatching { MorpheRuntimeBridge.loadMetadata(bundlePath) }
+        if (morpheResult.isSuccess) {
+            return PatchBundleType.MORPHE to morpheResult.getOrThrow()
+        }
+
+        val error = IllegalStateException("Failed to load patch bundle metadata")
+        revancedResult.exceptionOrNull()?.let(error::addSuppressed)
+        morpheResult.exceptionOrNull()?.let(error::addSuppressed)
+        throw error
+    }
+
+    private suspend fun loadBundleMetadata(uid: Int, bundle: PatchBundle): Pair<PatchBundleType, List<PatchInfo>> {
+        ensureBundleCacheValid(uid, bundle)
+        val initial = runCatching { loadBundleMetadataInternal(bundle) }
+        if (initial.isSuccess) return initial.getOrThrow()
+
+        clearBundleOdex(uid)
+        val retry = runCatching { loadBundleMetadataInternal(bundle) }
+        if (retry.isSuccess) return retry.getOrThrow()
+
+        val error = IllegalStateException("Failed to load patch bundle metadata")
+        initial.exceptionOrNull()?.let(error::addSuppressed)
+        retry.exceptionOrNull()?.let(error::addSuppressed)
+        throw error
+    }
+
     private suspend fun loadMetadata(sources: Map<Int, PatchBundleSource>): Map<Int, PatchBundleInfo.Global> {
         // Map bundles -> sources
         val map = sources.mapNotNull { (_, src) ->
@@ -459,23 +764,27 @@ class PatchBundleRepository(
 
         if (map.isEmpty()) return emptyMap()
 
-        val failures = mutableListOf<Pair<Int, Throwable>>()
+        ensureBundleCacheInitialized()
 
-        val metadata = map.mapNotNull { (bundle, src) ->
+        val failures = mutableListOf<Pair<Int, Throwable>>()
+        val metadata = mutableMapOf<Int, PatchBundleInfo.Global>()
+
+        for ((bundle, src) in map) {
             try {
-                src.uid to PatchBundleInfo.Global(
+                val (bundleType, patches) = loadBundleMetadata(src.uid, bundle)
+                metadata[src.uid] = PatchBundleInfo.Global(
                     src.displayTitle,
                     bundle.manifestAttributes?.version,
                     src.uid,
+                    bundleType,
                     src.enabled,
-                    PatchBundle.Loader.metadata(bundle)
+                    patches
                 )
             } catch (error: Throwable) {
                 failures += src.uid to error
                 Log.e(tag, "Failed to load bundle ${src.name}", error)
-                null
             }
-        }.toMap()
+        }
 
         if (failures.isNotEmpty()) {
             dispatchAction("Mark bundles as failed") { state ->
@@ -886,6 +1195,71 @@ class PatchBundleRepository(
         return result
     }
 
+    suspend fun updateRemoteEndpoint(
+        src: RemotePatchBundle,
+        newUrl: String,
+        onProgress: PatchBundleDownloadProgress? = null,
+    ): Boolean {
+        val normalizedUrl = try {
+            normalizeRemoteBundleUrl(newUrl)
+        } catch (e: IllegalArgumentException) {
+            withContext(Dispatchers.Main) {
+                app.toast(e.message ?: "Invalid bundle URL")
+            }
+            return false
+        }
+
+        if (normalizedUrl == src.endpoint) return false
+
+        dispatchAction("Update bundle url (${src.uid})") { state ->
+            val props = dao.getProps(src.uid) ?: return@dispatchAction state
+            val now = System.currentTimeMillis()
+            updateDb(src.uid) {
+                it.copy(
+                    source = SourceInfo.from(normalizedUrl),
+                    versionHash = null,
+                    lastNotifiedVersion = null,
+                    updatedAt = now
+                )
+            }
+            val updatedProps = props.copy(
+                source = SourceInfo.from(normalizedUrl),
+                versionHash = null,
+                lastNotifiedVersion = null,
+                updatedAt = now
+            )
+            val entity = PatchBundleEntity(
+                uid = src.uid,
+                name = updatedProps.name,
+                displayName = updatedProps.displayName,
+                versionHash = updatedProps.versionHash,
+                source = updatedProps.source,
+                autoUpdate = updatedProps.autoUpdate,
+                searchUpdate = updatedProps.searchUpdate,
+                lastNotifiedVersion = updatedProps.lastNotifiedVersion,
+                enabled = updatedProps.enabled,
+                sortOrder = updatedProps.sortOrder,
+                createdAt = updatedProps.createdAt,
+                updatedAt = updatedProps.updatedAt
+            )
+            val updatedSource = entity.load()
+            State(
+                sources = state.sources.put(src.uid, updatedSource),
+                info = state.info.remove(src.uid)
+            )
+        }
+
+        val updatedSource = store.state.value.sources[src.uid] as? RemotePatchBundle ?: return false
+        val allowUnsafeDownload = prefs.allowMeteredUpdates.get()
+        return updateNow(
+            force = true,
+            allowUnsafeNetwork = allowUnsafeDownload,
+            onPerBundleProgress = { bundle, bytesRead, bytesTotal ->
+                if (bundle.uid == updatedSource.uid) onProgress?.invoke(bytesRead, bytesTotal)
+            }
+        ) { it.uid == updatedSource.uid }
+    }
+
     suspend fun updateTimestamps(src: PatchBundleSource, createdAt: Long?, updatedAt: Long?) {
         if (createdAt == null && updatedAt == null) return
 
@@ -1250,6 +1624,7 @@ class PatchBundleRepository(
         force: Boolean = false,
         allowUnsafeNetwork: Boolean = false,
         onPerBundleProgress: ((bundle: RemotePatchBundle, bytesRead: Long, bytesTotal: Long?) -> Unit)? = null,
+        onBundleUpdated: ((bundle: RemotePatchBundle, updatedName: String?) -> Unit)? = null,
         predicate: (bundle: RemotePatchBundle) -> Boolean = { true },
     ): Boolean {
         while (true) {
@@ -1271,6 +1646,7 @@ class PatchBundleRepository(
                 showToast = false,
                 allowUnsafeNetwork = allowUnsafeNetwork,
                 onPerBundleProgress = onPerBundleProgress,
+                onBundleUpdated = onBundleUpdated,
                 predicate = predicate
             )
         } finally {
@@ -1305,7 +1681,7 @@ class PatchBundleRepository(
     suspend fun fetchUpdatesAndNotify(
         context: Context,
         predicate: (bundle: RemotePatchBundle) -> Boolean = { true },
-        onNotification: (bundleName: String, bundleVersion: String) -> Boolean
+        onNotification: (bundle: RemotePatchBundle, bundleVersion: String) -> Boolean
     ): Boolean = coroutineScope {
         val allowMeteredUpdates = prefs.allowMeteredUpdates.get()
         if (!allowMeteredUpdates && !networkInfo.isSafe()) {
@@ -1326,15 +1702,16 @@ class PatchBundleRepository(
                     return@forEach
                 }
 
-                val latestSignature = info.version.takeUnless { it.isBlank() }
-                val installedSignature = bundle.installedVersionSignature
-                val hasUpdate = latestSignature == null || installedSignature != latestSignature
-                if (!hasUpdate) return@forEach
+                val latestSignature = normalizeVersionForCompare(info.version) ?: return@forEach
+                val installedSignature = normalizeVersionForCompare(bundle.installedVersionSignature)
+                val manifestSignature = normalizeVersionForCompare(bundle.version)
+                val currentSignature = installedSignature ?: manifestSignature ?: return@forEach
+                if (currentSignature == latestSignature) return@forEach
 
-                val versionLabel = latestSignature ?: bundle.version ?: return@forEach
-                if (bundle.lastNotifiedVersion == versionLabel) return@forEach
+                val versionLabel = latestSignature
+                if (normalizeVersionForCompare(bundle.lastNotifiedVersion) == versionLabel) return@forEach
 
-                val notified = onNotification(bundle.displayTitle, versionLabel)
+                val notified = onNotification(bundle, info.version)
                 if (notified) {
                     updateLastNotifiedVersion(bundle.uid, versionLabel)
                     notifiedAny = true
@@ -1421,6 +1798,7 @@ class PatchBundleRepository(
                             showToast = request.showToast,
                             allowUnsafeNetwork = request.allowUnsafeNetwork,
                             onPerBundleProgress = request.onPerBundleProgress,
+                            onBundleUpdated = null,
                             predicate = request.predicate
                         )
                     } finally {
@@ -1451,12 +1829,15 @@ class PatchBundleRepository(
         showToast: Boolean,
         allowUnsafeNetwork: Boolean,
         onPerBundleProgress: ((bundle: RemotePatchBundle, bytesRead: Long, bytesTotal: Long?) -> Unit)?,
+        onBundleUpdated: ((bundle: RemotePatchBundle, updatedName: String?) -> Unit)?,
         predicate: (bundle: RemotePatchBundle) -> Boolean,
     ): Boolean = coroutineScope {
         try {
+            cancelBundleUpdateAutoClear()
             val allowMeteredUpdates = prefs.allowMeteredUpdates.get()
             if (!allowUnsafeNetwork && !allowMeteredUpdates && !networkInfo.isSafe()) {
                 Log.d(tag, "Skipping update check because the network is down or metered.")
+                cancelBundleUpdateAutoClear()
                 bundleUpdateProgressFlow.value = null
                 return@coroutineScope false
             }
@@ -1467,6 +1848,7 @@ class PatchBundleRepository(
 
             if (targets.isEmpty()) {
                 if (showToast) toast(R.string.patches_update_unavailable)
+                cancelBundleUpdateAutoClear()
                 bundleUpdateProgressFlow.value = null
                 return@coroutineScope false
             }
@@ -1503,6 +1885,7 @@ class PatchBundleRepository(
                         bytesRead = 0L,
                         bytesTotal = null,
                     )
+                    onPerBundleProgress?.invoke(bundle, 0L, null)
 
                     val onProgress: PatchBundleDownloadProgress = { bytesRead, bytesTotal ->
                         if (isRemoteUpdateCancelled(bundle.uid)) {
@@ -1548,6 +1931,8 @@ class PatchBundleRepository(
 
                     if (result != null) {
                         results[bundle] = result
+                        runCatching { recordChangelog(bundle.uid, bundle.fetchLatestReleaseInfo()) }
+                        onBundleUpdated?.invoke(bundle, downloadedName)
                     }
                 }
 
@@ -1557,7 +1942,7 @@ class PatchBundleRepository(
                 toast(R.string.patches_download_fail, e.simpleMessage())
                 emptyMap()
             } finally {
-                bundleUpdateProgressFlow.value = null
+                scheduleBundleUpdateProgressClear()
             }
 
             if (updated.isEmpty()) {
@@ -1633,12 +2018,14 @@ class PatchBundleRepository(
                     async {
                         try {
                             val info = bundle.fetchLatestReleaseInfo()
-                            val latestSignature = info.version.takeUnless { it.isBlank() }
-                            val installedSignature = bundle.installedVersionSignature
-                            val hasUpdate = latestSignature == null || installedSignature != latestSignature
-                            if (!hasUpdate) return@async bundle.uid to null
+                            val latestSignature = normalizeVersionForCompare(info.version)
+                                ?: return@async bundle.uid to null
+                            val installedSignature = normalizeVersionForCompare(bundle.installedVersionSignature)
+                                ?: normalizeVersionForCompare(bundle.version)
+                                ?: return@async bundle.uid to null
+                            if (installedSignature == latestSignature) return@async bundle.uid to null
                             bundle.uid to ManualBundleUpdateInfo(
-                                latestVersion = latestSignature ?: bundle.version,
+                                latestVersion = info.version,
                                 pageUrl = info.pageUrl
                             )
                         } catch (t: Throwable) {
@@ -1663,13 +2050,40 @@ class PatchBundleRepository(
         }
     }
 
-    private fun suggestedVersionsFor(patches: Set<Patch<*>>): Map<String, String?> {
-        val versionCounts = patches.mostCommonCompatibleVersions(countUnusedPatches = true)
+    private fun suggestedVersionsForRevanced(patches: Set<RevancedPatch<*>>): Map<String, String?> {
+        val versionCounts = patches.revancedMostCommonCompatibleVersions(countUnusedPatches = true)
 
         return versionCounts.mapValues { (_, versions) ->
             if (versions.keys.size < 2) {
                 return@mapValues versions.keys.firstOrNull()
             }
+
+            var currentHighestPatchCount = -1
+            versions.entries.last { (_, patchCount) ->
+                if (patchCount >= currentHighestPatchCount) {
+                    currentHighestPatchCount = patchCount
+                    true
+                } else false
+            }.key
+        }
+    }
+
+    private fun suggestedVersionsForMorphe(patches: Iterable<PatchInfo>): Map<String, String?> {
+        val versionCounts = mutableMapOf<String, MutableMap<String, Int>>()
+
+        patches.forEach { patch ->
+            patch.compatiblePackages?.forEach { pkg ->
+                val versions = pkg.versions ?: return@forEach
+                val counts = versionCounts.getOrPut(pkg.packageName) { linkedMapOf() }
+                versions.sorted().forEach { version ->
+                    counts[version] = (counts[version] ?: 0) + 1
+                }
+            }
+        }
+
+        return versionCounts.mapValues { (_, versions) ->
+            if (versions.isEmpty()) return@mapValues null
+            if (versions.keys.size < 2) return@mapValues versions.keys.firstOrNull()
 
             var currentHighestPatchCount = -1
             versions.entries.last { (_, patchCount) ->
@@ -1734,6 +2148,14 @@ class PatchBundleRepository(
         val latestVersion: String?,
         val pageUrl: String?,
     )
+
+    private fun normalizeVersionForCompare(raw: String?): String? {
+        val trimmed = raw?.trim().orEmpty()
+        if (trimmed.isEmpty()) return null
+        val noPrefix = trimmed.removePrefix("v").removePrefix("V")
+        val noBuild = noPrefix.substringBefore('+')
+        return noBuild.ifBlank { null }
+    }
 
     private companion object {
         const val DEFAULT_SOURCE_UID = 0

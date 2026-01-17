@@ -27,12 +27,17 @@ class PatchSelectionRepository(db: AppDatabase) {
             .filterValues { it.isNotEmpty() }
 
     suspend fun updateSelection(packageName: String, selection: Map<Int, Set<String>>) =
-        dao.updateSelections(selection.mapKeys { (sourceUid, _) ->
-            getOrCreateSelection(
-                sourceUid,
-                packageName
-            )
-        })
+        if (selection.isEmpty()) {
+            dao.resetForPackage(packageName)
+        } else {
+            dao.pruneSelections(packageName, selection.keys)
+            dao.updateSelections(selection.mapKeys { (sourceUid, _) ->
+                getOrCreateSelection(
+                    sourceUid,
+                    packageName
+                )
+            })
+        }
 
     fun getPackagesWithSavedSelection() =
         dao.getPackagesWithSelection().map(Iterable<String>::toSet).distinctUntilChanged()

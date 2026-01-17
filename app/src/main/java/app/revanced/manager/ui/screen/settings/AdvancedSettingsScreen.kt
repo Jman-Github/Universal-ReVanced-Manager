@@ -676,6 +676,20 @@ fun AdvancedSettingsScreen(
                 }
                 ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
+                    targetKey = R.string.skip_unneeded_split_apks,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.skipUnneededSplitApks,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.skip_unneeded_split_apks,
+                        description = R.string.skip_unneeded_split_apks_description,
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
                     targetKey = R.string.process_runtime,
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }

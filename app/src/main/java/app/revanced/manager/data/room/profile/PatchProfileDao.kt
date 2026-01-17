@@ -8,10 +8,10 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface PatchProfileDao {
-    @Query("SELECT * FROM patch_profiles ORDER BY created_at DESC")
+    @Query("SELECT * FROM patch_profiles ORDER BY sort_order ASC, uid DESC")
     fun observeAll(): Flow<List<PatchProfileEntity>>
 
-    @Query("SELECT * FROM patch_profiles WHERE package_name = :packageName ORDER BY created_at DESC")
+    @Query("SELECT * FROM patch_profiles WHERE package_name = :packageName ORDER BY sort_order ASC, uid DESC")
     fun observeForPackage(packageName: String): Flow<List<PatchProfileEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -20,7 +20,7 @@ interface PatchProfileDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(profiles: List<PatchProfileEntity>)
 
-    @Query("SELECT * FROM patch_profiles ORDER BY created_at DESC")
+    @Query("SELECT * FROM patch_profiles ORDER BY sort_order ASC, uid DESC")
     suspend fun getAll(): List<PatchProfileEntity>
 
     @Query("SELECT * FROM patch_profiles WHERE package_name = :packageName AND name = :name LIMIT 1")
@@ -34,4 +34,10 @@ interface PatchProfileDao {
 
     @Query("SELECT * FROM patch_profiles WHERE uid = :uid")
     suspend fun get(uid: Int): PatchProfileEntity?
+
+    @Query("SELECT MAX(sort_order) FROM patch_profiles")
+    suspend fun getMaxSortOrder(): Int?
+
+    @Query("UPDATE patch_profiles SET sort_order = :sortOrder WHERE uid = :uid")
+    suspend fun updateSortOrder(uid: Int, sortOrder: Int)
 }

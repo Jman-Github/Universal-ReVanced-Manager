@@ -67,6 +67,7 @@ import org.koin.compose.koinInject
 
 @Composable
 fun BundleItem(
+    modifier: Modifier = Modifier,
     src: PatchBundleSource,
     patchCount: Int,
     manualUpdateInfo: PatchBundleRepository.ManualBundleUpdateInfo?,
@@ -227,7 +228,7 @@ fun BundleItem(
     val cardShape = RoundedCornerShape(16.dp)
 
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .clip(cardShape)

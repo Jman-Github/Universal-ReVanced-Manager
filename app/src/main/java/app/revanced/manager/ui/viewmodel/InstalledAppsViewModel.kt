@@ -8,11 +8,13 @@ import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.data.room.apps.installed.InstallType
 import app.revanced.manager.data.room.apps.installed.InstalledApp
 import app.revanced.manager.data.room.profile.PatchProfilePayload
+import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.bundles.PatchBundleSource
 import app.revanced.manager.domain.installer.RootInstaller
 import app.revanced.manager.domain.installer.RootServiceException
 import app.revanced.manager.domain.repository.InstalledAppRepository
 import app.revanced.manager.domain.repository.PatchBundleRepository
+import app.revanced.manager.util.FilenameUtils
 import app.revanced.manager.util.PM
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.mutableStateSetOf
@@ -29,9 +31,16 @@ class InstalledAppsViewModel(
     private val patchBundleRepository: PatchBundleRepository,
     private val pm: PM,
     private val rootInstaller: RootInstaller,
-    private val filesystem: Filesystem
+    private val filesystem: Filesystem,
+    private val prefs: PreferencesManager
 ) : ViewModel() {
-    val apps = installedAppsRepository.getAll().flowOn(Dispatchers.IO)
+    val apps = combine(
+        installedAppsRepository.getAll(),
+        prefs.enableSavedApps.flow
+    ) { installedApps, savedAppsEnabled ->
+        if (savedAppsEnabled) installedApps
+        else installedApps.filter { it.installType != InstallType.SAVED }
+    }.flowOn(Dispatchers.IO)
 
     val packageInfoMap = mutableStateMapOf<String, PackageInfo?>()
     val selectedApps = mutableStateSetOf<String>()
@@ -128,6 +137,10 @@ class InstalledAppsViewModel(
         selectedApps.clear()
     }
 
+    fun reorderApps(orderedPackageNames: List<String>) = viewModelScope.launch(Dispatchers.IO) {
+        installedAppsRepository.reorderApps(orderedPackageNames)
+    }
+
     fun deleteSelectedApps() = viewModelScope.launch {
         if (selectedApps.isEmpty()) return@launch
 
@@ -203,11 +216,31 @@ class InstalledAppsViewModel(
             when (installedApp.installType) {
                 InstallType.SAVED -> {
                     val savedFile = filesystem.getPatchedAppFile(packageName, installedApp.version)
-                    if (!savedFile.exists()) {
-                        installedAppsRepository.delete(installedApp)
+                    val resolvedFile = if (savedFile.exists()) {
+                        savedFile
+                    } else {
+                        filesystem.findPatchedAppFile(packageName)
+                    }
+                    if (resolvedFile == null) {
                         return@withContext null
                     }
-                    pm.getPackageInfo(savedFile)
+                    if (resolvedFile != savedFile) {
+                        val safePackage = FilenameUtils.sanitize(packageName)
+                        val recoveredVersion = resolvedFile.name
+                            .removePrefix("${safePackage}_")
+                            .removeSuffix(".apk")
+                            .ifBlank { installedApp.version }
+                        val selection = installedAppsRepository.getAppliedPatches(packageName)
+                        installedAppsRepository.addOrUpdate(
+                            currentPackageName = installedApp.currentPackageName,
+                            originalPackageName = installedApp.originalPackageName,
+                            version = recoveredVersion,
+                            installType = installedApp.installType,
+                            patchSelection = selection,
+                            selectionPayload = installedApp.selectionPayload
+                        )
+                    }
+                    pm.getPackageInfo(resolvedFile)
                 }
 
                 else -> {

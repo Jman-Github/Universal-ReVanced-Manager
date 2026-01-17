@@ -23,6 +23,7 @@ import app.revanced.manager.domain.repository.SerializedSelection
 import app.revanced.manager.domain.bundles.PatchBundleSource
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
+import app.revanced.manager.domain.bundles.PatchBundleChangelogEntry
 import app.revanced.manager.domain.repository.remapLocalBundles
 import app.revanced.manager.data.room.bundles.Source as SourceInfo
 import app.revanced.manager.util.tag
@@ -123,7 +124,8 @@ data class PatchBundleSnapshot(
     val officialAutoUpdate: Boolean? = null,
     val officialUsePrereleases: Boolean? = null,
     val createdAt: Long? = null,
-    val updatedAt: Long? = null
+    val updatedAt: Long? = null,
+    val changelogHistory: List<PatchBundleChangelogEntry> = emptyList()
 )
 
 @Serializable
@@ -502,8 +504,11 @@ class ImportExportViewModel(
                                 val current = endpointToSource[endpoint]
                                 if (current != null) {
                                     var changed = false
-                                    if (current.displayName != targetDisplayName) {
-                                        val result = patchBundleRepository.setDisplayName(current.uid, targetDisplayName)
+                                    val normalizedDisplayName =
+                                        current.displayName?.takeUnless { it.isBlank() }
+                                    if (normalizedDisplayName != targetDisplayName) {
+                                        val result =
+                                            patchBundleRepository.setDisplayName(current.uid, targetDisplayName)
                                         if (result == PatchBundleRepository.DisplayNameUpdateResult.SUCCESS) {
                                             changed = true
                                         }
@@ -526,9 +531,18 @@ class ImportExportViewModel(
                                             snapshot.createdAt,
                                             snapshot.updatedAt
                                         )
-                                        changed = true
                                     }
-                                    if (changed) updatedCount += 1
+                                    if (snapshot.changelogHistory.isNotEmpty()) {
+                                        val existingHistory =
+                                            patchBundleRepository.getChangelogHistory(current.uid)
+                                        if (existingHistory != snapshot.changelogHistory) {
+                                            patchBundleRepository.setChangelogHistory(
+                                                current.uid,
+                                                snapshot.changelogHistory
+                                            )
+                                            changed = true
+                                        }
+                                    }
                                     finishImportItem()
                                     continue
                                 }
@@ -581,6 +595,12 @@ class ImportExportViewModel(
                                 if (created.enabled != snapshotEnabled) {
                                     pendingEnabledUpdates[created.uid] = snapshotEnabled
                                 }
+                                if (snapshot.changelogHistory.isNotEmpty()) {
+                                    patchBundleRepository.setChangelogHistory(
+                                        created.uid,
+                                        snapshot.changelogHistory
+                                    )
+                                }
 
                                 finishImportItem()
                             }
@@ -599,16 +619,24 @@ class ImportExportViewModel(
                                         if (defaultSource == null) {
                                             patchBundleRepository.restoreDefaultBundle()
                                             patchBundleRepository.refreshDefaultBundle()
-                                        defaultSource = patchBundleRepository.sources.first()
-                                                .firstOrNull { it.isDefault }
+                                            defaultSource = withTimeoutOrNull(15_000) {
+                                                patchBundleRepository.sources
+                                                    .map { sources -> sources.firstOrNull { it.isDefault } }
+                                                    .first { it != null }
+                                            }
                                             if (defaultSource != null) {
                                                 officialCreated = true
                                             }
-                                        } else {
-                                            if (defaultSource.state is PatchBundleSource.State.Missing) {
-                                                patchBundleRepository.refreshDefaultBundle()
-                                                defaultSource = patchBundleRepository.sources.first()
-                                                    .firstOrNull { it.isDefault }
+                                        } else if (defaultSource.state is PatchBundleSource.State.Missing) {
+                                            patchBundleRepository.refreshDefaultBundle()
+                                            val refreshed = withTimeoutOrNull(15_000) {
+                                                patchBundleRepository.sources
+                                                    .map { sources -> sources.firstOrNull { it.isDefault } }
+                                                    .first { it != null && it.state !is PatchBundleSource.State.Missing }
+                                            }
+                                            if (refreshed != null) {
+                                                defaultSource = refreshed
+                                                officialUpdated = true
                                             }
                                         }
                                         defaultSource?.let { source ->
@@ -618,17 +646,29 @@ class ImportExportViewModel(
                                                     officialUpdated = true
                                                 }
                                             }
+                                            if (snapshot.changelogHistory.isNotEmpty()) {
+                                                val existingHistory =
+                                                    patchBundleRepository.getChangelogHistory(source.uid)
+                                                if (existingHistory != snapshot.changelogHistory) {
+                                                    patchBundleRepository.setChangelogHistory(
+                                                        source.uid,
+                                                        snapshot.changelogHistory
+                                                    )
+                                                    officialUpdated = true
+                                                }
+                                            }
+                                            val remote = source.asRemoteOrNull
                                             desiredAutoUpdate?.let { autoUpdate ->
-                                                if (source.asRemoteOrNull?.autoUpdate != autoUpdate) {
+                                                if (remote != null && remote.autoUpdate != autoUpdate) {
                                                     with(patchBundleRepository) {
-                                                        source.asRemoteOrNull?.setAutoUpdate(autoUpdate)
+                                                        remote.setAutoUpdate(autoUpdate)
                                                     }
                                                     officialUpdated = true
                                                 }
                                             }
-                                            if (source.asRemoteOrNull?.searchUpdate != snapshot.searchUpdate) {
+                                            if (remote != null && remote.searchUpdate != snapshot.searchUpdate) {
                                                 with(patchBundleRepository) {
-                                                    source.asRemoteOrNull?.setSearchUpdate(snapshot.searchUpdate)
+                                                    remote.setSearchUpdate(snapshot.searchUpdate)
                                                 }
                                                 officialUpdated = true
                                             }
@@ -637,8 +677,12 @@ class ImportExportViewModel(
                                                 officialUpdated = true
                                             }
                                             snapshot.officialUsePrereleases?.let { usePrereleases ->
-                                                preferencesManager.usePatchesPrereleases.update(usePrereleases)
-                                                officialUpdated = true
+                                                val currentValue =
+                                                    preferencesManager.usePatchesPrereleases.get()
+                                                if (currentValue != usePrereleases) {
+                                                    preferencesManager.usePatchesPrereleases.update(usePrereleases)
+                                                    officialUpdated = true
+                                                }
                                             }
                                             if (snapshot.createdAt != null || snapshot.updatedAt != null) {
                                                 patchBundleRepository.updateTimestamps(
@@ -766,7 +810,6 @@ class ImportExportViewModel(
                     when {
                         totalCreated > 0 -> app.toast(app.getString(R.string.import_patch_bundles_success, totalCreated))
                         totalUpdated > 0 -> app.toast(app.getString(R.string.import_patch_bundles_updated, totalUpdated))
-                        hasOfficialSnapshot -> app.toast(app.getString(R.string.import_patch_bundles_success, 1))
                         else -> app.toast(app.getString(R.string.import_patch_bundles_none))
                     }
                     patchBundleRepository.enforceOfficialOrderPreference()
@@ -796,6 +839,7 @@ class ImportExportViewModel(
 
         val bundles = buildList {
             remoteSources.mapTo(this) {
+                val changelogHistory = patchBundleRepository.getChangelogHistory(it.uid)
                 PatchBundleSnapshot(
                     endpoint = it.endpoint,
                     name = it.name,
@@ -805,7 +849,8 @@ class ImportExportViewModel(
                     enabled = it.enabled,
                     position = positionLookup[it.uid],
                     createdAt = it.createdAt,
-                    updatedAt = it.updatedAt
+                    updatedAt = it.updatedAt,
+                    changelogHistory = changelogHistory
                 )
             }
             add(
@@ -821,7 +866,10 @@ class ImportExportViewModel(
                     officialAutoUpdate = officialAutoUpdate,
                     officialUsePrereleases = officialUsePrereleases,
                     createdAt = officialSource?.createdAt,
-                    updatedAt = officialSource?.updatedAt
+                    updatedAt = officialSource?.updatedAt,
+                    changelogHistory = officialSource?.let {
+                        patchBundleRepository.getChangelogHistory(it.uid)
+                    }.orEmpty()
                 )
             )
         }

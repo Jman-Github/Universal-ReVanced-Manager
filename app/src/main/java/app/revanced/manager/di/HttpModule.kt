@@ -20,6 +20,11 @@ import java.net.InetAddress
 
 val httpModule = module {
     fun provideHttpClient(context: Context, json: Json) = HttpClient(OkHttp) {
+        val fallbackUserAgent = "ReVanced-Manager/${BuildConfig.VERSION_CODE}"
+        val systemUserAgent = System.getProperty("http.agent")
+        if (systemUserAgent.isNullOrBlank()) {
+            System.setProperty("http.agent", fallbackUserAgent)
+        }
         engine {
             config {
                 dns(object : Dns {
@@ -49,7 +54,7 @@ val httpModule = module {
             requestTimeoutMillis = 5 * 60_000
         }
         install(UserAgent) {
-            agent = "ReVanced-Manager/${BuildConfig.VERSION_CODE}"
+            agent = fallbackUserAgent
         }
     }
 
