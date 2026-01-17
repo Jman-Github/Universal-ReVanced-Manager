@@ -4,6 +4,7 @@
 # Bug fixes
 
 - Fixed false update prompts and incorrect update detection
+- Fixed patch bundle ODEX cache invalidation and recovery
 
 
 # v1.7.1-dev.01 (2026-01-16)

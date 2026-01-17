@@ -63,6 +63,7 @@ class PreferencesManager(
     val officialBundleRemoved = booleanPreference("official_bundle_removed", false)
     val officialBundleSortOrder = intPreference("official_bundle_sort_order", -1)
     val officialBundleCustomDisplayName = stringPreference("official_bundle_custom_display_name", "")
+    val patchBundleCacheVersionCode = intPreference("patch_bundle_cache_version_code", -1)
     val autoCollapsePatcherSteps = booleanPreference("auto_collapse_patcher_steps", false)
     val autoExpandRunningSteps = booleanPreference("auto_expand_running_steps", true)
     val enableSavedApps = booleanPreference("enable_saved_apps", true)

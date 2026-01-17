@@ -7,6 +7,7 @@ import androidx.annotation.StringRes
 import app.revanced.library.mostCommonCompatibleVersions as revancedMostCommonCompatibleVersions
 import app.revanced.patcher.patch.Patch as RevancedPatch
 import app.universal.revanced.manager.R
+import app.universal.revanced.manager.BuildConfig
 import app.revanced.manager.data.platform.NetworkInfo
 import app.revanced.manager.data.redux.Action
 import app.revanced.manager.data.redux.ActionContext
@@ -179,6 +180,9 @@ class PatchBundleRepository(
     private var updateJob: Job? = null
     private val updateStateMutex = Mutex()
     private val changelogHistoryMutex = Mutex()
+    private val bundleCacheMutex = Mutex()
+    @Volatile
+    private var bundleCacheInitialized = false
     @Volatile
     private var activeUpdateUids: Set<Int> = emptySet()
     @Volatile
@@ -607,7 +611,111 @@ class PatchBundleRepository(
         return all
     }
 
-    private fun loadBundleMetadata(bundle: PatchBundle): Pair<PatchBundleType, List<PatchInfo>> {
+    private data class BundleDigestInfo(
+        val hash: String,
+        val size: Long,
+        val lastModified: Long,
+    )
+
+    private fun bundleDigestFile(uid: Int) = directoryOf(uid).resolve("patches.sha256")
+
+    private fun readBundleDigestInfo(uid: Int): BundleDigestInfo? {
+        val file = bundleDigestFile(uid)
+        if (!file.exists()) return null
+        val content = runCatching { file.readText() }.getOrDefault("").trim()
+        if (content.isBlank()) return null
+        val parts = content.split('|')
+        if (parts.size < 3) return null
+        val hash = parts[0].trim().takeIf { it.isNotEmpty() } ?: return null
+        val size = parts[1].toLongOrNull() ?: return null
+        val lastModified = parts[2].toLongOrNull() ?: return null
+        return BundleDigestInfo(hash, size, lastModified)
+    }
+
+    private fun writeBundleDigestInfo(uid: Int, info: BundleDigestInfo) {
+        val file = bundleDigestFile(uid)
+        file.parentFile?.mkdirs()
+        runCatching { file.writeText("${info.hash}|${info.size}|${info.lastModified}") }
+    }
+
+    private fun computeBundleHash(file: File): String? {
+        return runCatching {
+            val digest = MessageDigest.getInstance("SHA-256")
+            file.inputStream().use { input ->
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read == -1) break
+                    digest.update(buffer, 0, read)
+                }
+            }
+            val bytes = digest.digest()
+            val hexChars = "0123456789abcdef".toCharArray()
+            val result = CharArray(bytes.size * 2)
+            var index = 0
+            for (byte in bytes) {
+                val value = byte.toInt() and 0xff
+                result[index++] = hexChars[value ushr 4]
+                result[index++] = hexChars[value and 0x0f]
+            }
+            String(result)
+        }.getOrNull()
+    }
+
+    private fun clearBundleOdex(uid: Int) {
+        runCatching {
+            val oatDir = directoryOf(uid).resolve("oat")
+            if (oatDir.exists()) oatDir.deleteRecursively()
+        }
+    }
+
+    private fun clearAllBundleOdex() {
+        runCatching {
+            bundlesDir.listFiles()?.forEach { dir ->
+                val oatDir = dir.resolve("oat")
+                if (oatDir.exists()) oatDir.deleteRecursively()
+            }
+        }
+    }
+
+    private suspend fun ensureBundleCacheInitialized() {
+        if (bundleCacheInitialized) return
+        bundleCacheMutex.withLock {
+            if (bundleCacheInitialized) return
+            val currentVersion = BuildConfig.VERSION_CODE
+            val cachedVersion = prefs.patchBundleCacheVersionCode.get()
+            if (cachedVersion != currentVersion) {
+                withContext(Dispatchers.IO) {
+                    clearAllBundleOdex()
+                }
+                prefs.patchBundleCacheVersionCode.update(currentVersion)
+            }
+            bundleCacheInitialized = true
+        }
+    }
+
+    private suspend fun ensureBundleCacheValid(uid: Int, bundle: PatchBundle) {
+        withContext(Dispatchers.IO) {
+            val file = File(bundle.patchesJar)
+            if (!file.exists()) return@withContext
+
+            val size = runCatching { file.length() }.getOrDefault(0L)
+            val lastModified = runCatching { file.lastModified() }.getOrDefault(0L)
+            val existing = readBundleDigestInfo(uid)
+            if (existing != null && existing.size == size && existing.lastModified == lastModified) {
+                return@withContext
+            }
+
+            val hash = computeBundleHash(file) ?: return@withContext
+            val changed = existing == null || existing.hash != hash
+            if (changed) {
+                clearBundleOdex(uid)
+            }
+            writeBundleDigestInfo(uid, BundleDigestInfo(hash, size, lastModified))
+        }
+    }
+
+    private fun loadBundleMetadataInternal(bundle: PatchBundle): Pair<PatchBundleType, List<PatchInfo>> {
         val bundlePath = bundle.patchesJar
         val extension = File(bundlePath).extension.lowercase(Locale.US)
         if (extension == "rvp") {
@@ -633,6 +741,21 @@ class PatchBundleRepository(
         throw error
     }
 
+    private suspend fun loadBundleMetadata(uid: Int, bundle: PatchBundle): Pair<PatchBundleType, List<PatchInfo>> {
+        ensureBundleCacheValid(uid, bundle)
+        val initial = runCatching { loadBundleMetadataInternal(bundle) }
+        if (initial.isSuccess) return initial.getOrThrow()
+
+        clearBundleOdex(uid)
+        val retry = runCatching { loadBundleMetadataInternal(bundle) }
+        if (retry.isSuccess) return retry.getOrThrow()
+
+        val error = IllegalStateException("Failed to load patch bundle metadata")
+        initial.exceptionOrNull()?.let(error::addSuppressed)
+        retry.exceptionOrNull()?.let(error::addSuppressed)
+        throw error
+    }
+
     private suspend fun loadMetadata(sources: Map<Int, PatchBundleSource>): Map<Int, PatchBundleInfo.Global> {
         // Map bundles -> sources
         val map = sources.mapNotNull { (_, src) ->
@@ -641,12 +764,15 @@ class PatchBundleRepository(
 
         if (map.isEmpty()) return emptyMap()
 
-        val failures = mutableListOf<Pair<Int, Throwable>>()
+        ensureBundleCacheInitialized()
 
-        val metadata = map.mapNotNull { (bundle, src) ->
+        val failures = mutableListOf<Pair<Int, Throwable>>()
+        val metadata = mutableMapOf<Int, PatchBundleInfo.Global>()
+
+        for ((bundle, src) in map) {
             try {
-                val (bundleType, patches) = loadBundleMetadata(bundle)
-                src.uid to PatchBundleInfo.Global(
+                val (bundleType, patches) = loadBundleMetadata(src.uid, bundle)
+                metadata[src.uid] = PatchBundleInfo.Global(
                     src.displayTitle,
                     bundle.manifestAttributes?.version,
                     src.uid,
@@ -657,9 +783,8 @@ class PatchBundleRepository(
             } catch (error: Throwable) {
                 failures += src.uid to error
                 Log.e(tag, "Failed to load bundle ${src.name}", error)
-                null
             }
-        }.toMap()
+        }
 
         if (failures.isNotEmpty()) {
             dispatchAction("Mark bundles as failed") { state ->

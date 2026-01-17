@@ -50,6 +50,7 @@
 - Increased stability of the `Rooted mount installer` by fixing issues such as `Exception thrown on remote process`
 - Fixed false reimport toasts and adjusted official bundle restore logic with importing patch bundles from a patch bundles export
 - Fixed false update prompts and incorrect update detection
+- Fixed patch bundle ODEX cache invalidation and recovery
 
 
 # Docs
