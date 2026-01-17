@@ -850,7 +850,6 @@
     <string name="patches_prereleases">Використовуйте попередні версії</string>
     <string name="patches_prereleases_description">Використовуйте попередні версії %s</string>
     <string name="patches_replace_fail">Не вдалося імпортувати виправлення: %s</string>
-    <string name="patches_reset">Скинути пакети патчів</string>
     <string name="patches_selected">%s вибрано пакети патчів</string>
     <string name="patches_update_success">Оновлення успішно завершено</string>
     <string name="patches_update_unavailable">Немає доступних оновлень</string>

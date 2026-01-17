@@ -447,7 +447,6 @@
     <string name="language_option_ukrainian">Ukrainian</string>
     <string name="device_memory_limit_format">%1$d MB (通常) 〜 %2$d MB (大)</string>
     <string name="patches_force_download">すべてのパッチソースを強制ダウンロード</string>
-    <string name="patches_reset">パッチソースをリセット</string>
     <string name="storage">ストレージ</string>
     <string name="no_patch_found">パッチが見つかりません。パッチを確認してください</string>
     <string name="tab_apps">アプリ</string>

@@ -850,7 +850,6 @@
     <string name="patches_prereleases">Используйте предварительные версии</string>
     <string name="patches_prereleases_description">Используйте предварительные версии %s</string>
     <string name="patches_replace_fail">Не удалось импортировать исправления: %s</string>
-    <string name="patches_reset">Сбросить пакеты патчей</string>
     <string name="patches_selected">%s выбраны пакеты патчей</string>
     <string name="patches_update_success">Обновление успешно выполнено</string>
     <string name="patches_update_unavailable">Нет доступных обновлений</string>

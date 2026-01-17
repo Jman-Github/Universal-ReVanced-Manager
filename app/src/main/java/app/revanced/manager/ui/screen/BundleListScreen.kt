@@ -158,6 +158,9 @@ fun BundleListScreen(
                             onUpdate = {
                                 viewModel.update(source)
                             },
+                            onForceUpdate = {
+                                viewModel.forceUpdate(source)
+                            },
                             selectable = viewModel.selectedSources.size > 0,
                             onSelect = {
                                 viewModel.selectedSources.add(source.uid)

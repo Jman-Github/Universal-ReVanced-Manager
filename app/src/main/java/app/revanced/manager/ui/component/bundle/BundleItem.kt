@@ -9,8 +9,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -21,7 +21,6 @@ import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -34,13 +33,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.draw.clip
 import app.universal.revanced.manager.R
 import app.revanced.manager.domain.bundles.PatchBundleSource
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
@@ -57,7 +55,6 @@ import app.revanced.manager.ui.component.haptics.HapticCheckbox
 import app.revanced.manager.util.consumeHorizontalScroll
 import app.revanced.manager.util.PatchListCatalog
 import app.revanced.manager.util.relativeTime
-import app.revanced.manager.util.simpleMessage
 import app.revanced.manager.util.toast
 import compose.icons.FontAwesomeIcons
 import compose.icons.fontawesomeicons.Brands
@@ -77,12 +74,14 @@ fun BundleItem(
     onSelect: () -> Unit,
     onDelete: () -> Unit,
     onUpdate: () -> Unit,
+    onForceUpdate: () -> Unit,
     onDisable: () -> Unit,
 ) {
     var viewBundleDialogPage by rememberSaveable { mutableStateOf(false) }
     var showDeleteConfirmationDialog by rememberSaveable { mutableStateOf(false) }
     var showDisableConfirmationDialog by rememberSaveable { mutableStateOf(false) }
     var showEnableConfirmationDialog by rememberSaveable { mutableStateOf(false) }
+    var showForceUpdateDialog by rememberSaveable { mutableStateOf(false) }
     var autoOpenReleaseRequest by rememberSaveable { mutableStateOf<Int?>(null) }
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
@@ -194,6 +193,22 @@ fun BundleItem(
         )
     }
 
+    if (showForceUpdateDialog) {
+        ConfirmDialog(
+            onDismiss = { showForceUpdateDialog = false },
+            onConfirm = {
+                showForceUpdateDialog = false
+                onForceUpdate()
+            },
+            title = stringResource(R.string.patch_bundle_force_redownload_title),
+            description = stringResource(
+                R.string.patch_bundle_force_redownload_description,
+                bundleTitle
+            ),
+            icon = Icons.Outlined.Update
+        )
+    }
+
     val displayVersion = src.version
     val remoteSource = src.asRemoteOrNull
     val installedSignature = remoteSource?.installedVersionSignature
@@ -214,17 +229,6 @@ fun BundleItem(
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = disabledAlpha)
     }
-    val outlineTextColor = if (src.enabled) {
-        MaterialTheme.colorScheme.outline
-    } else {
-        MaterialTheme.colorScheme.outline.copy(alpha = disabledAlpha)
-    }
-    val accentTextColor = if (src.enabled) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.primary.copy(alpha = disabledAlpha)
-    }
-
     val cardShape = RoundedCornerShape(16.dp)
 
     Surface(
@@ -239,17 +243,23 @@ fun BundleItem(
         shape = cardShape,
         tonalElevation = 2.dp
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.Top
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            val statusIcon = remember(src.state) {
+                when (src.state) {
+                    is PatchBundleSource.State.Failed -> Icons.Outlined.ErrorOutline to R.string.patches_error
+                    is PatchBundleSource.State.Missing -> Icons.Outlined.Warning to R.string.patches_missing
+                    is PatchBundleSource.State.Available -> null
+                }
+            }
             Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.Top
             ) {
                 if (selectable) {
                     HapticCheckbox(
@@ -261,41 +271,28 @@ fun BundleItem(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    val statusIcon = remember(src.state) {
-                        when (src.state) {
-                            is PatchBundleSource.State.Failed -> Icons.Outlined.ErrorOutline to R.string.patches_error
-                            is PatchBundleSource.State.Missing -> Icons.Outlined.Warning to R.string.patches_missing
-                            is PatchBundleSource.State.Available -> null
-                        }
-                    }
                     val titleScrollState = rememberScrollState()
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.weight(1f),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                text = src.displayTitle,
-                                style = MaterialTheme.typography.titleMedium,
-                                maxLines = 1,
-                                color = primaryTextColor,
-                                modifier = Modifier
-                                    .weight(1f, fill = false)
-                                    .consumeHorizontalScroll(titleScrollState)
-                                    .horizontalScroll(titleScrollState)
+                        Text(
+                            text = src.displayTitle,
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            color = primaryTextColor,
+                            modifier = Modifier
+                                .weight(1f, fill = false)
+                                .consumeHorizontalScroll(titleScrollState)
+                                .horizontalScroll(titleScrollState)
+                        )
+                        statusIcon?.let { (icon, description) ->
+                            Icon(
+                                icon,
+                                contentDescription = stringResource(description),
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(18.dp)
                             )
-                            statusIcon?.let { (icon, description) ->
-                                Icon(
-                                    icon,
-                                    contentDescription = stringResource(description),
-                                    tint = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
                         }
                     }
                     val hasCustomName =
@@ -311,101 +308,121 @@ fun BundleItem(
                                 .horizontalScroll(internalNameScrollState)
                         )
                     }
-                    val patchCountText =
-                        if (src.state is PatchBundleSource.State.Available) {
-                            pluralStringResource(R.plurals.patch_count, patchCount, patchCount)
-                        } else null
-                    val versionText = src.version?.let {
-                        if (it.startsWith("v", ignoreCase = true)) it else "v$it"
-                    }
-                    val detailLine = listOfNotNull(patchCountText, versionText).joinToString(" • ")
-                    if (detailLine.isNotEmpty()) {
-                        Text(
-                            text = detailLine,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = secondaryTextColor
+                }
+                val showUpdate = manualUpdateBadge != null || src.asRemoteOrNull != null
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ActionIconButton(onClick = { showRenameDialog = true }) {
+                        Icon(
+                            Icons.Outlined.Edit,
+                            contentDescription = stringResource(R.string.patch_bundle_rename),
+                            modifier = Modifier.size(ActionIconSize)
                         )
                     }
-                    val timestampLine = listOfNotNull(
-                        src.createdAt?.takeIf { it > 0 }?.relativeTime(context)?.let {
-                            stringResource(R.string.bundle_created_at, it)
-                        },
-                        src.updatedAt?.takeIf { it > 0 }?.relativeTime(context)?.let {
-                            stringResource(R.string.bundle_updated_at, it)
+                    ActionIconButton(onClick = { showLinkSheet = true }) {
+                        Icon(
+                            FontAwesomeIcons.Brands.Github,
+                            contentDescription = stringResource(R.string.bundle_release_page),
+                            modifier = Modifier.size(ActionIconSize)
+                        )
+                    }
+                    if (showUpdate) {
+                        ActionIconButton(
+                            onClick = onUpdate,
+                            onLongClick = { showForceUpdateDialog = true }
+                        ) {
+                            Icon(
+                                Icons.Outlined.Update,
+                                contentDescription = stringResource(R.string.refresh),
+                                modifier = Modifier.size(ActionIconSize)
+                            )
                         }
-                    ).joinToString(" • ")
-                    if (timestampLine.isNotEmpty()) {
-                        Text(
-                            text = timestampLine,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = secondaryTextColor
-                        )
-                    }
-                    val typeLabel = stringResource(
-                        when {
-                            src.isDefault -> R.string.bundle_type_preinstalled
-                            src.asRemoteOrNull != null -> R.string.bundle_type_remote
-                            else -> R.string.bundle_type_local
-                        }
-                    )
-                    Text(
-                        text = typeLabel,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = outlineTextColor
-                    )
-                    manualUpdateBadge?.let { info ->
-                        val label = info.latestVersion?.takeUnless { it.isBlank() }?.let { version ->
-                            stringResource(R.string.bundle_update_manual_available_with_version, version)
-                        } ?: stringResource(R.string.bundle_update_manual_available)
-
-                        Text(
-                            text = label,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = accentTextColor
-                        )
                     }
                 }
             }
 
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.width(ActionButtonSize)
-            ) {
-                ActionButtonPair(
-                    leadingOnClick = { showRenameDialog = true },
-                    leadingIcon = Icons.Outlined.Edit,
-                    leadingDescription = stringResource(R.string.patch_bundle_rename),
-                    trailingOnClick = { showLinkSheet = true },
-                    trailingIcon = FontAwesomeIcons.Brands.Github,
-                    trailingDescription = stringResource(R.string.bundle_release_page),
-                )
-                val showUpdate = manualUpdateBadge != null || src.asRemoteOrNull != null
-                if (showUpdate) {
-                    ActionIconButton(onClick = onUpdate) {
-                        Icon(
-                            Icons.Outlined.Update,
-                            contentDescription = stringResource(R.string.refresh),
-                            modifier = Modifier.size(ActionIconSize)
-                        )
+            val patchCountText =
+                if (src.state is PatchBundleSource.State.Available) {
+                    pluralStringResource(R.plurals.patch_count, patchCount, patchCount)
+                } else null
+            val versionText = src.version?.let {
+                if (it.startsWith("v", ignoreCase = true)) it else "v$it"
+            }
+            val typeLabel = stringResource(
+                when {
+                    src.isDefault -> R.string.bundle_type_preinstalled
+                    src.asRemoteOrNull != null -> R.string.bundle_type_remote
+                    else -> R.string.bundle_type_local
+                }
+            )
+            val metaItems = listOfNotNull(patchCountText, versionText, typeLabel)
+            val metaScrollState = rememberScrollState()
+            if (metaItems.isNotEmpty() || manualUpdateBadge != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .consumeHorizontalScroll(metaScrollState)
+                        .horizontalScroll(metaScrollState),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    metaItems.forEach { item ->
+                        BundleMetaPill(text = item, enabled = src.enabled)
+                    }
+                    manualUpdateBadge?.let { info ->
+                        val label = info.latestVersion?.takeUnless { it.isBlank() }?.let { version ->
+                            stringResource(R.string.bundle_update_manual_available_with_version, version)
+                        } ?: stringResource(R.string.bundle_update_manual_available)
+                        BundleMetaPill(text = label, enabled = src.enabled, isAccent = true)
                     }
                 }
+            }
+
+            val timestampLine = listOfNotNull(
+                src.createdAt?.takeIf { it > 0 }?.relativeTime(context)?.let {
+                    stringResource(R.string.bundle_created_at, it)
+                },
+                src.updatedAt?.takeIf { it > 0 }?.relativeTime(context)?.let {
+                    stringResource(R.string.bundle_updated_at, it)
+                }
+            ).joinToString(" • ")
+            if (timestampLine.isNotEmpty()) {
+                Text(
+                    text = timestampLine,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = secondaryTextColor
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 val toggleIcon = if (src.enabled) Icons.Outlined.Block else Icons.Outlined.CheckCircle
                 val toggleLabel = if (src.enabled) R.string.disable else R.string.enable
-                ActionButtonPair(
-                    leadingOnClick = {
-                        if (src.enabled) {
-                            showDisableConfirmationDialog = true
-                        } else {
-                            showEnableConfirmationDialog = true
-                        }
-                    },
-                    leadingIcon = toggleIcon,
-                    leadingDescription = stringResource(toggleLabel),
-                    trailingOnClick = { showDeleteConfirmationDialog = true },
-                    trailingIcon = Icons.Outlined.Delete,
-                    trailingDescription = stringResource(R.string.delete),
-                )
+                ActionIconButton(onClick = {
+                    if (src.enabled) {
+                        showDisableConfirmationDialog = true
+                    } else {
+                        showEnableConfirmationDialog = true
+                    }
+                }) {
+                    Icon(
+                        toggleIcon,
+                        contentDescription = stringResource(toggleLabel),
+                        modifier = Modifier.size(ActionIconSize)
+                    )
+                }
+                ActionIconButton(onClick = { showDeleteConfirmationDialog = true }) {
+                    Icon(
+                        Icons.Outlined.Delete,
+                        contentDescription = stringResource(R.string.delete),
+                        modifier = Modifier.size(ActionIconSize)
+                    )
+                }
             }
         }
     }
@@ -432,53 +449,62 @@ fun BundleItem(
 @Composable
 private fun ActionIconButton(
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
-    IconButton(
-        onClick = onClick,
-        modifier = modifier.size(ActionButtonSize)
+    val interactionSource = remember { MutableInteractionSource() }
+    Box(
+        modifier = modifier
+            .size(ActionButtonSize)
+            .clip(RoundedCornerShape(999.dp))
+            .combinedClickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
+            .padding(6.dp),
+        contentAlignment = Alignment.Center
     ) {
         content()
     }
 }
 
-private val ActionButtonSize = 40.dp
-private val ActionIconSize = 18.dp
-private val ActionButtonSpacing = 4.dp
-private val ActionButtonOffset = ActionButtonSize + ActionButtonSpacing
-
 @Composable
-private fun ActionButtonPair(
-    leadingOnClick: () -> Unit,
-    leadingIcon: androidx.compose.ui.graphics.vector.ImageVector,
-    leadingDescription: String,
-    trailingOnClick: () -> Unit,
-    trailingIcon: androidx.compose.ui.graphics.vector.ImageVector,
-    trailingDescription: String,
+private fun BundleMetaPill(
+    text: String,
+    enabled: Boolean,
+    isAccent: Boolean = false,
+    modifier: Modifier = Modifier,
 ) {
-    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-        ActionIconButton(
-            onClick = trailingOnClick,
-            modifier = Modifier.align(Alignment.Center)
-        ) {
-            Icon(
-                trailingIcon,
-                contentDescription = trailingDescription,
-                modifier = Modifier.size(ActionIconSize)
-            )
-        }
-        ActionIconButton(
-            onClick = leadingOnClick,
-            modifier = Modifier
-                .align(Alignment.Center)
-                .offset(x = -ActionButtonOffset)
-        ) {
-            Icon(
-                leadingIcon,
-                contentDescription = leadingDescription,
-                modifier = Modifier.size(ActionIconSize)
-            )
-        }
+    val background = if (isAccent) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val content = if (isAccent) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val adjustedBackground = if (enabled) background else background.copy(alpha = 0.6f)
+    val adjustedContent = if (enabled) content else content.copy(alpha = 0.6f)
+
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(999.dp),
+        color = adjustedBackground,
+        contentColor = adjustedContent
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            maxLines = 1
+        )
     }
 }
+
+private val ActionButtonSize = 36.dp
+private val ActionIconSize = 18.dp

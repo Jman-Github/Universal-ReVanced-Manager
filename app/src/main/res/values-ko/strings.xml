@@ -461,7 +461,6 @@
     <string name="language_option_ukrainian">우크라이나어</string>
     <string name="device_memory_limit_format">%1$d MB (일반) - %2$d MB (대용)</string>
     <string name="patches_force_download">모든 패치 번들 강제 다운로드</string>
-    <string name="patches_reset">패치 번들 초기화</string>
     <string name="storage">기기 저장소</string>
     <string name="no_patch_found">찾을 수 있는 패치가 없습니다. 패치를 확인하세요</string>
     <string name="tab_apps">앱</string>

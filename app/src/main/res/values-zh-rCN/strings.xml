@@ -430,7 +430,6 @@
     <string name="patcher_preflight_missing_patch_proceed">Proceed anyway</string>
     <string name="device_memory_limit_format">%1$dMB (正常) - %2$dMB (大)</string>
     <string name="patches_force_download">强制下载所有补丁包</string>
-    <string name="patches_reset">重置补丁包</string>
     <string name="storage">存储</string>
     <string name="no_patch_found">找不到任何补丁。请检查您的补丁</string>
     <string name="tab_apps">应用</string>

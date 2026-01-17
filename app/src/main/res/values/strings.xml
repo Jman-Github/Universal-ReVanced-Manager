@@ -57,6 +57,8 @@
     <string name="bundle_version_suggested_label">Suggested version: %1$s</string>
     <string name="bundle_update_manual_available">Update available</string>
     <string name="bundle_update_manual_available_with_version">Update available: %1$s</string>
+    <string name="patch_bundle_force_redownload_title">Force redownload</string>
+    <string name="patch_bundle_force_redownload_description">Redownload %1$s and overwrite the local copy?</string>
     <string name="bundle_update_progress">%1$d/%2$d bundles processed</string>
     <string name="bundle_update_banner_title">Updating patch bundles</string>
     <string name="bundle_updates_notification_progress">Updating %1$d of %2$d: %3$s</string>
@@ -491,7 +493,6 @@ Patch profiles are not affected.</string>
     <string name="language_option_ukrainian">Ukrainian</string>
     <string name="device_memory_limit_format">%1$dMB (Normal) - %2$dMB (Large)</string>
     <string name="patches_force_download">Force download all patch bundles</string>
-    <string name="patches_reset">Reset patch bundles</string>
     <string name="storage">Storage</string>
     <string name="no_patch_found">No patch can be found. Check your patches</string>
     <string name="tab_apps">Apps</string>

@@ -172,7 +172,6 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                 keywords = listOf(
                     R.string.battery_optimization_banner_title,
                     R.string.patches_force_download,
-                    R.string.patches_reset,
                     R.string.patch_profile_bundle_override_title
                 )
             )
@@ -242,7 +241,6 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.about_device, null, R.string.advanced, Settings.Advanced),
             SearchEntry(R.string.battery_optimization_banner_title, R.string.battery_optimization_banner_description, R.string.developer_options, Settings.Developer),
             SearchEntry(R.string.patches_force_download, null, R.string.developer_options, Settings.Developer),
-            SearchEntry(R.string.patches_reset, null, R.string.developer_options, Settings.Developer),
             SearchEntry(R.string.patch_profile_bundle_override_title, R.string.patch_profile_bundle_override_description, R.string.developer_options, Settings.Developer),
         )
     }

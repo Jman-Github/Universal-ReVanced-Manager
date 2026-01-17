@@ -33,6 +33,9 @@
 - Added the ability to reorder/organize the listing order of saved patched apps in the `Apps` tab and patch profiles in the `Patch profiles` tab
 - Make the progress banner collapsiable/expandable and gave it animations
 - Made the `Apps`, `Patch Bundles` and `Patch Profiles` tabs items searchable via a button on the nav bar
+- Redesigned the patch bundle widgets UI
+- Hold tapping the individual update check button on patch bundles will give you a prompt to force redownload the corresponding patch bundle
+- Removed redundant `Reset patch bundles` button in `Developer options`
 
 
 # Bug fixes
