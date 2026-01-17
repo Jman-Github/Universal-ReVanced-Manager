@@ -87,7 +87,12 @@ jobs:
             echo "Unable to find dev APK in app/build/outputs/apk/dev"
             exit 1
           fi
-          echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
+          BASE_VERSION="${{ steps.changelog.outputs.base_version }}"
+          DEV_SUFFIX="${{ steps.changelog.outputs.dev_suffix }}"
+          TARGET_NAME="universal-revanced-manager-${BASE_VERSION}-${DEV_SUFFIX}.apk"
+          TARGET_PATH="$(dirname "$APK_PATH")/$TARGET_NAME"
+          cp "$APK_PATH" "$TARGET_PATH"
+          echo "apk_path=$TARGET_PATH" >> "$GITHUB_OUTPUT"
           echo "Found APK at $APK_PATH"
 
       - name: Prepare prerelease tag
@@ -99,7 +104,7 @@ jobs:
             echo "Version extracted from dev changelog is empty."
             exit 1
           fi
-          echo "NEW_TAG=${VERSION}-dev" >> "$GITHUB_OUTPUT"
+          echo "NEW_TAG=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Publish prerelease
         if: steps.release.outputs.NEW_TAG != ''
