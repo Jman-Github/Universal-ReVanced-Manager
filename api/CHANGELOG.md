@@ -68,6 +68,7 @@ The `Discover patch bundles` screen has been updated to use [Brosssh's new API](
 - Fixed false update prompts and incorrect update detection
 - Fixed patch bundle ODEX cache invalidation and recovery
 - Fixed issues with the auto-remount system for after restarts on some devices
+- Fixed a crash when leaving the app during patching
 
 
 # Docs

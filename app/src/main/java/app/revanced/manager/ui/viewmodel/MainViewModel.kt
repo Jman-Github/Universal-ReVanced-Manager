@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 class MainViewModel(
@@ -75,11 +76,12 @@ class MainViewModel(
         persistConfiguration: Boolean = true
     ) = viewModelScope.launch {
         val resolved = findDownloadedApp(app) ?: app
+        val selectionPayloadJson = selectionPayload?.let { json.encodeToString(it) }
         appSelectChannel.send(
             SelectedApplicationInfo.ViewModelParams(
                 app = resolved,
                 patches = patches,
-                selectionPayload = selectionPayload,
+                selectionPayloadJson = selectionPayloadJson,
                 persistConfiguration = persistConfiguration
             )
         )

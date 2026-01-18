@@ -61,6 +61,9 @@ import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.simpleMessage
 import app.revanced.manager.util.toast
 import androidx.documentfile.provider.DocumentFile
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -104,6 +107,7 @@ class SelectedAppInfoViewModel(
     private val patchProfileRepository: PatchProfileRepository = get()
     private val installedAppRepository: InstalledAppRepository = get()
     private val rootInstaller: RootInstaller = get()
+    private val json: Json = get()
     private val pm: PM = get()
     private val filesystem: Filesystem = get()
     private val savedStateHandle: SavedStateHandle = get()
@@ -115,7 +119,14 @@ class SelectedAppInfoViewModel(
     val packageName = input.app.packageName
     private val profileId = input.profileId
     private val requiresSourceSelection = input.requiresSourceSelection
-    private val inputSelectionPayload = input.selectionPayload
+    private val inputSelectionPayload = input.selectionPayloadJson?.let { encoded ->
+        runCatching { json.decodeFromString<PatchProfilePayload>(encoded) }
+            .onFailure { error ->
+                if (error !is SerializationException) return@onFailure
+                Log.e(TAG, "Failed to decode selection payload", error)
+            }
+            .getOrNull()
+    }
     val sourceSelectionRequired get() = requiresSourceSelection
     private val persistConfiguration = input.persistConfiguration
     private val storageInputDir = filesystem.uiTempDir

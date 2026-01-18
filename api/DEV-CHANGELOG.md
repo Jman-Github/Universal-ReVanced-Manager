@@ -23,6 +23,7 @@ The `Discover patch bundles` screen has been updated to use [Brosssh's new API](
 # Bug fixes
 
 - Fixed issues with the auto-remount system for after restarts on some devices
+- Fixed a crash when leaving the app during patching
 
 
 # v1.7.1-dev.02 (2026-01-16)

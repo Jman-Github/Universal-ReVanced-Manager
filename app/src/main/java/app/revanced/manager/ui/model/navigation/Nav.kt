@@ -2,7 +2,6 @@ package app.revanced.manager.ui.model.navigation
 
 import android.os.Parcelable
 import app.revanced.manager.ui.model.SelectedApp
-import app.revanced.manager.data.room.profile.PatchProfilePayload
 import app.revanced.manager.util.Options
 import app.revanced.manager.util.PatchSelection
 import kotlinx.parcelize.Parcelize
@@ -35,7 +34,7 @@ data object SelectedApplicationInfo : ComplexParameter<SelectedApplicationInfo.V
     data class ViewModelParams(
         val app: SelectedApp,
         val patches: PatchSelection? = null,
-        val selectionPayload: @RawValue PatchProfilePayload? = null,
+        val selectionPayloadJson: String? = null,
         val persistConfiguration: Boolean = true,
         val profileId: Int? = null,
         val requiresSourceSelection: Boolean = false
