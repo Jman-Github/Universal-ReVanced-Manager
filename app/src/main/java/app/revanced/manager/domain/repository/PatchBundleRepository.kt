@@ -18,6 +18,9 @@ import app.revanced.manager.data.room.bundles.PatchBundleEntity
 import app.revanced.manager.data.room.bundles.PatchBundleProperties
 import app.revanced.manager.data.room.bundles.Source
 import app.revanced.manager.domain.bundles.APIPatchBundle
+import app.revanced.manager.domain.bundles.ExternalBundleMetadata
+import app.revanced.manager.domain.bundles.ExternalBundleMetadataStore
+import app.revanced.manager.domain.bundles.ExternalGraphqlPatchBundle
 import app.revanced.manager.domain.bundles.GitHubPullRequestBundle
 import app.revanced.manager.domain.bundles.JsonPatchBundle
 import app.revanced.manager.data.room.bundles.Source as SourceInfo
@@ -28,6 +31,7 @@ import app.revanced.manager.domain.bundles.PatchBundleDownloadResult
 import app.revanced.manager.domain.bundles.RemotePatchBundle
 import app.revanced.manager.domain.bundles.PatchBundleSource
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
+import app.revanced.manager.network.dto.ExternalBundleSnapshot
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.patcher.morphe.MorpheRuntimeBridge
 import app.revanced.manager.patcher.patch.PatchInfo
@@ -859,7 +863,29 @@ class PatchBundleRepository(
                 searchUpdate,
                 lastNotifiedVersion,
                 enabled,
-            )
+            ).let { jsonBundle ->
+                val external = ExternalBundleMetadataStore.read(dir)
+                if (external == null) {
+                    jsonBundle
+                } else {
+                    ExternalGraphqlPatchBundle(
+                        actualName,
+                        uid,
+                        normalizedDisplayName,
+                        createdAt,
+                        updatedAt,
+                        versionHash,
+                        null,
+                        dir,
+                        source.url.toString(),
+                        autoUpdate,
+                        searchUpdate,
+                        lastNotifiedVersion,
+                        enabled,
+                        external
+                    )
+                }
+            }
             // PR #35: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35
             is SourceInfo.GitHubPullRequest -> GitHubPullRequestBundle(
                 actualName,
@@ -1513,6 +1539,119 @@ class PatchBundleRepository(
             state.copy(sources = state.sources.put(src.uid, src))
         }
 
+    suspend fun createRemoteFromDiscovery(
+        bundle: ExternalBundleSnapshot,
+        searchUpdate: Boolean,
+        autoUpdate: Boolean,
+        onProgress: PatchBundleDownloadProgress? = null,
+    ) = dispatchAction("Add bundle (${bundle.bundleId})") { state ->
+        if (bundle.isBundleV3) {
+            toast(R.string.patch_bundle_discovery_v3_warning)
+            return@dispatchAction state
+        }
+        val rawUrl = externalBundleEndpoint(bundle).trim()
+        if (rawUrl.isBlank()) {
+            toast(R.string.patch_bundle_discovery_error)
+            return@dispatchAction state
+        }
+
+        val validatedUrl = try {
+            validateDiscoveryBundleUrl(rawUrl)
+        } catch (e: IllegalArgumentException) {
+            withContext(Dispatchers.Main) { app.toast(e.message ?: "Invalid bundle URL") }
+            return@dispatchAction state
+        }
+
+        val metadata = ExternalBundleMetadata(
+            bundleId = bundle.bundleId,
+            downloadUrl = validatedUrl,
+            signatureDownloadUrl = bundle.signatureDownloadUrl,
+            version = bundle.version.ifBlank { "unknown" },
+            createdAt = bundle.createdAt.takeUnless { it.isBlank() },
+            description = bundle.description
+        )
+
+        val entity = createEntity(
+            "",
+            SourceInfo.from(externalBundleEndpoint(bundle)),
+            autoUpdate,
+            searchUpdate = searchUpdate
+        )
+        ExternalBundleMetadataStore.write(directoryOf(entity.uid), metadata)
+
+        val src = entity.load() as RemotePatchBundle
+        val allowUnsafeDownload = prefs.allowMeteredUpdates.get()
+        update(
+            src,
+            allowUnsafeNetwork = allowUnsafeDownload,
+            onPerBundleProgress = { bundleSrc, bytesRead, bytesTotal ->
+                if (bundleSrc.uid == src.uid) onProgress?.invoke(bytesRead, bytesTotal)
+            }
+        )
+        state.copy(sources = state.sources.put(src.uid, src))
+    }
+
+    private fun externalBundleEndpoint(bundle: ExternalBundleSnapshot): String {
+        val owner = bundle.ownerName.trim()
+        val repo = bundle.repoName.trim()
+        if (owner.isNotBlank() && repo.isNotBlank()) {
+            val prerelease = bundle.isPrerelease
+            return "https://revanced-external-bundles.brosssh.com/api/v1/bundle/$owner/$repo/latest?prerelease=$prerelease"
+        }
+        return externalBundleEndpoint(bundle.bundleId)
+    }
+
+    private fun externalBundleEndpoint(bundleId: Int): String =
+        "https://revanced-external-bundles.brosssh.com/bundles/id?id=$bundleId"
+
+    private fun validateRemoteBundleUrl(input: String): String {
+        val trimmed = input.trim()
+        val parsed = try {
+            Url(trimmed)
+        } catch (e: Exception) {
+            throw IllegalArgumentException("Invalid bundle URL: ${e.message ?: trimmed}")
+        }
+
+        val pathNoQuery = parsed.encodedPath.substringBefore('?').substringBefore('#')
+        val isJson = pathNoQuery.endsWith(".json", ignoreCase = true)
+        val host = parsed.host.lowercase(Locale.US)
+        val isExternalBundlesHost = host == "revanced-external-bundles.brosssh.com" ||
+            host == "revanced-external-bundles-dev.brosssh.com"
+        val isExternalBundlesEndpoint = isExternalBundlesHost &&
+            (pathNoQuery.startsWith("/api/v1/bundle/") || pathNoQuery.startsWith("/bundles/id"))
+        if (!isJson && !isExternalBundlesEndpoint) {
+            throw IllegalArgumentException(
+                "Patch bundle URL must point to a .json file or a supported external bundles API URL."
+            )
+        }
+
+        val query = parsed.encodedQuery.takeIf { it.isNotEmpty() }?.let { "?$it" }.orEmpty()
+        val scheme = if (parsed.protocol.name.equals("https", ignoreCase = true)) "https" else "http"
+        return "$scheme://${parsed.host}${parsed.encodedPath}$query"
+    }
+
+    private fun validateDiscoveryBundleUrl(input: String): String {
+        val trimmed = input.trim()
+        val parsed = try {
+            Url(trimmed)
+        } catch (e: Exception) {
+            throw IllegalArgumentException("Invalid bundle URL: ${e.message ?: trimmed}")
+        }
+
+        val host = parsed.host.lowercase(Locale.US)
+        val isExternalBundlesHost = host == "revanced-external-bundles.brosssh.com" ||
+            host == "revanced-external-bundles-dev.brosssh.com"
+        if (!isExternalBundlesHost) {
+            throw IllegalArgumentException(
+                "Patch bundle URL must point to a supported external bundles API URL."
+            )
+        }
+
+        val query = parsed.encodedQuery.takeIf { it.isNotEmpty() }?.let { "?$it" }.orEmpty()
+        val scheme = if (parsed.protocol.name.equals("https", ignoreCase = true)) "https" else "http"
+        return "$scheme://${parsed.host}${parsed.encodedPath}$query"
+    }
+
     private fun normalizeRemoteBundleUrl(input: String): String {
         val trimmed = input.trim()
         val parsed = try {
@@ -1546,14 +1685,19 @@ class PatchBundleRepository(
 
         val normalizedPath = "/" + pathSegments.joinToString("/")
         val pathNoQuery = normalizedPath.substringBefore('?').substringBefore('#')
-        if (host.equals("revanced-external-bundles.brosssh.com", ignoreCase = true) &&
-            pathNoQuery.startsWith("/bundles/id")
+        if (host.equals("revanced-external-bundles.brosssh.com", ignoreCase = true) ||
+            host.equals("revanced-external-bundles-dev.brosssh.com", ignoreCase = true)
         ) {
-            val query = parsed.encodedQuery.takeIf { it.isNotEmpty() }?.let { "?$it" }.orEmpty()
-            return "https://$host$normalizedPath$query"
+            if (pathNoQuery.startsWith("/bundles/id") || pathNoQuery.startsWith("/api/v1/bundle/")) {
+                val query = parsed.encodedQuery.takeIf { it.isNotEmpty() }?.let { "?$it" }.orEmpty()
+                return "https://$host$normalizedPath$query"
+            }
         }
-        if (!pathNoQuery.endsWith(".json", ignoreCase = true)) {
-            throw IllegalArgumentException("Patch bundle URL must point to a .json file.")
+        val isJson = pathNoQuery.endsWith(".json", ignoreCase = true)
+        if (!isJson) {
+            throw IllegalArgumentException(
+                "Patch bundle URL must point to a .json file or a supported external bundles API URL."
+            )
         }
 
         val query = parsed.encodedQuery.takeIf { it.isNotEmpty() }?.let { "?$it" }.orEmpty()

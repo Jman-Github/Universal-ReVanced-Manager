@@ -1,14 +1,23 @@
-# v1.7.1-dev.03 (2026-01-17)
+# v1.7.1-dev.03 (2026-01-18)
+
+
+# ⚠️ BREAKING CHANGES
+
+The `Discover patch bundles` screen has been updated to use [Brosssh's new API](https://github.com/brosssh/revanced-external-bundles/blob/dev/docs/graphql-examples.md). As a result, you will need to reimport any patch bundles that were added via the Discovery system prior to this release to continue receiving updates from their remote sources.
 
 
 # Features
 
 - Added the ability to reorder/organize the listing order of saved patched apps in the `Apps` tab and patch profiles in the `Patch profiles` tabcollapsible/expandable
 - Make the progress banner collapsiable/expandable and gave it animations
-- Made the `Apps`, `Patch Bundles` and `Patch Profiles` tabs items searchable via a button on the nav bar
+- Made the `Apps`, `Patch Bundles` and `Patch Profiles` tabs items searchable via a button on the nav bar https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/113
 - Redesigned the patch bundle widgets UI
 - Hold tapping the individual update check button on patch bundles will give you a prompt to force redownload the corresponding patch bundle
 - Removed redundant `Reset patch bundles` button in `Developer options`
+- Moved the `Release`/`Prerelease` toggle button to a three dot menu popout for each patch bundle listing on the `Discover patch bundles` screen
+- Added the ability to copy the remote URLs for patch bundles on the `Discover patch bundles` screen from a three dot button menu popout
+- Added the ability to download patch bundles to your devices storage from the `Discover patch bundles` screen through the three dot buttons menu popout
+- Added a way to search/filter through patch bundles on the `Discover patch bundles` screen by app package name https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/113
 
 
 # Bug fixes

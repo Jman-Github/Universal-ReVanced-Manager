@@ -1,9 +1,12 @@
 package app.revanced.manager.domain.bundles
 
 import app.revanced.manager.domain.manager.PreferencesManager
+import app.revanced.manager.network.api.ExternalBundlesApi
 import app.revanced.manager.network.api.ReVancedAPI
+import app.revanced.manager.network.dto.ExternalBundleSnapshot
 import app.revanced.manager.network.dto.ReVancedAsset
 import app.revanced.manager.network.service.HttpService
+import app.revanced.manager.network.utils.getOrNull
 import app.revanced.manager.network.utils.getOrThrow
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
@@ -17,7 +20,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.toInstant
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -432,6 +439,110 @@ class GitHubPullRequestBundle(
         lastNotifiedVersion,
         enabled
     )
+}
+
+class ExternalGraphqlPatchBundle(
+    name: String,
+    uid: Int,
+    displayName: String?,
+    createdAt: Long?,
+    updatedAt: Long?,
+    installedVersionSignature: String?,
+    error: Throwable?,
+    directory: File,
+    endpoint: String,
+    autoUpdate: Boolean,
+    searchUpdate: Boolean,
+    lastNotifiedVersion: String?,
+    enabled: Boolean,
+    private var metadata: ExternalBundleMetadata
+) : RemotePatchBundle(
+    name,
+    uid,
+    displayName,
+    createdAt,
+    updatedAt,
+    installedVersionSignature,
+    error,
+    directory,
+    endpoint,
+    autoUpdate,
+    searchUpdate,
+    lastNotifiedVersion,
+    enabled
+) {
+    private val api: ExternalBundlesApi by inject()
+
+    override suspend fun getLatestInfo(): ReVancedAsset = withContext(Dispatchers.IO) {
+        val latest = api.getBundleById(metadata.bundleId).getOrNull()
+        if (latest != null) {
+            metadata = metadataFromSnapshot(latest)
+            ExternalBundleMetadataStore.write(directory, metadata)
+        }
+        snapshotToAsset(latest)
+    }
+
+    override fun copy(
+        error: Throwable?,
+        name: String,
+        displayName: String?,
+        createdAt: Long?,
+        updatedAt: Long?,
+        autoUpdate: Boolean,
+        searchUpdate: Boolean,
+        lastNotifiedVersion: String?,
+        enabled: Boolean
+    ) = ExternalGraphqlPatchBundle(
+        name,
+        uid,
+        displayName,
+        createdAt,
+        updatedAt,
+        installedVersionSignature,
+        error,
+        directory,
+        endpoint,
+        autoUpdate,
+        searchUpdate,
+        lastNotifiedVersion,
+        enabled,
+        metadata
+    )
+
+    private fun metadataFromSnapshot(snapshot: ExternalBundleSnapshot) = ExternalBundleMetadata(
+        bundleId = metadata.bundleId,
+        downloadUrl = snapshot.downloadUrl ?: metadata.downloadUrl,
+        signatureDownloadUrl = snapshot.signatureDownloadUrl ?: metadata.signatureDownloadUrl,
+        version = snapshot.version.ifBlank { metadata.version },
+        createdAt = snapshot.createdAt.ifBlank { metadata.createdAt },
+        description = snapshot.description ?: metadata.description
+    )
+
+    private fun snapshotToAsset(snapshot: ExternalBundleSnapshot?): ReVancedAsset {
+        val downloadUrl = snapshot?.downloadUrl ?: metadata.downloadUrl
+        val signatureUrl = snapshot?.signatureDownloadUrl ?: metadata.signatureDownloadUrl
+        val version = snapshot?.version?.ifBlank { null } ?: metadata.version
+        val description = snapshot?.description ?: metadata.description ?: ""
+        val createdAtRaw = snapshot?.createdAt ?: metadata.createdAt
+        val createdAt = parseCreatedAt(createdAtRaw)
+
+        return ReVancedAsset(
+            downloadUrl = downloadUrl,
+            createdAt = createdAt,
+            signatureDownloadUrl = signatureUrl,
+            pageUrl = snapshot?.sourceUrl,
+            description = description,
+            version = version
+        )
+    }
+
+    private fun parseCreatedAt(raw: String?): LocalDateTime {
+        val trimmed = raw?.trim().orEmpty()
+        val instantParsed = runCatching { Instant.parse(trimmed).toLocalDateTime(TimeZone.UTC) }.getOrNull()
+        if (instantParsed != null) return instantParsed
+        val localParsed = runCatching { LocalDateTime.parse(trimmed) }.getOrNull()
+        return localParsed ?: Clock.System.now().toLocalDateTime(TimeZone.UTC)
+    }
 }
 
 private data class CachedChangelog(val asset: ReVancedAsset, val timestamp: Long)

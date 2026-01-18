@@ -111,6 +111,7 @@ fun BundleItem(
                 }
             },
             onUpdate = onUpdate,
+            onForceUpdate = onForceUpdate,
             autoOpenReleaseRequest = autoOpenReleaseRequest,
         )
     }

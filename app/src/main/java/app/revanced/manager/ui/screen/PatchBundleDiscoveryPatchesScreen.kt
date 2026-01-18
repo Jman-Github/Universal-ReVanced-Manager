@@ -18,6 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -27,7 +28,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.revanced.manager.R
-import app.revanced.manager.network.dto.ExternalBundleSnapshot
+import app.revanced.manager.network.dto.ExternalBundlePatch
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
 import app.revanced.manager.ui.component.LoadingIndicator
@@ -48,6 +49,13 @@ fun PatchBundleDiscoveryPatchesScreen(
     val errorMessage = viewModel.errorMessage
     val bundle = remember(bundles, bundleId) {
         bundles?.firstOrNull { it.bundleId == bundleId }
+    }
+    val patches = viewModel.getPatches(bundleId)
+    val patchesLoading = viewModel.isPatchesLoading(bundleId)
+    val patchesError = viewModel.getPatchesError(bundleId)
+
+    LaunchedEffect(bundleId) {
+        viewModel.loadPatches(bundleId)
     }
 
     val title = bundle?.let {
@@ -74,7 +82,7 @@ fun PatchBundleDiscoveryPatchesScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             when {
-                isLoading && bundle == null -> {
+                (isLoading && bundle == null) || patchesLoading -> {
                     item {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -85,17 +93,17 @@ fun PatchBundleDiscoveryPatchesScreen(
                     }
                 }
 
-                bundle == null -> {
+                bundle == null || patchesError != null -> {
                     item {
                         Text(
-                            text = errorMessage ?: stringResource(R.string.patch_bundle_discovery_patches_empty),
+                            text = patchesError ?: errorMessage ?: stringResource(R.string.patch_bundle_discovery_patches_empty),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
 
-                bundle.patches.isEmpty() -> {
+                patches.isNullOrEmpty() -> {
                     item {
                         Text(
                             text = stringResource(R.string.patch_bundle_discovery_patches_empty),
@@ -106,8 +114,8 @@ fun PatchBundleDiscoveryPatchesScreen(
                 }
 
                 else -> {
-                    items(bundle.patches.size, key = { index -> "${bundle.bundleId}-$index" }) { index ->
-                        PatchBundlePatchItem(bundle, index)
+                    items(patches.size, key = { index -> "${bundle.bundleId}-$index" }) { index ->
+                        PatchBundlePatchItem(patches, index)
                     }
                 }
             }
@@ -118,10 +126,10 @@ fun PatchBundleDiscoveryPatchesScreen(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PatchBundlePatchItem(
-    bundle: ExternalBundleSnapshot,
+    patches: List<ExternalBundlePatch>,
     index: Int,
 ) {
-    val patch = bundle.patches[index]
+    val patch = patches[index]
     ExpressiveSettingsCard(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(16.dp)

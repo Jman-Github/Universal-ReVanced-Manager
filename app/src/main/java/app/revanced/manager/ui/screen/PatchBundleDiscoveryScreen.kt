@@ -1,7 +1,11 @@
 package app.revanced.manager.ui.screen
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.tween
+import android.content.Context
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.text.format.Formatter
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -11,17 +15,19 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Public
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Source
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -29,19 +35,23 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,31 +60,43 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.revanced.manager.R
 import app.revanced.manager.domain.bundles.RemotePatchBundle
+import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.network.dto.ExternalBundleSnapshot
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.CheckedFilterChip
+import app.revanced.manager.ui.component.ConfirmDialog
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
 import app.revanced.manager.ui.component.LoadingIndicator
+import app.revanced.manager.ui.component.bundle.LinkOptionRow
+import app.revanced.manager.ui.component.patches.PathSelectorDialog
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsCard
 import app.revanced.manager.ui.viewmodel.BundleDiscoveryViewModel
-import app.revanced.manager.util.consumeHorizontalScroll
+import app.revanced.manager.util.isAllowedPatchBundleFile
 import app.revanced.manager.util.openUrl
+import app.revanced.manager.util.relativeTime
 import app.revanced.manager.domain.manager.PreferencesManager
+import app.revanced.manager.util.toast
 import compose.icons.FontAwesomeIcons
 import compose.icons.fontawesomeicons.Brands
 import compose.icons.fontawesomeicons.brands.Github
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import coil.compose.AsyncImage
+import java.nio.file.Files
+import java.nio.file.Path
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -87,6 +109,9 @@ fun PatchBundleDiscoveryScreen(
     val context = LocalContext.current
     val prefs: PreferencesManager = koinInject()
     val patchBundleRepository: PatchBundleRepository = koinInject()
+    val filesystem: Filesystem = koinInject()
+    val storageRoots = remember { filesystem.storageRoots() }
+    val clipboard = remember(context) { context.getSystemService(ClipboardManager::class.java) }
     val sources by patchBundleRepository.sources.collectAsStateWithLifecycle(emptyList())
     val existingEndpoints = remember(sources) {
         sources.filterIsInstance<RemotePatchBundle>().map { it.endpoint }.toSet()
@@ -95,10 +120,17 @@ fun PatchBundleDiscoveryScreen(
     val isLoading = viewModel.isLoading
     val errorMessage = viewModel.errorMessage
     var query by remember { mutableStateOf("") }
+    var packageQuery by remember { mutableStateOf("") }
     val showReleasePref by prefs.patchBundleDiscoveryShowRelease.getAsState()
     val showPrereleasePref by prefs.patchBundleDiscoveryShowPrerelease.getAsState()
     var showRelease by remember { mutableStateOf(showReleasePref) }
     var showPrerelease by remember { mutableStateOf(showPrereleasePref) }
+    LaunchedEffect(showRelease, showPrerelease) {
+        if (!showRelease && !showPrerelease) {
+            showRelease = true
+            showPrerelease = true
+        }
+    }
     LaunchedEffect(showReleasePref) {
         if (showRelease != showReleasePref) {
             showRelease = showReleasePref
@@ -118,6 +150,11 @@ fun PatchBundleDiscoveryScreen(
         if (showPrerelease != showPrereleasePref) {
             prefs.patchBundleDiscoveryShowPrerelease.update(showPrerelease)
         }
+    }
+    LaunchedEffect(packageQuery) {
+        val trimmed = packageQuery.trim()
+        delay(200)
+        viewModel.refresh(trimmed.ifBlank { null })
     }
     val groupedBundles by remember(bundles, query, showRelease, showPrerelease) {
         derivedStateOf {
@@ -139,19 +176,19 @@ fun PatchBundleDiscoveryScreen(
                     BundleGroup(key = key, release = null, prerelease = null)
                 }
                 grouped[key] = if (bundle.isPrerelease) {
-                    entry.copy(prerelease = bundle)
+                    if (entry.prerelease == null) entry.copy(prerelease = bundle) else entry
                 } else {
-                    entry.copy(release = bundle)
+                    if (entry.release == null) entry.copy(release = bundle) else entry
                 }
             }
 
-            val hasTypeFilter = showRelease || showPrerelease
+            val allowRelease = showRelease
+            val allowPrerelease = showPrerelease
             val filteredByType = order.mapNotNull { grouped[it] }.filter { group ->
-                if (!hasTypeFilter || (showRelease && showPrerelease)) return@filter true
                 val hasRelease = group.release != null
                 val hasPrerelease = group.prerelease != null
 
-                (showRelease && hasRelease) || (showPrerelease && hasPrerelease)
+                (allowRelease && hasRelease) || (allowPrerelease && hasPrerelease)
             }
 
             filteredByType.filter { group ->
@@ -169,6 +206,167 @@ fun PatchBundleDiscoveryScreen(
                     .joinToString(" ")
                     .lowercase()
                 haystack.contains(trimmedQuery)
+            }
+        }
+    }
+    val variantOverrides = remember { mutableStateMapOf<String, Boolean>() }
+    var activeBundleMenu by remember { mutableStateOf<BundleMenuState?>(null) }
+    var activeExportBundle by remember { mutableStateOf<ExternalBundleSnapshot?>(null) }
+    var exportFileDialogState by remember { mutableStateOf<BundleExportFileDialogState?>(null) }
+    var pendingExportConfirmation by remember { mutableStateOf<PendingBundleExportConfirmation?>(null) }
+
+    activeExportBundle?.let { bundle ->
+        PathSelectorDialog(
+            roots = storageRoots,
+            onSelect = { path ->
+                if (path == null) activeExportBundle = null
+            },
+            fileFilter = { isAllowedPatchBundleFile(it) },
+            allowDirectorySelection = false,
+            fileTypeLabel = bundleExportExtension(bundle),
+            confirmButtonText = stringResource(R.string.save),
+            onConfirm = { directory ->
+                exportFileDialogState = BundleExportFileDialogState(
+                    bundle = bundle,
+                    directory = directory,
+                    fileName = defaultBundleExportName(bundle)
+                )
+            }
+        )
+    }
+
+    exportFileDialogState?.let { state ->
+        ExportBundleFileNameDialog(
+            initialName = state.fileName,
+            onDismiss = {
+                exportFileDialogState = null
+            },
+            onConfirm = { fileName ->
+                val trimmedName = fileName.trim()
+                if (trimmedName.isBlank()) return@ExportBundleFileNameDialog
+                exportFileDialogState = null
+                val resolvedName = ensureBundleExportExtension(trimmedName, state.bundle)
+                val target = state.directory.resolve(resolvedName)
+                if (Files.exists(target)) {
+                    pendingExportConfirmation = PendingBundleExportConfirmation(
+                        bundle = state.bundle,
+                        directory = state.directory,
+                        fileName = resolvedName
+                    )
+                } else {
+                    viewModel.exportBundle(state.bundle, target)
+                    activeExportBundle = null
+                }
+            }
+        )
+    }
+
+    pendingExportConfirmation?.let { state ->
+        ConfirmDialog(
+            onDismiss = {
+                pendingExportConfirmation = null
+                exportFileDialogState = BundleExportFileDialogState(
+                    bundle = state.bundle,
+                    directory = state.directory,
+                    fileName = state.fileName
+                )
+            },
+            onConfirm = {
+                pendingExportConfirmation = null
+                viewModel.exportBundle(state.bundle, state.directory.resolve(state.fileName))
+                activeExportBundle = null
+            },
+            title = stringResource(R.string.export_overwrite_title),
+            description = stringResource(R.string.export_overwrite_description, state.fileName),
+            icon = Icons.Outlined.FileDownload
+        )
+    }
+    activeBundleMenu?.let { menu ->
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        val coroutineScope = rememberCoroutineScope()
+        val toggleLabel = stringResource(
+            if (menu.showPrerelease) {
+                R.string.patch_bundle_discovery_show_release
+            } else {
+                R.string.patch_bundle_discovery_show_prerelease
+            }
+        )
+        ModalBottomSheet(
+            onDismissRequest = { activeBundleMenu = null },
+            sheetState = sheetState
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = menu.displayName,
+                    style = MaterialTheme.typography.titleMedium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                LinkOptionRow(
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Outlined.ContentCopy,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    },
+                    text = stringResource(R.string.patch_bundle_copy_remote_url)
+                ) {
+                    coroutineScope.launch {
+                        sheetState.hide()
+                        activeBundleMenu = null
+                        val url = viewModel.remoteBundleUrl(menu.bundle)
+                        if (url.isNullOrBlank()) {
+                            context.toast(context.getString(R.string.patch_bundle_discovery_error))
+                        } else {
+                            clipboard?.setPrimaryClip(
+                                ClipData.newPlainText(
+                                    context.getString(R.string.patch_bundle_remote_url_label),
+                                    url
+                                )
+                            )
+                            context.toast(context.getString(R.string.toast_copied_to_clipboard))
+                        }
+                    }
+                }
+                LinkOptionRow(
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Outlined.FileDownload,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    },
+                    text = stringResource(R.string.patch_bundle_export)
+                ) {
+                    coroutineScope.launch {
+                        sheetState.hide()
+                        activeBundleMenu = null
+                        activeExportBundle = menu.bundle
+                    }
+                }
+                if (menu.toggleVisible) {
+                    LinkOptionRow(
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Outlined.Refresh,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        },
+                        text = toggleLabel,
+                        enabled = menu.toggleEnabled
+                    ) {
+                        val newValue = !menu.showPrerelease
+                        variantOverrides[menu.groupKey] = newValue
+                        activeBundleMenu = menu.copy(showPrerelease = newValue)
+                    }
+                }
             }
         }
     }
@@ -252,6 +450,30 @@ fun PatchBundleDiscoveryScreen(
                             }
                         }
                         OutlinedTextField(
+                            value = packageQuery,
+                            onValueChange = { packageQuery = it },
+                            label = { Text(stringResource(R.string.patch_bundle_discovery_package_label)) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Outlined.Search,
+                                    contentDescription = null
+                                )
+                            },
+                            trailingIcon = {
+                                if (packageQuery.isNotBlank()) {
+                                    IconButton(onClick = { packageQuery = "" }) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Close,
+                                            contentDescription = null
+                                        )
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
                             value = query,
                             onValueChange = { query = it },
                             label = { Text(stringResource(R.string.patch_bundle_discovery_search_label)) },
@@ -281,12 +503,20 @@ fun PatchBundleDiscoveryScreen(
                         ) {
                             CheckedFilterChip(
                                 selected = showRelease,
-                                onClick = { showRelease = !showRelease },
+                                onClick = {
+                                    val newValue = !showRelease
+                                    if (!newValue && !showPrerelease) return@CheckedFilterChip
+                                    showRelease = newValue
+                                },
                                 label = { Text(stringResource(R.string.patch_bundle_discovery_release)) }
                             )
                             CheckedFilterChip(
                                 selected = showPrerelease,
-                                onClick = { showPrerelease = !showPrerelease },
+                                onClick = {
+                                    val newValue = !showPrerelease
+                                    if (!newValue && !showRelease) return@CheckedFilterChip
+                                    showPrerelease = newValue
+                                },
                                 label = { Text(stringResource(R.string.patch_bundle_discovery_prerelease)) }
                             )
                         }
@@ -329,23 +559,27 @@ fun PatchBundleDiscoveryScreen(
                 else -> {
                     items(visibleBundles, key = { it.key }) { group ->
                         BundleDiscoveryItem(
+                            groupKey = group.key,
                             releaseBundle = group.release,
                             prereleaseBundle = group.prerelease,
                             allowRelease = showRelease,
                             allowPrerelease = showPrerelease,
+                            showPrereleaseOverride = variantOverrides[group.key],
                             isImported = { bundle ->
-                                viewModel.bundleEndpoint(bundle.bundleId) in existingEndpoints
+                                viewModel.bundleEndpoints(bundle).any { it in existingEndpoints }
                             },
                             onImport = { bundle ->
                                 viewModel.importBundle(
-                                    bundle.bundleId,
+                                    bundle,
                                     autoUpdate = true,
                                     searchUpdate = true
                                 )
                             },
                             onViewPatches = { bundle ->
                                 onViewPatches(bundle.bundleId)
-                            }
+                            },
+                            onMenuRequest = { activeBundleMenu = it },
+                            exportProgressFor = viewModel::getExportProgress
                         )
                     }
                 }
@@ -357,29 +591,30 @@ fun PatchBundleDiscoveryScreen(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun BundleDiscoveryItem(
+    groupKey: String,
     releaseBundle: ExternalBundleSnapshot?,
     prereleaseBundle: ExternalBundleSnapshot?,
     allowRelease: Boolean,
     allowPrerelease: Boolean,
+    showPrereleaseOverride: Boolean?,
     isImported: (ExternalBundleSnapshot) -> Boolean,
     onImport: (ExternalBundleSnapshot) -> Unit,
     onViewPatches: (ExternalBundleSnapshot) -> Unit,
+    onMenuRequest: (BundleMenuState) -> Unit,
+    exportProgressFor: (Int) -> BundleDiscoveryViewModel.BundleExportProgress?,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val hasRelease = releaseBundle != null
     val hasPrerelease = prereleaseBundle != null
-    val noTypeFilter = !allowRelease && !allowPrerelease
-    val releaseAllowed = hasRelease && (allowRelease || noTypeFilter)
-    val prereleaseAllowed = hasPrerelease && (allowPrerelease || noTypeFilter)
-    val toggleEnabled = releaseAllowed && prereleaseAllowed
-    var showPrerelease by remember(releaseBundle?.bundleId, prereleaseBundle?.bundleId) {
-        mutableStateOf(!hasRelease && hasPrerelease)
-    }
+    val releaseAllowed = allowRelease && hasRelease
+    val prereleaseAllowed = allowPrerelease && hasPrerelease
+    val toggleVisible = allowRelease && allowPrerelease
+    val toggleEnabled = toggleVisible && hasRelease && hasPrerelease
     val effectiveShowPrerelease = when {
         releaseAllowed && !prereleaseAllowed -> false
         prereleaseAllowed && !releaseAllowed -> true
-        else -> showPrerelease
+        else -> showPrereleaseOverride ?: (!hasRelease && hasPrerelease)
     }
     val bundle = if (effectiveShowPrerelease && prereleaseBundle != null) {
         prereleaseBundle
@@ -393,8 +628,11 @@ private fun BundleDiscoveryItem(
             .ifBlank { bundle.sourceUrl }
     }
     val description = bundle.repoDescription?.takeIf { it.isNotBlank() }
-    val patchCount = bundle.patches.size
+    val patchCount = if (bundle.patches.isNotEmpty()) bundle.patches.size else bundle.patchCount
     val isSupported = !bundle.isBundleV3
+    val lastUpdatedLabel = remember(bundle.repoPushedAt) {
+        formatRepoUpdatedLabel(context, bundle.repoPushedAt)
+    }
     val importEnabled = isSupported && !isImported(bundle)
     val viewPatchesEnabled = patchCount > 0
     val importLabel = if (isImported(bundle)) {
@@ -402,12 +640,16 @@ private fun BundleDiscoveryItem(
     } else {
         stringResource(R.string.import_)
     }
-    val toggleLabel = stringResource(
-        if (effectiveShowPrerelease) {
-            R.string.patch_bundle_discovery_prerelease
-        } else {
-            R.string.patch_bundle_discovery_release
-        }
+    val exportProgress = exportProgressFor(bundle.bundleId)
+    val menuState = BundleMenuState(
+        groupKey = groupKey,
+        bundle = bundle,
+        release = releaseBundle,
+        prerelease = prereleaseBundle,
+        showPrerelease = effectiveShowPrerelease,
+        toggleVisible = toggleVisible,
+        toggleEnabled = toggleEnabled,
+        displayName = displayName
     )
 
     ExpressiveSettingsCard(
@@ -469,12 +711,47 @@ private fun BundleDiscoveryItem(
                         )
                     }
                 }
+                IconButton(onClick = { onMenuRequest(menuState) }) {
+                    Icon(
+                        imageVector = Icons.Outlined.MoreVert,
+                        contentDescription = stringResource(R.string.more_options)
+                    )
+                }
             }
 
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                if (bundle.bundleType.isNotBlank()) {
+                    val typeLabel = remember(bundle.bundleType) {
+                        formatBundleTypeLabel(bundle.bundleType)
+                    }
+                    BundleTag(
+                        text = typeLabel,
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                BundleTag(
+                    text = stringResource(
+                        if (bundle.isPrerelease) {
+                            R.string.patch_bundle_discovery_prerelease
+                        } else {
+                            R.string.patch_bundle_discovery_release
+                        }
+                    ),
+                    containerColor = if (bundle.isPrerelease) {
+                        MaterialTheme.colorScheme.tertiaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.secondaryContainer
+                    },
+                    contentColor = if (bundle.isPrerelease) {
+                        MaterialTheme.colorScheme.onTertiaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSecondaryContainer
+                    }
+                )
                 if (bundle.version.isNotBlank()) {
                     BundleTag(
                         text = bundle.version,
@@ -487,6 +764,20 @@ private fun BundleDiscoveryItem(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 )
+                if (!lastUpdatedLabel.isNullOrBlank()) {
+                    BundleTag(
+                        text = lastUpdatedLabel,
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (bundle.isRepoArchived) {
+                    BundleTag(
+                        text = stringResource(R.string.patch_bundle_discovery_archived_badge),
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
                 if (isImported(bundle)) {
                     BundleTag(
                         text = stringResource(R.string.patch_bundle_discovery_imported),
@@ -496,6 +787,13 @@ private fun BundleDiscoveryItem(
                 }
             }
 
+            if (bundle.isRepoArchived) {
+                Text(
+                    text = stringResource(R.string.patch_bundle_discovery_archived_notice),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
             if (!isSupported) {
                 Text(
                     text = stringResource(R.string.patch_bundle_discovery_v3_warning),
@@ -509,47 +807,6 @@ private fun BundleDiscoveryItem(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                val toggleScrollState = rememberScrollState()
-                FilledTonalButton(
-                    enabled = toggleEnabled,
-                    onClick = { showPrerelease = !showPrerelease },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(
-                        text = toggleLabel,
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Clip,
-                        modifier = Modifier
-                            .consumeHorizontalScroll(toggleScrollState)
-                            .horizontalScroll(toggleScrollState)
-                    )
-                }
-                val viewScrollState = rememberScrollState()
-                LaunchedEffect(viewScrollState.maxValue) {
-                    if (viewScrollState.maxValue <= 0) {
-                        return@LaunchedEffect
-                    }
-                    viewScrollState.scrollTo(0)
-                    while (isActive) {
-                        viewScrollState.animateScrollTo(
-                            value = viewScrollState.maxValue,
-                            animationSpec = tween(
-                                durationMillis = 2200,
-                                easing = LinearEasing
-                            )
-                        )
-                        delay(600)
-                        viewScrollState.animateScrollTo(
-                            value = 0,
-                            animationSpec = tween(
-                                durationMillis = 2200,
-                                easing = LinearEasing
-                            )
-                        )
-                        delay(1000)
-                    }
-                }
                 FilledTonalButton(
                     enabled = viewPatchesEnabled,
                     onClick = { onViewPatches(bundle) },
@@ -559,13 +816,9 @@ private fun BundleDiscoveryItem(
                         text = stringResource(R.string.patch_bundle_discovery_view_patches),
                         maxLines = 1,
                         softWrap = false,
-                        overflow = TextOverflow.Clip,
-                        modifier = Modifier
-                            .consumeHorizontalScroll(viewScrollState)
-                            .horizontalScroll(viewScrollState)
+                        overflow = TextOverflow.Clip
                     )
                 }
-                val importScrollState = rememberScrollState()
                 FilledTonalButton(
                     enabled = importEnabled,
                     onClick = { onImport(bundle) },
@@ -575,10 +828,45 @@ private fun BundleDiscoveryItem(
                         text = importLabel,
                         maxLines = 1,
                         softWrap = false,
-                        overflow = TextOverflow.Clip,
-                        modifier = Modifier
-                            .consumeHorizontalScroll(importScrollState)
-                            .horizontalScroll(importScrollState)
+                        overflow = TextOverflow.Clip
+                    )
+                }
+            }
+            if (exportProgress != null) {
+                val totalBytes = exportProgress.bytesTotal?.takeIf { it > 0L }
+                val fraction = exportProgress.bytesTotal?.takeIf { it > 0L }?.let { total ->
+                    exportProgress.bytesRead.toFloat() / total.toFloat()
+                }
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.patch_bundle_exporting),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    val progressLabel = if (totalBytes != null) {
+                        val percent = (exportProgress.bytesRead.toDouble() / totalBytes.toDouble()) * 100
+                        context.getString(
+                            R.string.patch_bundle_export_progress,
+                            Formatter.formatShortFileSize(context, exportProgress.bytesRead),
+                            Formatter.formatShortFileSize(context, totalBytes),
+                            percent
+                        )
+                    } else {
+                        context.getString(
+                            R.string.patch_bundle_export_progress_indeterminate,
+                            Formatter.formatShortFileSize(context, exportProgress.bytesRead)
+                        )
+                    }
+                    Text(
+                        text = progressLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    LinearProgressIndicator(
+                        progress = { fraction ?: 0f },
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             }
@@ -605,8 +893,113 @@ private fun BundleTag(
     }
 }
 
+@Composable
+private fun ExportBundleFileNameDialog(
+    initialName: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var value by remember(initialName) { mutableStateOf(initialName) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.export)) },
+        text = {
+            OutlinedTextField(
+                value = value,
+                onValueChange = { value = it },
+                singleLine = true,
+                label = { Text(stringResource(R.string.file_name)) }
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(value) }) {
+                Text(stringResource(R.string.save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
+}
+
+private fun defaultBundleExportName(bundle: ExternalBundleSnapshot): String {
+    val base = listOf(bundle.ownerName, bundle.repoName)
+        .filter { it.isNotBlank() }
+        .joinToString("-")
+        .ifBlank { "patch-bundle" }
+    val version = bundle.version.takeIf { it.isNotBlank() }?.let { "-$it" }.orEmpty()
+    val rawName = sanitizeFileName("$base$version")
+    return ensureBundleExportExtension(rawName, bundle)
+}
+
+private fun ensureBundleExportExtension(name: String, bundle: ExternalBundleSnapshot): String {
+    val trimmed = name.trim()
+    val ext = bundleExportExtension(bundle)
+    return if (trimmed.lowercase().endsWith(".$ext")) trimmed else "$trimmed.$ext"
+}
+
+private fun bundleExportExtension(bundle: ExternalBundleSnapshot): String {
+    val type = bundle.bundleType.trim()
+    return if (type.startsWith("Morphe", ignoreCase = true)) "mpp" else "rvp"
+}
+
+private fun sanitizeFileName(value: String): String =
+    value.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+
+private fun formatBundleTypeLabel(rawType: String): String {
+    val trimmed = rawType.trim()
+    if (trimmed.startsWith("Morphe", ignoreCase = true)) {
+        return "Morphe"
+    }
+    if (trimmed.startsWith("ReVanced", ignoreCase = true)) {
+        val version = trimmed.substringAfter(':', "").ifBlank {
+            trimmed.substringAfter(' ', "")
+        }.trim()
+        return if (version.isBlank()) {
+            "ReVanced"
+        } else {
+            "ReVanced $version"
+        }
+    }
+    return trimmed.replace('_', ' ').replaceFirstChar { it.uppercase() }
+}
+
+private fun formatRepoUpdatedLabel(context: Context, raw: String?): String? {
+    val trimmed = raw?.trim().orEmpty()
+    if (trimmed.isEmpty()) return null
+    val relative = runCatching {
+        Instant.parse(trimmed).toLocalDateTime(TimeZone.UTC).relativeTime(context)
+    }.getOrNull() ?: return null
+    return context.getString(R.string.bundle_updated_at, relative)
+}
+
 private data class BundleGroup(
     val key: String,
     val release: ExternalBundleSnapshot?,
     val prerelease: ExternalBundleSnapshot?
+)
+
+private data class BundleExportFileDialogState(
+    val bundle: ExternalBundleSnapshot,
+    val directory: Path,
+    val fileName: String
+)
+
+private data class PendingBundleExportConfirmation(
+    val bundle: ExternalBundleSnapshot,
+    val directory: Path,
+    val fileName: String
+)
+
+private data class BundleMenuState(
+    val groupKey: String,
+    val bundle: ExternalBundleSnapshot,
+    val release: ExternalBundleSnapshot?,
+    val prerelease: ExternalBundleSnapshot?,
+    val showPrerelease: Boolean,
+    val toggleVisible: Boolean,
+    val toggleEnabled: Boolean,
+    val displayName: String
 )

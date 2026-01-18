@@ -23,7 +23,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.expandVertically
@@ -234,6 +237,7 @@ fun DashboardScreen(
     fun BundleProgressBanner(modifier: Modifier = Modifier) {
         var importCollapsed by rememberSaveable { mutableStateOf(false) }
         var updateCollapsed by rememberSaveable { mutableStateOf(false) }
+        val bannerExitAlphaSpec = tween<Float>(durationMillis = 220, easing = FastOutSlowInEasing)
         Column(
             modifier = modifier,
             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -248,10 +252,13 @@ fun DashboardScreen(
                         initialOffsetY = { height -> -height / 2 },
                         animationSpec = spring(stiffness = 400f)
                     ),
-                exit = fadeOut(animationSpec = spring(stiffness = 400f)) +
+                exit = fadeOut(animationSpec = bannerExitAlphaSpec) +
                     slideOutVertically(
                         targetOffsetY = { height -> -height / 2 },
-                        animationSpec = spring(stiffness = 400f)
+                        animationSpec = spring(
+                            stiffness = 250f,
+                            dampingRatio = Spring.DampingRatioNoBouncy
+                        )
                     )
             ) {
                 bundleImportProgress?.let { progress ->
@@ -324,10 +331,13 @@ fun DashboardScreen(
                         initialOffsetY = { height -> -height / 2 },
                         animationSpec = spring(stiffness = 400f)
                     ),
-                exit = fadeOut(animationSpec = spring(stiffness = 400f)) +
+                exit = fadeOut(animationSpec = bannerExitAlphaSpec) +
                     slideOutVertically(
                         targetOffsetY = { height -> -height / 2 },
-                        animationSpec = spring(stiffness = 400f)
+                        animationSpec = spring(
+                            stiffness = 250f,
+                            dampingRatio = Spring.DampingRatioNoBouncy
+                        )
                     )
             ) {
                 bundleUpdateProgress?.let { progress ->

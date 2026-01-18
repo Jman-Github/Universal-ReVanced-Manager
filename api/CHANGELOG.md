@@ -1,6 +1,11 @@
 # v1.7.1 (TBD)
 
 
+# ⚠️ BREAKING CHANGES
+
+The `Discover patch bundles` screen has been updated to use [Brosssh's new API](https://github.com/brosssh/revanced-external-bundles/blob/dev/docs/graphql-examples.md). As a result, you will need to reimport any patch bundles that were added via the Discovery system prior to this release to continue receiving updates from their remote sources.
+
+
 # Features
 
 - Removed the `Discover patch bundles` banner and added a FAB button next to the plus button instead to access the `Discover patch bundles` page
@@ -36,6 +41,10 @@
 - Redesigned the patch bundle widgets UI
 - Hold tapping the individual update check button on patch bundles will give you a prompt to force redownload the corresponding patch bundle
 - Removed redundant `Reset patch bundles` button in `Developer options`
+- Moved the `Release`/`Prerelease` toggle button to a three dot menu popout for each patch bundle listing on the `Discover patch bundles` screen
+- Added the ability to copy the remote URLs for patch bundles on the `Discover patch bundles` screen from a three dot button menu popout
+- Added the ability to download patch bundles to your devices storage from the `Discover patch bundles` screen through the three dot buttons menu popout
+- Added a way to search/filter through patch bundles on the `Discover patch bundles` screen by app package name https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/113
 
 
 # Bug fixes

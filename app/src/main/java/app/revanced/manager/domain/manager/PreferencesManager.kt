@@ -109,8 +109,8 @@ class PreferencesManager(
     val patchSelectionShowVersionTags = booleanPreference("patch_selection_show_version_tags", true)
     val pathSelectorFavorites = stringSetPreference("path_selector_favorites", emptySet())
     val pathSelectorLastDirectory = stringPreference("path_selector_last_directory", "")
-    val patchBundleDiscoveryShowRelease = booleanPreference("patch_bundle_discovery_show_release", false)
-    val patchBundleDiscoveryShowPrerelease = booleanPreference("patch_bundle_discovery_show_prerelease", false)
+    val patchBundleDiscoveryShowRelease = booleanPreference("patch_bundle_discovery_show_release", true)
+    val patchBundleDiscoveryShowPrerelease = booleanPreference("patch_bundle_discovery_show_prerelease", true)
 
     val acknowledgedDownloaderPlugins = stringSetPreference("acknowledged_downloader_plugins", emptySet())
     val autoSaveDownloaderApks = booleanPreference("auto_save_downloader_apks", true)
