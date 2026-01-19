@@ -848,27 +848,25 @@ fun InstalledAppInfoScreen(
                         )
                     }
 
-                    if (savedAppsEnabled) {
-                        var showDeleteConfirmation by rememberSaveable { mutableStateOf(false) }
-                        if (showDeleteConfirmation) {
-                            ConfirmDialog(
-                                onDismiss = { showDeleteConfirmation = false },
-                                onConfirm = {
-                                    showDeleteConfirmation = false
-                                    viewModel.deleteSavedEntry()
-                                },
-                                title = stringResource(R.string.delete_saved_entry_title),
-                                description = stringResource(R.string.delete_saved_entry_description),
-                                icon = Icons.Outlined.Delete
-                            )
-                        }
-                        key("delete_entry") {
-                            SegmentedButton(
-                                icon = Icons.Outlined.Delete,
-                                text = stringResource(R.string.delete),
-                                onClick = { showDeleteConfirmation = true }
-                            )
-                        }
+                    var showDeleteConfirmation by rememberSaveable { mutableStateOf(false) }
+                    if (showDeleteConfirmation) {
+                        ConfirmDialog(
+                            onDismiss = { showDeleteConfirmation = false },
+                            onConfirm = {
+                                showDeleteConfirmation = false
+                                viewModel.deleteSavedEntry()
+                            },
+                            title = stringResource(R.string.delete_saved_entry_title),
+                            description = stringResource(R.string.delete_saved_entry_description),
+                            icon = Icons.Outlined.Delete
+                        )
+                    }
+                    key("delete_entry") {
+                        SegmentedButton(
+                            icon = Icons.Outlined.Delete,
+                            text = stringResource(R.string.delete),
+                            onClick = { showDeleteConfirmation = true }
+                        )
                     }
                 } else {
                     if (isInstalledOnDevice) {
@@ -945,26 +943,24 @@ fun InstalledAppInfoScreen(
                     text = stringResource(R.string.export),
                     onClick = { openExportPicker() }
                 )
-                if (savedAppsEnabled) {
-                    var showDeleteConfirmation by rememberSaveable { mutableStateOf(false) }
-                    if (showDeleteConfirmation) {
-                        ConfirmDialog(
-                            onDismiss = { showDeleteConfirmation = false },
-                            onConfirm = {
-                                showDeleteConfirmation = false
-                                viewModel.deleteSavedEntry()
-                            },
-                            title = stringResource(R.string.delete_saved_entry_title),
-                            description = stringResource(R.string.delete_saved_entry_description),
-                            icon = Icons.Outlined.Delete
-                        )
-                    }
-                    SegmentedButton(
-                        icon = Icons.Outlined.Delete,
-                        text = stringResource(R.string.delete),
-                        onClick = { showDeleteConfirmation = true }
+                var showDeleteConfirmation by rememberSaveable { mutableStateOf(false) }
+                if (showDeleteConfirmation) {
+                    ConfirmDialog(
+                        onDismiss = { showDeleteConfirmation = false },
+                        onConfirm = {
+                            showDeleteConfirmation = false
+                            viewModel.deleteSavedEntry()
+                        },
+                        title = stringResource(R.string.delete_saved_entry_title),
+                        description = stringResource(R.string.delete_saved_entry_description),
+                        icon = Icons.Outlined.Delete
                     )
                 }
+                SegmentedButton(
+                    icon = Icons.Outlined.Delete,
+                    text = stringResource(R.string.delete),
+                    onClick = { showDeleteConfirmation = true }
+                )
                 SegmentedButton(
                     icon = Icons.Outlined.Update,
                     text = stringResource(R.string.repatch),
@@ -1032,27 +1028,25 @@ fun InstalledAppInfoScreen(
                 val deleteTitle = stringResource(R.string.delete_saved_app_title)
                 val deleteDescription = stringResource(R.string.delete_saved_app_description)
                 val deleteLabel = stringResource(R.string.delete)
-                if (savedAppsEnabled) {
-                    var showDeleteConfirmation by rememberSaveable { mutableStateOf(false) }
-                    if (showDeleteConfirmation) {
-                        ConfirmDialog(
-                            onDismiss = { showDeleteConfirmation = false },
-                            onConfirm = {
-                                showDeleteConfirmation = false
-                                deleteAction()
-                            },
-                            title = deleteTitle,
-                            description = deleteDescription,
-                            icon = Icons.Outlined.Delete
-                        )
-                    }
-                    key("delete_entry") {
-                        SegmentedButton(
-                            icon = Icons.Outlined.Delete,
-                            text = deleteLabel,
-                            onClick = { showDeleteConfirmation = true }
-                        )
-                    }
+                var showDeleteConfirmation by rememberSaveable { mutableStateOf(false) }
+                if (showDeleteConfirmation) {
+                    ConfirmDialog(
+                        onDismiss = { showDeleteConfirmation = false },
+                        onConfirm = {
+                            showDeleteConfirmation = false
+                            deleteAction()
+                        },
+                        title = deleteTitle,
+                        description = deleteDescription,
+                        icon = Icons.Outlined.Delete
+                    )
+                }
+                key("delete_entry") {
+                    SegmentedButton(
+                        icon = Icons.Outlined.Delete,
+                        text = deleteLabel,
+                        onClick = { showDeleteConfirmation = true }
+                    )
                 }
 
                 key("repatch") {

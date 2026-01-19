@@ -966,7 +966,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         forceSave: Boolean = false
     ): Boolean {
         val savedAppsEnabled = prefs.enableSavedApps.get()
-        val shouldSaveForLater = savedAppsEnabled || forceSave
+        val preserveSavedEntry = installedApp?.installType == InstallType.SAVED
+        val shouldSaveForLater = savedAppsEnabled || forceSave || preserveSavedEntry
         return withContext(Dispatchers.IO) {
             val installedPackageInfo = currentPackageName?.let(pm::getPackageInfo)
             val patchedPackageInfo = pm.getPackageInfo(outputFile)
@@ -1010,12 +1011,13 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 sanitizedOptionsFinal
             )
 
-            if (shouldSaveForLater || installType != InstallType.SAVED) {
+            val persistedInstallType = if (preserveSavedEntry) InstallType.SAVED else installType
+            if (shouldSaveForLater || persistedInstallType != InstallType.SAVED) {
                 installedAppRepository.addOrUpdate(
                     finalPackageName,
                     packageName,
                     finalVersion,
-                    installType,
+                    persistedInstallType,
                     sanitizedSelectionFinal,
                     selectionPayload
                 )

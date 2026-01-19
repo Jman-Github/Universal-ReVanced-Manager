@@ -8,6 +8,8 @@
 
 # Bug fixes
 
+- Fixed more issues with the `Saved patched apps for later` setting toggle
+
 
 # v1.7.1-dev.04 (2026-01-19)
 
