@@ -48,6 +48,9 @@ class BundleDiscoveryViewModel(
     var errorMessage: String? by mutableStateOf(null)
         private set
 
+    var bundleSearchQuery: String by mutableStateOf("")
+    var packageSearchQuery: String by mutableStateOf("")
+
     private val patchesByBundle = mutableStateMapOf<Int, List<ExternalBundlePatch>>()
     private val patchesLoading = mutableStateMapOf<Int, Boolean>()
     private val patchesError = mutableStateMapOf<Int, String?>()
@@ -55,15 +58,19 @@ class BundleDiscoveryViewModel(
     private val bundleExports = mutableStateMapOf<Int, BundleExportProgress>()
     private val cacheDir = File(app.cacheDir, "bundle_discovery").also { it.mkdirs() }
     private var refreshJob: Job? = null
+    private var searchJob: Job? = null
     private var currentQueryKey: String = ""
     private var nextOffset: Int = 0
     private var refreshToken: Int = 0
+    private var searchToken: Int = 0
     private var importProgressSnapshot by mutableStateOf<Map<String, PatchBundleRepository.DiscoveryImportProgress>>(emptyMap())
     private var queuedImportSnapshot by mutableStateOf<Set<String>>(emptySet())
     private val localQueuedKeys = mutableStateMapOf<String, Boolean>()
     var isLoadingMore: Boolean by mutableStateOf(false)
         private set
     var canLoadMore: Boolean by mutableStateOf(true)
+        private set
+    var isSearchingMore: Boolean by mutableStateOf(false)
         private set
 
     init {
@@ -89,6 +96,9 @@ class BundleDiscoveryViewModel(
     }
 
     fun refresh(packageNameQuery: String? = null) {
+        searchJob?.cancel()
+        searchToken++
+        isSearchingMore = false
         val key = packageNameQuery?.trim().orEmpty()
         currentQueryKey = key
         nextOffset = 0
@@ -128,31 +138,54 @@ class BundleDiscoveryViewModel(
 
     fun loadMore() {
         if (!canLoadMore || isLoadingMore) return
-        val key = currentQueryKey
-        val query = key.takeIf { it.isNotBlank() }
         viewModelScope.launch {
-            isLoadingMore = true
-            val snapshot = withContext(Dispatchers.IO) {
-                api.getBundles(query, limit = PAGE_SIZE, offset = nextOffset).getOrNull()
-            }
-            if (!snapshot.isNullOrEmpty()) {
-                val current = bundles.orEmpty()
-                val updated = current + snapshot
-                val cached = bundleCache[key]
-                val entry = if (cached != null) {
-                    cached.copy(bundles = updated)
-                } else {
-                    BundleCacheEntry(updated, fingerprint(updated))
+            loadNextPageInternal(force = false)
+        }
+    }
+
+    fun ensureSearchCoverage(
+        bundleQuery: String?,
+        packageQuery: String?,
+        allowRelease: Boolean,
+        allowPrerelease: Boolean
+    ) {
+        val trimmedBundle = bundleQuery?.trim().orEmpty()
+        val trimmedPackage = packageQuery?.trim().orEmpty()
+        val shouldSearch = trimmedBundle.isNotBlank() || trimmedPackage.isNotBlank()
+        if (!shouldSearch) {
+            searchJob?.cancel()
+            searchToken++
+            isSearchingMore = false
+            return
+        }
+        val queryKey = trimmedPackage.ifBlank { currentQueryKey }
+        if (queryKey.isNotBlank() && queryKey != currentQueryKey) return
+        searchJob?.cancel()
+        val localToken = ++searchToken
+        isSearchingMore = true
+        val token = refreshToken
+        searchJob = viewModelScope.launch {
+            try {
+                val queryLower = trimmedBundle.lowercase()
+                while (token == refreshToken) {
+                    if (isLoading || isLoadingMore) {
+                        delay(50)
+                        continue
+                    }
+                    val found = if (queryLower.isNotBlank()) {
+                        hasSearchMatches(queryLower, allowRelease, allowPrerelease)
+                    } else {
+                        bundles?.isNotEmpty() == true
+                    }
+                    if (found) break
+                    val loaded = loadNextPageInternal(force = true)
+                    if (!loaded) break
                 }
-                bundleCache[key] = entry
-                bundles = entry.bundles
-                persistDiskCache(key, entry)
-                nextOffset += snapshot.size
-                canLoadMore = snapshot.size >= PAGE_SIZE
-            } else {
-                canLoadMore = false
+            } finally {
+                if (localToken == searchToken) {
+                    isSearchingMore = false
+                }
             }
-            isLoadingMore = false
         }
     }
 
@@ -303,6 +336,85 @@ class BundleDiscoveryViewModel(
         return null
     }
 
+    private suspend fun loadNextPageInternal(force: Boolean): Boolean {
+        if ((!canLoadMore && !force) || isLoadingMore) return false
+        val key = currentQueryKey
+        val query = key.takeIf { it.isNotBlank() }
+        isLoadingMore = true
+        return try {
+            val snapshot = withContext(Dispatchers.IO) {
+                api.getBundles(query, limit = PAGE_SIZE, offset = nextOffset).getOrNull()
+            }
+            if (!snapshot.isNullOrEmpty()) {
+                val current = bundles.orEmpty()
+                val updated = current + snapshot
+                val cached = bundleCache[key]
+                val entry = if (cached != null) {
+                    cached.copy(bundles = updated)
+                } else {
+                    BundleCacheEntry(updated, fingerprint(updated))
+                }
+                bundleCache[key] = entry
+                bundles = entry.bundles
+                persistDiskCache(key, entry)
+                nextOffset += snapshot.size
+                canLoadMore = snapshot.size >= PAGE_SIZE
+                true
+            } else {
+                canLoadMore = false
+                false
+            }
+        } finally {
+            isLoadingMore = false
+        }
+    }
+
+    private fun hasSearchMatches(
+        queryLower: String,
+        allowRelease: Boolean,
+        allowPrerelease: Boolean
+    ): Boolean {
+        if (queryLower.isBlank()) return true
+        val list = bundles.orEmpty()
+        if (list.isEmpty()) return false
+        val grouped = LinkedHashMap<String, SearchGroup>()
+        for (bundle in list) {
+            val owner = bundle.ownerName.takeIf { it.isNotBlank() }
+            val repo = bundle.repoName.takeIf { it.isNotBlank() }
+            val key = if (owner != null || repo != null) {
+                listOfNotNull(owner, repo).joinToString("/")
+            } else {
+                bundle.sourceUrl
+            }
+            val entry = grouped.getOrPut(key) {
+                SearchGroup(release = null, prerelease = null)
+            }
+            grouped[key] = if (bundle.isPrerelease) {
+                if (entry.prerelease == null) entry.copy(prerelease = bundle) else entry
+            } else {
+                if (entry.release == null) entry.copy(release = bundle) else entry
+            }
+        }
+        return grouped.values.any { group ->
+            val hasRelease = group.release != null
+            val hasPrerelease = group.prerelease != null
+            if (!((allowRelease && hasRelease) || (allowPrerelease && hasPrerelease))) return@any false
+            val haystack = listOfNotNull(group.release, group.prerelease)
+                .flatMap {
+                    listOfNotNull(
+                        it.sourceUrl,
+                        it.ownerName,
+                        it.repoName,
+                        it.repoDescription,
+                        it.version
+                    )
+                }
+                .joinToString(" ")
+                .lowercase()
+            haystack.contains(queryLower)
+        }
+    }
+
     private fun fingerprint(bundles: List<ExternalBundleSnapshot>): String =
         bundles.joinToString(separator = "|") { bundle ->
             listOf(
@@ -336,6 +448,11 @@ class BundleDiscoveryViewModel(
     )
 
     data class BundleExportProgress(val bytesRead: Long, val bytesTotal: Long?)
+
+    private data class SearchGroup(
+        val release: ExternalBundleSnapshot?,
+        val prerelease: ExternalBundleSnapshot?
+    )
 
     private fun cacheFileForKey(key: String): File {
         val normalized = key.trim().lowercase(Locale.ROOT)

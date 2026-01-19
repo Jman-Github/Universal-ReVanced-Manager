@@ -121,9 +121,10 @@ fun PatchBundleDiscoveryScreen(
     val bundles = viewModel.bundles
     val isLoading = viewModel.isLoading
     val errorMessage = viewModel.errorMessage
+    val isSearchingMore = viewModel.isSearchingMore
     val listState = rememberLazyListState()
-    var query by remember { mutableStateOf("") }
-    var packageQuery by remember { mutableStateOf("") }
+    val query = viewModel.bundleSearchQuery
+    val packageQuery = viewModel.packageSearchQuery
     val showReleasePref by prefs.patchBundleDiscoveryShowRelease.getAsState()
     val showPrereleasePref by prefs.patchBundleDiscoveryShowPrerelease.getAsState()
     var showRelease by remember { mutableStateOf(showReleasePref) }
@@ -206,6 +207,15 @@ fun PatchBundleDiscoveryScreen(
                 haystack.contains(trimmedQuery)
             }
         }
+    }
+
+    LaunchedEffect(query, packageQuery, showRelease, showPrerelease, bundles) {
+        viewModel.ensureSearchCoverage(
+            bundleQuery = query,
+            packageQuery = packageQuery,
+            allowRelease = showRelease,
+            allowPrerelease = showPrerelease
+        )
     }
 
     LaunchedEffect(listState, groupedBundles, viewModel.canLoadMore, viewModel.isLoadingMore) {
@@ -464,7 +474,7 @@ fun PatchBundleDiscoveryScreen(
                         OutlinedTextField(
                             value = packageQuery,
                             onValueChange = {
-                                packageQuery = it
+                                viewModel.packageSearchQuery = it
                                 val trimmed = it.trim()
                                 viewModel.refreshDebounced(trimmed.ifBlank { null })
                             },
@@ -480,7 +490,7 @@ fun PatchBundleDiscoveryScreen(
                             trailingIcon = {
                                 if (packageQuery.isNotBlank()) {
                                     IconButton(onClick = {
-                                        packageQuery = ""
+                                        viewModel.packageSearchQuery = ""
                                         viewModel.refreshDebounced(null)
                                     }) {
                                         Icon(
@@ -494,7 +504,7 @@ fun PatchBundleDiscoveryScreen(
                         )
                         OutlinedTextField(
                             value = query,
-                            onValueChange = { query = it },
+                            onValueChange = { viewModel.bundleSearchQuery = it },
                             label = { Text(stringResource(R.string.patch_bundle_discovery_search_label)) },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -506,7 +516,7 @@ fun PatchBundleDiscoveryScreen(
                             },
                             trailingIcon = {
                                 if (query.isNotBlank()) {
-                                    IconButton(onClick = { query = "" }) {
+                                    IconButton(onClick = { viewModel.bundleSearchQuery = "" }) {
                                         Icon(
                                             imageVector = Icons.Outlined.Close,
                                             contentDescription = null
@@ -567,11 +577,30 @@ fun PatchBundleDiscoveryScreen(
 
                 visibleBundles.isNullOrEmpty() -> {
                     item {
-                        Text(
-                            text = stringResource(R.string.patch_bundle_discovery_empty),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        if (isSearchingMore && (query.isNotBlank() || packageQuery.isNotBlank())) {
+                            ExpressiveSettingsCard(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
+                            ) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    LoadingIndicator(modifier = Modifier.size(20.dp))
+                                    Text(
+                                        text = stringResource(R.string.patch_bundle_discovery_searching),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        } else {
+                            Text(
+                                text = stringResource(R.string.patch_bundle_discovery_empty),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
 
@@ -606,11 +635,21 @@ fun PatchBundleDiscoveryScreen(
                     }
                     if (viewModel.isLoadingMore) {
                         item(key = "bundle_loading_more") {
-                            Row(
+                            ExpressiveSettingsCard(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.Center
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
                             ) {
-                                LoadingIndicator()
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    LoadingIndicator(modifier = Modifier.size(20.dp))
+                                    Text(
+                                        text = stringResource(R.string.patch_bundle_discovery_loading_more),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }

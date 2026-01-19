@@ -4,6 +4,7 @@
 # Features
 
 - Made the fallback installer actually functional. If an install fails with the primary installer, the fallback installer is prompted
+- Improved the `Discover patch bundles` screens searching/filtering
 
 
 # Bug fixes

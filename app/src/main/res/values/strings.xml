@@ -968,6 +968,8 @@ Details: %2$s</string>
     <string name="patch_bundle_discovery_package_label">Search by package name</string>
     <string name="patch_bundle_discovery_search_label">Search bundles</string>
     <string name="patch_bundle_discovery_empty">No patch bundles found.</string>
+    <string name="patch_bundle_discovery_searching">Searching for patch bundles…</string>
+    <string name="patch_bundle_discovery_loading_more">Loading more patch bundles…</string>
     <string name="patch_bundle_discovery_error">Failed to load patch bundles.</string>
     <string name="patch_bundle_discovery_imported">Added</string>
     <string name="patch_bundle_discovery_patch_count">%1$d patches</string>

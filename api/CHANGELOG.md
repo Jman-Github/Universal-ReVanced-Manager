@@ -48,6 +48,7 @@ The `Discover patch bundles` screen has been updated to use [Brosssh's new API](
 - Improved loading speeds significantly for the `Discover patch bundles` screen
 - Added import progress to the `Discover patch bundles` screen along with a import queue system
 - Made the fallback installer actually functional. If an install fails with the primary installer, the fallback installer is prompted
+- Improved the `Discover patch bundles` screens searching/filtering
 
 
 # Bug fixes
@@ -74,6 +75,7 @@ The `Discover patch bundles` screen has been updated to use [Brosssh's new API](
 - Fixed a crash when leaving the app during patching
 - Fixed deep linking not always working with bundle update/updating notifications
 - Fixed the `Saved patched apps for later` setting not actually disabling and deleting saved patched apps
+- Fixed more issues with the `Saved patched apps for later` setting toggle
 
 
 # Docs
