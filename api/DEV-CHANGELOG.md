@@ -9,6 +9,7 @@
 
 # Bug fixes
 
+- Fixed deep linking not always working with bundle update/updating notifications (needs testing)
 
 
 # v1.7.1-dev.03 (2026-01-18)

@@ -421,8 +421,17 @@ fun DashboardScreen(
     LaunchedEffect(bundleDeepLink) {
         val deepLink = bundleDeepLink ?: return@LaunchedEffect
         highlightBundleUid = deepLink.bundleUid
-        pagerState.animateScrollToPage(DashboardPage.BUNDLES.ordinal)
-        onBundleDeepLinkConsumed()
+        try {
+            if (pagerState.currentPage != DashboardPage.BUNDLES.ordinal) {
+                runCatching {
+                    pagerState.animateScrollToPage(DashboardPage.BUNDLES.ordinal)
+                }.onFailure {
+                    pagerState.scrollToPage(DashboardPage.BUNDLES.ordinal)
+                }
+            }
+        } finally {
+            onBundleDeepLinkConsumed()
+        }
     }
 
     val firstLaunch by vm.prefs.firstLaunch.getAsState()
