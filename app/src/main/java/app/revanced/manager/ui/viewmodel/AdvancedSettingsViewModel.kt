@@ -13,6 +13,7 @@ import app.revanced.manager.domain.installer.RootInstaller
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.manager.hideInstallerComponent
 import app.revanced.manager.domain.manager.showInstallerComponent
+import app.revanced.manager.domain.repository.InstalledAppRepository
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.util.tag
 import app.revanced.manager.util.toast
@@ -31,13 +32,17 @@ import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import app.revanced.manager.ui.model.PatchSelectionActionKey
+import app.revanced.manager.data.platform.Filesystem
+import app.revanced.manager.data.room.apps.installed.InstallType
 
 class AdvancedSettingsViewModel(
     val prefs: PreferencesManager,
     private val app: Application,
     private val patchBundleRepository: PatchBundleRepository,
     private val installerManager: InstallerManager,
-    private val rootInstaller: RootInstaller
+    private val rootInstaller: RootInstaller,
+    private val installedAppRepository: InstalledAppRepository,
+    private val filesystem: Filesystem
 ) : ViewModel() {
     val hasOfficialBundle = patchBundleRepository.sources
         .map { sources -> sources.any { it.isDefault } }
@@ -125,6 +130,21 @@ class AdvancedSettingsViewModel(
 
     fun resetPatchedAppExportFormat() = viewModelScope.launch(Dispatchers.Default) {
         prefs.patchedAppExportFormat.update(prefs.patchedAppExportFormat.default)
+    }
+
+    fun setSavedAppsEnabled(enabled: Boolean) = viewModelScope.launch(Dispatchers.Default) {
+        prefs.enableSavedApps.update(enabled)
+        if (enabled) return@launch
+
+        val savedApps = installedAppRepository.getByInstallType(InstallType.SAVED)
+        val mountedApps = installedAppRepository.getByInstallType(InstallType.MOUNT)
+        installedAppRepository.deleteByInstallType(InstallType.SAVED)
+        installedAppRepository.deleteByInstallType(InstallType.MOUNT)
+        withContext(Dispatchers.IO) {
+            (savedApps + mountedApps).forEach { app ->
+                filesystem.deletePatchedAppFiles(app.currentPackageName)
+            }
+        }
     }
 
     fun setPatchSelectionActionOrder(order: List<PatchSelectionActionKey>) =

@@ -866,9 +866,11 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private suspend fun persistPatchedApp(
         currentPackageName: String?,
-        installType: InstallType
+        installType: InstallType,
+        forceSave: Boolean = false
     ): Boolean {
         val savedAppsEnabled = prefs.enableSavedApps.get()
+        val shouldSaveForLater = savedAppsEnabled || forceSave
         return withContext(Dispatchers.IO) {
             val installedPackageInfo = currentPackageName?.let(pm::getPackageInfo)
             val patchedPackageInfo = pm.getPackageInfo(outputFile)
@@ -882,7 +884,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             val finalVersion = packageInfo.versionName?.takeUnless { it.isBlank() } ?: version ?: "unspecified"
 
             val savedCopy = fs.getPatchedAppFile(finalPackageName, finalVersion)
-            if (savedAppsEnabled) {
+            if (shouldSaveForLater) {
                 try {
                     savedCopy.parentFile?.mkdirs()
                     outputFile.copyTo(savedCopy, overwrite = true)
@@ -912,7 +914,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 sanitizedOptionsFinal
             )
 
-            if (savedAppsEnabled || installType != InstallType.SAVED) {
+            if (shouldSaveForLater || installType != InstallType.SAVED) {
                 installedAppRepository.addOrUpdate(
                     finalPackageName,
                     packageName,
@@ -933,7 +935,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             appliedOptions = sanitizedOptionsOriginal
 
             savedPatchedApp = savedPatchedApp ||
-                (savedAppsEnabled && (installType == InstallType.SAVED || savedCopy.exists()))
+                (shouldSaveForLater && (installType == InstallType.SAVED || savedCopy.exists()))
             true
         }
     }
@@ -949,11 +951,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
 
         viewModelScope.launch {
-            if (!prefs.enableSavedApps.get()) {
-                onResult(false)
-                return@launch
-            }
-            val success = persistPatchedApp(null, InstallType.SAVED)
+            val success = persistPatchedApp(null, InstallType.SAVED, forceSave = true)
             if (success) {
                 if (showToast) {
                     app.toast(app.getString(R.string.patched_app_saved_toast))

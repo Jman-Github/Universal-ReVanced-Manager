@@ -39,7 +39,7 @@ class InstalledAppsViewModel(
         prefs.enableSavedApps.flow
     ) { installedApps, savedAppsEnabled ->
         if (savedAppsEnabled) installedApps
-        else installedApps.filter { it.installType != InstallType.SAVED }
+        else installedApps.filter { it.installType != InstallType.SAVED && it.installType != InstallType.MOUNT }
     }.flowOn(Dispatchers.IO)
 
     val packageInfoMap = mutableStateMapOf<String, PackageInfo?>()

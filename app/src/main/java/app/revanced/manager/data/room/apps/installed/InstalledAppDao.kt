@@ -17,6 +17,9 @@ interface InstalledAppDao {
     @Query("SELECT * FROM installed_app WHERE current_package_name = :packageName")
     suspend fun get(packageName: String): InstalledApp?
 
+    @Query("SELECT * FROM installed_app WHERE install_type = :installType")
+    suspend fun getByInstallType(installType: InstallType): List<InstalledApp>
+
     @Query("SELECT sort_order FROM installed_app WHERE current_package_name = :packageName")
     suspend fun getSortOrder(packageName: String): Int?
 
@@ -49,6 +52,9 @@ interface InstalledAppDao {
 
     @Query("DELETE FROM applied_patch WHERE package_name = :packageName")
     suspend fun deleteAppliedPatches(packageName: String)
+
+    @Query("DELETE FROM installed_app WHERE install_type = :installType")
+    suspend fun deleteByInstallType(installType: InstallType)
 
     @Delete
     suspend fun delete(installedApp: InstalledApp)

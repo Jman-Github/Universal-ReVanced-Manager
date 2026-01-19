@@ -72,6 +72,7 @@ The `Discover patch bundles` screen has been updated to use [Brosssh's new API](
 - Fixed issues with the auto-remount system for after restarts on some devices
 - Fixed a crash when leaving the app during patching
 - Fixed deep linking not always working with bundle update/updating notifications
+- Fixed the `Saved patched apps for later` setting not actually disabling and deleting saved patched apps
 
 
 # Docs

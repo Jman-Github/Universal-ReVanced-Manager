@@ -1,4 +1,4 @@
-# v1.7.1-dev.04 (2026-01-18)
+# v1.7.1-dev.04 (2026-01-19)
 
 
 # Features
@@ -10,6 +10,7 @@
 # Bug fixes
 
 - Fixed deep linking not always working with bundle update/updating notifications (needs testing)
+- Fixed the `Saved patched apps for later` setting not actually disabling and deleting saved patched apps
 
 
 # v1.7.1-dev.03 (2026-01-18)

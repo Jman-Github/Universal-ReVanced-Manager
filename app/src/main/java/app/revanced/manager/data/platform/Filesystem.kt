@@ -112,4 +112,21 @@ class Filesystem(private val app: Application) {
             }
             ?.maxByOrNull { it.lastModified() }
     }
+
+    fun deletePatchedAppFiles(packageName: String): Int {
+        val safePackage = FilenameUtils.sanitize(packageName)
+        val matches = patchedAppsDir.listFiles { file ->
+            file.isFile &&
+                file.name.startsWith("${safePackage}_") &&
+                file.name.endsWith(".apk")
+        } ?: return 0
+
+        var removed = 0
+        matches.forEach { file ->
+            if (file.delete()) {
+                removed++
+            }
+        }
+        return removed
+    }
 }

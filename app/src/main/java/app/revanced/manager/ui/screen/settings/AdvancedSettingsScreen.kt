@@ -783,10 +783,11 @@ fun AdvancedSettingsScreen(
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
+                    val savedAppsEnabled by viewModel.prefs.enableSavedApps.getAsState()
                     BooleanItem(
                         modifier = highlightModifier,
-                        preference = viewModel.prefs.enableSavedApps,
-                        coroutineScope = viewModel.viewModelScope,
+                        value = savedAppsEnabled,
+                        onValueChange = viewModel::setSavedAppsEnabled,
                         headline = R.string.patcher_saved_apps_title,
                         description = R.string.patcher_saved_apps_description,
                     )

@@ -17,6 +17,9 @@ class InstalledAppRepository(
 
     suspend fun get(packageName: String) = dao.get(packageName)
 
+    suspend fun getByInstallType(installType: InstallType) =
+        dao.getByInstallType(installType)
+
     suspend fun getAppliedPatches(packageName: String): PatchSelection =
         dao.getPatchesSelection(packageName).mapValues { (_, patches) -> patches.toSet() }
 
@@ -59,5 +62,9 @@ class InstalledAppRepository(
 
     suspend fun delete(installedApp: InstalledApp) {
         dao.delete(installedApp)
+    }
+
+    suspend fun deleteByInstallType(installType: InstallType) {
+        dao.deleteByInstallType(installType)
     }
 }
