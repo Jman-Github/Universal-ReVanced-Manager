@@ -1,3 +1,16 @@
+# v1.7.1-dev.04 (2026-01-18)
+
+
+# Features
+
+- Improved loading speeds significantly for the `Discover patch bundles` screen
+- Added import progress to the `Discover patch bundles` screen along with a import queue toast
+
+
+# Bug fixes
+
+
+
 # v1.7.1-dev.03 (2026-01-18)
 
 

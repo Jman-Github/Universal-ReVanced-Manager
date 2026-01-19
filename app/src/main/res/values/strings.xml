@@ -986,6 +986,11 @@ Details: %2$s</string>
     <string name="patch_bundle_export_fail">Failed to export bundle: %1$s</string>
     <string name="patch_bundle_export_progress">%1$s / %2$s (%3$.1f%%)</string>
     <string name="patch_bundle_export_progress_indeterminate">%1$s</string>
+    <string name="patch_bundle_importing">Importing bundle…</string>
+    <string name="patch_bundle_import_progress">%1$s / %2$s (%3$.1f%%)</string>
+    <string name="patch_bundle_import_progress_indeterminate">%1$s</string>
+    <string name="patch_bundle_import_queued">Added patch bundle import to queue.</string>
+    <string name="patch_bundle_import_queued_label">Queued for import</string>
     <string name="more_options">More options</string>
     <string name="patch_bundle_discovery_patches_title">Patches · %1$s/%2$s</string>
     <string name="patch_bundle_discovery_patches_title_fallback">Bundle patches</string>

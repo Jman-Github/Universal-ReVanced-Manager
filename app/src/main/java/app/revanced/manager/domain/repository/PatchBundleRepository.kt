@@ -46,6 +46,7 @@ import app.revanced.manager.util.toast
 import kotlinx.collections.immutable.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -63,6 +64,8 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.first
 import kotlin.coroutines.coroutineContext
 import io.ktor.http.Url
 import java.io.File
@@ -179,6 +182,12 @@ class PatchBundleRepository(
 
     private val bundleImportProgressFlow = MutableStateFlow<ImportProgress?>(null)
     val bundleImportProgress: StateFlow<ImportProgress?> = bundleImportProgressFlow.asStateFlow()
+    private val discoveryImportProgressFlow =
+        MutableStateFlow<Map<String, DiscoveryImportProgress>>(emptyMap())
+    val discoveryImportProgress: StateFlow<Map<String, DiscoveryImportProgress>> =
+        discoveryImportProgressFlow.asStateFlow()
+    private val discoveryImportQueuedFlow = MutableStateFlow<Set<String>>(emptySet())
+    val discoveryImportQueued: StateFlow<Set<String>> = discoveryImportQueuedFlow.asStateFlow()
 
     private val updateJobMutex = Mutex()
     private var updateJob: Job? = null
@@ -202,6 +211,10 @@ class PatchBundleRepository(
 
     private var bundleImportAutoClearJob: Job? = null
     private var bundleUpdateAutoClearJob: Job? = null
+    private val discoveryImportMutex = Mutex()
+    private val discoveryImportQueue = ArrayDeque<DiscoveryImportRequest>()
+    private val discoveryImportQueuedKeys = LinkedHashSet<String>()
+    private var discoveryImportJob: Job? = null
     private val changelogHistoryJson = Json {
         encodeDefaults = true
         ignoreUnknownKeys = true
@@ -613,6 +626,60 @@ class PatchBundleRepository(
         }
 
         return all
+    }
+
+    fun discoveryImportKey(bundle: ExternalBundleSnapshot): String {
+        if (bundle.bundleId > 0) {
+            val channel = if (bundle.isPrerelease) "prerelease" else "release"
+            return "${bundle.bundleId}|$channel"
+        }
+        val owner = bundle.ownerName.trim().lowercase(Locale.US)
+        val repo = bundle.repoName.trim().lowercase(Locale.US)
+        val base = when {
+            owner.isNotBlank() || repo.isNotBlank() ->
+                listOf(owner, repo).filter { it.isNotBlank() }.joinToString("/")
+            bundle.sourceUrl.isNotBlank() -> bundle.sourceUrl.trim().lowercase(Locale.US)
+            !bundle.downloadUrl.isNullOrBlank() ->
+                bundle.downloadUrl.trim().lowercase(Locale.US)
+            else -> "unknown"
+        }
+        val channel = if (bundle.isPrerelease) "prerelease" else "release"
+        return "$base|$channel"
+    }
+
+    suspend fun enqueueDiscoveryImport(
+        bundle: ExternalBundleSnapshot,
+        searchUpdate: Boolean,
+        autoUpdate: Boolean
+    ): DiscoveryImportEnqueueResult {
+        val bundleKey = discoveryImportKey(bundle)
+        return discoveryImportMutex.withLock {
+            val inProgress = discoveryImportProgressFlow.value.containsKey(bundleKey)
+            val alreadyQueued = discoveryImportQueuedKeys.contains(bundleKey)
+            if (inProgress || alreadyQueued) {
+                return@withLock DiscoveryImportEnqueueResult.Duplicate
+            }
+            val wasActive = discoveryImportJob?.isActive == true ||
+                discoveryImportProgressFlow.value.isNotEmpty() ||
+                discoveryImportQueuedKeys.isNotEmpty()
+            discoveryImportQueuedKeys.add(bundleKey)
+            discoveryImportQueue.addLast(
+                DiscoveryImportRequest(bundleKey, bundle, searchUpdate, autoUpdate)
+            )
+            discoveryImportProgressFlow.update { current ->
+                if (current.containsKey(bundleKey)) current
+                else current + (bundleKey to DiscoveryImportProgress(0L, null, DiscoveryImportStatus.Queued))
+            }
+            updateDiscoveryQueuedLocked()
+            if (discoveryImportJob?.isActive != true) {
+                discoveryImportJob = scope.launch { runDiscoveryImportQueue() }
+            }
+            if (wasActive) {
+                DiscoveryImportEnqueueResult.Queued
+            } else {
+                DiscoveryImportEnqueueResult.Started
+            }
+        }
     }
 
     private data class BundleDigestInfo(
@@ -1063,6 +1130,7 @@ class PatchBundleRepository(
         val force: Boolean,
         val showToast: Boolean,
         val allowUnsafeNetwork: Boolean,
+        val showProgress: Boolean,
         val onPerBundleProgress: ((bundle: RemotePatchBundle, bytesRead: Long, bytesTotal: Long?) -> Unit)?,
         val predicate: (bundle: RemotePatchBundle) -> Boolean,
     )
@@ -1078,6 +1146,7 @@ class PatchBundleRepository(
             force = requests.any { it.force },
             showToast = requests.any { it.showToast },
             allowUnsafeNetwork = requests.any { it.allowUnsafeNetwork },
+            showProgress = requests.any { it.showProgress },
             onPerBundleProgress = mergedCallback,
             predicate = { bundle -> requests.any { it.predicate(bundle) } }
         )
@@ -1544,22 +1613,22 @@ class PatchBundleRepository(
         searchUpdate: Boolean,
         autoUpdate: Boolean,
         onProgress: PatchBundleDownloadProgress? = null,
-    ) = dispatchAction("Add bundle (${bundle.bundleId})") { state ->
+    ) {
         if (bundle.isBundleV3) {
             toast(R.string.patch_bundle_discovery_v3_warning)
-            return@dispatchAction state
+            return
         }
         val rawUrl = externalBundleEndpoint(bundle).trim()
         if (rawUrl.isBlank()) {
             toast(R.string.patch_bundle_discovery_error)
-            return@dispatchAction state
+            return
         }
 
         val validatedUrl = try {
             validateDiscoveryBundleUrl(rawUrl)
         } catch (e: IllegalArgumentException) {
             withContext(Dispatchers.Main) { app.toast(e.message ?: "Invalid bundle URL") }
-            return@dispatchAction state
+            return
         }
 
         val metadata = ExternalBundleMetadata(
@@ -1580,15 +1649,21 @@ class PatchBundleRepository(
         ExternalBundleMetadataStore.write(directoryOf(entity.uid), metadata)
 
         val src = entity.load() as RemotePatchBundle
+        dispatchAction("Add bundle (${bundle.bundleId})") { state ->
+            state.copy(sources = state.sources.put(src.uid, src))
+        }
+        withTimeoutOrNull(2_000) {
+            sources.first { list -> list.any { it.uid == src.uid } }
+        }
         val allowUnsafeDownload = prefs.allowMeteredUpdates.get()
-        update(
-            src,
+        updateNow(
             allowUnsafeNetwork = allowUnsafeDownload,
+            showProgress = false,
             onPerBundleProgress = { bundleSrc, bytesRead, bytesTotal ->
                 if (bundleSrc.uid == src.uid) onProgress?.invoke(bytesRead, bytesTotal)
-            }
+            },
+            predicate = { it.uid == src.uid }
         )
-        state.copy(sources = state.sources.put(src.uid, src))
     }
 
     private fun externalBundleEndpoint(bundle: ExternalBundleSnapshot): String {
@@ -1767,6 +1842,7 @@ class PatchBundleRepository(
     suspend fun updateNow(
         force: Boolean = false,
         allowUnsafeNetwork: Boolean = false,
+        showProgress: Boolean = true,
         onPerBundleProgress: ((bundle: RemotePatchBundle, bytesRead: Long, bytesTotal: Long?) -> Unit)? = null,
         onBundleUpdated: ((bundle: RemotePatchBundle, updatedName: String?) -> Unit)? = null,
         predicate: (bundle: RemotePatchBundle) -> Boolean = { true },
@@ -1789,6 +1865,7 @@ class PatchBundleRepository(
                 force = force,
                 showToast = false,
                 allowUnsafeNetwork = allowUnsafeNetwork,
+                showProgress = showProgress,
                 onPerBundleProgress = onPerBundleProgress,
                 onBundleUpdated = onBundleUpdated,
                 predicate = predicate
@@ -1805,6 +1882,7 @@ class PatchBundleRepository(
                     force = next.force,
                     showToast = next.showToast,
                     allowUnsafeNetwork = next.allowUnsafeNetwork,
+                    showProgress = next.showProgress,
                     onPerBundleProgress = next.onPerBundleProgress,
                     predicate = next.predicate
                 )
@@ -1898,6 +1976,7 @@ class PatchBundleRepository(
         private val force: Boolean = false,
         private val showToast: Boolean = false,
         private val allowUnsafeNetwork: Boolean = false,
+        private val showProgress: Boolean = true,
         private val onPerBundleProgress: ((bundle: RemotePatchBundle, bytesRead: Long, bytesTotal: Long?) -> Unit)? = null,
         private val predicate: (bundle: RemotePatchBundle) -> Boolean = { true },
     ) : Action<State> {
@@ -1910,6 +1989,7 @@ class PatchBundleRepository(
                 force = force,
                 showToast = showToast,
                 allowUnsafeNetwork = allowUnsafeNetwork,
+                showProgress = showProgress,
                 onPerBundleProgress = onPerBundleProgress,
                 predicate = predicate
             )
@@ -1926,10 +2006,18 @@ class PatchBundleRepository(
         force: Boolean,
         showToast: Boolean,
         allowUnsafeNetwork: Boolean,
+        showProgress: Boolean,
         onPerBundleProgress: ((bundle: RemotePatchBundle, bytesRead: Long, bytesTotal: Long?) -> Unit)?,
         predicate: (bundle: RemotePatchBundle) -> Boolean,
     ) {
-        val request = UpdateRequest(force, showToast, allowUnsafeNetwork, onPerBundleProgress, predicate)
+        val request = UpdateRequest(
+            force,
+            showToast,
+            allowUnsafeNetwork,
+            showProgress,
+            onPerBundleProgress,
+            predicate
+        )
         var queued = false
         updateJobMutex.withLock {
             if (updateJob?.isActive == true) {
@@ -1941,6 +2029,7 @@ class PatchBundleRepository(
                             force = request.force,
                             showToast = request.showToast,
                             allowUnsafeNetwork = request.allowUnsafeNetwork,
+                            showProgress = request.showProgress,
                             onPerBundleProgress = request.onPerBundleProgress,
                             onBundleUpdated = null,
                             predicate = request.predicate
@@ -1955,6 +2044,7 @@ class PatchBundleRepository(
                                 force = next.force,
                                 showToast = next.showToast,
                                 allowUnsafeNetwork = next.allowUnsafeNetwork,
+                                showProgress = next.showProgress,
                                 onPerBundleProgress = next.onPerBundleProgress,
                                 predicate = next.predicate
                             )
@@ -1972,17 +2062,22 @@ class PatchBundleRepository(
         force: Boolean,
         showToast: Boolean,
         allowUnsafeNetwork: Boolean,
+        showProgress: Boolean,
         onPerBundleProgress: ((bundle: RemotePatchBundle, bytesRead: Long, bytesTotal: Long?) -> Unit)?,
         onBundleUpdated: ((bundle: RemotePatchBundle, updatedName: String?) -> Unit)?,
         predicate: (bundle: RemotePatchBundle) -> Boolean,
     ): Boolean = coroutineScope {
         try {
-            cancelBundleUpdateAutoClear()
+            if (showProgress) {
+                cancelBundleUpdateAutoClear()
+            }
             val allowMeteredUpdates = prefs.allowMeteredUpdates.get()
             if (!allowUnsafeNetwork && !allowMeteredUpdates && !networkInfo.isSafe()) {
                 Log.d(tag, "Skipping update check because the network is down or metered.")
-                cancelBundleUpdateAutoClear()
-                bundleUpdateProgressFlow.value = null
+                if (showProgress) {
+                    cancelBundleUpdateAutoClear()
+                    bundleUpdateProgressFlow.value = null
+                }
                 return@coroutineScope false
             }
 
@@ -1992,18 +2087,22 @@ class PatchBundleRepository(
 
             if (targets.isEmpty()) {
                 if (showToast) toast(R.string.patches_update_unavailable)
-                cancelBundleUpdateAutoClear()
-                bundleUpdateProgressFlow.value = null
+                if (showProgress) {
+                    cancelBundleUpdateAutoClear()
+                    bundleUpdateProgressFlow.value = null
+                }
                 return@coroutineScope false
             }
 
             markActiveUpdateUids(targets.map(RemotePatchBundle::uid).toSet())
 
-            bundleUpdateProgressFlow.value = BundleUpdateProgress(
-                total = currentUpdateTotal(targets.size),
-                completed = 0,
-                phase = BundleUpdatePhase.Checking,
-            )
+            if (showProgress) {
+                bundleUpdateProgressFlow.value = BundleUpdateProgress(
+                    total = currentUpdateTotal(targets.size),
+                    completed = 0,
+                    phase = BundleUpdatePhase.Checking,
+                )
+            }
 
             val updated: Map<RemotePatchBundle, PatchBundleDownloadResult> = try {
                 val results = LinkedHashMap<RemotePatchBundle, PatchBundleDownloadResult>()
@@ -2012,7 +2111,9 @@ class PatchBundleRepository(
                 for (bundle in targets) {
                     val total = currentUpdateTotal(targets.size)
                     if (total <= 0) {
-                        bundleUpdateProgressFlow.value = null
+                        if (showProgress) {
+                            bundleUpdateProgressFlow.value = null
+                        }
                         return@coroutineScope false
                     }
                     if (isRemoteUpdateCancelled(bundle.uid)) {
@@ -2021,27 +2122,31 @@ class PatchBundleRepository(
 
                     Log.d(tag, "Updating patch bundle: ${bundle.name}")
 
-                    bundleUpdateProgressFlow.value = BundleUpdateProgress(
-                        total = total,
-                        completed = completed.coerceAtMost(total),
-                        currentBundleName = progressLabelFor(bundle),
-                        phase = BundleUpdatePhase.Checking,
-                        bytesRead = 0L,
-                        bytesTotal = null,
-                    )
+                    if (showProgress) {
+                        bundleUpdateProgressFlow.value = BundleUpdateProgress(
+                            total = total,
+                            completed = completed.coerceAtMost(total),
+                            currentBundleName = progressLabelFor(bundle),
+                            phase = BundleUpdatePhase.Checking,
+                            bytesRead = 0L,
+                            bytesTotal = null,
+                        )
+                    }
                     onPerBundleProgress?.invoke(bundle, 0L, null)
 
                     val onProgress: PatchBundleDownloadProgress = { bytesRead, bytesTotal ->
                         if (isRemoteUpdateCancelled(bundle.uid)) {
                             throw BundleUpdateCancelled(bundle.uid)
                         }
-                        bundleUpdateProgressFlow.update { progress ->
-                            progress?.copy(
-                                currentBundleName = progressLabelFor(bundle),
-                                phase = BundleUpdatePhase.Downloading,
-                                bytesRead = bytesRead,
-                                bytesTotal = bytesTotal,
-                            )
+                        if (showProgress) {
+                            bundleUpdateProgressFlow.update { progress ->
+                                progress?.copy(
+                                    currentBundleName = progressLabelFor(bundle),
+                                    phase = BundleUpdatePhase.Downloading,
+                                    bytesRead = bytesRead,
+                                    bytesTotal = bytesTotal,
+                                )
+                            }
                         }
                         onPerBundleProgress?.invoke(bundle, bytesRead, bytesTotal)
                     }
@@ -2055,7 +2160,7 @@ class PatchBundleRepository(
                     val downloadedName = runCatching {
                         PatchBundle(bundle.patchesJarFile.absolutePath).manifestAttributes?.name
                     }.getOrNull()?.trim().takeUnless { it.isNullOrBlank() }
-                    if (downloadedName != null) {
+                    if (downloadedName != null && showProgress) {
                         bundleUpdateProgressFlow.update { progress ->
                             progress?.copy(currentBundleName = downloadedName)
                         }
@@ -2063,14 +2168,16 @@ class PatchBundleRepository(
 
                     val nextTotal = currentUpdateTotal(targets.size)
                     completed = (completed + 1).coerceAtMost(nextTotal)
-                    bundleUpdateProgressFlow.update { progress ->
-                        progress?.copy(
-                            completed = completed,
-                            currentBundleName = downloadedName ?: progressLabelFor(bundle),
-                            phase = BundleUpdatePhase.Finalizing,
-                            bytesRead = 0L,
-                            bytesTotal = null,
-                        )
+                    if (showProgress) {
+                        bundleUpdateProgressFlow.update { progress ->
+                            progress?.copy(
+                                completed = completed,
+                                currentBundleName = downloadedName ?: progressLabelFor(bundle),
+                                phase = BundleUpdatePhase.Finalizing,
+                                bytesRead = 0L,
+                                bytesTotal = null,
+                            )
+                        }
                     }
 
                     if (result != null) {
@@ -2086,7 +2193,9 @@ class PatchBundleRepository(
                 toast(R.string.patches_download_fail, e.simpleMessage())
                 emptyMap()
             } finally {
-                scheduleBundleUpdateProgressClear()
+                if (showProgress) {
+                    scheduleBundleUpdateProgressClear()
+                }
             }
 
             if (updated.isEmpty()) {
@@ -2318,5 +2427,135 @@ class PatchBundleRepository(
             createdAt = System.currentTimeMillis(),
             updatedAt = System.currentTimeMillis()
         )
+    }
+
+    private data class DiscoveryImportRequest(
+        val key: String,
+        val bundle: ExternalBundleSnapshot,
+        val searchUpdate: Boolean,
+        val autoUpdate: Boolean
+    )
+
+    data class DiscoveryImportProgress(
+        val bytesRead: Long,
+        val bytesTotal: Long?,
+        val status: DiscoveryImportStatus
+    )
+
+    enum class DiscoveryImportStatus {
+        Queued,
+        Importing
+    }
+
+    enum class DiscoveryImportEnqueueResult {
+        Started,
+        Queued,
+        Duplicate
+    }
+
+    private fun updateDiscoveryQueuedLocked() {
+        discoveryImportQueuedFlow.value = discoveryImportQueuedKeys.toSet()
+    }
+
+    private suspend fun runDiscoveryImportQueue() {
+        var completed = 0
+        while (true) {
+            val request = discoveryImportMutex.withLock {
+                val next = discoveryImportQueue.removeFirstOrNull()
+                if (next != null) {
+                    discoveryImportQueuedKeys.remove(next.key)
+                }
+                updateDiscoveryQueuedLocked()
+                next
+            } ?: break
+
+            val bundleKey = request.key
+            val label = discoveryImportLabel(request.bundle)
+            discoveryImportProgressFlow.update { current ->
+                current + (bundleKey to DiscoveryImportProgress(0L, null, DiscoveryImportStatus.Importing))
+            }
+            updateDiscoveryImportBanner(
+                completed = completed,
+                total = discoveryImportTotal(completed),
+                label = label,
+                phase = BundleImportPhase.Processing,
+                bytesRead = 0L,
+                bytesTotal = null
+            )
+            try {
+                withContext(NonCancellable) {
+                    createRemoteFromDiscovery(
+                        bundle = request.bundle,
+                        searchUpdate = request.searchUpdate,
+                        autoUpdate = request.autoUpdate,
+                        onProgress = { bytesRead, bytesTotal ->
+                            discoveryImportProgressFlow.update { current ->
+                                if (!current.containsKey(bundleKey)) current
+                                else current + (bundleKey to DiscoveryImportProgress(bytesRead, bytesTotal, DiscoveryImportStatus.Importing))
+                            }
+                            updateDiscoveryImportBanner(
+                                completed = completed,
+                                total = discoveryImportTotal(completed),
+                                label = label,
+                                phase = BundleImportPhase.Downloading,
+                                bytesRead = bytesRead,
+                                bytesTotal = bytesTotal
+                            )
+                        }
+                    )
+                }
+            } catch (e: CancellationException) {
+                Log.w(tag, "Discovery import cancelled for $label", e)
+            } catch (e: Exception) {
+                toast(R.string.patches_download_fail, e.simpleMessage())
+            } finally {
+                discoveryImportProgressFlow.update { current -> current - bundleKey }
+                completed += 1
+                val total = discoveryImportTotal(completed - 1)
+                if (discoveryImportQueue.isEmpty()) {
+                    updateDiscoveryImportBanner(
+                        completed = completed,
+                        total = total.coerceAtLeast(completed),
+                        label = label,
+                        phase = BundleImportPhase.Finalizing,
+                        bytesRead = 0L,
+                        bytesTotal = null
+                    )
+                }
+            }
+        }
+    }
+
+    private fun discoveryImportTotal(completed: Int): Int {
+        val queued = discoveryImportQueuedFlow.value.size
+        return (completed + queued + 1).coerceAtLeast(1)
+    }
+
+    private fun updateDiscoveryImportBanner(
+        completed: Int,
+        total: Int,
+        label: String,
+        phase: BundleImportPhase,
+        bytesRead: Long,
+        bytesTotal: Long?
+    ) {
+        setBundleImportProgress(
+            ImportProgress(
+                processed = completed.coerceAtMost(total),
+                total = total.coerceAtLeast(1),
+                currentBundleName = label,
+                phase = phase,
+                bytesRead = bytesRead,
+                bytesTotal = bytesTotal,
+            )
+        )
+    }
+
+    private fun discoveryImportLabel(bundle: ExternalBundleSnapshot): String {
+        val owner = bundle.ownerName.trim()
+        val repo = bundle.repoName.trim()
+        return listOf(owner, repo).filter { it.isNotBlank() }.joinToString("/").ifBlank {
+            bundle.sourceUrl
+        }
     }
 }

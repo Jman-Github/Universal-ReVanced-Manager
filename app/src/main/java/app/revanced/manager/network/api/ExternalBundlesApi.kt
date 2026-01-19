@@ -27,8 +27,12 @@ import kotlinx.serialization.json.put
 class ExternalBundlesApi(
     private val client: HttpService,
 ) {
-    suspend fun getBundles(packageNameQuery: String? = null): APIResponse<List<ExternalBundleSnapshot>> {
-        val stableVariables = buildBundleVariables(packageNameQuery)
+    suspend fun getBundles(
+        packageNameQuery: String? = null,
+        limit: Int = DEFAULT_PAGE_SIZE,
+        offset: Int = 0
+    ): APIResponse<List<ExternalBundleSnapshot>> {
+        val stableVariables = buildBundleVariables(packageNameQuery, limit, offset)
         val stableResponse = graphql<BundlesQueryData>(STABLE_GRAPHQL_URL, BUNDLES_QUERY, stableVariables)
         if (stableResponse is APIResponse.Success) {
             return stableResponse.transform { data ->
@@ -36,7 +40,7 @@ class ExternalBundlesApi(
             }
         }
 
-        val devVariables = buildBundleVariables(packageNameQuery)
+        val devVariables = buildBundleVariables(packageNameQuery, limit, offset)
         val devResponse = graphql<BundlesQueryData>(DEV_GRAPHQL_URL, BUNDLES_QUERY, devVariables)
         if (devResponse is APIResponse.Success) {
             return devResponse.transform { data ->
@@ -223,11 +227,17 @@ class ExternalBundlesApi(
         return "https://$bundlesHost$normalizedPath"
     }
 
-    private fun buildBundleVariables(packageNameQuery: String?): JsonObject {
+    private fun buildBundleVariables(
+        packageNameQuery: String?,
+        limit: Int,
+        offset: Int
+    ): JsonObject {
         val trimmed = packageNameQuery?.trim().orEmpty()
         return if (trimmed.isEmpty()) {
             buildJsonObject {
                 put("where", buildJsonObject { })
+                put("limit", JsonPrimitive(limit))
+                put("offset", JsonPrimitive(offset))
             }
         } else {
             buildJsonObject {
@@ -242,6 +252,8 @@ class ExternalBundlesApi(
                         })
                     })
                 })
+                put("limit", JsonPrimitive(limit))
+                put("offset", JsonPrimitive(offset))
             }
         }
     }
@@ -252,10 +264,12 @@ class ExternalBundlesApi(
         private const val DEV_BUNDLES_HOST = "revanced-external-bundles-dev.brosssh.com"
         private const val STABLE_BUNDLES_HOST = "revanced-external-bundles.brosssh.com"
         private const val BUNDLES_QUERY = """
-            query BundleDiscovery(${"$"}where: bundle_bool_exp) {
+            query BundleDiscovery(${"$"}where: bundle_bool_exp, ${"$"}limit: Int, ${"$"}offset: Int) {
               bundle(
                 where: ${"$"}where
                 order_by: { created_at: desc }
+                limit: ${"$"}limit
+                offset: ${"$"}offset
               ) {
                 id
                 bundle_type
@@ -333,6 +347,7 @@ class ExternalBundlesApi(
               }
             }
         """
+        private const val DEFAULT_PAGE_SIZE = 30
     }
 
     private class GraphqlException(message: String) : Exception(message)

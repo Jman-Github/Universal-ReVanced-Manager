@@ -18,9 +18,18 @@ import app.revanced.manager.util.simpleMessage
 import app.revanced.manager.util.toast
 import io.ktor.client.request.url
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
 import java.net.URI
+import java.io.File
+import java.util.Locale
 import java.nio.file.Path
 
 class BundleDiscoveryViewModel(
@@ -28,6 +37,7 @@ class BundleDiscoveryViewModel(
     private val patchBundleRepository: PatchBundleRepository,
     private val app: Application,
     private val http: HttpService,
+    private val json: Json,
 ) : ViewModel() {
     var bundles: List<ExternalBundleSnapshot>? by mutableStateOf(null)
         private set
@@ -43,25 +53,59 @@ class BundleDiscoveryViewModel(
     private val patchesError = mutableStateMapOf<Int, String?>()
     private val bundleCache = mutableMapOf<String, BundleCacheEntry>()
     private val bundleExports = mutableStateMapOf<Int, BundleExportProgress>()
+    private val cacheDir = File(app.cacheDir, "bundle_discovery").also { it.mkdirs() }
+    private var refreshJob: Job? = null
+    private var currentQueryKey: String = ""
+    private var nextOffset: Int = 0
+    private var refreshToken: Int = 0
+    private var importProgressSnapshot by mutableStateOf<Map<String, PatchBundleRepository.DiscoveryImportProgress>>(emptyMap())
+    private var queuedImportSnapshot by mutableStateOf<Set<String>>(emptySet())
+    private val localQueuedKeys = mutableStateMapOf<String, Boolean>()
+    var isLoadingMore: Boolean by mutableStateOf(false)
+        private set
+    var canLoadMore: Boolean by mutableStateOf(true)
+        private set
 
     init {
+        viewModelScope.launch {
+            patchBundleRepository.discoveryImportProgress.collect { progress ->
+                importProgressSnapshot = progress
+            }
+        }
+        viewModelScope.launch {
+            patchBundleRepository.discoveryImportQueued.collect { queued ->
+                queuedImportSnapshot = queued
+            }
+        }
         refresh()
+    }
+
+    fun refreshDebounced(packageNameQuery: String? = null) {
+        refreshJob?.cancel()
+        refreshJob = viewModelScope.launch {
+            delay(300)
+            refresh(packageNameQuery)
+        }
     }
 
     fun refresh(packageNameQuery: String? = null) {
         val key = packageNameQuery?.trim().orEmpty()
-        val cached = bundleCache[key]
+        currentQueryKey = key
+        nextOffset = 0
+        canLoadMore = true
+        val cached = bundleCache[key] ?: loadDiskCache(key)?.also { bundleCache[key] = it }
         if (cached != null) {
             bundles = cached.bundles
         }
+        val token = ++refreshToken
         viewModelScope.launch {
+            if (token != refreshToken) return@launch
             isLoading = cached == null
-            if (cached == null) {
-                errorMessage = null
-            }
+            errorMessage = null
             val snapshot = withContext(Dispatchers.IO) {
-                api.getBundles(packageNameQuery).getOrNull()
+                api.getBundles(packageNameQuery, limit = PAGE_SIZE, offset = 0).getOrNull()
             }
+            if (token != refreshToken) return@launch
             if (snapshot == null) {
                 if (cached == null) {
                     errorMessage = app.getString(R.string.patch_bundle_discovery_error)
@@ -69,17 +113,63 @@ class BundleDiscoveryViewModel(
             } else {
                 val fingerprint = fingerprint(snapshot)
                 if (cached == null || cached.fingerprint != fingerprint) {
-                    bundleCache[key] = BundleCacheEntry(snapshot, fingerprint)
-                    bundles = snapshot
+                    val entry = BundleCacheEntry(snapshot, fingerprint)
+                    bundleCache[key] = entry
+                    bundles = entry.bundles
+                    persistDiskCache(key, entry)
                 }
+                nextOffset = snapshot.size
+                canLoadMore = snapshot.size >= PAGE_SIZE
+                errorMessage = null
             }
             isLoading = false
         }
     }
 
+    fun loadMore() {
+        if (!canLoadMore || isLoadingMore) return
+        val key = currentQueryKey
+        val query = key.takeIf { it.isNotBlank() }
+        viewModelScope.launch {
+            isLoadingMore = true
+            val snapshot = withContext(Dispatchers.IO) {
+                api.getBundles(query, limit = PAGE_SIZE, offset = nextOffset).getOrNull()
+            }
+            if (!snapshot.isNullOrEmpty()) {
+                val current = bundles.orEmpty()
+                val updated = current + snapshot
+                val cached = bundleCache[key]
+                val entry = if (cached != null) {
+                    cached.copy(bundles = updated)
+                } else {
+                    BundleCacheEntry(updated, fingerprint(updated))
+                }
+                bundleCache[key] = entry
+                bundles = entry.bundles
+                persistDiskCache(key, entry)
+                nextOffset += snapshot.size
+                canLoadMore = snapshot.size >= PAGE_SIZE
+            } else {
+                canLoadMore = false
+            }
+            isLoadingMore = false
+        }
+    }
+
     fun importBundle(bundle: ExternalBundleSnapshot, autoUpdate: Boolean, searchUpdate: Boolean) {
         viewModelScope.launch {
-            patchBundleRepository.createRemoteFromDiscovery(bundle, searchUpdate, autoUpdate)
+            val key = patchBundleRepository.discoveryImportKey(bundle)
+            val result = patchBundleRepository.enqueueDiscoveryImport(
+                bundle = bundle,
+                searchUpdate = searchUpdate,
+                autoUpdate = autoUpdate
+            )
+            if (result != PatchBundleRepository.DiscoveryImportEnqueueResult.Duplicate) {
+                localQueuedKeys[key] = true
+            }
+            if (result == PatchBundleRepository.DiscoveryImportEnqueueResult.Queued) {
+                app.toast(app.getString(R.string.patch_bundle_import_queued))
+            }
         }
     }
 
@@ -178,6 +268,41 @@ class BundleDiscoveryViewModel(
 
     fun getExportProgress(bundleId: Int): BundleExportProgress? = bundleExports[bundleId]
 
+    fun getImportProgress(
+        bundle: ExternalBundleSnapshot,
+        isImported: Boolean
+    ): PatchBundleRepository.DiscoveryImportProgress? {
+        val key = patchBundleRepository.discoveryImportKey(bundle)
+        val progress = importProgressSnapshot[key]
+        if (progress != null) {
+            localQueuedKeys.remove(key)
+            return progress
+        }
+
+        val queuedFromRepo = queuedImportSnapshot.contains(key)
+        if (queuedFromRepo) {
+            localQueuedKeys.remove(key)
+            return PatchBundleRepository.DiscoveryImportProgress(
+                bytesRead = 0L,
+                bytesTotal = null,
+                status = PatchBundleRepository.DiscoveryImportStatus.Queued
+            )
+        }
+
+        if (localQueuedKeys.containsKey(key)) {
+            return PatchBundleRepository.DiscoveryImportProgress(
+                bytesRead = 0L,
+                bytesTotal = null,
+                status = PatchBundleRepository.DiscoveryImportStatus.Queued
+            )
+        }
+
+        if (isImported) {
+            localQueuedKeys.remove(key)
+        }
+        return null
+    }
+
     private fun fingerprint(bundles: List<ExternalBundleSnapshot>): String =
         bundles.joinToString(separator = "|") { bundle ->
             listOf(
@@ -204,6 +329,7 @@ class BundleDiscoveryViewModel(
         }
     }
 
+    @Serializable
     private data class BundleCacheEntry(
         val bundles: List<ExternalBundleSnapshot>,
         val fingerprint: String
@@ -211,8 +337,32 @@ class BundleDiscoveryViewModel(
 
     data class BundleExportProgress(val bytesRead: Long, val bytesTotal: Long?)
 
+    private fun cacheFileForKey(key: String): File {
+        val normalized = key.trim().lowercase(Locale.ROOT)
+        val suffix = if (normalized.isBlank()) "all" else normalized.hashCode().toString()
+        return File(cacheDir, "bundles_$suffix.json")
+    }
+
+    private fun loadDiskCache(key: String): BundleCacheEntry? {
+        val file = cacheFileForKey(key)
+        if (!file.exists()) return null
+        return runCatching {
+            json.decodeFromString<BundleCacheEntry>(file.readText())
+        }.getOrNull()
+    }
+
+    private fun persistDiskCache(key: String, entry: BundleCacheEntry) {
+        runCatching {
+            val file = cacheFileForKey(key)
+            file.writeText(json.encodeToString(entry))
+        }.onFailure { error ->
+            if (error is SerializationException) return@onFailure
+        }
+    }
+
     private companion object {
         const val STABLE_BUNDLES_HOST = "revanced-external-bundles.brosssh.com"
         const val DEV_BUNDLES_HOST = "revanced-external-bundles-dev.brosssh.com"
+        const val PAGE_SIZE = 30
     }
 }

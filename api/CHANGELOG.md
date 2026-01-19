@@ -45,6 +45,8 @@ The `Discover patch bundles` screen has been updated to use [Brosssh's new API](
 - Added the ability to copy the remote URLs for patch bundles on the `Discover patch bundles` screen from a three dot button menu popout
 - Added the ability to download patch bundles to your devices storage from the `Discover patch bundles` screen through the three dot buttons menu popout
 - Added a way to search/filter through patch bundles on the `Discover patch bundles` screen by app package name https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/113
+- Improved loading speeds significantly for the `Discover patch bundles` screen
+- Added import progress to the `Discover patch bundles` screen along with a import queue system
 
 
 # Bug fixes

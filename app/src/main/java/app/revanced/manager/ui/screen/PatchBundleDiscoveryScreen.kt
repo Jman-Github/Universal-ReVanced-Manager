@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -53,6 +54,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -88,7 +90,7 @@ import compose.icons.FontAwesomeIcons
 import compose.icons.fontawesomeicons.Brands
 import compose.icons.fontawesomeicons.brands.Github
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -119,6 +121,7 @@ fun PatchBundleDiscoveryScreen(
     val bundles = viewModel.bundles
     val isLoading = viewModel.isLoading
     val errorMessage = viewModel.errorMessage
+    val listState = rememberLazyListState()
     var query by remember { mutableStateOf("") }
     var packageQuery by remember { mutableStateOf("") }
     val showReleasePref by prefs.patchBundleDiscoveryShowRelease.getAsState()
@@ -150,11 +153,6 @@ fun PatchBundleDiscoveryScreen(
         if (showPrerelease != showPrereleasePref) {
             prefs.patchBundleDiscoveryShowPrerelease.update(showPrerelease)
         }
-    }
-    LaunchedEffect(packageQuery) {
-        val trimmed = packageQuery.trim()
-        delay(200)
-        viewModel.refresh(trimmed.ifBlank { null })
     }
     val groupedBundles by remember(bundles, query, showRelease, showPrerelease) {
         derivedStateOf {
@@ -206,6 +204,19 @@ fun PatchBundleDiscoveryScreen(
                     .joinToString(" ")
                     .lowercase()
                 haystack.contains(trimmedQuery)
+            }
+        }
+    }
+
+    LaunchedEffect(listState, groupedBundles, viewModel.canLoadMore, viewModel.isLoadingMore) {
+        snapshotFlow {
+            val total = listState.layoutInfo.totalItemsCount
+            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            lastVisible to total
+        }.collect { (lastVisible, totalItems) ->
+            if (groupedBundles.isNullOrEmpty()) return@collect
+            if (totalItems > 0 && lastVisible >= totalItems - 3) {
+                viewModel.loadMore()
             }
         }
     }
@@ -408,6 +419,7 @@ fun PatchBundleDiscoveryScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
+            state = listState,
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -451,7 +463,11 @@ fun PatchBundleDiscoveryScreen(
                         }
                         OutlinedTextField(
                             value = packageQuery,
-                            onValueChange = { packageQuery = it },
+                            onValueChange = {
+                                packageQuery = it
+                                val trimmed = it.trim()
+                                viewModel.refreshDebounced(trimmed.ifBlank { null })
+                            },
                             label = { Text(stringResource(R.string.patch_bundle_discovery_package_label)) },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -463,7 +479,10 @@ fun PatchBundleDiscoveryScreen(
                             },
                             trailingIcon = {
                                 if (packageQuery.isNotBlank()) {
-                                    IconButton(onClick = { packageQuery = "" }) {
+                                    IconButton(onClick = {
+                                        packageQuery = ""
+                                        viewModel.refreshDebounced(null)
+                                    }) {
                                         Icon(
                                             imageVector = Icons.Outlined.Close,
                                             contentDescription = null
@@ -579,8 +598,21 @@ fun PatchBundleDiscoveryScreen(
                                 onViewPatches(bundle.bundleId)
                             },
                             onMenuRequest = { activeBundleMenu = it },
-                            exportProgressFor = viewModel::getExportProgress
+                            exportProgressFor = viewModel::getExportProgress,
+                            importProgressFor = { bundle, isImported ->
+                                viewModel.getImportProgress(bundle, isImported)
+                            }
                         )
+                    }
+                    if (viewModel.isLoadingMore) {
+                        item(key = "bundle_loading_more") {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                LoadingIndicator()
+                            }
+                        }
                     }
                 }
             }
@@ -602,6 +634,10 @@ private fun BundleDiscoveryItem(
     onViewPatches: (ExternalBundleSnapshot) -> Unit,
     onMenuRequest: (BundleMenuState) -> Unit,
     exportProgressFor: (Int) -> BundleDiscoveryViewModel.BundleExportProgress?,
+    importProgressFor: (
+        ExternalBundleSnapshot,
+        Boolean
+    ) -> PatchBundleRepository.DiscoveryImportProgress?,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -633,12 +669,28 @@ private fun BundleDiscoveryItem(
     val lastUpdatedLabel = remember(bundle.repoPushedAt) {
         formatRepoUpdatedLabel(context, bundle.repoPushedAt)
     }
-    val importEnabled = isSupported && !isImported(bundle)
+    val releaseImported = releaseBundle?.let(isImported) ?: false
+    val prereleaseImported = prereleaseBundle?.let(isImported) ?: false
+    val releaseProgress = releaseBundle?.let { importProgressFor(it, releaseImported) }
+    val prereleaseProgress = prereleaseBundle?.let { importProgressFor(it, prereleaseImported) }
+    val groupProgress = listOfNotNull(releaseProgress, prereleaseProgress)
+        .firstOrNull { it.status == PatchBundleRepository.DiscoveryImportStatus.Importing }
+        ?: listOfNotNull(releaseProgress, prereleaseProgress)
+            .firstOrNull { it.status == PatchBundleRepository.DiscoveryImportStatus.Queued }
+    val isImportQueuedForGroup =
+        groupProgress?.status == PatchBundleRepository.DiscoveryImportStatus.Queued
+    val isImportingForGroup =
+        groupProgress?.status == PatchBundleRepository.DiscoveryImportStatus.Importing
     val viewPatchesEnabled = patchCount > 0
-    val importLabel = if (isImported(bundle)) {
-        stringResource(R.string.patch_bundle_discovery_imported)
-    } else {
-        stringResource(R.string.import_)
+    val importEnabled = isSupported &&
+        !isImported(bundle) &&
+        !isImportQueuedForGroup &&
+        !isImportingForGroup
+    val importLabel = when {
+        isImported(bundle) -> stringResource(R.string.patch_bundle_discovery_imported)
+        isImportQueuedForGroup -> stringResource(R.string.patch_bundle_import_queued_label)
+        isImportingForGroup -> stringResource(R.string.patch_bundle_importing)
+        else -> stringResource(R.string.import_)
     }
     val exportProgress = exportProgressFor(bundle.bundleId)
     val menuState = BundleMenuState(
@@ -868,6 +920,52 @@ private fun BundleDiscoveryItem(
                         progress = { fraction ?: 0f },
                         modifier = Modifier.fillMaxWidth()
                     )
+                }
+            }
+            if (groupProgress != null) {
+                val totalBytes = groupProgress.bytesTotal?.takeIf { it > 0L }
+                val fraction = groupProgress.bytesTotal?.takeIf { it > 0L }?.let { total ->
+                    groupProgress.bytesRead.toFloat() / total.toFloat()
+                }
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.patch_bundle_importing),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    val progressLabel = if (isImportQueuedForGroup) {
+                        stringResource(R.string.patch_bundle_import_queued_label)
+                    } else if (totalBytes != null) {
+                        val percent = (groupProgress.bytesRead.toDouble() / totalBytes.toDouble()) * 100
+                        context.getString(
+                            R.string.patch_bundle_import_progress,
+                            Formatter.formatShortFileSize(context, groupProgress.bytesRead),
+                            Formatter.formatShortFileSize(context, totalBytes),
+                            percent
+                        )
+                    } else {
+                        context.getString(
+                            R.string.patch_bundle_import_progress_indeterminate,
+                            Formatter.formatShortFileSize(context, groupProgress.bytesRead)
+                        )
+                    }
+                    Text(
+                        text = progressLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (fraction == null || isImportQueuedForGroup) {
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else {
+                        LinearProgressIndicator(
+                            progress = { fraction },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
             }
         }
