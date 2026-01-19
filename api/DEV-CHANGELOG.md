@@ -1,3 +1,14 @@
+# v1.7.1-dev.05 (2026-01-21)
+
+
+# Features
+
+- Made the fallback installer actually functional. If an install fails with the primary installer, the fallback installer is prompted
+
+
+# Bug fixes
+
+
 # v1.7.1-dev.04 (2026-01-19)
 
 

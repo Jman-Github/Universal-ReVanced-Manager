@@ -447,6 +447,44 @@ fun PatcherScreen(
         )
     }
 
+    viewModel.fallbackInstallPrompt?.let { prompt ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissFallbackInstallPrompt,
+            title = { Text(stringResource(R.string.installer_fallback_prompt_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = stringResource(R.string.installer_fallback_prompt_failure_label),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = prompt.failureMessage,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.size(4.dp))
+                    Text(
+                        text = stringResource(
+                            R.string.installer_fallback_prompt_fallback_label,
+                            prompt.fallbackLabel
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = viewModel::confirmFallbackInstallPrompt) {
+                    Text(stringResource(R.string.installer_use_fallback))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissFallbackInstallPrompt) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+
     viewModel.memoryAdjustmentDialog?.let { state ->
         val message = if (state.adjusted) {
             stringResource(

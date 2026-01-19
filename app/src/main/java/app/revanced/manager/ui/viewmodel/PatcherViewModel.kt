@@ -155,6 +155,11 @@ class PatcherViewModel(
     private var deferUninstallProgressToasts = false
     private var pendingSignatureMismatchPlan: InstallerManager.InstallPlan? = null
     private var pendingSignatureMismatchPackage: String? = null
+    private var lastInstallToken: InstallerManager.Token? = null
+    private var lastInstallTarget: InstallerManager.InstallTarget? = null
+    private var lastInstallExpectedPackage: String? = null
+    private var lastInstallSourceLabel: String? = null
+    private var pendingInstallFailureMessage: String? = null
 
     private var installedApp: InstalledApp? = null
     private val selectedApp = input.selectedApp
@@ -287,9 +292,102 @@ fun proceedAfterMissingPatchWarning() {
 
     var installFailureMessage by mutableStateOf<String?>(null)
         private set
+    var fallbackInstallPrompt by mutableStateOf<FallbackInstallPrompt?>(null)
+        private set
     private var suppressFailureAfterSuccess = false
     private var lastSuccessInstallType: InstallType? = null
     private var lastSuccessAtMs: Long = 0L
+
+    private fun tokensEqual(a: InstallerManager.Token, b: InstallerManager.Token): Boolean = when {
+        a === b -> true
+        a is InstallerManager.Token.Component && b is InstallerManager.Token.Component ->
+            a.componentName == b.componentName
+        else -> false
+    }
+
+    private fun recordInstallPlan(
+        token: InstallerManager.Token,
+        target: InstallerManager.InstallTarget,
+        expectedPackage: String?,
+        sourceLabel: String?
+    ) {
+        lastInstallToken = token
+        lastInstallTarget = target
+        lastInstallExpectedPackage = expectedPackage
+        lastInstallSourceLabel = sourceLabel
+    }
+
+    private fun recordInstallPlan(
+        plan: InstallerManager.InstallPlan,
+        expectedPackage: String?,
+        sourceLabel: String?
+    ) {
+        val token = when (plan) {
+            is InstallerManager.InstallPlan.Internal -> InstallerManager.Token.Internal
+            is InstallerManager.InstallPlan.Mount -> InstallerManager.Token.AutoSaved
+            is InstallerManager.InstallPlan.Shizuku -> InstallerManager.Token.Shizuku
+            is InstallerManager.InstallPlan.External -> plan.token
+        }
+        val target = when (plan) {
+            is InstallerManager.InstallPlan.Internal -> plan.target
+            is InstallerManager.InstallPlan.Mount -> plan.target
+            is InstallerManager.InstallPlan.Shizuku -> plan.target
+            is InstallerManager.InstallPlan.External -> plan.target
+        }
+        val resolvedPackage = expectedPackage
+            ?: (plan as? InstallerManager.InstallPlan.External)?.expectedPackage
+            ?: lastInstallExpectedPackage
+            ?: packageName
+        recordInstallPlan(token, target, resolvedPackage, sourceLabel)
+    }
+
+    private fun buildFallbackPrompt(message: String): FallbackInstallPrompt? {
+        val target = lastInstallTarget ?: return null
+        val lastToken = lastInstallToken ?: return null
+        val primaryToken = installerManager.getPrimaryToken()
+        if (!tokensEqual(primaryToken, lastToken)) return null
+        val fallbackToken = installerManager.getFallbackToken()
+        if (fallbackToken == InstallerManager.Token.None) return null
+        if (tokensEqual(primaryToken, fallbackToken)) return null
+        val fallbackEntry = installerManager.describeEntry(fallbackToken, target) ?: return null
+        if (!fallbackEntry.availability.available) return null
+        val expectedPackage = lastInstallExpectedPackage ?: packageName
+        val plan = installerManager.resolvePlanForToken(
+            token = fallbackToken,
+            target = target,
+            sourceFile = outputFile,
+            expectedPackage = expectedPackage,
+            sourceLabel = lastInstallSourceLabel
+        ) ?: return null
+        if (plan is InstallerManager.InstallPlan.Internal && fallbackToken is InstallerManager.Token.Component) {
+            return null
+        }
+        return FallbackInstallPrompt(
+            failureMessage = message,
+            fallbackLabel = fallbackEntry.label,
+            fallbackToken = fallbackToken,
+            target = target
+        )
+    }
+
+    private fun cleanupFailedInstall() {
+        updateInstallingState(false)
+        stopInstallProgressToasts()
+        pendingExternalInstall?.let(installerManager::cleanup)
+        pendingExternalInstall = null
+        externalInstallBaseline = null
+        externalInstallStartTime = null
+        externalPackageWasPresentAtStart = false
+        expectedInstallSignature = null
+        baselineInstallSignature = null
+        packageInstallerStatus = null
+    }
+
+    private fun applyInstallFailure(message: String) {
+        installFailureMessage = message
+        installStatus = InstallCompletionStatus.Failure(message)
+        cleanupFailedInstall()
+    }
 
     private fun showInstallFailure(message: String) {
         val now = System.currentTimeMillis()
@@ -306,18 +404,16 @@ fun proceedAfterMissingPatchWarning() {
         if (activeInstallType != null) {
             lastInstallType = activeInstallType
         }
-        installFailureMessage = adjusted
-        installStatus = InstallCompletionStatus.Failure(adjusted)
-        updateInstallingState(false)
-        stopInstallProgressToasts()
-        pendingExternalInstall?.let(installerManager::cleanup)
-        pendingExternalInstall = null
-        externalInstallBaseline = null
-        externalInstallStartTime = null
-        externalPackageWasPresentAtStart = false
-        expectedInstallSignature = null
-        baselineInstallSignature = null
-        packageInstallerStatus = null
+        val fallbackPrompt = buildFallbackPrompt(adjusted)
+        if (fallbackPrompt != null) {
+            pendingInstallFailureMessage = adjusted
+            installFailureMessage = null
+            installStatus = null
+            fallbackInstallPrompt = fallbackPrompt
+            cleanupFailedInstall()
+            return
+        }
+        applyInstallFailure(adjusted)
     }
 
     private fun showSignatureMismatchPrompt(
@@ -1432,6 +1528,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private suspend fun executeInstallPlan(plan: InstallerManager.InstallPlan) {
         Log.d(TAG, "executeInstallPlan(plan=${plan::class.java.simpleName})")
+        recordInstallPlan(plan, lastInstallExpectedPackage ?: packageName, lastInstallSourceLabel)
         when (plan) {
             is InstallerManager.InstallPlan.Internal -> {
                 pendingExternalInstall?.let(installerManager::cleanup)
@@ -1608,6 +1705,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     showSignatureMismatchPrompt(expectedPackage, plan)
                     return@runCatching
                 }
+                recordInstallPlan(plan, expectedPackage, null)
                 executeInstallPlan(plan)
             }.onFailure { error ->
                 Log.e(TAG, "install() failed to start", error)
@@ -1631,6 +1729,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 expectedPackage,
                 null
             )
+            recordInstallPlan(plan, expectedPackage, null)
             when (plan) {
                 is InstallerManager.InstallPlan.Internal -> {
                     pendingExternalInstall?.let(installerManager::cleanup)
@@ -1720,6 +1819,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
                 Session.State.Succeeded -> {
                     stopUninstallProgressToasts()
+                    recordInstallPlan(plan, targetPackage, null)
                     executeInstallPlan(plan)
                 }
             }
@@ -1738,6 +1838,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         installFailureMessage = null
         packageInstallerStatus = null
         installStatus = null
+        pendingInstallFailureMessage = null
     }
 
     fun shouldSuppressInstallFailureDialog(): Boolean {
@@ -1751,6 +1852,49 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     fun clearInstallStatus() {
         installStatus = null
     }
+
+    fun confirmFallbackInstallPrompt() {
+        val prompt = fallbackInstallPrompt ?: return
+        val expectedPackage = lastInstallExpectedPackage ?: packageName
+        val plan = installerManager.resolvePlanForToken(
+            token = prompt.fallbackToken,
+            target = prompt.target,
+            sourceFile = outputFile,
+            expectedPackage = expectedPackage,
+            sourceLabel = lastInstallSourceLabel
+        )
+        fallbackInstallPrompt = null
+        pendingInstallFailureMessage = null
+        installFailureMessage = null
+        installStatus = null
+        if (plan == null) {
+            val message = app.getString(R.string.installer_hint_generic)
+            applyInstallFailure(message)
+            return
+        }
+        recordInstallPlan(plan, expectedPackage, lastInstallSourceLabel)
+        viewModelScope.launch {
+            executeInstallPlan(plan)
+        }
+    }
+
+    fun dismissFallbackInstallPrompt() {
+        val message = pendingInstallFailureMessage
+        fallbackInstallPrompt = null
+        pendingInstallFailureMessage = null
+        installFailureMessage = null
+        installStatus = null
+        if (message != null) {
+            applyInstallFailure(message)
+        }
+    }
+
+    data class FallbackInstallPrompt(
+        val failureMessage: String,
+        val fallbackLabel: String,
+        val fallbackToken: InstallerManager.Token,
+        val target: InstallerManager.InstallTarget
+    )
 
     sealed class InstallCompletionStatus {
         data object InProgress : InstallCompletionStatus()

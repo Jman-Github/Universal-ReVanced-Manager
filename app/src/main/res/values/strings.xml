@@ -684,6 +684,10 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="hide_password_field">Hide password</string>
     <string name="installer_primary_title">Primary installer</string>
     <string name="installer_fallback_title">Fallback installer</string>
+    <string name="installer_fallback_prompt_title">Try fallback installer?</string>
+    <string name="installer_fallback_prompt_failure_label">Primary installer failed</string>
+    <string name="installer_fallback_prompt_fallback_label">Try fallback installer: %1$s</string>
+    <string name="installer_use_fallback">Use fallback</string>
     <string name="installer_internal_name">System installer</string>
     <string name="installer_internal_description">Use the Android package installer</string>
     <string name="installer_auto_saved_name">Rooted mount installer</string>

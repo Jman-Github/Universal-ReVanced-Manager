@@ -47,6 +47,7 @@ The `Discover patch bundles` screen has been updated to use [Brosssh's new API](
 - Added a way to search/filter through patch bundles on the `Discover patch bundles` screen by app package name https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/113
 - Improved loading speeds significantly for the `Discover patch bundles` screen
 - Added import progress to the `Discover patch bundles` screen along with a import queue system
+- Made the fallback installer actually functional. If an install fails with the primary installer, the fallback installer is prompted
 
 
 # Bug fixes
