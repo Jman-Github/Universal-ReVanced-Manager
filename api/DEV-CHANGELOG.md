@@ -12,6 +12,8 @@
 
 - Fixed more issues with the `Saved patched apps for later` setting toggle & adjust its behavior
 - Fixed null splitNames errors with the Rooted mount installer
+- Fixed imported discovery patch bundle update checks not always detecting an update when it should be
+
 
 
 # v1.7.1-dev.04 (2026-01-19)

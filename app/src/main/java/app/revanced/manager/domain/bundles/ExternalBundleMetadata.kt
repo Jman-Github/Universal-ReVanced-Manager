@@ -12,7 +12,10 @@ data class ExternalBundleMetadata(
     val signatureDownloadUrl: String? = null,
     val version: String,
     val createdAt: String? = null,
-    val description: String? = null
+    val description: String? = null,
+    val ownerName: String? = null,
+    val repoName: String? = null,
+    val isPrerelease: Boolean? = null
 )
 
 object ExternalBundleMetadataStore {

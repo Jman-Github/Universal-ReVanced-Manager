@@ -78,6 +78,7 @@ The `Discover patch bundles` screen has been updated to use [Brosssh's new API](
 - Fixed the `Saved patched apps for later` setting not actually disabling and deleting saved patched apps
 - Fixed more issues with the `Saved patched apps for later` setting toggle & adjust its behavior
 - Fixed null splitNames errors with the Rooted mount installer
+- Fixed imported discovery patch bundle update checks not always detecting an update when it should be
 
 
 # Docs

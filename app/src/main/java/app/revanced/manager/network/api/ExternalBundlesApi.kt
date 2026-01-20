@@ -80,6 +80,42 @@ class ExternalBundlesApi(
         }
     }
 
+    suspend fun getLatestBundle(
+        owner: String,
+        repo: String,
+        prerelease: Boolean
+    ): APIResponse<ExternalBundleSnapshot?> {
+        val trimmedOwner = owner.trim()
+        val trimmedRepo = repo.trim()
+        if (trimmedOwner.isBlank() || trimmedRepo.isBlank()) {
+            return APIResponse.Success(null)
+        }
+        val variables = buildJsonObject {
+            put("owner", JsonPrimitive(trimmedOwner))
+            put("repo", JsonPrimitive(trimmedRepo))
+            put("prerelease", JsonPrimitive(prerelease))
+        }
+        val stableResponse = graphql<BundlesQueryData>(STABLE_GRAPHQL_URL, BUNDLE_LATEST_QUERY, variables)
+        if (stableResponse is APIResponse.Success) {
+            return stableResponse.transform { data ->
+                data.bundle.firstOrNull()?.toSnapshot(STABLE_BUNDLES_HOST)
+            }
+        }
+
+        val devResponse = graphql<BundlesQueryData>(DEV_GRAPHQL_URL, BUNDLE_LATEST_QUERY, variables)
+        if (devResponse is APIResponse.Success) {
+            return devResponse.transform { data ->
+                data.bundle.firstOrNull()?.toSnapshot(DEV_BUNDLES_HOST)
+            }
+        }
+
+        return when (devResponse) {
+            is APIResponse.Error -> APIResponse.Error(devResponse.error)
+            is APIResponse.Failure -> APIResponse.Failure(devResponse.error)
+            is APIResponse.Success -> APIResponse.Success(null)
+        }
+    }
+
     suspend fun getBundlePatches(bundleId: Int): APIResponse<List<ExternalBundlePatch>> {
         val variables = buildJsonObject {
             put("id", JsonPrimitive(bundleId))
@@ -319,6 +355,49 @@ class ExternalBundlesApi(
         private const val BUNDLE_BY_ID_QUERY = """
             query BundleById(${"$"}id: Int!) {
               bundle(where: { id: { _eq: ${"$"}id } }) {
+                id
+                bundle_type
+                created_at
+                description
+                download_url
+                signature_download_url
+                is_prerelease
+                version
+                source {
+                  url
+                  source_metadatum {
+                    owner_name
+                    owner_avatar_url
+                    repo_name
+                    repo_description
+                    repo_stars
+                    repo_pushed_at
+                    is_repo_archived
+                  }
+                }
+                patches_aggregate {
+                  aggregate {
+                    count
+                  }
+                }
+              }
+            }
+        """
+        private const val BUNDLE_LATEST_QUERY = """
+            query BundleLatest(${"$"}owner: String!, ${"$"}repo: String!, ${"$"}prerelease: Boolean!) {
+              bundle(
+                where: {
+                  is_prerelease: { _eq: ${"$"}prerelease }
+                  source: {
+                    source_metadatum: {
+                      owner_name: { _eq: ${"$"}owner }
+                      repo_name: { _eq: ${"$"}repo }
+                    }
+                  }
+                }
+                order_by: { created_at: desc }
+                limit: 1
+              ) {
                 id
                 bundle_type
                 created_at

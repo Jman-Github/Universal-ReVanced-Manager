@@ -1637,7 +1637,10 @@ class PatchBundleRepository(
             signatureDownloadUrl = bundle.signatureDownloadUrl,
             version = bundle.version.ifBlank { "unknown" },
             createdAt = bundle.createdAt.takeUnless { it.isBlank() },
-            description = bundle.description
+            description = bundle.description,
+            ownerName = bundle.ownerName.takeIf { it.isNotBlank() },
+            repoName = bundle.repoName.takeIf { it.isNotBlank() },
+            isPrerelease = bundle.isPrerelease
         )
 
         val entity = createEntity(

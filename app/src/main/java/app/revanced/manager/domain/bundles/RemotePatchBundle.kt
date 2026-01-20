@@ -16,6 +16,7 @@ import io.ktor.client.request.prepareGet
 import io.ktor.client.request.url
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.utils.io.jvm.javaio.toInputStream
+import io.ktor.http.Url
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -474,7 +475,15 @@ class ExternalGraphqlPatchBundle(
     private val api: ExternalBundlesApi by inject()
 
     override suspend fun getLatestInfo(): ReVancedAsset = withContext(Dispatchers.IO) {
-        val latest = api.getBundleById(metadata.bundleId).getOrNull()
+        val (endpointOwner, endpointRepo, endpointPrerelease) = parseEndpointMetadata()
+        val owner = metadata.ownerName?.trim().takeIf { !it.isNullOrBlank() } ?: endpointOwner.orEmpty()
+        val repo = metadata.repoName?.trim().takeIf { !it.isNullOrBlank() } ?: endpointRepo.orEmpty()
+        val prerelease = metadata.isPrerelease ?: endpointPrerelease
+        val latest = if (owner.isNotBlank() && repo.isNotBlank() && prerelease != null) {
+            api.getLatestBundle(owner, repo, prerelease).getOrNull()
+        } else {
+            api.getBundleById(metadata.bundleId).getOrNull()
+        }
         if (latest != null) {
             metadata = metadataFromSnapshot(latest)
             ExternalBundleMetadataStore.write(directory, metadata)
@@ -515,7 +524,10 @@ class ExternalGraphqlPatchBundle(
         signatureDownloadUrl = snapshot.signatureDownloadUrl ?: metadata.signatureDownloadUrl,
         version = snapshot.version.ifBlank { metadata.version },
         createdAt = snapshot.createdAt.ifBlank { metadata.createdAt },
-        description = snapshot.description ?: metadata.description
+        description = snapshot.description ?: metadata.description,
+        ownerName = snapshot.ownerName.takeIf { it.isNotBlank() } ?: metadata.ownerName,
+        repoName = snapshot.repoName.takeIf { it.isNotBlank() } ?: metadata.repoName,
+        isPrerelease = snapshot.isPrerelease
     )
 
     private fun snapshotToAsset(snapshot: ExternalBundleSnapshot?): ReVancedAsset {
@@ -534,6 +546,31 @@ class ExternalGraphqlPatchBundle(
             description = description,
             version = version
         )
+    }
+
+    private fun parseEndpointMetadata(): Triple<String?, String?, Boolean?> {
+        val candidates = listOfNotNull(endpoint, metadata.downloadUrl)
+        for (candidate in candidates) {
+            val parsed = runCatching { Url(candidate) }.getOrNull() ?: continue
+            val segments = parsed.encodedPath.trim('/').split('/').filter { it.isNotBlank() }
+            if (segments.size >= 5 &&
+                segments[0].equals("api", ignoreCase = true) &&
+                segments[1].equals("v1", ignoreCase = true) &&
+                segments[2].equals("bundle", ignoreCase = true)
+            ) {
+                val owner = segments[3]
+                val repo = segments[4]
+                val prerelease = parsed.parameters["prerelease"]?.lowercase()?.let { value ->
+                    when (value) {
+                        "true" -> true
+                        "false" -> false
+                        else -> null
+                    }
+                }
+                return Triple(owner, repo, prerelease)
+            }
+        }
+        return Triple(null, null, null)
     }
 
     private fun parseCreatedAt(raw: String?): LocalDateTime {
