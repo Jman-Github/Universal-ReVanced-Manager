@@ -1392,7 +1392,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                         // Check for base APK, first check if the app is already installed
                         if (existingPackageInfo == null) {
                             // If the app is not installed, check if the output file is a base apk
-                            if (currentPackageInfo.splitNames.isNotEmpty()) {
+                            if (currentPackageInfo.splitNames?.isNotEmpty() == true) {
                                 val hint =
                                     installerManager.formatFailureHint(PackageInstaller.STATUS_FAILURE_INVALID, null)
                                         ?: app.getString(R.string.installer_hint_invalid)

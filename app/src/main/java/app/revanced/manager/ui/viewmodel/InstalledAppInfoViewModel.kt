@@ -463,7 +463,7 @@ class InstalledAppInfoViewModel(
                     }
                     val packageInfo = pm.getPackageInfo(apk)
                         ?: throw Exception("Failed to load application info")
-                    if (packageInfo.splitNames.isNotEmpty()) {
+                    if (packageInfo.splitNames?.isNotEmpty() == true) {
                         mountVersionMismatchMessage = context.getString(R.string.mount_split_not_supported)
                         return@launch
                     }
