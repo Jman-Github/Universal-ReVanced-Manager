@@ -14,6 +14,7 @@ import app.revanced.manager.util.FilenameUtils
 import app.revanced.manager.util.RequestManageStorageContract
 import java.io.File
 import java.nio.file.Path
+import java.util.Locale
 
 class Filesystem(private val app: Application) {
     data class StorageRoot(val path: Path, val label: String, val isRemovable: Boolean)
@@ -36,6 +37,7 @@ class Filesystem(private val app: Application) {
      */
     val uiTempDir: File = app.getDir("ui_ephemeral", Context.MODE_PRIVATE)
     private val patchedAppsDir: File = app.getDir("patched-apps", Context.MODE_PRIVATE).apply { mkdirs() }
+    private val patchProfileInputsDir: File = app.getDir("patch-profile-inputs", Context.MODE_PRIVATE).apply { mkdirs() }
 
     fun externalFilesDir(): Path = Environment.getExternalStorageDirectory().toPath()
 
@@ -128,5 +130,11 @@ class Filesystem(private val app: Application) {
             }
         }
         return removed
+    }
+
+    fun getPatchProfileInputFile(profileId: Int, extension: String): File {
+        val sanitized = extension.lowercase(Locale.ROOT).takeIf { it.matches(Regex("^[a-z0-9]{1,10}$")) }
+            ?: "apk"
+        return patchProfileInputsDir.resolve("profile_${profileId}.$sanitized")
     }
 }

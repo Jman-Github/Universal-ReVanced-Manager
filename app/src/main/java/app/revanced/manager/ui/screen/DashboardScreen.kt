@@ -591,19 +591,17 @@ fun DashboardScreen(
                             )
                             },
                             actions = {
-                                if (savedAppsEnabled) {
-                                    IconButton(
-                                        onClick = { showDeleteSavedAppsDialog = true }
-                                    ) {
-                                        Icon(
-                                            Icons.Outlined.Delete,
-                                            stringResource(R.string.delete)
-                                        )
-                                    }
-                                }
+                            IconButton(
+                                onClick = { showDeleteSavedAppsDialog = true }
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Delete,
+                                    stringResource(R.string.delete)
+                                )
                             }
-                        )
-                    }
+                        }
+                    )
+                }
 
                 bundlesSelectable -> {
                     BundleTopBar(

@@ -5,11 +5,12 @@
 
 - Made the fallback installer actually functional. If an install fails with the primary installer, the fallback installer is prompted
 - Improved the `Discover patch bundles` screens searching/filtering
+- Added the ability to set a APK path that persists to one tap patch with patch profiles
 
 
 # Bug fixes
 
-- Fixed more issues with the `Saved patched apps for later` setting toggle
+- Fixed more issues with the `Saved patched apps for later` setting toggle & adjust its behavior
 
 
 # v1.7.1-dev.04 (2026-01-19)

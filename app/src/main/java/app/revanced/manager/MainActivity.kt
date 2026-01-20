@@ -19,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
@@ -65,11 +66,13 @@ import app.revanced.manager.ui.viewmodel.MainViewModel
 import app.revanced.manager.ui.viewmodel.SelectedAppInfoViewModel
 import app.revanced.manager.util.EventEffect
 import app.revanced.manager.util.AppForeground
+import app.universal.revanced.manager.R
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.androidx.compose.navigation.koinNavViewModel
 import org.koin.core.parameter.parametersOf
 import org.koin.androidx.viewmodel.ext.android.getViewModel as getActivityViewModel
+import java.io.File
 
 class MainActivity : AppCompatActivity() {
     @ExperimentalAnimationApi
@@ -133,6 +136,7 @@ class MainActivity : AppCompatActivity() {
 private fun ReVancedManager(vm: MainViewModel) {
     val navController = rememberNavController()
     var pendingBundleDeepLink by remember { mutableStateOf<app.revanced.manager.util.BundleDeepLink?>(null) }
+    val context = LocalContext.current
 
     EventEffect(vm.appSelectFlow) { params ->
         navController.popBackStack(SelectedApplicationInfo.Main, inclusive = true)
@@ -178,16 +182,33 @@ private fun ReVancedManager(vm: MainViewModel) {
                     navController.navigate(InstalledApplicationInfo(packageName))
                 },
                 onProfileLaunch = { launchData ->
+                    val apkFile = launchData.profile.apkPath
+                        ?.let(::File)
+                        ?.takeIf { it.exists() }
+                    val resolvedVersion = launchData.profile.apkVersion
+                        ?: launchData.profile.appVersion
+                        ?: context.getString(R.string.app_version_unspecified)
+                    val selectedApp = if (apkFile != null) {
+                        SelectedApp.Local(
+                            packageName = launchData.profile.packageName,
+                            version = resolvedVersion,
+                            file = apkFile,
+                            temporary = false,
+                            resolved = true
+                        )
+                    } else {
+                        SelectedApp.Search(
+                            launchData.profile.packageName,
+                            launchData.profile.appVersion
+                        )
+                    }
                     navController.navigateComplex(
                         SelectedApplicationInfo,
                         SelectedApplicationInfo.ViewModelParams(
-                            app = SelectedApp.Search(
-                                launchData.profile.packageName,
-                                launchData.profile.appVersion
-                            ),
+                            app = selectedApp,
                             patches = null,
                             profileId = launchData.profile.uid,
-                            requiresSourceSelection = true
+                            requiresSourceSelection = apkFile == null
                         )
                     )
                 },

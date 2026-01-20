@@ -33,6 +33,10 @@ class PatchProfileRepository(
             uid = AppDatabase.generateUid(),
             packageName = packageName,
             appVersion = appVersion,
+            apkPath = null,
+            apkSourcePath = null,
+            apkVersion = null,
+            autoPatch = false,
             name = name,
             payload = payload,
             createdAt = System.currentTimeMillis(),
@@ -66,8 +70,32 @@ class PatchProfileRepository(
             appVersion = appVersion,
             name = name,
             payload = payload,
+            autoPatch = existing.autoPatch,
             sortOrder = existing.sortOrder
         )
+        dao.upsert(entity)
+        return entity.toDomain()
+    }
+
+    suspend fun updateProfileApk(
+        uid: Int,
+        apkPath: String?,
+        apkVersion: String?,
+        apkSourcePath: String?
+    ): PatchProfile? {
+        val existing = dao.get(uid) ?: return null
+        val entity = existing.copy(
+            apkPath = apkPath,
+            apkSourcePath = apkSourcePath,
+            apkVersion = apkVersion
+        )
+        dao.upsert(entity)
+        return entity.toDomain()
+    }
+
+    suspend fun updateProfileAutoPatch(uid: Int, enabled: Boolean): PatchProfile? {
+        val existing = dao.get(uid) ?: return null
+        val entity = existing.copy(autoPatch = enabled)
         dao.upsert(entity)
         return entity.toDomain()
     }
@@ -92,6 +120,10 @@ class PatchProfileRepository(
                 uid = AppDatabase.generateUid(),
                 packageName = entry.packageName,
                 appVersion = entry.appVersion,
+                apkPath = null,
+                apkSourcePath = null,
+                apkVersion = null,
+                autoPatch = entry.autoPatch,
                 name = entry.name,
                 payload = entry.payload,
                 createdAt = entry.createdAt ?: System.currentTimeMillis(),
@@ -115,6 +147,10 @@ data class PatchProfile(
     val uid: Int,
     val packageName: String,
     val appVersion: String?,
+    val apkPath: String?,
+    val apkSourcePath: String?,
+    val apkVersion: String?,
+    val autoPatch: Boolean,
     val name: String,
     val createdAt: Long,
     val payload: PatchProfilePayload
@@ -125,6 +161,7 @@ data class PatchProfileExportEntry(
     val name: String,
     val packageName: String,
     val appVersion: String?,
+    val autoPatch: Boolean = false,
     val createdAt: Long?,
     val payload: PatchProfilePayload
 )
@@ -138,6 +175,10 @@ private fun PatchProfileEntity.toDomain() = PatchProfile(
     uid = uid,
     packageName = packageName,
     appVersion = appVersion,
+    apkPath = apkPath,
+    apkSourcePath = apkSourcePath,
+    apkVersion = apkVersion,
+    autoPatch = autoPatch,
     name = name,
     createdAt = createdAt,
     payload = payload
@@ -154,6 +195,7 @@ private fun PatchProfileEntity.toExportEntry() = PatchProfileExportEntry(
     name = name,
     packageName = packageName,
     appVersion = appVersion,
+    autoPatch = autoPatch,
     createdAt = createdAt,
     payload = payload
 )

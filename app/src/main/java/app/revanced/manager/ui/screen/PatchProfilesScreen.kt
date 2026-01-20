@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -29,6 +30,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.outlined.Bookmarks
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -64,6 +67,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
 import app.revanced.manager.ui.component.TextInputDialog
 import app.revanced.manager.ui.component.haptics.HapticCheckbox
+import app.revanced.manager.ui.component.patches.PathSelectorDialog
+import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.ui.viewmodel.BundleSourceType
 import app.revanced.manager.ui.viewmodel.BundleOptionDisplay
@@ -73,12 +78,14 @@ import app.revanced.manager.ui.viewmodel.PatchProfilesViewModel
 import app.revanced.manager.ui.viewmodel.PatchProfilesViewModel.RenameResult
 import app.revanced.manager.util.relativeTime
 import app.revanced.manager.util.toast
+import app.revanced.manager.util.isAllowedApkFile
 import app.universal.revanced.manager.R
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import sh.calvin.reorderable.ReorderableCollectionItemScope
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
+import java.io.File
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -101,6 +108,8 @@ fun PatchProfilesScreen(
     val allowBundleOverride by prefs.allowPatchProfileBundleOverride.flow.collectAsStateWithLifecycle(
         initialValue = prefs.allowPatchProfileBundleOverride.default
     )
+    val filesystem = koinInject<Filesystem>()
+    val storageRoots = remember { filesystem.storageRoots() }
     var loadingProfileId by remember { mutableStateOf<Int?>(null) }
     var blockedProfile by remember { mutableStateOf<PatchProfileLaunchData?>(null) }
     var renameProfileId by rememberSaveable { mutableStateOf<Int?>(null) }
@@ -109,6 +118,9 @@ fun PatchProfilesScreen(
     var versionDialogValue by rememberSaveable { mutableStateOf("") }
     var versionDialogAllVersions by rememberSaveable { mutableStateOf(false) }
     var versionDialogSaving by remember { mutableStateOf(false) }
+    var settingsDialogProfile by remember { mutableStateOf<PatchProfileListItem?>(null) }
+    var apkPickerProfile by remember { mutableStateOf<PatchProfileListItem?>(null) }
+    var apkPickerBusy by remember { mutableStateOf(false) }
     data class ChangeUidTarget(val profileId: Int, val bundleUid: Int, val bundleName: String?)
     var changeUidTarget by remember { mutableStateOf<ChangeUidTarget?>(null) }
     data class RemoteBundleTarget(
@@ -154,6 +166,43 @@ fun PatchProfilesScreen(
     }
 
     BackHandler(enabled = selectionActive) { viewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL) }
+
+    apkPickerProfile?.let { profile ->
+        PathSelectorDialog(
+            roots = storageRoots,
+            onSelect = { path ->
+                apkPickerProfile = null
+                if (path == null) return@PathSelectorDialog
+                apkPickerBusy = true
+                scope.launch {
+                    try {
+                        val result = viewModel.updateProfileApk(profile.id, File(path.toString()))
+                        when (result) {
+                            PatchProfilesViewModel.ApkSelectionResult.SUCCESS -> context.toast(
+                                context.getString(R.string.patch_profile_apk_saved_toast, profile.name)
+                            )
+                            PatchProfilesViewModel.ApkSelectionResult.INVALID_FILE -> context.toast(
+                                context.getString(R.string.patch_profile_apk_invalid_toast)
+                            )
+                            PatchProfilesViewModel.ApkSelectionResult.PACKAGE_MISMATCH -> context.toast(
+                                context.getString(R.string.patch_profile_apk_mismatch_toast)
+                            )
+                            PatchProfilesViewModel.ApkSelectionResult.PROFILE_NOT_FOUND,
+                            PatchProfilesViewModel.ApkSelectionResult.FAILED,
+                            PatchProfilesViewModel.ApkSelectionResult.CLEARED -> context.toast(
+                                context.getString(R.string.patch_profile_apk_failed_toast)
+                            )
+                        }
+                    } finally {
+                        apkPickerBusy = false
+                    }
+                }
+            },
+            fileFilter = ::isAllowedApkFile,
+            allowDirectorySelection = false,
+            fileTypeLabel = stringResource(R.string.apk_file_type)
+        )
+    }
 
     renameProfileId?.let { targetId ->
         TextInputDialog(
@@ -430,18 +479,16 @@ fun PatchProfilesScreen(
                                 renameProfileName = profile.name
                             }
                             Spacer(modifier = Modifier.size(8.dp))
-                            Icon(
-                                imageVector = Icons.Outlined.Settings,
-                                contentDescription = stringResource(R.string.patch_profile_version_override_action),
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier
-                                    .size(20.dp)
-                                    .clickable {
-                                        versionDialogProfile = profile
-                                        versionDialogValue = profile.appVersion.orEmpty()
-                                        versionDialogAllVersions = profile.appVersion.isNullOrBlank()
-                                    }
-                            )
+                            IconButton(
+                                onClick = { settingsDialogProfile = profile }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Settings,
+                                    contentDescription = stringResource(R.string.patch_profile_version_override_action),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
                     }
                     AnimatedVisibility(
@@ -754,6 +801,152 @@ fun PatchProfilesScreen(
                                     )
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        )
+    }
+
+    settingsDialogProfile?.let { profile ->
+        val settingsProfile = profiles.firstOrNull { it.id == profile.id } ?: profile
+        val apkPath = settingsProfile.apkPath?.takeIf { it.isNotBlank() }
+        val apkDisplayPath = settingsProfile.apkSourcePath?.takeIf { it.isNotBlank() } ?: apkPath
+        val versionSummary = settingsProfile.appVersion?.takeIf { it.isNotBlank() }?.let { version ->
+            if (version.startsWith("v", ignoreCase = true)) version else "v$version"
+        } ?: stringResource(R.string.bundle_version_all_versions)
+        var autoPatchUpdating by remember(settingsProfile.id) { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = {
+                if (apkPickerBusy) return@AlertDialog
+                settingsDialogProfile = null
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (apkPickerBusy) return@TextButton
+                        settingsDialogProfile = null
+                    }
+                ) {
+                    Text(stringResource(R.string.close))
+                }
+            },
+            title = { Text(stringResource(R.string.patch_profile_settings_title, settingsProfile.name)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = stringResource(R.string.patch_profile_apk_section_title),
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        val apkScrollState = rememberScrollState()
+                        Text(
+                            text = apkDisplayPath ?: stringResource(R.string.patch_profile_apk_not_set),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Visible,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(apkScrollState)
+                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TextButton(
+                                onClick = {
+                                    if (apkPickerBusy) return@TextButton
+                                    apkPickerProfile = settingsProfile
+                                }
+                            ) {
+                                Text(stringResource(R.string.patch_profile_apk_select))
+                            }
+                            if (apkPath != null) {
+                                TextButton(
+                                    onClick = {
+                                        if (apkPickerBusy) return@TextButton
+                                        apkPickerBusy = true
+                                        scope.launch {
+                                            try {
+                                                when (viewModel.updateProfileApk(settingsProfile.id, null)) {
+                                                    PatchProfilesViewModel.ApkSelectionResult.CLEARED -> context.toast(
+                                                        context.getString(
+                                                            R.string.patch_profile_apk_cleared_toast,
+                                                            settingsProfile.name
+                                                        )
+                                                    )
+                                                    PatchProfilesViewModel.ApkSelectionResult.PROFILE_NOT_FOUND,
+                                                    PatchProfilesViewModel.ApkSelectionResult.FAILED,
+                                                    PatchProfilesViewModel.ApkSelectionResult.SUCCESS,
+                                                    PatchProfilesViewModel.ApkSelectionResult.INVALID_FILE,
+                                                    PatchProfilesViewModel.ApkSelectionResult.PACKAGE_MISMATCH -> context.toast(
+                                                        context.getString(R.string.patch_profile_apk_failed_toast)
+                                                    )
+                                                }
+                                            } finally {
+                                                apkPickerBusy = false
+                                            }
+                                        }
+                                    }
+                                ) {
+                                    Text(stringResource(R.string.patch_profile_apk_clear))
+                                }
+                            }
+                        }
+                    }
+                    Divider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = stringResource(R.string.patch_profile_version_override_action),
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Text(
+                            text = versionSummary,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        TextButton(
+                            onClick = {
+                                if (apkPickerBusy) return@TextButton
+                                versionDialogProfile = settingsProfile
+                                versionDialogValue = settingsProfile.appVersion.orEmpty()
+                                versionDialogAllVersions = settingsProfile.appVersion.isNullOrBlank()
+                                settingsDialogProfile = null
+                            }
+                        ) {
+                            Text(stringResource(R.string.edit))
+                        }
+                    }
+                    Divider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        HapticCheckbox(
+                            checked = settingsProfile.autoPatch,
+                            onCheckedChange = { enabled ->
+                                if (autoPatchUpdating) return@HapticCheckbox
+                                autoPatchUpdating = true
+                                scope.launch {
+                                    val updated = viewModel.updateProfileAutoPatch(settingsProfile.id, enabled)
+                                    if (!updated) {
+                                        context.toast(context.getString(R.string.patch_profile_save_failed_toast))
+                                    }
+                                    autoPatchUpdating = false
+                                }
+                            }
+                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = stringResource(R.string.patch_profile_auto_patch_label),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                text = stringResource(R.string.patch_profile_auto_patch_description),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }

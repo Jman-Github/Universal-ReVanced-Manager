@@ -198,6 +198,30 @@ fun SelectedAppInfoScreen(
         )
     }
     val composableScope = rememberCoroutineScope()
+    val launchPatchFlow: () -> Unit = launch@{
+        if (selectedPatchCount == 0) {
+            context.toast(context.getString(R.string.no_patches_selected))
+            return@launch
+        }
+
+        composableScope.launch {
+            if (patchBundleRepository.selectionHasMixedBundleTypes(patches)) {
+                showMixedBundleDialog = true
+                return@launch
+            }
+            if (!vm.hasSetRequiredOptions(patches)) {
+                val optionsSnapshot = vm.awaitOptions()
+                onRequiredOptions(
+                    vm.selectedApp,
+                    vm.getCustomPatches(bundles, allowIncompatiblePatches),
+                    optionsSnapshot
+                )
+                return@launch
+            }
+
+            onPatchClick()
+        }
+    }
 
     val error by vm.errorFlow.collectAsStateWithLifecycle(null)
     val profileLaunchState by vm.profileLaunchState.collectAsStateWithLifecycle(null)
@@ -209,8 +233,13 @@ fun SelectedAppInfoScreen(
         if (!vm.shouldAutoLaunchProfile()) return@LaunchedEffect
         val appSource = vm.selectedApp
         if (appSource is SelectedApp.Search) return@LaunchedEffect
+        val autoPatch = vm.shouldAutoPatchProfile()
         vm.markProfileAutoLaunchConsumed()
-        onPatchSelectorClick(resolveNavigationVersion(appSource), launchState.selection, launchState.options)
+        if (autoPatch) {
+            launchPatchFlow()
+        } else {
+            onPatchSelectorClick(resolveNavigationVersion(appSource), launchState.selection, launchState.options)
+        }
     }
 
     Scaffold(
@@ -232,31 +261,7 @@ fun SelectedAppInfoScreen(
                         stringResource(R.string.patch)
                     )
                 },
-                onClick = patchClick@{
-                    if (selectedPatchCount == 0) {
-                        context.toast(context.getString(R.string.no_patches_selected))
-
-                        return@patchClick
-                    }
-
-                    composableScope.launch {
-                        if (patchBundleRepository.selectionHasMixedBundleTypes(patches)) {
-                            showMixedBundleDialog = true
-                            return@launch
-                        }
-                        if (!vm.hasSetRequiredOptions(patches)) {
-                            val optionsSnapshot = vm.awaitOptions()
-                            onRequiredOptions(
-                                vm.selectedApp,
-                                vm.getCustomPatches(bundles, allowIncompatiblePatches),
-                                optionsSnapshot
-                            )
-                            return@launch
-                        }
-
-                        onPatchClick()
-                    }
-                }
+                onClick = { launchPatchFlow() }
             )
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),

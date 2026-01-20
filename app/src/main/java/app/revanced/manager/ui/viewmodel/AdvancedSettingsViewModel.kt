@@ -140,9 +140,9 @@ class AdvancedSettingsViewModel(
             val savedApps = installedAppRepository.getByInstallType(InstallType.SAVED)
             savedApps.forEach { app ->
                 installedAppRepository.delete(app)
-                val savedFile = filesystem.getPatchedAppFile(app.currentPackageName, app.version)
-                if (savedFile.exists()) {
-                    savedFile.delete()
+                filesystem.deletePatchedAppFiles(app.currentPackageName)
+                if (app.originalPackageName != app.currentPackageName) {
+                    filesystem.deletePatchedAppFiles(app.originalPackageName)
                 }
             }
         }

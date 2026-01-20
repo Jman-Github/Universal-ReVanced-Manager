@@ -137,6 +137,7 @@ class SelectedAppInfoViewModel(
     private val _profileLaunchState = MutableStateFlow<ProfileLaunchState?>(null)
     val profileLaunchState = _profileLaunchState.asStateFlow()
     private var autoLaunchProfilePatcher = profileId != null
+    private var autoPatchProfile = false
     private val allowUniversalFlow = prefs.disableUniversalPatchCheck.flow
     private var allowUniversalPatches = true
     private var _selectedApp by savedStateHandle.saveable {
@@ -403,8 +404,10 @@ class SelectedAppInfoViewModel(
                     app.toast(app.getString(R.string.patch_profile_launch_error))
                 }
                 autoLaunchProfilePatcher = false
+                autoPatchProfile = false
                 return@launch
             }
+            autoPatchProfile = profile.autoPatch && !profile.apkPath.isNullOrBlank()
 
             val sourcesList = bundleRepository.sources.first()
             val bundleInfoSnapshot = bundleRepository.bundleInfoFlow.first()
@@ -502,6 +505,10 @@ class SelectedAppInfoViewModel(
                 name = "",
                 packageName = packageName,
                 appVersion = desiredVersion,
+                apkPath = null,
+                apkSourcePath = null,
+                apkVersion = null,
+                autoPatch = false,
                 createdAt = 0L,
                 payload = remappedPayload
             ).toConfiguration(scopedBundles, sources)
@@ -977,7 +984,10 @@ class SelectedAppInfoViewModel(
 
     fun markProfileAutoLaunchConsumed() {
         autoLaunchProfilePatcher = false
+        autoPatchProfile = false
     }
+
+    fun shouldAutoPatchProfile() = autoPatchProfile
 
     data class ProfileLaunchState(
         val profile: PatchProfile,
