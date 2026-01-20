@@ -98,7 +98,9 @@ fun PatchItem(
     onExpandVersions: () -> Unit,
     expandOptions: Boolean,
     onExpandOptions: () -> Unit,
-    showCompatibilityMeta: Boolean = true
+    showCompatibilityMeta: Boolean = true,
+    showOptionValues: Boolean = false,
+    optionValues: Map<String, Any?>? = null
 ) {
     ElevatedCard(
         modifier = Modifier
@@ -197,6 +199,11 @@ fun PatchItem(
 
                     Column {
                         options.forEachIndexed { i, option ->
+                            val resolvedValue = optionValues?.get(option.key) ?: option.default
+                            val presetLabel = option.presets
+                                ?.entries
+                                ?.firstOrNull { it.value == resolvedValue }
+                                ?.key
                             OutlinedCard(
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = CardColors(
@@ -228,6 +235,41 @@ fun PatchItem(
                                         text = option.description,
                                         style = MaterialTheme.typography.bodyMedium
                                     )
+                                    if (showOptionValues) {
+                                        val displayValue = when {
+                                            presetLabel != null -> presetLabel
+                                            resolvedValue == null -> stringResource(R.string.app_version_unspecified)
+                                            resolvedValue is Boolean -> if (resolvedValue) {
+                                                stringResource(R.string.option_value_enabled)
+                                            } else {
+                                                stringResource(R.string.option_value_disabled)
+                                            }
+                                            resolvedValue is List<*> -> resolvedValue.joinToString(", ") { it.toString() }
+                                            else -> resolvedValue.toString()
+                                        }
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Surface(
+                                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                                                shape = RoundedCornerShape(999.dp)
+                                            ) {
+                                                Text(
+                                                    text = stringResource(R.string.option_value_selected_label),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                )
+                                            }
+                                            Text(
+                                                text = displayValue,
+                                                style = MaterialTheme.typography.labelLarge,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }

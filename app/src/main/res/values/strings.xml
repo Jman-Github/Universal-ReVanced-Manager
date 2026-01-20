@@ -309,6 +309,8 @@
     <string name="disable_patch_selection_confirmations">Disable action confirmations</string>
     <string name="disable_patch_selection_confirmations_description">Skip confirmation dialogs for patch selection actions</string>
     <string name="disable_patch_selection_confirmations_warning">Disabling confirmations may cause unintended bulk changes.</string>
+    <string name="show_patch_selection_summary">Show patch summary before patching</string>
+    <string name="show_patch_selection_summary_description">Display a summary of selected patches by bundle before starting the patcher</string>
     <string name="patch_selection_collapse_on_toggle">Collapse actions after toggling patches</string>
     <string name="patch_selection_collapse_on_toggle_description">Automatically hide the patch selection action buttons whenever you select or deselect a patch</string>
     <string name="patch_selection_action_order_title">Patch selection action buttons order</string>
@@ -644,6 +646,12 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="original_package_name">Original package name</string>
     <string name="applied_patches">Applied patches</string>
     <string name="view_applied_patches">View applied patches</string>
+    <string name="patch_confirmation_title">Patch confirmation</string>
+    <string name="selected_patches_title">Selected patches</string>
+    <string name="patch_confirmation_subtitle">Review the selected patches before continuing.</string>
+    <string name="option_value_selected_label">Selected</string>
+    <string name="option_value_enabled">Enabled</string>
+    <string name="option_value_disabled">Disabled</string>
     <string name="patch_bundles_used">Patch bundles used</string>
     <string name="applied_patches_empty">No patches recorded for this app</string>
     <string name="applied_patches_bundle_missing">Bundle metadata unavailable. Showing saved patch names.</string>

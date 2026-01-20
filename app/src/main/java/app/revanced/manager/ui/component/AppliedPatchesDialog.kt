@@ -3,30 +3,39 @@ package app.revanced.manager.ui.component
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.annotation.StringRes
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.revanced.manager.patcher.patch.PatchInfo
 import app.revanced.manager.ui.component.bundle.BundleTopBar
 import app.revanced.manager.ui.component.bundle.PatchItem
+import app.revanced.manager.util.Options
 import app.universal.revanced.manager.R
 
 data class AppliedPatchBundleUi(
@@ -42,13 +51,20 @@ data class AppliedPatchBundleUi(
 @OptIn(ExperimentalMaterial3Api::class)
 fun AppliedPatchesDialog(
     bundles: List<AppliedPatchBundleUi>,
-    onDismissRequest: () -> Unit
+    onDismissRequest: () -> Unit,
+    @StringRes titleRes: Int = R.string.applied_patches,
+    @StringRes sectionHeaderRes: Int? = null,
+    @StringRes sectionSubtitleRes: Int? = null,
+    optionsByBundle: Options = emptyMap(),
+    @StringRes confirmTextRes: Int? = null,
+    onConfirm: (() -> Unit)? = null,
+    confirmEnabled: Boolean = true
 ) {
     FullscreenDialog(onDismissRequest = onDismissRequest) {
         Scaffold(
             topBar = {
                 BundleTopBar(
-                    title = stringResource(R.string.applied_patches),
+                    title = stringResource(titleRes),
                     onBackClick = onDismissRequest,
                     backIcon = {
                         Icon(
@@ -57,6 +73,29 @@ fun AppliedPatchesDialog(
                         )
                     }
                 )
+            },
+            bottomBar = {
+                if (confirmTextRes != null && onConfirm != null) {
+                    Surface(tonalElevation = 2.dp) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(onClick = onDismissRequest) {
+                                Text(stringResource(R.string.cancel))
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            FilledTonalButton(
+                                onClick = onConfirm,
+                                enabled = confirmEnabled
+                            ) {
+                                Text(stringResource(confirmTextRes))
+                            }
+                        }
+                    }
+                }
             }
         ) { paddingValues ->
             if (bundles.isEmpty()) {
@@ -80,6 +119,43 @@ fun AppliedPatchesDialog(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                if (sectionHeaderRes != null) {
+                    item(key = "section-header") {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = MaterialTheme.shapes.extraLarge,
+                            tonalElevation = 2.dp
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.CheckCircle,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        text = stringResource(sectionHeaderRes),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                                sectionSubtitleRes?.let { subtitleRes ->
+                                    Text(
+                                        text = stringResource(subtitleRes),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
                 items(bundles, key = AppliedPatchBundleUi::uid) { bundle ->
                     Column(modifier = Modifier.fillMaxWidth()) {
                         val bundleTitle = buildString {
@@ -103,6 +179,8 @@ fun AppliedPatchesDialog(
                             val optionsKey = "options-$index"
                             var expandVersions by rememberSaveable(bundle.uid, patch.name, versionKey) { mutableStateOf(false) }
                             var expandOptions by rememberSaveable(bundle.uid, patch.name, optionsKey) { mutableStateOf(false) }
+                            val bundleOptions = optionsByBundle[bundle.uid]
+                            val patchOptionValues = bundleOptions?.get(patch.name)
 
                             PatchItem(
                                 patch = patch,
@@ -110,7 +188,9 @@ fun AppliedPatchesDialog(
                                 onExpandVersions = { expandVersions = !expandVersions },
                                 expandOptions = expandOptions,
                                 onExpandOptions = { expandOptions = !expandOptions },
-                                showCompatibilityMeta = false
+                                showCompatibilityMeta = false,
+                                showOptionValues = true,
+                                optionValues = patchOptionValues
                             )
 
                             if (index != bundle.patchInfos.lastIndex) {

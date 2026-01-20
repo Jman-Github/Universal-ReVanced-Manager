@@ -6,6 +6,7 @@
 - Made the fallback installer actually functional. If an install fails with the primary installer, the fallback installer is prompted
 - Improved the `Discover patch bundles` screens searching/filtering
 - Added the ability to set a APK path that persists to one tap patch with patch profiles
+- Added a patch confirmation screen showing the user what patch bundles, patches, and sub options they have selected and enabled/disabled
 
 
 # Bug fixes

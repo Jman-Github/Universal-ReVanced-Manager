@@ -98,6 +98,7 @@ class PreferencesManager(
     val disableUniversalPatchCheck = booleanPreference("disable_patch_universal_check", true)
     val suggestedVersionSafeguard = booleanPreference("suggested_version_safeguard", true)
     val disablePatchSelectionConfirmations = booleanPreference("disable_patch_selection_confirmations", false)
+    val showPatchSelectionSummary = booleanPreference("show_patch_selection_summary", true)
     val collapsePatchActionsOnSelection = booleanPreference("collapse_patch_actions_on_selection", true)
     val patchSelectionFilterFlags = intPreference("patch_selection_filter_flags", -1)
     val patchSelectionSortAlphabetical = booleanPreference("patch_selection_sort_alphabetical", false)
@@ -160,6 +161,7 @@ class PreferencesManager(
         val disableUniversalPatchCheck: Boolean? = null,
         val suggestedVersionSafeguard: Boolean? = null,
         val disablePatchSelectionConfirmations: Boolean? = null,
+        val showPatchSelectionSummary: Boolean? = null,
         val collapsePatchActionsOnSelection: Boolean? = null,
         val patchSelectionFilterFlags: Int? = null,
         val patchSelectionSortAlphabetical: Boolean? = null,
@@ -219,6 +221,7 @@ class PreferencesManager(
         disableUniversalPatchCheck = disableUniversalPatchCheck.get(),
         suggestedVersionSafeguard = suggestedVersionSafeguard.get(),
         disablePatchSelectionConfirmations = disablePatchSelectionConfirmations.get(),
+        showPatchSelectionSummary = showPatchSelectionSummary.get(),
         collapsePatchActionsOnSelection = collapsePatchActionsOnSelection.get(),
         patchSelectionFilterFlags = patchSelectionFilterFlags.get(),
         patchSelectionSortAlphabetical = patchSelectionSortAlphabetical.get(),
@@ -282,6 +285,7 @@ class PreferencesManager(
         snapshot.disableUniversalPatchCheck?.let { disableUniversalPatchCheck.value = it }
         snapshot.suggestedVersionSafeguard?.let { suggestedVersionSafeguard.value = it }
         snapshot.disablePatchSelectionConfirmations?.let { disablePatchSelectionConfirmations.value = it }
+        snapshot.showPatchSelectionSummary?.let { showPatchSelectionSummary.value = it }
         snapshot.collapsePatchActionsOnSelection?.let { collapsePatchActionsOnSelection.value = it }
         snapshot.patchSelectionFilterFlags?.let { patchSelectionFilterFlags.value = it }
         snapshot.patchSelectionSortAlphabetical?.let { patchSelectionSortAlphabetical.value = it }

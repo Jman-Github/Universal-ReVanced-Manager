@@ -612,6 +612,20 @@ fun AdvancedSettingsScreen(
                 }
                 ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
+                    targetKey = R.string.show_patch_selection_summary,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.showPatchSelectionSummary,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.show_patch_selection_summary,
+                        description = R.string.show_patch_selection_summary_description,
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
                     targetKey = R.string.universal_patches_safeguard,
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }
