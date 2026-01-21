@@ -82,6 +82,7 @@ The `Discover patch bundles` screen has been updated to use [Brosssh's new API](
 - Fixed null splitNames errors with the Rooted mount installer https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/124
 - Fixed imported discovery patch bundle update checks not always detecting an update when it should be https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/125
 - Added support for PKCS12 keystore types
+- Fixed issues with version name checking with the `Rooted mount installer`
 
 
 # Docs
