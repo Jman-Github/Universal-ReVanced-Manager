@@ -1,4 +1,4 @@
-# v1.7.1-dev.05 (2026-01-21)
+# v1.7.1-dev.05 (2026-01-20)
 
 
 # Features
@@ -16,7 +16,7 @@
 - Fixed more issues with the `Saved patched apps for later` setting toggle & adjust its behavior
 - Fixed null splitNames errors with the Rooted mount installer https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/124
 - Fixed imported discovery patch bundle update checks not always detecting an update when it should be https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/125
-- Fixed issues with version name checking with the `Rooted mount installer`
+- Fixed issues with version name checking with the `Rooted mount installer` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/126
 
 
 
