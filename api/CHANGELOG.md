@@ -84,7 +84,7 @@ The `Discover patch bundles` screen has been updated to use [Brosssh's new API](
 - Fixed imported discovery patch bundle update checks not always detecting an update when it should be https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/125
 - Added support for PKCS12 keystore types
 - Fixed issues with version name checking with the `Rooted mount installer` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/126
-- Fixed issues with keystores from before dev.05 release not working unless regenerated
+- Fixed issues with keystores from before the dev.05 release not working unless regenerated
 
 
 # Docs
