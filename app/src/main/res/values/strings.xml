@@ -202,7 +202,7 @@
     <string name="universal_patches_profile_blocked_description">This patch profile contains universal patches. Enable “%1$s” in advanced settings to use it.</string>
     <string name="universal_patches_app_blocked_description">This app contains universal patches. Enable “%1$s” in advanced settings to continue.</string>
     <string name="import_keystore">Import keystore</string>
-    <string name="import_keystore_description">Import a custom keystore of the following types PKCS12 (.p12 or .pfx) or BKS. JKS keystores are not supported.</string>
+    <string name="import_keystore_description">Import a custom keystore of the following types: JKS, PKCS12 (.p12 or .pfx) and BKS.</string>
     <string name="import_keystore_dialog_title">Enter keystore credentials</string>
     <string name="import_keystore_dialog_description">Enter the keystore password and key password. If the key password is the same, you can leave it empty.</string>
     <string name="import_keystore_dialog_alias_field">Username (Alias)</string>

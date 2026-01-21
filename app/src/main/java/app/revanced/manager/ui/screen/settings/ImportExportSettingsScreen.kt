@@ -948,7 +948,7 @@ private fun isJsonFile(path: Path): Boolean =
     hasExtension(path, "json")
 
 private fun isKeystoreFile(path: Path): Boolean =
-    hasExtension(path, "keystore", "p12", "pfx", "bks")
+    hasExtension(path, "jks", "keystore", "p12", "pfx", "bks")
 
 private fun hasExtension(path: Path, vararg extensions: String): Boolean {
     val name = path.fileName?.toString()?.lowercase().orEmpty()
