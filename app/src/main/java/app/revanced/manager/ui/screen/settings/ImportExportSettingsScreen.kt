@@ -138,7 +138,11 @@ fun ImportExportSettingsScreen(
             ExportPicker.PatchBundles -> vm.exportPatchBundles(target)
             ExportPicker.PatchProfiles -> vm.exportPatchProfiles(target)
             ExportPicker.ManagerSettings -> vm.exportManagerSettings(target)
-            ExportPicker.PatchSelection -> vm.executeSelectionExport(target)
+            ExportPicker.PatchSelection -> when (vm.selectionAction) {
+                ImportExportViewModel.SelectionAction.ExportAllBundles ->
+                    vm.executeSelectionExportAllBundles(target)
+                else -> vm.executeSelectionExport(target)
+            }
         }
         coroutineScope.launch {
             job.join()
@@ -161,18 +165,33 @@ fun ImportExportSettingsScreen(
     }
 
     vm.selectionAction?.let { action ->
-        if (vm.selectedBundle == null) {
-            BundleSelector(patchBundles) {
-                if (it == null) {
-                    vm.clearSelectionAction()
-                } else {
-                    vm.selectBundle(it)
-                    when (action) {
-                        ImportExportViewModel.SelectionAction.Import -> {
-                            openImportPicker(ImportPicker.PatchSelection)
-                        }
-                        ImportExportViewModel.SelectionAction.Export -> {
-                            openExportPicker(ExportPicker.PatchSelection)
+        when (action) {
+            ImportExportViewModel.SelectionAction.ExportAllBundles -> {
+                if (activeExportPicker == null && !exportInProgress) {
+                    openExportPicker(ExportPicker.PatchSelection)
+                }
+            }
+            ImportExportViewModel.SelectionAction.ImportAllBundles -> {
+                if (activeImportPicker == null) {
+                    openImportPicker(ImportPicker.PatchSelection)
+                }
+            }
+            else -> {
+                if (vm.selectedBundle == null) {
+                    BundleSelector(patchBundles) {
+                        if (it == null) {
+                            vm.clearSelectionAction()
+                        } else {
+                            vm.selectBundle(it)
+                            when (action) {
+                                ImportExportViewModel.SelectionAction.ImportBundle -> {
+                                    openImportPicker(ImportPicker.PatchSelection)
+                                }
+                                ImportExportViewModel.SelectionAction.ExportBundle -> {
+                                    openExportPicker(ExportPicker.PatchSelection)
+                                }
+                                else -> {}
+                            }
                         }
                     }
                 }
@@ -277,7 +296,11 @@ fun ImportExportSettingsScreen(
                             ImportPicker.PatchBundles -> vm.importPatchBundles(path)
                             ImportPicker.PatchProfiles -> vm.importPatchProfiles(path)
                             ImportPicker.ManagerSettings -> vm.importManagerSettings(path)
-                            ImportPicker.PatchSelection -> vm.executeSelectionImport(path)
+                            ImportPicker.PatchSelection -> when (vm.selectionAction) {
+                                ImportExportViewModel.SelectionAction.ImportAllBundles ->
+                                    vm.executeSelectionImportAllBundles(path)
+                                else -> vm.executeSelectionImport(path)
+                            }
                         }
                     },
                     fileFilter = fileFilter,
@@ -440,11 +463,22 @@ fun ImportExportSettingsScreen(
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
-                    GroupItem(
+                    ExpandableSettingListItem(
+                        headlineContent = stringResource(R.string.import_patch_selection),
+                        supportingContent = stringResource(R.string.import_patch_selection_description),
                         modifier = highlightModifier,
-                        onClick = vm::importSelection,
-                        headline = R.string.import_patch_selection,
-                        description = R.string.import_patch_selection_description
+                        expandableContent = {
+                            GroupItem(
+                                onClick = vm::importSelectionForBundle,
+                                headline = R.string.import_patch_selection_bundle,
+                                description = R.string.import_patch_selection_bundle_description
+                            )
+                            GroupItem(
+                                onClick = vm::importSelectionAllBundles,
+                                headline = R.string.import_patch_selection_all,
+                                description = R.string.import_patch_selection_all_description
+                            )
+                        }
                     )
                 }
                 ExpressiveSettingsDivider()
@@ -522,11 +556,23 @@ fun ImportExportSettingsScreen(
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
-                    GroupItem(
+                    ExpandableSettingListItem(
+                        headlineContent = stringResource(R.string.export_patch_selection),
+                        supportingContent = stringResource(R.string.export_patch_selection_description),
                         modifier = highlightModifier,
-                        onClick = vm::exportSelection,
-                        headline = R.string.export_patch_selection,
-                        description = R.string.export_patch_selection_description
+                        expandableContent = {
+                            GroupItem(
+                                onClick = vm::exportSelectionForBundle,
+                                headline = R.string.export_patch_selection_bundle,
+                                description = R.string.export_patch_selection_bundle_description
+                            )
+
+                            GroupItem(
+                                onClick = vm::exportSelectionAllBundles,
+                                headline = R.string.export_patch_selection_all,
+                                description = R.string.export_patch_selection_all_description
+                            )
+                        }
                     )
                 }
                 ExpressiveSettingsDivider()

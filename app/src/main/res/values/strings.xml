@@ -220,6 +220,10 @@
     <string name="regenerate_keystore_success">The keystore has been successfully replaced</string>
     <string name="import_patch_selection">Import patch selection</string>
     <string name="import_patch_selection_description">Import patch selection from a JSON file</string>
+    <string name="import_patch_selection_bundle">Import bundle selection</string>
+    <string name="import_patch_selection_bundle_description">Import selections for a single bundle from a JSON file</string>
+    <string name="import_patch_selection_all">Import all bundle selections</string>
+    <string name="import_patch_selection_all_description">Import selections for all bundles from a JSON file</string>
     <string name="import_patch_selection_fail">Could not import patch selection: %s</string>
     <string name="import_patch_selection_success">Imported patch selection</string>
     <string name="import_patch_bundles">Import patch bundles</string>
@@ -247,6 +251,10 @@
     <string name="import_manager_settings_success">Imported manager settings</string>
     <string name="export_patch_selection">Export patch selection</string>
     <string name="export_patch_selection_description">Export patch selection to a JSON file</string>
+    <string name="export_patch_selection_bundle">Export patch selection per bundle</string>
+    <string name="export_patch_selection_bundle_description">Exports selections for all apps in the chosen bundle.</string>
+    <string name="export_patch_selection_all">Export all bundle selections</string>
+    <string name="export_patch_selection_all_description">Exports the selections for all patch bundles to a single file.</string>
     <string name="export_patch_selection_fail">Could not export patch selection: %s</string>
     <string name="export_patch_selection_success">Exported patch selection</string>
     <string name="export_patch_bundles">Export patch bundles</string>

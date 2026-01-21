@@ -156,6 +156,21 @@ data class ManagerSettingsExportFile(
     val settings: PreferencesManager.SettingsSnapshot
 )
 
+@Serializable
+data class PatchSelectionExportFile(
+    val version: Int = 1,
+    val bundles: List<PatchSelectionBundleExport>
+)
+
+@Serializable
+data class PatchSelectionBundleExport(
+    val bundleUid: Int,
+    val name: String,
+    val displayName: String?,
+    val source: String?,
+    val selection: SerializedSelection
+)
+
 @OptIn(ExperimentalSerializationApi::class)
 class ImportExportViewModel(
     private val app: Application,
@@ -167,8 +182,10 @@ class ImportExportViewModel(
     private val preferencesManager: PreferencesManager
 ) : ViewModel() {
     enum class SelectionAction {
-        Import,
-        Export
+        ImportBundle,
+        ImportAllBundles,
+        ExportBundle,
+        ExportAllBundles
     }
 
     private val contentResolver = app.contentResolver
@@ -326,6 +343,31 @@ class ImportExportViewModel(
         }
     }
 
+    fun executeSelectionImportAllBundles(target: Path) = viewModelScope.launch {
+        clearSelectionAction()
+
+        uiSafe(app, R.string.import_patch_selection_fail, "Failed to restore patch selection") {
+            val exportFile = withContext(Dispatchers.IO) {
+                target.inputStream().use {
+                    Json.decodeFromStream<PatchSelectionExportFile>(it)
+                }
+            }
+
+            val bundles = patchBundleRepository.sources.first()
+            val byUid = bundles.associateBy { it.uid }
+            val byEndpoint = bundles.mapNotNull { it.asRemoteOrNull?.endpoint?.trim()?.takeIf(String::isNotBlank)?.let { endpoint -> endpoint to it } }
+                .toMap()
+
+            for (bundleExport in exportFile.bundles) {
+                val source = byUid[bundleExport.bundleUid]
+                    ?: bundleExport.source?.trim()?.takeIf(String::isNotBlank)?.let { byEndpoint[it] }
+                    ?: continue
+                selectionRepository.import(source.uid, bundleExport.selection)
+            }
+            app.toast(app.getString(R.string.import_patch_selection_success))
+        }
+    }
+
     fun executeSelectionExport(target: Uri) = viewModelScope.launch {
         val source = selectedBundle ?: return@launch
         clearSelectionAction()
@@ -359,6 +401,65 @@ class ImportExportViewModel(
         }
     }
 
+    fun executeSelectionExportAllBundles(target: Uri) = viewModelScope.launch {
+        clearSelectionAction()
+
+        uiSafe(app, R.string.export_patch_selection_fail, "Failed to backup patch selection") {
+            val bundles = patchBundleRepository.sources.first()
+            val exports = bundles.mapNotNull { bundle ->
+                val selection = selectionRepository.export(bundle.uid)
+                if (selection.isEmpty()) return@mapNotNull null
+                PatchSelectionBundleExport(
+                    bundleUid = bundle.uid,
+                    name = bundle.name,
+                    displayName = bundle.displayName,
+                    source = bundle.asRemoteOrNull?.endpoint,
+                    selection = selection
+                )
+            }
+
+            withContext(Dispatchers.IO) {
+                contentResolver.openOutputStream(target, "wt")!!.use {
+                    Json.Default.encodeToStream(
+                        PatchSelectionExportFile(bundles = exports),
+                        it
+                    )
+                }
+            }
+            app.toast(app.getString(R.string.export_patch_selection_success))
+        }
+    }
+
+    fun executeSelectionExportAllBundles(target: Path) = viewModelScope.launch {
+        clearSelectionAction()
+
+        uiSafe(app, R.string.export_patch_selection_fail, "Failed to backup patch selection") {
+            val bundles = patchBundleRepository.sources.first()
+            val exports = bundles.mapNotNull { bundle ->
+                val selection = selectionRepository.export(bundle.uid)
+                if (selection.isEmpty()) return@mapNotNull null
+                PatchSelectionBundleExport(
+                    bundleUid = bundle.uid,
+                    name = bundle.name,
+                    displayName = bundle.displayName,
+                    source = bundle.asRemoteOrNull?.endpoint,
+                    selection = selection
+                )
+            }
+
+            withContext(Dispatchers.IO) {
+                target.parent?.let { Files.createDirectories(it) }
+                Files.newOutputStream(target).use {
+                    Json.Default.encodeToStream(
+                        PatchSelectionExportFile(bundles = exports),
+                        it
+                    )
+                }
+            }
+            app.toast(app.getString(R.string.export_patch_selection_success))
+        }
+    }
+
     fun selectBundle(bundle: PatchBundleSource) {
         selectedBundle = bundle
     }
@@ -368,12 +469,20 @@ class ImportExportViewModel(
         selectedBundle = null
     }
 
-    fun importSelection() = clearSelectionAction().also {
-        selectionAction = SelectionAction.Import
+    fun importSelectionForBundle() = clearSelectionAction().also {
+        selectionAction = SelectionAction.ImportBundle
     }
 
-    fun exportSelection() = clearSelectionAction().also {
-        selectionAction = SelectionAction.Export
+    fun importSelectionAllBundles() = clearSelectionAction().also {
+        selectionAction = SelectionAction.ImportAllBundles
+    }
+
+    fun exportSelectionForBundle() = clearSelectionAction().also {
+        selectionAction = SelectionAction.ExportBundle
+    }
+
+    fun exportSelectionAllBundles() = clearSelectionAction().also {
+        selectionAction = SelectionAction.ExportAllBundles
     }
 
     fun importPatchBundles(source: Uri) = viewModelScope.launch {

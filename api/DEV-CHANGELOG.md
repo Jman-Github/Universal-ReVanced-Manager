@@ -7,13 +7,14 @@
 - Improved the `Discover patch bundles` screens searching/filtering
 - Added the ability to set a APK path that persists to one tap patch with patch profiles
 - Added a patch confirmation screen showing the user what patch bundles, patches, and sub options they have selected and enabled/disabled
+- Added an option to export all patch selections at once
 
 
 # Bug fixes
 
 - Fixed more issues with the `Saved patched apps for later` setting toggle & adjust its behavior
-- Fixed null splitNames errors with the Rooted mount installer
-- Fixed imported discovery patch bundle update checks not always detecting an update when it should be
+- Fixed null splitNames errors with the Rooted mount installer https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/124
+- Fixed imported discovery patch bundle update checks not always detecting an update when it should be https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/125
 
 
 
