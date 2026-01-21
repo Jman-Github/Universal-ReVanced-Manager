@@ -190,6 +190,7 @@ class MainViewModel(
             keystoreManager.import(
                 "alias",
                 settings.keystorePassword,
+                settings.keystorePassword,
                 keystoreBytes.inputStream()
             )
         }

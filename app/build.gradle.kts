@@ -142,6 +142,9 @@ dependencies {
     // Compose Icons
     implementation(libs.compose.icons.fontawesome)
 
+    // APK signing (supports JKS/PKCS12)
+    implementation(libs.apksig)
+
     // Ackpine
     implementation(libs.ackpine.core)
     implementation(libs.ackpine.ktx)
@@ -334,4 +337,5 @@ tasks {
     named("preBuild") {
         dependsOn(copyMorpheRuntimeApk)
     }
+
 }

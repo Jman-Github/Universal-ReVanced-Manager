@@ -202,10 +202,10 @@ fun ImportExportSettingsScreen(
     if (vm.showCredentialsDialog) {
         KeystoreCredentialsDialog(
             onDismissRequest = vm::cancelKeystoreImport,
-            onSubmit = { alias, pass ->
+            onSubmit = { alias, storePass, keyPass ->
                 vm.viewModelScope.launch {
                     uiSafe(context, R.string.failed_to_import_keystore, "Failed to import keystore") {
-                        val result = vm.tryKeystoreImport(alias, pass)
+                        val result = vm.tryKeystoreImport(alias, storePass, keyPass)
                         if (!result) context.toast(context.getString(R.string.import_keystore_wrong_credentials))
                     }
                 }
@@ -854,17 +854,18 @@ private fun GroupItem(
 @Composable
 fun KeystoreCredentialsDialog(
     onDismissRequest: () -> Unit,
-    onSubmit: (String, String) -> Unit
+    onSubmit: (String, String, String) -> Unit
 ) {
     var alias by rememberSaveable { mutableStateOf("") }
-    var pass by rememberSaveable { mutableStateOf("") }
+    var storePass by rememberSaveable { mutableStateOf("") }
+    var keyPass by rememberSaveable { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismissRequest,
         confirmButton = {
             TextButton(
                 onClick = {
-                    onSubmit(alias, pass)
+                    onSubmit(alias, storePass, keyPass)
                 }
             ) {
                 Text(stringResource(R.string.import_keystore_dialog_button))
@@ -901,9 +902,14 @@ fun KeystoreCredentialsDialog(
                     label = { Text(stringResource(R.string.import_keystore_dialog_alias_field)) }
                 )
                 PasswordField(
-                    value = pass,
-                    onValueChange = { pass = it },
+                    value = storePass,
+                    onValueChange = { storePass = it },
                     label = { Text(stringResource(R.string.import_keystore_dialog_password_field)) }
+                )
+                PasswordField(
+                    value = keyPass,
+                    onValueChange = { keyPass = it },
+                    label = { Text(stringResource(R.string.import_keystore_dialog_key_password_field)) }
                 )
             }
         }
@@ -942,7 +948,7 @@ private fun isJsonFile(path: Path): Boolean =
     hasExtension(path, "json")
 
 private fun isKeystoreFile(path: Path): Boolean =
-    hasExtension(path, "jks", "keystore", "p12", "pfx", "bks")
+    hasExtension(path, "keystore", "p12", "pfx", "bks")
 
 private fun hasExtension(path: Path, vararg extensions: String): Boolean {
     val name = path.fileName?.toString()?.lowercase().orEmpty()

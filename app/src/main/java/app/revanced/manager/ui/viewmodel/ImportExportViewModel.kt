@@ -232,7 +232,7 @@ class ImportExportViewModel(
 
             aliases.forEach { alias ->
                 knownPasswords.forEach { pass ->
-                    if (tryKeystoreImport(alias, pass, path)) {
+                    if (tryKeystoreImport(alias, pass, pass, path)) {
                         return@launch
                     }
                 }
@@ -254,7 +254,7 @@ class ImportExportViewModel(
 
             aliases.forEach { alias ->
                 knownPasswords.forEach { pass ->
-                    if (tryKeystoreImport(alias, pass, path)) {
+                    if (tryKeystoreImport(alias, pass, pass, path)) {
                         return@launch
                     }
                 }
@@ -269,12 +269,17 @@ class ImportExportViewModel(
         keystoreImportPath = null
     }
 
-    suspend fun tryKeystoreImport(alias: String, pass: String) =
-        tryKeystoreImport(alias, pass, keystoreImportPath!!)
+    suspend fun tryKeystoreImport(alias: String, storePass: String, keyPass: String) =
+        tryKeystoreImport(alias, storePass, keyPass, keystoreImportPath!!)
 
-    private suspend fun tryKeystoreImport(alias: String, pass: String, path: Path): Boolean {
+    private suspend fun tryKeystoreImport(
+        alias: String,
+        storePass: String,
+        keyPass: String,
+        path: Path
+    ): Boolean {
         path.inputStream().use { stream ->
-            if (keystoreManager.import(alias, pass, stream)) {
+            if (keystoreManager.import(alias, storePass, keyPass, stream)) {
                 app.toast(app.getString(R.string.import_keystore_success))
                 cancelKeystoreImport()
                 return true

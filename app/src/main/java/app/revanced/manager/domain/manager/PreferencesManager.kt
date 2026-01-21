@@ -76,6 +76,7 @@ class PreferencesManager(
 
     val keystoreAlias = stringPreference("keystore_alias", KeystoreManager.DEFAULT)
     val keystorePass = stringPreference("keystore_pass", KeystoreManager.DEFAULT)
+    val keystoreKeyPass = stringPreference("keystore_key_pass", KeystoreManager.DEFAULT)
 
     val firstLaunch = booleanPreference("first_launch", true)
     val managerAutoUpdates = booleanPreference("manager_auto_updates", false)
@@ -149,6 +150,7 @@ class PreferencesManager(
         val installerHiddenComponents: Set<String>? = null,
         val keystoreAlias: String? = null,
         val keystorePass: String? = null,
+        val keystoreKeyPass: String? = null,
         val firstLaunch: Boolean? = null,
         val managerAutoUpdates: Boolean? = null,
         val showManagerUpdateDialogOnLaunch: Boolean? = null,
@@ -209,6 +211,7 @@ class PreferencesManager(
         installerHiddenComponents = installerHiddenComponents.get(),
         keystoreAlias = keystoreAlias.get(),
         keystorePass = keystorePass.get(),
+        keystoreKeyPass = keystoreKeyPass.get(),
         firstLaunch = firstLaunch.get(),
         managerAutoUpdates = managerAutoUpdates.get(),
         showManagerUpdateDialogOnLaunch = showManagerUpdateDialogOnLaunch.get(),
@@ -269,6 +272,7 @@ class PreferencesManager(
         snapshot.installerHiddenComponents?.let { installerHiddenComponents.value = it }
         snapshot.keystoreAlias?.let { keystoreAlias.value = it }
         snapshot.keystorePass?.let { keystorePass.value = it }
+        snapshot.keystoreKeyPass?.let { keystoreKeyPass.value = it }
         snapshot.firstLaunch?.let { firstLaunch.value = it }
         snapshot.managerAutoUpdates?.let { managerAutoUpdates.value = it }
         snapshot.showManagerUpdateDialogOnLaunch?.let {

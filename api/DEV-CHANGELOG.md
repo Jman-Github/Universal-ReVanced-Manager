@@ -8,6 +8,7 @@
 - Added the ability to set a APK path that persists to one tap patch with patch profiles
 - Added a patch confirmation screen showing the user what patch bundles, patches, and sub options they have selected and enabled/disabled
 - Added an option to export all patch selections at once
+- Added support for PKCS12 keystore types
 
 
 # Bug fixes
