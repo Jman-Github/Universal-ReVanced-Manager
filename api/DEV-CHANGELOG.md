@@ -9,6 +9,7 @@
 - Added a patch confirmation screen showing the user what patch bundles, patches, and sub options they have selected and enabled/disabled
 - Added an option to export all patch selections at once
 - Added support for PKCS12 keystore types
+- Added support for `JKS` keystore types
 
 
 # Bug fixes
@@ -17,7 +18,7 @@
 - Fixed null splitNames errors with the Rooted mount installer https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/124
 - Fixed imported discovery patch bundle update checks not always detecting an update when it should be https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/125
 - Fixed issues with version name checking with the `Rooted mount installer` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/126
-
+- Fixed issues with keystores from before dev.05 release not working unless regenerated
 
 
 # v1.7.1-dev.04 (2026-01-19)
