@@ -45,6 +45,9 @@ Universal ReVanced Manager includes powerful features that the official ReVanced
       <li>Per-bundle select all button</li>
       <li>Global select all button</li>
       <li>Patch profiles button to save patch selections and option states per app</li>
+      <li>Patch profiles can store a persistent APK path for one-tap patching</li>
+      <li>Patch confirmation screen showing selected bundles, patches, and sub-options</li>
+      <li>Export all patch selections at once</li>
       <li>Latest patch bundle changelogs shown in bundle info</li>
       <li>Undo and redo buttons</li>
     </ul>
@@ -56,6 +59,7 @@ Universal ReVanced Manager includes powerful features that the official ReVanced
   <li><strong>Release link button:</strong> GitHub button on each bundle's info page opens the bundle repository's releases.</li>
   <li><strong>Bundle timestamps:</strong> Cards show Created and Updated times; exports and imports preserve these timestamps.</li>
   <li><strong>Organize bundles:</strong> "Organize" button to manually reorder bundles; exports and imports keep the custom order.</li>
+  <li><strong>Force bundle redownload:</strong> Long-press the update check button on a bundle to force a full redownload.</li>
   <li><strong>Bundle discovery:</strong> Browse a patch bundle catalog and import external bundles directly from the app.</li>
   <li><strong>Improved UI:</strong> Settings, the Patch Bundles tab, the Apps tab, the app selection page, and the patch selection page all have an improved UI design.</li>
 </ul>
@@ -64,15 +68,18 @@ Universal ReVanced Manager includes powerful features that the official ReVanced
 <details>
 <summary><strong>App Patching Flow</strong></summary>
 <ul>
-  <li><strong>Morphe patch bundles support:</strong> Supports the <a href="https://github.com/MorpheApp/morphe-patches">Morphe</a> patch bundle without needing a computer or another app.</li>
+  <li><strong>Morphe patch bundles support:</strong> Supports the <a href="https://github.com/MorpheApp/morphe-patcher">Morphe Patcher</a> without needing a computer or another app.</li>
   <li><strong>Downloaded app source:</strong> Added a "Downloaded apps" source in the select source screen when patching. If the manager has cached an APK from a downloader plugin, you can pick it directly from there. This option only appears when that app is available.</li>
   <li><strong>Split APK support:</strong> .apkm, .apks, and .xapk file formats are automatically converted to the .apk format when patching. No need for outside tools.</li>
   <li><strong>Split merge sub-steps:</strong> Expandable sub-steps for the "Merging split APKs" step, plus sub-steps for "Writing patched APK".</li>
   <li><strong>Skip unused split modules:</strong> Optional Advanced setting that skips unnecessary split modules (like locale and density splits) when patching split APKs.</li>
   <li><strong>Advanced native library stripping:</strong> Optional advanced setting to strip unused native libraries (unsupported ABIs) from patched APKs during patching, helping reduce size.</li>
+  <li><strong>Keystore support:</strong> Import and use JKS and PKCS12 keystores for signing patched APKs.</li>
+  <li><strong>Patcher logs export:</strong> Export patcher logs from the patcher screen as a .txt file.</li>
   <li><strong>Export = auto-save:</strong> When you export a patched app to storage from the patching screen, the manager will now also automatically save that patched app under the "Apps" tab. Before, this only happened if you installed the patched app directly from that screen.</li>
   <li><strong>Installer management:</strong> A full installer management system with installer metadata, and configurable primary and fallback that applies everywhere across the app.</li>
   <li><strong>View applied patches:</strong> The "Apps" tab shows the applied patches for each saved patched APK and which patch bundle(s) were used.</li>
+  <li><strong>Organize apps & profiles:</strong> Reorder saved patched apps in the Apps tab and patch profiles in the Patch Profiles tab.</li>
   <li><strong>Accidental exit protection:</strong> After patching, pressing the back button now shows a confirmation popup. It asks if you really want to leave and gives you the option to save the patched app for later (adds it to the "Apps" tab).</li>
   <li><strong>Missing patch recovery:</strong> If a selected patch no longer exists, a detailed dialog explains the issue and returns you to patch selection with missing patches highlighted.</li>
   <li><strong>Step auto-collapse:</strong> Completed patcher steps auto-collapse; toggle in Settings &gt; Advanced &gt; "Auto-collapse completed patcher steps".</li>
@@ -127,6 +134,7 @@ Universal ReVanced Manager includes powerful features that the official ReVanced
 <summary><strong>Developer & Power Features</strong></summary>
 <ul>
   <li><strong>Always-visible developer options:</strong> Developer options are always available in Settings by default. No hidden or secret unlock flow.</li>
+  <li><strong>Disable battery optimization banner:</strong> Developer option to hide the battery optimization warning banner.</li>
   <li><strong>Robust import and export:</strong> Export and import your patch bundles, your patch profiles, and your app settings to and from JSON files for easy backup, sharing, or migration between devices.</li>
 </ul>
 </details>
@@ -135,6 +143,7 @@ Universal ReVanced Manager includes powerful features that the official ReVanced
 <summary><strong>Settings & Navigation</strong></summary>
 <ul>
   <li><strong>Settings search:</strong> Search across settings categories with jump-to highlighting.</li>
+  <li><strong>Tab search:</strong> Apps, Patch Bundles, and Patch Profiles tabs are searchable via a nav bar search button.</li>
 </ul>
 </details>
 

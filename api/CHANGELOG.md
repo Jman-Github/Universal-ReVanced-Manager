@@ -93,6 +93,7 @@ Additionally, due to a keystore system update, you may need to export and then r
 - Attempted to fix missing resources/AAPT2 errors
 - Fixed issues UI issues on the patch selection screen for Android 8.1 and lower devices
 - Fixed the `Continue` and `Cancel` buttons on the `Patch confirmation` screen being coverd by the system navigation buttons
+- Possibily fixed `NoSuchFileException` signing errors
 
 
 # Docs

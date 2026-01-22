@@ -87,6 +87,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -237,7 +239,9 @@ fun DashboardScreen(
     fun BundleProgressBanner(modifier: Modifier = Modifier) {
         var importCollapsed by rememberSaveable { mutableStateOf(false) }
         var updateCollapsed by rememberSaveable { mutableStateOf(false) }
-        val bannerExitAlphaSpec = tween<Float>(durationMillis = 220, easing = FastOutSlowInEasing)
+        val bannerSizeSpec = tween<IntSize>(durationMillis = 260, easing = FastOutSlowInEasing)
+        val bannerOffsetSpec = tween<IntOffset>(durationMillis = 260, easing = FastOutSlowInEasing)
+        val bannerExitAlphaSpec = tween<Float>(durationMillis = 240, easing = FastOutSlowInEasing)
         Column(
             modifier = modifier,
             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -247,18 +251,17 @@ fun DashboardScreen(
             }
             AnimatedVisibility(
                 visible = bundleImportProgress != null,
-                enter = fadeIn(animationSpec = spring(stiffness = 400f)) +
+                enter = fadeIn(animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing)) +
+                    expandVertically(expandFrom = Alignment.Top, animationSpec = bannerSizeSpec) +
                     slideInVertically(
-                        initialOffsetY = { height -> -height / 2 },
-                        animationSpec = spring(stiffness = 400f)
+                        initialOffsetY = { height -> -height / 3 },
+                        animationSpec = bannerOffsetSpec
                     ),
                 exit = fadeOut(animationSpec = bannerExitAlphaSpec) +
+                    shrinkVertically(shrinkTowards = Alignment.Top, animationSpec = bannerSizeSpec) +
                     slideOutVertically(
-                        targetOffsetY = { height -> -height / 2 },
-                        animationSpec = spring(
-                            stiffness = 250f,
-                            dampingRatio = Spring.DampingRatioNoBouncy
-                        )
+                        targetOffsetY = { height -> -height / 3 },
+                        animationSpec = bannerOffsetSpec
                     )
             ) {
                 bundleImportProgress?.let { progress ->
@@ -326,18 +329,17 @@ fun DashboardScreen(
             }
             AnimatedVisibility(
                 visible = bundleUpdateProgress != null,
-                enter = fadeIn(animationSpec = spring(stiffness = 400f)) +
+                enter = fadeIn(animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing)) +
+                    expandVertically(expandFrom = Alignment.Top, animationSpec = bannerSizeSpec) +
                     slideInVertically(
-                        initialOffsetY = { height -> -height / 2 },
-                        animationSpec = spring(stiffness = 400f)
+                        initialOffsetY = { height -> -height / 3 },
+                        animationSpec = bannerOffsetSpec
                     ),
                 exit = fadeOut(animationSpec = bannerExitAlphaSpec) +
+                    shrinkVertically(shrinkTowards = Alignment.Top, animationSpec = bannerSizeSpec) +
                     slideOutVertically(
-                        targetOffsetY = { height -> -height / 2 },
-                        animationSpec = spring(
-                            stiffness = 250f,
-                            dampingRatio = Spring.DampingRatioNoBouncy
-                        )
+                        targetOffsetY = { height -> -height / 3 },
+                        animationSpec = bannerOffsetSpec
                     )
             ) {
                 bundleUpdateProgress?.let { progress ->
