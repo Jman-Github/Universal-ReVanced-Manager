@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -52,6 +54,7 @@ import app.revanced.manager.ui.component.bundle.BundleLinksSheet
 import app.revanced.manager.ui.component.bundle.openBundleCatalogPage
 import app.revanced.manager.ui.component.bundle.openBundleReleasePage
 import app.revanced.manager.ui.component.haptics.HapticCheckbox
+import app.revanced.manager.ui.component.ShimmerBox
 import app.revanced.manager.util.consumeHorizontalScroll
 import app.revanced.manager.util.PatchListCatalog
 import app.revanced.manager.util.relativeTime
@@ -469,6 +472,58 @@ private fun ActionIconButton(
         contentAlignment = Alignment.Center
     ) {
         content()
+    }
+}
+
+@Composable
+fun BundleItemPlaceholder(
+    modifier: Modifier = Modifier
+) {
+    val cardShape = RoundedCornerShape(16.dp)
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .clip(cardShape),
+        shape = cardShape,
+        tonalElevation = 2.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    ShimmerBox(modifier = Modifier.width(180.dp).height(18.dp))
+                    ShimmerBox(modifier = Modifier.width(120.dp).height(12.dp))
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ShimmerBox(modifier = Modifier.size(28.dp))
+                    ShimmerBox(modifier = Modifier.size(28.dp))
+                    ShimmerBox(modifier = Modifier.size(28.dp))
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ShimmerBox(modifier = Modifier.width(74.dp).height(22.dp))
+                ShimmerBox(modifier = Modifier.width(92.dp).height(22.dp))
+                ShimmerBox(modifier = Modifier.width(64.dp).height(22.dp))
+            }
+
+            ShimmerBox(modifier = Modifier.width(200.dp).height(12.dp))
+        }
     }
 }
 

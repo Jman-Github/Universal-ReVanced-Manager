@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
 import app.revanced.manager.ui.component.bundle.BundleItem
+import app.revanced.manager.ui.component.bundle.BundleItemPlaceholder
 import app.revanced.manager.ui.component.settings.SettingsSearchHighlight
 import app.revanced.manager.ui.viewmodel.BundleListViewModel
 import app.revanced.manager.util.EventEffect
@@ -65,30 +66,32 @@ fun BundleListScreen(
     onHighlightConsumed: () -> Unit = {}
 ) {
     val patchCounts by viewModel.patchCounts.collectAsStateWithLifecycle(emptyMap())
-    val sources by viewModel.sources.collectAsStateWithLifecycle(emptyList())
+    val sources by viewModel.sources.collectAsStateWithLifecycle<List<PatchBundleSource>?>(initialValue = null)
     val manualUpdateInfo by viewModel.manualUpdateInfo.collectAsStateWithLifecycle(emptyMap())
     val listState = rememberLazyListState()
     val normalizedQuery = searchQuery.trim().lowercase()
-    val filteredSources = if (normalizedQuery.isBlank()) {
-        sources
-    } else {
-        sources.filter { source ->
-            val searchText = buildString {
-                append(source.displayTitle)
-                source.displayName?.let { displayName ->
-                    append(' ')
-                    append(displayName)
-                }
-                source.name.let { name ->
-                    append(' ')
-                    append(name)
-                }
-                source.version?.let { version ->
-                    append(' ')
-                    append(version)
-                }
-            }.lowercase()
-            searchText.contains(normalizedQuery)
+    val filteredSources = sources?.let { currentSources ->
+        if (normalizedQuery.isBlank()) {
+            currentSources
+        } else {
+            currentSources.filter { source ->
+                val searchText = buildString {
+                    append(source.displayTitle)
+                    source.displayName?.let { displayName ->
+                        append(' ')
+                        append(displayName)
+                    }
+                    source.name.let { name ->
+                        append(' ')
+                        append(name)
+                    }
+                    source.version?.let { version ->
+                        append(' ')
+                        append(version)
+                    }
+                }.lowercase()
+                searchText.contains(normalizedQuery)
+            }
         }
     }
 
@@ -99,7 +102,7 @@ fun BundleListScreen(
 
     LaunchedEffect(selectedUids.value, sources) {
         setSelectedSourceCount(selectedUids.value.size)
-        val selectedSources = sources.filter { it.uid in selectedUids.value }
+        val selectedSources = sources.orEmpty().filter { it.uid in selectedUids.value }
         setSelectedSourceHasEnabled(selectedSources.any { it.enabled })
     }
 
@@ -111,10 +114,11 @@ fun BundleListScreen(
 
     LaunchedEffect(highlightBundleUid, filteredSources) {
         val uid = highlightBundleUid ?: return@LaunchedEffect
-        val index = filteredSources.indexOfFirst { it.uid == uid }
+        val currentSources = filteredSources ?: return@LaunchedEffect
+        val index = currentSources.indexOfFirst { it.uid == uid }
         if (index >= 0) {
             listState.animateScrollToItem(index)
-        } else if (filteredSources.isNotEmpty()) {
+        } else if (currentSources.isNotEmpty()) {
             onHighlightConsumed()
         }
     }
@@ -123,7 +127,18 @@ fun BundleListScreen(
         onRefresh = viewModel::refresh,
         isRefreshing = viewModel.isRefreshing
     ) {
-        if (filteredSources.isEmpty() && normalizedQuery.isNotBlank()) {
+        if (sources == null) {
+            LazyColumnWithScrollbar(
+                modifier = Modifier.fillMaxSize(),
+                state = listState,
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Top,
+            ) {
+                items(4) {
+                    BundleItemPlaceholder()
+                }
+            }
+        } else if (filteredSources.isNullOrEmpty() && normalizedQuery.isNotBlank()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -134,6 +149,7 @@ fun BundleListScreen(
                 )
             }
         } else {
+            val currentSources = filteredSources.orEmpty()
             LazyColumnWithScrollbar(
                 modifier = Modifier.fillMaxSize(),
                 state = listState,
@@ -141,7 +157,7 @@ fun BundleListScreen(
                 verticalArrangement = Arrangement.Top,
             ) {
                 items(
-                    filteredSources,
+                    currentSources,
                     key = { it.uid }
                 ) { source ->
                     val content: @Composable (Modifier) -> Unit = { modifier ->
@@ -195,7 +211,7 @@ fun BundleListScreen(
 
     if (showOrderDialog) {
         BundleOrderDialog(
-            bundles = sources,
+            bundles = sources.orEmpty(),
             onDismissRequest = onDismissOrderDialog,
             onConfirm = { ordered ->
                 viewModel.reorder(ordered.map(PatchBundleSource::uid))

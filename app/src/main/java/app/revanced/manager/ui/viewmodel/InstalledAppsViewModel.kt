@@ -46,6 +46,7 @@ class InstalledAppsViewModel(
     val selectedApps = mutableStateSetOf<String>()
     val missingPackages = mutableStateSetOf<String>()
     val bundleSummaries = mutableStateMapOf<String, List<AppBundleSummary>>()
+    val bundleSummaryLoaded = mutableStateSetOf<String>()
 
     init {
         viewModelScope.launch {
@@ -102,6 +103,7 @@ class InstalledAppsViewModel(
                 installedApps.forEach { app ->
                     if (app.installType != InstallType.SAVED) {
                         bundleSummaries.remove(app.currentPackageName)
+                        bundleSummaryLoaded.remove(app.currentPackageName)
                         return@forEach
                     }
                     val selection = loadAppliedPatches(app.currentPackageName)
@@ -111,10 +113,13 @@ class InstalledAppsViewModel(
                     } else {
                         bundleSummaries[app.currentPackageName] = summaries
                     }
+                    bundleSummaryLoaded.add(app.currentPackageName)
                 }
 
                 val stale = bundleSummaries.keys - packageNames
                 stale.forEach { bundleSummaries.remove(it) }
+                val staleLoaded = bundleSummaryLoaded - packageNames
+                bundleSummaryLoaded.removeAll(staleLoaded)
             }
         }
     }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -76,7 +77,7 @@ import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.CheckedFilterChip
 import app.revanced.manager.ui.component.ConfirmDialog
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
-import app.revanced.manager.ui.component.LoadingIndicator
+import app.revanced.manager.ui.component.ShimmerBox
 import app.revanced.manager.ui.component.bundle.LinkOptionRow
 import app.revanced.manager.ui.component.patches.PathSelectorDialog
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsCard
@@ -555,13 +556,8 @@ fun PatchBundleDiscoveryScreen(
 
             when {
                 isLoading && visibleBundles == null -> {
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            LoadingIndicator()
-                        }
+                    items(3) {
+                        BundleDiscoveryPlaceholderItem()
                     }
                 }
 
@@ -586,7 +582,10 @@ fun PatchBundleDiscoveryScreen(
                                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    LoadingIndicator(modifier = Modifier.size(20.dp))
+                                    ShimmerBox(
+                                        modifier = Modifier.size(20.dp),
+                                        shape = CircleShape
+                                    )
                                     Text(
                                         text = stringResource(R.string.patch_bundle_discovery_searching),
                                         style = MaterialTheme.typography.bodyMedium,
@@ -643,7 +642,10 @@ fun PatchBundleDiscoveryScreen(
                                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    LoadingIndicator(modifier = Modifier.size(20.dp))
+                                    ShimmerBox(
+                                        modifier = Modifier.size(20.dp),
+                                        shape = CircleShape
+                                    )
                                     Text(
                                         text = stringResource(R.string.patch_bundle_discovery_loading_more),
                                         style = MaterialTheme.typography.bodyMedium,
@@ -654,6 +656,50 @@ fun PatchBundleDiscoveryScreen(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BundleDiscoveryPlaceholderItem() {
+    ExpressiveSettingsCard(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ShimmerBox(
+                    modifier = Modifier.size(40.dp),
+                    shape = CircleShape
+                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    ShimmerBox(
+                        modifier = Modifier
+                            .fillMaxWidth(0.6f)
+                            .height(16.dp)
+                    )
+                    ShimmerBox(
+                        modifier = Modifier
+                            .fillMaxWidth(0.4f)
+                            .height(12.dp)
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ShimmerBox(modifier = Modifier.size(28.dp))
+                    ShimmerBox(modifier = Modifier.size(28.dp))
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ShimmerBox(modifier = Modifier.size(width = 70.dp, height = 22.dp))
+                ShimmerBox(modifier = Modifier.size(width = 90.dp, height = 22.dp))
+                ShimmerBox(modifier = Modifier.size(width = 62.dp, height = 22.dp))
             }
         }
     }

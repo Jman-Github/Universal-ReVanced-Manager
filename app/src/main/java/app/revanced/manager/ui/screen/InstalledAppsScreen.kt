@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -45,7 +47,7 @@ import app.revanced.manager.data.room.apps.installed.InstalledApp
 import app.revanced.manager.ui.component.AppIcon
 import app.revanced.manager.ui.component.AppLabel
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
-import app.revanced.manager.ui.component.LoadingIndicator
+import app.revanced.manager.ui.component.ShimmerBox
 import app.revanced.manager.ui.component.haptics.HapticCheckbox
 import app.revanced.manager.ui.viewmodel.InstalledAppsViewModel
 import app.revanced.manager.ui.viewmodel.InstalledAppsViewModel.AppBundleSummary
@@ -90,11 +92,15 @@ fun InstalledAppsScreen(
 
     when {
         installedApps == null -> {
-            Box(
+            LazyColumnWithScrollbar(
                 modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Top,
+                contentPadding = PaddingValues(vertical = 12.dp)
             ) {
-                LoadingIndicator()
+                items(4) {
+                    InstalledAppCardPlaceholder()
+                }
             }
         }
 
@@ -135,38 +141,45 @@ fun InstalledAppsScreen(
                 ) { installedApp ->
                         val packageName = installedApp.currentPackageName
                         val packageInfo = viewModel.packageInfoMap[packageName]
+                        val hasPackageInfo = viewModel.packageInfoMap.containsKey(packageName)
                         val isSaved = installedApp.installType == InstallType.SAVED
+                        val isBundleMetaLoaded = !isSaved || packageName in viewModel.bundleSummaryLoaded
+                        val showPlaceholder = !hasPackageInfo || !isBundleMetaLoaded
                         val isMissingInstall = packageName in viewModel.missingPackages
                         val isSelectable = isSaved || isMissingInstall
                         val isSelected = packageName in viewModel.selectedApps
                         val bundleSummaries = viewModel.bundleSummaries[packageName].orEmpty()
 
-                        InstalledAppCard(
-                            installedApp = installedApp,
-                            packageInfo = packageInfo,
-                            isSelected = isSelected,
-                            selectionActive = selectionActive,
-                            isSelectable = isSelectable,
-                            isMissingInstall = isMissingInstall,
-                            bundleSummaries = bundleSummaries,
-                            onClick = {
-                                when {
-                                selectionActive && isSelectable -> viewModel.toggleSelection(installedApp)
-                                selectionActive -> {}
-                                else -> onAppClick(installedApp)
+                        if (showPlaceholder) {
+                            InstalledAppCardPlaceholder()
+                        } else {
+                            InstalledAppCard(
+                                installedApp = installedApp,
+                                packageInfo = packageInfo,
+                                isSelected = isSelected,
+                                selectionActive = selectionActive,
+                                isSelectable = isSelectable,
+                                isMissingInstall = isMissingInstall,
+                                bundleSummaries = bundleSummaries,
+                                onClick = {
+                                    when {
+                                    selectionActive && isSelectable -> viewModel.toggleSelection(installedApp)
+                                    selectionActive -> {}
+                                    else -> onAppClick(installedApp)
+                                }
+                            },
+                            onLongClick = {
+                                if (isSelectable) {
+                                    viewModel.toggleSelection(installedApp)
+                                } else {
+                                    onAppClick(installedApp)
+                                }
+                            },
+                            onSelectionChange = { checked ->
+                                viewModel.setSelection(installedApp, checked)
                             }
-                        },
-                        onLongClick = {
-                            if (isSelectable) {
-                                viewModel.toggleSelection(installedApp)
-                            } else {
-                                onAppClick(installedApp)
-                            }
-                        },
-                        onSelectionChange = { checked ->
-                            viewModel.setSelection(installedApp, checked)
-                        }
-                    )
+                        )
+                    }
                 }
             }
         }
@@ -284,6 +297,42 @@ private fun InstalledAppCard(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InstalledAppCardPlaceholder() {
+    val cardShape = RoundedCornerShape(16.dp)
+    val elevation = 2.dp
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .clip(cardShape),
+        shape = cardShape,
+        tonalElevation = elevation,
+        color = MaterialTheme.colorScheme.surfaceColorAtElevation(elevation)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            ShimmerBox(
+                modifier = Modifier.size(48.dp),
+                shape = RoundedCornerShape(12.dp)
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                ShimmerBox(modifier = Modifier.width(180.dp).height(18.dp))
+                ShimmerBox(modifier = Modifier.width(140.dp).height(12.dp))
+                ShimmerBox(modifier = Modifier.width(120.dp).height(12.dp))
             }
         }
     }

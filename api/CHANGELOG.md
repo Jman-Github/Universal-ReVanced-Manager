@@ -58,6 +58,7 @@ Additionally, due to a keystore system update, you may need to export and then r
 - Added a `Last checked` badge to the `Discover patch bundles` screens patch bundle widgets
 - Added support for PKCS12 keystore types
 - Made the `Patch selection action buttons order` action buttons be listed vertically
+- Added shimmers to several places in the UI
 
 
 # Bug fixes

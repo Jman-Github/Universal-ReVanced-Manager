@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
@@ -68,7 +69,7 @@ import app.revanced.manager.ui.component.AppLabel
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.CheckedFilterChip
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
-import app.revanced.manager.ui.component.LoadingIndicator
+import app.revanced.manager.ui.component.ShimmerBox
 import app.revanced.manager.ui.component.NonSuggestedVersionDialog
 import app.revanced.manager.ui.component.patches.PathSelectorDialog
 import app.revanced.manager.ui.component.SafeguardHintCard
@@ -220,6 +221,17 @@ fun AppSelectorScreen(
                             onClick = { onSelect(app.packageName) },
                             modifier = Modifier.fillMaxWidth()
                         )
+                    }
+                }
+            } else if (appList.isEmpty()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    repeat(4) {
+                        AppSelectorCardPlaceholder()
                     }
                 }
             } else {
@@ -422,12 +434,57 @@ fun AppSelectorScreen(
                 }
             } else {
                 item {
-                    Box(
-                        modifier = Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center
+                    Column(
+                        modifier = Modifier
+                            .fillParentMaxSize()
+                            .padding(vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        LoadingIndicator()
+                        repeat(4) {
+                            AppSelectorCardPlaceholder()
+                        }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppSelectorCardPlaceholder(modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        tonalElevation = 2.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ShimmerBox(
+                    modifier = Modifier.size(48.dp),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    ShimmerBox(modifier = Modifier.fillMaxWidth(0.6f).height(16.dp))
+                    ShimmerBox(modifier = Modifier.fillMaxWidth(0.4f).height(12.dp))
+                }
+                ShimmerBox(modifier = Modifier.size(width = 36.dp, height = 20.dp))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ShimmerBox(modifier = Modifier.size(width = 72.dp, height = 22.dp))
+                ShimmerBox(modifier = Modifier.size(width = 96.dp, height = 22.dp))
             }
         }
     }

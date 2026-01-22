@@ -6,9 +6,11 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -31,7 +33,7 @@ import app.universal.revanced.manager.R
 import app.revanced.manager.network.dto.ExternalBundlePatch
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
-import app.revanced.manager.ui.component.LoadingIndicator
+import app.revanced.manager.ui.component.ShimmerBox
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsCard
 import app.revanced.manager.ui.viewmodel.BundleDiscoveryViewModel
 import org.koin.androidx.compose.koinViewModel
@@ -83,32 +85,25 @@ fun PatchBundleDiscoveryPatchesScreen(
         ) {
             when {
                 (isLoading && bundle == null) || patchesLoading -> {
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            LoadingIndicator()
-                        }
+                    items(4) {
+                        PatchBundlePatchPlaceholderItem()
                     }
                 }
 
                 bundle == null || patchesError != null -> {
                     item {
-                        Text(
-                            text = patchesError ?: errorMessage ?: stringResource(R.string.patch_bundle_discovery_patches_empty),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        PatchBundlePatchesEmptyState(
+                            message = patchesError ?: errorMessage ?: stringResource(
+                                R.string.patch_bundle_discovery_patches_empty
+                            )
                         )
                     }
                 }
 
                 patches.isNullOrEmpty() -> {
                     item {
-                        Text(
-                            text = stringResource(R.string.patch_bundle_discovery_patches_empty),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        PatchBundlePatchesEmptyState(
+                            message = stringResource(R.string.patch_bundle_discovery_patches_empty)
                         )
                     }
                 }
@@ -118,6 +113,27 @@ fun PatchBundleDiscoveryPatchesScreen(
                         PatchBundlePatchItem(patches, index)
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PatchBundlePatchPlaceholderItem() {
+    ExpressiveSettingsCard(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(16.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            ShimmerBox(modifier = Modifier.fillMaxWidth(0.7f).height(18.dp))
+            ShimmerBox(modifier = Modifier.fillMaxWidth(0.9f).height(12.dp))
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ShimmerBox(modifier = Modifier.size(width = 120.dp, height = 28.dp))
+                ShimmerBox(modifier = Modifier.size(width = 100.dp, height = 28.dp))
+                ShimmerBox(modifier = Modifier.size(width = 140.dp, height = 28.dp))
             }
         }
     }
@@ -168,6 +184,18 @@ private fun PatchBundlePatchItem(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun PatchBundlePatchesEmptyState(message: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        PatchBundlePatchPlaceholderItem()
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
