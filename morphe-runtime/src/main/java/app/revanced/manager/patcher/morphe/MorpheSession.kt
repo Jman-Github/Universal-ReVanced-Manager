@@ -27,6 +27,9 @@ import java.nio.file.StandardCopyOption
 import java.util.LinkedHashSet
 import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
+import javax.xml.parsers.DocumentBuilderFactory
+import org.w3c.dom.Attr
+import org.w3c.dom.Element
 
 internal typealias MorphePatchList = List<Patch<*>>
 
@@ -163,6 +166,7 @@ class MorpheSession(
             )
             logger.info("Writing patched files...")
             ensureMissingDrawables()
+            validateMissingResourceReferences()
             val result = patcher.get()
 
             val patched = tempDir.resolve("result.apk")
@@ -350,6 +354,147 @@ class MorpheSession(
         fileName.endsWith(".xml", ignoreCase = true) -> fileName.removeSuffix(".xml")
         else -> null
     }
+
+    private fun validateMissingResourceReferences() {
+        val apkDir = tempDir.resolve("apk")
+        val resDir = apkDir.resolve("res")
+        val manifestFile = apkDir.resolve("AndroidManifest.xml")
+        if (!manifestFile.exists() || !resDir.exists()) return
+
+        val resourceIndex = collectResourceIndex(resDir)
+        if (resourceIndex.isEmpty()) return
+
+        val missing = mutableListOf<String>()
+        collectMissingRefsFromFile(
+            file = manifestFile,
+            resourceIndex = resourceIndex,
+            missing = missing
+        )
+
+        resDir.walkTopDown()
+            .filter { it.isFile && it.extension.equals("xml", ignoreCase = true) }
+            .filterNot { it.parentFile?.name?.startsWith("values") == true }
+            .forEach { file ->
+                collectMissingRefsFromFile(
+                    file = file,
+                    resourceIndex = resourceIndex,
+                    missing = missing
+                )
+            }
+
+        if (missing.isNotEmpty()) {
+            val uniqueMissing = missing.distinct().sorted()
+            logger.error(
+                "Missing resource references detected. Aborting patching:\n" +
+                    uniqueMissing.joinToString("\n")
+            )
+            throw IllegalStateException("Missing resource references detected.")
+        }
+    }
+
+    private fun collectResourceIndex(resDir: File): Map<String, Set<String>> {
+        val index = mutableMapOf<String, MutableSet<String>>()
+
+        resDir.listFiles()
+            ?.filter { it.isDirectory }
+            ?.forEach { dir ->
+                val type = dir.name.substringBefore('-')
+                if (type == "values") {
+                    dir.listFiles { file -> file.isFile && file.extension.equals("xml", true) }
+                        ?.forEach { file ->
+                            runCatching { collectValuesResources(file, index) }
+                        }
+                } else {
+                    dir.listFiles { file -> file.isFile }
+                        ?.forEach { file ->
+                            val name = resourceFileName(file.name) ?: return@forEach
+                            index.getOrPut(type) { mutableSetOf() }.add(name)
+                        }
+                }
+            }
+
+        return index
+    }
+
+    private fun collectValuesResources(file: File, index: MutableMap<String, MutableSet<String>>) {
+        val document = parseXml(file) ?: return
+        val resources = document.documentElement ?: return
+        val nodes = resources.childNodes
+        for (i in 0 until nodes.length) {
+            val node = nodes.item(i) as? Element ?: continue
+            val name = node.getAttribute("name").takeIf { it.isNotBlank() } ?: continue
+            val type = when {
+                node.tagName == "item" -> node.getAttribute("type").takeIf { it.isNotBlank() }
+                node.tagName.endsWith("-array") -> "array"
+                else -> node.tagName
+            } ?: continue
+            index.getOrPut(type) { mutableSetOf() }.add(name)
+        }
+    }
+
+    private fun resourceFileName(fileName: String): String? = when {
+        fileName.endsWith(".9.png", ignoreCase = true) -> fileName.removeSuffix(".9.png")
+        fileName.endsWith(".png", ignoreCase = true) -> fileName.removeSuffix(".png")
+        fileName.endsWith(".webp", ignoreCase = true) -> fileName.removeSuffix(".webp")
+        fileName.endsWith(".jpg", ignoreCase = true) -> fileName.removeSuffix(".jpg")
+        fileName.endsWith(".jpeg", ignoreCase = true) -> fileName.removeSuffix(".jpeg")
+        fileName.contains('.') -> fileName.substringBeforeLast('.')
+        else -> null
+    }
+
+    private fun collectMissingRefsFromFile(
+        file: File,
+        resourceIndex: Map<String, Set<String>>,
+        missing: MutableList<String>
+    ) {
+        val document = parseXml(file) ?: return
+        val elements = document.getElementsByTagName("*")
+        for (i in 0 until elements.length) {
+            val element = elements.item(i) as? Element ?: continue
+            val attrs = element.attributes
+            for (j in 0 until attrs.length) {
+                val attr = attrs.item(j) as? Attr ?: continue
+                val missingRefs = findMissingRefs(attr.value, resourceIndex)
+                if (missingRefs.isEmpty()) continue
+
+                missingRefs.forEach { ref ->
+                    missing.add("${file.name}: ${element.tagName}@${attr.name} -> @$ref")
+                }
+            }
+        }
+    }
+
+    private fun findMissingRefs(value: String, resourceIndex: Map<String, Set<String>>): List<String> {
+        val refs = mutableListOf<String>()
+        val pattern = Regex("@(?:(\\*?)([a-zA-Z0-9_.]+):)?([a-zA-Z0-9_]+)/([a-zA-Z0-9_.]+)")
+        pattern.findAll(value).forEach { match ->
+            val star = match.groupValues[1]
+            val pkg = match.groupValues[2]
+            val type = match.groupValues[3]
+            val name = match.groupValues[4]
+            if (value.startsWith("?")) return@forEach
+            if (pkg.equals("android", ignoreCase = true) || star.contains("android")) return@forEach
+            if (pkg.isNotBlank()) return@forEach
+            val known = resourceIndex[type]?.contains(name) == true
+            if (!known) {
+                refs.add("$type/$name")
+            }
+        }
+        return refs
+    }
+
+    private fun parseXml(file: File) = runCatching {
+        val factory = DocumentBuilderFactory.newInstance().apply {
+            isNamespaceAware = true
+            setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
+            setFeature("http://xml.org/sax/features/external-general-entities", false)
+            setFeature("http://xml.org/sax/features/external-parameter-entities", false)
+            setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
+            isXIncludeAware = false
+            setExpandEntityReferences(false)
+        }
+        factory.newDocumentBuilder().parse(file)
+    }.getOrNull()
 
     private fun fastCopy(source: File, target: File) {
         FileInputStream(source).channel.use { input ->

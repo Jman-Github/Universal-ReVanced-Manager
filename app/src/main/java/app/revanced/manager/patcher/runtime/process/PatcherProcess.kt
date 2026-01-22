@@ -23,12 +23,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
+import java.io.FileInputStream
 import java.io.OutputStream
 import java.io.PrintStream
+import java.security.MessageDigest
 import java.util.logging.Handler
 import java.util.logging.Level
 import java.util.logging.LogRecord
 import java.util.logging.Logger as JavaLogger
+import java.util.zip.ZipFile
 import kotlin.system.exitProcess
 
 /**
@@ -90,6 +93,8 @@ class PatcherProcess : IPatcherProcess.Stub() {
             }
 
             logger.info("Memory limit: ${Runtime.getRuntime().maxMemory() / (1024 * 1024)}MB")
+            logAapt2Info(parameters.aaptPath, logger)
+            ensureFrameworkApkHealthy(parameters.frameworkDir, logger)
 
             val aaptLogs = AaptLogCapture(onLine = ::handleDexCompileLine).apply { start() }
             val stdioCapture = StdIoCapture(onLine = ::handleDexCompileLine).apply { start() }
@@ -357,4 +362,66 @@ class PatcherProcess : IPatcherProcess.Stub() {
             }
         }
     }
+
+    private fun logAapt2Info(aaptPath: String, logger: Logger) {
+        val aaptFile = File(aaptPath)
+        if (!aaptFile.exists()) {
+            logger.warn("AAPT2 binary missing at $aaptPath")
+            return
+        }
+        val digest = sha256(aaptFile)
+        if (digest != null) {
+            logger.info("AAPT2 sha256: $digest")
+        }
+        val version = runCatching {
+            val process = ProcessBuilder(aaptPath, "version")
+                .redirectErrorStream(true)
+                .start()
+            val output = process.inputStream.bufferedReader().readText().trim()
+            process.waitFor()
+            output.takeIf { it.isNotBlank() }
+        }.getOrNull()
+        if (!version.isNullOrBlank()) {
+            logger.info("AAPT2 version: $version")
+        }
+    }
+
+    private fun ensureFrameworkApkHealthy(frameworkDir: String, logger: Logger) {
+        val framework = File(frameworkDir).resolve("1.apk")
+        if (!framework.exists()) {
+            logger.warn("Framework APK missing at ${framework.absolutePath}")
+            return
+        }
+        if (!framework.isFile || framework.length() <= 0L) {
+            logger.warn("Framework APK invalid. Deleting ${framework.absolutePath}")
+            framework.delete()
+            return
+        }
+        val valid = runCatching {
+            ZipFile(framework).use { zip ->
+                zip.getEntry("resources.arsc") != null || zip.getEntry("AndroidManifest.xml") != null
+            }
+        }.getOrDefault(false)
+        if (!valid) {
+            logger.warn("Framework APK corrupt. Deleting ${framework.absolutePath}")
+            framework.delete()
+        }
+    }
+
+    private fun sha256(file: File): String? = runCatching {
+        val digest = MessageDigest.getInstance("SHA-256")
+        FileInputStream(file).use { input ->
+            val buffer = ByteArray(8192)
+            while (true) {
+                val read = input.read(buffer)
+                if (read <= 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        val hex = StringBuilder()
+        digest.digest().forEach { byte ->
+            hex.append(String.format("%02x", byte))
+        }
+        hex.toString()
+    }.getOrNull()
 }

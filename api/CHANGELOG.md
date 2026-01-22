@@ -5,6 +5,8 @@
 
 The `Discover patch bundles` screen has been updated to use [Brosssh's new API](https://github.com/brosssh/revanced-external-bundles/blob/dev/docs/graphql-examples.md). As a result, you will need to reimport any patch bundles that were added via the Discovery system prior to this release to continue receiving updates from their remote sources.
 
+Additionally, due to a keystore system update, you may need to export and then re-import the Manager’s keystore to resolve a signing error during patching. This is a one-time step after installing version 1.7.1 for the first time.
+
 
 # Features
 
@@ -85,6 +87,7 @@ The `Discover patch bundles` screen has been updated to use [Brosssh's new API](
 - Added support for PKCS12 keystore types
 - Fixed issues with version name checking with the `Rooted mount installer` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/126
 - Fixed issues with keystores from before the dev.05 release not working unless regenerated
+- Attempted to fix missing resources/AAPT2 errors
 
 
 # Docs
