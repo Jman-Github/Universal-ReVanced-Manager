@@ -89,6 +89,7 @@ Additionally, due to a keystore system update, you may need to export and then r
 - Fixed issues with version name checking with the `Rooted mount installer` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/126
 - Fixed issues with keystores from before the dev.05 release not working unless regenerated
 - Attempted to fix missing resources/AAPT2 errors
+- Fixed issues UI issues on the patch selection screen for Android 8.1 and lower devices
 
 
 # Docs

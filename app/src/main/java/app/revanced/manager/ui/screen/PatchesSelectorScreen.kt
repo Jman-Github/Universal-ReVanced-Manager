@@ -1,5 +1,6 @@
 package app.revanced.manager.ui.screen
 
+import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.EaseInOut
@@ -34,6 +35,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -70,11 +72,13 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SearchBarValue
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.rememberSearchBarState
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -129,6 +133,7 @@ import app.revanced.manager.ui.component.CheckedFilterChip
 import app.revanced.manager.ui.component.FullscreenDialog
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
 import app.revanced.manager.ui.component.SearchBar
+import app.revanced.manager.ui.component.SearchView
 import app.revanced.manager.ui.component.AlertDialogExtended
 import app.revanced.manager.ui.component.haptics.HapticCheckbox
 import app.revanced.manager.ui.component.haptics.HapticExtendedFloatingActionButton
@@ -173,11 +178,22 @@ fun PatchesSelectorScreen(
         bundles.size
     }
     val composableScope = rememberCoroutineScope()
-    val (query, setQuery) = rememberSaveable {
-        mutableStateOf("")
+    val textFieldState = rememberTextFieldState()
+    val searchBarState = rememberSearchBarState()
+    val query by remember {
+        derivedStateOf { textFieldState.text.toString() }
     }
-    val (searchExpanded, setSearchExpanded) = rememberSaveable {
-        mutableStateOf(false)
+    val searchExpanded by remember {
+        derivedStateOf { searchBarState.currentValue == SearchBarValue.Expanded }
+    }
+    var searchActive by rememberSaveable { mutableStateOf(false) }
+    val useFallbackSearch = remember {
+        Build.VERSION.SDK_INT <= Build.VERSION_CODES.O_MR1
+    }
+    val updateQuery: (String) -> Unit = { value ->
+        textFieldState.edit {
+            replace(0, length, value)
+        }
     }
     var showBottomSheet by rememberSaveable { mutableStateOf(false) }
     val actionOrderPref by viewModel.prefs.patchSelectionActionOrder.getAsState()
@@ -320,6 +336,33 @@ fun PatchesSelectorScreen(
                 actionsExpanded = false
             }
     }
+    BackHandler(enabled = !dialogsOpen && (if (useFallbackSearch) searchActive else searchExpanded)) {
+        if (useFallbackSearch) {
+            searchActive = false
+        } else {
+            composableScope.launch {
+                searchBarState.animateToCollapsed()
+            }
+        }
+    }
+    LaunchedEffect(searchActive, useFallbackSearch) {
+        if (useFallbackSearch && searchActive) {
+            actionsExpanded = false
+        }
+    }
+    LaunchedEffect(searchExpanded, useFallbackSearch) {
+        if (!useFallbackSearch && searchExpanded) {
+            actionsExpanded = false
+        }
+    }
+    LaunchedEffect(dialogsOpen, useFallbackSearch) {
+        if (!dialogsOpen) return@LaunchedEffect
+        if (useFallbackSearch) {
+            searchActive = false
+        } else {
+            searchBarState.animateToCollapsed()
+        }
+    }
 
     fun openProfileSaveDialog() {
         if (bundles.isEmpty() || isSavingProfile) return
@@ -329,7 +372,13 @@ fun PatchesSelectorScreen(
         defaultBundleUid?.let { selectedBundleUids.add(it) }
         pendingProfileName = ""
         selectedProfileId = null
-        if (searchExpanded) setSearchExpanded(false)
+        if (useFallbackSearch && searchActive) {
+            searchActive = false
+        } else if (!useFallbackSearch && searchExpanded) {
+            composableScope.launch {
+                searchBarState.animateToCollapsed()
+            }
+        }
         showBottomSheet = false
         showBundleDialog = true
     }
@@ -970,218 +1019,395 @@ fun PatchesSelectorScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            SearchBar(
-                query = query,
-                onQueryChange = setQuery,
-                expanded = searchExpanded && !dialogsOpen,
-                onExpandedChange = { expanded ->
-                    if (dialogsOpen) return@SearchBar
-                    if (expanded) {
-                        actionsExpanded = false
-                    }
-                    setSearchExpanded(expanded)
-                },
-                placeholder = {
-                    Text(stringResource(R.string.search_patches))
-                },
-                leadingIcon = {
-                    val rotation by animateFloatAsState(
-                        targetValue = if (searchExpanded) 360f else 0f,
-                        animationSpec = tween(durationMillis = 400, easing = EaseInOut),
-                        label = stringResource(R.string.search_bar_back_button_label)
-                    )
-                    IconButton(
-                        onClick = {
-                            if (searchExpanded) {
-                                setSearchExpanded(false)
-                            } else {
-                                onBackClick()
-                            }
+    if (useFallbackSearch && searchActive) {
+        SearchView(
+            query = query,
+            onQueryChange = updateQuery,
+            onActiveChange = { searchActive = it },
+            placeholder = { Text(stringResource(R.string.search_patches)) }
+        ) {
+            val bundle = bundles[pagerState.currentPage]
+            val suggestedVersion = suggestedVersionsByBundle[bundle.uid]?.get(viewModel.appPackageName)
+            val searchQuery = query
+
+            LazyColumnWithScrollbar(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                fun List<PatchInfo>.searched() = filter {
+                    it.name.contains(searchQuery, true)
+                }
+
+                if (nonUniversalSelected) {
+                    if (bundle.compatible.isNotEmpty()) {
+                        item(contentType = 0) {
+                            ListHeader(
+                                title = stringResource(R.string.regular_patches)
+                            )
                         }
+                    }
+                    patchList(
+                        uid = bundle.uid,
+                        patches = bundle.compatible.searched(),
+                        visible = true,
+                        compatible = true,
+                        suggestedVersion = suggestedVersion
+                    )
+                    patchList(
+                        uid = bundle.uid,
+                        patches = bundle.incompatible.searched(),
+                        visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
+                        compatible = viewModel.allowIncompatiblePatches,
+                        suggestedVersion = suggestedVersion
                     ) {
-                        Icon(
-                            modifier = Modifier.rotate(rotation),
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.back)
+                        ListHeader(
+                            title = stringResource(R.string.incompatible_patches),
+                            onHelpClick = { showIncompatiblePatchesDialog = true }
                         )
                     }
-                },
-                trailingIcon = {
-                    AnimatedContent(
-                        targetState = searchExpanded,
-                        label = stringResource(R.string.patch_selector_filter_clear_label),
-                        transitionSpec = { fadeIn() togetherWith fadeOut() }
-                    ) { expanded ->
-                        if (expanded) {
-                            IconButton(
-                                onClick = { setQuery("") },
-                                enabled = query.isNotEmpty()
-                            ) {
+                    patchList(
+                        uid = bundle.uid,
+                        patches = bundle.universal.searched(),
+                        visible = true,
+                        compatible = true,
+                        suggestedVersion = suggestedVersion
+                    ) {
+                        ListHeader(
+                            title = stringResource(R.string.universal_patches),
+                        )
+                    }
+                } else {
+                    patchList(
+                        uid = bundle.uid,
+                        patches = bundle.universal.searched(),
+                        visible = true,
+                        compatible = true,
+                        suggestedVersion = suggestedVersion
+                    ) {
+                        ListHeader(
+                            title = stringResource(R.string.universal_patches),
+                        )
+                    }
+                    if (bundle.compatible.isNotEmpty()) {
+                        item(contentType = 0) {
+                            ListHeader(
+                                title = stringResource(R.string.regular_patches)
+                            )
+                        }
+                    }
+                    patchList(
+                        uid = bundle.uid,
+                        patches = bundle.compatible.searched(),
+                        visible = true,
+                        compatible = true,
+                        suggestedVersion = suggestedVersion
+                    )
+                    patchList(
+                        uid = bundle.uid,
+                        patches = bundle.incompatible.searched(),
+                        visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
+                        compatible = viewModel.allowIncompatiblePatches,
+                        suggestedVersion = suggestedVersion
+                    ) {
+                        ListHeader(
+                            title = stringResource(R.string.incompatible_patches),
+                            onHelpClick = { showIncompatiblePatchesDialog = true }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            if (useFallbackSearch) {
+                AppTopBar(
+                    title = stringResource(R.string.patch_selector_item),
+                    onBackClick = onBackClick,
+                    actions = {
+                        IconButton(onClick = { searchActive = true }) {
+                            Icon(
+                                imageVector = Icons.Outlined.Search,
+                                contentDescription = stringResource(R.string.search)
+                            )
+                        }
+                        Box {
+                            val toggleLabel = if (actionsExpanded) {
+                                R.string.patch_selection_toggle_collapse
+                            } else {
+                                R.string.patch_selection_toggle_expand
+                            }
+                            IconButton(onClick = {
+                                if (visibleActionKeys.isEmpty()) {
+                                    actionsExpanded = false
+                                    context.toast(
+                                        context.getString(R.string.patch_selection_all_actions_hidden_toast)
+                                    )
+                                    return@IconButton
+                                }
+                                actionsExpanded = !actionsExpanded
+                            }) {
                                 Icon(
-                                    imageVector = Icons.Filled.Close,
-                                    contentDescription = stringResource(R.string.clear)
+                                    imageVector = Icons.Outlined.MoreHoriz,
+                                    contentDescription = stringResource(toggleLabel)
                                 )
                             }
-                        } else {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box {
-                                    val toggleLabel = if (actionsExpanded) {
-                                        R.string.patch_selection_toggle_collapse
-                                    } else {
-                                        R.string.patch_selection_toggle_expand
-                                    }
-                                    IconButton(onClick = {
-                                        if (visibleActionKeys.isEmpty()) {
-                                            actionsExpanded = false
-                                            context.toast(
-                                                context.getString(R.string.patch_selection_all_actions_hidden_toast)
-                                            )
-                                            return@IconButton
-                                        }
-                                        actionsExpanded = !actionsExpanded
-                                    }) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.MoreHoriz,
-                                            contentDescription = stringResource(toggleLabel)
-                                        )
-                                    }
-                                    if (actionsExpanded) {
-                                        val density = LocalDensity.current
-                                        val marginPx = remember(density) { with(density) { 8.dp.roundToPx() } }
-                                        val glowRadiusPx = remember(density) { with(density) { 220.dp.toPx() } }
+                            if (actionsExpanded) {
+                                val density = LocalDensity.current
+                                val marginPx = remember(density) { with(density) { 8.dp.roundToPx() } }
+                                val glowRadiusPx = remember(density) { with(density) { 220.dp.toPx() } }
 
-                                        Popup(
-                                            popupPositionProvider = remember(marginPx) {
-                                                PatchSelectionActionsPopupPositionProvider(marginPx = marginPx)
-                                            },
-                                            onDismissRequest = { actionsExpanded = false },
-                                            properties = PopupProperties(
-                                                focusable = true,
-                                                dismissOnBackPress = true,
-                                                dismissOnClickOutside = true
-                                            )
-                                        ) {
-                                            PatchSelectionActionsPopup(
-                                                actionSpecs = actionSpecs,
-                                                glowRadiusPx = glowRadiusPx,
-                                                onActionClick = { spec ->
-                                                    spec.onClick()
-                                                    actionsExpanded = false
-                                                }
-                                            )
+                                Popup(
+                                    popupPositionProvider = remember(marginPx) {
+                                        PatchSelectionActionsPopupPositionProvider(marginPx = marginPx)
+                                    },
+                                    onDismissRequest = { actionsExpanded = false },
+                                    properties = PopupProperties(
+                                        focusable = true,
+                                        dismissOnBackPress = true,
+                                        dismissOnClickOutside = true
+                                    )
+                                ) {
+                                    PatchSelectionActionsPopup(
+                                        actionSpecs = actionSpecs,
+                                        glowRadiusPx = glowRadiusPx,
+                                        onActionClick = { spec ->
+                                            spec.onClick()
+                                            actionsExpanded = false
                                         }
-                                    }
-                                }
-                                IconButton(onClick = {
-                                    actionsExpanded = false
-                                    showBottomSheet = true
-                                }) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.FilterList,
-                                        contentDescription = stringResource(R.string.more)
                                     )
                                 }
                             }
                         }
+                        IconButton(onClick = {
+                            actionsExpanded = false
+                            showBottomSheet = true
+                        }) {
+                            Icon(
+                                imageVector = Icons.Outlined.FilterList,
+                                contentDescription = stringResource(R.string.more)
+                            )
+                        }
                     }
-                }
-            ) {
-                val bundle = bundles[pagerState.currentPage]
-                val suggestedVersion = suggestedVersionsByBundle[bundle.uid]?.get(viewModel.appPackageName)
+                )
+            } else {
+                SearchBar(
+                    textFieldState = textFieldState,
+                    searchBarState = searchBarState,
+                    onSearch = {
+                        composableScope.launch {
+                            searchBarState.animateToCollapsed()
+                        }
+                    },
+                    placeholder = {
+                        Text(stringResource(R.string.search_patches))
+                    },
+                    leadingIcon = {
+                        val rotation by animateFloatAsState(
+                            targetValue = if (searchExpanded) 360f else 0f,
+                            animationSpec = tween(durationMillis = 400, easing = EaseInOut),
+                            label = stringResource(R.string.search_bar_back_button_label)
+                        )
+                        IconButton(
+                            onClick = {
+                                if (searchExpanded) {
+                                    composableScope.launch {
+                                        searchBarState.animateToCollapsed()
+                                    }
+                                } else {
+                                    onBackClick()
+                                }
+                            }
+                        ) {
+                            Icon(
+                                modifier = Modifier.rotate(rotation),
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.back)
+                            )
+                        }
+                    },
+                    trailingIcon = {
+                        AnimatedContent(
+                            targetState = searchExpanded,
+                            label = stringResource(R.string.patch_selector_filter_clear_label),
+                            transitionSpec = { fadeIn() togetherWith fadeOut() }
+                        ) { expanded ->
+                            if (expanded) {
+                                IconButton(
+                                    onClick = { updateQuery("") },
+                                    enabled = query.isNotEmpty()
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Close,
+                                        contentDescription = stringResource(R.string.clear)
+                                    )
+                                }
+                            } else {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box {
+                                        val toggleLabel = if (actionsExpanded) {
+                                            R.string.patch_selection_toggle_collapse
+                                        } else {
+                                            R.string.patch_selection_toggle_expand
+                                        }
+                                        IconButton(onClick = {
+                                            if (visibleActionKeys.isEmpty()) {
+                                                actionsExpanded = false
+                                                context.toast(
+                                                    context.getString(R.string.patch_selection_all_actions_hidden_toast)
+                                                )
+                                                return@IconButton
+                                            }
+                                            actionsExpanded = !actionsExpanded
+                                        }) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.MoreHoriz,
+                                                contentDescription = stringResource(toggleLabel)
+                                            )
+                                        }
+                                        if (actionsExpanded) {
+                                            val density = LocalDensity.current
+                                            val marginPx = remember(density) { with(density) { 8.dp.roundToPx() } }
+                                            val glowRadiusPx = remember(density) { with(density) { 220.dp.toPx() } }
 
-                LazyColumnWithScrollbar(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                            Popup(
+                                                popupPositionProvider = remember(marginPx) {
+                                                    PatchSelectionActionsPopupPositionProvider(marginPx = marginPx)
+                                                },
+                                                onDismissRequest = { actionsExpanded = false },
+                                                properties = PopupProperties(
+                                                    focusable = true,
+                                                    dismissOnBackPress = true,
+                                                    dismissOnClickOutside = true
+                                                )
+                                            ) {
+                                                PatchSelectionActionsPopup(
+                                                    actionSpecs = actionSpecs,
+                                                    glowRadiusPx = glowRadiusPx,
+                                                    onActionClick = { spec ->
+                                                        spec.onClick()
+                                                        actionsExpanded = false
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                    IconButton(onClick = {
+                                        actionsExpanded = false
+                                        showBottomSheet = true
+                                    }) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.FilterList,
+                                            contentDescription = stringResource(R.string.more)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 ) {
-                    fun List<PatchInfo>.searched() = filter {
-                        it.name.contains(query, true)
-                    }
+                    val bundle = bundles[pagerState.currentPage]
+                    val suggestedVersion = suggestedVersionsByBundle[bundle.uid]?.get(viewModel.appPackageName)
+                    val searchQuery = query
 
-                    if (nonUniversalSelected) {
-                        if (bundle.compatible.isNotEmpty()) {
-                            item(contentType = 0) {
+                    LazyColumnWithScrollbar(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        fun List<PatchInfo>.searched() = filter {
+                            it.name.contains(searchQuery, true)
+                        }
+
+                        if (nonUniversalSelected) {
+                            if (bundle.compatible.isNotEmpty()) {
+                                item(contentType = 0) {
+                                    ListHeader(
+                                        title = stringResource(R.string.regular_patches)
+                                    )
+                                }
+                            }
+                            patchList(
+                                uid = bundle.uid,
+                                patches = bundle.compatible.searched(),
+                                visible = true,
+                                compatible = true,
+                                suggestedVersion = suggestedVersion
+                            )
+                            patchList(
+                                uid = bundle.uid,
+                                patches = bundle.incompatible.searched(),
+                                visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
+                                compatible = viewModel.allowIncompatiblePatches,
+                                suggestedVersion = suggestedVersion
+                            ) {
                                 ListHeader(
-                                    title = stringResource(R.string.regular_patches)
+                                    title = stringResource(R.string.incompatible_patches),
+                                    onHelpClick = { showIncompatiblePatchesDialog = true }
                                 )
                             }
-                        }
-                        patchList(
-                            uid = bundle.uid,
-                            patches = bundle.compatible.searched(),
-                            visible = true,
-                            compatible = true,
-                            suggestedVersion = suggestedVersion
-                        )
-                        patchList(
-                            uid = bundle.uid,
-                            patches = bundle.incompatible.searched(),
-                            visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
-                            compatible = viewModel.allowIncompatiblePatches,
-                            suggestedVersion = suggestedVersion
-                        ) {
-                            ListHeader(
-                                title = stringResource(R.string.incompatible_patches),
-                                onHelpClick = { showIncompatiblePatchesDialog = true }
-                            )
-                        }
-                        patchList(
-                            uid = bundle.uid,
-                            patches = bundle.universal.searched(),
-                            visible = true,
-                            compatible = true,
-                            suggestedVersion = suggestedVersion
-                        ) {
-                            ListHeader(
-                                title = stringResource(R.string.universal_patches),
-                            )
-                        }
-                    } else {
-                        patchList(
-                            uid = bundle.uid,
-                            patches = bundle.universal.searched(),
-                            visible = true,
-                            compatible = true,
-                            suggestedVersion = suggestedVersion
-                        ) {
-                            ListHeader(
-                                title = stringResource(R.string.universal_patches),
-                            )
-                        }
-                        if (bundle.compatible.isNotEmpty()) {
-                            item(contentType = 0) {
+                            patchList(
+                                uid = bundle.uid,
+                                patches = bundle.universal.searched(),
+                                visible = true,
+                                compatible = true,
+                                suggestedVersion = suggestedVersion
+                            ) {
                                 ListHeader(
-                                    title = stringResource(R.string.regular_patches)
+                                    title = stringResource(R.string.universal_patches),
                                 )
                             }
-                        }
-                        patchList(
-                            uid = bundle.uid,
-                            patches = bundle.compatible.searched(),
-                            visible = true,
-                            compatible = true,
-                            suggestedVersion = suggestedVersion
-                        )
-                        patchList(
-                            uid = bundle.uid,
-                            patches = bundle.incompatible.searched(),
-                            visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
-                            compatible = viewModel.allowIncompatiblePatches,
-                            suggestedVersion = suggestedVersion
-                        ) {
-                            ListHeader(
-                                title = stringResource(R.string.incompatible_patches),
-                                onHelpClick = { showIncompatiblePatchesDialog = true }
+                        } else {
+                            patchList(
+                                uid = bundle.uid,
+                                patches = bundle.universal.searched(),
+                                visible = true,
+                                compatible = true,
+                                suggestedVersion = suggestedVersion
+                            ) {
+                                ListHeader(
+                                    title = stringResource(R.string.universal_patches),
+                                )
+                            }
+                            if (bundle.compatible.isNotEmpty()) {
+                                item(contentType = 0) {
+                                    ListHeader(
+                                        title = stringResource(R.string.regular_patches)
+                                    )
+                                }
+                            }
+                            patchList(
+                                uid = bundle.uid,
+                                patches = bundle.compatible.searched(),
+                                visible = true,
+                                compatible = true,
+                                suggestedVersion = suggestedVersion
                             )
+                            patchList(
+                                uid = bundle.uid,
+                                patches = bundle.incompatible.searched(),
+                                visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
+                                compatible = viewModel.allowIncompatiblePatches,
+                                suggestedVersion = suggestedVersion
+                            ) {
+                                ListHeader(
+                                    title = stringResource(R.string.incompatible_patches),
+                                    onHelpClick = { showIncompatiblePatchesDialog = true }
+                                )
+                            }
                         }
                     }
                 }
             }
         },
         floatingActionButton = {
-            if (searchExpanded) return@Scaffold
+            if (useFallbackSearch) {
+                if (searchActive) return@Scaffold
+            } else {
+                if (searchExpanded) return@Scaffold
+            }
 
             Box(
                 modifier = Modifier
