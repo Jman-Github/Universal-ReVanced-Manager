@@ -394,6 +394,10 @@
     <string name="language_option_system">デバイスの言語を使用</string>
     <string name="language_option_english">英語</string>
     <string name="language_option_chinese_simplified">中国語（簡体字）</string>
+    <string name="language_option_indonesian">Indonesian</string>
+    <string name="language_option_hindi">Hindi</string>
+    <string name="language_option_gujarati">Gujarati</string>
+    <string name="language_option_portuguese_brazil">Portuguese (Brazil)</string>
     <string name="language_option_korean">韓国語</string>
     <string name="language_option_vietnamese">ベトナム語</string>
     <string name="language_option_japanese">日本語</string>

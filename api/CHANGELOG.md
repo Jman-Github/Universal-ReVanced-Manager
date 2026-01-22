@@ -59,6 +59,7 @@ Additionally, due to a keystore system update, you may need to export and then r
 - Added support for PKCS12 keystore types
 - Made the `Patch selection action buttons order` action buttons be listed vertically
 - Added shimmers to several places in the UI
+- Added the Gujarati, Hindi, Indonesian, and Brazilian Portuguese to the langauge selector
 
 
 # Bug fixes

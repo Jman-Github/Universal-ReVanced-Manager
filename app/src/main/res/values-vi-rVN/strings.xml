@@ -431,6 +431,10 @@
     <string name="language_option_system">Theo ngôn ngữ hệ thống</string>
     <string name="language_option_english">Tiếng Anh</string>
     <string name="language_option_chinese_simplified">Tiếng Trung (giản thể)</string>
+    <string name="language_option_indonesian">Indonesian</string>
+    <string name="language_option_hindi">Hindi</string>
+    <string name="language_option_gujarati">Gujarati</string>
+    <string name="language_option_portuguese_brazil">Portuguese (Brazil)</string>
     <string name="language_option_korean">Tiếng Hàn</string>
     <string name="language_option_vietnamese">Tiếng Việt</string>
     <string name="language_option_japanese">Tiếng Nhật</string>

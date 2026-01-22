@@ -493,6 +493,10 @@
     <string name="language_option_system">Використовувати мову пристрою</string>
     <string name="language_option_english">Англійська</string>
     <string name="language_option_chinese_simplified">Китайська (спрощена)</string>
+    <string name="language_option_indonesian">Indonesian</string>
+    <string name="language_option_hindi">Hindi</string>
+    <string name="language_option_gujarati">Gujarati</string>
+    <string name="language_option_portuguese_brazil">Portuguese (Brazil)</string>
     <string name="language_option_korean">Корейська</string>
     <string name="language_option_vietnamese">В\'єтнамська</string>
     <string name="language_option_japanese">Японський</string>

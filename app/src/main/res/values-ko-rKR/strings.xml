@@ -497,6 +497,10 @@
     <string name="language_option_system">기기 언어 사용</string>
     <string name="language_option_english">영어</string>
     <string name="language_option_chinese_simplified">중국어 (간체)</string>
+    <string name="language_option_indonesian">Indonesian</string>
+    <string name="language_option_hindi">Hindi</string>
+    <string name="language_option_gujarati">Gujarati</string>
+    <string name="language_option_portuguese_brazil">Portuguese (Brazil)</string>
     <string name="language_option_korean">한국어</string>
     <string name="language_option_vietnamese">베트남어</string>
     <string name="language_option_japanese">일본어</string>

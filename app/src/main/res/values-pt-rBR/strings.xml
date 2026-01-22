@@ -496,6 +496,10 @@ Osperfis de patches não serão afetados.</string>
     <string name="language_option_system">Usar idioma do dispositivo</string>
     <string name="language_option_english">Inglês</string>
     <string name="language_option_chinese_simplified">Chinês (Simplificado)</string>
+    <string name="language_option_indonesian">Indonesian</string>
+    <string name="language_option_hindi">Hindi</string>
+    <string name="language_option_gujarati">Gujarati</string>
+    <string name="language_option_portuguese_brazil">Portuguese (Brazil)</string>
     <string name="language_option_korean">Coreano</string>
     <string name="language_option_vietnamese">Vietinamita</string>
     <string name="language_option_japanese">Japonês</string>

@@ -150,15 +150,17 @@ Universal ReVanced Manager includes powerful features that the official ReVanced
 <details>
 <summary><strong>Localization</strong></summary>
 <ul>
-  <li><strong>Chinese Simplified (zh-CN):</strong> User-selectable language option in settings.</li>
-  <li><strong>Vietnamese (vi):</strong> User-selectable language option in settings.</li>
-  <li><strong>Korean (ko):</strong> User-selectable language option in settings.</li>
-  <li><strong>Japanese (ja):</strong> User-selectable language option in settings.</li>
-  <li><strong>Russian (ru):</strong> User-selectable language option in settings.</li>
-  <li><strong>Ukrainian (uk):</strong> User-selectable language option in settings.</li>
-  <li><strong>Brazilian Portuguese (pt-BR):</strong> User-selectable language option in settings.</li>
-  <li><strong>Indonesian (id):</strong> User-selectable language option in settings.</li>
-  <li><strong>Fillipino (fil):</strong> User-selectable language option in settings.</li>
+  <li><strong>Chinese Simplified:</strong> User-selectable language option in settings.</li>
+  <li><strong>Vietnamese:</strong> User-selectable language option in settings.</li>
+  <li><strong>Korean:</strong> User-selectable language option in settings.</li>
+  <li><strong>Japanese:</strong> User-selectable language option in settings.</li>
+  <li><strong>Russian:</strong> User-selectable language option in settings.</li>
+  <li><strong>Ukrainian:</strong> User-selectable language option in settings.</li>
+  <li><strong>Brazilian Portuguese:</strong> User-selectable language option in settings.</li>
+  <li><strong>Indonesian:</strong> User-selectable language option in settings.</li>
+  <li><strong>Fillipino:</strong> User-selectable language option in settings.</li>
+  <li><strong>Hindi:</strong> User-selectable language option in settings.</li>
+  <li><strong>Gujarati:</strong> User-selectable language option in settings.</li>
 </ul>
 </details>
 

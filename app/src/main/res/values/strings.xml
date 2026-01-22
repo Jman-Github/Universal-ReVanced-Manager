@@ -498,6 +498,10 @@ Patch profiles are not affected.</string>
     <string name="language_option_system">Use device language</string>
     <string name="language_option_english">English</string>
     <string name="language_option_chinese_simplified">Chinese (Simplified)</string>
+    <string name="language_option_indonesian">Indonesian</string>
+    <string name="language_option_hindi">Hindi</string>
+    <string name="language_option_gujarati">Gujarati</string>
+    <string name="language_option_portuguese_brazil">Portuguese (Brazil)</string>
     <string name="language_option_korean">Korean</string>
     <string name="language_option_vietnamese">Vietnamese</string>
     <string name="language_option_japanese">Japanese</string>
