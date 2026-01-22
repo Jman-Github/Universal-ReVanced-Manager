@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="patcher">Patcher</string>
+    <string name="patches">Patches</string>
+    <string name="patch_bundles">Patch Bundles</string>
+    <string name="patch_bundle">Patch Bundle</string>
+    <string name="manager">Manager</string>
+    <string name="toast_copied_to_clipboard">Nakopya!</string>
+    <string name="copy_to_clipboard">Kopyahin sa clipboard</string>
+    <string name="settings">Settings</string>
+    <string name="settings_search_hint">Maghanap sa settings</string>
+    <string name="settings_search_no_results">Walang mahanap na settings.</string>
+    <string name="select_app">Pumili ng app</string>
+    <string name="app_filter_title">I-filter ang mga app</string>
+    <string name="app_filter_installed_only">Mga naka install lang</string>
+    <string name="app_filter_patches_available">Available na patches</string>
+    <string name="bundle_version_no_version">Walang suggested na bersyon</string>
+    <string name="bundle_version_suggested_label">Suggested na bersyon %1$s</string>
+</resources>
