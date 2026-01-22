@@ -7,12 +7,17 @@ import java.util.Locale
 private val supportedLanguages = setOf(
     "system",
     "en",
+    "id",
+    "in",
+    "hi",
+    "gu",
     "zh-cn",
     "vi",
     "ko",
     "ja",
     "ru",
-    "uk"
+    "uk",
+    "pt-br"
 )
 
 private fun normalizeTag(tag: String): String =
@@ -61,6 +66,7 @@ fun applyAppLanguage(code: String) {
     val localeList = when (target.lowercase(Locale.ROOT)) {
         "zh", "zh-cn", "zh_cn", "zh-hans" -> LocaleListCompat.create(Locale.SIMPLIFIED_CHINESE)
         "en", "en-us", "en_gb" -> LocaleListCompat.create(Locale.ENGLISH)
+        "id", "in" -> LocaleListCompat.forLanguageTags("in")
         else -> LocaleListCompat.forLanguageTags(target)
     }
 

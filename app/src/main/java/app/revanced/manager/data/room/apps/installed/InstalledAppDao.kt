@@ -11,11 +11,23 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface InstalledAppDao {
-    @Query("SELECT * FROM installed_app")
+    @Query("SELECT * FROM installed_app ORDER BY sort_order ASC, current_package_name ASC")
     fun getAll(): Flow<List<InstalledApp>>
 
     @Query("SELECT * FROM installed_app WHERE current_package_name = :packageName")
     suspend fun get(packageName: String): InstalledApp?
+
+    @Query("SELECT * FROM installed_app WHERE install_type = :installType")
+    suspend fun getByInstallType(installType: InstallType): List<InstalledApp>
+
+    @Query("SELECT sort_order FROM installed_app WHERE current_package_name = :packageName")
+    suspend fun getSortOrder(packageName: String): Int?
+
+    @Query("SELECT MAX(sort_order) FROM installed_app")
+    suspend fun getMaxSortOrder(): Int?
+
+    @Query("UPDATE installed_app SET sort_order = :sortOrder WHERE current_package_name = :packageName")
+    suspend fun updateSortOrder(packageName: String, sortOrder: Int)
 
     @Query(
         "SELECT bundle, patch_name FROM applied_patch" +
@@ -40,6 +52,9 @@ interface InstalledAppDao {
 
     @Query("DELETE FROM applied_patch WHERE package_name = :packageName")
     suspend fun deleteAppliedPatches(packageName: String)
+
+    @Query("DELETE FROM installed_app WHERE install_type = :installType")
+    suspend fun deleteByInstallType(installType: InstallType)
 
     @Delete
     suspend fun delete(installedApp: InstalledApp)

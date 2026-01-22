@@ -28,6 +28,7 @@ import app.revanced.manager.domain.repository.DownloadResult
 import app.revanced.manager.domain.repository.DownloadedAppRepository
 import app.revanced.manager.domain.repository.DownloaderPluginRepository
 import app.revanced.manager.domain.repository.InstalledAppRepository
+import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.domain.worker.Worker
 import app.revanced.manager.domain.worker.WorkerRepository
 import app.revanced.manager.network.downloader.LoadedDownloaderPlugin
@@ -38,9 +39,10 @@ import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.patcher.runtime.CoroutineRuntime
 import app.revanced.manager.patcher.runtime.ProcessRuntime
-import app.revanced.manager.patcher.util.NativeLibStripper
+import app.revanced.manager.patcher.runtime.morphe.MorpheProcessRuntime
 import app.revanced.manager.patcher.runStep
 import app.revanced.manager.patcher.toRemoteError
+import app.revanced.manager.patcher.patch.PatchBundleType
 import app.revanced.manager.plugin.downloader.GetScope
 import app.revanced.manager.plugin.downloader.PluginHostApi
 import app.revanced.manager.plugin.downloader.UserInteractionException
@@ -70,6 +72,9 @@ class PatcherWorker(
     private val fs: Filesystem by inject()
     private val installedAppRepository: InstalledAppRepository by inject()
     private val rootInstaller: RootInstaller by inject()
+    private val patchBundleRepository: PatchBundleRepository by inject()
+    private var activeRuntime: app.revanced.manager.patcher.runtime.Runtime? = null
+    private var activeMorpheRuntime: app.revanced.manager.patcher.runtime.morphe.MorpheRuntime? = null
 
     class Args(
         val input: SelectedApp,
@@ -120,6 +125,12 @@ class PatcherWorker(
     }
 
     override suspend fun doWork(): Result {
+        kotlinx.coroutines.currentCoroutineContext()[kotlinx.coroutines.Job]?.invokeOnCompletion { cause ->
+            if (cause != null) {
+                activeRuntime?.cancel()
+                activeMorpheRuntime?.cancel()
+            }
+        }
         if (runAttemptCount > 0) {
             Log.d(tag, "Android requested retrying but retrying is disabled.".logFmt())
             return Result.failure()
@@ -248,13 +259,10 @@ class PatcherWorker(
             downloadCleanup = downloadResult.cleanup
             val inputFile = downloadResult.file
 
-            val runtime = if (prefs.useProcessRuntime.get()) {
-                ProcessRuntime(applicationContext)
-            } else {
-                CoroutineRuntime(applicationContext)
-            }
-
+            val bundleType = patchBundleRepository.selectionBundleType(args.selectedPatches)
+                ?: throw IllegalStateException("Cannot patch with mixed ReVanced and Morphe bundles.")
             val stripNativeLibs = prefs.stripUnusedNativeLibs.get()
+            val skipUnneededSplits = prefs.skipUnneededSplitApks.get()
             val inputIsSplitArchive = SplitApkPreparer.isSplitArchive(inputFile)
             val selectedCount = args.selectedPatches.values.sumOf { it.size }
 
@@ -265,19 +273,58 @@ class PatcherWorker(
                         "split=$inputIsSplitArchive patches=$selectedCount"
             )
 
-            runtime.execute(
-                inputFile.absolutePath,
-                patchedApk.absolutePath,
-                args.packageName,
-                args.selectedPatches,
-                args.options,
-                args.logger,
-                args.onEvent,
-                stripNativeLibs
-            )
-
-            if (stripNativeLibs && !inputIsSplitArchive) {
-                NativeLibStripper.strip(patchedApk)
+            when (bundleType) {
+                PatchBundleType.MORPHE -> {
+                    val runtime = MorpheProcessRuntime(applicationContext)
+                    activeMorpheRuntime = runtime
+                    runtime.execute(
+                        inputFile.absolutePath,
+                        patchedApk.absolutePath,
+                        args.packageName,
+                        args.selectedPatches,
+                        args.options,
+                        args.logger,
+                        args.onEvent,
+                        stripNativeLibs,
+                        skipUnneededSplits
+                    )
+                }
+                PatchBundleType.REVANCED -> {
+                    val runtime = ProcessRuntime(applicationContext)
+                    activeRuntime = runtime
+                    try {
+                        runtime.execute(
+                            inputFile.absolutePath,
+                            patchedApk.absolutePath,
+                            args.packageName,
+                            args.selectedPatches,
+                            args.options,
+                            args.logger,
+                            args.onEvent,
+                            stripNativeLibs,
+                            skipUnneededSplits
+                        )
+                    } catch (e: ProcessRuntime.ProcessExitException) {
+                        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
+                            Log.w(tag, "app_process exited with code ${e.exitCode}; retrying in-process runtime".logFmt())
+                            val fallback = CoroutineRuntime(applicationContext)
+                            activeRuntime = fallback
+                            fallback.execute(
+                                inputFile.absolutePath,
+                                patchedApk.absolutePath,
+                                args.packageName,
+                                args.selectedPatches,
+                                args.options,
+                                args.logger,
+                                args.onEvent,
+                                stripNativeLibs,
+                                skipUnneededSplits
+                            )
+                        } else {
+                            throw e
+                        }
+                    }
+                }
             }
 
             runStep(StepId.SignAPK, args.onEvent) {
@@ -312,7 +359,7 @@ class PatcherWorker(
                 workDataOf(
                     PROCESS_EXIT_CODE_KEY to e.exitCode,
                     PROCESS_PREVIOUS_LIMIT_KEY to previousLimit,
-                    PROCESS_FAILURE_MESSAGE_KEY to message
+                    PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(message)
                 )
             )
         } catch (e: ProcessRuntime.RemoteFailureException) {
@@ -331,15 +378,54 @@ class PatcherWorker(
                 )
             )
             Result.failure(
-                workDataOf(PROCESS_FAILURE_MESSAGE_KEY to e.originalStackTrace)
+                workDataOf(PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(e.originalStackTrace))
+            )
+        } catch (e: MorpheProcessRuntime.ProcessExitException) {
+            Log.e(
+                tag,
+                "Morphe patcher process exited with code ${e.exitCode}".logFmt(),
+                e
+            )
+            val message = applicationContext.getString(
+                R.string.patcher_process_exit_message,
+                e.exitCode
+            )
+            args.onEvent(ProgressEvent.Failed(null, Exception(message).toRemoteError()))
+            val previousLimit = prefs.patcherProcessMemoryLimit.get()
+            Result.failure(
+                workDataOf(
+                    PROCESS_EXIT_CODE_KEY to e.exitCode,
+                    PROCESS_PREVIOUS_LIMIT_KEY to previousLimit,
+                    PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(message)
+                )
+            )
+        } catch (e: MorpheProcessRuntime.RemoteFailureException) {
+            Log.e(
+                tag,
+                "An exception occurred in the Morphe remote process while patching. ${e.originalStackTrace}".logFmt()
+            )
+            args.onEvent(
+                ProgressEvent.Failed(
+                    null,
+                    RemoteError(
+                        type = e::class.java.name,
+                        message = e.message,
+                        stackTrace = e.originalStackTrace
+                    )
+                )
+            )
+            Result.failure(
+                workDataOf(PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(e.originalStackTrace))
             )
         } catch (e: Exception) {
             Log.e(tag, "An exception occurred while patching".logFmt(), e)
             args.onEvent(ProgressEvent.Failed(null, e.toRemoteError()))
             Result.failure(
-                workDataOf(PROCESS_FAILURE_MESSAGE_KEY to e.stackTraceToString())
+                workDataOf(PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(e.stackTraceToString()))
             )
         } finally {
+            activeRuntime = null
+            activeMorpheRuntime = null
             patchedApk.delete()
             downloadCleanup?.invoke()
         }
@@ -351,6 +437,21 @@ class PatcherWorker(
         const val PROCESS_EXIT_CODE_KEY = "process_exit_code"
         const val PROCESS_PREVIOUS_LIMIT_KEY = "process_previous_limit"
         const val PROCESS_FAILURE_MESSAGE_KEY = "process_failure_message"
+        private const val WORK_DATA_MAX_BYTES = 9000
     }
 
+    private fun trimForWorkData(message: String?): String? {
+        if (message.isNullOrEmpty()) return message
+        val utf8 = Charsets.UTF_8
+        if (message.toByteArray(utf8).size <= WORK_DATA_MAX_BYTES) return message
+        var end = message.length
+        while (end > 0) {
+            val candidate = message.substring(0, end)
+            if (candidate.toByteArray(utf8).size <= WORK_DATA_MAX_BYTES) {
+                return candidate + "\n[truncated]"
+            }
+            end -= 1
+        }
+        return message.take(512) + "\n[truncated]"
+    }
 }

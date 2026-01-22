@@ -56,6 +56,7 @@ class GeneralSettingsViewModel(
         prefs.theme.update(Theme.SYSTEM)
         prefs.dynamicColor.update(false)
         prefs.pureBlackTheme.update(false)
+        prefs.pureBlackOnSystemDark.update(false)
         prefs.themePresetSelectionEnabled.update(true)
         prefs.themePresetSelectionName.update(ThemePreset.DEFAULT.name)
         prefs.customAccentColor.update("")
@@ -73,6 +74,10 @@ class GeneralSettingsViewModel(
         val value = color?.toHexString().orEmpty()
         prefs.customThemeColor.update(value)
         resetListItemColorsCached()
+    }
+
+    fun setPureBlackOnSystemDark(enabled: Boolean) = viewModelScope.launch {
+        prefs.pureBlackOnSystemDark.update(enabled)
     }
 
     fun setAppLanguage(languageCode: String) = viewModelScope.launch {

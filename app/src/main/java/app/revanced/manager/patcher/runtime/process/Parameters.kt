@@ -15,6 +15,7 @@ data class Parameters(
     val outputFile: String,
     val configurations: List<PatchConfiguration>,
     val stripNativeLibs: Boolean,
+    val skipUnneededSplits: Boolean,
 ) : Parcelable
 
 @Parcelize

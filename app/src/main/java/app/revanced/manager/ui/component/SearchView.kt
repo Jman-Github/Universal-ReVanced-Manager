@@ -8,7 +8,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SearchBar
-import androidx.compose.material3.SearchBarColors
 import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,7 +28,7 @@ fun SearchView(
     placeholder: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val colors = SearchBarColors(
+    val colors = SearchBarDefaults.colors(
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         dividerColor = MaterialTheme.colorScheme.outline
     )
@@ -47,6 +46,7 @@ fun SearchView(
                 expanded = true,
                 onExpandedChange = onActiveChange,
                 placeholder = placeholder,
+                colors = colors.inputFieldColors,
                 leadingIcon = {
                     IconButton(onClick = { onActiveChange(false) }) {
                         Icon(

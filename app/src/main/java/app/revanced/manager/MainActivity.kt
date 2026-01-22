@@ -1,6 +1,7 @@
 package app.revanced.manager
 
 import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.os.Bundle
 import android.os.Parcelable
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -13,9 +14,12 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
@@ -62,11 +66,13 @@ import app.revanced.manager.ui.viewmodel.MainViewModel
 import app.revanced.manager.ui.viewmodel.SelectedAppInfoViewModel
 import app.revanced.manager.util.EventEffect
 import app.revanced.manager.util.AppForeground
+import app.universal.revanced.manager.R
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.androidx.compose.navigation.koinNavViewModel
 import org.koin.core.parameter.parametersOf
 import org.koin.androidx.viewmodel.ext.android.getViewModel as getActivityViewModel
+import java.io.File
 
 class MainActivity : AppCompatActivity() {
     @ExperimentalAnimationApi
@@ -78,6 +84,7 @@ class MainActivity : AppCompatActivity() {
         installSplashScreen()
 
         val vm: MainViewModel = getActivityViewModel()
+        vm.handleIntent(intent)
 
         setContent {
             val launcher = rememberLauncherForActivityResult(
@@ -87,8 +94,12 @@ class MainActivity : AppCompatActivity() {
             val theme by vm.prefs.theme.getAsState()
             val dynamicColor by vm.prefs.dynamicColor.getAsState()
             val pureBlackTheme by vm.prefs.pureBlackTheme.getAsState()
+            val pureBlackOnSystemDark by vm.prefs.pureBlackOnSystemDark.getAsState()
             val customAccentColor by vm.prefs.customAccentColor.getAsState()
             val customThemeColor by vm.prefs.customThemeColor.getAsState()
+            val systemDark = isSystemInDarkTheme()
+            val darkThemeEnabled = theme == Theme.SYSTEM && systemDark || theme == Theme.DARK
+            val pureBlackEnabled = pureBlackTheme || (pureBlackOnSystemDark && theme == Theme.SYSTEM && systemDark)
 
             EventEffect(vm.legacyImportActivityFlow) {
                 try {
@@ -98,15 +109,21 @@ class MainActivity : AppCompatActivity() {
             }
 
             ReVancedManagerTheme(
-                darkTheme = theme == Theme.SYSTEM && isSystemInDarkTheme() || theme == Theme.DARK,
+                darkTheme = darkThemeEnabled,
                 dynamicColor = dynamicColor,
-                pureBlackTheme = pureBlackTheme,
+                pureBlackTheme = pureBlackEnabled,
                 accentColorHex = customAccentColor.takeUnless { it.isBlank() },
                 themeColorHex = customThemeColor.takeUnless { it.isBlank() }
             ) {
                 ReVancedManager(vm)
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val vm: MainViewModel = getActivityViewModel()
+        vm.handleIntent(intent)
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -118,12 +135,23 @@ class MainActivity : AppCompatActivity() {
 @Composable
 private fun ReVancedManager(vm: MainViewModel) {
     val navController = rememberNavController()
+    var pendingBundleDeepLink by remember { mutableStateOf<app.revanced.manager.util.BundleDeepLink?>(null) }
+    val context = LocalContext.current
 
     EventEffect(vm.appSelectFlow) { params ->
+        navController.popBackStack(SelectedApplicationInfo.Main, inclusive = true)
         navController.navigateComplex(
             SelectedApplicationInfo,
             params
         )
+    }
+
+    EventEffect(vm.bundleDeepLinkFlow) { deepLink ->
+        pendingBundleDeepLink = deepLink
+        navController.navigate(Dashboard) {
+            launchSingleTop = true
+            popUpTo(Dashboard) { inclusive = false }
+        }
     }
 
     NavHost(
@@ -154,19 +182,38 @@ private fun ReVancedManager(vm: MainViewModel) {
                     navController.navigate(InstalledApplicationInfo(packageName))
                 },
                 onProfileLaunch = { launchData ->
+                    val apkFile = launchData.profile.apkPath
+                        ?.let(::File)
+                        ?.takeIf { it.exists() }
+                    val resolvedVersion = launchData.profile.apkVersion
+                        ?: launchData.profile.appVersion
+                        ?: context.getString(R.string.app_version_unspecified)
+                    val selectedApp = if (apkFile != null) {
+                        SelectedApp.Local(
+                            packageName = launchData.profile.packageName,
+                            version = resolvedVersion,
+                            file = apkFile,
+                            temporary = false,
+                            resolved = true
+                        )
+                    } else {
+                        SelectedApp.Search(
+                            launchData.profile.packageName,
+                            launchData.profile.appVersion
+                        )
+                    }
                     navController.navigateComplex(
                         SelectedApplicationInfo,
                         SelectedApplicationInfo.ViewModelParams(
-                            app = SelectedApp.Search(
-                                launchData.profile.packageName,
-                                launchData.profile.appVersion
-                            ),
+                            app = selectedApp,
                             patches = null,
                             profileId = launchData.profile.uid,
-                            requiresSourceSelection = true
+                            requiresSourceSelection = apkFile == null
                         )
                     )
-                }
+                },
+                bundleDeepLink = pendingBundleDeepLink,
+                onBundleDeepLinkConsumed = { pendingBundleDeepLink = null }
             )
         }
 
@@ -174,8 +221,8 @@ private fun ReVancedManager(vm: MainViewModel) {
             val data = it.toRoute<InstalledApplicationInfo>()
 
             InstalledAppInfoScreen(
-                onPatchClick = { packageName, selection ->
-                    vm.selectApp(packageName, selection)
+                onPatchClick = { packageName, selection, selectionPayload, persistConfiguration ->
+                    vm.selectApp(packageName, selection, selectionPayload, persistConfiguration)
                 },
                 onBackClick = navController::popBackStack,
                 viewModel = koinViewModel { parametersOf(data.packageName) }

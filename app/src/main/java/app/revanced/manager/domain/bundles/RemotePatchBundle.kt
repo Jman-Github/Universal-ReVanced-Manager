@@ -1,9 +1,12 @@
 package app.revanced.manager.domain.bundles
 
 import app.revanced.manager.domain.manager.PreferencesManager
+import app.revanced.manager.network.api.ExternalBundlesApi
 import app.revanced.manager.network.api.ReVancedAPI
+import app.revanced.manager.network.dto.ExternalBundleSnapshot
 import app.revanced.manager.network.dto.ReVancedAsset
 import app.revanced.manager.network.service.HttpService
+import app.revanced.manager.network.utils.getOrNull
 import app.revanced.manager.network.utils.getOrThrow
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
@@ -13,11 +16,16 @@ import io.ktor.client.request.prepareGet
 import io.ktor.client.request.url
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.utils.io.jvm.javaio.toInputStream
+import io.ktor.http.Url
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.toInstant
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -113,12 +121,16 @@ sealed class RemotePatchBundle(
      * Downloads the latest version regardless if there is a new update available.
      */
     suspend fun downloadLatest(onProgress: PatchBundleDownloadProgress? = null): PatchBundleDownloadResult =
-        download(getLatestInfo(), onProgress)
+        download(fetchLatestReleaseInfo(), onProgress)
 
     suspend fun update(onProgress: PatchBundleDownloadProgress? = null): PatchBundleDownloadResult? =
         withContext(Dispatchers.IO) {
-        val info = getLatestInfo()
-        if (hasInstalled() && info.version == installedVersionSignatureInternal)
+        val info = fetchLatestReleaseInfo()
+        val latestSignature = normalizeVersionForCompare(info.version)
+            ?: return@withContext null
+        val installedSignature = normalizeVersionForCompare(installedVersionSignatureInternal)
+            ?: normalizeVersionForCompare(version)
+        if (hasInstalled() && installedSignature != null && latestSignature == installedSignature)
             return@withContext null
 
         download(info, onProgress)
@@ -147,6 +159,14 @@ sealed class RemotePatchBundle(
     }
 
     val installedVersionSignature: String? get() = installedVersionSignatureInternal
+
+    private fun normalizeVersionForCompare(raw: String?): String? {
+        val trimmed = raw?.trim().orEmpty()
+        if (trimmed.isEmpty()) return null
+        val noPrefix = trimmed.removePrefix("v").removePrefix("V")
+        val noBuild = noPrefix.substringBefore('+')
+        return noBuild.ifBlank { null }
+    }
 }
 
 class JsonPatchBundle(
@@ -350,7 +370,8 @@ class GitHubPullRequestBundle(
 
                             var entry = zis.nextEntry
                             while (entry != null) {
-                                if (!entry.isDirectory && entry.name.endsWith(".rvp")) {
+                                val entryName = entry.name.lowercase()
+                                if (!entry.isDirectory && (entryName.endsWith(".rvp") || entryName.endsWith(".mpp"))) {
                                     extractedTotal = entry.size.takeIf { it > 0 }
                                     while (true) {
                                         val read = zis.read(buffer)
@@ -371,7 +392,7 @@ class GitHubPullRequestBundle(
                             }
 
                             if (copiedBytes <= 0L) {
-                                throw IOException("No .rvp file found in the pull request artifact.")
+                                throw IOException("No .rvp or .mpp file found in the pull request artifact.")
                             }
                             onProgress?.invoke(copiedBytes, extractedTotal)
                         }
@@ -419,6 +440,146 @@ class GitHubPullRequestBundle(
         lastNotifiedVersion,
         enabled
     )
+}
+
+class ExternalGraphqlPatchBundle(
+    name: String,
+    uid: Int,
+    displayName: String?,
+    createdAt: Long?,
+    updatedAt: Long?,
+    installedVersionSignature: String?,
+    error: Throwable?,
+    directory: File,
+    endpoint: String,
+    autoUpdate: Boolean,
+    searchUpdate: Boolean,
+    lastNotifiedVersion: String?,
+    enabled: Boolean,
+    private var metadata: ExternalBundleMetadata
+) : RemotePatchBundle(
+    name,
+    uid,
+    displayName,
+    createdAt,
+    updatedAt,
+    installedVersionSignature,
+    error,
+    directory,
+    endpoint,
+    autoUpdate,
+    searchUpdate,
+    lastNotifiedVersion,
+    enabled
+) {
+    private val api: ExternalBundlesApi by inject()
+
+    override suspend fun getLatestInfo(): ReVancedAsset = withContext(Dispatchers.IO) {
+        val (endpointOwner, endpointRepo, endpointPrerelease) = parseEndpointMetadata()
+        val owner = metadata.ownerName?.trim().takeIf { !it.isNullOrBlank() } ?: endpointOwner.orEmpty()
+        val repo = metadata.repoName?.trim().takeIf { !it.isNullOrBlank() } ?: endpointRepo.orEmpty()
+        val prerelease = metadata.isPrerelease ?: endpointPrerelease
+        val latest = if (owner.isNotBlank() && repo.isNotBlank() && prerelease != null) {
+            api.getLatestBundle(owner, repo, prerelease).getOrNull()
+        } else {
+            api.getBundleById(metadata.bundleId).getOrNull()
+        }
+        if (latest != null) {
+            metadata = metadataFromSnapshot(latest)
+            ExternalBundleMetadataStore.write(directory, metadata)
+        }
+        snapshotToAsset(latest)
+    }
+
+    override fun copy(
+        error: Throwable?,
+        name: String,
+        displayName: String?,
+        createdAt: Long?,
+        updatedAt: Long?,
+        autoUpdate: Boolean,
+        searchUpdate: Boolean,
+        lastNotifiedVersion: String?,
+        enabled: Boolean
+    ) = ExternalGraphqlPatchBundle(
+        name,
+        uid,
+        displayName,
+        createdAt,
+        updatedAt,
+        installedVersionSignature,
+        error,
+        directory,
+        endpoint,
+        autoUpdate,
+        searchUpdate,
+        lastNotifiedVersion,
+        enabled,
+        metadata
+    )
+
+    private fun metadataFromSnapshot(snapshot: ExternalBundleSnapshot) = ExternalBundleMetadata(
+        bundleId = metadata.bundleId,
+        downloadUrl = snapshot.downloadUrl ?: metadata.downloadUrl,
+        signatureDownloadUrl = snapshot.signatureDownloadUrl ?: metadata.signatureDownloadUrl,
+        version = snapshot.version.ifBlank { metadata.version },
+        createdAt = snapshot.createdAt.ifBlank { metadata.createdAt },
+        description = snapshot.description ?: metadata.description,
+        ownerName = snapshot.ownerName.takeIf { it.isNotBlank() } ?: metadata.ownerName,
+        repoName = snapshot.repoName.takeIf { it.isNotBlank() } ?: metadata.repoName,
+        isPrerelease = snapshot.isPrerelease
+    )
+
+    private fun snapshotToAsset(snapshot: ExternalBundleSnapshot?): ReVancedAsset {
+        val downloadUrl = snapshot?.downloadUrl ?: metadata.downloadUrl
+        val signatureUrl = snapshot?.signatureDownloadUrl ?: metadata.signatureDownloadUrl
+        val version = snapshot?.version?.ifBlank { null } ?: metadata.version
+        val description = snapshot?.description ?: metadata.description ?: ""
+        val createdAtRaw = snapshot?.createdAt ?: metadata.createdAt
+        val createdAt = parseCreatedAt(createdAtRaw)
+
+        return ReVancedAsset(
+            downloadUrl = downloadUrl,
+            createdAt = createdAt,
+            signatureDownloadUrl = signatureUrl,
+            pageUrl = snapshot?.sourceUrl,
+            description = description,
+            version = version
+        )
+    }
+
+    private fun parseEndpointMetadata(): Triple<String?, String?, Boolean?> {
+        val candidates = listOfNotNull(endpoint, metadata.downloadUrl)
+        for (candidate in candidates) {
+            val parsed = runCatching { Url(candidate) }.getOrNull() ?: continue
+            val segments = parsed.encodedPath.trim('/').split('/').filter { it.isNotBlank() }
+            if (segments.size >= 5 &&
+                segments[0].equals("api", ignoreCase = true) &&
+                segments[1].equals("v1", ignoreCase = true) &&
+                segments[2].equals("bundle", ignoreCase = true)
+            ) {
+                val owner = segments[3]
+                val repo = segments[4]
+                val prerelease = parsed.parameters["prerelease"]?.lowercase()?.let { value ->
+                    when (value) {
+                        "true" -> true
+                        "false" -> false
+                        else -> null
+                    }
+                }
+                return Triple(owner, repo, prerelease)
+            }
+        }
+        return Triple(null, null, null)
+    }
+
+    private fun parseCreatedAt(raw: String?): LocalDateTime {
+        val trimmed = raw?.trim().orEmpty()
+        val instantParsed = runCatching { Instant.parse(trimmed).toLocalDateTime(TimeZone.UTC) }.getOrNull()
+        if (instantParsed != null) return instantParsed
+        val localParsed = runCatching { LocalDateTime.parse(trimmed) }.getOrNull()
+        return localParsed ?: Clock.System.now().toLocalDateTime(TimeZone.UTC)
+    }
 }
 
 private data class CachedChangelog(val asset: ReVancedAsset, val timestamp: Long)

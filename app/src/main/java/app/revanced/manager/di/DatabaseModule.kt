@@ -10,6 +10,10 @@ import app.revanced.manager.data.room.MIGRATION_4_5
 import app.revanced.manager.data.room.MIGRATION_5_6
 import app.revanced.manager.data.room.MIGRATION_6_7
 import app.revanced.manager.data.room.MIGRATION_7_8
+import app.revanced.manager.data.room.MIGRATION_8_9
+import app.revanced.manager.data.room.MIGRATION_9_10
+import app.revanced.manager.data.room.MIGRATION_10_11
+import app.revanced.manager.data.room.MIGRATION_11_12
 import org.koin.android.ext.koin.androidContext
 import org.koin.dsl.module
 
@@ -23,7 +27,11 @@ val databaseModule = module {
                 MIGRATION_4_5,
                 MIGRATION_5_6,
                 MIGRATION_6_7,
-                MIGRATION_7_8
+                MIGRATION_7_8,
+                MIGRATION_8_9,
+                MIGRATION_9_10,
+                MIGRATION_10_11,
+                MIGRATION_11_12
             )
             .build()
 

@@ -292,6 +292,14 @@ class InstallerManager(
         return InstallPlan.Internal(target)
     }
 
+    fun resolvePlanForToken(
+        token: Token,
+        target: InstallTarget,
+        sourceFile: File,
+        expectedPackage: String,
+        sourceLabel: String?
+    ): InstallPlan? = createPlan(token, target, sourceFile, expectedPackage, sourceLabel)
+
     fun cleanup(plan: InstallPlan.External) {
         runCatching {
             app.revokeUriPermission(plan.uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)

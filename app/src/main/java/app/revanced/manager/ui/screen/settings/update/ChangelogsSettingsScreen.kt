@@ -4,7 +4,10 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -24,7 +27,7 @@ import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.ColumnWithScrollbar
-import app.revanced.manager.ui.component.LoadingIndicator
+import app.revanced.manager.ui.component.ShimmerBox
 import app.revanced.manager.ui.component.settings.Changelog
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsCard
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsDivider
@@ -84,7 +87,17 @@ fun ChangelogsSettingsScreen(
                         }
                     }
                 } 
-            } ?: LoadingIndicator()
+            } ?: ExpressiveSettingsCard(
+                modifier = Modifier.padding(16.dp),
+                contentPadding = PaddingValues(16.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ShimmerBox(modifier = Modifier.fillMaxWidth().height(22.dp))
+                    ShimmerBox(modifier = Modifier.fillMaxWidth().height(16.dp))
+                    ShimmerBox(modifier = Modifier.fillMaxWidth().height(16.dp))
+                    ShimmerBox(modifier = Modifier.width(180.dp).height(14.dp))
+                }
+            }
         }
     }
 }

@@ -1,12 +1,14 @@
 package app.revanced.manager.ui.screen
 
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,20 +25,23 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ExitToApp
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Cancel
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.PostAdd
 import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomAppBar
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -55,11 +60,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
+import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.ui.component.AppScaffold
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.ConfirmDialog
 import app.revanced.manager.ui.component.InstallerStatusDialog
 import app.revanced.manager.ui.component.haptics.HapticExtendedFloatingActionButton
+import app.revanced.manager.ui.component.patches.PathSelectorDialog
 import app.revanced.manager.ui.component.patcher.Steps
 import app.revanced.manager.ui.model.StepCategory
 import app.revanced.manager.ui.model.SelectedApp
@@ -68,14 +75,16 @@ import app.revanced.manager.data.room.apps.installed.InstallType
 import app.revanced.manager.util.Options
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.domain.manager.PreferencesManager
-import app.revanced.manager.util.APK_MIMETYPE
 import app.revanced.manager.util.ExportNameFormatter
 import app.revanced.manager.util.EventEffect
 import app.revanced.manager.util.PatchedAppExportData
+import app.revanced.manager.util.isAllowedApkFile
 import app.revanced.manager.util.mutableStateSetOf
 import app.revanced.manager.util.saver.snapshotStateSetSaver
 import app.revanced.manager.util.toast
 import org.koin.compose.koinInject
+import java.nio.file.Files
+import java.nio.file.Path
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -107,8 +116,6 @@ fun PatcherScreen(
     val exportFileName = remember(exportFormat, exportMetadata, fallbackExportMetadata) {
         ExportNameFormatter.format(exportFormat, exportMetadata ?: fallbackExportMetadata)
     }
-    val exportApkLauncher =
-        rememberLauncherForActivityResult(CreateDocument(APK_MIMETYPE), viewModel::export)
 
     val patcherSucceeded by viewModel.patcherSucceeded.observeAsState(null)
     val isMounting = viewModel.activeInstallType == InstallType.MOUNT
@@ -116,6 +123,35 @@ fun PatcherScreen(
     var showDismissConfirmationDialog by rememberSaveable { mutableStateOf(false) }
     var showInstallInProgressDialog by rememberSaveable { mutableStateOf(false) }
     var showSavePatchedAppDialog by rememberSaveable { mutableStateOf(false) }
+    var exportInProgress by rememberSaveable { mutableStateOf(false) }
+    var showLogActionsDialog by rememberSaveable { mutableStateOf(false) }
+    var showLogExportPicker by rememberSaveable { mutableStateOf(false) }
+    var logExportInProgress by rememberSaveable { mutableStateOf(false) }
+    val fs: Filesystem = koinInject()
+    val storageRoots = remember { fs.storageRoots() }
+    val (permissionContract, permissionName) = remember { fs.permissionContract() }
+    var showExportPicker by rememberSaveable { mutableStateOf(false) }
+    var exportFileDialogState by remember { mutableStateOf<ExportApkDialogState?>(null) }
+    var pendingExportConfirmation by remember { mutableStateOf<PendingExportConfirmation?>(null) }
+    var logExportFileDialogState by remember { mutableStateOf<LogExportDialogState?>(null) }
+    var pendingLogExportConfirmation by remember { mutableStateOf<PendingLogExportConfirmation?>(null) }
+    val logFileName = remember(viewModel.packageName) {
+        val suffix = viewModel.packageName?.takeIf { it.isNotBlank() } ?: "patch"
+        "patcher-log-$suffix.txt"
+    }
+    val permissionLauncher =
+        rememberLauncherForActivityResult(permissionContract) { granted ->
+            if (granted) {
+                showExportPicker = true
+            }
+        }
+    fun openExportPicker() {
+        if (fs.hasStoragePermission()) {
+            showExportPicker = true
+        } else {
+            permissionLauncher.launch(permissionName)
+        }
+    }
 
     fun onPageBack() = when {
         patcherSucceeded == null -> showDismissConfirmationDialog = true
@@ -217,6 +253,174 @@ fun PatcherScreen(
         )
     }
 
+    if (showLogActionsDialog) {
+        PatchLogActionsDialog(
+            onDismiss = { showLogActionsDialog = false },
+            onCopy = {
+                val clipboard = context.getSystemService(ClipboardManager::class.java)
+                if (clipboard != null) {
+                    val content = viewModel.getLogContent(context)
+                    clipboard.setPrimaryClip(ClipData.newPlainText("Patch log", content))
+                    context.toast(context.getString(R.string.toast_copied_to_clipboard))
+                }
+                showLogActionsDialog = false
+            },
+            onExport = {
+                showLogActionsDialog = false
+                showLogExportPicker = true
+            }
+        )
+    }
+
+    if (showExportPicker) {
+        PathSelectorDialog(
+            roots = storageRoots,
+            onSelect = { path ->
+                if (path == null) {
+                    showExportPicker = false
+                }
+            },
+            fileFilter = ::isAllowedApkFile,
+            allowDirectorySelection = false,
+            fileTypeLabel = ".apk",
+            confirmButtonText = stringResource(R.string.save),
+            onConfirm = { directory ->
+                exportFileDialogState = ExportApkDialogState(directory, exportFileName)
+            }
+        )
+    }
+    if (showLogExportPicker) {
+        PathSelectorDialog(
+            roots = storageRoots,
+            onSelect = { path ->
+                if (path == null) {
+                    showLogExportPicker = false
+                }
+            },
+            fileFilter = { false },
+            allowDirectorySelection = true,
+            fileTypeLabel = ".txt",
+            confirmButtonText = stringResource(R.string.save),
+            onConfirm = { directory ->
+                logExportFileDialogState = LogExportDialogState(directory, logFileName)
+            }
+        )
+    }
+    logExportFileDialogState?.let { state ->
+        ExportLogFileNameDialog(
+            initialName = state.fileName,
+            onDismiss = { logExportFileDialogState = null },
+            onConfirm = { fileName ->
+                val trimmedName = fileName.trim()
+                if (trimmedName.isBlank()) return@ExportLogFileNameDialog
+                logExportFileDialogState = null
+                val target = state.directory.resolve(trimmedName)
+                if (Files.exists(target)) {
+                    pendingLogExportConfirmation = PendingLogExportConfirmation(
+                        directory = state.directory,
+                        fileName = trimmedName
+                    )
+                } else {
+                    logExportInProgress = true
+                    viewModel.exportLogsToPath(context, target) { success ->
+                        logExportInProgress = false
+                        if (success) {
+                            showLogExportPicker = false
+                        }
+                    }
+                }
+            }
+        )
+    }
+    pendingLogExportConfirmation?.let { state ->
+        ConfirmDialog(
+            onDismiss = {
+                pendingLogExportConfirmation = null
+                logExportFileDialogState = LogExportDialogState(state.directory, state.fileName)
+            },
+            onConfirm = {
+                pendingLogExportConfirmation = null
+                logExportInProgress = true
+                viewModel.exportLogsToPath(context, state.directory.resolve(state.fileName)) { success ->
+                    logExportInProgress = false
+                    if (success) {
+                        showLogExportPicker = false
+                    }
+                }
+            },
+            title = stringResource(R.string.export_overwrite_title),
+            description = stringResource(R.string.export_overwrite_description, state.fileName),
+            icon = Icons.Outlined.WarningAmber
+        )
+    }
+    if (logExportInProgress) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text(stringResource(R.string.save_logs)) },
+            text = { Text(stringResource(R.string.patcher_log_exporting)) },
+            icon = { CircularProgressIndicator() },
+            confirmButton = {},
+            dismissButton = {}
+        )
+    }
+    exportFileDialogState?.let { state ->
+        ExportApkFileNameDialog(
+            initialName = state.fileName,
+            onDismiss = { exportFileDialogState = null },
+            onConfirm = { fileName ->
+                val trimmedName = fileName.trim()
+                if (trimmedName.isBlank()) return@ExportApkFileNameDialog
+                exportFileDialogState = null
+                val target = state.directory.resolve(trimmedName)
+                if (Files.exists(target)) {
+                    pendingExportConfirmation = PendingExportConfirmation(
+                        directory = state.directory,
+                        fileName = trimmedName
+                    )
+                } else {
+                    exportInProgress = true
+                    viewModel.exportToPath(target) { success ->
+                        exportInProgress = false
+                        if (success) {
+                            showExportPicker = false
+                        }
+                    }
+                }
+            }
+        )
+    }
+    pendingExportConfirmation?.let { state ->
+        ConfirmDialog(
+            onDismiss = {
+                pendingExportConfirmation = null
+                exportFileDialogState = ExportApkDialogState(state.directory, state.fileName)
+            },
+            onConfirm = {
+                pendingExportConfirmation = null
+                exportInProgress = true
+                viewModel.exportToPath(state.directory.resolve(state.fileName)) { success ->
+                    exportInProgress = false
+                    if (success) {
+                        showExportPicker = false
+                    }
+                }
+            },
+            title = stringResource(R.string.export_overwrite_title),
+            description = stringResource(R.string.export_overwrite_description, state.fileName),
+            icon = Icons.Outlined.WarningAmber
+        )
+    }
+    if (exportInProgress) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text(stringResource(R.string.save_apk)) },
+            text = { Text(stringResource(R.string.patcher_step_group_saving)) },
+            icon = { CircularProgressIndicator() },
+            confirmButton = {},
+            dismissButton = {}
+        )
+    }
+
     viewModel.packageInstallerStatus?.let {
         if (!viewModel.shouldSuppressPackageInstallerDialog()) {
             InstallerStatusDialog(it, viewModel, viewModel::dismissPackageInstallerDialog)
@@ -237,6 +441,44 @@ fun PatcherScreen(
             },
             dismissButton = {
                 TextButton(onClick = viewModel::dismissSignatureMismatchPrompt) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+
+    viewModel.fallbackInstallPrompt?.let { prompt ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissFallbackInstallPrompt,
+            title = { Text(stringResource(R.string.installer_fallback_prompt_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = stringResource(R.string.installer_fallback_prompt_failure_label),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = prompt.failureMessage,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.size(4.dp))
+                    Text(
+                        text = stringResource(
+                            R.string.installer_fallback_prompt_fallback_label,
+                            prompt.fallbackLabel
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = viewModel::confirmFallbackInstallPrompt) {
+                    Text(stringResource(R.string.installer_use_fallback))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissFallbackInstallPrompt) {
                     Text(stringResource(R.string.cancel))
                 }
             }
@@ -435,17 +677,17 @@ fun PatcherScreen(
             BottomAppBar(
                 actions = {
                     IconButton(
-                        onClick = { exportApkLauncher.launch(exportFileName) },
+                        onClick = ::openExportPicker,
                         enabled = patcherSucceeded == true
                     ) {
-                        Icon(Icons.Outlined.Save, stringResource(id = R.string.save_apk))
-                    }
-                    IconButton(
-                        onClick = { viewModel.exportLogs(context) },
-                        enabled = patcherSucceeded != null
-                    ) {
-                        Icon(Icons.Outlined.PostAdd, stringResource(id = R.string.save_logs))
-                    }
+                    Icon(Icons.Outlined.Save, stringResource(id = R.string.save_apk))
+                }
+                IconButton(
+                    onClick = { showLogActionsDialog = true },
+                    enabled = patcherSucceeded != null
+                ) {
+                    Icon(Icons.Outlined.PostAdd, stringResource(id = R.string.save_logs))
+                }
                 },
                 floatingActionButton = {
                     AnimatedVisibility(visible = canInstall) {
@@ -484,19 +726,10 @@ fun PatcherScreen(
                 .padding(paddingValues)
                 .fillMaxSize()
         ) {
-            var expandedCategory by rememberSaveable { mutableStateOf<StepCategory?>(null) }
             val expandedCategories = rememberSaveable(
                 saver = snapshotStateSetSaver()
             ) {
                 mutableStateSetOf<StepCategory>()
-            }
-
-            LaunchedEffect(autoCollapsePatcherSteps) {
-                if (autoCollapsePatcherSteps) {
-                    expandedCategory = expandedCategory ?: expandedCategories.firstOrNull()
-                } else {
-                    expandedCategory?.let { expandedCategories.add(it) }
-                }
             }
 
             LinearProgressIndicator(
@@ -516,28 +749,17 @@ fun PatcherScreen(
                     Steps(
                         category = category,
                         steps = steps,
-                        isExpanded = if (autoCollapsePatcherSteps) {
-                            expandedCategory == category
-                        } else {
-                            expandedCategories.contains(category)
-                        },
+                        subStepsById = viewModel.stepSubSteps,
+                        isExpanded = expandedCategories.contains(category),
                         autoExpandRunning = autoExpandRunningSteps,
                         onExpand = {
-                            if (autoCollapsePatcherSteps) {
-                                expandedCategory = category
-                            } else {
-                                expandedCategories.add(category)
-                            }
+                            expandedCategories.add(category)
                         },
                         onClick = {
-                            if (autoCollapsePatcherSteps) {
-                                expandedCategory = if (expandedCategory == category) null else category
+                            if (expandedCategories.contains(category)) {
+                                expandedCategories.remove(category)
                             } else {
-                                if (expandedCategories.contains(category)) {
-                                    expandedCategories.remove(category)
-                                } else {
-                                    expandedCategories.add(category)
-                                }
+                                expandedCategories.add(category)
                             }
                         },
                         autoCollapseCompleted = autoCollapsePatcherSteps
@@ -634,5 +856,179 @@ private fun SavePatchedAppDialog(
             }
         },
         dismissButton = {}
+    )
+}
+
+private data class ExportApkDialogState(
+    val directory: Path,
+    val fileName: String
+)
+
+private data class PendingExportConfirmation(
+    val directory: Path,
+    val fileName: String
+)
+
+private data class LogExportDialogState(
+    val directory: Path,
+    val fileName: String
+)
+
+private data class PendingLogExportConfirmation(
+    val directory: Path,
+    val fileName: String
+)
+
+@Composable
+private fun PatchLogActionsDialog(
+    onDismiss: () -> Unit,
+    onCopy: () -> Unit,
+    onExport: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Outlined.PostAdd, null) },
+        title = { Text(stringResource(R.string.patcher_log_dialog_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = stringResource(R.string.patcher_log_dialog_description),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                ElevatedCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onCopy)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.ContentCopy,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = stringResource(R.string.patcher_log_dialog_copy),
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                text = stringResource(R.string.patcher_log_dialog_copy_description),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+                ElevatedCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onExport)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Description,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = stringResource(R.string.patcher_log_dialog_export),
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                text = stringResource(R.string.patcher_log_dialog_export_description),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+        dismissButton = {}
+    )
+}
+
+@Composable
+private fun ExportApkFileNameDialog(
+    initialName: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var fileName by rememberSaveable(initialName) { mutableStateOf(initialName) }
+    val trimmedName = fileName.trim()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(trimmedName) },
+                enabled = trimmedName.isNotEmpty()
+            ) {
+                Text(stringResource(R.string.save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+        title = { Text(stringResource(R.string.save_apk)) },
+        text = {
+            OutlinedTextField(
+                value = fileName,
+                onValueChange = { fileName = it },
+                label = { Text(stringResource(R.string.file_name)) },
+                placeholder = { Text(stringResource(R.string.dialog_input_placeholder)) }
+            )
+        }
+    )
+}
+
+@Composable
+private fun ExportLogFileNameDialog(
+    initialName: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var fileName by rememberSaveable(initialName) { mutableStateOf(initialName) }
+    val trimmedName = fileName.trim()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(trimmedName) },
+                enabled = trimmedName.isNotEmpty()
+            ) {
+                Text(stringResource(R.string.save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+        title = { Text(stringResource(R.string.save_logs)) },
+        text = {
+            OutlinedTextField(
+                value = fileName,
+                onValueChange = { fileName = it },
+                label = { Text(stringResource(R.string.file_name)) },
+                placeholder = { Text(stringResource(R.string.dialog_input_placeholder)) }
+            )
+        }
     )
 }

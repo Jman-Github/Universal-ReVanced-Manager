@@ -65,10 +65,13 @@ import app.revanced.manager.data.platform.NetworkInfo
 import app.revanced.manager.data.room.apps.downloaded.DownloadedApp
 import app.revanced.manager.data.room.apps.installed.InstallType
 import app.revanced.manager.data.room.apps.installed.InstalledApp
+import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.network.downloader.LoadedDownloaderPlugin
 import app.revanced.manager.ui.component.AlertDialogExtended
 import app.revanced.manager.ui.component.AppInfo
 import app.revanced.manager.ui.component.AppTopBar
+import app.revanced.manager.ui.component.AppliedPatchBundleUi
+import app.revanced.manager.ui.component.AppliedPatchesDialog
 import app.revanced.manager.ui.component.ColumnWithScrollbar
 import app.revanced.manager.ui.component.LoadingIndicator
 import app.revanced.manager.ui.component.NotificationCard
@@ -87,6 +90,7 @@ import app.revanced.manager.util.enabled
 import app.revanced.manager.util.isAllowedApkFile
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.transparentListItemColors
+import java.util.Locale
 import java.io.File
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -102,6 +106,7 @@ fun SelectedAppInfoScreen(
 ) {
     val context = LocalContext.current
     val networkInfo = koinInject<NetworkInfo>()
+    val patchBundleRepository: PatchBundleRepository = koinInject()
     val networkConnected = remember { networkInfo.isConnected() }
     val networkMetered = remember { !networkInfo.isUnmetered() }
 
@@ -114,16 +119,39 @@ fun SelectedAppInfoScreen(
     val preferredBundleVersion by vm.preferredBundleVersionFlow.collectAsStateWithLifecycle(null)
     val bundleRecommendationDetails by vm.bundleRecommendationDetailsFlow.collectAsStateWithLifecycle(emptyList())
     var showBundleRecommendationDialog by rememberSaveable { mutableStateOf(false) }
+    var showMixedBundleDialog by rememberSaveable { mutableStateOf(false) }
+    var showPatchSummaryDialog by rememberSaveable { mutableStateOf(false) }
 
     val allowIncompatiblePatches by vm.prefs.disablePatchVersionCompatCheck.getAsState()
     val suggestedVersionSafeguard by vm.prefs.suggestedVersionSafeguard.getAsState()
+    val showPatchSummaryDialogSetting by vm.prefs.showPatchSelectionSummary.getAsState()
     val bundleRecommendationsEnabled = allowIncompatiblePatches && !suggestedVersionSafeguard
     val patches = vm.getPatches(bundles, allowIncompatiblePatches)
     val selectedPatchCount = patches.values.sumOf { it.size }
     val downloadedApps by vm.downloadedApps.collectAsStateWithLifecycle(emptyList())
-    val resolveNavigationVersion: (SelectedApp) -> SelectedApp = remember(downloadedApps, vm.selectedAppInfo, vm.selectedApp) {
+    val resolveNavigationVersion: (SelectedApp) -> SelectedApp = remember(
+        downloadedApps,
+        vm.selectedAppInfo,
+        vm.selectedApp,
+        selectedBundleOverride,
+        preferredBundleVersion,
+        bundleTargetsAllVersions,
+        selectedBundleUid
+    ) {
         { app ->
-            val versionOverride = vm.selectedAppInfo?.versionName?.takeUnless { it.isNullOrBlank() }
+            val preferredVersion = if (bundleTargetsAllVersions && selectedBundleUid != null) {
+                null
+            } else {
+                selectedBundleOverride?.takeUnless { it.isBlank() }
+                    ?: preferredBundleVersion?.takeUnless { it.isBlank() }
+            }
+            val fileVersion = when (app) {
+                is SelectedApp.Local, is SelectedApp.Download -> app.version?.takeUnless { it.isNullOrBlank() }
+                else -> null
+            }
+            val versionOverride = fileVersion
+                ?: preferredVersion
+                ?: vm.selectedAppInfo?.versionName?.takeUnless { it.isNullOrBlank() }
                 ?: app.version?.takeUnless { it.isNullOrBlank() }
                 ?: downloadedApps.firstOrNull()?.version?.takeUnless { it.isNullOrBlank() }
             if (versionOverride.isNullOrBlank()) return@remember app
@@ -175,6 +203,67 @@ fun SelectedAppInfoScreen(
         )
     }
     val composableScope = rememberCoroutineScope()
+    val selectedPatchSummary = remember(bundles, patches, context) {
+        if (patches.isEmpty()) return@remember emptyList<AppliedPatchBundleUi>()
+        patches.entries.mapNotNull { (bundleUid, patchNames) ->
+            if (patchNames.isEmpty()) return@mapNotNull null
+            val bundle = bundles.firstOrNull { it.uid == bundleUid }
+            val patchInfos = bundle?.patches
+                ?.filter { it.name in patchNames }
+                ?.distinctBy { it.name }
+                ?.sortedBy { it.name }
+                ?: emptyList()
+            val missingNames = patchNames
+                .filterNot { name -> patchInfos.any { it.name == name } }
+                .distinct()
+                .sorted()
+            val fallbackName = if (bundleUid == 0) {
+                context.getString(R.string.patches_name_default)
+            } else {
+                context.getString(R.string.patches_name_fallback)
+            }
+            val title = bundle?.name ?: "$fallbackName (#$bundleUid)"
+
+            AppliedPatchBundleUi(
+                uid = bundleUid,
+                title = title,
+                version = bundle?.version,
+                patchInfos = patchInfos,
+                fallbackNames = missingNames,
+                bundleAvailable = bundle != null
+            )
+        }.sortedBy { it.title.lowercase(Locale.ROOT) }
+    }
+    val selectedPatchOptions = vm.getOptionsFiltered(bundles)
+    val launchPatchFlow: () -> Unit = launch@{
+        if (selectedPatchCount == 0) {
+            context.toast(context.getString(R.string.no_patches_selected))
+            return@launch
+        }
+
+        composableScope.launch {
+            if (patchBundleRepository.selectionHasMixedBundleTypes(patches)) {
+                showMixedBundleDialog = true
+                return@launch
+            }
+            if (!vm.hasSetRequiredOptions(patches)) {
+                val optionsSnapshot = vm.awaitOptions()
+                onRequiredOptions(
+                    vm.selectedApp,
+                    vm.getCustomPatches(bundles, allowIncompatiblePatches),
+                    optionsSnapshot
+                )
+                return@launch
+            }
+
+            if (showPatchSummaryDialogSetting) {
+                showPatchSummaryDialog = true
+                return@launch
+            }
+
+            onPatchClick()
+        }
+    }
 
     val error by vm.errorFlow.collectAsStateWithLifecycle(null)
     val profileLaunchState by vm.profileLaunchState.collectAsStateWithLifecycle(null)
@@ -186,8 +275,13 @@ fun SelectedAppInfoScreen(
         if (!vm.shouldAutoLaunchProfile()) return@LaunchedEffect
         val appSource = vm.selectedApp
         if (appSource is SelectedApp.Search) return@LaunchedEffect
+        val autoPatch = vm.shouldAutoPatchProfile()
         vm.markProfileAutoLaunchConsumed()
-        onPatchSelectorClick(resolveNavigationVersion(appSource), launchState.selection, launchState.options)
+        if (autoPatch) {
+            launchPatchFlow()
+        } else {
+            onPatchSelectorClick(resolveNavigationVersion(appSource), launchState.selection, launchState.options)
+        }
     }
 
     Scaffold(
@@ -209,27 +303,7 @@ fun SelectedAppInfoScreen(
                         stringResource(R.string.patch)
                     )
                 },
-                onClick = patchClick@{
-                    if (selectedPatchCount == 0) {
-                        context.toast(context.getString(R.string.no_patches_selected))
-
-                        return@patchClick
-                    }
-
-                    composableScope.launch {
-                        if (!vm.hasSetRequiredOptions(patches)) {
-                            val optionsSnapshot = vm.awaitOptions()
-                            onRequiredOptions(
-                                vm.selectedApp,
-                                vm.getCustomPatches(bundles, allowIncompatiblePatches),
-                                optionsSnapshot
-                            )
-                            return@launch
-                        }
-
-                        onPatchClick()
-                    }
-                }
+                onClick = { launchPatchFlow() }
             )
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -410,6 +484,35 @@ fun SelectedAppInfoScreen(
             onDismissRequest = { showBundleRecommendationDialog = false }
         )
     }
+
+    if (showMixedBundleDialog) {
+        AlertDialogExtended(
+            onDismissRequest = { showMixedBundleDialog = false },
+            confirmButton = {
+                TextButton(onClick = { showMixedBundleDialog = false }) {
+                    Text(stringResource(R.string.close))
+                }
+            },
+            title = { Text(stringResource(R.string.mixed_patch_bundles_title)) },
+            text = { Text(stringResource(R.string.mixed_patch_bundles_description)) }
+        )
+    }
+
+    if (showPatchSummaryDialog) {
+        AppliedPatchesDialog(
+            bundles = selectedPatchSummary,
+            onDismissRequest = { showPatchSummaryDialog = false },
+            titleRes = R.string.patch_confirmation_title,
+            sectionHeaderRes = R.string.selected_patches_title,
+            sectionSubtitleRes = R.string.patch_confirmation_subtitle,
+            optionsByBundle = selectedPatchOptions,
+            confirmTextRes = R.string.continue_,
+            onConfirm = {
+                showPatchSummaryDialog = false
+                onPatchClick()
+            }
+        )
+    }
 }
 
 @Composable
@@ -500,6 +603,7 @@ private fun BundleVersionSelectionDialog(
             onDismissRequest = { otherVersionsTarget = null }
         )
     }
+
 }
 
 @Composable

@@ -14,6 +14,7 @@ sealed class ProgressEvent : Parcelable {
         val current: Long? = null,
         val total: Long? = null,
         val message: String? = null,
+        val subSteps: List<String>? = null,
     ) : ProgressEvent()
 
     data class Completed(
@@ -62,11 +63,27 @@ inline fun <T> runStep(
     onEvent: (ProgressEvent) -> Unit,
     block: () -> T,
 ): T = try {
+    val startTimeNs = System.nanoTime()
+    val startMemMb = usedMemoryMb()
     onEvent(ProgressEvent.Started(stepId))
     val value = block()
+    val elapsedMs = (System.nanoTime() - startTimeNs) / 1_000_000
+    val endMemMb = usedMemoryMb()
+    val deltaMemMb = endMemMb - startMemMb
+    android.util.Log.d(
+        "PatcherProgress",
+        "step=${stepId::class.java.simpleName} duration=${elapsedMs}ms mem=${endMemMb}MB delta=${deltaMemMb}MB"
+    )
     onEvent(ProgressEvent.Completed(stepId))
     value
 } catch (error: Exception) {
     onEvent(ProgressEvent.Failed(stepId, error.toRemoteError()))
     throw error
+}
+
+@PublishedApi
+internal fun usedMemoryMb(): Long {
+    val runtime = Runtime.getRuntime()
+    val usedBytes = runtime.totalMemory() - runtime.freeMemory()
+    return usedBytes / (1024 * 1024)
 }

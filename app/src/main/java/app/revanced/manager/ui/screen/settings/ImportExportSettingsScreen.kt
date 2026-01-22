@@ -3,6 +3,12 @@ package app.revanced.manager.ui.screen.settings
 import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.annotation.StringRes
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -15,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -90,6 +97,7 @@ fun ImportExportSettingsScreen(
     var activeExportPicker by rememberSaveable { mutableStateOf<ExportPicker?>(null) }
     var exportFileDialogState by remember { mutableStateOf<ExportFileDialogState?>(null) }
     var pendingExportConfirmation by remember { mutableStateOf<PendingExportConfirmation?>(null) }
+    var exportInProgress by rememberSaveable { mutableStateOf(false) }
     val permissionLauncher = rememberLauncherForActivityResult(permissionContract) { granted ->
         val pendingImport = pendingImportPicker
         val pendingExport = pendingExportPicker
@@ -124,15 +132,21 @@ fun ImportExportSettingsScreen(
         }
     }
     val runExport = { picker: ExportPicker, target: Path ->
+        exportInProgress = true
         val job = when (picker) {
             ExportPicker.Keystore -> vm.exportKeystore(target)
             ExportPicker.PatchBundles -> vm.exportPatchBundles(target)
             ExportPicker.PatchProfiles -> vm.exportPatchProfiles(target)
             ExportPicker.ManagerSettings -> vm.exportManagerSettings(target)
-            ExportPicker.PatchSelection -> vm.executeSelectionExport(target)
+            ExportPicker.PatchSelection -> when (vm.selectionAction) {
+                ImportExportViewModel.SelectionAction.ExportAllBundles ->
+                    vm.executeSelectionExportAllBundles(target)
+                else -> vm.executeSelectionExport(target)
+            }
         }
         coroutineScope.launch {
             job.join()
+            exportInProgress = false
             activeExportPicker = null
         }
     }
@@ -151,18 +165,33 @@ fun ImportExportSettingsScreen(
     }
 
     vm.selectionAction?.let { action ->
-        if (vm.selectedBundle == null) {
-            BundleSelector(patchBundles) {
-                if (it == null) {
-                    vm.clearSelectionAction()
-                } else {
-                    vm.selectBundle(it)
-                    when (action) {
-                        ImportExportViewModel.SelectionAction.Import -> {
-                            openImportPicker(ImportPicker.PatchSelection)
-                        }
-                        ImportExportViewModel.SelectionAction.Export -> {
-                            openExportPicker(ExportPicker.PatchSelection)
+        when (action) {
+            ImportExportViewModel.SelectionAction.ExportAllBundles -> {
+                if (activeExportPicker == null && !exportInProgress) {
+                    openExportPicker(ExportPicker.PatchSelection)
+                }
+            }
+            ImportExportViewModel.SelectionAction.ImportAllBundles -> {
+                if (activeImportPicker == null) {
+                    openImportPicker(ImportPicker.PatchSelection)
+                }
+            }
+            else -> {
+                if (vm.selectedBundle == null) {
+                    BundleSelector(patchBundles) {
+                        if (it == null) {
+                            vm.clearSelectionAction()
+                        } else {
+                            vm.selectBundle(it)
+                            when (action) {
+                                ImportExportViewModel.SelectionAction.ImportBundle -> {
+                                    openImportPicker(ImportPicker.PatchSelection)
+                                }
+                                ImportExportViewModel.SelectionAction.ExportBundle -> {
+                                    openExportPicker(ExportPicker.PatchSelection)
+                                }
+                                else -> {}
+                            }
                         }
                     }
                 }
@@ -173,10 +202,10 @@ fun ImportExportSettingsScreen(
     if (vm.showCredentialsDialog) {
         KeystoreCredentialsDialog(
             onDismissRequest = vm::cancelKeystoreImport,
-            onSubmit = { alias, pass ->
+            onSubmit = { alias, storePass, keyPass ->
                 vm.viewModelScope.launch {
                     uiSafe(context, R.string.failed_to_import_keystore, "Failed to import keystore") {
-                        val result = vm.tryKeystoreImport(alias, pass)
+                        val result = vm.tryKeystoreImport(alias, storePass, keyPass)
                         if (!result) context.toast(context.getString(R.string.import_keystore_wrong_credentials))
                     }
                 }
@@ -213,6 +242,16 @@ fun ImportExportSettingsScreen(
             title = stringResource(R.string.export_overwrite_title),
             description = stringResource(R.string.export_overwrite_description, state.fileName),
             icon = Icons.Outlined.WarningAmber
+        )
+    }
+    if (exportInProgress) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text(stringResource(R.string.export)) },
+            text = { Text(stringResource(R.string.patcher_step_group_saving)) },
+            icon = { CircularProgressIndicator() },
+            confirmButton = {},
+            dismissButton = {}
         )
     }
 
@@ -257,7 +296,11 @@ fun ImportExportSettingsScreen(
                             ImportPicker.PatchBundles -> vm.importPatchBundles(path)
                             ImportPicker.PatchProfiles -> vm.importPatchProfiles(path)
                             ImportPicker.ManagerSettings -> vm.importManagerSettings(path)
-                            ImportPicker.PatchSelection -> vm.executeSelectionImport(path)
+                            ImportPicker.PatchSelection -> when (vm.selectionAction) {
+                                ImportExportViewModel.SelectionAction.ImportAllBundles ->
+                                    vm.executeSelectionImportAllBundles(path)
+                                else -> vm.executeSelectionImport(path)
+                            }
                         }
                     },
                     fileFilter = fileFilter,
@@ -326,54 +369,74 @@ fun ImportExportSettingsScreen(
                 )
             }
 
-            importProgress?.let { progress ->
-                val subtitleParts = buildList {
-                    val total = progress.total.coerceAtLeast(1)
-                    val stepLabel = if (progress.isStepBased) {
-                        val step = (progress.processed + 1).coerceAtMost(total)
-                        stringResource(R.string.import_patch_bundles_banner_steps, step, total)
-                    } else {
-                        stringResource(R.string.import_patch_bundles_banner_subtitle, progress.processed, total)
-                    }
-                    add(stepLabel)
-                    val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList
-                    val phaseText = if (progress.isStepBased) {
-                        when (progress.phase) {
-                            BundleImportPhase.Downloading -> "Copying bundle"
-                            BundleImportPhase.Processing -> "Writing bundle"
-                            BundleImportPhase.Finalizing -> "Finalizing import"
+            AnimatedVisibility(
+                visible = importProgress != null,
+                enter = fadeIn(animationSpec = spring(stiffness = 400f)) +
+                    expandVertically(
+                        expandFrom = Alignment.Top,
+                        animationSpec = spring(stiffness = 400f)
+                    ),
+                exit = fadeOut(animationSpec = spring(stiffness = 400f)) +
+                    shrinkVertically(
+                        shrinkTowards = Alignment.Top,
+                        animationSpec = spring(stiffness = 400f)
+                    )
+            ) {
+                importProgress?.let { progress ->
+                    val subtitleParts = buildList {
+                        val total = progress.total.coerceAtLeast(1)
+                        val stepLabel = if (progress.isStepBased) {
+                            val step = (progress.processed + 1).coerceAtMost(total)
+                            stringResource(R.string.import_patch_bundles_banner_steps, step, total)
+                        } else {
+                            stringResource(R.string.import_patch_bundles_banner_subtitle, progress.processed, total)
                         }
-                    } else {
-                        when (progress.phase) {
-                            BundleImportPhase.Processing -> "Processing"
-                            BundleImportPhase.Downloading -> "Downloading"
-                            BundleImportPhase.Finalizing -> "Finalizing"
-                        }
-                    }
-                    val detail = buildString {
-                        append(phaseText)
-                        append(": ")
-                        append(name)
-                        if (progress.bytesTotal?.takeIf { it > 0L } != null) {
-                            append(" (")
-                            append(Formatter.formatShortFileSize(context, progress.bytesRead))
-                            progress.bytesTotal?.takeIf { it > 0L }?.let { total ->
-                                append("/")
-                                append(Formatter.formatShortFileSize(context, total))
+                        add(stepLabel)
+                        val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList
+                        val phaseText = if (progress.isStepBased) {
+                            when (progress.phase) {
+                                BundleImportPhase.Downloading ->
+                                    stringResource(R.string.bundle_import_phase_copying)
+                                BundleImportPhase.Processing ->
+                                    stringResource(R.string.bundle_import_phase_writing)
+                                BundleImportPhase.Finalizing ->
+                                    stringResource(R.string.bundle_import_phase_finalizing)
                             }
-                            append(")")
+                        } else {
+                            when (progress.phase) {
+                                BundleImportPhase.Processing ->
+                                    stringResource(R.string.bundle_import_phase_processing)
+                                BundleImportPhase.Downloading ->
+                                    stringResource(R.string.bundle_import_phase_downloading)
+                                BundleImportPhase.Finalizing ->
+                                    stringResource(R.string.bundle_import_phase_finalizing_short)
+                            }
                         }
+                        val detail = buildString {
+                            append(phaseText)
+                            append(": ")
+                            append(name)
+                            if (progress.bytesTotal?.takeIf { it > 0L } != null) {
+                                append(" (")
+                                append(Formatter.formatShortFileSize(context, progress.bytesRead))
+                                progress.bytesTotal?.takeIf { it > 0L }?.let { total ->
+                                    append("/")
+                                    append(Formatter.formatShortFileSize(context, total))
+                                }
+                                append(")")
+                            }
+                        }
+                        add(detail)
                     }
-                    add(detail)
+                    DownloadProgressBanner(
+                        title = stringResource(R.string.import_patch_bundles_banner_title),
+                        subtitle = subtitleParts.joinToString(" - "),
+                        progress = progress.ratio,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
                 }
-                DownloadProgressBanner(
-                    title = stringResource(R.string.import_patch_bundles_banner_title),
-                    subtitle = subtitleParts.joinToString(" • "),
-                    progress = progress.ratio,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                )
             }
 
             GroupHeader(stringResource(R.string.import_))
@@ -400,11 +463,22 @@ fun ImportExportSettingsScreen(
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
-                    GroupItem(
+                    ExpandableSettingListItem(
+                        headlineContent = stringResource(R.string.import_patch_selection),
+                        supportingContent = stringResource(R.string.import_patch_selection_description),
                         modifier = highlightModifier,
-                        onClick = vm::importSelection,
-                        headline = R.string.import_patch_selection,
-                        description = R.string.import_patch_selection_description
+                        expandableContent = {
+                            GroupItem(
+                                onClick = vm::importSelectionForBundle,
+                                headline = R.string.import_patch_selection_bundle,
+                                description = R.string.import_patch_selection_bundle_description
+                            )
+                            GroupItem(
+                                onClick = vm::importSelectionAllBundles,
+                                headline = R.string.import_patch_selection_all,
+                                description = R.string.import_patch_selection_all_description
+                            )
+                        }
                     )
                 }
                 ExpressiveSettingsDivider()
@@ -482,11 +556,23 @@ fun ImportExportSettingsScreen(
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
-                    GroupItem(
+                    ExpandableSettingListItem(
+                        headlineContent = stringResource(R.string.export_patch_selection),
+                        supportingContent = stringResource(R.string.export_patch_selection_description),
                         modifier = highlightModifier,
-                        onClick = vm::exportSelection,
-                        headline = R.string.export_patch_selection,
-                        description = R.string.export_patch_selection_description
+                        expandableContent = {
+                            GroupItem(
+                                onClick = vm::exportSelectionForBundle,
+                                headline = R.string.export_patch_selection_bundle,
+                                description = R.string.export_patch_selection_bundle_description
+                            )
+
+                            GroupItem(
+                                onClick = vm::exportSelectionAllBundles,
+                                headline = R.string.export_patch_selection_all,
+                                description = R.string.export_patch_selection_all_description
+                            )
+                        }
                     )
                 }
                 ExpressiveSettingsDivider()
@@ -699,7 +785,7 @@ private fun PackageSelector(packages: Set<String>, onFinish: (String?) -> Unit) 
 
     LaunchedEffect(noPackages) {
         if (noPackages) {
-            context.toast("No packages available.")
+            context.toast(context.getString(R.string.no_packages_available))
             onFinish(null)
         }
     }
@@ -721,7 +807,7 @@ private fun PackageSelector(packages: Set<String>, onFinish: (String?) -> Unit) 
                     .fillMaxWidth()
             ) {
                 Text(
-                    text = "Select package",
+                    text = stringResource(R.string.select_package),
                     style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.onSurface
                 )
@@ -768,17 +854,18 @@ private fun GroupItem(
 @Composable
 fun KeystoreCredentialsDialog(
     onDismissRequest: () -> Unit,
-    onSubmit: (String, String) -> Unit
+    onSubmit: (String, String, String) -> Unit
 ) {
     var alias by rememberSaveable { mutableStateOf("") }
-    var pass by rememberSaveable { mutableStateOf("") }
+    var storePass by rememberSaveable { mutableStateOf("") }
+    var keyPass by rememberSaveable { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismissRequest,
         confirmButton = {
             TextButton(
                 onClick = {
-                    onSubmit(alias, pass)
+                    onSubmit(alias, storePass, keyPass)
                 }
             ) {
                 Text(stringResource(R.string.import_keystore_dialog_button))
@@ -815,9 +902,14 @@ fun KeystoreCredentialsDialog(
                     label = { Text(stringResource(R.string.import_keystore_dialog_alias_field)) }
                 )
                 PasswordField(
-                    value = pass,
-                    onValueChange = { pass = it },
+                    value = storePass,
+                    onValueChange = { storePass = it },
                     label = { Text(stringResource(R.string.import_keystore_dialog_password_field)) }
+                )
+                PasswordField(
+                    value = keyPass,
+                    onValueChange = { keyPass = it },
+                    label = { Text(stringResource(R.string.import_keystore_dialog_key_password_field)) }
                 )
             }
         }

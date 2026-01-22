@@ -6,9 +6,11 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -18,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -27,10 +30,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.revanced.manager.R
-import app.revanced.manager.network.dto.ExternalBundleSnapshot
+import app.revanced.manager.network.dto.ExternalBundlePatch
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
-import app.revanced.manager.ui.component.LoadingIndicator
+import app.revanced.manager.ui.component.ShimmerBox
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsCard
 import app.revanced.manager.ui.viewmodel.BundleDiscoveryViewModel
 import org.koin.androidx.compose.koinViewModel
@@ -48,6 +51,13 @@ fun PatchBundleDiscoveryPatchesScreen(
     val errorMessage = viewModel.errorMessage
     val bundle = remember(bundles, bundleId) {
         bundles?.firstOrNull { it.bundleId == bundleId }
+    }
+    val patches = viewModel.getPatches(bundleId)
+    val patchesLoading = viewModel.isPatchesLoading(bundleId)
+    val patchesError = viewModel.getPatchesError(bundleId)
+
+    LaunchedEffect(bundleId) {
+        viewModel.loadPatches(bundleId)
     }
 
     val title = bundle?.let {
@@ -74,42 +84,56 @@ fun PatchBundleDiscoveryPatchesScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             when {
-                isLoading && bundle == null -> {
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            LoadingIndicator()
-                        }
+                (isLoading && bundle == null) || patchesLoading -> {
+                    items(4) {
+                        PatchBundlePatchPlaceholderItem()
                     }
                 }
 
-                bundle == null -> {
+                bundle == null || patchesError != null -> {
                     item {
-                        Text(
-                            text = errorMessage ?: stringResource(R.string.patch_bundle_discovery_patches_empty),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        PatchBundlePatchesEmptyState(
+                            message = patchesError ?: errorMessage ?: stringResource(
+                                R.string.patch_bundle_discovery_patches_empty
+                            )
                         )
                     }
                 }
 
-                bundle.patches.isEmpty() -> {
+                patches.isNullOrEmpty() -> {
                     item {
-                        Text(
-                            text = stringResource(R.string.patch_bundle_discovery_patches_empty),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        PatchBundlePatchesEmptyState(
+                            message = stringResource(R.string.patch_bundle_discovery_patches_empty)
                         )
                     }
                 }
 
                 else -> {
-                    items(bundle.patches.size, key = { index -> "${bundle.bundleId}-$index" }) { index ->
-                        PatchBundlePatchItem(bundle, index)
+                    items(patches.size, key = { index -> "${bundle.bundleId}-$index" }) { index ->
+                        PatchBundlePatchItem(patches, index)
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PatchBundlePatchPlaceholderItem() {
+    ExpressiveSettingsCard(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(16.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            ShimmerBox(modifier = Modifier.fillMaxWidth(0.7f).height(18.dp))
+            ShimmerBox(modifier = Modifier.fillMaxWidth(0.9f).height(12.dp))
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ShimmerBox(modifier = Modifier.size(width = 120.dp, height = 28.dp))
+                ShimmerBox(modifier = Modifier.size(width = 100.dp, height = 28.dp))
+                ShimmerBox(modifier = Modifier.size(width = 140.dp, height = 28.dp))
             }
         }
     }
@@ -118,10 +142,10 @@ fun PatchBundleDiscoveryPatchesScreen(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PatchBundlePatchItem(
-    bundle: ExternalBundleSnapshot,
+    patches: List<ExternalBundlePatch>,
     index: Int,
 ) {
-    val patch = bundle.patches[index]
+    val patch = patches[index]
     ExpressiveSettingsCard(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(16.dp)
@@ -160,6 +184,18 @@ private fun PatchBundlePatchItem(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun PatchBundlePatchesEmptyState(message: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        PatchBundlePatchPlaceholderItem()
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

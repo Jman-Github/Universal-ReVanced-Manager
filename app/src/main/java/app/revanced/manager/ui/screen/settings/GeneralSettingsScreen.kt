@@ -7,6 +7,8 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +20,7 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -69,6 +72,7 @@ import app.revanced.manager.ui.component.GroupHeader
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsCard
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsDivider
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsItem
+import app.revanced.manager.ui.component.settings.ExpressiveSettingsSwitch
 import app.revanced.manager.ui.component.settings.SettingsSearchHighlight
 import app.revanced.manager.ui.model.navigation.Settings
 import app.revanced.manager.ui.theme.Theme
@@ -103,6 +107,7 @@ fun GeneralSettingsScreen(
     val dynamicColorEnabled by prefs.dynamicColor.getAsState()
     val themePresetSelectionEnabled by prefs.themePresetSelectionEnabled.getAsState()
     val selectedThemePresetName by prefs.themePresetSelectionName.getAsState()
+    val pureBlackOnSystemDark by prefs.pureBlackOnSystemDark.getAsState()
     val supportsDynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
     LaunchedEffect(searchTarget) {
@@ -127,9 +132,11 @@ fun GeneralSettingsScreen(
             LanguageOption("system", R.string.language_option_system),
             LanguageOption("en", R.string.language_option_english),
             LanguageOption("zh-CN", R.string.language_option_chinese_simplified),
-            // From PR #38: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/38
+            LanguageOption("in", R.string.language_option_indonesian),
+            LanguageOption("hi", R.string.language_option_hindi),
+            LanguageOption("gu", R.string.language_option_gujarati),
+            LanguageOption("pt-BR", R.string.language_option_portuguese_brazil),
             LanguageOption("vi", R.string.language_option_vietnamese),
-            // From PR #42: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/42
             LanguageOption("ko", R.string.language_option_korean),
             LanguageOption("ja", R.string.language_option_japanese),
             LanguageOption("ru", R.string.language_option_russian),
@@ -321,6 +328,27 @@ fun GeneralSettingsScreen(
                         },
                         enabled = canAdjustAccentColor,
                         onClick = { showAccentPicker = true }
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.pure_black_follow_system,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(R.string.pure_black_follow_system),
+                        supportingContent = stringResource(R.string.pure_black_follow_system_description),
+                        trailingContent = {
+                            ExpressiveSettingsSwitch(
+                                checked = pureBlackOnSystemDark,
+                                onCheckedChange = viewModel::setPureBlackOnSystemDark,
+                                enabled = theme == Theme.SYSTEM
+                            )
+                        },
+                        enabled = theme == Theme.SYSTEM,
+                        onClick = { viewModel.setPureBlackOnSystemDark(!pureBlackOnSystemDark) }
                     )
                 }
             }
@@ -530,6 +558,7 @@ private fun LanguageDialog(
         onDismissRequest = onDismiss,
         confirmButton = {},
         text = {
+            val scrollState = rememberScrollState()
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     text = stringResource(R.string.language_dialog_title),
@@ -538,25 +567,32 @@ private fun LanguageDialog(
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center
                 )
-                options.forEach { option ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { onSelect(option.code) }
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = option.code == selectedCode,
-                            onClick = { onSelect(option.code) }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = stringResource(option.labelRes),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = 360.dp)
+                        .verticalScroll(scrollState),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    options.forEach { option ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { onSelect(option.code) }
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = option.code == selectedCode,
+                                onClick = { onSelect(option.code) }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = stringResource(option.labelRes),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
                 TextButton(

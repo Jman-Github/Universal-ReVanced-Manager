@@ -19,9 +19,12 @@ import android.widget.Toast
 import androidx.activity.result.ActivityResult
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.autoSaver
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
@@ -62,6 +65,7 @@ import app.revanced.manager.ui.model.SelectedApp
 import app.revanced.manager.ui.model.State
 import app.revanced.manager.ui.model.Step
 import app.revanced.manager.ui.model.StepCategory
+import app.revanced.manager.ui.model.StepDetail
 import app.revanced.manager.ui.model.withState
 import app.revanced.manager.ui.model.navigation.Patcher
 import app.revanced.manager.util.PM
@@ -105,7 +109,11 @@ import ru.solrudev.ackpine.uninstaller.UninstallFailure
 import ru.solrudev.ackpine.uninstaller.createSession
 import java.io.File
 import java.io.IOException
+import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.StandardCopyOption
+import java.nio.file.StandardOpenOption
 import java.time.Duration
 import java.util.UUID
 
@@ -147,6 +155,11 @@ class PatcherViewModel(
     private var deferUninstallProgressToasts = false
     private var pendingSignatureMismatchPlan: InstallerManager.InstallPlan? = null
     private var pendingSignatureMismatchPackage: String? = null
+    private var lastInstallToken: InstallerManager.Token? = null
+    private var lastInstallTarget: InstallerManager.InstallTarget? = null
+    private var lastInstallExpectedPackage: String? = null
+    private var lastInstallSourceLabel: String? = null
+    private var pendingInstallFailureMessage: String? = null
 
     private var installedApp: InstalledApp? = null
     private val selectedApp = input.selectedApp
@@ -255,18 +268,18 @@ fun proceedAfterMissingPatchWarning() {
     }
 }
 
-fun removeMissingPatchesAndStart() {
-    val warning = missingPatchWarning ?: return
-    viewModelScope.launch {
-        val scopedBundles = gatherScopedBundles()
-        val sanitizedSelection = sanitizeSelection(appliedSelection, scopedBundles)
-        val sanitizedOptions = sanitizeOptions(appliedOptions, scopedBundles)
-        appliedSelection = sanitizedSelection
-        appliedOptions = sanitizedOptions
-        missingPatchWarning = null
-        startWorker()
+    fun removeMissingPatchesAndStart() {
+        val warning = missingPatchWarning ?: return
+        viewModelScope.launch {
+            val scopedBundles = gatherScopedBundles()
+            val sanitizedSelection = sanitizeSelection(appliedSelection, scopedBundles)
+            val sanitizedOptions = sanitizeOptions(appliedOptions, scopedBundles)
+            appliedSelection = sanitizedSelection
+            appliedOptions = sanitizedOptions
+            missingPatchWarning = null
+            startWorker()
+        }
     }
-}
 
     private var currentActivityRequest: Pair<CompletableDeferred<Boolean>, String>? by mutableStateOf(
         null
@@ -279,9 +292,102 @@ fun removeMissingPatchesAndStart() {
 
     var installFailureMessage by mutableStateOf<String?>(null)
         private set
+    var fallbackInstallPrompt by mutableStateOf<FallbackInstallPrompt?>(null)
+        private set
     private var suppressFailureAfterSuccess = false
     private var lastSuccessInstallType: InstallType? = null
     private var lastSuccessAtMs: Long = 0L
+
+    private fun tokensEqual(a: InstallerManager.Token, b: InstallerManager.Token): Boolean = when {
+        a === b -> true
+        a is InstallerManager.Token.Component && b is InstallerManager.Token.Component ->
+            a.componentName == b.componentName
+        else -> false
+    }
+
+    private fun recordInstallPlan(
+        token: InstallerManager.Token,
+        target: InstallerManager.InstallTarget,
+        expectedPackage: String?,
+        sourceLabel: String?
+    ) {
+        lastInstallToken = token
+        lastInstallTarget = target
+        lastInstallExpectedPackage = expectedPackage
+        lastInstallSourceLabel = sourceLabel
+    }
+
+    private fun recordInstallPlan(
+        plan: InstallerManager.InstallPlan,
+        expectedPackage: String?,
+        sourceLabel: String?
+    ) {
+        val token = when (plan) {
+            is InstallerManager.InstallPlan.Internal -> InstallerManager.Token.Internal
+            is InstallerManager.InstallPlan.Mount -> InstallerManager.Token.AutoSaved
+            is InstallerManager.InstallPlan.Shizuku -> InstallerManager.Token.Shizuku
+            is InstallerManager.InstallPlan.External -> plan.token
+        }
+        val target = when (plan) {
+            is InstallerManager.InstallPlan.Internal -> plan.target
+            is InstallerManager.InstallPlan.Mount -> plan.target
+            is InstallerManager.InstallPlan.Shizuku -> plan.target
+            is InstallerManager.InstallPlan.External -> plan.target
+        }
+        val resolvedPackage = expectedPackage
+            ?: (plan as? InstallerManager.InstallPlan.External)?.expectedPackage
+            ?: lastInstallExpectedPackage
+            ?: packageName
+        recordInstallPlan(token, target, resolvedPackage, sourceLabel)
+    }
+
+    private fun buildFallbackPrompt(message: String): FallbackInstallPrompt? {
+        val target = lastInstallTarget ?: return null
+        val lastToken = lastInstallToken ?: return null
+        val primaryToken = installerManager.getPrimaryToken()
+        if (!tokensEqual(primaryToken, lastToken)) return null
+        val fallbackToken = installerManager.getFallbackToken()
+        if (fallbackToken == InstallerManager.Token.None) return null
+        if (tokensEqual(primaryToken, fallbackToken)) return null
+        val fallbackEntry = installerManager.describeEntry(fallbackToken, target) ?: return null
+        if (!fallbackEntry.availability.available) return null
+        val expectedPackage = lastInstallExpectedPackage ?: packageName
+        val plan = installerManager.resolvePlanForToken(
+            token = fallbackToken,
+            target = target,
+            sourceFile = outputFile,
+            expectedPackage = expectedPackage,
+            sourceLabel = lastInstallSourceLabel
+        ) ?: return null
+        if (plan is InstallerManager.InstallPlan.Internal && fallbackToken is InstallerManager.Token.Component) {
+            return null
+        }
+        return FallbackInstallPrompt(
+            failureMessage = message,
+            fallbackLabel = fallbackEntry.label,
+            fallbackToken = fallbackToken,
+            target = target
+        )
+    }
+
+    private fun cleanupFailedInstall() {
+        updateInstallingState(false)
+        stopInstallProgressToasts()
+        pendingExternalInstall?.let(installerManager::cleanup)
+        pendingExternalInstall = null
+        externalInstallBaseline = null
+        externalInstallStartTime = null
+        externalPackageWasPresentAtStart = false
+        expectedInstallSignature = null
+        baselineInstallSignature = null
+        packageInstallerStatus = null
+    }
+
+    private fun applyInstallFailure(message: String) {
+        installFailureMessage = message
+        installStatus = InstallCompletionStatus.Failure(message)
+        cleanupFailedInstall()
+    }
 
     private fun showInstallFailure(message: String) {
         val now = System.currentTimeMillis()
@@ -298,18 +404,16 @@ fun removeMissingPatchesAndStart() {
         if (activeInstallType != null) {
             lastInstallType = activeInstallType
         }
-        installFailureMessage = adjusted
-        installStatus = InstallCompletionStatus.Failure(adjusted)
-        updateInstallingState(false)
-        stopInstallProgressToasts()
-        pendingExternalInstall?.let(installerManager::cleanup)
-        pendingExternalInstall = null
-        externalInstallBaseline = null
-        externalInstallStartTime = null
-        externalPackageWasPresentAtStart = false
-        expectedInstallSignature = null
-        baselineInstallSignature = null
-        packageInstallerStatus = null
+        val fallbackPrompt = buildFallbackPrompt(adjusted)
+        if (fallbackPrompt != null) {
+            pendingInstallFailureMessage = adjusted
+            installFailureMessage = null
+            installStatus = null
+            fallbackInstallPrompt = fallbackPrompt
+            cleanupFailedInstall()
+            return
+        }
+        applyInstallFailure(adjusted)
     }
 
     private fun showSignatureMismatchPrompt(
@@ -690,10 +794,15 @@ fun removeMissingPatchesAndStart() {
     private val outputFile = tempDir.resolve("output.apk")
 
     private val logs by savedStateHandle.saveable<MutableList<Pair<LogLevel, String>>> { mutableListOf() }
+    private val dexCompilePattern =
+        Regex("(Compiling|Compiled)\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
+    private val dexWritePattern =
+        Regex("Write\\s+\\[[^\\]]+\\]\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
     private val logger = object : Logger() {
         override fun log(level: LogLevel, message: String) {
             level.androidLog(message)
             if (level == LogLevel.TRACE) return
+            handleDexCompileLine(message)
 
             viewModelScope.launch {
                 logs.add(level to message)
@@ -771,14 +880,18 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             exportMetadata = metadata
         }
     }
-    val steps by savedStateHandle.saveable(saver = snapshotStateListSaver()) {
-        generateSteps(
-            app,
-            input.selectedApp,
-            input.selectedPatches,
-            requiresSplitPreparation
-        ).toMutableStateList()
-    }
+        val steps by savedStateHandle.saveable(saver = snapshotStateListSaver()) {
+            generateSteps(
+                app,
+                input.selectedApp,
+                input.selectedPatches,
+                requiresSplitPreparation
+            ).toMutableStateList()
+        }
+    val stepSubSteps = mutableStateMapOf<StepId, SnapshotStateList<StepDetail>>()
+    private var dexSubStepsReady = false
+    private val pendingDexCompileLines = mutableListOf<String>()
+    private val seenDexCompiles = mutableSetOf<String>()
 
     val progress by derivedStateOf {
         val current = steps.count { it.state == State.COMPLETED }
@@ -840,6 +953,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
 
     private fun startWorker() {
+        resetDexCompileState()
         logBatteryOptimizationStatus()
         val workId = launchWorker()
         patcherWorkerId = ParcelUuid(workId)
@@ -848,71 +962,85 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private suspend fun persistPatchedApp(
         currentPackageName: String?,
-        installType: InstallType
-    ): Boolean = withContext(Dispatchers.IO) {
-        val installedPackageInfo = currentPackageName?.let(pm::getPackageInfo)
-        val patchedPackageInfo = pm.getPackageInfo(outputFile)
-        val packageInfo = installedPackageInfo ?: patchedPackageInfo
-        if (packageInfo == null) {
-            Log.e(TAG, "Failed to resolve package info for patched APK")
-            return@withContext false
+        installType: InstallType,
+        forceSave: Boolean = false
+    ): Boolean {
+        val savedAppsEnabled = prefs.enableSavedApps.get()
+        val latestInstalledApp = installedAppRepository.get(packageName)
+        if (latestInstalledApp != installedApp) {
+            installedApp = latestInstalledApp
         }
-
-        val finalPackageName = packageInfo.packageName
-        val finalVersion = packageInfo.versionName?.takeUnless { it.isBlank() } ?: version ?: "unspecified"
-
-        val savedCopy = fs.getPatchedAppFile(finalPackageName, finalVersion)
-        try {
-            savedCopy.parentFile?.mkdirs()
-            outputFile.copyTo(savedCopy, overwrite = true)
-        } catch (error: IOException) {
-            if (installType == InstallType.SAVED) {
-                Log.e(TAG, "Failed to copy patched APK for later", error)
+        val preserveSavedEntry =
+            savedAppsEnabled && latestInstalledApp?.installType == InstallType.SAVED
+        val shouldSaveForLater = savedAppsEnabled || forceSave || preserveSavedEntry
+        return withContext(Dispatchers.IO) {
+            val installedPackageInfo = currentPackageName?.let(pm::getPackageInfo)
+            val patchedPackageInfo = pm.getPackageInfo(outputFile)
+            val packageInfo = installedPackageInfo ?: patchedPackageInfo
+            if (packageInfo == null) {
+                Log.e(TAG, "Failed to resolve package info for patched APK")
                 return@withContext false
-            } else {
-                Log.w(TAG, "Failed to update saved copy for $finalPackageName", error)
             }
+
+            val finalPackageName = packageInfo.packageName
+            val finalVersion = packageInfo.versionName?.takeUnless { it.isBlank() } ?: version ?: "unspecified"
+
+            val savedCopy = fs.getPatchedAppFile(finalPackageName, finalVersion)
+            if (shouldSaveForLater) {
+                try {
+                    savedCopy.parentFile?.mkdirs()
+                    outputFile.copyTo(savedCopy, overwrite = true)
+                } catch (error: IOException) {
+                    if (installType == InstallType.SAVED) {
+                        Log.e(TAG, "Failed to copy patched APK for later", error)
+                        return@withContext false
+                    } else {
+                        Log.w(TAG, "Failed to update saved copy for $finalPackageName", error)
+                    }
+                }
+            }
+
+            val metadata = buildExportMetadata(patchedPackageInfo ?: packageInfo)
+            withContext(Dispatchers.Main) {
+                exportMetadata = metadata
+            }
+
+            val globalBundlesFinal = patchBundleRepository.allBundlesInfoFlow.first()
+            val sanitizedSelectionFinal = sanitizeSelection(appliedSelection, globalBundlesFinal)
+            val sanitizedOptionsFinal = sanitizeOptions(appliedOptions, globalBundlesFinal)
+            val sanitizedSelectionOriginal = sanitizeSelection(appliedSelection, globalBundlesFinal)
+            val sanitizedOptionsOriginal = sanitizeOptions(appliedOptions, globalBundlesFinal)
+
+            val selectionPayload = patchBundleRepository.snapshotSelection(
+                sanitizedSelectionFinal,
+                sanitizedOptionsFinal
+            )
+
+            val persistedInstallType = if (preserveSavedEntry) InstallType.SAVED else installType
+            if (shouldSaveForLater || persistedInstallType != InstallType.SAVED) {
+                installedAppRepository.addOrUpdate(
+                    finalPackageName,
+                    packageName,
+                    finalVersion,
+                    persistedInstallType,
+                    sanitizedSelectionFinal,
+                    selectionPayload
+                )
+            }
+
+            if (finalPackageName != packageName) {
+                patchSelectionRepository.updateSelection(finalPackageName, sanitizedSelectionFinal)
+                patchOptionsRepository.saveOptions(finalPackageName, sanitizedOptionsFinal)
+            }
+            patchSelectionRepository.updateSelection(packageName, sanitizedSelectionOriginal)
+            patchOptionsRepository.saveOptions(packageName, sanitizedOptionsOriginal)
+            appliedSelection = sanitizedSelectionOriginal
+            appliedOptions = sanitizedOptionsOriginal
+
+            savedPatchedApp = savedPatchedApp ||
+                (shouldSaveForLater && (installType == InstallType.SAVED || savedCopy.exists()))
+            true
         }
-
-        val metadata = buildExportMetadata(patchedPackageInfo ?: packageInfo)
-        withContext(Dispatchers.Main) {
-            exportMetadata = metadata
-        }
-
-        val scopedBundlesFinal = patchBundleRepository.scopedBundleInfoFlow(finalPackageName, finalVersion)
-            .first()
-            .associateBy { it.uid }
-        val sanitizedSelectionFinal = sanitizeSelection(appliedSelection, scopedBundlesFinal)
-        val sanitizedOptionsFinal = sanitizeOptions(appliedOptions, scopedBundlesFinal)
-        val scopedBundlesOriginal = patchBundleRepository.scopedBundleInfoFlow(
-            packageName,
-            input.selectedApp.version
-        ).first().associateBy { it.uid }
-        val sanitizedSelectionOriginal = sanitizeSelection(appliedSelection, scopedBundlesOriginal)
-        val sanitizedOptionsOriginal = sanitizeOptions(appliedOptions, scopedBundlesOriginal)
-
-        val selectionPayload = patchBundleRepository.snapshotSelection(sanitizedSelectionFinal)
-
-        installedAppRepository.addOrUpdate(
-            finalPackageName,
-            packageName,
-            finalVersion,
-            installType,
-            sanitizedSelectionFinal,
-            selectionPayload
-        )
-
-        if (finalPackageName != packageName) {
-            patchSelectionRepository.updateSelection(finalPackageName, sanitizedSelectionFinal)
-            patchOptionsRepository.saveOptions(finalPackageName, sanitizedOptionsFinal)
-        }
-        patchSelectionRepository.updateSelection(packageName, sanitizedSelectionOriginal)
-        patchOptionsRepository.saveOptions(packageName, sanitizedOptionsOriginal)
-        appliedSelection = sanitizedSelectionOriginal
-        appliedOptions = sanitizedOptionsOriginal
-
-        savedPatchedApp = savedPatchedApp || installType == InstallType.SAVED || savedCopy.exists()
-        true
     }
 
     fun savePatchedAppForLater(
@@ -926,7 +1054,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
 
         viewModelScope.launch {
-            val success = persistPatchedApp(null, InstallType.SAVED)
+            val success = persistPatchedApp(null, InstallType.SAVED, forceSave = true)
             if (success) {
                 if (showToast) {
                     app.toast(app.getString(R.string.patched_app_saved_toast))
@@ -998,6 +1126,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     fun onBack() {
         // tempDir cannot be deleted inside onCleared because it gets called on system-initiated process death.
+        if (_patcherSucceeded.value == null) {
+            patcherWorkerId?.uuid?.let(workManager::cancelWorkById)
+        }
         tempDir.deleteRecursively()
     }
 
@@ -1031,6 +1162,34 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 return@launch
             }
 
+            finalizeExport()
+        }
+    }
+
+    fun exportToPath(
+        target: Path,
+        onResult: (Boolean) -> Unit = {}
+    ) = viewModelScope.launch {
+        ensureExportMetadata()
+        val exportSucceeded = runCatching {
+            withContext(Dispatchers.IO) {
+                target.parent?.let { Files.createDirectories(it) }
+                Files.copy(outputFile.toPath(), target, StandardCopyOption.REPLACE_EXISTING)
+            }
+        }.isSuccess
+
+        if (!exportSucceeded) {
+            app.toast(app.getString(R.string.saved_app_export_failed))
+            onResult(false)
+            return@launch
+        }
+
+        finalizeExport()
+        onResult(true)
+    }
+
+    private suspend fun finalizeExport() {
+        if (prefs.enableSavedApps.get()) {
             val wasAlreadySaved = hasSavedPatchedApp
             val saved = persistPatchedApp(null, InstallType.SAVED)
             if (!saved) {
@@ -1038,12 +1197,12 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             } else if (!wasAlreadySaved) {
                 app.toast(app.getString(R.string.patched_app_saved_toast))
             }
-
-            app.toast(app.getString(R.string.save_apk_success))
         }
+
+        app.toast(app.getString(R.string.save_apk_success))
     }
 
-    fun exportLogs(context: Context) {
+    private fun buildLogContent(context: Context): String {
         val stepLines = steps.mapIndexed { index, step ->
             buildString {
                 append(index + 1)
@@ -1062,7 +1221,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
         val logLines = logs.toList().map { (level, msg) -> "[${level.name}]: $msg" }
 
-        val content = buildString {
+        return buildString {
             appendLine("=== Patcher Steps ===")
             if (stepLines.isEmpty()) {
                 appendLine("No steps recorded.")
@@ -1077,6 +1236,41 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 logLines.forEach { appendLine(it) }
             }
         }
+    }
+
+    fun getLogContent(context: Context): String = buildLogContent(context)
+
+    fun exportLogsToPath(
+        context: Context,
+        target: Path,
+        onResult: (Boolean) -> Unit = {}
+    ) = viewModelScope.launch {
+        val exportSucceeded = runCatching {
+            withContext(Dispatchers.IO) {
+                target.parent?.let { Files.createDirectories(it) }
+                Files.newBufferedWriter(
+                    target,
+                    StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING
+                ).use { writer ->
+                    writer.write(buildLogContent(context))
+                }
+            }
+        }.isSuccess
+
+        if (!exportSucceeded) {
+            app.toast(app.getString(R.string.patcher_log_export_failed))
+            onResult(false)
+            return@launch
+        }
+
+        app.toast(app.getString(R.string.patcher_log_export_success))
+        onResult(true)
+    }
+
+    fun exportLogs(context: Context) {
+        val content = buildLogContent(context)
 
         val sendIntent: Intent = Intent().apply {
             action = Intent.ACTION_SEND
@@ -1198,7 +1392,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                         // Check for base APK, first check if the app is already installed
                         if (existingPackageInfo == null) {
                             // If the app is not installed, check if the output file is a base apk
-                            if (currentPackageInfo.splitNames.isNotEmpty()) {
+                            if (currentPackageInfo.splitNames?.isNotEmpty() == true) {
                                 val hint =
                                     installerManager.formatFailureHint(PackageInstaller.STATUS_FAILURE_INVALID, null)
                                         ?: app.getString(R.string.installer_hint_invalid)
@@ -1341,6 +1535,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private suspend fun executeInstallPlan(plan: InstallerManager.InstallPlan) {
         Log.d(TAG, "executeInstallPlan(plan=${plan::class.java.simpleName})")
+        recordInstallPlan(plan, lastInstallExpectedPackage ?: packageName, lastInstallSourceLabel)
         when (plan) {
             is InstallerManager.InstallPlan.Internal -> {
                 pendingExternalInstall?.let(installerManager::cleanup)
@@ -1517,6 +1712,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     showSignatureMismatchPrompt(expectedPackage, plan)
                     return@runCatching
                 }
+                recordInstallPlan(plan, expectedPackage, null)
                 executeInstallPlan(plan)
             }.onFailure { error ->
                 Log.e(TAG, "install() failed to start", error)
@@ -1540,6 +1736,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 expectedPackage,
                 null
             )
+            recordInstallPlan(plan, expectedPackage, null)
             when (plan) {
                 is InstallerManager.InstallPlan.Internal -> {
                     pendingExternalInstall?.let(installerManager::cleanup)
@@ -1629,6 +1826,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
                 Session.State.Succeeded -> {
                     stopUninstallProgressToasts()
+                    recordInstallPlan(plan, targetPackage, null)
                     executeInstallPlan(plan)
                 }
             }
@@ -1647,6 +1845,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         installFailureMessage = null
         packageInstallerStatus = null
         installStatus = null
+        pendingInstallFailureMessage = null
     }
 
     fun shouldSuppressInstallFailureDialog(): Boolean {
@@ -1660,6 +1859,49 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     fun clearInstallStatus() {
         installStatus = null
     }
+
+    fun confirmFallbackInstallPrompt() {
+        val prompt = fallbackInstallPrompt ?: return
+        val expectedPackage = lastInstallExpectedPackage ?: packageName
+        val plan = installerManager.resolvePlanForToken(
+            token = prompt.fallbackToken,
+            target = prompt.target,
+            sourceFile = outputFile,
+            expectedPackage = expectedPackage,
+            sourceLabel = lastInstallSourceLabel
+        )
+        fallbackInstallPrompt = null
+        pendingInstallFailureMessage = null
+        installFailureMessage = null
+        installStatus = null
+        if (plan == null) {
+            val message = app.getString(R.string.installer_hint_generic)
+            applyInstallFailure(message)
+            return
+        }
+        recordInstallPlan(plan, expectedPackage, lastInstallSourceLabel)
+        viewModelScope.launch {
+            executeInstallPlan(plan)
+        }
+    }
+
+    fun dismissFallbackInstallPrompt() {
+        val message = pendingInstallFailureMessage
+        fallbackInstallPrompt = null
+        pendingInstallFailureMessage = null
+        installFailureMessage = null
+        installStatus = null
+        if (message != null) {
+            applyInstallFailure(message)
+        }
+    }
+
+    data class FallbackInstallPrompt(
+        val failureMessage: String,
+        val fallbackLabel: String,
+        val fallbackToken: InstallerManager.Token,
+        val target: InstallerManager.InstallTarget
+    )
 
     sealed class InstallCompletionStatus {
         data object InProgress : InstallCompletionStatus()
@@ -1739,19 +1981,45 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
 
     private fun handleProgressEvent(event: ProgressEvent) = viewModelScope.launch {
+        val eventStepId = event.stepId
         val stepIndex = steps.indexOfFirst { step ->
-            event.stepId?.let { id -> id == step.id }
+            eventStepId?.let { id -> id == step.id }
                 ?: (step.state == State.RUNNING || step.state == State.WAITING)
+        }
+
+        if (eventStepId != null && isExpandableStep(eventStepId)) {
+            when (event) {
+                is ProgressEvent.Started -> stepSubSteps.remove(eventStepId)
+                is ProgressEvent.Progress -> {
+                    val progress = event.current?.let { current -> current to event.total }
+                    event.subSteps?.let { prepareSubSteps(eventStepId, it) }
+                    if (!event.message.isNullOrBlank() || progress != null) {
+                        updateSubStep(eventStepId, event.message, progress)
+                    }
+                }
+                is ProgressEvent.Completed -> finalizeSubSteps(eventStepId)
+                is ProgressEvent.Failed -> {
+                    finalizeSubSteps(
+                        eventStepId,
+                        failed = true,
+                        errorMessage = event.error.message ?: event.error.type
+                    )
+                }
+            }
         }
 
         if (stepIndex != -1) steps[stepIndex] = steps[stepIndex].run {
             when (event) {
                 is ProgressEvent.Started -> withState(State.RUNNING)
 
-                is ProgressEvent.Progress -> withState(
-                    message = event.message ?: message,
-                    progress = event.current?.let { event.current to event.total } ?: progress
-                )
+                is ProgressEvent.Progress -> {
+                    val nextState = if (state == State.WAITING) State.RUNNING else state
+                    withState(
+                        state = nextState,
+                        message = event.message ?: message,
+                        progress = event.current?.let { event.current to event.total } ?: progress
+                    )
+                }
 
                 is ProgressEvent.Completed -> withState(State.COMPLETED, progress = null)
 
@@ -1764,6 +2032,304 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     )
                 }
             }
+        }
+    }
+
+    private fun isExpandableStep(stepId: StepId) = when (stepId) {
+        StepId.PrepareSplitApk,
+        StepId.WriteAPK -> true
+        else -> false
+    }
+
+    private fun prepareSubSteps(stepId: StepId, titles: List<String>) {
+        val normalized = titles.filter { it.isNotBlank() }.map { it.trim() }
+        val existing = stepSubSteps[stepId]
+        val list = mutableStateListOf<StepDetail>()
+        normalized.forEach { rawTitle ->
+            val (title, skipped) = parseSubStepTitle(rawTitle)
+            val previous = existing?.firstOrNull { it.title == title }
+            val effectiveSkipped = skipped || previous?.skipped == true
+            val state = when {
+                effectiveSkipped -> if (previous?.state == State.FAILED) State.FAILED else State.COMPLETED
+                previous != null -> previous.state
+                else -> State.WAITING
+            }
+            list.add(
+                previous?.copy(title = title, state = state, skipped = effectiveSkipped)
+                    ?: StepDetail(title = title, state = state, skipped = effectiveSkipped)
+            )
+        }
+        stepSubSteps[stepId] = list
+        if (stepId == StepId.WriteAPK) {
+            markDexSubStepsReady()
+        }
+    }
+
+    private fun updateSubStep(
+        stepId: StepId,
+        message: String?,
+        progress: Pair<Long, Long?>?
+    ) {
+        val list = stepSubSteps.getOrPut(stepId) { mutableStateListOf() }
+        if (message.isNullOrBlank()) {
+            if (progress != null && list.isNotEmpty()) {
+                val runningIndex = list.indexOfFirst { it.state == State.RUNNING }
+                val targetIndex = if (runningIndex != -1) runningIndex else list.lastIndex
+                val target = list[targetIndex]
+                list[targetIndex] = target.copy(progress = progress)
+            }
+            return
+        }
+
+        val title = message.trim()
+        val normalized = normalizeWriteApkTitle(stepId, title)
+        if (stepId == StepId.WriteAPK && isDexCompileTitle(normalized)) {
+            seenDexCompiles.add(normalized)
+        }
+        var existingIndex = list.indexOfFirst { it.title == normalized }
+        val runningIndex = list.indexOfFirst { !it.skipped && it.state == State.RUNNING }
+        if (stepId == StepId.WriteAPK && isDexCompilePhaseTitle(normalized)) {
+            completeWriteApkApplyChanges(list)
+            val firstCompile = list.indexOfFirst { isDexCompileTitle(it.title) }
+            if (firstCompile != -1) {
+                if (runningIndex != -1 && runningIndex < firstCompile) {
+                    val running = list[runningIndex]
+                    list[runningIndex] = running.copy(state = State.COMPLETED, progress = null)
+                }
+                val target = list[firstCompile]
+                list[firstCompile] = target.copy(state = State.RUNNING, progress = progress)
+                return
+            }
+            if (runningIndex != -1) {
+                val running = list[runningIndex]
+                list[runningIndex] = running.copy(state = State.COMPLETED, progress = null)
+                return
+            }
+        }
+        if (stepId == StepId.WriteAPK && isResourceCompileTitle(normalized)) {
+            activateResourceCompileStep(list, progress)
+            return
+        }
+        if (existingIndex == -1 && list.isNotEmpty()) {
+            existingIndex = findBestSubStepIndex(list, normalized)
+        }
+        if (existingIndex == -1 && stepId == StepId.WriteAPK && isDexCompileTitle(normalized)) {
+            val resourcesIndex = list.indexOfFirst {
+                it.title.equals("Compiling modified resources", ignoreCase = true)
+            }.takeIf { it != -1 }
+            val insertIndex = resourcesIndex
+                ?: list.indexOfFirst { it.title == "Writing output APK" }
+                    .takeIf { it != -1 }
+                ?: list.size
+            list.add(insertIndex, StepDetail(title = normalized, state = State.WAITING))
+            existingIndex = insertIndex
+        }
+        if (stepId == StepId.WriteAPK && isDexCompileTitle(normalized)) {
+            completeWriteApkApplyChanges(list)
+        }
+        if (existingIndex != -1) {
+            if (list[existingIndex].skipped) return
+            if (runningIndex != -1 && existingIndex < runningIndex) {
+                return
+            }
+            if (runningIndex != -1 && runningIndex != existingIndex) {
+                val running = list[runningIndex]
+                list[runningIndex] = running.copy(state = State.COMPLETED, progress = null)
+            }
+            val existing = list[existingIndex]
+            list[existingIndex] = existing.copy(state = State.RUNNING, progress = progress)
+            return
+        }
+
+        if (list.isNotEmpty()) {
+            return
+        }
+
+        if (runningIndex != -1) {
+            val running = list[runningIndex]
+            list[runningIndex] = running.copy(state = State.COMPLETED, progress = null)
+        }
+
+        list.add(StepDetail(title = title, state = State.RUNNING, progress = progress))
+    }
+
+    private fun normalizeWriteApkTitle(stepId: StepId, title: String): String {
+        if (stepId != StepId.WriteAPK) return title
+        return if (title.startsWith("Compiled ", ignoreCase = true)) {
+            "Compiling " + title.removePrefix("Compiled ").trim()
+        } else {
+            title
+        }
+    }
+
+    private fun isDexCompileTitle(title: String): Boolean {
+        if (!title.startsWith("Compiling ", ignoreCase = true)) return false
+        val suffix = title.removePrefix("Compiling ").trim()
+        return suffix.startsWith("classes") && suffix.endsWith(".dex")
+    }
+
+    private fun isDexCompilePhaseTitle(title: String): Boolean =
+        title.equals("Compiling patched dex files", ignoreCase = true)
+    private fun isResourceCompileTitle(title: String): Boolean =
+        title.equals("Compiling modified resources", ignoreCase = true)
+
+    private fun resetDexCompileState() {
+        dexSubStepsReady = false
+        pendingDexCompileLines.clear()
+        seenDexCompiles.clear()
+    }
+
+    private fun markDexSubStepsReady() {
+        if (dexSubStepsReady) return
+        dexSubStepsReady = true
+        flushPendingDexCompileLines(force = true)
+    }
+
+    private fun flushPendingDexCompileLines(force: Boolean = false) {
+        if (pendingDexCompileLines.isEmpty()) return
+        val list = stepSubSteps[StepId.WriteAPK] ?: return
+        val iterator = pendingDexCompileLines.iterator()
+        while (iterator.hasNext()) {
+            val title = iterator.next()
+            val hasEntry = list.any { it.title.equals(title, ignoreCase = true) }
+            if (force || hasEntry) {
+                updateSubStep(StepId.WriteAPK, title, null)
+                iterator.remove()
+            }
+        }
+    }
+
+    private fun completeWriteApkApplyChanges(list: SnapshotStateList<StepDetail>) {
+        val index = list.indexOfFirst {
+            it.title.equals("Applying patched changes", ignoreCase = true)
+        }
+        if (index == -1) return
+        val detail = list[index]
+        if (detail.state == State.COMPLETED) return
+        list[index] = detail.copy(state = State.COMPLETED, progress = null)
+    }
+
+    private fun activateResourceCompileStep(
+        list: SnapshotStateList<StepDetail>,
+        progress: Pair<Long, Long?>?
+    ) {
+        val resourceIndex = list.indexOfFirst {
+            it.title.equals("Compiling modified resources", ignoreCase = true)
+        }.takeIf { it != -1 } ?: run {
+            val insertIndex = list.indexOfFirst {
+                it.title.equals("Writing output APK", ignoreCase = true)
+            }.takeIf { it != -1 } ?: list.size
+            list.add(insertIndex, StepDetail(title = "Compiling modified resources", state = State.WAITING))
+            insertIndex
+        }
+
+        list.forEachIndexed { index, detail ->
+            if (detail.title.startsWith("Compiling ", ignoreCase = true) &&
+                detail.title.endsWith(".dex", ignoreCase = true)
+            ) {
+                list[index] = detail.copy(state = State.COMPLETED, progress = null)
+            }
+        }
+
+        val runningIndex = list.indexOfFirst { it.state == State.RUNNING }
+        if (runningIndex != -1 && runningIndex != resourceIndex) {
+            val running = list[runningIndex]
+            list[runningIndex] = running.copy(state = State.COMPLETED, progress = null)
+        }
+
+        val resourceStep = list[resourceIndex]
+        list[resourceIndex] = resourceStep.copy(state = State.RUNNING, progress = progress)
+    }
+
+    private fun handleDexCompileLine(rawLine: String) {
+        val line = rawLine.trim()
+        if (line.isEmpty()) return
+        if (line.contains("Compiling modified resources", ignoreCase = true)) {
+            viewModelScope.launch {
+                updateSubStep(StepId.WriteAPK, "Compiling modified resources", null)
+                markDexSubStepsReady()
+            }
+            return
+        }
+        if (isDexCompilePhaseTitle(line)) {
+            viewModelScope.launch {
+                updateSubStep(StepId.WriteAPK, line, null)
+                markDexSubStepsReady()
+            }
+            return
+        }
+        val match = dexCompilePattern.find(line) ?: dexWritePattern.find(line) ?: return
+        val dexName = match.groupValues.lastOrNull()?.takeIf { it.endsWith(".dex") } ?: return
+        viewModelScope.launch {
+            val title = "Compiling $dexName"
+            seenDexCompiles.add(title)
+            val list = stepSubSteps[StepId.WriteAPK]
+            val hasEntry = list?.any { it.title.equals(title, ignoreCase = true) } == true
+            if (dexSubStepsReady || hasEntry) {
+                updateSubStep(StepId.WriteAPK, title, null)
+            } else {
+                pendingDexCompileLines.add(title)
+            }
+        }
+    }
+
+    private fun findBestSubStepIndex(
+        list: List<StepDetail>,
+        title: String
+    ): Int {
+        val needle = title.lowercase()
+        val prefixIndex = list.indexOfFirst { needle.startsWith(it.title.lowercase()) }
+        if (prefixIndex != -1) return prefixIndex
+        val reversePrefix = list.indexOfFirst { it.title.lowercase().startsWith(needle) }
+        if (reversePrefix != -1) return reversePrefix
+        val containsIndex = list.indexOfFirst { needle.contains(it.title.lowercase()) }
+        return containsIndex
+    }
+
+    private fun finalizeSubSteps(
+        stepId: StepId,
+        failed: Boolean = false,
+        errorMessage: String? = null
+    ) {
+        val list = stepSubSteps[stepId] ?: return
+        if (list.isEmpty()) return
+        if (!failed) {
+            list.forEachIndexed { index, detail ->
+                list[index] = detail.copy(state = State.COMPLETED, progress = null)
+            }
+            return
+        }
+
+        val runningIndex = list.indexOfFirst { !it.skipped && it.state == State.RUNNING }
+        val failedIndex = when {
+            runningIndex != -1 -> runningIndex
+            else -> list.indexOfFirst { !it.skipped && it.state != State.COMPLETED }.takeIf { it != -1 }
+        } ?: list.lastIndex
+
+        list.forEachIndexed { index, detail ->
+            if (detail.skipped) {
+                list[index] = detail.copy(progress = null)
+                return@forEachIndexed
+            }
+            val updated = when {
+                index == failedIndex -> detail.copy(
+                    state = State.FAILED,
+                    message = errorMessage,
+                    progress = null
+                )
+                detail.state == State.RUNNING -> detail.copy(state = State.WAITING, progress = null)
+                else -> detail.copy(progress = null)
+            }
+            list[index] = updated
+        }
+    }
+
+    private fun parseSubStepTitle(rawTitle: String): Pair<String, Boolean> {
+        val trimmed = rawTitle.trim()
+        return if (trimmed.startsWith(SKIPPED_SUBSTEP_PREFIX)) {
+            trimmed.removePrefix(SKIPPED_SUBSTEP_PREFIX).trim() to true
+        } else {
+            trimmed to false
         }
     }
 
@@ -1860,7 +2426,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             requiresSplitPreparation
         ).toMutableStateList()
         steps.clear()
+        resetDexCompileState()
         steps.addAll(newSteps)
+        stepSubSteps.clear()
         _patcherSucceeded.value = null
     }
 
@@ -1897,6 +2465,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 steps[index] = steps[index].withState(State.COMPLETED)
             }
         }
+
     }
 
     private fun addSplitStep() {
@@ -1918,7 +2487,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private fun sanitizeSelection(
         selection: PatchSelection,
-        bundles: Map<Int, PatchBundleInfo.Scoped>
+        bundles: Map<Int, PatchBundleInfo>
     ): PatchSelection = buildMap {
         selection.forEach { (uid, patches) ->
             val bundle = bundles[uid]
@@ -1942,7 +2511,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private fun sanitizeOptions(
         options: Options,
-        bundles: Map<Int, PatchBundleInfo.Scoped>
+        bundles: Map<Int, PatchBundleInfo>
     ): Options = buildMap {
         options.forEach { (uid, patchOptions) ->
             val bundle = bundles[uid] ?: return@forEach
@@ -1961,6 +2530,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private companion object {
         const val TAG = "ReVanced Patcher"
+        const val SKIPPED_SUBSTEP_PREFIX = "[skipped]"
         private const val SYSTEM_INSTALL_TIMEOUT_MS = 60_000L
         private const val EXTERNAL_INSTALL_TIMEOUT_MS = 60_000L
         private const val POST_TIMEOUT_GRACE_MS = 5_000L
@@ -1970,7 +2540,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         private const val INSTALL_PROGRESS_TOAST_INTERVAL_MS = 2500L
         private const val MEMORY_ADJUSTMENT_MB = 200
         private const val SUPPRESS_FAILURE_AFTER_SUCCESS_MS = 5000L
-
         fun LogLevel.androidLog(msg: String) = when (this) {
             LogLevel.TRACE -> Log.v(TAG, msg)
             LogLevel.INFO -> Log.i(TAG, msg)

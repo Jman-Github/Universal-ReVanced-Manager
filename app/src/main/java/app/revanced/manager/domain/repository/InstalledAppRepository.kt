@@ -17,6 +17,9 @@ class InstalledAppRepository(
 
     suspend fun get(packageName: String) = dao.get(packageName)
 
+    suspend fun getByInstallType(installType: InstallType) =
+        dao.getByInstallType(installType)
+
     suspend fun getAppliedPatches(packageName: String): PatchSelection =
         dao.getPatchesSelection(packageName).mapValues { (_, patches) -> patches.toSet() }
 
@@ -28,12 +31,15 @@ class InstalledAppRepository(
         patchSelection: PatchSelection,
         selectionPayload: PatchProfilePayload? = null
     ) {
+        val existingSortOrder = dao.getSortOrder(currentPackageName)
+        val sortOrder = existingSortOrder ?: ((dao.getMaxSortOrder() ?: -1) + 1)
         dao.upsertApp(
             InstalledApp(
                 currentPackageName = currentPackageName,
                 originalPackageName = originalPackageName,
                 version = version,
                 installType = installType,
+                sortOrder = sortOrder,
                 selectionPayload = selectionPayload
             ),
             patchSelection.flatMap { (uid, patches) ->
@@ -48,7 +54,17 @@ class InstalledAppRepository(
         )
     }
 
+    suspend fun reorderApps(orderedPackageNames: List<String>) {
+        orderedPackageNames.forEachIndexed { index, packageName ->
+            dao.updateSortOrder(packageName, index)
+        }
+    }
+
     suspend fun delete(installedApp: InstalledApp) {
         dao.delete(installedApp)
+    }
+
+    suspend fun deleteByInstallType(installType: InstallType) {
+        dao.deleteByInstallType(installType)
     }
 }

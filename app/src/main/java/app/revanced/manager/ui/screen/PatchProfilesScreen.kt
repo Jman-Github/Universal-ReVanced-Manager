@@ -20,16 +20,24 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.outlined.Bookmarks
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
@@ -45,6 +53,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -58,6 +67,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
 import app.revanced.manager.ui.component.TextInputDialog
 import app.revanced.manager.ui.component.haptics.HapticCheckbox
+import app.revanced.manager.ui.component.patches.PathSelectorDialog
+import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.ui.viewmodel.BundleSourceType
 import app.revanced.manager.ui.viewmodel.BundleOptionDisplay
@@ -67,16 +78,24 @@ import app.revanced.manager.ui.viewmodel.PatchProfilesViewModel
 import app.revanced.manager.ui.viewmodel.PatchProfilesViewModel.RenameResult
 import app.revanced.manager.util.relativeTime
 import app.revanced.manager.util.toast
+import app.revanced.manager.util.isAllowedApkFile
 import app.universal.revanced.manager.R
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
+import sh.calvin.reorderable.ReorderableCollectionItemScope
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
+import java.io.File
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PatchProfilesScreen(
     onProfileClick: (PatchProfileLaunchData) -> Unit,
     modifier: Modifier = Modifier,
-    viewModel: PatchProfilesViewModel
+    viewModel: PatchProfilesViewModel,
+    showOrderDialog: Boolean = false,
+    onDismissOrderDialog: () -> Unit = {},
+    searchQuery: String = ""
 ) {
     val profiles by viewModel.profiles.collectAsStateWithLifecycle()
     val remoteBundleOptions by viewModel.remoteBundleOptions.collectAsStateWithLifecycle(emptyList())
@@ -89,6 +108,8 @@ fun PatchProfilesScreen(
     val allowBundleOverride by prefs.allowPatchProfileBundleOverride.flow.collectAsStateWithLifecycle(
         initialValue = prefs.allowPatchProfileBundleOverride.default
     )
+    val filesystem = koinInject<Filesystem>()
+    val storageRoots = remember { filesystem.storageRoots() }
     var loadingProfileId by remember { mutableStateOf<Int?>(null) }
     var blockedProfile by remember { mutableStateOf<PatchProfileLaunchData?>(null) }
     var renameProfileId by rememberSaveable { mutableStateOf<Int?>(null) }
@@ -97,6 +118,9 @@ fun PatchProfilesScreen(
     var versionDialogValue by rememberSaveable { mutableStateOf("") }
     var versionDialogAllVersions by rememberSaveable { mutableStateOf(false) }
     var versionDialogSaving by remember { mutableStateOf(false) }
+    var settingsDialogProfile by remember { mutableStateOf<PatchProfileListItem?>(null) }
+    var apkPickerProfile by remember { mutableStateOf<PatchProfileListItem?>(null) }
+    var apkPickerBusy by remember { mutableStateOf(false) }
     data class ChangeUidTarget(val profileId: Int, val bundleUid: Int, val bundleName: String?)
     var changeUidTarget by remember { mutableStateOf<ChangeUidTarget?>(null) }
     data class RemoteBundleTarget(
@@ -119,8 +143,66 @@ fun PatchProfilesScreen(
     val selectionActive = viewModel.selectedProfiles.isNotEmpty()
     data class OptionDialogData(val patchName: String, val entries: List<BundleOptionDisplay>)
     var optionDialogData by remember { mutableStateOf<OptionDialogData?>(null) }
+    val normalizedQuery = searchQuery.trim().lowercase()
+    val filteredProfiles = if (normalizedQuery.isBlank()) {
+        profiles
+    } else {
+        profiles.filter { profile ->
+            val searchText = buildString {
+                append(profile.name)
+                append(' ')
+                append(profile.packageName)
+                profile.appVersion?.let { version ->
+                    append(' ')
+                    append(version)
+                }
+                profile.bundleNames.forEach { name ->
+                    append(' ')
+                    append(name)
+                }
+            }.lowercase()
+            searchText.contains(normalizedQuery)
+        }
+    }
 
     BackHandler(enabled = selectionActive) { viewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL) }
+
+    apkPickerProfile?.let { profile ->
+        PathSelectorDialog(
+            roots = storageRoots,
+            onSelect = { path ->
+                apkPickerProfile = null
+                if (path == null) return@PathSelectorDialog
+                apkPickerBusy = true
+                scope.launch {
+                    try {
+                        val result = viewModel.updateProfileApk(profile.id, File(path.toString()))
+                        when (result) {
+                            PatchProfilesViewModel.ApkSelectionResult.SUCCESS -> context.toast(
+                                context.getString(R.string.patch_profile_apk_saved_toast, profile.name)
+                            )
+                            PatchProfilesViewModel.ApkSelectionResult.INVALID_FILE -> context.toast(
+                                context.getString(R.string.patch_profile_apk_invalid_toast)
+                            )
+                            PatchProfilesViewModel.ApkSelectionResult.PACKAGE_MISMATCH -> context.toast(
+                                context.getString(R.string.patch_profile_apk_mismatch_toast)
+                            )
+                            PatchProfilesViewModel.ApkSelectionResult.PROFILE_NOT_FOUND,
+                            PatchProfilesViewModel.ApkSelectionResult.FAILED,
+                            PatchProfilesViewModel.ApkSelectionResult.CLEARED -> context.toast(
+                                context.getString(R.string.patch_profile_apk_failed_toast)
+                            )
+                        }
+                    } finally {
+                        apkPickerBusy = false
+                    }
+                }
+            },
+            fileFilter = ::isAllowedApkFile,
+            allowDirectorySelection = false,
+            fileTypeLabel = stringResource(R.string.apk_file_type)
+        )
+    }
 
     renameProfileId?.let { targetId ->
         TextInputDialog(
@@ -202,12 +284,26 @@ fun PatchProfilesScreen(
         return
     }
 
+    if (filteredProfiles.isEmpty() && normalizedQuery.isNotBlank()) {
+        Box(
+            modifier = modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = stringResource(R.string.search_no_results),
+                style = MaterialTheme.typography.titleLarge,
+                textAlign = TextAlign.Center
+            )
+        }
+        return
+    }
+
     LazyColumnWithScrollbar(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        items(profiles, key = { it.id }) { profile ->
+        items(filteredProfiles, key = { it.id }) { profile ->
             val bundleCountText = pluralStringResource(
                 R.plurals.patch_profile_bundle_count,
                 profile.bundleCount,
@@ -383,18 +479,16 @@ fun PatchProfilesScreen(
                                 renameProfileName = profile.name
                             }
                             Spacer(modifier = Modifier.size(8.dp))
-                            Icon(
-                                imageVector = Icons.Outlined.Settings,
-                                contentDescription = stringResource(R.string.patch_profile_version_override_action),
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier
-                                    .size(20.dp)
-                                    .clickable {
-                                        versionDialogProfile = profile
-                                        versionDialogValue = profile.appVersion.orEmpty()
-                                        versionDialogAllVersions = profile.appVersion.isNullOrBlank()
-                                    }
-                            )
+                            IconButton(
+                                onClick = { settingsDialogProfile = profile }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Settings,
+                                    contentDescription = stringResource(R.string.patch_profile_version_override_action),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
                     }
                     AnimatedVisibility(
@@ -524,6 +618,17 @@ fun PatchProfilesScreen(
             }
             }
         }
+    }
+
+    if (showOrderDialog) {
+        PatchProfilesOrderDialog(
+            profiles = profiles,
+            onDismissRequest = onDismissOrderDialog,
+            onConfirm = { ordered ->
+                viewModel.reorderProfiles(ordered.map { it.id })
+                onDismissOrderDialog()
+            }
+        )
     }
 
     optionDialogData?.let { data ->
@@ -696,6 +801,152 @@ fun PatchProfilesScreen(
                                     )
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        )
+    }
+
+    settingsDialogProfile?.let { profile ->
+        val settingsProfile = profiles.firstOrNull { it.id == profile.id } ?: profile
+        val apkPath = settingsProfile.apkPath?.takeIf { it.isNotBlank() }
+        val apkDisplayPath = settingsProfile.apkSourcePath?.takeIf { it.isNotBlank() } ?: apkPath
+        val versionSummary = settingsProfile.appVersion?.takeIf { it.isNotBlank() }?.let { version ->
+            if (version.startsWith("v", ignoreCase = true)) version else "v$version"
+        } ?: stringResource(R.string.bundle_version_all_versions)
+        var autoPatchUpdating by remember(settingsProfile.id) { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = {
+                if (apkPickerBusy) return@AlertDialog
+                settingsDialogProfile = null
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (apkPickerBusy) return@TextButton
+                        settingsDialogProfile = null
+                    }
+                ) {
+                    Text(stringResource(R.string.close))
+                }
+            },
+            title = { Text(stringResource(R.string.patch_profile_settings_title, settingsProfile.name)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = stringResource(R.string.patch_profile_apk_section_title),
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        val apkScrollState = rememberScrollState()
+                        Text(
+                            text = apkDisplayPath ?: stringResource(R.string.patch_profile_apk_not_set),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Visible,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(apkScrollState)
+                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TextButton(
+                                onClick = {
+                                    if (apkPickerBusy) return@TextButton
+                                    apkPickerProfile = settingsProfile
+                                }
+                            ) {
+                                Text(stringResource(R.string.patch_profile_apk_select))
+                            }
+                            if (apkPath != null) {
+                                TextButton(
+                                    onClick = {
+                                        if (apkPickerBusy) return@TextButton
+                                        apkPickerBusy = true
+                                        scope.launch {
+                                            try {
+                                                when (viewModel.updateProfileApk(settingsProfile.id, null)) {
+                                                    PatchProfilesViewModel.ApkSelectionResult.CLEARED -> context.toast(
+                                                        context.getString(
+                                                            R.string.patch_profile_apk_cleared_toast,
+                                                            settingsProfile.name
+                                                        )
+                                                    )
+                                                    PatchProfilesViewModel.ApkSelectionResult.PROFILE_NOT_FOUND,
+                                                    PatchProfilesViewModel.ApkSelectionResult.FAILED,
+                                                    PatchProfilesViewModel.ApkSelectionResult.SUCCESS,
+                                                    PatchProfilesViewModel.ApkSelectionResult.INVALID_FILE,
+                                                    PatchProfilesViewModel.ApkSelectionResult.PACKAGE_MISMATCH -> context.toast(
+                                                        context.getString(R.string.patch_profile_apk_failed_toast)
+                                                    )
+                                                }
+                                            } finally {
+                                                apkPickerBusy = false
+                                            }
+                                        }
+                                    }
+                                ) {
+                                    Text(stringResource(R.string.patch_profile_apk_clear))
+                                }
+                            }
+                        }
+                    }
+                    Divider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = stringResource(R.string.patch_profile_version_override_action),
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Text(
+                            text = versionSummary,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        TextButton(
+                            onClick = {
+                                if (apkPickerBusy) return@TextButton
+                                versionDialogProfile = settingsProfile
+                                versionDialogValue = settingsProfile.appVersion.orEmpty()
+                                versionDialogAllVersions = settingsProfile.appVersion.isNullOrBlank()
+                                settingsDialogProfile = null
+                            }
+                        ) {
+                            Text(stringResource(R.string.edit))
+                        }
+                    }
+                    Divider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        HapticCheckbox(
+                            checked = settingsProfile.autoPatch,
+                            onCheckedChange = { enabled ->
+                                if (autoPatchUpdating) return@HapticCheckbox
+                                autoPatchUpdating = true
+                                scope.launch {
+                                    val updated = viewModel.updateProfileAutoPatch(settingsProfile.id, enabled)
+                                    if (!updated) {
+                                        context.toast(context.getString(R.string.patch_profile_save_failed_toast))
+                                    }
+                                    autoPatchUpdating = false
+                                }
+                            }
+                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = stringResource(R.string.patch_profile_auto_patch_label),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                text = stringResource(R.string.patch_profile_auto_patch_description),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
@@ -881,6 +1132,103 @@ fun PatchProfilesScreen(
                 )
             }
         )
+    }
+}
+
+@Composable
+private fun PatchProfilesOrderDialog(
+    profiles: List<PatchProfileListItem>,
+    onDismissRequest: () -> Unit,
+    onConfirm: (List<PatchProfileListItem>) -> Unit
+) {
+    val workingOrder = remember(profiles) { profiles.toMutableStateList() }
+    val lazyListState = rememberLazyListState()
+    val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
+        workingOrder.add(to.index, workingOrder.removeAt(from.index))
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        confirmButton = {
+            TextButton(onClick = { onConfirm(workingOrder.toList()) }, enabled = workingOrder.isNotEmpty()) {
+                Text(text = stringResource(R.string.save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text(text = stringResource(R.string.cancel))
+            }
+        },
+        title = { Text(text = stringResource(R.string.patch_profiles_reorder_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = stringResource(R.string.patch_profiles_reorder_description),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                LazyColumnWithScrollbar(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 320.dp),
+                    state = lazyListState
+                ) {
+                    itemsIndexed(workingOrder, key = { _, profile -> profile.id }) { index, profile ->
+                        val interactionSource = remember { MutableInteractionSource() }
+                        ReorderableItem(reorderableState, key = profile.id) { _ ->
+                            PatchProfileOrderRow(
+                                index = index,
+                                profile = profile,
+                                interactionSource = interactionSource
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    )
+}
+
+@Composable
+private fun ReorderableCollectionItemScope.PatchProfileOrderRow(
+    index: Int,
+    profile: PatchProfileListItem,
+    interactionSource: MutableInteractionSource
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            text = (index + 1).toString(),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = profile.name,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = profile.packageName,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        IconButton(
+            onClick = {},
+            interactionSource = interactionSource,
+            modifier = Modifier.longPressDraggableHandle()
+        ) {
+            Icon(
+                imageVector = Icons.Filled.DragHandle,
+                contentDescription = stringResource(R.string.drag_handle)
+            )
+        }
     }
 }
 

@@ -22,7 +22,9 @@ import androidx.lifecycle.viewmodel.compose.saveable
 import app.universal.revanced.manager.R
 import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.data.room.apps.downloaded.DownloadedApp
+import app.revanced.manager.data.room.apps.installed.InstallType
 import app.revanced.manager.data.room.apps.installed.InstalledApp
+import app.revanced.manager.data.room.profile.PatchProfilePayload
 import app.revanced.manager.domain.installer.RootInstaller
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.repository.DownloadedAppRepository
@@ -59,6 +61,9 @@ import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.simpleMessage
 import app.revanced.manager.util.toast
 import androidx.documentfile.provider.DocumentFile
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -102,6 +107,7 @@ class SelectedAppInfoViewModel(
     private val patchProfileRepository: PatchProfileRepository = get()
     private val installedAppRepository: InstalledAppRepository = get()
     private val rootInstaller: RootInstaller = get()
+    private val json: Json = get()
     private val pm: PM = get()
     private val filesystem: Filesystem = get()
     private val savedStateHandle: SavedStateHandle = get()
@@ -113,7 +119,16 @@ class SelectedAppInfoViewModel(
     val packageName = input.app.packageName
     private val profileId = input.profileId
     private val requiresSourceSelection = input.requiresSourceSelection
+    private val inputSelectionPayload = input.selectionPayloadJson?.let { encoded ->
+        runCatching { json.decodeFromString<PatchProfilePayload>(encoded) }
+            .onFailure { error ->
+                if (error !is SerializationException) return@onFailure
+                Log.e(TAG, "Failed to decode selection payload", error)
+            }
+            .getOrNull()
+    }
     val sourceSelectionRequired get() = requiresSourceSelection
+    private val persistConfiguration = input.persistConfiguration
     private val storageInputDir = filesystem.uiTempDir
     private val splitWorkspace = filesystem.tempDir
     private var preparedApkCleanup: (() -> Unit)? = null
@@ -122,6 +137,7 @@ class SelectedAppInfoViewModel(
     private val _profileLaunchState = MutableStateFlow<ProfileLaunchState?>(null)
     val profileLaunchState = _profileLaunchState.asStateFlow()
     private var autoLaunchProfilePatcher = profileId != null
+    private var autoPatchProfile = false
     private val allowUniversalFlow = prefs.disableUniversalPatchCheck.flow
     private var allowUniversalPatches = true
     private var _selectedApp by savedStateHandle.saveable {
@@ -194,8 +210,6 @@ class SelectedAppInfoViewModel(
         }.sortedBy { it.name.lowercase(Locale.ROOT) }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    private val persistConfiguration = input.patches == null
-
     val hasRoot = rootInstaller.hasRootAccess()
     var installedAppData: Pair<SelectedApp.Installed, InstalledApp?>? by mutableStateOf(null)
         private set
@@ -217,24 +231,25 @@ class SelectedAppInfoViewModel(
         }
 
     var options: Options by savedStateHandle.saveable {
-        val state = mutableStateOf<Options>(emptyMap())
+        mutableStateOf<Options>(emptyMap())
+    }
+        private set
 
+    private fun loadOptionsFromRepository() {
+        if (optionsLoadJob?.isActive == true) return
         optionsLoadJob = viewModelScope.launch {
             val bundlePatches = withContext(Dispatchers.Default) {
                 bundleRepository
-                    .scopedBundleInfoFlow(packageName, input.app.version)
+                    .scopedBundleInfoFlow(packageName, desiredVersion)
                     .first()
                     .associate { scoped -> scoped.uid to scoped.patches.associateBy { it.name } }
             }
 
-            state.value = withContext(Dispatchers.Default) {
+            options = withContext(Dispatchers.Default) {
                 optionsRepository.getOptions(packageName, bundlePatches)
             }
         }
-
-        state
     }
-        private set
 
     private var selectionState: SelectionState by mutableStateOf(
         if (input.patches != null) SelectionState.Customized(input.patches) else SelectionState.Default
@@ -247,6 +262,7 @@ class SelectedAppInfoViewModel(
                 if (previous.values.sumOf { it.size } == 0) return@launch
                 selectionState = SelectionState.Customized(previous)
             }
+            loadOptionsFromRepository()
         }
     }
 
@@ -257,14 +273,24 @@ class SelectedAppInfoViewModel(
             val packageInfo = async(Dispatchers.IO) { pm.getPackageInfo(packageName) }
             val installedAppDeferred =
                 async(Dispatchers.IO) { installedAppRepository.get(packageName) }
+            val installedApp = installedAppDeferred.await()
 
             installedAppData =
                 packageInfo.await()?.let {
                     SelectedApp.Installed(
                         packageName,
                         it.versionName!!
-                    ) to installedAppDeferred.await()
+                    ) to installedApp
                 }
+            if (profileId == null && input.patches != null) {
+                val payload = inputSelectionPayload
+                    ?: installedApp?.takeIf { it.installType == InstallType.SAVED }?.selectionPayload
+                if (payload != null) {
+                    applySavedSelectionPayload(payload)
+                } else {
+                    loadOptionsFromRepository()
+                }
+            }
         }
 
         allowUniversalPatches = prefs.disableUniversalPatchCheck.getBlocking()
@@ -378,8 +404,10 @@ class SelectedAppInfoViewModel(
                     app.toast(app.getString(R.string.patch_profile_launch_error))
                 }
                 autoLaunchProfilePatcher = false
+                autoPatchProfile = false
                 return@launch
             }
+            autoPatchProfile = profile.autoPatch && !profile.apkPath.isNullOrBlank()
 
             val sourcesList = bundleRepository.sources.first()
             val bundleInfoSnapshot = bundleRepository.bundleInfoFlow.first()
@@ -395,19 +423,21 @@ class SelectedAppInfoViewModel(
                 .associateBy { it.uid }
             val allowUniversal = prefs.disableUniversalPatchCheck.get()
             if (!allowUniversal) {
-                val universalPatchNames = bundleInfoSnapshot
-                    .values
-                    .flatMap { it.patches }
-                    .filter { it.compatiblePackages == null }
-                    .mapTo(mutableSetOf()) { it.name.lowercase() }
+                val universalPatchNamesByUid = bundleInfoSnapshot.mapValues { (_, info) ->
+                    info.patches
+                        .asSequence()
+                        .filter { it.compatiblePackages == null }
+                        .mapTo(mutableSetOf()) { it.name.trim().lowercase() }
+                }
                 val containsUniversal = workingProfile.payload.bundles.any { bundle ->
                     val info = scopedBundles[bundle.bundleUid]
+                    val universalNames = universalPatchNamesByUid[bundle.bundleUid].orEmpty()
                     bundle.patches.any { patchName ->
-                        val normalized = patchName.lowercase()
+                        val normalized = patchName.trim().lowercase()
                         val matchesScoped = info?.patches?.any {
                             it.name.equals(patchName, true) && it.compatiblePackages == null
                         } == true
-                        matchesScoped || universalPatchNames.contains(normalized)
+                        matchesScoped || universalNames.contains(normalized)
                     }
                 }
                 if (containsUniversal) {
@@ -453,6 +483,43 @@ class SelectedAppInfoViewModel(
                     app.toast(app.getString(R.string.patch_profile_changed_patches_toast))
                 }
             }
+        }
+    }
+
+    private fun applySavedSelectionPayload(payload: PatchProfilePayload) {
+        val hasPayloadOptions = payload.bundles.any { it.options.isNotEmpty() }
+        viewModelScope.launch(Dispatchers.Default) {
+            val sourcesList = bundleRepository.sources.first()
+            val bundleInfoSnapshot = bundleRepository.bundleInfoFlow.first()
+            val signatureMap = bundleInfoSnapshot.mapValues { (_, info) ->
+                info.patches.map { it.name.trim().lowercase() }.toSet()
+            }
+            val remappedPayload = payload.remapLocalBundles(sourcesList, signatureMap)
+            val scopedBundles = bundleRepository
+                .scopedBundleInfoFlow(packageName, desiredVersion)
+                .first()
+                .associateBy { it.uid }
+            val sources = sourcesList.associateBy { it.uid }
+            val config = PatchProfile(
+                uid = 0,
+                name = "",
+                packageName = packageName,
+                appVersion = desiredVersion,
+                apkPath = null,
+                apkSourcePath = null,
+                apkVersion = null,
+                autoPatch = false,
+                createdAt = 0L,
+                payload = remappedPayload
+            ).toConfiguration(scopedBundles, sources)
+            val selection = config.selection.takeUnless { it.isEmpty() }
+            val resolvedOptions = if (hasPayloadOptions) config.options else emptyMap()
+            updateConfiguration(
+                selection,
+                resolvedOptions,
+                persistState = false,
+                filterOptions = false
+            ).join()
         }
     }
     private fun pruneSelectionForUniversal(bundles: List<PatchBundleInfo.Scoped>) {
@@ -642,9 +709,7 @@ class SelectedAppInfoViewModel(
         cancelPluginAction()
         viewModelScope.launch {
             val result = runCatching {
-                val apkFile = withContext(Dispatchers.IO) {
-                    downloadedAppRepository.getPreparedApkFile(downloadedApp)
-                }
+                val apkFile = downloadedAppRepository.getApkFileForApp(downloadedApp)
                 withContext(Dispatchers.IO) {
                     downloadedAppRepository.get(
                         downloadedApp.packageName,
@@ -702,6 +767,21 @@ class SelectedAppInfoViewModel(
 
             else -> Unit
         }
+
+        if (bundleUid != null) {
+            applyBundleRecommendationSelection(bundleUid)
+        }
+    }
+
+    private fun applyBundleRecommendationSelection(bundleUid: Int) = viewModelScope.launch {
+        val bundles = bundleInfoFlow.first()
+        val bundle = bundles.firstOrNull { it.uid == bundleUid } ?: return@launch
+        val allowIncompatible = prefs.disablePatchVersionCompatCheck.get()
+        val selectedPatches = bundle.patchSequence(allowIncompatible)
+            .filter { it.include }
+            .map { it.name }
+            .toSet()
+        selectionState = SelectionState.Customized(mapOf(bundleUid to selectedPatches))
     }
 
     fun searchUsingPlugin(plugin: LoadedDownloaderPlugin) {
@@ -795,7 +875,7 @@ class SelectedAppInfoViewModel(
                         ?: downloadedAppRepository.getLatest(app.packageName)
                     else -> downloadedAppRepository.getLatest(app.packageName)
                 }
-                downloaded?.let { resolvePackageInfo(downloadedAppRepository.getPreparedApkFile(it)) }
+                downloaded?.let { resolvePackageInfo(downloadedAppRepository.getApkFileForApp(it)) }
                     ?: pm.getPackageInfo(app.packageName)
             }
             else -> null
@@ -904,7 +984,10 @@ class SelectedAppInfoViewModel(
 
     fun markProfileAutoLaunchConsumed() {
         autoLaunchProfilePatcher = false
+        autoPatchProfile = false
     }
+
+    fun shouldAutoPatchProfile() = autoPatchProfile
 
     data class ProfileLaunchState(
         val profile: PatchProfile,

@@ -13,7 +13,10 @@ import app.revanced.manager.domain.installer.RootInstaller
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.manager.hideInstallerComponent
 import app.revanced.manager.domain.manager.showInstallerComponent
+import app.revanced.manager.domain.repository.InstalledAppRepository
 import app.revanced.manager.domain.repository.PatchBundleRepository
+import app.revanced.manager.data.platform.Filesystem
+import app.revanced.manager.data.room.apps.installed.InstallType
 import app.revanced.manager.util.tag
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.simpleMessage
@@ -36,6 +39,8 @@ class AdvancedSettingsViewModel(
     val prefs: PreferencesManager,
     private val app: Application,
     private val patchBundleRepository: PatchBundleRepository,
+    private val installedAppRepository: InstalledAppRepository,
+    private val filesystem: Filesystem,
     private val installerManager: InstallerManager,
     private val rootInstaller: RootInstaller
 ) : ViewModel() {
@@ -125,6 +130,22 @@ class AdvancedSettingsViewModel(
 
     fun resetPatchedAppExportFormat() = viewModelScope.launch(Dispatchers.Default) {
         prefs.patchedAppExportFormat.update(prefs.patchedAppExportFormat.default)
+    }
+
+    fun setSavedAppsEnabled(enabled: Boolean) = viewModelScope.launch(Dispatchers.Default) {
+        prefs.enableSavedApps.update(enabled)
+        if (enabled) return@launch
+
+        withContext(Dispatchers.IO) {
+            val savedApps = installedAppRepository.getByInstallType(InstallType.SAVED)
+            savedApps.forEach { app ->
+                installedAppRepository.delete(app)
+                filesystem.deletePatchedAppFiles(app.currentPackageName)
+                if (app.originalPackageName != app.currentPackageName) {
+                    filesystem.deletePatchedAppFiles(app.originalPackageName)
+                }
+            }
+        }
     }
 
     fun setPatchSelectionActionOrder(order: List<PatchSelectionActionKey>) =

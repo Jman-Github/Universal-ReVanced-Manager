@@ -25,6 +25,7 @@ class CoroutineRuntime(context: Context) : Runtime(context) {
         logger: Logger,
         onEvent: (ProgressEvent) -> Unit,
         stripNativeLibs: Boolean,
+        skipUnneededSplits: Boolean,
     ) {
         val patchList = runStep(StepId.LoadPatches, onEvent) {
             val selectedBundles = selectedPatches.keys
@@ -62,7 +63,14 @@ class CoroutineRuntime(context: Context) : Runtime(context) {
                     input,
                     File(cacheDir),
                     logger,
-                    stripNativeLibs
+                    stripNativeLibs,
+                    skipUnneededSplits,
+                    onProgress = { message ->
+                        onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
+                    },
+                    onSubSteps = { subSteps ->
+                        onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
+                    }
                 )
             }
         } else {
@@ -70,7 +78,14 @@ class CoroutineRuntime(context: Context) : Runtime(context) {
                 input,
                 File(cacheDir),
                 logger,
-                stripNativeLibs
+                stripNativeLibs,
+                skipUnneededSplits,
+                onProgress = { message ->
+                    onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
+                },
+                onSubSteps = { subSteps ->
+                    onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
+                }
             )
         }
 
@@ -89,7 +104,9 @@ class CoroutineRuntime(context: Context) : Runtime(context) {
             session.use { s ->
                 s.run(
                     File(outputFile),
-                    patchList
+                    patchList,
+                    stripNativeLibs,
+                    preparation.merged
                 )
             }
         } finally {

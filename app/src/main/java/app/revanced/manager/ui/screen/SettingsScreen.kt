@@ -142,12 +142,14 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                     R.string.universal_patches_safeguard,
                     R.string.restore_official_bundle,
                     R.string.strip_unused_libs,
+                    R.string.skip_unneeded_split_apks,
                     R.string.process_runtime,
                     R.string.process_runtime_memory_limit,
                     R.string.process_runtime_memory_aggressive,
                     R.string.patcher_auto_collapse_steps,
                     R.string.patcher_auto_expand_steps,
                     R.string.patcher_saved_apps_title,
+                    R.string.show_patch_selection_summary,
                     R.string.patch_selection_collapse_on_toggle,
                     R.string.patch_selection_action_order_title,
                     R.string.patch_selection_action_visibility_title,
@@ -171,7 +173,6 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                 keywords = listOf(
                     R.string.battery_optimization_banner_title,
                     R.string.patches_force_download,
-                    R.string.patches_reset,
                     R.string.patch_profile_bundle_override_title
                 )
             )
@@ -186,6 +187,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.theme_presets, R.string.theme_presets_description, R.string.general, Settings.General),
             SearchEntry(R.string.theme_color, R.string.theme_color_description, R.string.general, Settings.General),
             SearchEntry(R.string.accent_color, R.string.accent_color_description, R.string.general, Settings.General),
+            SearchEntry(R.string.pure_black_follow_system, R.string.pure_black_follow_system_description, R.string.general, Settings.General),
             SearchEntry(R.string.theme_preview_title, R.string.theme_preview_description, R.string.general, Settings.General),
             SearchEntry(R.string.theme_reset, null, R.string.general, Settings.General),
             SearchEntry(R.string.app_language, null, R.string.general, Settings.General),
@@ -224,12 +226,14 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.universal_patches_safeguard, R.string.universal_patches_safeguard_description, R.string.advanced, Settings.Advanced),
             SearchEntry(R.string.restore_official_bundle, null, R.string.advanced, Settings.Advanced),
             SearchEntry(R.string.strip_unused_libs, R.string.strip_unused_libs_description, R.string.advanced, Settings.Advanced),
+            SearchEntry(R.string.skip_unneeded_split_apks, R.string.skip_unneeded_split_apks_description, R.string.advanced, Settings.Advanced),
             SearchEntry(R.string.process_runtime, R.string.process_runtime_description, R.string.advanced, Settings.Advanced),
             SearchEntry(R.string.process_runtime_memory_limit, R.string.process_runtime_memory_limit_description, R.string.advanced, Settings.Advanced),
             SearchEntry(R.string.process_runtime_memory_aggressive, R.string.process_runtime_memory_aggressive_description, R.string.advanced, Settings.Advanced),
             SearchEntry(R.string.patcher_auto_collapse_steps, R.string.patcher_auto_collapse_steps_description, R.string.advanced, Settings.Advanced),
             SearchEntry(R.string.patcher_auto_expand_steps, R.string.patcher_auto_expand_steps_description, R.string.advanced, Settings.Advanced),
             SearchEntry(R.string.patcher_saved_apps_title, R.string.patcher_saved_apps_description, R.string.advanced, Settings.Advanced),
+            SearchEntry(R.string.show_patch_selection_summary, R.string.show_patch_selection_summary_description, R.string.advanced, Settings.Advanced),
             SearchEntry(R.string.patch_selection_collapse_on_toggle, R.string.patch_selection_collapse_on_toggle_description, R.string.advanced, Settings.Advanced),
             SearchEntry(R.string.patch_selection_action_order_title, R.string.patch_selection_action_order_description, R.string.advanced, Settings.Advanced),
             SearchEntry(R.string.patch_selection_action_visibility_title, R.string.patch_selection_action_visibility_description, R.string.advanced, Settings.Advanced),
@@ -239,7 +243,6 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.about_device, null, R.string.advanced, Settings.Advanced),
             SearchEntry(R.string.battery_optimization_banner_title, R.string.battery_optimization_banner_description, R.string.developer_options, Settings.Developer),
             SearchEntry(R.string.patches_force_download, null, R.string.developer_options, Settings.Developer),
-            SearchEntry(R.string.patches_reset, null, R.string.developer_options, Settings.Developer),
             SearchEntry(R.string.patch_profile_bundle_override_title, R.string.patch_profile_bundle_override_description, R.string.developer_options, Settings.Developer),
         )
     }

@@ -1,5 +1,6 @@
 package app.revanced.manager.ui.screen
 
+import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.EaseInOut
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
@@ -33,6 +35,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -69,11 +72,13 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SearchBarValue
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.rememberSearchBarState
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -96,6 +101,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -112,6 +118,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.net.Uri
 import android.os.Build
@@ -126,6 +133,7 @@ import app.revanced.manager.ui.component.CheckedFilterChip
 import app.revanced.manager.ui.component.FullscreenDialog
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
 import app.revanced.manager.ui.component.SearchBar
+import app.revanced.manager.ui.component.SearchView
 import app.revanced.manager.ui.component.AlertDialogExtended
 import app.revanced.manager.ui.component.haptics.HapticCheckbox
 import app.revanced.manager.ui.component.haptics.HapticExtendedFloatingActionButton
@@ -136,6 +144,8 @@ import app.revanced.manager.ui.model.PatchSelectionActionKey
 import app.revanced.manager.ui.viewmodel.BundleSourceType
 import app.revanced.manager.ui.viewmodel.PatchesSelectorViewModel
 import app.revanced.manager.ui.viewmodel.PatchesSelectorViewModel.Companion.SHOW_INCOMPATIBLE
+import app.revanced.manager.ui.viewmodel.PatchesSelectorViewModel.Companion.SHOW_NON_UNIVERSAL
+import app.revanced.manager.ui.viewmodel.PatchesSelectorViewModel.Companion.SHOW_TYPE_FILTER
 import app.revanced.manager.ui.viewmodel.PatchesSelectorViewModel.Companion.SHOW_UNIVERSAL
 import app.revanced.manager.util.Options
 import app.revanced.manager.util.PatchSelection
@@ -168,11 +178,22 @@ fun PatchesSelectorScreen(
         bundles.size
     }
     val composableScope = rememberCoroutineScope()
-    val (query, setQuery) = rememberSaveable {
-        mutableStateOf("")
+    val textFieldState = rememberTextFieldState()
+    val searchBarState = rememberSearchBarState()
+    val query by remember {
+        derivedStateOf { textFieldState.text.toString() }
     }
-    val (searchExpanded, setSearchExpanded) = rememberSaveable {
-        mutableStateOf(false)
+    val searchExpanded by remember {
+        derivedStateOf { searchBarState.currentValue == SearchBarValue.Expanded }
+    }
+    var searchActive by rememberSaveable { mutableStateOf(false) }
+    val useFallbackSearch = remember {
+        Build.VERSION.SDK_INT <= Build.VERSION_CODES.O_MR1
+    }
+    val updateQuery: (String) -> Unit = { value ->
+        textFieldState.edit {
+            replace(0, length, value)
+        }
     }
     var showBottomSheet by rememberSaveable { mutableStateOf(false) }
     val actionOrderPref by viewModel.prefs.patchSelectionActionOrder.getAsState()
@@ -191,6 +212,7 @@ fun PatchesSelectorScreen(
         orderedActionKeys.filterNot { it.storageId in hiddenActionsPref }
     }
     val context = LocalContext.current
+    val density = LocalDensity.current
     val selectedBundleUids = remember { mutableStateListOf<Int>() }
     var showBundleDialog by rememberSaveable { mutableStateOf(false) }
     var showProfileNameDialog by rememberSaveable { mutableStateOf(false) }
@@ -250,6 +272,17 @@ fun PatchesSelectorScreen(
                 ?: (defaultPatchSelectionCount > 0)
         }
     }
+    val typeFilterMask = SHOW_UNIVERSAL or SHOW_NON_UNIVERSAL
+    val typeFilterActive by remember {
+        derivedStateOf {
+            viewModel.filter and SHOW_TYPE_FILTER != 0 || viewModel.filter and typeFilterMask != 0
+        }
+    }
+    val nonUniversalSelected by remember {
+        derivedStateOf {
+            typeFilterActive && viewModel.filter and SHOW_NON_UNIVERSAL != 0
+        }
+    }
     val currentBundleHasSelection by remember {
         derivedStateOf {
             val bundle = bundles.getOrNull(pagerState.currentPage)
@@ -303,6 +336,33 @@ fun PatchesSelectorScreen(
                 actionsExpanded = false
             }
     }
+    BackHandler(enabled = !dialogsOpen && (if (useFallbackSearch) searchActive else searchExpanded)) {
+        if (useFallbackSearch) {
+            searchActive = false
+        } else {
+            composableScope.launch {
+                searchBarState.animateToCollapsed()
+            }
+        }
+    }
+    LaunchedEffect(searchActive, useFallbackSearch) {
+        if (useFallbackSearch && searchActive) {
+            actionsExpanded = false
+        }
+    }
+    LaunchedEffect(searchExpanded, useFallbackSearch) {
+        if (!useFallbackSearch && searchExpanded) {
+            actionsExpanded = false
+        }
+    }
+    LaunchedEffect(dialogsOpen, useFallbackSearch) {
+        if (!dialogsOpen) return@LaunchedEffect
+        if (useFallbackSearch) {
+            searchActive = false
+        } else {
+            searchBarState.animateToCollapsed()
+        }
+    }
 
     fun openProfileSaveDialog() {
         if (bundles.isEmpty() || isSavingProfile) return
@@ -312,7 +372,13 @@ fun PatchesSelectorScreen(
         defaultBundleUid?.let { selectedBundleUids.add(it) }
         pendingProfileName = ""
         selectedProfileId = null
-        if (searchExpanded) setSearchExpanded(false)
+        if (useFallbackSearch && searchActive) {
+            searchActive = false
+        } else if (!useFallbackSearch && searchExpanded) {
+            composableScope.launch {
+                searchBarState.animateToCollapsed()
+            }
+        }
         showBottomSheet = false
         showBundleDialog = true
     }
@@ -347,11 +413,29 @@ fun PatchesSelectorScreen(
                         onClick = { viewModel.toggleFlag(SHOW_INCOMPATIBLE) },
                         label = { Text(stringResource(R.string.this_version)) }
                     )
+                }
 
+                Spacer(modifier = Modifier.size(0.dp, 10.dp))
+
+                Text(
+                    text = stringResource(R.string.patch_selector_sheet_filter_type_title),
+                    style = MaterialTheme.typography.titleMedium
+                )
+
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    CheckedFilterChip(
+                        selected = typeFilterActive && viewModel.filter and SHOW_NON_UNIVERSAL != 0,
+                        onClick = { viewModel.toggleTypeFlag(SHOW_NON_UNIVERSAL) },
+                        label = { Text(stringResource(R.string.non_universal)) }
+                    )
                     if (viewModel.allowUniversalPatches) {
                         CheckedFilterChip(
-                            selected = viewModel.filter and SHOW_UNIVERSAL != 0,
-                            onClick = { viewModel.toggleFlag(SHOW_UNIVERSAL) },
+                            selected = typeFilterActive && viewModel.filter and SHOW_UNIVERSAL != 0,
+                            onClick = { viewModel.toggleTypeFlag(SHOW_UNIVERSAL) },
                             label = { Text(stringResource(R.string.universal)) },
                         )
                     }
@@ -594,6 +678,30 @@ fun PatchesSelectorScreen(
             }
         )
     }
+    if (viewModel.showMixedPatchBundlesDialog) {
+        AlertDialogExtended(
+            onDismissRequest = viewModel::dismissMixedPatchBundlesDialog,
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissMixedPatchBundlesDialog) {
+                    Text(stringResource(R.string.ok))
+                }
+            },
+            title = {
+                Text(
+                    text = stringResource(R.string.mixed_patch_bundles_title),
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Start
+                )
+            },
+            text = {
+                Text(
+                    text = stringResource(R.string.mixed_patch_bundles_description),
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Start
+                )
+            }
+        )
+    }
     val disableActionConfirmations by viewModel.prefs.disablePatchSelectionConfirmations.getAsState()
     val collapseActionsOnSelection by viewModel.prefs.collapsePatchActionsOnSelection.getAsState()
 
@@ -740,6 +848,22 @@ fun PatchesSelectorScreen(
     val currentBundle = bundles.getOrNull(pagerState.currentPage)
     val currentBundleDisplayName = currentBundle?.let { bundleDisplayNames[it.uid] ?: it.name }
     val warningEnabled = viewModel.selectionWarningEnabled
+    val currentBundleUid by remember {
+        derivedStateOf { bundles.getOrNull(pagerState.currentPage)?.uid }
+    }
+    val currentBundleSelectionCount by remember {
+        derivedStateOf {
+            currentBundleUid?.let { viewModel.bundleSelectionCount(it) } ?: 0
+        }
+    }
+    val showBundleCounter by remember {
+        derivedStateOf { bundles.size > 1 && currentBundleUid != null }
+    }
+    var tabRowHeightPx by remember { mutableStateOf(0) }
+    var bundleCounterHeightPx by remember(density) {
+        mutableStateOf(with(density) { 24.dp.roundToPx() })
+    }
+    val bundleCounterOffsetPx = remember(density) { with(density) { 6.dp.roundToPx() } }
 
     val actionSpecs = visibleActionKeys.mapNotNull { key ->
         when (key) {
@@ -895,136 +1019,34 @@ fun PatchesSelectorScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            SearchBar(
-                query = query,
-                onQueryChange = setQuery,
-                expanded = searchExpanded && !dialogsOpen,
-                onExpandedChange = { expanded ->
-                    if (dialogsOpen) return@SearchBar
-                    if (expanded) {
-                        actionsExpanded = false
-                    }
-                    setSearchExpanded(expanded)
-                },
-                placeholder = {
-                    Text(stringResource(R.string.search_patches))
-                },
-                leadingIcon = {
-                    val rotation by animateFloatAsState(
-                        targetValue = if (searchExpanded) 360f else 0f,
-                        animationSpec = tween(durationMillis = 400, easing = EaseInOut),
-                        label = "SearchBar back button"
-                    )
-                    IconButton(
-                        onClick = {
-                            if (searchExpanded) {
-                                setSearchExpanded(false)
-                            } else {
-                                onBackClick()
-                            }
-                        }
-                    ) {
-                        Icon(
-                            modifier = Modifier.rotate(rotation),
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.back)
-                        )
-                    }
-                },
-                trailingIcon = {
-                    AnimatedContent(
-                        targetState = searchExpanded,
-                        label = "Filter/Clear",
-                        transitionSpec = { fadeIn() togetherWith fadeOut() }
-                    ) { expanded ->
-                        if (expanded) {
-                            IconButton(
-                                onClick = { setQuery("") },
-                                enabled = query.isNotEmpty()
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Close,
-                                    contentDescription = stringResource(R.string.clear)
-                                )
-                            }
-                        } else {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box {
-                                    val toggleLabel = if (actionsExpanded) {
-                                        R.string.patch_selection_toggle_collapse
-                                    } else {
-                                        R.string.patch_selection_toggle_expand
-                                    }
-                                    IconButton(onClick = {
-                                        if (visibleActionKeys.isEmpty()) {
-                                            actionsExpanded = false
-                                            context.toast(
-                                                context.getString(R.string.patch_selection_all_actions_hidden_toast)
-                                            )
-                                            return@IconButton
-                                        }
-                                        actionsExpanded = !actionsExpanded
-                                    }) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.MoreHoriz,
-                                            contentDescription = stringResource(toggleLabel)
-                                        )
-                                    }
-                                    if (actionsExpanded) {
-                                        val density = LocalDensity.current
-                                        val marginPx = remember(density) { with(density) { 8.dp.roundToPx() } }
-                                        val glowRadiusPx = remember(density) { with(density) { 220.dp.toPx() } }
+    if (useFallbackSearch && searchActive) {
+        SearchView(
+            query = query,
+            onQueryChange = updateQuery,
+            onActiveChange = { searchActive = it },
+            placeholder = { Text(stringResource(R.string.search_patches)) }
+        ) {
+            val bundle = bundles[pagerState.currentPage]
+            val suggestedVersion = suggestedVersionsByBundle[bundle.uid]?.get(viewModel.appPackageName)
+            val searchQuery = query
 
-                                        Popup(
-                                            popupPositionProvider = remember(marginPx) {
-                                                PatchSelectionActionsPopupPositionProvider(marginPx = marginPx)
-                                            },
-                                            onDismissRequest = { actionsExpanded = false },
-                                            properties = PopupProperties(
-                                                focusable = true,
-                                                dismissOnBackPress = true,
-                                                dismissOnClickOutside = true
-                                            )
-                                        ) {
-                                            PatchSelectionActionsPopup(
-                                                actionSpecs = actionSpecs,
-                                                glowRadiusPx = glowRadiusPx,
-                                                onActionClick = { spec ->
-                                                    spec.onClick()
-                                                    actionsExpanded = false
-                                                }
-                                            )
-                                        }
-                                    }
-                                }
-                                IconButton(onClick = {
-                                    actionsExpanded = false
-                                    showBottomSheet = true
-                                }) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.FilterList,
-                                        contentDescription = stringResource(R.string.more)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+            LazyColumnWithScrollbar(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                val bundle = bundles[pagerState.currentPage]
-                val suggestedVersion = suggestedVersionsByBundle[bundle.uid]?.get(viewModel.appPackageName)
+                fun List<PatchInfo>.searched() = filter {
+                    it.name.contains(searchQuery, true)
+                }
 
-                LazyColumnWithScrollbar(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    fun List<PatchInfo>.searched() = filter {
-                        it.name.contains(query, true)
+                if (nonUniversalSelected) {
+                    if (bundle.compatible.isNotEmpty()) {
+                        item(contentType = 0) {
+                            ListHeader(
+                                title = stringResource(R.string.regular_patches)
+                            )
+                        }
                     }
-
                     patchList(
                         uid = bundle.uid,
                         patches = bundle.compatible.searched(),
@@ -1034,8 +1056,20 @@ fun PatchesSelectorScreen(
                     )
                     patchList(
                         uid = bundle.uid,
+                        patches = bundle.incompatible.searched(),
+                        visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
+                        compatible = viewModel.allowIncompatiblePatches,
+                        suggestedVersion = suggestedVersion
+                    ) {
+                        ListHeader(
+                            title = stringResource(R.string.incompatible_patches),
+                            onHelpClick = { showIncompatiblePatchesDialog = true }
+                        )
+                    }
+                    patchList(
+                        uid = bundle.uid,
                         patches = bundle.universal.searched(),
-                        visible = viewModel.filter and SHOW_UNIVERSAL != 0,
+                        visible = true,
                         compatible = true,
                         suggestedVersion = suggestedVersion
                     ) {
@@ -1043,7 +1077,32 @@ fun PatchesSelectorScreen(
                             title = stringResource(R.string.universal_patches),
                         )
                     }
-
+                } else {
+                    patchList(
+                        uid = bundle.uid,
+                        patches = bundle.universal.searched(),
+                        visible = true,
+                        compatible = true,
+                        suggestedVersion = suggestedVersion
+                    ) {
+                        ListHeader(
+                            title = stringResource(R.string.universal_patches),
+                        )
+                    }
+                    if (bundle.compatible.isNotEmpty()) {
+                        item(contentType = 0) {
+                            ListHeader(
+                                title = stringResource(R.string.regular_patches)
+                            )
+                        }
+                    }
+                    patchList(
+                        uid = bundle.uid,
+                        patches = bundle.compatible.searched(),
+                        visible = true,
+                        compatible = true,
+                        suggestedVersion = suggestedVersion
+                    )
                     patchList(
                         uid = bundle.uid,
                         patches = bundle.incompatible.searched(),
@@ -1058,9 +1117,297 @@ fun PatchesSelectorScreen(
                     }
                 }
             }
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            if (useFallbackSearch) {
+                AppTopBar(
+                    title = stringResource(R.string.patch_selector_item),
+                    onBackClick = onBackClick,
+                    actions = {
+                        IconButton(onClick = { searchActive = true }) {
+                            Icon(
+                                imageVector = Icons.Outlined.Search,
+                                contentDescription = stringResource(R.string.search)
+                            )
+                        }
+                        Box {
+                            val toggleLabel = if (actionsExpanded) {
+                                R.string.patch_selection_toggle_collapse
+                            } else {
+                                R.string.patch_selection_toggle_expand
+                            }
+                            IconButton(onClick = {
+                                if (visibleActionKeys.isEmpty()) {
+                                    actionsExpanded = false
+                                    context.toast(
+                                        context.getString(R.string.patch_selection_all_actions_hidden_toast)
+                                    )
+                                    return@IconButton
+                                }
+                                actionsExpanded = !actionsExpanded
+                            }) {
+                                Icon(
+                                    imageVector = Icons.Outlined.MoreHoriz,
+                                    contentDescription = stringResource(toggleLabel)
+                                )
+                            }
+                            if (actionsExpanded) {
+                                val density = LocalDensity.current
+                                val marginPx = remember(density) { with(density) { 8.dp.roundToPx() } }
+                                val glowRadiusPx = remember(density) { with(density) { 220.dp.toPx() } }
+
+                                Popup(
+                                    popupPositionProvider = remember(marginPx) {
+                                        PatchSelectionActionsPopupPositionProvider(marginPx = marginPx)
+                                    },
+                                    onDismissRequest = { actionsExpanded = false },
+                                    properties = PopupProperties(
+                                        focusable = true,
+                                        dismissOnBackPress = true,
+                                        dismissOnClickOutside = true
+                                    )
+                                ) {
+                                    PatchSelectionActionsPopup(
+                                        actionSpecs = actionSpecs,
+                                        glowRadiusPx = glowRadiusPx,
+                                        onActionClick = { spec ->
+                                            spec.onClick()
+                                            actionsExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                        IconButton(onClick = {
+                            actionsExpanded = false
+                            showBottomSheet = true
+                        }) {
+                            Icon(
+                                imageVector = Icons.Outlined.FilterList,
+                                contentDescription = stringResource(R.string.more)
+                            )
+                        }
+                    }
+                )
+            } else {
+                SearchBar(
+                    textFieldState = textFieldState,
+                    searchBarState = searchBarState,
+                    onSearch = {
+                        composableScope.launch {
+                            searchBarState.animateToCollapsed()
+                        }
+                    },
+                    placeholder = {
+                        Text(stringResource(R.string.search_patches))
+                    },
+                    leadingIcon = {
+                        val rotation by animateFloatAsState(
+                            targetValue = if (searchExpanded) 360f else 0f,
+                            animationSpec = tween(durationMillis = 400, easing = EaseInOut),
+                            label = stringResource(R.string.search_bar_back_button_label)
+                        )
+                        IconButton(
+                            onClick = {
+                                if (searchExpanded) {
+                                    composableScope.launch {
+                                        searchBarState.animateToCollapsed()
+                                    }
+                                } else {
+                                    onBackClick()
+                                }
+                            }
+                        ) {
+                            Icon(
+                                modifier = Modifier.rotate(rotation),
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.back)
+                            )
+                        }
+                    },
+                    trailingIcon = {
+                        AnimatedContent(
+                            targetState = searchExpanded,
+                            label = stringResource(R.string.patch_selector_filter_clear_label),
+                            transitionSpec = { fadeIn() togetherWith fadeOut() }
+                        ) { expanded ->
+                            if (expanded) {
+                                IconButton(
+                                    onClick = { updateQuery("") },
+                                    enabled = query.isNotEmpty()
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Close,
+                                        contentDescription = stringResource(R.string.clear)
+                                    )
+                                }
+                            } else {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box {
+                                        val toggleLabel = if (actionsExpanded) {
+                                            R.string.patch_selection_toggle_collapse
+                                        } else {
+                                            R.string.patch_selection_toggle_expand
+                                        }
+                                        IconButton(onClick = {
+                                            if (visibleActionKeys.isEmpty()) {
+                                                actionsExpanded = false
+                                                context.toast(
+                                                    context.getString(R.string.patch_selection_all_actions_hidden_toast)
+                                                )
+                                                return@IconButton
+                                            }
+                                            actionsExpanded = !actionsExpanded
+                                        }) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.MoreHoriz,
+                                                contentDescription = stringResource(toggleLabel)
+                                            )
+                                        }
+                                        if (actionsExpanded) {
+                                            val density = LocalDensity.current
+                                            val marginPx = remember(density) { with(density) { 8.dp.roundToPx() } }
+                                            val glowRadiusPx = remember(density) { with(density) { 220.dp.toPx() } }
+
+                                            Popup(
+                                                popupPositionProvider = remember(marginPx) {
+                                                    PatchSelectionActionsPopupPositionProvider(marginPx = marginPx)
+                                                },
+                                                onDismissRequest = { actionsExpanded = false },
+                                                properties = PopupProperties(
+                                                    focusable = true,
+                                                    dismissOnBackPress = true,
+                                                    dismissOnClickOutside = true
+                                                )
+                                            ) {
+                                                PatchSelectionActionsPopup(
+                                                    actionSpecs = actionSpecs,
+                                                    glowRadiusPx = glowRadiusPx,
+                                                    onActionClick = { spec ->
+                                                        spec.onClick()
+                                                        actionsExpanded = false
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                    IconButton(onClick = {
+                                        actionsExpanded = false
+                                        showBottomSheet = true
+                                    }) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.FilterList,
+                                            contentDescription = stringResource(R.string.more)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                ) {
+                    val bundle = bundles[pagerState.currentPage]
+                    val suggestedVersion = suggestedVersionsByBundle[bundle.uid]?.get(viewModel.appPackageName)
+                    val searchQuery = query
+
+                    LazyColumnWithScrollbar(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        fun List<PatchInfo>.searched() = filter {
+                            it.name.contains(searchQuery, true)
+                        }
+
+                        if (nonUniversalSelected) {
+                            if (bundle.compatible.isNotEmpty()) {
+                                item(contentType = 0) {
+                                    ListHeader(
+                                        title = stringResource(R.string.regular_patches)
+                                    )
+                                }
+                            }
+                            patchList(
+                                uid = bundle.uid,
+                                patches = bundle.compatible.searched(),
+                                visible = true,
+                                compatible = true,
+                                suggestedVersion = suggestedVersion
+                            )
+                            patchList(
+                                uid = bundle.uid,
+                                patches = bundle.incompatible.searched(),
+                                visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
+                                compatible = viewModel.allowIncompatiblePatches,
+                                suggestedVersion = suggestedVersion
+                            ) {
+                                ListHeader(
+                                    title = stringResource(R.string.incompatible_patches),
+                                    onHelpClick = { showIncompatiblePatchesDialog = true }
+                                )
+                            }
+                            patchList(
+                                uid = bundle.uid,
+                                patches = bundle.universal.searched(),
+                                visible = true,
+                                compatible = true,
+                                suggestedVersion = suggestedVersion
+                            ) {
+                                ListHeader(
+                                    title = stringResource(R.string.universal_patches),
+                                )
+                            }
+                        } else {
+                            patchList(
+                                uid = bundle.uid,
+                                patches = bundle.universal.searched(),
+                                visible = true,
+                                compatible = true,
+                                suggestedVersion = suggestedVersion
+                            ) {
+                                ListHeader(
+                                    title = stringResource(R.string.universal_patches),
+                                )
+                            }
+                            if (bundle.compatible.isNotEmpty()) {
+                                item(contentType = 0) {
+                                    ListHeader(
+                                        title = stringResource(R.string.regular_patches)
+                                    )
+                                }
+                            }
+                            patchList(
+                                uid = bundle.uid,
+                                patches = bundle.compatible.searched(),
+                                visible = true,
+                                compatible = true,
+                                suggestedVersion = suggestedVersion
+                            )
+                            patchList(
+                                uid = bundle.uid,
+                                patches = bundle.incompatible.searched(),
+                                visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
+                                compatible = viewModel.allowIncompatiblePatches,
+                                suggestedVersion = suggestedVersion
+                            ) {
+                                ListHeader(
+                                    title = stringResource(R.string.incompatible_patches),
+                                    onHelpClick = { showIncompatiblePatchesDialog = true }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         },
         floatingActionButton = {
-            if (searchExpanded) return@Scaffold
+            if (useFallbackSearch) {
+                if (searchActive) return@Scaffold
+            } else {
+                if (searchExpanded) return@Scaffold
+            }
 
             Box(
                 modifier = Modifier
@@ -1113,94 +1460,178 @@ fun PatchesSelectorScreen(
                 .padding(paddingValues)
                 .padding(top = 16.dp)
         ) {
-            if (bundles.size > 1) {
-                ScrollableTabRow(
-                    selectedTabIndex = pagerState.currentPage,
-                    containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp)
-                ) {
-                    bundles.forEachIndexed { index, bundle ->
-                        HapticTab(
-                            selected = pagerState.currentPage == index,
-                            onClick = {
-                                composableScope.launch {
-                                    pagerState.animateScrollToPage(
-                                        index
+            Box(modifier = Modifier.fillMaxSize()) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    if (bundles.size > 1) {
+                        ScrollableTabRow(
+                            selectedTabIndex = pagerState.currentPage,
+                            containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp),
+                            modifier = Modifier.onSizeChanged { tabRowHeightPx = it.height }
+                        ) {
+                            bundles.forEachIndexed { index, bundle ->
+                                HapticTab(
+                                    selected = pagerState.currentPage == index,
+                                    onClick = {
+                                        composableScope.launch {
+                                            pagerState.animateScrollToPage(
+                                                index
+                                            )
+                                        }
+                                    },
+                                    text = {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text(
+                                                text = bundleDisplayNames[bundle.uid] ?: bundle.name,
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                            Text(
+                                                text = bundle.version.orEmpty(),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Text(
+                                                text = stringResource(bundleTypeLabelRes(bundleTypes[bundle.uid])),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.outline
+                                            )
+                                        }
+                                    },
+                                    selectedContentColor = MaterialTheme.colorScheme.primary,
+                                    unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    HorizontalPager(
+                        state = pagerState,
+                        userScrollEnabled = true,
+                        pageContent = { index ->
+                            // Avoid crashing if the lists have not been fully initialized yet.
+                            if (index > bundles.lastIndex || bundles.size != patchLazyListStates.size) return@HorizontalPager
+                        val bundle = bundles[index]
+                        val suggestedVersion = suggestedVersionsByBundle[bundle.uid]?.get(viewModel.appPackageName)
+
+                            LazyColumnWithScrollbar(
+                                modifier = Modifier.fillMaxSize(),
+                                state = patchLazyListStates[index],
+                                contentPadding = PaddingValues(
+                                    start = 16.dp,
+                                    end = 16.dp,
+                                    top = if (showBundleCounter) {
+                                        12.dp + with(density) { bundleCounterHeightPx.toDp() } + 6.dp
+                                    } else {
+                                        12.dp
+                                    },
+                                    bottom = 12.dp
+                                ),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                            if (nonUniversalSelected) {
+                                if (bundle.compatible.isNotEmpty()) {
+                                    item(contentType = 0) {
+                                        ListHeader(
+                                            title = stringResource(R.string.regular_patches)
+                                        )
+                                    }
+                                }
+                                patchList(
+                                    uid = bundle.uid,
+                                    patches = bundle.compatible,
+                                    visible = true,
+                                    compatible = true,
+                                    suggestedVersion = suggestedVersion
+                                )
+                                patchList(
+                                    uid = bundle.uid,
+                                    patches = bundle.incompatible,
+                                    visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
+                                    compatible = viewModel.allowIncompatiblePatches,
+                                    suggestedVersion = suggestedVersion
+                                ) {
+                                    ListHeader(
+                                        title = stringResource(R.string.incompatible_patches),
+                                        onHelpClick = { showIncompatiblePatchesDialog = true }
                                     )
                                 }
-                            },
-                            text = {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(
-                                        text = bundleDisplayNames[bundle.uid] ?: bundle.name,
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                    Text(
-                                        text = bundle.version.orEmpty(),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Text(
-                                        text = stringResource(bundleTypeLabelRes(bundleTypes[bundle.uid])),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.outline
+                                patchList(
+                                    uid = bundle.uid,
+                                    patches = bundle.universal,
+                                    visible = true,
+                                    compatible = true,
+                                    suggestedVersion = suggestedVersion
+                                ) {
+                                    ListHeader(
+                                        title = stringResource(R.string.universal_patches),
                                     )
                                 }
-                            },
-                            selectedContentColor = MaterialTheme.colorScheme.primary,
-                            unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            } else {
+                                patchList(
+                                    uid = bundle.uid,
+                                    patches = bundle.universal,
+                                    visible = true,
+                                    compatible = true,
+                                    suggestedVersion = suggestedVersion
+                                ) {
+                                    ListHeader(
+                                        title = stringResource(R.string.universal_patches),
+                                    )
+                                }
+                                if (bundle.compatible.isNotEmpty()) {
+                                    item(contentType = 0) {
+                                        ListHeader(
+                                            title = stringResource(R.string.regular_patches)
+                                        )
+                                    }
+                                }
+                                patchList(
+                                    uid = bundle.uid,
+                                    patches = bundle.compatible,
+                                    visible = true,
+                                    compatible = true,
+                                    suggestedVersion = suggestedVersion
+                                )
+                                patchList(
+                                    uid = bundle.uid,
+                                    patches = bundle.incompatible,
+                                    visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
+                                    compatible = viewModel.allowIncompatiblePatches,
+                                    suggestedVersion = suggestedVersion
+                                ) {
+                                    ListHeader(
+                                        title = stringResource(R.string.incompatible_patches),
+                                        onHelpClick = { showIncompatiblePatchesDialog = true }
+                                    )
+                                }
+                            }
+                            }
+                        }
+                    )
+                }
+                if (showBundleCounter) {
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp),
+                        tonalElevation = 1.dp,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(end = 16.dp)
+                            .offset { IntOffset(0, tabRowHeightPx + bundleCounterOffsetPx) }
+                            .onSizeChanged { bundleCounterHeightPx = it.height }
+                            .zIndex(1f)
+                    ) {
+                        Text(
+                            text = stringResource(
+                                R.string.patch_selector_bundle_selected_count,
+                                currentBundleSelectionCount
+                            ),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                         )
                     }
                 }
             }
-
-            HorizontalPager(
-                state = pagerState,
-                userScrollEnabled = true,
-                pageContent = { index ->
-                    // Avoid crashing if the lists have not been fully initialized yet.
-                    if (index > bundles.lastIndex || bundles.size != patchLazyListStates.size) return@HorizontalPager
-                val bundle = bundles[index]
-                val suggestedVersion = suggestedVersionsByBundle[bundle.uid]?.get(viewModel.appPackageName)
-
-                    LazyColumnWithScrollbar(
-                        modifier = Modifier.fillMaxSize(),
-                        state = patchLazyListStates[index],
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                    patchList(
-                        uid = bundle.uid,
-                        patches = bundle.compatible,
-                        visible = true,
-                        compatible = true,
-                        suggestedVersion = suggestedVersion
-                    )
-                    patchList(
-                        uid = bundle.uid,
-                        patches = bundle.universal,
-                        visible = viewModel.filter and SHOW_UNIVERSAL != 0,
-                        compatible = true,
-                        suggestedVersion = suggestedVersion
-                    ) {
-                        ListHeader(
-                            title = stringResource(R.string.universal_patches),
-                        )
-                    }
-                    patchList(
-                        uid = bundle.uid,
-                        patches = bundle.incompatible,
-                        visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
-                        compatible = viewModel.allowIncompatiblePatches,
-                        suggestedVersion = suggestedVersion
-                    ) {
-                        ListHeader(
-                            title = stringResource(R.string.incompatible_patches),
-                            onHelpClick = { showIncompatiblePatchesDialog = true }
-                        )
-                        }
-                    }
-                }
-            )
         }
     }
 }
@@ -1618,8 +2049,9 @@ private fun bundleTypeLabelRes(type: BundleSourceType?): Int = when (type) {
     else -> R.string.bundle_type_local
 }
 
+@Composable
 private fun formatPatchCountForBadge(count: Int): String =
-    if (count > 999) "999+" else count.toString()
+    if (count > 999) stringResource(R.string.patch_count_overflow) else count.toString()
 
 @Composable
 private fun PatchProfileBundleDialog(

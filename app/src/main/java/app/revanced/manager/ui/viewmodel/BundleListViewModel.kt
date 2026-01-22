@@ -92,6 +92,18 @@ class BundleListViewModel : ViewModel(), KoinComponent {
         patchBundleRepository.update(src, showToast = true)
     }
 
+    fun forceUpdate(src: PatchBundleSource) = viewModelScope.launch {
+        if (src !is RemotePatchBundle) return@launch
+
+        val updated = patchBundleRepository.updateNow(
+            force = true,
+            predicate = { it.uid == src.uid }
+        )
+        if (!updated) {
+            app.toast(app.getString(R.string.patches_update_unavailable))
+        }
+    }
+
     fun disable(src: PatchBundleSource) =
         viewModelScope.launch {
             patchBundleRepository.disable(src)

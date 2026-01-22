@@ -1,8 +1,11 @@
 package app.revanced.manager.ui.viewmodel
 
+import android.app.Application
+import android.content.pm.PackageInfo
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.data.room.profile.PatchProfilePayload
 import app.revanced.manager.data.room.options.Option.SerializedValue as StoredOptionSerializedValue
 import app.revanced.manager.domain.bundles.PatchBundleSource
@@ -15,6 +18,10 @@ import app.revanced.manager.domain.repository.PatchProfile
 import app.revanced.manager.domain.repository.PatchProfileRepository
 import app.revanced.manager.domain.repository.remapLocalBundles
 import app.revanced.manager.domain.repository.toConfiguration
+import app.revanced.manager.patcher.split.SplitApkInspector
+import app.revanced.manager.patcher.split.SplitApkPreparer
+import app.revanced.manager.util.APK_FILE_EXTENSIONS
+import app.revanced.manager.util.PM
 import app.revanced.manager.util.mutableStateSetOf
 import app.revanced.manager.util.tag
 import kotlinx.coroutines.Dispatchers
@@ -24,12 +31,20 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.util.Locale
 
 data class PatchProfileListItem(
     val id: Int,
     val name: String,
     val packageName: String,
     val appVersion: String?,
+    val apkPath: String?,
+    val apkSourcePath: String?,
+    val apkVersion: String?,
+    val autoPatch: Boolean,
     val bundleCount: Int,
     val bundleNames: List<String>,
     val createdAt: Long,
@@ -86,6 +101,9 @@ private fun Map<String, Map<String, app.revanced.manager.data.room.options.Optio
     mapValues { (_, options) -> options.mapValues { (_, value) -> value.toJsonString() } }
 
 class PatchProfilesViewModel(
+    private val app: Application,
+    private val pm: PM,
+    private val filesystem: Filesystem,
     private val patchProfileRepository: PatchProfileRepository,
     private val patchBundleRepository: PatchBundleRepository
 ) : ViewModel() {
@@ -120,7 +138,17 @@ class PatchProfilesViewModel(
         FAILED
     }
 
+    enum class ApkSelectionResult {
+        SUCCESS,
+        CLEARED,
+        PROFILE_NOT_FOUND,
+        INVALID_FILE,
+        PACKAGE_MISMATCH,
+        FAILED
+    }
+
     val selectedProfiles = mutableStateSetOf<Int>()
+    private val splitWorkspace = filesystem.tempDir
 
     val profiles = combine(
         patchProfileRepository.profilesFlow(),
@@ -253,6 +281,10 @@ class PatchProfilesViewModel(
                 name = profile.name,
                 packageName = profile.packageName,
                 appVersion = profile.appVersion,
+                apkPath = profile.apkPath,
+                apkSourcePath = profile.apkSourcePath,
+                apkVersion = profile.apkVersion,
+                autoPatch = profile.autoPatch,
                 bundleCount = workingPayload.bundles.size,
                 bundleNames = bundleNames,
                 createdAt = profile.createdAt,
@@ -323,6 +355,8 @@ class PatchProfilesViewModel(
 
     suspend fun deleteProfile(profileId: Int) {
         selectedProfiles.remove(profileId)
+        val profile = patchProfileRepository.getProfile(profileId)
+        profile?.apkPath?.let { File(it).delete() }
         patchProfileRepository.deleteProfile(profileId)
     }
 
@@ -368,6 +402,62 @@ class PatchProfilesViewModel(
                 Log.e(tag, "Failed to update patch profile version", t)
                 VersionUpdateResult.FAILED
             }
+        }
+
+    suspend fun updateProfileApk(profileId: Int, file: File?): ApkSelectionResult =
+        withContext(Dispatchers.IO) {
+            val profile = patchProfileRepository.getProfile(profileId)
+                ?: return@withContext ApkSelectionResult.PROFILE_NOT_FOUND
+            if (file == null) {
+                profile.apkPath?.let { File(it).delete() }
+                patchProfileRepository.updateProfileApk(profileId, null, null, null)
+                return@withContext ApkSelectionResult.CLEARED
+            }
+            if (!file.exists()) return@withContext ApkSelectionResult.INVALID_FILE
+
+            val extension = file.extension.lowercase(Locale.ROOT)
+            if (extension !in APK_FILE_EXTENSIONS) return@withContext ApkSelectionResult.INVALID_FILE
+
+            val destination = filesystem.getPatchProfileInputFile(profileId, extension)
+            try {
+                destination.parentFile?.mkdirs()
+                Files.copy(file.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            } catch (error: Exception) {
+                Log.e(tag, "Failed to copy patch profile APK", error)
+                destination.delete()
+                return@withContext ApkSelectionResult.FAILED
+            }
+
+            val packageInfo = resolvePackageInfo(destination)
+            if (packageInfo == null) {
+                destination.delete()
+                return@withContext ApkSelectionResult.INVALID_FILE
+            }
+            if (packageInfo.packageName != profile.packageName) {
+                destination.delete()
+                return@withContext ApkSelectionResult.PACKAGE_MISMATCH
+            }
+
+            val version = packageInfo.versionName?.takeIf { it.isNotBlank() } ?: profile.appVersion.orEmpty()
+            val updated = patchProfileRepository.updateProfileApk(
+                profileId,
+                destination.absolutePath,
+                version,
+                file.absolutePath
+            )
+            if (updated == null) {
+                destination.delete()
+                return@withContext ApkSelectionResult.FAILED
+            }
+            profile.apkPath
+                ?.takeIf { it != destination.absolutePath }
+                ?.let { File(it).delete() }
+            ApkSelectionResult.SUCCESS
+        }
+
+    suspend fun updateProfileAutoPatch(profileId: Int, enabled: Boolean): Boolean =
+        withContext(Dispatchers.IO) {
+            patchProfileRepository.updateProfileAutoPatch(profileId, enabled) != null
         }
 
     suspend fun changeLocalBundleUid(
@@ -471,6 +561,11 @@ class PatchProfilesViewModel(
             Event.DELETE_SELECTED -> viewModelScope.launch(Dispatchers.Default) {
                 val ids = selectedProfiles.toList()
                 if (ids.isEmpty()) return@launch
+                ids.forEach { id ->
+                    patchProfileRepository.getProfile(id)?.apkPath?.let { path ->
+                        File(path).delete()
+                    }
+                }
                 patchProfileRepository.deleteProfiles(ids)
                 selectedProfiles.clear()
             }
@@ -485,6 +580,26 @@ class PatchProfilesViewModel(
         }
     }
 
+    fun reorderProfiles(orderedUids: List<Int>) = viewModelScope.launch(Dispatchers.IO) {
+        patchProfileRepository.reorderProfiles(orderedUids)
+    }
+
+    private suspend fun resolvePackageInfo(file: File): PackageInfo? =
+        runCatching {
+            if (SplitApkPreparer.isSplitArchive(file)) {
+                val extracted = SplitApkInspector.extractRepresentativeApk(file, splitWorkspace)
+                    ?: return null
+                try {
+                    pm.getPackageInfo(extracted.file)
+                } finally {
+                    extracted.cleanup()
+                }
+            } else {
+                pm.getPackageInfo(file)
+            }
+        }.onFailure { error ->
+            Log.e(tag, "Failed to resolve package info for patch profile APK", error)
+        }.getOrNull()
 }
 
 private fun PatchBundleSource?.determineType(bundle: PatchProfilePayload.Bundle): BundleSourceType {

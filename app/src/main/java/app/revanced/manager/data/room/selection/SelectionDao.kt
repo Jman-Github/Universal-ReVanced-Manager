@@ -44,6 +44,12 @@ abstract class SelectionDao {
     @Query("DELETE FROM patch_selections WHERE package_name = :packageName")
     abstract suspend fun resetForPackage(packageName: String)
 
+    @Query(
+        "DELETE FROM patch_selections " +
+                "WHERE package_name = :packageName AND patch_bundle NOT IN (:bundleUids)"
+    )
+    abstract suspend fun pruneSelections(packageName: String, bundleUids: Set<Int>)
+
     @Query("DELETE FROM patch_selections")
     abstract suspend fun reset()
 

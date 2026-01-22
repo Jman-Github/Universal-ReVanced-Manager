@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="patcher">પેચર</string>
+    <string name="patches">પેચો</string>
+    <string name="patch_bundles">પેચ બંડલ્સ</string>
+    <string name="patch_bundle">પેચ બંડલ</string>
+    <string name="manager">મેનેજર</string>
+    <string name="plugin_host_permission_label">યુનિવર્સલ રિવાન્સ્ડ મેનેજર પ્લગઇન હોસ્ટ</string>
+    <string name="plugin_host_permission_description">યુનિવર્સલ રેવાન્સ્ડ મેનેજર પ્લગઇન્સની ઍક્સેસને નિયંત્રિત કરવા માટે વપરાય છે. ફક્ત યુનિવર્સલ રેવાન્સ્ડ મેનેજર પાસે જ આ છે.</string>
+    <string name="toast_copied_to_clipboard">નકલ કરી!</string>
+    <string name="copy_to_clipboard">ક્લિપબોર્ડ પર નકલ કરો</string>
+    <string name="settings">સેટિંગ્સ</string>
+    <string name="settings_search_hint">સેટિંગ્સ શોધો</string>
+    <string name="settings_search_no_results">કોઈ સેટિંગ્સ મળ્યા નહી.</string>
+    <string name="select_app">એક એપ્લિકેશન પસંદ કરો</string>
+    <string name="app_filter_title">એપ્લિકેશનો ફિલ્ટર કરો</string>
+    <string name="app_filter_installed_only">ફક્ત ઇન્સ્ટોલ કરેલ</string>
+    <string name="app_filter_patches_available">પેચ ઉપલબ્ધ છે</string>
+    <string name="app_filter_no_results">કોઈ એપ્લિકેશન તમારા ફિલ્ટર્સ સાથે મેળ ખાતી નથી.</string>
+    <string name="new_downloader_plugins_notification">નવા ડાઉનલોડર પ્લગઇન્સ ઉપલબ્ધ છે. તેમને ગોઠવવા માટે અહીં ક્લિક કરો.</string>
+    <string name="unsupported_architecture_warning">આ ઉપકરણ આર્કિટેક્ચર પર પેચિંગ અસમર્થિત છે અને મોટા ભાગે નિષ્ફળ જશે.</string>
+    <string name="import_">આયાત કરો</string>
+    <string name="file_field_not_set">પસંદ કરેલ નથી</string>
+    <string name="field_not_set">સેટ નથી</string>
+    <string name="patches_missing">ખૂટે છે</string>
+</resources>

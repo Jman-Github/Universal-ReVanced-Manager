@@ -8,16 +8,31 @@ import android.text.format.Formatter
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Storage
@@ -31,8 +46,11 @@ import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Sort
 import androidx.compose.material.icons.outlined.Source
 import androidx.compose.material.icons.outlined.Update
@@ -44,9 +62,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -60,10 +81,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.revanced.manager.R
 import app.revanced.manager.data.platform.Filesystem
@@ -85,14 +112,16 @@ import app.revanced.manager.ui.viewmodel.DashboardViewModel
 import app.revanced.manager.ui.model.SelectedApp
 import app.revanced.manager.ui.viewmodel.PatchProfileLaunchData
 import app.revanced.manager.ui.viewmodel.PatchProfilesViewModel
+import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.domain.repository.PatchBundleRepository.BundleUpdatePhase
 import app.revanced.manager.domain.repository.PatchBundleRepository.BundleImportPhase
 import app.revanced.manager.ui.viewmodel.InstalledAppsViewModel
 import app.revanced.manager.ui.viewmodel.AppSelectorViewModel
 import app.revanced.manager.util.RequestInstallAppsContract
+import app.revanced.manager.util.BundleDeepLink
 import app.revanced.manager.util.EventEffect
 import app.revanced.manager.util.isAllowedApkFile
-import app.revanced.manager.util.isAllowedRvpFile
+import app.revanced.manager.util.isAllowedPatchBundleFile
 import app.revanced.manager.util.toast
 import java.io.File
 import kotlinx.coroutines.launch
@@ -120,10 +149,22 @@ fun DashboardScreen(
     onDownloaderPluginClick: () -> Unit,
     onBundleDiscoveryClick: () -> Unit,
     onAppClick: (String) -> Unit,
-    onProfileLaunch: (PatchProfileLaunchData) -> Unit
+    onProfileLaunch: (PatchProfileLaunchData) -> Unit,
+    bundleDeepLink: BundleDeepLink? = null,
+    onBundleDeepLinkConsumed: () -> Unit = {}
 ) {
     val installedAppsViewModel: InstalledAppsViewModel = koinViewModel()
     val patchProfilesViewModel: PatchProfilesViewModel = koinViewModel()
+    val patchBundleRepository: PatchBundleRepository = koinInject()
+    val installedApps by installedAppsViewModel.apps.collectAsStateWithLifecycle(initialValue = emptyList())
+    val profiles by patchProfilesViewModel.profiles.collectAsStateWithLifecycle(emptyList())
+    val bundleSources by patchBundleRepository.sources.collectAsStateWithLifecycle(emptyList())
+    var appsSearchActive by rememberSaveable { mutableStateOf(false) }
+    var appsSearchQuery by rememberSaveable { mutableStateOf("") }
+    var bundlesSearchActive by rememberSaveable { mutableStateOf(false) }
+    var bundlesSearchQuery by rememberSaveable { mutableStateOf("") }
+    var profilesSearchActive by rememberSaveable { mutableStateOf(false) }
+    var profilesSearchQuery by rememberSaveable { mutableStateOf("") }
     var selectedSourceCount by rememberSaveable { mutableIntStateOf(0) }
     var selectedSourcesHasEnabled by rememberSaveable { mutableStateOf(true) }
     val bundlesSelectable by remember { derivedStateOf { selectedSourceCount > 0 } }
@@ -159,12 +200,16 @@ fun DashboardScreen(
     val bundleUpdateProgress by vm.bundleUpdateProgress.collectAsStateWithLifecycle(null)
     val bundleImportProgress by vm.bundleImportProgress.collectAsStateWithLifecycle(null)
     val androidContext = LocalContext.current
+    val density = LocalDensity.current
     val composableScope = rememberCoroutineScope()
     var showBundleOrderDialog by rememberSaveable { mutableStateOf(false) }
+    var showAppsOrderDialog by rememberSaveable { mutableStateOf(false) }
+    var showProfilesOrderDialog by rememberSaveable { mutableStateOf(false) }
     val pagerState = rememberPagerState(
         initialPage = DashboardPage.DASHBOARD.ordinal,
         initialPageOffsetFraction = 0f
     ) { DashboardPage.entries.size }
+    var highlightBundleUid by rememberSaveable { mutableStateOf<Int?>(null) }
     val appsSelectionActive = installedAppsViewModel.selectedApps.isNotEmpty()
     val selectedAppCount = installedAppsViewModel.selectedApps.size
 
@@ -177,6 +222,7 @@ fun DashboardScreen(
                 showBundleFilePicker = true
             }
         }
+    var tabRowHeightPx by remember { mutableIntStateOf(0) }
     fun requestBundleFilePicker() {
         if (fs.hasStoragePermission()) {
             showBundleFilePicker = true
@@ -185,9 +231,184 @@ fun DashboardScreen(
         }
     }
 
+    val tabRowHeight = with(density) { tabRowHeightPx.toDp() }
+    val bannerOffset = 6.dp
+    val dashboardSidePadding = 16.dp
+
+    @Composable
+    fun BundleProgressBanner(modifier: Modifier = Modifier) {
+        var importCollapsed by rememberSaveable { mutableStateOf(false) }
+        var updateCollapsed by rememberSaveable { mutableStateOf(false) }
+        val bannerSizeSpec = tween<IntSize>(durationMillis = 260, easing = FastOutSlowInEasing)
+        val bannerOffsetSpec = tween<IntOffset>(durationMillis = 260, easing = FastOutSlowInEasing)
+        val bannerExitAlphaSpec = tween<Float>(durationMillis = 240, easing = FastOutSlowInEasing)
+        Column(
+            modifier = modifier,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            LaunchedEffect(bundleImportProgress != null) {
+                if (bundleImportProgress != null) importCollapsed = false
+            }
+            AnimatedVisibility(
+                visible = bundleImportProgress != null,
+                enter = fadeIn(animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing)) +
+                    expandVertically(expandFrom = Alignment.Top, animationSpec = bannerSizeSpec) +
+                    slideInVertically(
+                        initialOffsetY = { height -> -height / 3 },
+                        animationSpec = bannerOffsetSpec
+                    ),
+                exit = fadeOut(animationSpec = bannerExitAlphaSpec) +
+                    shrinkVertically(shrinkTowards = Alignment.Top, animationSpec = bannerSizeSpec) +
+                    slideOutVertically(
+                        targetOffsetY = { height -> -height / 3 },
+                        animationSpec = bannerOffsetSpec
+                    )
+            ) {
+                bundleImportProgress?.let { progress ->
+                    val context = LocalContext.current
+                    val subtitleParts = buildList {
+                        val total = progress.total.coerceAtLeast(1)
+                        val stepLabel = if (progress.isStepBased) {
+                            val step = (progress.processed + 1).coerceAtMost(total)
+                            stringResource(R.string.import_patch_bundles_banner_steps, step, total)
+                        } else {
+                            stringResource(R.string.import_patch_bundles_banner_subtitle, progress.processed, total)
+                        }
+                        add(stepLabel)
+                        val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList
+                        val phaseText = if (progress.isStepBased) {
+                            when (progress.phase) {
+                                BundleImportPhase.Downloading ->
+                                    stringResource(R.string.bundle_import_phase_copying)
+                                BundleImportPhase.Processing ->
+                                    stringResource(R.string.bundle_import_phase_writing)
+                                BundleImportPhase.Finalizing ->
+                                    stringResource(R.string.bundle_import_phase_finalizing)
+                            }
+                        } else {
+                            when (progress.phase) {
+                                BundleImportPhase.Processing ->
+                                    stringResource(R.string.bundle_import_phase_processing)
+                                BundleImportPhase.Downloading ->
+                                    stringResource(R.string.bundle_import_phase_downloading)
+                                BundleImportPhase.Finalizing ->
+                                    stringResource(R.string.bundle_import_phase_finalizing_short)
+                            }
+                        }
+                        val detail = buildString {
+                            append(phaseText)
+                            append(": ")
+                            append(name)
+                            if (progress.bytesTotal?.takeIf { it > 0L } != null) {
+                                append(" (")
+                                append(Formatter.formatShortFileSize(context, progress.bytesRead))
+                                progress.bytesTotal?.takeIf { it > 0L }?.let { total ->
+                                    append("/")
+                                    append(Formatter.formatShortFileSize(context, total))
+                                }
+                                append(")")
+                            }
+                        }
+                        add(detail)
+                    }
+                    DownloadProgressBanner(
+                        title = stringResource(R.string.import_patch_bundles_banner_title),
+                        subtitle = subtitleParts.joinToString(" - "),
+                        progress = progress.ratio,
+                        collapsed = importCollapsed,
+                        onToggleCollapsed = { importCollapsed = !importCollapsed },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = dashboardSidePadding, vertical = 8.dp)
+                    )
+                }
+            }
+
+            LaunchedEffect(bundleUpdateProgress != null) {
+                if (bundleUpdateProgress != null) updateCollapsed = false
+            }
+            AnimatedVisibility(
+                visible = bundleUpdateProgress != null,
+                enter = fadeIn(animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing)) +
+                    expandVertically(expandFrom = Alignment.Top, animationSpec = bannerSizeSpec) +
+                    slideInVertically(
+                        initialOffsetY = { height -> -height / 3 },
+                        animationSpec = bannerOffsetSpec
+                    ),
+                exit = fadeOut(animationSpec = bannerExitAlphaSpec) +
+                    shrinkVertically(shrinkTowards = Alignment.Top, animationSpec = bannerSizeSpec) +
+                    slideOutVertically(
+                        targetOffsetY = { height -> -height / 3 },
+                        animationSpec = bannerOffsetSpec
+                    )
+            ) {
+                bundleUpdateProgress?.let { progress ->
+                    val context = LocalContext.current
+                    val perBundleFraction = progress.bytesTotal
+                        ?.takeIf { it > 0L }
+                        ?.let { total -> (progress.bytesRead.toFloat() / total).coerceIn(0f, 1f) }
+
+                    val progressFraction: Float? = when {
+                        progress.total == 0 -> 0f
+                        progress.phase == BundleUpdatePhase.Downloading && perBundleFraction != null ->
+                            ((progress.completed.toFloat() + perBundleFraction) / progress.total).coerceIn(0f, 1f)
+
+                        else -> (progress.completed.toFloat() / progress.total).coerceIn(0f, 1f)
+                    }
+
+                    val subtitleParts = buildList {
+                        add(
+                            stringResource(
+                                R.string.bundle_update_progress,
+                                progress.completed,
+                                progress.total
+                            )
+                        )
+                        val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList
+                        val phaseText = when (progress.phase) {
+                            BundleUpdatePhase.Checking ->
+                                stringResource(R.string.bundle_update_phase_checking)
+                            BundleUpdatePhase.Downloading ->
+                                stringResource(R.string.bundle_update_phase_downloading)
+                            BundleUpdatePhase.Finalizing ->
+                                stringResource(R.string.bundle_update_phase_finalizing)
+                        }
+
+                        val detail = buildString {
+                            append(phaseText)
+                            append(": ")
+                            append(name)
+                            if (progress.phase == BundleUpdatePhase.Downloading && progress.bytesRead > 0L) {
+                                append(" (")
+                                append(Formatter.formatShortFileSize(context, progress.bytesRead))
+                                progress.bytesTotal?.takeIf { it > 0L }?.let { total ->
+                                    append("/")
+                                    append(Formatter.formatShortFileSize(context, total))
+                                }
+                                append(")")
+                            }
+                        }
+                        add(detail)
+                    }
+                    DownloadProgressBanner(
+                        title = stringResource(R.string.bundle_update_banner_title),
+                        subtitle = subtitleParts.joinToString(" - "),
+                        progress = progressFraction,
+                        collapsed = updateCollapsed,
+                        onToggleCollapsed = { updateCollapsed = !updateCollapsed },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = dashboardSidePadding, vertical = 8.dp)
+                    )
+                }
+            }
+        }
+    }
+
     LaunchedEffect(pagerState.currentPage) {
         if (pagerState.currentPage != DashboardPage.DASHBOARD.ordinal) {
             installedAppsViewModel.clearSelection()
+            showAppsOrderDialog = false
         }
         if (pagerState.currentPage != DashboardPage.BUNDLES.ordinal) {
             vm.cancelSourceSelection()
@@ -195,6 +416,23 @@ fun DashboardScreen(
         }
         if (pagerState.currentPage != DashboardPage.PROFILES.ordinal) {
             patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
+            showProfilesOrderDialog = false
+        }
+    }
+
+    LaunchedEffect(bundleDeepLink) {
+        val deepLink = bundleDeepLink ?: return@LaunchedEffect
+        highlightBundleUid = deepLink.bundleUid
+        try {
+            if (pagerState.currentPage != DashboardPage.BUNDLES.ordinal) {
+                runCatching {
+                    pagerState.animateScrollToPage(DashboardPage.BUNDLES.ordinal)
+                }.onFailure {
+                    pagerState.scrollToPage(DashboardPage.BUNDLES.ordinal)
+                }
+            }
+        } finally {
+            onBundleDeepLinkConsumed()
         }
     }
 
@@ -219,7 +457,7 @@ fun DashboardScreen(
                 showBundleFilePicker = false
                 path?.let { selectedBundlePath = it.toString() }
             },
-            fileFilter = ::isAllowedRvpFile,
+            fileFilter = ::isAllowedPatchBundleFile,
             allowDirectorySelection = false
         )
     }
@@ -355,19 +593,17 @@ fun DashboardScreen(
                             )
                             },
                             actions = {
-                                if (savedAppsEnabled) {
-                                    IconButton(
-                                        onClick = { showDeleteSavedAppsDialog = true }
-                                    ) {
-                                        Icon(
-                                            Icons.Outlined.Delete,
-                                            stringResource(R.string.delete)
-                                        )
-                                    }
-                                }
+                            IconButton(
+                                onClick = { showDeleteSavedAppsDialog = true }
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Delete,
+                                    stringResource(R.string.delete)
+                                )
                             }
-                        )
-                    }
+                        }
+                    )
+                }
 
                 bundlesSelectable -> {
                     BundleTopBar(
@@ -453,15 +689,87 @@ fun DashboardScreen(
                                     }
                                 }
                             }
+                            val isAppsTab = pagerState.currentPage == DashboardPage.DASHBOARD.ordinal
+                            val isBundlesTab = pagerState.currentPage == DashboardPage.BUNDLES.ordinal
+                            val isProfilesTab = pagerState.currentPage == DashboardPage.PROFILES.ordinal
+                            val searchActive = when {
+                                isAppsTab -> appsSearchActive
+                                isBundlesTab -> bundlesSearchActive
+                                isProfilesTab -> profilesSearchActive
+                                else -> false
+                            }
+                            if (isAppsTab || isBundlesTab || isProfilesTab) {
+                                IconButton(
+                                    onClick = {
+                                        when {
+                                            isAppsTab -> {
+                                                appsSearchActive = !appsSearchActive
+                                                if (!appsSearchActive) appsSearchQuery = ""
+                                            }
+                                            isBundlesTab -> {
+                                                bundlesSearchActive = !bundlesSearchActive
+                                                if (!bundlesSearchActive) bundlesSearchQuery = ""
+                                            }
+                                            isProfilesTab -> {
+                                                profilesSearchActive = !profilesSearchActive
+                                                if (!profilesSearchActive) profilesSearchQuery = ""
+                                            }
+                                        }
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = if (searchActive) Icons.Outlined.Close else Icons.Outlined.Search,
+                                        contentDescription = stringResource(if (searchActive) R.string.close else R.string.search)
+                                    )
+                                }
+                            }
                             if (pagerState.currentPage == DashboardPage.BUNDLES.ordinal && !bundlesSelectable) {
                                 IconButton(
                                     onClick = {
                                         installedAppsViewModel.clearSelection()
                                         patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
+                                        if (bundleSources.isEmpty()) {
+                                            androidContext.toast(
+                                                androidContext.getString(R.string.bundle_reorder_empty_toast)
+                                            )
+                                            return@IconButton
+                                        }
                                         showBundleOrderDialog = true
                                     }
                                 ) {
                                     Icon(Icons.Outlined.Sort, stringResource(R.string.bundle_reorder))
+                                }
+                            }
+                            if (pagerState.currentPage == DashboardPage.DASHBOARD.ordinal && !appsSelectionActive) {
+                                IconButton(
+                                    onClick = {
+                                        installedAppsViewModel.clearSelection()
+                                        if (installedApps.isEmpty()) {
+                                            androidContext.toast(
+                                                androidContext.getString(R.string.apps_reorder_empty_toast)
+                                            )
+                                            return@IconButton
+                                        }
+                                        showAppsOrderDialog = true
+                                    }
+                                ) {
+                                    Icon(Icons.Outlined.Sort, stringResource(R.string.apps_reorder))
+                                }
+                            }
+                            if (pagerState.currentPage == DashboardPage.PROFILES.ordinal && !profilesSelectable) {
+                                IconButton(
+                                    onClick = {
+                                        patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
+                                        if (profiles.isEmpty()) {
+                                            androidContext.toast(
+                                                androidContext.getString(R.string.patch_profiles_reorder_empty_toast)
+                                            )
+                                            return@IconButton
+                                        }
+                                        showProfilesOrderDialog = true
+                                    }
+                                ) {
+                                    Icon(Icons.Outlined.Sort, stringResource(R.string.patch_profiles_reorder))
                                 }
                             }
                             IconButton(onClick = onSettingsClick) {
@@ -476,14 +784,27 @@ fun DashboardScreen(
         floatingActionButton = {
             when (pagerState.currentPage) {
                 DashboardPage.BUNDLES.ordinal -> {
-                    HapticFloatingActionButton(
-                        onClick = {
-                            vm.cancelSourceSelection()
-                            installedAppsViewModel.clearSelection()
-                            patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
-                            showAddBundleDialog = true
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        HapticFloatingActionButton(
+                            onClick = onBundleDiscoveryClick
+                        ) {
+                            Icon(
+                                Icons.Outlined.Public,
+                                stringResource(R.string.patch_bundle_discovery_title)
+                            )
                         }
-                    ) { Icon(Icons.Default.Add, stringResource(R.string.add)) }
+                        HapticFloatingActionButton(
+                            onClick = {
+                                vm.cancelSourceSelection()
+                                installedAppsViewModel.clearSelection()
+                                patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
+                                showAddBundleDialog = true
+                            }
+                        ) { Icon(Icons.Default.Add, stringResource(R.string.add)) }
+                    }
                 }
 
                 DashboardPage.DASHBOARD.ordinal -> {
@@ -506,118 +827,12 @@ fun DashboardScreen(
             }
         }
     ) { paddingValues ->
-        Column(Modifier.padding(paddingValues)) {
-            bundleImportProgress?.let { progress ->
-                val context = LocalContext.current
-                val subtitleParts = buildList {
-                    val total = progress.total.coerceAtLeast(1)
-                    val stepLabel = if (progress.isStepBased) {
-                        val step = (progress.processed + 1).coerceAtMost(total)
-                        stringResource(R.string.import_patch_bundles_banner_steps, step, total)
-                    } else {
-                        stringResource(R.string.import_patch_bundles_banner_subtitle, progress.processed, total)
-                    }
-                    add(stepLabel)
-                    val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList
-                    val phaseText = if (progress.isStepBased) {
-                        when (progress.phase) {
-                            BundleImportPhase.Downloading -> "Copying bundle"
-                            BundleImportPhase.Processing -> "Writing bundle"
-                            BundleImportPhase.Finalizing -> "Finalizing import"
-                        }
-                    } else {
-                        when (progress.phase) {
-                            BundleImportPhase.Processing -> "Processing"
-                            BundleImportPhase.Downloading -> "Downloading"
-                            BundleImportPhase.Finalizing -> "Finalizing"
-                        }
-                    }
-                    val detail = buildString {
-                        append(phaseText)
-                        append(": ")
-                        append(name)
-                        if (progress.bytesTotal?.takeIf { it > 0L } != null) {
-                            append(" (")
-                            append(Formatter.formatShortFileSize(context, progress.bytesRead))
-                            progress.bytesTotal?.takeIf { it > 0L }?.let { total ->
-                                append("/")
-                                append(Formatter.formatShortFileSize(context, total))
-                            }
-                            append(")")
-                        }
-                    }
-                    add(detail)
-                }
-                DownloadProgressBanner(
-                    title = stringResource(R.string.import_patch_bundles_banner_title),
-                    subtitle = subtitleParts.joinToString(" • "),
-                    progress = progress.ratio,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                )
-            }
-            if (bundleImportProgress == null) {
-                bundleUpdateProgress?.let { progress ->
-                    val context = LocalContext.current
-                    val perBundleFraction = progress.bytesTotal
-                        ?.takeIf { it > 0L }
-                        ?.let { total -> (progress.bytesRead.toFloat() / total).coerceIn(0f, 1f) }
-
-                    val progressFraction: Float? = when {
-                        progress.total == 0 -> 0f
-                        progress.phase == BundleUpdatePhase.Downloading && perBundleFraction == null -> null
-                        progress.phase == BundleUpdatePhase.Downloading && perBundleFraction != null ->
-                            ((progress.completed.toFloat() + perBundleFraction) / progress.total).coerceIn(0f, 1f)
-
-                        else -> (progress.completed.toFloat() / progress.total).coerceIn(0f, 1f)
-                    }
-
-                    val subtitleParts = buildList {
-                        add(
-                            stringResource(
-                                R.string.bundle_update_progress,
-                                progress.completed,
-                                progress.total
-                            )
-                        )
-                        val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList
-                        val phaseText = when (progress.phase) {
-                            BundleUpdatePhase.Checking -> "Checking"
-                            BundleUpdatePhase.Downloading -> "Downloading"
-                            BundleUpdatePhase.Finalizing -> "Finalizing"
-                        }
-
-                        val detail = buildString {
-                            append(phaseText)
-                            append(": ")
-                            append(name)
-                            if (progress.phase == BundleUpdatePhase.Downloading && progress.bytesRead > 0L) {
-                                append(" (")
-                                append(Formatter.formatShortFileSize(context, progress.bytesRead))
-                                progress.bytesTotal?.takeIf { it > 0L }?.let { total ->
-                                    append("/")
-                                    append(Formatter.formatShortFileSize(context, total))
-                                }
-                                append(")")
-                            }
-                        }
-                        add(detail)
-                    }
-                    DownloadProgressBanner(
-                        title = stringResource(R.string.bundle_update_banner_title),
-                        subtitle = subtitleParts.joinToString(" • "),
-                        progress = progressFraction,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
-                }
-            }
-
+        Box(Modifier.padding(paddingValues)) {
+            Column {
             TabRow(
                 selectedTabIndex = pagerState.currentPage,
-                containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp)
+                containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp),
+                modifier = Modifier.onSizeChanged { tabRowHeightPx = it.height }
             ) {
                 DashboardPage.entries.forEachIndexed { index, page ->
                     HapticTab(
@@ -679,6 +894,65 @@ fun DashboardScreen(
                 } else null
             )
 
+            val isAppsTab = pagerState.currentPage == DashboardPage.DASHBOARD.ordinal
+            val isBundlesTab = pagerState.currentPage == DashboardPage.BUNDLES.ordinal
+            val isProfilesTab = pagerState.currentPage == DashboardPage.PROFILES.ordinal
+            val searchActive = when {
+                isAppsTab -> appsSearchActive
+                isBundlesTab -> bundlesSearchActive
+                isProfilesTab -> profilesSearchActive
+                else -> false
+            }
+            AnimatedVisibility(
+                visible = searchActive,
+                enter = fadeIn(animationSpec = spring(stiffness = 400f)) +
+                    expandVertically(
+                        expandFrom = Alignment.Top,
+                        animationSpec = spring(stiffness = 400f)
+                    ),
+                exit = fadeOut(animationSpec = spring(stiffness = 400f)) +
+                    shrinkVertically(
+                        shrinkTowards = Alignment.Top,
+                        animationSpec = spring(stiffness = 400f)
+                    )
+            ) {
+                val (query, onQueryChange, placeholderRes) = when {
+                    isAppsTab -> Triple(
+                        appsSearchQuery,
+                        { value: String -> appsSearchQuery = value },
+                        R.string.apps_search_hint
+                    )
+                    isBundlesTab -> Triple(
+                        bundlesSearchQuery,
+                        { value: String -> bundlesSearchQuery = value },
+                        R.string.bundles_search_hint
+                    )
+                    else -> Triple(
+                        profilesSearchQuery,
+                        { value: String -> profilesSearchQuery = value },
+                        R.string.profiles_search_hint
+                    )
+                }
+                DashboardSearchField(
+                    query = query,
+                    onQueryChange = onQueryChange,
+                    onClear = {
+                        when {
+                            isAppsTab -> appsSearchQuery = ""
+                            isBundlesTab -> bundlesSearchQuery = ""
+                            else -> profilesSearchQuery = ""
+                        }
+                    },
+                    placeholderRes = placeholderRes,
+                    modifier = Modifier.padding(
+                        start = dashboardSidePadding,
+                        end = dashboardSidePadding,
+                        top = 12.dp,
+                        bottom = 0.dp
+                    )
+                )
+            }
+
             HorizontalPager(
                 state = pagerState,
                 userScrollEnabled = true,
@@ -694,6 +968,9 @@ fun DashboardScreen(
                                     installedAppsViewModel.clearSelection()
                                     onAppClick(it.currentPackageName)
                                 },
+                                searchQuery = appsSearchQuery,
+                                showOrderDialog = showAppsOrderDialog,
+                                onDismissOrderDialog = { showAppsOrderDialog = false },
                                 viewModel = installedAppsViewModel
                             )
                         }
@@ -711,10 +988,12 @@ fun DashboardScreen(
                                 eventsFlow = vm.bundleListEventsFlow,
                                 setSelectedSourceCount = { selectedSourceCount = it },
                                 setSelectedSourceHasEnabled = { selectedSourcesHasEnabled = it },
+                                searchQuery = bundlesSearchQuery,
                                 showOrderDialog = showBundleOrderDialog,
                                 onDismissOrderDialog = { showBundleOrderDialog = false },
-                                onDiscoverBundles = onBundleDiscoveryClick,
-                                onScrollStateChange = {}
+                                onScrollStateChange = {},
+                                highlightBundleUid = highlightBundleUid,
+                                onHighlightConsumed = { highlightBundleUid = null }
                             )
                         }
 
@@ -722,6 +1001,9 @@ fun DashboardScreen(
                             PatchProfilesScreen(
                                 onProfileClick = onProfileLaunch,
                                 modifier = Modifier.fillMaxSize(),
+                                searchQuery = profilesSearchQuery,
+                                showOrderDialog = showProfilesOrderDialog,
+                                onDismissOrderDialog = { showProfilesOrderDialog = false },
                                 viewModel = patchProfilesViewModel
                             )
                         }
@@ -729,7 +1011,15 @@ fun DashboardScreen(
                 }
             )
         }
+        BundleProgressBanner(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = tabRowHeight)
+                .offset(y = bannerOffset)
+                .zIndex(1f)
+            )
     }
+}
 }
 
 @Composable
@@ -747,6 +1037,55 @@ fun Notifications(
                 notification()
             }
         }
+    }
+}
+
+@Composable
+private fun DashboardSearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onClear: () -> Unit,
+    placeholderRes: Int,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        tonalElevation = 3.dp,
+        shadowElevation = 10.dp,
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        ),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        TextField(
+            value = query,
+            onValueChange = onQueryChange,
+            placeholder = { Text(stringResource(placeholderRes)) },
+            leadingIcon = { Icon(Icons.Outlined.Search, null) },
+            trailingIcon = {
+                if (query.isNotBlank()) {
+                    IconButton(onClick = onClear) {
+                        Icon(Icons.Outlined.Close, stringResource(R.string.clear))
+                    }
+                }
+            },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(6.dp),
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(6.dp),
+                disabledContainerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(6.dp),
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                disabledIndicatorColor = Color.Transparent,
+                focusedLeadingIconColor = MaterialTheme.colorScheme.primary,
+                unfocusedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                focusedTrailingIconColor = MaterialTheme.colorScheme.primary,
+                unfocusedTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        )
     }
 }
 

@@ -23,6 +23,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
+import java.io.FileInputStream
+import java.io.OutputStream
+import java.io.PrintStream
+import java.security.MessageDigest
+import java.util.logging.Handler
+import java.util.logging.Level
+import java.util.logging.LogRecord
+import java.util.logging.Logger as JavaLogger
+import java.util.zip.ZipFile
 import kotlin.system.exitProcess
 
 /**
@@ -55,77 +64,138 @@ class PatcherProcess : IPatcherProcess.Stub() {
         eventBinder = events
 
         scope.launch {
-            val logger = object : Logger() {
-                override fun log(level: LogLevel, message: String) =
-                    events.log(level.name, message)
+            val dexCompilePattern =
+                Regex("(Compiling|Compiled)\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
+            val dexWritePattern =
+                Regex("Write\\s+\\[[^\\]]+\\]\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
+            val seenDexCompiles = mutableSetOf<String>()
+            fun handleDexCompileLine(rawLine: String) {
+                val line = rawLine.trim()
+                if (line.isEmpty()) return
+                val match = dexCompilePattern.find(line)
+                    ?: dexWritePattern.find(line)
+                    ?: return
+                val dexName = match.groupValues.lastOrNull()?.takeIf { it.endsWith(".dex") } ?: return
+                if (!seenDexCompiles.add(dexName)) return
+                onEvent(
+                    ProgressEvent.Progress(
+                        stepId = StepId.WriteAPK,
+                        message = "Compiling $dexName"
+                    )
+                )
             }
 
-            logger.info("Memory limit: ${Runtime.getRuntime().maxMemory() / (1024 * 1024)}MB")
-
-            val patchList = runStep(StepId.LoadPatches, ::onEvent) {
-                val allPatches = PatchBundle.Loader.patches(
-                    parameters.configurations.map { it.bundle },
-                    parameters.packageName
-                )
-
-                parameters.configurations.flatMap { config ->
-                    val patches = (allPatches[config.bundle] ?: return@flatMap emptyList())
-                        .filter { it.name in config.patches }
-                        .associateBy { it.name }
-
-                    val filteredOptions = config.options.filterKeys { it in patches }
-                    filteredOptions.forEach { (patchName, opts) ->
-                        val patchOptions = patches[patchName]?.options
-                            ?: throw Exception("Patch with name $patchName does not exist.")
-
-                        opts.forEach { (key, value) ->
-                            patchOptions[key] = value
-                        }
-                    }
-
-                    patches.values
+            val logger = object : Logger() {
+                override fun log(level: LogLevel, message: String) {
+                    handleDexCompileLine(message)
+                    events.log(level.name, message)
                 }
             }
 
-            val input = File(parameters.inputFile)
-            val preparation = if (SplitApkPreparer.isSplitArchive(input)) {
-                runStep(StepId.PrepareSplitApk, ::onEvent) {
+            logger.info("Memory limit: ${Runtime.getRuntime().maxMemory() / (1024 * 1024)}MB")
+            logAapt2Info(parameters.aaptPath, logger)
+            ensureFrameworkApkHealthy(parameters.frameworkDir, logger)
+
+            val aaptLogs = AaptLogCapture(onLine = ::handleDexCompileLine).apply { start() }
+            val stdioCapture = StdIoCapture(onLine = ::handleDexCompileLine).apply { start() }
+
+            try {
+                val patchList = runStep(StepId.LoadPatches, ::onEvent) {
+                    val allPatches = PatchBundle.Loader.patches(
+                        parameters.configurations.map { it.bundle },
+                        parameters.packageName
+                    )
+
+                    parameters.configurations.flatMap { config ->
+                        val patches = (allPatches[config.bundle] ?: return@flatMap emptyList())
+                            .filter { it.name in config.patches }
+                            .associateBy { it.name }
+
+                        val filteredOptions = config.options.filterKeys { it in patches }
+                        filteredOptions.forEach { (patchName, opts) ->
+                            val patchOptions = patches[patchName]?.options
+                                ?: throw Exception("Patch with name $patchName does not exist.")
+
+                            opts.forEach { (key, value) ->
+                                patchOptions[key] = value
+                            }
+                        }
+
+                        patches.values
+                    }
+                }
+
+                val input = File(parameters.inputFile)
+                val preparation = if (SplitApkPreparer.isSplitArchive(input)) {
+                    runStep(StepId.PrepareSplitApk, ::onEvent) {
+                        SplitApkPreparer.prepareIfNeeded(
+                            input,
+                            File(parameters.cacheDir),
+                            logger,
+                            parameters.stripNativeLibs,
+                            parameters.skipUnneededSplits,
+                            onProgress = { message ->
+                                onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
+                            },
+                            onSubSteps = { subSteps ->
+                                onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
+                            }
+                        )
+                    }
+                } else {
                     SplitApkPreparer.prepareIfNeeded(
                         input,
                         File(parameters.cacheDir),
                         logger,
-                        parameters.stripNativeLibs
-                    )
-                }
-            } else {
-                SplitApkPreparer.prepareIfNeeded(
-                    input,
-                    File(parameters.cacheDir),
-                    logger,
-                    parameters.stripNativeLibs
-                )
-            }
-
-            try {
-                val session = runStep(StepId.ReadAPK, ::onEvent) {
-                    Session(
-                        cacheDir = parameters.cacheDir,
-                        aaptPath = parameters.aaptPath,
-                        frameworkDir = parameters.frameworkDir,
-                        logger = logger,
-                        input = preparation.file,
-                        onEvent = ::onEvent,
+                        parameters.stripNativeLibs,
+                        parameters.skipUnneededSplits,
+                        onProgress = { message ->
+                            onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
+                        },
+                        onSubSteps = { subSteps ->
+                            onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
+                        }
                     )
                 }
 
-                session.use {
-                    it.run(File(parameters.outputFile), patchList)
+                try {
+                    val session = runStep(StepId.ReadAPK, ::onEvent) {
+                        Session(
+                            cacheDir = parameters.cacheDir,
+                            aaptPath = parameters.aaptPath,
+                            frameworkDir = parameters.frameworkDir,
+                            logger = logger,
+                            input = preparation.file,
+                            onEvent = ::onEvent,
+                        )
+                    }
+
+                    session.use {
+                        it.run(
+                            File(parameters.outputFile),
+                            patchList,
+                            parameters.stripNativeLibs,
+                            preparation.merged
+                        )
+                    }
+                } finally {
+                    preparation.cleanup()
                 }
+
+                events.finished(null)
+            } catch (throwable: Throwable) {
+                val extra = aaptLogs.dump()
+                val stack = throwable.stackTraceToString()
+                val report = if (extra.isNotBlank()) {
+                    "$stack\n\nAAPT2 output:\n$extra"
+                } else {
+                    stack
+                }
+                events.finished(report)
             } finally {
-                preparation.cleanup()
+                stdioCapture.close()
+                aaptLogs.stop()
             }
-
-            events.finished(null)
         }
     }
 
@@ -145,11 +215,15 @@ class PatcherProcess : IPatcherProcess.Stub() {
             val appContext = systemContext.createPackageContext(managerPackageName, 0)
 
             // Avoid annoying logs. See https://github.com/robolectric/robolectric/blob/ad0484c6b32c7d11176c711abeb3cb4a900f9258/robolectric/src/main/java/org/robolectric/android/internal/AndroidTestEnvironment.java#L376-L388
-            Class.forName("android.app.AppCompatCallbacks").apply {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
-                    getDeclaredMethod("install", longArrayClass, longArrayClass).also { it.isAccessible = true }(null, emptyLongArray, emptyLongArray)
-                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    getDeclaredMethod("install", longArrayClass).also { it.isAccessible = true }(null, emptyLongArray)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                runCatching {
+                    Class.forName("android.app.AppCompatCallbacks").apply {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+                            getDeclaredMethod("install", longArrayClass, longArrayClass).also { it.isAccessible = true }(null, emptyLongArray, emptyLongArray)
+                        } else {
+                            getDeclaredMethod("install", longArrayClass).also { it.isAccessible = true }(null, emptyLongArray)
+                        }
+                    }
                 }
             }
 
@@ -168,4 +242,186 @@ class PatcherProcess : IPatcherProcess.Stub() {
             exitProcess(1) // Shouldn't happen
         }
     }
+
+    private class AaptLogCapture(
+        private val onLine: ((String) -> Unit)? = null
+    ) {
+        private val logger = JavaLogger.getLogger("")
+        private val lines = ArrayDeque<String>()
+        private var originalLevel: Level? = null
+        private val handler = object : Handler() {
+            override fun publish(record: LogRecord) {
+                val message = record.message?.trim().orEmpty()
+                if (message.isEmpty()) return
+                onLine?.invoke(message)
+                synchronized(lines) {
+                    if (lines.size >= MAX_LINES) {
+                        lines.removeFirst()
+                    }
+                    lines.addLast(message)
+                }
+            }
+
+            override fun flush() {}
+            override fun close() {}
+        }
+
+        fun start() {
+            originalLevel = logger.level
+            logger.level = Level.ALL
+            handler.level = Level.ALL
+            logger.addHandler(handler)
+        }
+
+        fun stop() {
+            logger.removeHandler(handler)
+            logger.level = originalLevel
+        }
+
+        fun dump(): String = synchronized(lines) { lines.joinToString("\n") }
+
+        companion object {
+            private const val MAX_LINES = 200
+        }
+    }
+
+    private class StdIoCapture(
+        private val onLine: (String) -> Unit
+    ) {
+        private val originalOut = System.out
+        private val originalErr = System.err
+        private val outBuffer = LineBufferOutputStream(onLine)
+        private val errBuffer = LineBufferOutputStream(onLine)
+        private val outStream = PrintStream(TeeOutputStream(originalOut, outBuffer), true)
+        private val errStream = PrintStream(TeeOutputStream(originalErr, errBuffer), true)
+
+        fun start() {
+            System.setOut(outStream)
+            System.setErr(errStream)
+        }
+
+        fun close() {
+            outBuffer.flushPending()
+            errBuffer.flushPending()
+            System.setOut(originalOut)
+            System.setErr(originalErr)
+        }
+    }
+
+    private class TeeOutputStream(
+        private val first: OutputStream,
+        private val second: OutputStream
+    ) : OutputStream() {
+        override fun write(b: Int) {
+            first.write(b)
+            second.write(b)
+        }
+
+        override fun write(bytes: ByteArray, off: Int, len: Int) {
+            first.write(bytes, off, len)
+            second.write(bytes, off, len)
+        }
+
+        override fun flush() {
+            first.flush()
+            second.flush()
+        }
+    }
+
+    private class LineBufferOutputStream(
+        private val onLine: (String) -> Unit
+    ) : OutputStream() {
+        private val buffer = StringBuilder()
+
+        override fun write(b: Int) {
+            appendChar(b.toChar())
+        }
+
+        override fun write(bytes: ByteArray, off: Int, len: Int) {
+            for (index in off until off + len) {
+                appendChar(bytes[index].toInt().toChar())
+            }
+        }
+
+        override fun flush() {
+            flushPending()
+        }
+
+        fun flushPending() {
+            if (buffer.isEmpty()) return
+            val line = buffer.toString()
+            buffer.setLength(0)
+            onLine(line)
+        }
+
+        private fun appendChar(ch: Char) {
+            when (ch) {
+                '\n' -> flushPending()
+                '\r' -> Unit
+                else -> buffer.append(ch)
+            }
+        }
+    }
+
+    private fun logAapt2Info(aaptPath: String, logger: Logger) {
+        val aaptFile = File(aaptPath)
+        if (!aaptFile.exists()) {
+            logger.warn("AAPT2 binary missing at $aaptPath")
+            return
+        }
+        val digest = sha256(aaptFile)
+        if (digest != null) {
+            logger.info("AAPT2 sha256: $digest")
+        }
+        val version = runCatching {
+            val process = ProcessBuilder(aaptPath, "version")
+                .redirectErrorStream(true)
+                .start()
+            val output = process.inputStream.bufferedReader().readText().trim()
+            process.waitFor()
+            output.takeIf { it.isNotBlank() }
+        }.getOrNull()
+        if (!version.isNullOrBlank()) {
+            logger.info("AAPT2 version: $version")
+        }
+    }
+
+    private fun ensureFrameworkApkHealthy(frameworkDir: String, logger: Logger) {
+        val framework = File(frameworkDir).resolve("1.apk")
+        if (!framework.exists()) {
+            logger.warn("Framework APK missing at ${framework.absolutePath}")
+            return
+        }
+        if (!framework.isFile || framework.length() <= 0L) {
+            logger.warn("Framework APK invalid. Deleting ${framework.absolutePath}")
+            framework.delete()
+            return
+        }
+        val valid = runCatching {
+            ZipFile(framework).use { zip ->
+                zip.getEntry("resources.arsc") != null || zip.getEntry("AndroidManifest.xml") != null
+            }
+        }.getOrDefault(false)
+        if (!valid) {
+            logger.warn("Framework APK corrupt. Deleting ${framework.absolutePath}")
+            framework.delete()
+        }
+    }
+
+    private fun sha256(file: File): String? = runCatching {
+        val digest = MessageDigest.getInstance("SHA-256")
+        FileInputStream(file).use { input ->
+            val buffer = ByteArray(8192)
+            while (true) {
+                val read = input.read(buffer)
+                if (read <= 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        val hex = StringBuilder()
+        digest.digest().forEach { byte ->
+            hex.append(String.format("%02x", byte))
+        }
+        hex.toString()
+    }.getOrNull()
 }

@@ -34,6 +34,8 @@ data object SelectedApplicationInfo : ComplexParameter<SelectedApplicationInfo.V
     data class ViewModelParams(
         val app: SelectedApp,
         val patches: PatchSelection? = null,
+        val selectionPayloadJson: String? = null,
+        val persistConfiguration: Boolean = true,
         val profileId: Int? = null,
         val requiresSourceSelection: Boolean = false
     ) : Parcelable

@@ -10,7 +10,11 @@ data class ExternalBundleSnapshot(
     val repoDescription: String? = null,
     val sourceUrl: String = "",
     val repoStars: Int = 0,
+    val repoPushedAt: String? = null,
+    val lastRefreshedAt: String? = null,
+    val isRepoArchived: Boolean = false,
     val bundleId: Int = 0,
+    val bundleType: String = "",
     val createdAt: String = "",
     val description: String? = null,
     val version: String = "",
@@ -18,6 +22,7 @@ data class ExternalBundleSnapshot(
     val signatureDownloadUrl: String? = null,
     val isPrerelease: Boolean = false,
     val isBundleV3: Boolean = false,
+    val patchCount: Int = 0,
     val patches: List<ExternalBundlePatch> = emptyList(),
 )
 

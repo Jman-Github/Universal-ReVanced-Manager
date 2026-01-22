@@ -137,17 +137,6 @@ fun DeveloperSettingsScreen(
                         modifier = highlightModifier.clickable(onClick = vm::redownloadBundles)
                     )
                 }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.patches_reset,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    ExpressiveSettingsItem(
-                        headlineContent = stringResource(R.string.patches_reset),
-                        modifier = highlightModifier.clickable(onClick = vm::redownloadBundles)
-                    )
-                }
             }
             GroupHeader(stringResource(R.string.tab_profiles))
             ExpressiveSettingsCard(

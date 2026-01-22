@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.revanced.manager.domain.bundles.RemotePatchBundle
+import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.network.dto.ReVancedAsset
 import app.revanced.manager.ui.component.ColumnWithScrollbar
 import app.revanced.manager.ui.component.FullscreenDialog
@@ -37,6 +38,7 @@ import app.revanced.manager.ui.component.settings.Changelog
 import app.revanced.manager.util.relativeTime
 import app.revanced.manager.util.simpleMessage
 import app.universal.revanced.manager.R
+import org.koin.compose.koinInject
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,6 +46,7 @@ fun BundleChangelogDialog(
     src: RemotePatchBundle,
     onDismissRequest: () -> Unit,
 ) {
+    val bundleRepo = koinInject<PatchBundleRepository>()
     var refreshKey by remember { mutableStateOf(0) }
     var state: BundleChangelogState by remember { mutableStateOf(BundleChangelogState.Loading) }
 
@@ -51,6 +54,7 @@ fun BundleChangelogDialog(
         state = BundleChangelogState.Loading
         state = try {
             val asset = src.fetchLatestReleaseInfo()
+            runCatching { bundleRepo.recordChangelog(src.uid, asset) }
             BundleChangelogState.Success(asset)
         } catch (t: Throwable) {
             BundleChangelogState.Error(t)
@@ -185,13 +189,3 @@ private sealed interface BundleChangelogState {
     data class Success(val asset: ReVancedAsset) : BundleChangelogState
     data class Error(val throwable: Throwable) : BundleChangelogState
 }
-
-private val doubleBracketLinkRegex =
-    Regex("""\[\[([^\]]+)]\(([^)]+)\)]""")
-
-private fun String.sanitizePatchChangelogMarkdown(): String =
-    doubleBracketLinkRegex.replace(this) { match ->
-        val label = match.groupValues[1]
-        val link = match.groupValues[2]
-        "[\\[$label\\]]($link)"
-    }

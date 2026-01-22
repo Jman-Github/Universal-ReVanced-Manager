@@ -28,13 +28,19 @@ class PatchProfileRepository(
         if (existing != null) {
             throw DuplicatePatchProfileNameException(packageName, name)
         }
+        val sortOrder = (dao.getMaxSortOrder() ?: -1) + 1
         val entity = PatchProfileEntity(
             uid = AppDatabase.generateUid(),
             packageName = packageName,
             appVersion = appVersion,
+            apkPath = null,
+            apkSourcePath = null,
+            apkVersion = null,
+            autoPatch = false,
             name = name,
             payload = payload,
-            createdAt = System.currentTimeMillis()
+            createdAt = System.currentTimeMillis(),
+            sortOrder = sortOrder
         )
         dao.upsert(entity)
         return entity.toDomain()
@@ -63,8 +69,33 @@ class PatchProfileRepository(
             packageName = packageName,
             appVersion = appVersion,
             name = name,
-            payload = payload
+            payload = payload,
+            autoPatch = existing.autoPatch,
+            sortOrder = existing.sortOrder
         )
+        dao.upsert(entity)
+        return entity.toDomain()
+    }
+
+    suspend fun updateProfileApk(
+        uid: Int,
+        apkPath: String?,
+        apkVersion: String?,
+        apkSourcePath: String?
+    ): PatchProfile? {
+        val existing = dao.get(uid) ?: return null
+        val entity = existing.copy(
+            apkPath = apkPath,
+            apkSourcePath = apkSourcePath,
+            apkVersion = apkVersion
+        )
+        dao.upsert(entity)
+        return entity.toDomain()
+    }
+
+    suspend fun updateProfileAutoPatch(uid: Int, enabled: Boolean): PatchProfile? {
+        val existing = dao.get(uid) ?: return null
+        val entity = existing.copy(autoPatch = enabled)
         dao.upsert(entity)
         return entity.toDomain()
     }
@@ -78,6 +109,7 @@ class PatchProfileRepository(
         if (entries.isEmpty()) return ImportProfilesResult(0, 0)
         var imported = 0
         var skipped = 0
+        var nextSortOrder = (dao.getMaxSortOrder() ?: -1) + 1
         for (entry in entries) {
             val existing = dao.findByPackageAndName(entry.packageName, entry.name)
             if (existing != null) {
@@ -88,14 +120,26 @@ class PatchProfileRepository(
                 uid = AppDatabase.generateUid(),
                 packageName = entry.packageName,
                 appVersion = entry.appVersion,
+                apkPath = null,
+                apkSourcePath = null,
+                apkVersion = null,
+                autoPatch = entry.autoPatch,
                 name = entry.name,
                 payload = entry.payload,
-                createdAt = entry.createdAt ?: System.currentTimeMillis()
+                createdAt = entry.createdAt ?: System.currentTimeMillis(),
+                sortOrder = nextSortOrder
             )
             dao.upsert(entity)
             imported++
+            nextSortOrder += 1
         }
         return ImportProfilesResult(imported, skipped)
+    }
+
+    suspend fun reorderProfiles(orderedUids: List<Int>) {
+        orderedUids.forEachIndexed { index, uid ->
+            dao.updateSortOrder(uid, index)
+        }
     }
 }
 
@@ -103,6 +147,10 @@ data class PatchProfile(
     val uid: Int,
     val packageName: String,
     val appVersion: String?,
+    val apkPath: String?,
+    val apkSourcePath: String?,
+    val apkVersion: String?,
+    val autoPatch: Boolean,
     val name: String,
     val createdAt: Long,
     val payload: PatchProfilePayload
@@ -113,6 +161,7 @@ data class PatchProfileExportEntry(
     val name: String,
     val packageName: String,
     val appVersion: String?,
+    val autoPatch: Boolean = false,
     val createdAt: Long?,
     val payload: PatchProfilePayload
 )
@@ -126,6 +175,10 @@ private fun PatchProfileEntity.toDomain() = PatchProfile(
     uid = uid,
     packageName = packageName,
     appVersion = appVersion,
+    apkPath = apkPath,
+    apkSourcePath = apkSourcePath,
+    apkVersion = apkVersion,
+    autoPatch = autoPatch,
     name = name,
     createdAt = createdAt,
     payload = payload
@@ -142,6 +195,7 @@ private fun PatchProfileEntity.toExportEntry() = PatchProfileExportEntry(
     name = name,
     packageName = packageName,
     appVersion = appVersion,
+    autoPatch = autoPatch,
     createdAt = createdAt,
     payload = payload
 )

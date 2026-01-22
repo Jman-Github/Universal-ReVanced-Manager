@@ -29,6 +29,7 @@ import app.revanced.manager.domain.repository.PatchProfileRepository
 import app.revanced.manager.domain.repository.remapLocalBundles
 import app.revanced.manager.domain.repository.DownloadedAppRepository
 import app.revanced.manager.patcher.patch.Option
+import app.revanced.manager.patcher.patch.PatchBundleType
 import app.revanced.manager.patcher.patch.PatchBundleInfo
 import app.revanced.manager.patcher.patch.PatchBundleInfo.Extensions.toPatchSelection
 import app.revanced.manager.patcher.patch.PatchInfo
@@ -149,7 +150,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
             initialValue = persistentMapOf()
         )
 
-    private var currentDefaultSelection: PersistentPatchSelection = persistentMapOf()
+    private var currentDefaultSelection: PersistentPatchSelection by mutableStateOf(persistentMapOf())
 
     val defaultSelectionCount = defaultPatchSelection.map { selection ->
         selection.values.sumOf { it.size }
@@ -173,12 +174,15 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
                 prefs.patchSelectionFilterFlags.update(filterState.value)
             }
         }
-        setAppVersion(
-            input.app.version?.takeUnless { it.isBlank() }
-                ?: preferredBundleOverride
+        val initialVersion = when {
+            preferredBundleUid != null && preferredBundleTargetsAllVersions -> null
+            preferredBundleUid != null -> preferredBundleOverride
                 ?: preferredBundleVersion
                 ?: preferredAppVersionHint
-        )
+                ?: input.app.version
+            else -> input.app.version ?: preferredAppVersionHint
+        }
+        setAppVersion(initialVersion)
         viewModelScope.launch {
             prefs.disablePatchVersionCompatCheck.flow
                 .distinctUntilChanged()
@@ -258,6 +262,8 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
      * Show the patch options dialog for this patch.
      */
     var optionsDialog by mutableStateOf<Pair<Int, PatchInfo>?>(null)
+    var showMixedPatchBundlesDialog by mutableStateOf(false)
+        private set
 
     val compatibleVersions = mutableStateListOf<String>()
 
@@ -306,6 +312,11 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         return customPatchSelection == null && (currentDefaultSelection[bundleUid]?.isNotEmpty() == true)
     }
 
+    fun bundleSelectionCount(bundleUid: Int): Int {
+        val selection = customPatchSelection ?: currentDefaultSelection
+        return selection[bundleUid]?.size ?: 0
+    }
+
     fun isSelected(bundle: Int, patch: PatchInfo): Boolean {
         customPatchSelection?.let { selection ->
             return selection[bundle]?.contains(patch.name) == true
@@ -316,19 +327,28 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
     fun togglePatch(bundle: Int, patch: PatchInfo) = viewModelScope.launch {
         hasModifiedSelection = true
 
-        val baseSelection = customPatchSelection ?: run {
-            if (currentDefaultSelection.isNotEmpty()) currentDefaultSelection
-            else defaultPatchSelection.value ?: defaultPatchSelection.first()
+        val baseSelection = customPatchSelection ?: currentDefaultSelection
+        val currentPatches = baseSelection[bundle] ?: persistentSetOf()
+        val isSelected = patch.name in currentPatches
+        if (!isSelected) {
+            val targetType = currentBundles.firstOrNull { it.uid == bundle }?.bundleType
+            if (!canMixBundleType(baseSelection, targetType)) {
+                notifyMixedPatchBundles()
+                return@launch
+            }
         }
 
-        val newPatches = baseSelection[bundle]?.let { patches ->
-            if (patch.name in patches)
-                patches.remove(patch.name)
-            else
-                patches.add(patch.name)
-        } ?: persistentSetOf(patch.name)
+        val newPatches = if (isSelected) {
+            currentPatches.remove(patch.name)
+        } else {
+            currentPatches.add(patch.name)
+        }
 
-        customPatchSelection = baseSelection.put(bundle, newPatches)
+        customPatchSelection = if (newPatches.isEmpty()) {
+            baseSelection.remove(bundle)
+        } else {
+            baseSelection.put(bundle, newPatches)
+        }
     }
 
     fun reset() {
@@ -350,7 +370,25 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
     fun selectAll() {
         if (currentBundles.isEmpty()) return
 
-        val selections = currentBundles
+        val baseSelection = customPatchSelection ?: currentDefaultSelection
+        val currentTypes = selectedBundleTypes(baseSelection)
+        if (currentTypes.size > 1) {
+            notifyMixedPatchBundles()
+            return
+        }
+
+        val preferredType = currentTypes.firstOrNull()
+        val eligibleBundles = if (preferredType == null) {
+            currentBundles
+        } else {
+            currentBundles.filter { it.bundleType == preferredType }
+        }
+        if (preferredType == null && currentBundles.map { it.bundleType }.distinct().size > 1) {
+            notifyMixedPatchBundles()
+            return
+        }
+
+        val selections = eligibleBundles
             .associate { bundle ->
                 bundle.uid to bundle.patchSequence(allowIncompatiblePatches)
                     .map(PatchInfo::name)
@@ -376,6 +414,15 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
             return@launch
         }
 
+        val baseSelection = customPatchSelection ?: run {
+            if (currentDefaultSelection.isNotEmpty()) currentDefaultSelection
+            else defaultPatchSelection.value ?: defaultPatchSelection.first()
+        }
+        if (!canMixBundleType(baseSelection, bundle.bundleType)) {
+            notifyMixedPatchBundles()
+            return@launch
+        }
+
         val patches = bundle.patchSequence(allowIncompatiblePatches)
             .map(PatchInfo::name)
             .toPersistentSet()
@@ -383,11 +430,6 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         if (patches.isEmpty()) {
             app.toast(app.getString(R.string.patch_selection_select_bundle_empty_toast, bundleName))
             return@launch
-        }
-
-        val baseSelection = customPatchSelection ?: run {
-            if (currentDefaultSelection.isNotEmpty()) currentDefaultSelection
-            else defaultPatchSelection.value ?: defaultPatchSelection.first()
         }
 
         recordSnapshot(actionLabel(R.string.patch_selection_action_select_bundle, bundleName))
@@ -409,12 +451,12 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
 
         val selectedPatches = baseSelection[bundleUid] ?: persistentSetOf()
         if (selectedPatches.isEmpty()) {
-            app.toast(
-                app.getString(
-                    R.string.patch_selection_no_selected_bundle_toast,
-                    bundleName
-                )
+        app.toast(
+            app.getString(
+                R.string.patch_selection_no_selected_bundle_toast,
+                bundleName
             )
+        )
             return@launch
         }
 
@@ -428,6 +470,25 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
                 bundleName
             )
         )
+    }
+
+    private fun selectedBundleTypes(selection: PersistentPatchSelection): Set<PatchBundleType> =
+        selection.mapNotNull { (uid, patches) ->
+            if (patches.isEmpty()) return@mapNotNull null
+            currentBundles.firstOrNull { it.uid == uid }?.bundleType
+        }.toSet()
+
+    private fun canMixBundleType(
+        selection: PersistentPatchSelection,
+        targetType: PatchBundleType?,
+    ): Boolean {
+        if (targetType == null) return true
+        val types = selectedBundleTypes(selection)
+        return types.isEmpty() || types.size == 1 && types.first() == targetType
+    }
+
+    private fun notifyMixedPatchBundles() {
+        showMixedPatchBundlesDialog = true
     }
 
     fun resetBundleToDefaults(bundleUid: Int, bundleName: String) = viewModelScope.launch {
@@ -739,12 +800,32 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         compatibleVersions.clear()
     }
 
+    fun dismissMixedPatchBundlesDialog() {
+        showMixedPatchBundlesDialog = false
+    }
+
     fun openIncompatibleDialog(incompatiblePatch: PatchInfo) {
         compatibleVersions.addAll(incompatiblePatch.compatiblePackages?.find { it.packageName == packageName }?.versions.orEmpty())
     }
 
     fun toggleFlag(flag: Int) {
         filter = filter xor flag
+    }
+
+    fun toggleTypeFlag(flag: Int) {
+        val typeMask = SHOW_UNIVERSAL or SHOW_NON_UNIVERSAL
+        val typeActive = filter and SHOW_TYPE_FILTER != 0
+        val next = if (!typeActive) {
+            (filter and typeMask.inv()) or SHOW_TYPE_FILTER or flag
+        } else {
+            val toggled = filter xor flag
+            if (toggled and typeMask == 0) {
+                toggled and SHOW_TYPE_FILTER.inv()
+            } else {
+                toggled
+            }
+        }
+        filter = next
     }
 
     private fun resolveInitialFilter(handle: SavedStateHandle, prefs: PreferencesManager): Int {
@@ -759,8 +840,9 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
                 else -> defaultFilterFlags()
             }
         }
-        handle["filter"] = resolved
-        return resolved
+        val normalized = normalizeTypeFilter(resolved)
+        handle["filter"] = normalized
+        return normalized
     }
 
     fun undoAction() {
@@ -817,13 +899,24 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
 
     private fun defaultFilterFlags(): Int =
         if (allowIncompatiblePatches || !suggestedVersionSafeguardEnabled)
-            SHOW_UNIVERSAL or SHOW_INCOMPATIBLE
+            SHOW_INCOMPATIBLE
         else
-            SHOW_UNIVERSAL
+            0
+
+    private fun normalizeTypeFilter(flags: Int): Int {
+        val typeMask = SHOW_UNIVERSAL or SHOW_NON_UNIVERSAL
+        return if (flags and typeMask != 0) {
+            flags or SHOW_TYPE_FILTER
+        } else {
+            flags
+        }
+    }
 
     companion object {
         const val SHOW_INCOMPATIBLE = 1 // 2^0
         const val SHOW_UNIVERSAL = 2 // 2^1
+        const val SHOW_NON_UNIVERSAL = 4 // 2^2
+        const val SHOW_TYPE_FILTER = 8 // 2^3
 
         private val optionsSaver: Saver<PersistentOptions, Options> = snapshotStateMapSaver(
             // Patch name -> Options

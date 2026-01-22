@@ -27,6 +27,14 @@ data class Step(
     val hide: Boolean = false,
 ) : Parcelable
 
+data class StepDetail(
+    val title: String,
+    val state: State = State.WAITING,
+    val message: String? = null,
+    val progress: Pair<Long, Long?>? = null,
+    val skipped: Boolean = false
+)
+
 fun Step.withState(
     state: State = this.state,
     message: String? = this.message,

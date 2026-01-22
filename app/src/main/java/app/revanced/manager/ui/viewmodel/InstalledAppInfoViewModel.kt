@@ -55,6 +55,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.first
 import java.io.File
 import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
 import org.koin.core.component.inject
@@ -460,7 +463,7 @@ class InstalledAppInfoViewModel(
                     }
                     val packageInfo = pm.getPackageInfo(apk)
                         ?: throw Exception("Failed to load application info")
-                    if (packageInfo.splitNames.isNotEmpty()) {
+                    if (packageInfo.splitNames?.isNotEmpty() == true) {
                         mountVersionMismatchMessage = context.getString(R.string.mount_split_not_supported)
                         return@launch
                     }
@@ -805,7 +808,8 @@ class InstalledAppInfoViewModel(
             val sourcesSnapshot = patchBundleRepository.sources.first()
             val availableIds = sourcesSnapshot.map { it.uid }.toSet()
             val persistableSelection = selection.filterKeys { it in availableIds }
-            val payload = patchBundleRepository.snapshotSelection(selection)
+            val payload = currentApp.selectionPayload
+                ?: patchBundleRepository.snapshotSelection(selection)
             installedAppRepository.addOrUpdate(
                 currentApp.currentPackageName,
                 currentApp.originalPackageName,
@@ -953,6 +957,32 @@ class InstalledAppInfoViewModel(
         )
     }
 
+    fun exportSavedAppToPath(
+        target: Path,
+        onResult: (Boolean) -> Unit = {}
+    ) = viewModelScope.launch {
+        val file = savedApkFile()
+        if (file == null) {
+            context.toast(context.getString(R.string.saved_app_export_failed))
+            onResult(false)
+            return@launch
+        }
+
+        val success = runCatching {
+            withContext(Dispatchers.IO) {
+                target.parent?.let { Files.createDirectories(it) }
+                Files.copy(file.toPath(), target, StandardCopyOption.REPLACE_EXISTING)
+            }
+        }.isSuccess
+
+        context.toast(
+            context.getString(
+                if (success) R.string.saved_app_export_success else R.string.saved_app_export_failed
+            )
+        )
+        onResult(success)
+    }
+
     fun removeSavedApp() = viewModelScope.launch {
         val app = installedApp ?: return@launch
         if (app.installType != InstallType.SAVED) return@launch
@@ -998,7 +1028,9 @@ class InstalledAppInfoViewModel(
             filesystem.getPatchedAppFile(target.currentPackageName, target.version),
             filesystem.getPatchedAppFile(target.originalPackageName, target.version)
         ).distinct()
-        return candidates.firstOrNull { it.exists() }
+        candidates.firstOrNull { it.exists() }?.let { return it }
+        return filesystem.findPatchedAppFile(target.currentPackageName)
+            ?: filesystem.findPatchedAppFile(target.originalPackageName)
     }
 
     private suspend fun refreshAppState(app: InstalledApp) {

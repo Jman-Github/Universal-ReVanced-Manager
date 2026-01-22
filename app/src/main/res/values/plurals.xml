@@ -3,12 +3,8 @@
     <plurals name="patch_count">
         <item quantity="one">%d patch</item>
         <item quantity="other">%d patches</item>
-    </plurals>
-    <plurals name="patches_executed">
-        <item quantity="one">Execute %d patch</item>
-        <item quantity="other">Execute %d patches</item>
-    </plurals>
+        </plurals>
     <plurals name="selected_count">
         <item quantity="other">%d selected</item>
-    </plurals>
-</resources>
+        </plurals>
+    </resources>
