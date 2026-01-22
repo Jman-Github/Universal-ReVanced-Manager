@@ -56,6 +56,8 @@ Additionally, due to a keystore system update, you may need to export and then r
 - Added an option to export all patch selections at once
 - Added support for `JKS` keystore types
 - Added a `Last checked` badge to the `Discover patch bundles` screens patch bundle widgets
+- Added support for PKCS12 keystore types
+- Made the `Patch selection action buttons order` action buttons be listed vertically
 
 
 # Bug fixes
@@ -85,7 +87,6 @@ Additionally, due to a keystore system update, you may need to export and then r
 - Fixed more issues with the `Saved patched apps for later` setting toggle & adjust its behavior
 - Fixed null splitNames errors with the Rooted mount installer https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/124
 - Fixed imported discovery patch bundle update checks not always detecting an update when it should be https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/125
-- Added support for PKCS12 keystore types
 - Fixed issues with version name checking with the `Rooted mount installer` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/126
 - Fixed issues with keystores from before the dev.05 release not working unless regenerated
 - Attempted to fix missing resources/AAPT2 errors

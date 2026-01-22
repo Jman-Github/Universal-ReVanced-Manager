@@ -904,21 +904,6 @@ fun AdvancedSettingsScreen(
                 )
             }
 
-            ExpressiveSettingsDivider()
-            SettingsSearchHighlight(
-                targetKey = R.string.patch_selection_version_tags_title,
-                activeKey = highlightTarget,
-                onHighlightComplete = { highlightTarget = null }
-            ) { highlightModifier ->
-                BooleanItem(
-                    modifier = highlightModifier,
-                    preference = viewModel.prefs.patchSelectionShowVersionTags,
-                    coroutineScope = viewModel.viewModelScope,
-                    headline = R.string.patch_selection_version_tags_title,
-                    description = R.string.patch_selection_version_tags_description
-                )
-            }
-
             if (actionsExpanded) {
                 ExpressiveSettingsDivider()
                 Box(
@@ -1168,74 +1153,32 @@ fun AdvancedSettingsScreen(
 
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 PatchSelectionActionKey.values()
-                                    .toList()
-                                    .chunked(2)
-                                    .forEach { keys ->
-                                        if (keys.size == 1) {
-                                            val key = keys.first()
-                                            val visible = key.storageId !in hiddenActionsPref
-                                            val setVisible: (Boolean) -> Unit = { isVisible ->
-                                                val updated = hiddenActionsPref.toMutableSet()
-                                                if (isVisible) updated.remove(key.storageId) else updated.add(key.storageId)
-                                                viewModel.setPatchSelectionHiddenActions(updated)
-                                            }
+                                    .forEach { key ->
+                                        val visible = key.storageId !in hiddenActionsPref
+                                        val setVisible: (Boolean) -> Unit = { isVisible ->
+                                            val updated = hiddenActionsPref.toMutableSet()
+                                            if (isVisible) updated.remove(key.storageId) else updated.add(key.storageId)
+                                            viewModel.setPatchSelectionHiddenActions(updated)
+                                        }
 
-                                            Box(modifier = Modifier.fillMaxWidth()) {
-                                                Row(
-                                                    modifier = Modifier
-                                                        .align(Alignment.Center)
-                                                        .fillMaxWidth(0.5f)
-                                                        .clip(RoundedCornerShape(12.dp))
-                                                        .clickable { setVisible(!visible) }
-                                                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    Text(
-                                                        text = stringResource(key.labelRes),
-                                                        modifier = Modifier.weight(1f),
-                                                        style = MaterialTheme.typography.bodyMedium,
-                                                        maxLines = 1
-                                                    )
-                                                    ExpressiveSettingsSwitch(
-                                                        checked = visible,
-                                                        onCheckedChange = setVisible
-                                                    )
-                                                }
-                                            }
-                                        } else {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                            ) {
-                                                keys.forEach { key ->
-                                                    val visible = key.storageId !in hiddenActionsPref
-                                                    val setVisible: (Boolean) -> Unit = { isVisible ->
-                                                        val updated = hiddenActionsPref.toMutableSet()
-                                                        if (isVisible) updated.remove(key.storageId) else updated.add(key.storageId)
-                                                        viewModel.setPatchSelectionHiddenActions(updated)
-                                                    }
-
-                                                    Row(
-                                                        modifier = Modifier
-                                                            .weight(1f)
-                                                            .clip(RoundedCornerShape(12.dp))
-                                                            .clickable { setVisible(!visible) }
-                                                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                                                        verticalAlignment = Alignment.CenterVertically
-                                                    ) {
-                                                        Text(
-                                                            text = stringResource(key.labelRes),
-                                                            modifier = Modifier.weight(1f),
-                                                            style = MaterialTheme.typography.bodyMedium,
-                                                            maxLines = 1
-                                                        )
-                                                        ExpressiveSettingsSwitch(
-                                                            checked = visible,
-                                                            onCheckedChange = setVisible
-                                                        )
-                                                    }
-                                                }
-                                            }
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .clickable { setVisible(!visible) }
+                                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = stringResource(key.labelRes),
+                                                modifier = Modifier.weight(1f),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                maxLines = 1
+                                            )
+                                            ExpressiveSettingsSwitch(
+                                                checked = visible,
+                                                onCheckedChange = setVisible
+                                            )
                                         }
                                     }
                             }
@@ -1262,6 +1205,20 @@ fun AdvancedSettingsScreen(
                             }
                     }
                 }
+            ExpressiveSettingsDivider()
+            SettingsSearchHighlight(
+                targetKey = R.string.patch_selection_version_tags_title,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                BooleanItem(
+                    modifier = highlightModifier,
+                    preference = viewModel.prefs.patchSelectionShowVersionTags,
+                    coroutineScope = viewModel.viewModelScope,
+                    headline = R.string.patch_selection_version_tags_title,
+                    description = R.string.patch_selection_version_tags_description
+                )
+            }
             }
 
             GroupHeader(stringResource(R.string.app_exporting))
