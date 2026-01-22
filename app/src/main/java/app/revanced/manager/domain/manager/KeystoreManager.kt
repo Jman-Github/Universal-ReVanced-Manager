@@ -6,6 +6,8 @@ import app.revanced.library.ApkSigner as RevancedApkSigner
 import com.android.apksig.ApkSigner as AndroidApkSigner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.BufferedInputStream
 import java.io.ByteArrayInputStream
 import java.io.DataInputStream
@@ -42,6 +44,7 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         app.getDir("signing", Context.MODE_PRIVATE).resolve("manager.keystore")
     private val credentialsPath =
         app.getDir("signing", Context.MODE_PRIVATE).resolve("keystore.txt")
+    private val keystoreMutex = Mutex()
 
     private data class KeystoreCredentials(
         val alias: String,
@@ -136,46 +139,50 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         }
 
     suspend fun sign(input: File, output: File) = withContext(Dispatchers.Default) {
-        try {
-            signWithApksig(input, output)
-            return@withContext
-        } catch (e: Exception) {
-            val sanitized = sanitizeZipIfNeeded(input)
-            if (sanitized == input) {
-                throw e
-            }
+        keystoreMutex.withLock {
             try {
-                signWithApksig(sanitized, output)
-            } finally {
-                sanitized.delete()
+                signWithApksig(input, output)
+                return@withLock
+            } catch (e: Exception) {
+                val sanitized = sanitizeZipIfNeeded(input)
+                if (sanitized == input) {
+                    throw e
+                }
+                try {
+                    signWithApksig(sanitized, output)
+                } finally {
+                    sanitized.delete()
+                }
             }
         }
     }
 
     suspend fun regenerate() = withContext(Dispatchers.Default) {
-        val keyCertPair = RevancedApkSigner.newPrivateKeyCertificatePair(
-            prefs.keystoreAlias.get(),
-            eightYearsFromNow
-        )
-        val ks = RevancedApkSigner.newKeyStore(
-            setOf(
-                RevancedApkSigner.KeyStoreEntry(
-                    DEFAULT, DEFAULT, keyCertPair
+        keystoreMutex.withLock {
+            val keyCertPair = RevancedApkSigner.newPrivateKeyCertificatePair(
+                prefs.keystoreAlias.get(),
+                eightYearsFromNow
+            )
+            val ks = RevancedApkSigner.newKeyStore(
+                setOf(
+                    RevancedApkSigner.KeyStoreEntry(
+                        DEFAULT, DEFAULT, keyCertPair
+                    )
                 )
             )
-        )
-        val bytes = withContext(Dispatchers.IO) {
-            ByteArrayOutputStream().use { output ->
-                ks.store(output, DEFAULT.toCharArray())
-                output.toByteArray()
+            val bytes = withContext(Dispatchers.IO) {
+                ByteArrayOutputStream().use { output ->
+                    ks.store(output, DEFAULT.toCharArray())
+                    output.toByteArray()
+                }
             }
-        }
-        val fingerprint = keystoreFingerprint(bytes)
-        withContext(Dispatchers.IO) {
-            Files.write(keystorePath.toPath(), bytes)
-        }
+            val fingerprint = keystoreFingerprint(bytes)
+            withContext(Dispatchers.IO) {
+                Files.write(keystorePath.toPath(), bytes)
+            }
 
-        updatePrefs(DEFAULT, DEFAULT, DEFAULT, "BKS", fingerprint)
+            updatePrefs(DEFAULT, DEFAULT, DEFAULT, "BKS", fingerprint)
+        }
     }
 
     /**
@@ -217,40 +224,48 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         storePass: String,
         keyPass: String,
         keystore: InputStream
-    ): Boolean {
-        val keystoreData = withContext(Dispatchers.IO) { keystore.readBytes() }
-        val resolvedKeyPass = keyPass.takeIf { it.isNotBlank() } ?: storePass
+    ): Boolean = withContext(Dispatchers.Default) {
+        keystoreMutex.withLock {
+            val keystoreData = withContext(Dispatchers.IO) { keystore.readBytes() }
+            val resolvedKeyPass = keyPass.takeIf { it.isNotBlank() } ?: storePass
 
-        val keyMaterial = tryLoadKeyMaterial(keystoreData, alias, storePass, resolvedKeyPass)
-            ?: return false
+            val keyMaterial = tryLoadKeyMaterial(keystoreData, alias, storePass, resolvedKeyPass)
+                ?: return@withLock false
 
-        val persistedType = if (keyMaterial.storeType == "JKS") "PKCS12" else keyMaterial.storeType
-        val persistedBytes = if (keyMaterial.storeType == "JKS") {
-            buildPkcs12Keystore(
-                keyMaterial.alias,
-                resolvedKeyPass,
-                storePass,
-                keyMaterial.privateKey,
-                keyMaterial.certificates
-            )
-        } else {
-            keystoreData
+            val persistedType = if (keyMaterial.storeType == "JKS") "PKCS12" else keyMaterial.storeType
+            val persistedBytes = if (keyMaterial.storeType == "JKS") {
+                buildPkcs12Keystore(
+                    keyMaterial.alias,
+                    resolvedKeyPass,
+                    storePass,
+                    keyMaterial.privateKey,
+                    keyMaterial.certificates
+                )
+            } else {
+                keystoreData
+            }
+
+            val fingerprint = keystoreFingerprint(persistedBytes)
+            withContext(Dispatchers.IO) {
+                Files.write(keystorePath.toPath(), persistedBytes)
+            }
+
+            updatePrefs(keyMaterial.alias, storePass, resolvedKeyPass, persistedType, fingerprint)
+            true
         }
-
-        val fingerprint = keystoreFingerprint(persistedBytes)
-        withContext(Dispatchers.IO) {
-            Files.write(keystorePath.toPath(), persistedBytes)
-        }
-
-        updatePrefs(keyMaterial.alias, storePass, resolvedKeyPass, persistedType, fingerprint)
-        return true
     }
 
     fun hasKeystore() = keystorePath.exists()
 
-    suspend fun export(target: OutputStream) {
-        withContext(Dispatchers.IO) {
+    suspend fun export(target: OutputStream) = withContext(Dispatchers.IO) {
+        keystoreMutex.withLock {
             Files.copy(keystorePath.toPath(), target)
+        }
+    }
+
+    private fun requireKeystoreReady() {
+        if (!keystorePath.exists() || keystorePath.length() == 0L) {
+            throw IllegalStateException("Keystore missing. Regenerate or import it in settings.")
         }
     }
 
@@ -313,16 +328,17 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
     }
 
     private suspend fun signWithApksig(input: File, output: File) {
+        requireKeystoreReady()
         val credentials = resolveCredentials()
         val keystoreData = withContext(Dispatchers.IO) {
             Files.readAllBytes(keystorePath.toPath())
         }
         val fingerprint = keystoreFingerprint(keystoreData)
         if (!credentials.fingerprint.isNullOrBlank() && credentials.fingerprint != fingerprint) {
-            throw IllegalArgumentException("Keystore changed. Please re-import it.")
+            throw IllegalArgumentException("Keystore changed. Re-import or regenerate it.")
         }
         val signingType = resolveSigningType(credentials) ?: throw IllegalArgumentException(
-            "Keystore needs re-import."
+            "Keystore needs re-import or regenerate."
         )
         val strictResult = loadKeyMaterialStrict(
             keystoreData,

@@ -1,4 +1,4 @@
-# v1.7.1 (TBD)
+# v1.7.1 (2026-01-22)
 
 
 # ⚠️ BREAKING CHANGES
