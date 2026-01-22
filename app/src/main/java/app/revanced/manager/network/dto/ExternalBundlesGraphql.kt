@@ -27,6 +27,12 @@ data class BundlesQueryData(
 )
 
 @Serializable
+data class RefreshJobsQueryData(
+    @SerialName("refresh_jobs")
+    val refreshJobs: List<RefreshJobNode> = emptyList(),
+)
+
+@Serializable
 data class BundleNode(
     val id: Int,
     @SerialName("bundle_type")
@@ -45,6 +51,13 @@ data class BundleNode(
     @SerialName("patches_aggregate")
     val patchesAggregate: PatchesAggregate? = null,
     val patches: List<PatchNode>? = null,
+)
+
+@Serializable
+data class RefreshJobNode(
+    @SerialName("started_at")
+    val startedAt: String? = null,
+    val status: String? = null,
 )
 
 @Serializable

@@ -708,6 +708,9 @@ private fun BundleDiscoveryItem(
     val lastUpdatedLabel = remember(bundle.repoPushedAt) {
         formatRepoUpdatedLabel(context, bundle.repoPushedAt)
     }
+    val lastRefreshedLabel = remember(bundle.lastRefreshedAt) {
+        formatBundleRefreshedLabel(context, bundle.lastRefreshedAt)
+    }
     val releaseImported = releaseBundle?.let(isImported) ?: false
     val prereleaseImported = prereleaseBundle?.let(isImported) ?: false
     val releaseProgress = releaseBundle?.let { importProgressFor(it, releaseImported) }
@@ -858,6 +861,13 @@ private fun BundleDiscoveryItem(
                 if (!lastUpdatedLabel.isNullOrBlank()) {
                     BundleTag(
                         text = lastUpdatedLabel,
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (!lastRefreshedLabel.isNullOrBlank()) {
+                    BundleTag(
+                        text = lastRefreshedLabel,
                         containerColor = MaterialTheme.colorScheme.surfaceVariant,
                         contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1110,6 +1120,15 @@ private fun formatRepoUpdatedLabel(context: Context, raw: String?): String? {
         Instant.parse(trimmed).toLocalDateTime(TimeZone.UTC).relativeTime(context)
     }.getOrNull() ?: return null
     return context.getString(R.string.bundle_updated_at, relative)
+}
+
+private fun formatBundleRefreshedLabel(context: Context, raw: String?): String? {
+    val trimmed = raw?.trim().orEmpty()
+    if (trimmed.isEmpty()) return null
+    val relative = runCatching {
+        Instant.parse(trimmed).toLocalDateTime(TimeZone.UTC).relativeTime(context)
+    }.getOrNull() ?: return null
+    return context.getString(R.string.bundle_refreshed_at, relative)
 }
 
 private data class BundleGroup(

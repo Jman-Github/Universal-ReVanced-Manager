@@ -19,6 +19,8 @@ import app.revanced.manager.util.toast
 import io.ktor.client.request.url
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -66,6 +68,7 @@ class BundleDiscoveryViewModel(
     private var importProgressSnapshot by mutableStateOf<Map<String, PatchBundleRepository.DiscoveryImportProgress>>(emptyMap())
     private var queuedImportSnapshot by mutableStateOf<Set<String>>(emptySet())
     private val localQueuedKeys = mutableStateMapOf<String, Boolean>()
+    private var lastRefreshAt: String? = null
     var isLoadingMore: Boolean by mutableStateOf(false)
         private set
     var canLoadMore: Boolean by mutableStateOf(true)
@@ -105,31 +108,50 @@ class BundleDiscoveryViewModel(
         canLoadMore = true
         val cached = bundleCache[key] ?: loadDiskCache(key)?.also { bundleCache[key] = it }
         if (cached != null) {
-            bundles = cached.bundles
+            bundles = applyLastRefreshed(cached.bundles)
         }
         val token = ++refreshToken
         viewModelScope.launch {
             if (token != refreshToken) return@launch
             isLoading = cached == null
             errorMessage = null
-            val snapshot = withContext(Dispatchers.IO) {
-                api.getBundles(packageNameQuery, limit = PAGE_SIZE, offset = 0).getOrNull()
+            val (snapshot, refreshJob) = withContext(Dispatchers.IO) {
+                coroutineScope {
+                    val bundlesDeferred = async {
+                        api.getBundles(packageNameQuery, limit = PAGE_SIZE, offset = 0).getOrNull()
+                    }
+                    val refreshDeferred = async {
+                        api.getLatestRefreshJob().getOrNull()
+                    }
+                    bundlesDeferred.await() to refreshDeferred.await()
+                }
             }
             if (token != refreshToken) return@launch
-            if (snapshot == null) {
+            val refreshedAt = refreshJob?.startedAt?.trim().takeIf { !it.isNullOrBlank() }
+            if (refreshedAt != null && refreshedAt != lastRefreshAt) {
+                lastRefreshAt = refreshedAt
+            }
+            val resolvedSnapshot = snapshot?.let { applyLastRefreshed(it) }
+            if (resolvedSnapshot == null) {
                 if (cached == null) {
                     errorMessage = app.getString(R.string.patch_bundle_discovery_error)
-                }
-            } else {
-                val fingerprint = fingerprint(snapshot)
-                if (cached == null || cached.fingerprint != fingerprint) {
-                    val entry = BundleCacheEntry(snapshot, fingerprint)
+                } else if (lastRefreshAt != null) {
+                    val updatedBundles = applyLastRefreshed(cached.bundles)
+                    val entry = BundleCacheEntry(updatedBundles, fingerprint(updatedBundles))
                     bundleCache[key] = entry
                     bundles = entry.bundles
                     persistDiskCache(key, entry)
                 }
-                nextOffset = snapshot.size
-                canLoadMore = snapshot.size >= PAGE_SIZE
+            } else {
+                val fingerprint = fingerprint(resolvedSnapshot)
+                if (cached == null || cached.fingerprint != fingerprint) {
+                    val entry = BundleCacheEntry(resolvedSnapshot, fingerprint)
+                    bundleCache[key] = entry
+                    bundles = entry.bundles
+                    persistDiskCache(key, entry)
+                }
+                nextOffset = resolvedSnapshot.size
+                canLoadMore = resolvedSnapshot.size >= PAGE_SIZE
                 errorMessage = null
             }
             isLoading = false
@@ -345,9 +367,10 @@ class BundleDiscoveryViewModel(
             val snapshot = withContext(Dispatchers.IO) {
                 api.getBundles(query, limit = PAGE_SIZE, offset = nextOffset).getOrNull()
             }
-            if (!snapshot.isNullOrEmpty()) {
+            val resolvedSnapshot = snapshot?.let { applyLastRefreshed(it) }
+            if (!resolvedSnapshot.isNullOrEmpty()) {
                 val current = bundles.orEmpty()
-                val updated = current + snapshot
+                val updated = current + resolvedSnapshot
                 val cached = bundleCache[key]
                 val entry = if (cached != null) {
                     cached.copy(bundles = updated)
@@ -357,8 +380,8 @@ class BundleDiscoveryViewModel(
                 bundleCache[key] = entry
                 bundles = entry.bundles
                 persistDiskCache(key, entry)
-                nextOffset += snapshot.size
-                canLoadMore = snapshot.size >= PAGE_SIZE
+                nextOffset += resolvedSnapshot.size
+                canLoadMore = resolvedSnapshot.size >= PAGE_SIZE
                 true
             } else {
                 canLoadMore = false
@@ -426,9 +449,23 @@ class BundleDiscoveryViewModel(
                 bundle.isBundleV3,
                 bundle.bundleType,
                 bundle.repoPushedAt,
+                bundle.lastRefreshedAt,
                 bundle.isRepoArchived
             ).joinToString(":")
         }
+
+    private fun applyLastRefreshed(
+        bundles: List<ExternalBundleSnapshot>
+    ): List<ExternalBundleSnapshot> {
+        val refreshedAt = lastRefreshAt?.trim().takeIf { !it.isNullOrBlank() } ?: return bundles
+        return bundles.map { bundle ->
+            if (bundle.lastRefreshedAt == refreshedAt) {
+                bundle
+            } else {
+                bundle.copy(lastRefreshedAt = refreshedAt)
+            }
+        }
+    }
 
     private fun bundleHostFromDownload(url: String?): String? {
         val trimmed = url?.trim().orEmpty()

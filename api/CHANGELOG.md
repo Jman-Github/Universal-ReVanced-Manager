@@ -55,6 +55,7 @@ Additionally, due to a keystore system update, you may need to export and then r
 - Added a patch confirmation screen showing the user what patch bundles, patches, and sub options they have selected and enabled/disabled
 - Added an option to export all patch selections at once
 - Added support for `JKS` keystore types
+- Added a `Last checked` badge to the `Discover patch bundles` screens patch bundle widgets
 
 
 # Bug fixes

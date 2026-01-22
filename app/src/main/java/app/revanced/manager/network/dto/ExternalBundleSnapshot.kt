@@ -11,6 +11,7 @@ data class ExternalBundleSnapshot(
     val sourceUrl: String = "",
     val repoStars: Int = 0,
     val repoPushedAt: String? = null,
+    val lastRefreshedAt: String? = null,
     val isRepoArchived: Boolean = false,
     val bundleId: Int = 0,
     val bundleType: String = "",

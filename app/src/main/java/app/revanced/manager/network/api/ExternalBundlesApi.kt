@@ -9,6 +9,8 @@ import app.revanced.manager.network.dto.GraphqlError
 import app.revanced.manager.network.dto.GraphqlRequest
 import app.revanced.manager.network.dto.GraphqlResponse
 import app.revanced.manager.network.dto.PatchNode
+import app.revanced.manager.network.dto.RefreshJobNode
+import app.revanced.manager.network.dto.RefreshJobsQueryData
 import app.revanced.manager.network.service.HttpService
 import app.revanced.manager.network.utils.APIFailure
 import app.revanced.manager.network.utils.APIResponse
@@ -70,6 +72,28 @@ class ExternalBundlesApi(
         if (devResponse is APIResponse.Success) {
             return devResponse.transform { data ->
                 data.bundle.firstOrNull()?.toSnapshot(DEV_BUNDLES_HOST)
+            }
+        }
+
+        return when (devResponse) {
+            is APIResponse.Error -> APIResponse.Error(devResponse.error)
+            is APIResponse.Failure -> APIResponse.Failure(devResponse.error)
+            is APIResponse.Success -> APIResponse.Success(null)
+        }
+    }
+
+    suspend fun getLatestRefreshJob(): APIResponse<RefreshJobNode?> {
+        val stableResponse = graphql<RefreshJobsQueryData>(STABLE_GRAPHQL_URL, REFRESH_JOBS_QUERY, null)
+        if (stableResponse is APIResponse.Success) {
+            return stableResponse.transform { data ->
+                data.refreshJobs.firstOrNull()
+            }
+        }
+
+        val devResponse = graphql<RefreshJobsQueryData>(DEV_GRAPHQL_URL, REFRESH_JOBS_QUERY, null)
+        if (devResponse is APIResponse.Success) {
+            return devResponse.transform { data ->
+                data.refreshJobs.firstOrNull()
             }
         }
 
@@ -193,6 +217,7 @@ class ExternalBundlesApi(
             sourceUrl = source?.url.orEmpty(),
             repoStars = metadata?.repoStars ?: 0,
             repoPushedAt = metadata?.repoPushedAt,
+            lastRefreshedAt = null,
             isRepoArchived = metadata?.isRepoArchived ?: false,
             bundleId = id,
             bundleType = resolved.bundleType,
@@ -380,6 +405,14 @@ class ExternalBundlesApi(
                     count
                   }
                 }
+              }
+            }
+        """
+        private const val REFRESH_JOBS_QUERY = """
+            query RefreshJobs {
+              refresh_jobs(order_by: { started_at: desc }, limit: 1) {
+                started_at
+                status
               }
             }
         """
