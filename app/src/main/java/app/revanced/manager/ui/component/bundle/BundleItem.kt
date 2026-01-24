@@ -27,6 +27,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,6 +50,7 @@ import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isDefaul
 import app.revanced.manager.data.platform.NetworkInfo
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.domain.repository.PatchBundleRepository.DisplayNameUpdateResult
+import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.ui.component.ConfirmDialog
 import app.revanced.manager.ui.component.TextInputDialog
 import app.revanced.manager.ui.component.bundle.BundleLinksSheet
@@ -56,6 +58,7 @@ import app.revanced.manager.ui.component.bundle.openBundleCatalogPage
 import app.revanced.manager.ui.component.bundle.openBundleReleasePage
 import app.revanced.manager.ui.component.haptics.HapticCheckbox
 import app.revanced.manager.ui.component.ShimmerBox
+import app.revanced.manager.ui.model.PatchBundleActionKey
 import app.revanced.manager.util.consumeHorizontalScroll
 import app.revanced.manager.util.PatchListCatalog
 import app.revanced.manager.util.relativeTime
@@ -91,6 +94,7 @@ fun BundleItem(
     val uriHandler = LocalUriHandler.current
     val networkInfo = koinInject<NetworkInfo>()
     val bundleRepo = koinInject<PatchBundleRepository>()
+    val prefs = koinInject<PreferencesManager>()
     val coroutineScope = rememberCoroutineScope()
     val catalogUrl = remember(src) {
         if (src.isDefault) PatchListCatalog.revancedCatalogUrl() else PatchListCatalog.resolveCatalogUrl(src)
@@ -235,12 +239,10 @@ fun BundleItem(
         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = disabledAlpha)
     }
     val cardShape = RoundedCornerShape(18.dp)
-    val cardBackground = MaterialTheme.colorScheme.surfaceVariant.copy(
-        alpha = if (src.enabled) 0.6f else 0.35f
-    )
-    val headerBackground = MaterialTheme.colorScheme.surfaceVariant.copy(
-        alpha = if (src.enabled) 0.85f else 0.5f
-    )
+    val cardBase = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
+    val headerBase = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp)
+    val cardBackground = cardBase.copy(alpha = if (src.enabled) 1f else 0.6f)
+    val headerBackground = headerBase.copy(alpha = if (src.enabled) 1f else 0.7f)
 
     Surface(
         modifier = modifier
@@ -367,37 +369,51 @@ fun BundleItem(
                     BundleMetaPill(text = label, enabled = src.enabled, isAccent = true)
                 }
 
-                val showUpdate = manualUpdateBadge != null || src.asRemoteOrNull != null
-                val actionScrollState = rememberScrollState()
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .consumeHorizontalScroll(actionScrollState)
-                        .horizontalScroll(actionScrollState),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+    val showUpdate = manualUpdateBadge != null || src.asRemoteOrNull != null
+    val actionScrollState = rememberScrollState()
+    val actionOrderPref by prefs.patchBundleActionOrder.getAsState()
+    val hiddenActionsPref by prefs.patchBundleHiddenActions.getAsState()
+    val orderedActionKeys = remember(actionOrderPref) {
+        val parsed = actionOrderPref
+            .split(',')
+            .mapNotNull { PatchBundleActionKey.fromStorageId(it.trim()) }
+        PatchBundleActionKey.ensureComplete(parsed)
+    }
+    val visibleActionKeys = remember(orderedActionKeys, hiddenActionsPref) {
+        orderedActionKeys.filterNot { it.storageId in hiddenActionsPref }
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .consumeHorizontalScroll(actionScrollState)
+            .horizontalScroll(actionScrollState),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        visibleActionKeys.forEach { key ->
+            when (key) {
+                PatchBundleActionKey.EDIT -> BundleActionPill(
+                    text = stringResource(R.string.edit),
+                    icon = Icons.Outlined.Edit,
+                    enabled = src.enabled,
+                    onClick = { showRenameDialog = true }
+                )
+                PatchBundleActionKey.REFRESH -> if (showUpdate) {
                     BundleActionPill(
-                        text = stringResource(R.string.edit),
-                        icon = Icons.Outlined.Edit,
+                        text = stringResource(R.string.refresh),
+                        icon = Icons.Outlined.Update,
                         enabled = src.enabled,
-                        onClick = { showRenameDialog = true }
+                        onClick = onUpdate,
+                        onLongClick = { showForceUpdateDialog = true }
                     )
-                    if (showUpdate) {
-                        BundleActionPill(
-                            text = stringResource(R.string.refresh),
-                            icon = Icons.Outlined.Update,
-                            enabled = src.enabled,
-                            onClick = onUpdate,
-                            onLongClick = { showForceUpdateDialog = true }
-                        )
-                    }
-                    BundleActionPill(
-                        text = stringResource(R.string.bundle_links),
-                        icon = FontAwesomeIcons.Brands.Github,
-                        enabled = src.enabled,
-                        onClick = { showLinkSheet = true }
-                    )
+                }
+                PatchBundleActionKey.LINKS -> BundleActionPill(
+                    text = stringResource(R.string.bundle_links),
+                    icon = FontAwesomeIcons.Brands.Github,
+                    enabled = src.enabled,
+                    onClick = { showLinkSheet = true }
+                )
+                PatchBundleActionKey.TOGGLE -> {
                     val toggleIcon = if (src.enabled) Icons.Outlined.Block else Icons.Outlined.CheckCircle
                     val toggleLabel = if (src.enabled) R.string.disable else R.string.enable
                     BundleActionPill(
@@ -412,13 +428,16 @@ fun BundleItem(
                             }
                         }
                     )
-                    BundleActionPill(
-                        text = stringResource(R.string.delete),
-                        icon = Icons.Outlined.Delete,
-                        enabled = true,
-                        onClick = { showDeleteConfirmationDialog = true }
-                    )
                 }
+                PatchBundleActionKey.DELETE -> BundleActionPill(
+                    text = stringResource(R.string.delete),
+                    icon = Icons.Outlined.Delete,
+                    enabled = true,
+                    onClick = { showDeleteConfirmationDialog = true }
+                )
+            }
+        }
+    }
             }
         }
     }
