@@ -584,8 +584,8 @@ Patch profiles are not affected.</string>
     <string name="patch_profile_changed_patches_toast">Some patches or options in this profile no longer match the bundle and were skipped.</string>
     <string name="patch_profile_no_available_bundles_toast">No bundles in this profile are available. Update your bundles and try again.</string>
     <string name="patch_profile_launch_error">Could not open this patch profile.</string>
-    <string name="patch_profile_show_more">Show more</string>
-    <string name="patch_profile_show_less">Show less</string>
+    <string name="patch_profile_show_more">View Patches</string>
+    <string name="patch_profile_show_less">Hide Patches</string>
     <string name="patch_profile_created_at">Created %1$s</string>
     <string name="patch_profile_bundle_header">%1$s • %2$s</string>
     <string name="patch_profile_bundle_unavailable_suffix">%1$s (unavailable)</string>
