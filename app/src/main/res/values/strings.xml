@@ -91,6 +91,7 @@
     <string name="bundle_release_page">Open release page</string>
     <string name="bundle_release_page_unavailable">Release page is not available for this bundle</string>
     <string name="bundle_release_page_error">Could not open release page: %s</string>
+    <string name="bundle_links">Links</string>
     <string name="bundle_links_title">Links for %1$s</string>
     <string name="bundle_link_release">GitHub release</string>
     <string name="bundle_link_catalog">Patch list catalog</string>

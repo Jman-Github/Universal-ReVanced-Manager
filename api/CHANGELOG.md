@@ -1,3 +1,14 @@
+# v1.8.0 (TBD)
+
+
+# Features
+
+- Redesigned and improved patch bundle widget UI, moved the progress banner and improved tab switcher UI https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/135
+
+
+# Bug fixes
+
+
 # v1.7.1 (2026-01-22)
 
 

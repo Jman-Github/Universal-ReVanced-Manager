@@ -235,11 +235,11 @@ fun BundleItem(
         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = disabledAlpha)
     }
     val cardShape = RoundedCornerShape(18.dp)
-    val cardBackground = MaterialTheme.colorScheme.primaryContainer.copy(
-        alpha = if (src.enabled) 0.28f else 0.16f
+    val cardBackground = MaterialTheme.colorScheme.surfaceVariant.copy(
+        alpha = if (src.enabled) 0.6f else 0.35f
     )
-    val headerBackground = MaterialTheme.colorScheme.primaryContainer.copy(
-        alpha = if (src.enabled) 0.55f else 0.28f
+    val headerBackground = MaterialTheme.colorScheme.surfaceVariant.copy(
+        alpha = if (src.enabled) 0.85f else 0.5f
     )
 
     Surface(
@@ -374,7 +374,7 @@ fun BundleItem(
                         .fillMaxWidth()
                         .consumeHorizontalScroll(actionScrollState)
                         .horizontalScroll(actionScrollState),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     BundleActionPill(
@@ -393,7 +393,7 @@ fun BundleItem(
                         )
                     }
                     BundleActionPill(
-                        text = stringResource(R.string.bundle_release_page),
+                        text = stringResource(R.string.bundle_links),
                         icon = FontAwesomeIcons.Brands.Github,
                         enabled = src.enabled,
                         onClick = { showLinkSheet = true }
@@ -464,22 +464,22 @@ private fun BundleActionPill(
                 onClick = onClick,
                 onLongClick = onLongClick
             )
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(horizontal = 10.dp, vertical = 4.dp),
         contentAlignment = Alignment.Center
     ) {
         Row(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 icon,
                 contentDescription = text,
                 tint = contentColor,
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(14.dp)
             )
             Text(
                 text = text,
-                style = MaterialTheme.typography.labelMedium,
+                style = MaterialTheme.typography.labelSmall,
                 color = contentColor,
                 maxLines = 1
             )
