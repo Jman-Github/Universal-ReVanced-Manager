@@ -130,6 +130,7 @@ node_modules/
 local.properties
 
 .cxx
-AGENT.md
+AGENTS.md
 .gitignore
 to-do.txt
+.ai/mcp/mcp.json

@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -84,13 +83,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.revanced.manager.R
 import app.revanced.manager.data.platform.Filesystem
@@ -200,7 +197,6 @@ fun DashboardScreen(
     val bundleUpdateProgress by vm.bundleUpdateProgress.collectAsStateWithLifecycle(null)
     val bundleImportProgress by vm.bundleImportProgress.collectAsStateWithLifecycle(null)
     val androidContext = LocalContext.current
-    val density = LocalDensity.current
     val composableScope = rememberCoroutineScope()
     var showBundleOrderDialog by rememberSaveable { mutableStateOf(false) }
     var showAppsOrderDialog by rememberSaveable { mutableStateOf(false) }
@@ -222,7 +218,6 @@ fun DashboardScreen(
                 showBundleFilePicker = true
             }
         }
-    var tabRowHeightPx by remember { mutableIntStateOf(0) }
     fun requestBundleFilePicker() {
         if (fs.hasStoragePermission()) {
             showBundleFilePicker = true
@@ -231,8 +226,6 @@ fun DashboardScreen(
         }
     }
 
-    val tabRowHeight = with(density) { tabRowHeightPx.toDp() }
-    val bannerOffset = 6.dp
     val dashboardSidePadding = 16.dp
 
     @Composable
@@ -832,13 +825,15 @@ fun DashboardScreen(
             TabRow(
                 selectedTabIndex = pagerState.currentPage,
                 containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp),
-                modifier = Modifier.onSizeChanged { tabRowHeightPx = it.height }
+                indicator = {},
+                divider = {}
             ) {
                 DashboardPage.entries.forEachIndexed { index, page ->
+                    val selected = pagerState.currentPage == index
                     HapticTab(
-                        selected = pagerState.currentPage == index,
+                        selected = selected,
                         onClick = { composableScope.launch { pagerState.animateScrollToPage(index) } },
-                        text = { Text(stringResource(page.titleResId)) },
+                        text = { DashboardTabLabel(text = stringResource(page.titleResId), selected = selected) },
                         icon = { Icon(page.icon, null) },
                         selectedContentColor = MaterialTheme.colorScheme.primary,
                         unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -953,6 +948,10 @@ fun DashboardScreen(
                 )
             }
 
+            BundleProgressBanner(
+                modifier = Modifier.padding(top = 8.dp)
+            )
+
             HorizontalPager(
                 state = pagerState,
                 userScrollEnabled = true,
@@ -1011,13 +1010,6 @@ fun DashboardScreen(
                 }
             )
         }
-        BundleProgressBanner(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = tabRowHeight)
-                .offset(y = bannerOffset)
-                .zIndex(1f)
-            )
     }
 }
 }
@@ -1037,6 +1029,37 @@ fun Notifications(
                 notification()
             }
         }
+    }
+}
+
+@Composable
+private fun DashboardTabLabel(
+    text: String,
+    selected: Boolean
+) {
+    if (selected) {
+        Surface(
+            shape = RoundedCornerShape(999.dp),
+            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+        ) {
+            Text(
+                text = text,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    } else {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
