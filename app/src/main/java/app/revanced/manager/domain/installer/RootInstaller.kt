@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.os.IBinder
 import android.os.SystemClock
+import android.util.Log
 import app.revanced.manager.IRootSystemService
 import app.revanced.manager.service.ManagerRootService
 import app.revanced.manager.util.PM
@@ -182,6 +183,12 @@ class RootInstaller(
                 "done"
         ).assertSuccess("Failed to clean service scripts")
 
+        // Remove legacy per-app service.d script to avoid duplicate mount logic.
+        val legacyScript = remoteFS.getFile(serviceScriptPath)
+        val hadLegacyScript = legacyScript.exists()
+        if (hadLegacyScript) legacyScript.delete()
+        if (hadLegacyScript) Log.i(TAG, "Removed legacy service.d mount script for $packageName")
+
         remoteFS.getFile(modulePath).mkdir()
 
         listOf(
@@ -192,6 +199,8 @@ class RootInstaller(
                 remoteFS.getFile("$modulePath/$file").newOutputStream()
                     .use { outputStream ->
                         val content = String(inputStream.readBytes())
+                            .replace("\r\n", "\n")
+                            .replace("\r", "\n")
                             .replace("__PKG_NAME__", packageName)
                             .replace("__VERSION__", version)
                             .replace("__LABEL__", label)
@@ -202,19 +211,7 @@ class RootInstaller(
             }
         }
 
-        assets.open("root/service.sh").use { inputStream ->
-            remoteFS.getFile(serviceScriptPath).newOutputStream().use { outputStream ->
-                val content = String(inputStream.readBytes())
-                    .replace("__PKG_NAME__", packageName)
-                    .replace("__VERSION__", version)
-                    .replace("__LABEL__", label)
-                    .toByteArray()
-
-                outputStream.write(content)
-            }
-        }
-
-        "$revancedDir/$packageName.apk".let { apkPath ->
+        "$modulePath/$packageName.apk".let { apkPath ->
 
             remoteFS.getFile(patchedAPK.absolutePath)
                 .also { if (!it.exists()) throw Exception("File doesn't exist") }
@@ -228,9 +225,7 @@ class RootInstaller(
                 "chmod 644 $apkPath",
                 "chown system:system $apkPath",
                 "chcon u:object_r:apk_data_file:s0 $apkPath",
-                "chmod +x $modulePath/service.sh",
-                "chmod 755 $serviceScriptPath",
-                "chown root:root $serviceScriptPath"
+                "chmod +x $modulePath/service.sh"
             ).assertSuccess("Failed to set file permissions")
         }
     }
@@ -254,6 +249,7 @@ class RootInstaller(
     }
 
     companion object {
+        private const val TAG = "RootInstaller"
         const val modulesPath = "/data/adb/modules"
         private const val revancedPath = "/data/adb/revanced"
         private const val serviceDirPath = "/data/adb/service.d"
@@ -267,11 +263,11 @@ class RootInstaller(
 
     private suspend fun resolvePatchedApkPath(packageName: String): String {
         val remoteFS = awaitRemoteFS()
-        val revancedApk = "$revancedPath/$packageName/$packageName.apk"
-        if (remoteFS.getFile(revancedApk).exists()) return revancedApk
-
         val moduleApk = "$modulesPath/$packageName-revanced/$packageName.apk"
         if (remoteFS.getFile(moduleApk).exists()) return moduleApk
+
+        val revancedApk = "$revancedPath/$packageName/$packageName.apk"
+        if (remoteFS.getFile(revancedApk).exists()) return revancedApk
 
         throw Exception("Patched APK not found for mount")
     }

@@ -10,6 +10,8 @@
 
 # Bug fixes
 
+- Resolved redundancies within the `service.sh` script improved module regeneration https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/134
+
 
 # v1.7.1-dev.06 (2026-01-20)
 
