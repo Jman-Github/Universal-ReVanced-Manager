@@ -10,10 +10,13 @@ import androidx.compose.material3.ExpandedFullScreenSearchBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SearchBar
 import androidx.compose.material3.SearchBarDefaults
+import androidx.compose.material3.SearchBarValue
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.SearchBarState
@@ -34,6 +37,13 @@ fun SearchBar(
         dividerColor = MaterialTheme.colorScheme.outline
     )
     val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    LaunchedEffect(searchBarState.currentValue) {
+        if (searchBarState.currentValue != SearchBarValue.Expanded) {
+            keyboardController?.hide()
+            focusManager.clearFocus(force = true)
+        }
+    }
     val inputField = @Composable {
         SearchBarDefaults.InputField(
             modifier = Modifier.sizeIn(minWidth = 380.dp),

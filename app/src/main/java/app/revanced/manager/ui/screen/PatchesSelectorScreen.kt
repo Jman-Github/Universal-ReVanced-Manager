@@ -104,6 +104,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -212,6 +214,8 @@ fun PatchesSelectorScreen(
         orderedActionKeys.filterNot { it.storageId in hiddenActionsPref }
     }
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val density = LocalDensity.current
     val selectedBundleUids = remember { mutableStateListOf<Int>() }
     var showBundleDialog by rememberSaveable { mutableStateOf(false) }
@@ -340,6 +344,8 @@ fun PatchesSelectorScreen(
         if (useFallbackSearch) {
             searchActive = false
         } else {
+            focusManager.clearFocus(force = true)
+            keyboardController?.hide()
             composableScope.launch {
                 searchBarState.animateToCollapsed()
             }
@@ -360,6 +366,8 @@ fun PatchesSelectorScreen(
         if (useFallbackSearch) {
             searchActive = false
         } else {
+            focusManager.clearFocus(force = true)
+            keyboardController?.hide()
             searchBarState.animateToCollapsed()
         }
     }
@@ -375,6 +383,8 @@ fun PatchesSelectorScreen(
         if (useFallbackSearch && searchActive) {
             searchActive = false
         } else if (!useFallbackSearch && searchExpanded) {
+            focusManager.clearFocus(force = true)
+            keyboardController?.hide()
             composableScope.launch {
                 searchBarState.animateToCollapsed()
             }
@@ -1197,6 +1207,8 @@ fun PatchesSelectorScreen(
                     textFieldState = textFieldState,
                     searchBarState = searchBarState,
                     onSearch = {
+                        focusManager.clearFocus(force = true)
+                        keyboardController?.hide()
                         composableScope.launch {
                             searchBarState.animateToCollapsed()
                         }
@@ -1213,6 +1225,8 @@ fun PatchesSelectorScreen(
                         IconButton(
                             onClick = {
                                 if (searchExpanded) {
+                                    focusManager.clearFocus(force = true)
+                                    keyboardController?.hide()
                                     composableScope.launch {
                                         searchBarState.animateToCollapsed()
                                     }
