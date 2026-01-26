@@ -18,6 +18,7 @@
 - Resolved redundancies within the `service.sh` script improved module regeneration https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/134
 - Mitigated issues with having to regenerate keystores & persistent errors with signing (even after regenerate the keystore) for some users
 - Fixed an issue where the experimental patcher was always on internally when patching with Morphe, and couldn't be turned off
+- Fixed alignment of accent presets in `Settings > General`
 
 
 # v1.7.1-dev.06 (2026-01-20)

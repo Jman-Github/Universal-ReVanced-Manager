@@ -11,6 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -24,10 +25,14 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
@@ -393,30 +398,76 @@ fun GeneralSettingsScreen(
                     .padding(horizontal = 16.dp)
                     .alpha(accentControlsAlpha)
             )
-            FlowRow(
+            val swatchSize = 40.dp
+            val swatchSpacing = 12.dp
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 12.dp)
-                    .alpha(accentControlsAlpha),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .alpha(accentControlsAlpha)
             ) {
-                accentPresets.forEach { preset ->
-                    val isSelected = selectedAccentArgb != null && preset.toArgb() == selectedAccentArgb
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .border(
-                                width = if (isSelected) 2.dp else 1.dp,
-                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                                shape = RoundedCornerShape(14.dp)
-                            )
-                            .background(preset, RoundedCornerShape(12.dp))
-                            .clickable(enabled = canAdjustAccentColor) {
-                                viewModel.setCustomAccentColor(preset)
+                val maxColumns = ((maxWidth + swatchSpacing) / (swatchSize + swatchSpacing))
+                    .toInt()
+                    .coerceAtLeast(4)
+                    .coerceAtMost(accentPresets.size.coerceAtLeast(1))
+                val gridColumns = (maxColumns downTo 1).firstOrNull {
+                    accentPresets.isNotEmpty() && accentPresets.size % it == 0
+                } ?: maxColumns
+                val gridRows = (accentPresets.size + gridColumns - 1) / gridColumns
+                val gridHeight = (swatchSize * gridRows) + (swatchSpacing * (gridRows - 1))
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(gridColumns),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(gridHeight),
+                    horizontalArrangement = Arrangement.spacedBy(swatchSpacing),
+                    verticalArrangement = Arrangement.spacedBy(swatchSpacing),
+                    userScrollEnabled = false
+                ) {
+                    items(accentPresets.size) { index ->
+                        val preset = accentPresets[index]
+                        val isSelected = selectedAccentArgb != null && preset.toArgb() == selectedAccentArgb
+                        Box(
+                            modifier = Modifier
+                                .size(swatchSize)
+                                .clip(RoundedCornerShape(14.dp))
+                                .border(
+                                    width = if (isSelected) 3.dp else 1.dp,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                    shape = RoundedCornerShape(14.dp)
+                                )
+                                .background(preset, RoundedCornerShape(12.dp))
+                                .clickable(enabled = canAdjustAccentColor) {
+                                    viewModel.setCustomAccentColor(preset)
+                                }
+                        ) {
+                            if (isSelected) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(4.dp)
+                                        .size(18.dp)
+                                        .background(
+                                            MaterialTheme.colorScheme.surface,
+                                            CircleShape
+                                        )
+                                        .border(
+                                            1.dp,
+                                            MaterialTheme.colorScheme.primary,
+                                            CircleShape
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Check,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                }
                             }
-                    )
+                        }
+                    }
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
