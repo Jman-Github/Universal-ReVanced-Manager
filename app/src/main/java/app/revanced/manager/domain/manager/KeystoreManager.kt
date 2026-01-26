@@ -2,6 +2,7 @@ package app.revanced.manager.domain.manager
 
 import android.app.Application
 import android.content.Context
+import android.util.Log
 import app.revanced.library.ApkSigner as RevancedApkSigner
 import com.android.apksig.ApkSigner as AndroidApkSigner
 import kotlinx.coroutines.Dispatchers
@@ -16,6 +17,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.io.ByteArrayOutputStream
 import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.security.KeyStore
 import java.security.PrivateKey
 import java.security.cert.X509Certificate
@@ -37,6 +39,8 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
          * Default alias and password for the keystore.
          */
         const val DEFAULT = "ReVanced"
+        private const val LEGACY_DEFAULT_PASSWORD = "s3cur3p@ssw0rd"
+        private const val LOG_TAG = "KeystoreManager"
         private val eightYearsFromNow get() = Date(System.currentTimeMillis() + (365.days * 8).inWholeMilliseconds * 24)
     }
 
@@ -44,9 +48,27 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         app.getDir("signing", Context.MODE_PRIVATE).resolve("manager.keystore")
     private val credentialsPath =
         app.getDir("signing", Context.MODE_PRIVATE).resolve("keystore.txt")
+    private val legacyKeystorePath = app.filesDir.resolve("manager.keystore")
+    private val backupKeystorePath = app.getExternalFilesDir("keystore")?.resolve("manager.keystore")
     private val keystoreMutex = Mutex()
 
     private data class KeystoreCredentials(
+        val alias: String,
+        val storePass: String,
+        val keyPass: String,
+        val type: String?,
+        val fingerprint: String?
+    )
+
+    data class KeystoreDiagnostics(
+        val keystorePath: String,
+        val keystoreSize: Long,
+        val credentialsPath: String,
+        val credentialsExists: Boolean,
+        val backupPath: String?,
+        val backupSize: Long?,
+        val legacyPath: String,
+        val legacySize: Long,
         val alias: String,
         val storePass: String,
         val keyPass: String,
@@ -159,29 +181,7 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
 
     suspend fun regenerate() = withContext(Dispatchers.Default) {
         keystoreMutex.withLock {
-            val keyCertPair = RevancedApkSigner.newPrivateKeyCertificatePair(
-                prefs.keystoreAlias.get(),
-                eightYearsFromNow
-            )
-            val ks = RevancedApkSigner.newKeyStore(
-                setOf(
-                    RevancedApkSigner.KeyStoreEntry(
-                        DEFAULT, DEFAULT, keyCertPair
-                    )
-                )
-            )
-            val bytes = withContext(Dispatchers.IO) {
-                ByteArrayOutputStream().use { output ->
-                    ks.store(output, DEFAULT.toCharArray())
-                    output.toByteArray()
-                }
-            }
-            val fingerprint = keystoreFingerprint(bytes)
-            withContext(Dispatchers.IO) {
-                Files.write(keystorePath.toPath(), bytes)
-            }
-
-            updatePrefs(DEFAULT, DEFAULT, DEFAULT, "BKS", fingerprint)
+            regenerateLocked()
         }
     }
 
@@ -230,7 +230,10 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
             val resolvedKeyPass = keyPass.takeIf { it.isNotBlank() } ?: storePass
 
             val keyMaterial = tryLoadKeyMaterial(keystoreData, alias, storePass, resolvedKeyPass)
-                ?: return@withLock false
+                ?: run {
+                    Log.w(LOG_TAG, "Keystore import failed: unable to load key material for alias=$alias")
+                    return@withLock false
+                }
 
             val persistedType = if (keyMaterial.storeType == "JKS") "PKCS12" else keyMaterial.storeType
             val persistedBytes = if (keyMaterial.storeType == "JKS") {
@@ -248,25 +251,55 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
             val fingerprint = keystoreFingerprint(persistedBytes)
             withContext(Dispatchers.IO) {
                 Files.write(keystorePath.toPath(), persistedBytes)
+                writeBackupKeystore(persistedBytes)
             }
 
             updatePrefs(keyMaterial.alias, storePass, resolvedKeyPass, persistedType, fingerprint)
+            Log.i(LOG_TAG, "Keystore imported (alias=${keyMaterial.alias}, type=$persistedType)")
             true
         }
     }
 
-    fun hasKeystore() = keystorePath.exists()
+    fun hasKeystore(): Boolean {
+        if (keystorePath.exists() && keystorePath.length() > 0L) return true
+        if (backupKeystorePath?.let { it.exists() && it.length() > 0L } == true) return true
+        return legacyKeystorePath.exists() && legacyKeystorePath.length() > 0L
+    }
 
     suspend fun export(target: OutputStream) = withContext(Dispatchers.IO) {
         keystoreMutex.withLock {
+            requireKeystoreReady()
             Files.copy(keystorePath.toPath(), target)
         }
     }
 
-    private fun requireKeystoreReady() {
-        if (!keystorePath.exists() || keystorePath.length() == 0L) {
-            throw IllegalStateException("Keystore missing. Regenerate or import it in settings.")
-        }
+    suspend fun getDiagnostics(): KeystoreDiagnostics = withContext(Dispatchers.IO) {
+        val fileCreds = readCredentials()
+        val resolved = resolveCredentials()
+        val backupFile = backupKeystorePath
+        KeystoreDiagnostics(
+            keystorePath = keystorePath.absolutePath,
+            keystoreSize = if (keystorePath.exists()) keystorePath.length() else 0L,
+            credentialsPath = credentialsPath.absolutePath,
+            credentialsExists = credentialsPath.exists(),
+            backupPath = backupFile?.absolutePath,
+            backupSize = backupFile?.takeIf { it.exists() }?.length(),
+            legacyPath = legacyKeystorePath.absolutePath,
+            legacySize = if (legacyKeystorePath.exists()) legacyKeystorePath.length() else 0L,
+            alias = resolved.alias,
+            storePass = resolved.storePass,
+            keyPass = resolved.keyPass,
+            type = fileCreds?.type,
+            fingerprint = fileCreds?.fingerprint
+        )
+    }
+
+    private suspend fun requireKeystoreReady() {
+        if (keystorePath.exists() && keystorePath.length() > 0L) return
+        Log.d(LOG_TAG, "Keystore missing at ${keystorePath.absolutePath}; attempting restore")
+        if (tryRestoreKeystore()) return
+        Log.w(LOG_TAG, "Keystore still missing; user action required")
+        throw IllegalStateException("Keystore missing. Regenerate or import it in settings.")
     }
 
     private fun keyStoreTypes(preferred: String?): List<String> {
@@ -387,6 +420,104 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         val type = credentials.type?.trim()?.uppercase()?.takeIf { it.isNotBlank() }
         if (type != null) return type
         return if (credentials.alias == DEFAULT) "BKS" else null
+    }
+
+    private suspend fun regenerateLocked() {
+        Log.i(LOG_TAG, "Regenerating keystore")
+        val keyCertPair = RevancedApkSigner.newPrivateKeyCertificatePair(
+            prefs.keystoreAlias.get(),
+            eightYearsFromNow
+        )
+        val ks = RevancedApkSigner.newKeyStore(
+            setOf(
+                RevancedApkSigner.KeyStoreEntry(
+                    DEFAULT, DEFAULT, keyCertPair
+                )
+            )
+        )
+        val bytes = withContext(Dispatchers.IO) {
+            ByteArrayOutputStream().use { output ->
+                ks.store(output, DEFAULT.toCharArray())
+                output.toByteArray()
+            }
+        }
+        val fingerprint = keystoreFingerprint(bytes)
+        withContext(Dispatchers.IO) {
+            Files.write(keystorePath.toPath(), bytes)
+            writeBackupKeystore(bytes)
+        }
+
+        updatePrefs(DEFAULT, DEFAULT, DEFAULT, "BKS", fingerprint)
+        Log.i(LOG_TAG, "Keystore regenerated at ${keystorePath.absolutePath}")
+    }
+
+    private suspend fun writeBackupKeystore(bytes: ByteArray) {
+        val backupPath = backupKeystorePath ?: return
+        withContext(Dispatchers.IO) {
+            backupPath.parentFile?.mkdirs()
+            Files.write(backupPath.toPath(), bytes)
+        }
+        Log.d(LOG_TAG, "Keystore backup saved to ${backupPath.absolutePath}")
+    }
+
+    private suspend fun tryRestoreKeystore(): Boolean = withContext(Dispatchers.IO) {
+        val candidates = listOfNotNull(
+            backupKeystorePath?.takeIf { it.exists() && it.length() > 0L },
+            legacyKeystorePath.takeIf { it.exists() && it.length() > 0L }
+        )
+        val source = candidates.firstOrNull() ?: run {
+            Log.w(LOG_TAG, "No keystore backup candidates found")
+            return@withContext false
+        }
+        keystorePath.parentFile?.mkdirs()
+        Files.copy(source.toPath(), keystorePath.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        Log.i(LOG_TAG, "Keystore restored from ${source.absolutePath}")
+        val bytes = Files.readAllBytes(keystorePath.toPath())
+        if (!rehydrateCredentials(bytes)) {
+            Log.w(LOG_TAG, "Restored keystore but could not infer credentials")
+        }
+        true
+    }
+
+    private suspend fun rehydrateCredentials(keystoreData: ByteArray): Boolean {
+        val aliasCandidates = listOf(
+            prefs.keystoreAlias.get(),
+            DEFAULT,
+            "alias",
+            "ReVanced Key"
+        ).filter { it.isNotBlank() }.distinct()
+        val passCandidates = listOf(
+            prefs.keystorePass.get(),
+            prefs.keystoreKeyPass.get(),
+            DEFAULT,
+            LEGACY_DEFAULT_PASSWORD
+        ).filter { it.isNotBlank() }.distinct()
+        val fingerprint = keystoreFingerprint(keystoreData)
+        val aliasSearch = (aliasCandidates + "").distinct()
+
+        for (alias in aliasSearch) {
+            for (storePass in passCandidates) {
+                for (keyPass in passCandidates) {
+                    val material = tryLoadKeyMaterial(
+                        keystoreData,
+                        alias,
+                        storePass,
+                        keyPass
+                    ) ?: continue
+                    val resolvedStorePass = storePass.ifBlank { keyPass }.trim()
+                    val resolvedKeyPass = keyPass.ifBlank { storePass }.trim()
+                    if (resolvedStorePass.isBlank() || resolvedKeyPass.isBlank()) continue
+                    val persistedType = if (material.storeType == "JKS") "PKCS12" else material.storeType
+                    updatePrefs(material.alias, resolvedStorePass, resolvedKeyPass, persistedType, fingerprint)
+                    Log.i(
+                        LOG_TAG,
+                        "Rehydrated keystore credentials (alias=${material.alias}, type=$persistedType)"
+                    )
+                    return true
+                }
+            }
+        }
+        return false
     }
 
     private fun loadKeyMaterialStrict(

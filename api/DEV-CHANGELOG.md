@@ -1,4 +1,4 @@
-# v1.8.0-dev.01 (2026-01-23)
+# v1.8.0-dev.01 (2026-01-24)
 
 
 # Features
@@ -6,6 +6,8 @@
 - Redesigned and improved patch bundle widgets UI, moved the progress banner and improved tab switcher UI https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/135
 - Redesigned and improved patch profile widgets UI along with adding an app icon to patch profiles that have an APK selected for instant patching https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/135
 - Added `Patch bundle action button order` setting in Settings > Advanced that lets the user disable and rearrange the action buttons on the patch bundles widget https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/135
+- Added a backup and restore system for keystores to mitigate any future missing keystore errors
+- Added a dialog that appears after missing keystore errors to give clarity to the user on what to do next
 
 
 # Bug fixes

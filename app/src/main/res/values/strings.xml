@@ -220,6 +220,8 @@
     <string name="regenerate_keystore_description">Generate a new keystore</string>
     <string name="regenerate_keystore_dialog_description">You are about to regenerate your keystore the manager will use during the patching process.\n\nYou will not be able to update the previously installed apps from this source.</string>
     <string name="regenerate_keystore_success">The keystore has been successfully replaced</string>
+    <string name="keystore_missing_dialog_title">Keystore required</string>
+    <string name="keystore_missing_dialog_message">Your keystore is missing. Regenerate or import one in Settings &gt; Import &amp; Export before signing.</string>
     <string name="import_patch_selection">Import patch selection</string>
     <string name="import_patch_selection_description">Import patch selection from a JSON file</string>
     <string name="import_patch_selection_bundle">Import bundle selection</string>
@@ -1052,6 +1054,35 @@ Details: %2$s</string>
     <string name="show_manager_update_dialog_on_launch">Show update message on launch</string>
     <string name="show_manager_update_dialog_on_launch_description">Show a popup notification whenever a new update is available on launch</string>
     <string name="failed_to_import_keystore">Failed to import keystore</string>
+    <string name="keystore_section">Keystore</string>
+    <string name="keystore_diagnostics">Keystore diagnostics</string>
+    <string name="keystore_diagnostics_description">View current keystore details and file status</string>
+    <string name="keystore_diagnostics_credentials_section">Credentials</string>
+    <string name="keystore_diagnostics_details_section">Details</string>
+    <string name="keystore_diagnostics_files_section">Files</string>
+    <string name="keystore_diagnostics_keystore_file_label">Keystore file</string>
+    <string name="keystore_diagnostics_credentials_file_label">Credentials file</string>
+    <string name="keystore_diagnostics_backup_file_label">Backup file</string>
+    <string name="keystore_diagnostics_legacy_file_label">Legacy keystore file</string>
+    <string name="keystore_diagnostics_type_label">Type</string>
+    <string name="keystore_diagnostics_fingerprint_label">Fingerprint</string>
+    <string name="not_applicable_short">N/A</string>
+    <string name="keystore_diagnostics_loading">Loading diagnostics...</string>
+    <string name="keystore_diagnostics_refresh">Refresh</string>
+    <string name="keystore_diagnostics_refreshed">Refreshed</string>
+    <string name="keystore_diagnostics_alias">Alias</string>
+    <string name="keystore_diagnostics_password">Password</string>
+    <string name="keystore_diagnostics_type">Type: %1$s</string>
+    <string name="keystore_diagnostics_fingerprint">Fingerprint: %1$s</string>
+    <string name="keystore_diagnostics_keystore_file">Keystore file: %1$s</string>
+    <string name="keystore_diagnostics_credentials_file">Credentials file: %1$s</string>
+    <string name="keystore_diagnostics_backup_file">Backup file: %1$s</string>
+    <string name="keystore_diagnostics_legacy_file">Legacy keystore file: %1$s</string>
+    <string name="keystore_diagnostics_present">Present</string>
+    <string name="keystore_diagnostics_missing">Missing</string>
+    <string name="keystore_diagnostics_present_size">Present (%1$s)</string>
     <string name="export">Export</string>
     <string name="confirm">Confirm</string>
     </resources>
+
+

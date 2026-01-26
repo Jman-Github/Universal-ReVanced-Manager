@@ -447,6 +447,27 @@ fun PatcherScreen(
         )
     }
 
+    if (viewModel.keystoreMissingDialog) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissKeystoreMissingDialog,
+            icon = { Icon(Icons.Outlined.WarningAmber, null) },
+            title = { Text(stringResource(R.string.keystore_missing_dialog_title)) },
+            text = {
+                Text(
+                    text = stringResource(R.string.keystore_missing_dialog_message),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissKeystoreMissingDialog) {
+                    Text(stringResource(R.string.ok))
+                }
+            },
+            dismissButton = {}
+        )
+    }
+
     viewModel.fallbackInstallPrompt?.let { prompt ->
         AlertDialog(
             onDismissRequest = viewModel::dismissFallbackInstallPrompt,

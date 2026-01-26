@@ -1,5 +1,7 @@
 package app.revanced.manager.ui.screen.settings
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.annotation.StringRes
@@ -9,24 +11,39 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -42,20 +59,26 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import app.universal.revanced.manager.R
 import app.revanced.manager.data.platform.Filesystem
+import app.revanced.manager.domain.manager.KeystoreManager
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.ColumnWithScrollbar
 import app.revanced.manager.ui.component.ConfirmDialog
 import app.revanced.manager.ui.component.DownloadProgressBanner
 import app.revanced.manager.ui.component.GroupHeader
+import app.revanced.manager.ui.component.ShimmerBox
 import app.revanced.manager.ui.component.PasswordField
 import app.revanced.manager.ui.component.bundle.BundleSelector
 import app.revanced.manager.ui.component.patches.PathSelectorDialog
@@ -71,6 +94,7 @@ import app.revanced.manager.ui.screen.settings.SettingsSearchState
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.uiSafe
 import app.revanced.manager.domain.repository.PatchBundleRepository.BundleImportPhase
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -155,6 +179,11 @@ fun ImportExportSettingsScreen(
     val packagesWithSelections by vm.packagesWithSelection.collectAsStateWithLifecycle(initialValue = emptySet())
     val packagesWithOptions by vm.packagesWithOptions.collectAsStateWithLifecycle(initialValue = emptySet())
     val importProgress by vm.bundleImportProgress.collectAsStateWithLifecycle(initialValue = null)
+    val keystoreDiagnostics = vm.keystoreDiagnostics
+
+    LaunchedEffect(Unit) {
+        vm.refreshKeystoreDiagnostics()
+    }
 
     LaunchedEffect(searchTarget) {
         val target = searchTarget
@@ -439,7 +468,7 @@ fun ImportExportSettingsScreen(
                 }
             }
 
-            GroupHeader(stringResource(R.string.import_))
+            GroupHeader(stringResource(R.string.keystore_section))
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
@@ -458,6 +487,55 @@ fun ImportExportSettingsScreen(
                     )
                 }
                 ExpressiveSettingsDivider()
+
+                ExpandableSettingListItem(
+                    headlineContent = stringResource(R.string.keystore_diagnostics),
+                    supportingContent = stringResource(R.string.keystore_diagnostics_description),
+                    expandableContent = {
+                        KeystoreDiagnosticsPanel(
+                            diagnostics = keystoreDiagnostics,
+                            onRefresh = vm::refreshKeystoreDiagnostics
+                        )
+                    }
+                )
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.export_keystore,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    GroupItem(
+                        modifier = highlightModifier,
+                        onClick = {
+                            openExportPicker(ExportPicker.Keystore)
+                        },
+                        headline = R.string.export_keystore,
+                        description = R.string.export_keystore_description
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.regenerate_keystore,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    GroupItem(
+                        modifier = highlightModifier,
+                        onClick = {
+                            vm.resetDialogState = ResetDialogState.Keystore {
+                                vm.regenerateKeystore()
+                            }
+                        },
+                        headline = R.string.regenerate_keystore,
+                        description = R.string.regenerate_keystore_description
+                    )
+                }
+            }
+
+            GroupHeader(stringResource(R.string.import_))
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
                 SettingsSearchHighlight(
                     targetKey = R.string.import_patch_selection,
                     activeKey = highlightTarget,
@@ -532,25 +610,7 @@ fun ImportExportSettingsScreen(
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                SettingsSearchHighlight(
-                    targetKey = R.string.export_keystore,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    GroupItem(
-                        modifier = highlightModifier,
-                        onClick = {
-                            if (!vm.canExport()) {
-                                context.toast(context.getString(R.string.export_keystore_unavailable))
-                                return@GroupItem
-                            }
-                            openExportPicker(ExportPicker.Keystore)
-                        },
-                        headline = R.string.export_keystore,
-                        description = R.string.export_keystore_description
-                    )
-                }
-                ExpressiveSettingsDivider()
+
                 SettingsSearchHighlight(
                     targetKey = R.string.export_patch_selection,
                     activeKey = highlightTarget,
@@ -626,24 +686,6 @@ fun ImportExportSettingsScreen(
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                SettingsSearchHighlight(
-                    targetKey = R.string.regenerate_keystore,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    GroupItem(
-                        modifier = highlightModifier,
-                        onClick = {
-                            vm.resetDialogState = ResetDialogState.Keystore {
-                                vm.regenerateKeystore()
-                            }
-                        },
-                        headline = R.string.regenerate_keystore,
-                        description = R.string.regenerate_keystore_description
-                    )
-                }
-                ExpressiveSettingsDivider()
-
                 SettingsSearchHighlight(
                     targetKey = R.string.reset_patch_selection,
                     activeKey = highlightTarget,
@@ -851,6 +893,433 @@ private fun GroupItem(
     )
 }
 
+private enum class StatusTone { Positive, Negative, Neutral }
+
+@Composable
+private fun KeystoreDiagnosticsPanel(
+    diagnostics: KeystoreManager.KeystoreDiagnostics?,
+    onRefresh: () -> Unit
+) {
+    val context = LocalContext.current
+    val clipboard = context.getSystemService(ClipboardManager::class.java)
+    val scope = rememberCoroutineScope()
+    val refreshedMessage = stringResource(R.string.keystore_diagnostics_refreshed)
+    var passwordVisible by rememberSaveable { mutableStateOf(false) }
+    var isRefreshing by rememberSaveable { mutableStateOf(false) }
+
+    fun copy(label: String, value: String) {
+        if (value.isBlank()) return
+        clipboard?.setPrimaryClip(ClipData.newPlainText(label, value))
+        context.toast(context.getString(R.string.toast_copied_to_clipboard))
+    }
+
+    fun triggerRefresh() {
+        if (isRefreshing) return
+        scope.launch {
+            isRefreshing = true
+            onRefresh()
+            delay(850)
+            isRefreshing = false
+            context.toast(refreshedMessage)
+        }
+    }
+
+    val showShimmer = isRefreshing
+
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+        focusedContainerColor = MaterialTheme.colorScheme.surface,
+        disabledContainerColor = MaterialTheme.colorScheme.surface,
+        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+        focusedBorderColor = MaterialTheme.colorScheme.primary,
+        disabledBorderColor = MaterialTheme.colorScheme.outlineVariant,
+        disabledTextColor = MaterialTheme.colorScheme.onSurface
+    )
+    val fieldShape = MaterialTheme.shapes.medium
+
+    @Composable
+    fun ShimmerField() {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+            color = MaterialTheme.colorScheme.surface,
+            shape = fieldShape,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            ShimmerBox(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(8.dp),
+                shape = fieldShape
+            )
+        }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shape = MaterialTheme.shapes.extraLarge
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (diagnostics == null) {
+                Text(
+                    text = stringResource(R.string.keystore_diagnostics_loading),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                return@Column
+            }
+
+            Text(
+                text = stringResource(R.string.keystore_diagnostics_credentials_section),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = stringResource(R.string.keystore_diagnostics_alias),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.outline
+            )
+            if (showShimmer) {
+                ShimmerField()
+            } else {
+                OutlinedTextField(
+                    value = diagnostics.alias,
+                    onValueChange = {},
+                    readOnly = true,
+                    singleLine = true,
+                    colors = fieldColors,
+                    shape = MaterialTheme.shapes.medium,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { copy("Keystore alias", diagnostics.alias) },
+                    trailingIcon = {
+                        IconButton(
+                            onClick = { copy("Keystore alias", diagnostics.alias) },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.ContentCopy,
+                                contentDescription = stringResource(R.string.copy_to_clipboard)
+                            )
+                        }
+                    }
+                )
+            }
+
+            Text(
+                text = stringResource(R.string.keystore_diagnostics_password),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.outline
+            )
+            if (showShimmer) {
+                ShimmerField()
+            } else {
+                OutlinedTextField(
+                    value = diagnostics.storePass,
+                    onValueChange = {},
+                    readOnly = true,
+                    singleLine = true,
+                    colors = fieldColors,
+                    shape = MaterialTheme.shapes.medium,
+                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            IconButton(
+                                onClick = { passwordVisible = !passwordVisible },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (passwordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                    contentDescription = stringResource(
+                                        if (passwordVisible) R.string.hide_password_field else R.string.show_password_field
+                                    )
+                                )
+                            }
+                            IconButton(
+                                onClick = { copy("Keystore password", diagnostics.storePass) },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.ContentCopy,
+                                    contentDescription = stringResource(R.string.copy_to_clipboard)
+                                )
+                            }
+                        }
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = stringResource(R.string.keystore_diagnostics_details_section),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            val typeLabel = diagnostics.type?.takeIf { it.isNotBlank() } ?: "-"
+            val fingerprintLabel = diagnostics.fingerprint?.takeIf { it.isNotBlank() } ?: "-"
+            Text(
+                text = stringResource(R.string.keystore_diagnostics_type_label),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.outline
+            )
+            if (showShimmer) {
+                ShimmerField()
+            } else {
+                OutlinedTextField(
+                    value = typeLabel,
+                    onValueChange = {},
+                    readOnly = true,
+                    singleLine = true,
+                    colors = fieldColors,
+                    shape = fieldShape,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { copy("Keystore type", typeLabel) },
+                    trailingIcon = {
+                        IconButton(
+                            onClick = { copy("Keystore type", typeLabel) },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.ContentCopy,
+                                contentDescription = stringResource(R.string.copy_to_clipboard)
+                            )
+                        }
+                    }
+                )
+            }
+
+            Text(
+                text = stringResource(R.string.keystore_diagnostics_fingerprint_label),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.outline
+            )
+            if (showShimmer) {
+                ShimmerBox(
+                    Modifier.fillMaxWidth().height(76.dp),
+                    shape = fieldShape
+                )
+            } else {
+                OutlinedTextField(
+                    value = fingerprintLabel,
+                    onValueChange = {},
+                    readOnly = true,
+                    singleLine = false,
+                    minLines = 2,
+                    maxLines = 3,
+                    colors = fieldColors,
+                    shape = fieldShape,
+                    textStyle = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { copy("Keystore fingerprint", fingerprintLabel) },
+                    trailingIcon = {
+                        IconButton(
+                            onClick = { copy("Keystore fingerprint", fingerprintLabel) },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.ContentCopy,
+                                contentDescription = stringResource(R.string.copy_to_clipboard)
+                            )
+                        }
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = stringResource(R.string.keystore_diagnostics_files_section),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            val keystoreStatus = if (diagnostics.keystoreSize > 0L) {
+                stringResource(
+                    R.string.keystore_diagnostics_present_size,
+                    Formatter.formatShortFileSize(context, diagnostics.keystoreSize)
+                )
+            } else {
+                stringResource(R.string.keystore_diagnostics_missing)
+            }
+            val backupStatus = if ((diagnostics.backupSize ?: 0L) > 0L) {
+                stringResource(
+                    R.string.keystore_diagnostics_present_size,
+                    Formatter.formatShortFileSize(context, diagnostics.backupSize ?: 0L)
+                )
+            } else {
+                stringResource(R.string.keystore_diagnostics_missing)
+            }
+            val legacyPresent = diagnostics.legacySize > 0L
+            val legacyStatus = if (legacyPresent) {
+                stringResource(
+                    R.string.keystore_diagnostics_present_size,
+                    Formatter.formatShortFileSize(context, diagnostics.legacySize)
+                )
+            } else {
+                stringResource(R.string.not_applicable_short)
+            }
+
+            @Composable
+            fun StatusChip(text: String, tone: StatusTone) {
+                val (container, content) = when (tone) {
+                    StatusTone.Positive -> MaterialTheme.colorScheme.primaryContainer to
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    StatusTone.Negative -> MaterialTheme.colorScheme.errorContainer to
+                        MaterialTheme.colorScheme.onErrorContainer
+                    StatusTone.Neutral -> MaterialTheme.colorScheme.surfaceVariant to
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                }
+                Surface(
+                    color = container,
+                    contentColor = content,
+                    shape = RoundedCornerShape(999.dp)
+                ) {
+                    Text(
+                        text = text,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                shape = MaterialTheme.shapes.medium,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    @Composable
+                    fun ShimmerRow() {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            ShimmerBox(
+                                Modifier.width(140.dp).height(12.dp),
+                                shape = RoundedCornerShape(999.dp)
+                            )
+                            ShimmerBox(
+                                Modifier.width(90.dp).height(20.dp),
+                                shape = RoundedCornerShape(999.dp)
+                            )
+                        }
+                    }
+
+                    if (showShimmer) {
+                        ShimmerRow()
+                        ShimmerRow()
+                        ShimmerRow()
+                        ShimmerRow()
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = stringResource(R.string.keystore_diagnostics_keystore_file_label),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            StatusChip(
+                                keystoreStatus,
+                                if (diagnostics.keystoreSize > 0L) StatusTone.Positive else StatusTone.Negative
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = stringResource(R.string.keystore_diagnostics_credentials_file_label),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            StatusChip(
+                                if (diagnostics.credentialsExists) {
+                                    stringResource(R.string.keystore_diagnostics_present)
+                                } else {
+                                    stringResource(R.string.keystore_diagnostics_missing)
+                                },
+                                if (diagnostics.credentialsExists) StatusTone.Positive else StatusTone.Negative
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = stringResource(R.string.keystore_diagnostics_backup_file_label),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            StatusChip(
+                                backupStatus,
+                                if ((diagnostics.backupSize ?: 0L) > 0L) StatusTone.Positive else StatusTone.Negative
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = stringResource(R.string.keystore_diagnostics_legacy_file_label),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            StatusChip(
+                                legacyStatus,
+                                if (legacyPresent) StatusTone.Positive else StatusTone.Neutral
+                            )
+                        }
+                    }
+                }
+            }
+
+            TextButton(
+                onClick = { triggerRefresh() },
+                enabled = !isRefreshing,
+                modifier = Modifier.align(Alignment.End)
+            ) {
+                Text(stringResource(R.string.keystore_diagnostics_refresh))
+            }
+        }
+    }
+}
+
 @Composable
 fun KeystoreCredentialsDialog(
     onDismissRequest: () -> Unit,
@@ -989,3 +1458,12 @@ private fun ExportFileNameDialog(
         }
     )
 }
+
+
+
+
+
+
+
+
+

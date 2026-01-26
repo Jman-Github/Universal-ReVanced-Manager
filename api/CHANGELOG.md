@@ -6,11 +6,16 @@
 - Redesigned and improved patch bundles widgets UI, moved the progress banner and improved tab switcher UI https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/135
 - Redesigned and improved patch profiles widgets UI along with adding an app icon to patch profiles that have an APK selected for instant patching https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/135
 - Added `Patch bundle action button order` setting in Settings > Advanced that lets the user disable and rearrange the action buttons on the patch bundles widget https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/135
+- Added a backup and restore system for keystores to mitigate any future missing keystore errors
+- Added a dialog that appears after missing keystore errors to give clarity to the user on what to do next
+- Added an information section/dignonstic panel for keystores which lists the keystore alias and password
+- Gave keystores its own section in Settings > `Import & Export` and moved relevant settings to that section
 
 
 # Bug fixes
 
 - Resolved redundancies within the `service.sh` script improved module regeneration https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/134
+- Mitigated issues with having to regenerate keystores & persistent errors with signing (even after regenerate the keystore) for some users
 
 
 # v1.7.1 (2026-01-22)

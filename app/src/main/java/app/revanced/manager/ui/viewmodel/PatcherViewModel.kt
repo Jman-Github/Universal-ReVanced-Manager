@@ -160,6 +160,8 @@ class PatcherViewModel(
     private var lastInstallExpectedPackage: String? = null
     private var lastInstallSourceLabel: String? = null
     private var pendingInstallFailureMessage: String? = null
+    var keystoreMissingDialog by mutableStateOf(false)
+        private set
 
     private var installedApp: InstalledApp? = null
     private val selectedApp = input.selectedApp
@@ -2033,6 +2035,20 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 }
             }
         }
+
+        if (event is ProgressEvent.Failed) {
+            handleKeystoreMissing(event.error)
+        }
+    }
+
+    private fun handleKeystoreMissing(error: app.revanced.manager.patcher.RemoteError) {
+        if (keystoreMissingDialog) return
+        val needle = "Keystore missing"
+        val messageMatch = error.message?.contains(needle, ignoreCase = true) == true
+        val stackMatch = error.stackTrace.contains(needle, ignoreCase = true)
+        if (messageMatch || stackMatch) {
+            keystoreMissingDialog = true
+        }
     }
 
     private fun isExpandableStep(stepId: StepId) = when (stepId) {
@@ -2404,6 +2420,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     fun dismissMemoryAdjustmentDialog() {
         memoryAdjustmentDialog = null
+    }
+
+    fun dismissKeystoreMissingDialog() {
+        keystoreMissingDialog = false
     }
 
     fun retryAfterMemoryAdjustment() {
