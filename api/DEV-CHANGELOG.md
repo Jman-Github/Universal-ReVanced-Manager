@@ -1,18 +1,23 @@
-# v1.8.0-dev.01 (2026-01-24)
+# v1.8.0-dev.01 (2026-01-25)
 
 
 # Features
 
-- Redesigned and improved patch bundle widgets UI, moved the progress banner and improved tab switcher UI https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/135
-- Redesigned and improved patch profile widgets UI along with adding an app icon to patch profiles that have an APK selected for instant patching https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/135
+- Redesigned and improved patch bundles widgets UI, moved the progress banner and improved tab switcher UI https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/135
+- Redesigned and improved patch profiles widgets UI along with adding an app icon to patch profiles that have an APK selected for instant patching https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/135
 - Added `Patch bundle action button order` setting in Settings > Advanced that lets the user disable and rearrange the action buttons on the patch bundles widget https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/135
 - Added a backup and restore system for keystores to mitigate any future missing keystore errors
 - Added a dialog that appears after missing keystore errors to give clarity to the user on what to do next
+- Added an information section/dignonstic panel for keystores which lists the keystore alias and password
+- Gave keystores its own section in Settings > `Import & Export` and moved relevant settings to that section
+- Added a `Effective memory` pill under the experimental patcher toggle to clarify to the user the max memory the app can use
 
 
 # Bug fixes
 
 - Resolved redundancies within the `service.sh` script improved module regeneration https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/134
+- Mitigated issues with having to regenerate keystores & persistent errors with signing (even after regenerate the keystore) for some users
+- Fixed an issue where the experimental patcher was always on internally when patching with Morphe, and couldn't be turned off
 
 
 # v1.7.1-dev.06 (2026-01-20)

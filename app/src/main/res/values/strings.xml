@@ -433,6 +433,8 @@ Patch profiles are not affected.</string>
     <string name="downloaded_apps">Downloaded apps</string>
     <string name="process_runtime">Run Patcher in another process (experimental)</string>
     <string name="process_runtime_description">This is faster and allows Patcher to use more memory</string>
+    <string name="process_runtime_effective_limit_format">Effective limit: %1$d MB</string>
+    <string name="process_runtime_effective_limit_disabled">Effective limit: Off</string>
     <string name="strip_unused_libs">Remove unused native libraries</string>
     <string name="strip_unused_libs_description">Remove all native libraries except a single supported CPU architecture from patched apps</string>
     <string name="skip_unneeded_split_apks">Skip unneeded split APKs</string>

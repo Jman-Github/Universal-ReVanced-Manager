@@ -713,12 +713,64 @@ fun AdvancedSettingsScreen(
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        preference = viewModel.prefs.useProcessRuntime,
-                        coroutineScope = viewModel.viewModelScope,
-                        headline = R.string.process_runtime,
-                        description = R.string.process_runtime_description,
+                    val processRuntimeEnabled by viewModel.prefs.useProcessRuntime.getAsState()
+                    val processMemoryLimit by viewModel.prefs.patcherProcessMemoryLimit.getAsState()
+                    val aggressiveLimitEnabled by viewModel.prefs.patcherProcessMemoryAggressive.getAsState()
+                    val effectiveLimit = remember(processRuntimeEnabled, processMemoryLimit, aggressiveLimitEnabled) {
+                        if (!processRuntimeEnabled) {
+                            null
+                        } else if (aggressiveLimitEnabled) {
+                            MemoryLimitConfig.maxLimitMb(context)
+                        } else {
+                            MemoryLimitConfig.autoScaleLimitMb(context, processMemoryLimit)
+                        }?.let { MemoryLimitConfig.clampLimitMb(context, it) }
+                    }
+
+                    ExpressiveSettingsItem(
+                        modifier = Modifier
+                            .clickable { viewModel.viewModelScope.launch { viewModel.prefs.useProcessRuntime.update(!processRuntimeEnabled) } }
+                            .then(highlightModifier),
+                        headlineContent = stringResource(R.string.process_runtime),
+                        supportingContentSlot = {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    text = stringResource(R.string.process_runtime_description),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Surface(
+                                    shape = RoundedCornerShape(999.dp),
+                                    color = if (processRuntimeEnabled) {
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    }
+                                ) {
+                                    Text(
+                                        text = if (effectiveLimit != null) {
+                                            stringResource(R.string.process_runtime_effective_limit_format, effectiveLimit)
+                                        } else {
+                                            stringResource(R.string.process_runtime_effective_limit_disabled)
+                                        },
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = if (processRuntimeEnabled) {
+                                            MaterialTheme.colorScheme.onPrimaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        }
+                                    )
+                                }
+                            }
+                        },
+                        trailingContent = {
+                            ExpressiveSettingsSwitch(
+                                checked = processRuntimeEnabled,
+                                onCheckedChange = { enabled ->
+                                    viewModel.viewModelScope.launch { viewModel.prefs.useProcessRuntime.update(enabled) }
+                                }
+                            )
+                        }
                     )
                 }
                 ExpressiveSettingsDivider()

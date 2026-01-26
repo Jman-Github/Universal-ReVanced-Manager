@@ -39,6 +39,9 @@ import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.patcher.runtime.CoroutineRuntime
 import app.revanced.manager.patcher.runtime.ProcessRuntime
+import app.revanced.manager.patcher.runtime.MemoryLimitConfig
+import app.revanced.manager.patcher.morphe.MorpheBridgeFailureException
+import app.revanced.manager.patcher.runtime.morphe.MorpheBridgeRuntime
 import app.revanced.manager.patcher.runtime.morphe.MorpheProcessRuntime
 import app.revanced.manager.patcher.runStep
 import app.revanced.manager.patcher.toRemoteError
@@ -265,6 +268,14 @@ class PatcherWorker(
             val skipUnneededSplits = prefs.skipUnneededSplitApks.get()
             val inputIsSplitArchive = SplitApkPreparer.isSplitArchive(inputFile)
             val selectedCount = args.selectedPatches.values.sumOf { it.size }
+            val experimentalRuntimeEnabled = prefs.useProcessRuntime.get()
+            val requestedLimit = prefs.patcherProcessMemoryLimit.get()
+            val aggressiveLimit = prefs.patcherProcessMemoryAggressive.get()
+            val effectiveLimit = if (aggressiveLimit) {
+                MemoryLimitConfig.maxLimitMb(applicationContext)
+            } else {
+                MemoryLimitConfig.autoScaleLimitMb(applicationContext, requestedLimit)
+            }.let { MemoryLimitConfig.clampLimitMb(applicationContext, it) }
 
             args.logger.info(
                 "Patching started at ${System.currentTimeMillis()} " +
@@ -272,10 +283,19 @@ class PatcherWorker(
                         "input=${inputFile.absolutePath} size=${inputFile.length()} " +
                         "split=$inputIsSplitArchive patches=$selectedCount"
             )
+            args.logger.info(
+                "Patcher runtime: bundle=$bundleType experimental=$experimentalRuntimeEnabled " +
+                    "memoryLimit=${if (experimentalRuntimeEnabled) "${effectiveLimit}MB" else "disabled"} " +
+                    "(requested=${requestedLimit}MB${if (aggressiveLimit) ", aggressive" else ""})"
+            )
 
             when (bundleType) {
                 PatchBundleType.MORPHE -> {
-                    val runtime = MorpheProcessRuntime(applicationContext)
+                    val runtime = if (experimentalRuntimeEnabled) {
+                        MorpheProcessRuntime(applicationContext, useMemoryOverride = true)
+                    } else {
+                        MorpheBridgeRuntime(applicationContext)
+                    }
                     activeMorpheRuntime = runtime
                     runtime.execute(
                         inputFile.absolutePath,
@@ -403,6 +423,24 @@ class PatcherWorker(
             Log.e(
                 tag,
                 "An exception occurred in the Morphe remote process while patching. ${e.originalStackTrace}".logFmt()
+            )
+            args.onEvent(
+                ProgressEvent.Failed(
+                    null,
+                    RemoteError(
+                        type = e::class.java.name,
+                        message = e.message,
+                        stackTrace = e.originalStackTrace
+                    )
+                )
+            )
+            Result.failure(
+                workDataOf(PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(e.originalStackTrace))
+            )
+        } catch (e: MorpheBridgeFailureException) {
+            Log.e(
+                tag,
+                "An exception occurred in the Morphe bridge runtime while patching. ${e.originalStackTrace}".logFmt()
             )
             args.onEvent(
                 ProgressEvent.Failed(

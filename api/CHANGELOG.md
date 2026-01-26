@@ -10,12 +10,15 @@
 - Added a dialog that appears after missing keystore errors to give clarity to the user on what to do next
 - Added an information section/dignonstic panel for keystores which lists the keystore alias and password
 - Gave keystores its own section in Settings > `Import & Export` and moved relevant settings to that section
+- Added a `Effective memory` pill under the experimental patcher toggle to clarify to the user the max memory the app can use
+- Added more information to the patcher log such as bundle type, and whether the experimental patcher is toggled off or on
 
 
 # Bug fixes
 
 - Resolved redundancies within the `service.sh` script improved module regeneration https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/134
 - Mitigated issues with having to regenerate keystores & persistent errors with signing (even after regenerate the keystore) for some users
+- Fixed an issue where the experimental patcher was always on internally when patching with Morphe, and couldn't be turned off
 
 
 # v1.7.1 (2026-01-22)
