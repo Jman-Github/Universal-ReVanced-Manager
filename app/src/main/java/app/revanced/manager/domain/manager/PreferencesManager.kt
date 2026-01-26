@@ -120,6 +120,7 @@ class PreferencesManager(
     val pathSelectorLastDirectory = stringPreference("path_selector_last_directory", "")
     val patchBundleDiscoveryShowRelease = booleanPreference("patch_bundle_discovery_show_release", true)
     val patchBundleDiscoveryShowPrerelease = booleanPreference("patch_bundle_discovery_show_prerelease", true)
+    val patchBundleDiscoveryLatest = booleanPreference("patch_bundle_discovery_latest", false)
 
     val acknowledgedDownloaderPlugins = stringSetPreference("acknowledged_downloader_plugins", emptySet())
     val autoSaveDownloaderApks = booleanPreference("auto_save_downloader_apks", true)
@@ -186,6 +187,7 @@ class PreferencesManager(
         val pathSelectorLastDirectory: String? = null,
         val patchBundleDiscoveryShowRelease: Boolean? = null,
         val patchBundleDiscoveryShowPrerelease: Boolean? = null,
+        val patchBundleDiscoveryLatest: Boolean? = null,
         val searchEngineHost: String? = null,
     )
 
@@ -249,6 +251,7 @@ class PreferencesManager(
         pathSelectorLastDirectory = pathSelectorLastDirectory.get().takeIf { it.isNotBlank() },
         patchBundleDiscoveryShowRelease = patchBundleDiscoveryShowRelease.get(),
         patchBundleDiscoveryShowPrerelease = patchBundleDiscoveryShowPrerelease.get(),
+        patchBundleDiscoveryLatest = patchBundleDiscoveryLatest.get(),
         searchEngineHost = searchEngineHost.get(),
     )
 
@@ -332,6 +335,7 @@ class PreferencesManager(
         }
         snapshot.patchBundleDiscoveryShowRelease?.let { patchBundleDiscoveryShowRelease.value = it }
         snapshot.patchBundleDiscoveryShowPrerelease?.let { patchBundleDiscoveryShowPrerelease.value = it }
+        snapshot.patchBundleDiscoveryLatest?.let { patchBundleDiscoveryLatest.value = it }
         snapshot.searchEngineHost?.let { searchEngineHost.value = it }
     }
 
@@ -355,3 +359,8 @@ suspend fun PreferencesManager.showInstallerComponent(component: ComponentName) 
     val flattened = component.flattenToString()
     installerHiddenComponents.value = installerHiddenComponents.value - flattened
 }
+
+
+
+
+

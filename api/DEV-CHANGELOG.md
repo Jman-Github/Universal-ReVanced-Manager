@@ -3,6 +3,8 @@
 
 # Features
 
+- Added a `Latest` filter and option in the three dot menu to the `Patch bundle discovery`
+
 
 # Bug fixes
 
