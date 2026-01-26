@@ -94,6 +94,7 @@ fun RequiredOptionsScreen(
                 expanded = patchLazyListStates.getOrNull(pagerState.currentPage)?.isScrollingUp
                     ?: true,
                 onClick = {
+                    vm.dismissDialogs()
                     onContinue(vm.getCustomSelection(), vm.getOptions())
                 }
             )

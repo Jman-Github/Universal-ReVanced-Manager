@@ -1446,6 +1446,7 @@ fun PatchesSelectorScreen(
                             expanded = saveButtonExpanded,
                             enabled = showSaveButton,
                             onClick = {
+                                viewModel.dismissDialogs()
                                 onSave(viewModel.getCustomSelection(), viewModel.getOptions())
                             }
                         )

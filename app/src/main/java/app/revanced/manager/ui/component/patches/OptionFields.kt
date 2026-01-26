@@ -437,6 +437,15 @@ private class PresetOptionEditor<T : Any>(private val innerEditor: OptionEditor<
             var hidePresetsDialog by rememberSaveable {
                 mutableStateOf(false)
             }
+            var openCustomDialog by rememberSaveable {
+                mutableStateOf(false)
+            }
+            LaunchedEffect(openCustomDialog) {
+                if (openCustomDialog) {
+                    openCustomDialog = false
+                    this@inner.openDialog()
+                }
+            }
             if (hidePresetsDialog) return@inner
 
             // TODO: add a divider for scrollable content
@@ -451,9 +460,10 @@ private class PresetOptionEditor<T : Any>(private val innerEditor: OptionEditor<
                                 )
                             )
                             else {
-                                this@inner.openDialog()
                                 // Hide the presets dialog so it doesn't show up in the background.
                                 hidePresetsDialog = true
+                                // Open the custom dialog on the next frame to avoid flicker.
+                                openCustomDialog = true
                             }
                         }
                     ) {
