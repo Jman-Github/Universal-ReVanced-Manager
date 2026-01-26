@@ -76,15 +76,12 @@ object SplitApkPreparer {
             }
             onSubSteps?.invoke(buildSplitSubSteps(mergeOrder, skippedModules, stripNativeLibs))
 
-            val module = Merger.merge(modulesDir.toPath(), skippedModules) { message ->
-                onProgress?.invoke(message)
-            }
-            module.use {
-                runInterruptible(Dispatchers.IO) {
-                    onProgress?.invoke("Writing merged APK")
-                    it.writeApk(mergedApk)
-                }
-            }
+            Merger.merge(
+                apkDir = modulesDir.toPath(),
+                outputApk = mergedApk,
+                skipModules = skippedModules,
+                onProgress = onProgress
+            )
 
             if (stripNativeLibs) {
                 onProgress?.invoke("Stripping native libraries")

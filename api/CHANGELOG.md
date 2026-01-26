@@ -13,6 +13,7 @@
 - Added a `Effective memory` pill under the experimental patcher toggle to clarify to the user the max memory the app can use
 - Added more information to the patcher log such as bundle type, and whether the experimental patcher is toggled off or on
 - Added a `Latest` filter and option in the three dot menu to the `Patch bundle discovery`
+- Updated the split-apk merger to use APKEditor instead of ARSCLib
 
 
 # Bug fixes

@@ -9,6 +9,7 @@ import com.reandroid.archive.ZipEntryMap
 import com.reandroid.archive.block.ApkSignatureBlock
 import com.reandroid.arsc.header.TableHeader
 import java.io.Closeable
+import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.nio.charset.CoderMalfunctionError
@@ -16,8 +17,8 @@ import java.nio.file.Path
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-private object ArscLogger : APKLogger {
-    private const val TAG = "ARSCLib"
+private object ApkEditorLogger : APKLogger {
+    private const val TAG = "APKEditor"
 
     override fun logMessage(msg: String) {
         Log.i(TAG, msg)
@@ -35,15 +36,16 @@ private object ArscLogger : APKLogger {
 internal object Merger {
     suspend fun merge(
         apkDir: Path,
+        outputApk: File,
         skipModules: Set<String> = emptySet(),
         onProgress: ((String) -> Unit)? = null
-    ): ApkModule {
+    ) {
         val closeables = mutableSetOf<Closeable>()
         try {
             val merged = withContext(Dispatchers.Default) {
                 try {
                     val bundle = ApkBundle().apply {
-                        setAPKLogger(ArscLogger)
+                        setAPKLogger(ApkEditorLogger)
                         loadApkDirectory(apkDir.toFile())
                     }
                     val modules = bundle.apkModuleList
@@ -54,7 +56,7 @@ internal object Merger {
                     closeables.addAll(modules)
 
                     val mergedModule = ApkModule(generateMergedModuleName(bundle), ZipEntryMap()).apply {
-                        setAPKLogger(ArscLogger)
+                        setAPKLogger(ApkEditorLogger)
                         setLoadDefaultFramework(false)
                     }
                     closeables.add(mergedModule)
@@ -142,7 +144,11 @@ internal object Merger {
                 refresh()
             }
 
-            return merged
+            outputApk.parentFile?.mkdirs()
+            withContext(Dispatchers.IO) {
+                onProgress?.invoke("Writing merged APK")
+                merged.writeApk(outputApk)
+            }
         } finally {
             closeables.forEach(Closeable::close)
         }
@@ -152,7 +158,7 @@ internal object Merger {
         val closeables = mutableSetOf<Closeable>()
         try {
             val bundle = ApkBundle().apply {
-                setAPKLogger(ArscLogger)
+                setAPKLogger(ApkEditorLogger)
                 loadApkDirectory(apkDir.toFile())
             }
             val modules = bundle.apkModuleList

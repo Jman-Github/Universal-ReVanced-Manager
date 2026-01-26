@@ -28,6 +28,7 @@
 - Added an information section/dignonstic panel for keystores which lists the keystore alias and password
 - Gave keystores its own section in Settings > `Import & Export` and moved relevant settings to that section
 - Added a `Effective memory` pill under the experimental patcher toggle to clarify to the user the max memory the app can use
+- Updated the split-apk merger to use APKEditor instead of ARSCLib
 
 
 # Bug fixes
