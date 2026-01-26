@@ -1023,6 +1023,9 @@ Details: %2$s</string>
     <string name="patch_bundle_discovery_filter_all">All</string>
     <string name="patch_bundle_discovery_release">Release</string>
     <string name="patch_bundle_discovery_prerelease">Prerelease</string>
+    <string name="patch_bundle_discovery_latest">Latest</string>
+    <string name="patch_bundle_discovery_use_latest">Use latest</string>
+    <string name="patch_bundle_discovery_use_listed">Use listed</string>
     <string name="patch_bundle_discovery_show_release">Show release</string>
     <string name="patch_bundle_discovery_show_prerelease">Show prerelease</string>
     <string name="patch_bundle_discovery_v3_warning">This bundle is using API V3. It will not be usable in the app and the patches list will always be empty.</string>
@@ -1086,5 +1089,6 @@ Details: %2$s</string>
     <string name="export">Export</string>
     <string name="confirm">Confirm</string>
     </resources>
+
 
 

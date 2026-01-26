@@ -1666,20 +1666,31 @@ private fun PatchItem(
     val supportedPackage = patch.compatiblePackages?.firstOrNull { it.packageName == packageName }
     val supportsAllVersions = patch.compatiblePackages == null || supportedPackage?.versions == null
     val rawVersions = supportedPackage?.versions?.toList()?.sorted().orEmpty()
-    val suggestedVersionInfo = suggestedVersion
-        ?.takeUnless { it.isBlank() || patch.compatiblePackages == null }
-        ?.let { version ->
-            PatchVersionChipInfo(
-                label = stringResource(
-                    R.string.bundle_version_suggested_label,
-                    formatPatchVersionLabel(version)
-                ),
-                version = version,
-                highlighted = true
-            )
+    val bundleSuggestedVersion = suggestedVersion?.takeUnless { it.isBlank() }
+    val effectiveSuggestedVersion = if (!supportsAllVersions) {
+        when {
+            bundleSuggestedVersion != null && rawVersions.contains(bundleSuggestedVersion) -> bundleSuggestedVersion
+            rawVersions.size == 1 -> rawVersions.first()
+            else -> null
         }
+    } else null
+    val suggestedVersionInfo = effectiveSuggestedVersion?.let { version ->
+        PatchVersionChipInfo(
+            label = stringResource(
+                R.string.bundle_version_suggested_label,
+                formatPatchVersionLabel(version)
+            ),
+            version = version,
+            highlighted = true
+        )
+    }
     val showAllVersionsChip = supportsAllVersions && suggestedVersionInfo == null
-    val hasMoreVersions = !supportsAllVersions && rawVersions.isNotEmpty()
+    val availableVersions = if (supportsAllVersions) {
+        emptyList()
+    } else {
+        rawVersions.filterNot { it == effectiveSuggestedVersion }
+    }
+    val hasMoreVersions = availableVersions.isNotEmpty()
     val visibleVersions = if (showAllVersionsChip) {
         listOf(
             PatchVersionChipInfo(
@@ -1701,7 +1712,7 @@ private fun PatchItem(
                 outlined = true
             )
         )
-        else -> rawVersions.map { version ->
+        else -> availableVersions.map { version ->
             PatchVersionChipInfo(
                 label = formatPatchVersionLabel(version),
                 version = version,

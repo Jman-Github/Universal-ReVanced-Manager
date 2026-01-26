@@ -11,6 +11,7 @@
 - Fixed the `Patch bunblde discovery` screen incorrectly displaying the shimmer effect on the loading elements
 - Fixed missing shimmer element when tapping refresh for the `Keystore dagnostics` panel
 - Fixed missing shimmer element when tapping refresh for the `Keystore diagnostics` panel
+- Fixed incorrect version listings on the patch selection screens patch widgets
 
 
 # v1.8.0-dev.01 (2026-01-25)
