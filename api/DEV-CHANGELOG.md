@@ -1,3 +1,16 @@
+# v1.8.0-dev.01 (2026-01-26)
+
+
+# Features
+
+
+# Bug fixes
+
+- Fixed the `Patch bunblde discovery` screen incorrectly displaying the shimmer effect on the loading elements
+- Fixed missing shimmer element when tapping refresh for the `Keystore dagnostics` panel
+- Fixed missing shimmer element when tapping refresh for the `Keystore diagnostics` panel
+
+
 # v1.8.0-dev.01 (2026-01-25)
 
 

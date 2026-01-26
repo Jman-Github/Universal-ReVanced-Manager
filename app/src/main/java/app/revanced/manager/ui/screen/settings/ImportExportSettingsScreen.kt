@@ -488,16 +488,23 @@ fun ImportExportSettingsScreen(
                 }
                 ExpressiveSettingsDivider()
 
-                ExpandableSettingListItem(
-                    headlineContent = stringResource(R.string.keystore_diagnostics),
-                    supportingContent = stringResource(R.string.keystore_diagnostics_description),
-                    expandableContent = {
-                        KeystoreDiagnosticsPanel(
-                            diagnostics = keystoreDiagnostics,
-                            onRefresh = vm::refreshKeystoreDiagnostics
-                        )
-                    }
-                )
+                SettingsSearchHighlight(
+                    targetKey = R.string.keystore_diagnostics,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpandableSettingListItem(
+                        headlineContent = stringResource(R.string.keystore_diagnostics),
+                        supportingContent = stringResource(R.string.keystore_diagnostics_description),
+                        modifier = highlightModifier,
+                        expandableContent = {
+                            KeystoreDiagnosticsPanel(
+                                diagnostics = keystoreDiagnostics,
+                                onRefresh = vm::refreshKeystoreDiagnostics
+                            )
+                        }
+                    )
+                }
                 ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
                     targetKey = R.string.export_keystore,
@@ -1117,10 +1124,21 @@ private fun KeystoreDiagnosticsPanel(
                 color = MaterialTheme.colorScheme.outline
             )
             if (showShimmer) {
-                ShimmerBox(
-                    Modifier.fillMaxWidth().height(76.dp),
-                    shape = fieldShape
-                )
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(76.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    shape = fieldShape,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    ShimmerBox(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(8.dp),
+                        shape = fieldShape
+                    )
+                }
             } else {
                 OutlinedTextField(
                     value = fingerprintLabel,

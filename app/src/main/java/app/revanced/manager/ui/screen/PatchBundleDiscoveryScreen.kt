@@ -8,6 +8,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
@@ -578,19 +580,28 @@ fun PatchBundleDiscoveryScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
                             ) {
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                val pillShape = RoundedCornerShape(24.dp)
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(36.dp)
                                 ) {
                                     ShimmerBox(
-                                        modifier = Modifier.size(20.dp),
-                                        shape = CircleShape
+                                        modifier = Modifier.fillMaxSize(),
+                                        shape = pillShape
                                     )
-                                    Text(
-                                        text = stringResource(R.string.patch_bundle_discovery_searching),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(horizontal = 16.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = stringResource(R.string.patch_bundle_discovery_searching),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
                             }
                         } else {
@@ -638,19 +649,28 @@ fun PatchBundleDiscoveryScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
                             ) {
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                val pillShape = RoundedCornerShape(24.dp)
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(36.dp)
                                 ) {
                                     ShimmerBox(
-                                        modifier = Modifier.size(20.dp),
-                                        shape = CircleShape
+                                        modifier = Modifier.fillMaxSize(),
+                                        shape = pillShape
                                     )
-                                    Text(
-                                        text = stringResource(R.string.patch_bundle_discovery_loading_more),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(horizontal = 16.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = stringResource(R.string.patch_bundle_discovery_loading_more),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -673,8 +693,9 @@ private fun BundleDiscoveryPlaceholderItem() {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 ShimmerBox(
-                    modifier = Modifier.size(40.dp),
-                    shape = CircleShape
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(40.dp)
                 )
                 Column(
                     modifier = Modifier.weight(1f),

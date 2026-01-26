@@ -207,6 +207,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.import_patch_bundles, R.string.import_patch_bundles_description, R.string.import_export, Settings.ImportExport),
             SearchEntry(R.string.import_patch_profiles, R.string.import_patch_profiles_description, R.string.import_export, Settings.ImportExport),
             SearchEntry(R.string.import_manager_settings, R.string.import_manager_settings_description, R.string.import_export, Settings.ImportExport),
+            SearchEntry(R.string.keystore_diagnostics, R.string.keystore_diagnostics_description, R.string.import_export, Settings.ImportExport),
             SearchEntry(R.string.export_keystore, R.string.export_keystore_description, R.string.import_export, Settings.ImportExport),
             SearchEntry(R.string.export_patch_selection, R.string.export_patch_selection_description, R.string.import_export, Settings.ImportExport),
             SearchEntry(R.string.export_patch_bundles, R.string.export_patch_bundles_description, R.string.import_export, Settings.ImportExport),

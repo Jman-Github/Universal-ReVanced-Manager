@@ -21,6 +21,9 @@
 - Fixed an issue where the experimental patcher was always on internally when patching with Morphe, and couldn't be turned off
 - Fixed alignment of accent presets in `Settings > General`
 - Fixed patch options/suboptions dialogs flickering in certain states
+- Fixed the `Patch bunblde discovery` screen incorrectly displaying the shimmer effect on the loading elements
+- Fixed `Keystore diagnostics` not being able to be searched through settings search bar
+- Fixed missing shimmer element when tapping refresh for the `Keystore diagnostics` panel
 
 
 # v1.7.1 (2026-01-22)
