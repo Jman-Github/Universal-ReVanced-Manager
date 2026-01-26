@@ -25,6 +25,8 @@
 - Fixed the `Patch bunblde discovery` screen incorrectly displaying the shimmer effect on the loading elements
 - Fixed `Keystore diagnostics` not being able to be searched through settings search bar
 - Fixed missing shimmer element when tapping refresh for the `Keystore diagnostics` panel
+- Fixed incorrect version listings on the patch selection screens patch widgets
+- Fixed the miscolored status bar on patch bundle information screens
 
 
 # v1.7.1 (2026-01-22)
