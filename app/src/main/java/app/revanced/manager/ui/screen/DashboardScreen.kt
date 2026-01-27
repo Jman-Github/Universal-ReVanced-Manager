@@ -9,25 +9,34 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
@@ -54,6 +63,8 @@ import androidx.compose.material.icons.outlined.Sort
 import androidx.compose.material.icons.outlined.Source
 import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -81,6 +92,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
@@ -225,6 +237,8 @@ fun DashboardScreen(
             bundlePermissionLauncher.launch(bundlePermissionName)
         }
     }
+
+    var bundlesFabCollapsed by rememberSaveable { mutableStateOf(false) }
 
     val dashboardSidePadding = 16.dp
 
@@ -777,26 +791,56 @@ fun DashboardScreen(
         floatingActionButton = {
             when (pagerState.currentPage) {
                 DashboardPage.BUNDLES.ordinal -> {
+                    val enterExitSpec = tween<IntOffset>(durationMillis = 220, easing = FastOutSlowInEasing)
+                    val sizeSpec = tween<IntSize>(durationMillis = 220, easing = FastOutSlowInEasing)
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.height(56.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        HapticFloatingActionButton(
-                            onClick = onBundleDiscoveryClick
+                        AnimatedVisibility(
+                            visible = !bundlesFabCollapsed,
+                            enter = fadeIn(animationSpec = tween(180)) +
+                                expandHorizontally(expandFrom = Alignment.End, animationSpec = sizeSpec) +
+                                slideInHorizontally(
+                                    initialOffsetX = { it / 2 },
+                                    animationSpec = enterExitSpec
+                                ),
+                            exit = fadeOut(animationSpec = tween(180)) +
+                                shrinkHorizontally(shrinkTowards = Alignment.End, animationSpec = sizeSpec) +
+                                slideOutHorizontally(
+                                    targetOffsetX = { it / 2 },
+                                    animationSpec = enterExitSpec
+                                )
                         ) {
-                            Icon(
-                                Icons.Outlined.Public,
-                                stringResource(R.string.patch_bundle_discovery_title)
-                            )
-                        }
-                        HapticFloatingActionButton(
-                            onClick = {
-                                vm.cancelSourceSelection()
-                                installedAppsViewModel.clearSelection()
-                                patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
-                                showAddBundleDialog = true
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                HapticFloatingActionButton(
+                                    onClick = onBundleDiscoveryClick
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.Public,
+                                        stringResource(R.string.patch_bundle_discovery_title)
+                                    )
+                                }
+                                HapticFloatingActionButton(
+                                    onClick = {
+                                        vm.cancelSourceSelection()
+                                        installedAppsViewModel.clearSelection()
+                                        patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
+                                        showAddBundleDialog = true
+                                    }
+                                ) { Icon(Icons.Default.Add, stringResource(R.string.add)) }
                             }
-                        ) { Icon(Icons.Default.Add, stringResource(R.string.add)) }
+                        }
+                        Spacer(modifier = Modifier.size(2.dp))
+                        BundleFabHandle(
+                            collapsed = bundlesFabCollapsed,
+                            onToggle = { bundlesFabCollapsed = !bundlesFabCollapsed },
+                            modifier = Modifier.offset(x = 6.dp)
+                        )
                     }
                 }
 
@@ -1044,21 +1088,63 @@ private fun DashboardTabLabel(
         ) {
             Text(
                 text = text,
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                 maxLines = 1,
                 softWrap = false,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Clip
             )
         }
     } else {
         Text(
             text = text,
-            style = MaterialTheme.typography.labelMedium,
+            style = MaterialTheme.typography.labelSmall,
             maxLines = 1,
             softWrap = false,
             overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun BundleFabHandle(
+    collapsed: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val shape = RoundedCornerShape(
+        topStart = 22.dp,
+        bottomStart = 22.dp,
+        topEnd = 0.dp,
+        bottomEnd = 0.dp
+    )
+    val interactionSource = remember { MutableInteractionSource() }
+    val container = MaterialTheme.colorScheme.primaryContainer
+    val contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+    val icon = if (collapsed) {
+        Icons.Outlined.ChevronRight
+    } else {
+        Icons.Outlined.ChevronLeft
+    }
+
+    Box(
+        modifier = modifier
+            .size(width = 22.dp, height = 56.dp)
+            .clip(shape)
+            .background(container)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onToggle
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = contentColor,
+            modifier = Modifier.size(16.dp)
         )
     }
 }

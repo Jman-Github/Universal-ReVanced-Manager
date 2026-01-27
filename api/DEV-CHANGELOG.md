@@ -6,13 +6,14 @@
 - Added a `Latest` filter and option in the three dot menu to the `Patch bundle discovery`
 - Updated the split-apk merger to use APKEditor instead of ARSCLib
 - Improved split-apk merger validation, normalization and cleanup
+- Made the two FAB buttons on the `Patch bundles` tab collapsible/expandable
+- Increased the pill text box size of the tab titles so devices with smaller screens won't have the text cut off
 
 
 # Bug fixes
 
 - Fixed the `Patch bunblde discovery` screen incorrectly displaying the shimmer effect on the loading elements
 - Fixed missing shimmer element when tapping refresh for the `Keystore dagnostics` panel
-- Fixed missing shimmer element when tapping refresh for the `Keystore diagnostics` panel
 - Fixed incorrect version listings on the patch selection screens patch widgets
 - Fixed the miscolored status bar on patch bundle information screens
 - Fixed issues with unicode characters causing resource compilation errors for certain apps https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/144
