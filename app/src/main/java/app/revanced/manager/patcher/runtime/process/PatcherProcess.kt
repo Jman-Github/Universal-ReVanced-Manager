@@ -24,7 +24,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileInputStream
-import java.io.FileOutputStream
 import java.io.OutputStream
 import java.io.PrintStream
 import java.security.MessageDigest
@@ -32,7 +31,6 @@ import java.util.logging.Handler
 import java.util.logging.Level
 import java.util.logging.LogRecord
 import java.util.logging.Logger as JavaLogger
-import java.util.zip.ZipFile
 import kotlin.system.exitProcess
 
 /**
@@ -95,7 +93,6 @@ class PatcherProcess : IPatcherProcess.Stub() {
 
             logger.info("Memory limit: ${Runtime.getRuntime().maxMemory() / (1024 * 1024)}MB")
             logAapt2Info(parameters.aaptPath, logger)
-            ensureFrameworkApkHealthy(parameters.frameworkDir, logger)
 
             val aaptLogs = AaptLogCapture(onLine = ::handleDexCompileLine).apply { start() }
             val stdioCapture = StdIoCapture(onLine = ::handleDexCompileLine).apply { start() }
@@ -385,67 +382,6 @@ class PatcherProcess : IPatcherProcess.Stub() {
         if (!version.isNullOrBlank()) {
             logger.info("AAPT2 version: $version")
         }
-    }
-
-    private fun ensureFrameworkApkHealthy(frameworkDir: String, logger: Logger) {
-        val framework = File(frameworkDir).resolve("1.apk")
-        if (!framework.exists()) {
-            logger.warn("Framework APK missing at ${framework.absolutePath}")
-        } else if (!isValidFrameworkApk(framework)) {
-            logger.warn("Framework APK invalid. Deleting ${framework.absolutePath}")
-            framework.delete()
-        } else {
-            return
-        }
-
-        if (!extractFrameworkApk(framework, logger)) {
-            logger.warn("Failed to extract framework APK. Resource decoding may fail.")
-            return
-        }
-
-        if (!isValidFrameworkApk(framework)) {
-            logger.warn("Framework APK corrupt after extraction. Deleting ${framework.absolutePath}")
-            framework.delete()
-        }
-    }
-
-    private fun extractFrameworkApk(target: File, logger: Logger): Boolean {
-        val candidates = listOf(
-            "/system/framework/framework-res.apk",
-            "/system_ext/framework/framework-res.apk",
-            "/product/framework/framework-res.apk",
-            "/vendor/framework/framework-res.apk",
-            "/odm/framework/framework-res.apk"
-        )
-
-        for (path in candidates) {
-            val source = File(path)
-            if (!source.isFile || source.length() <= 0L) continue
-            val copied = runCatching {
-                target.parentFile?.mkdirs()
-                FileInputStream(source).use { input ->
-                    FileOutputStream(target).use { output ->
-                        input.copyTo(output)
-                    }
-                }
-            }.isSuccess
-
-            if (copied) {
-                logger.info("Extracted framework APK from $path to ${target.absolutePath}")
-                return true
-            }
-        }
-
-        return false
-    }
-
-    private fun isValidFrameworkApk(file: File): Boolean {
-        if (!file.isFile || file.length() <= 0L) return false
-        return runCatching {
-            ZipFile(file).use { zip ->
-                zip.getEntry("resources.arsc") != null || zip.getEntry("AndroidManifest.xml") != null
-            }
-        }.getOrDefault(false)
     }
 
     private fun sha256(file: File): String? = runCatching {
