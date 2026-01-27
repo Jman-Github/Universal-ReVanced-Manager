@@ -17,6 +17,8 @@
 - Fixed the miscolored status bar on patch bundle information screens
 - Fixed issues with unicode characters causing resource compilation errors for certain apps https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/144
 - Fixed the ReVanced patcher runtime using the incorrect Aapt2 binary occasionally
+- Fixed `brut.androlib.exceptions.CantFindFrameworkResException` patching errors
+
 
 # v1.8.0-dev.01 (2026-01-25)
 
