@@ -36,6 +36,7 @@
 - Fixed issues with unicode characters causing resource compilation errors for certain apps https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/144
 - Fixed the ReVanced patcher runtime using the incorrect Aapt2 binary occasionally
 - Fixed `brut.androlib.exceptions.CantFindFrameworkResException` patching errors
+- Fixed issues with keystores from older versions of URV not being able to be imported into the newer versions of URV without signing errors https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/147
 
 
 # v1.7.1 (2026-01-22)

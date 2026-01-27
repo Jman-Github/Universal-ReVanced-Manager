@@ -362,25 +362,36 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
 
     private suspend fun signWithApksig(input: File, output: File) {
         requireKeystoreReady()
-        val credentials = resolveCredentials()
         val keystoreData = withContext(Dispatchers.IO) {
             Files.readAllBytes(keystorePath.toPath())
         }
         val fingerprint = keystoreFingerprint(keystoreData)
+        var credentials = resolveCredentials()
         if (!credentials.fingerprint.isNullOrBlank() && credentials.fingerprint != fingerprint) {
             throw IllegalArgumentException("Keystore changed. Re-import or regenerate it.")
         }
-        val signingType = resolveSigningType(credentials) ?: throw IllegalArgumentException(
-            "Keystore needs re-import or regenerate."
-        )
-        val strictResult = loadKeyMaterialStrict(
-            keystoreData,
-            credentials.alias,
-            credentials.storePass,
-            credentials.keyPass,
-            signingType,
-            credentials.fingerprint.isNullOrBlank()
-        ) ?: throw IllegalArgumentException("Invalid keystore credentials")
+
+        fun loadStrict(creds: KeystoreCredentials): StrictLoadResult? {
+            val signingType = resolveSigningType(creds) ?: return null
+            return loadKeyMaterialStrict(
+                keystoreData,
+                creds.alias,
+                creds.storePass,
+                creds.keyPass,
+                signingType,
+                creds.fingerprint.isNullOrBlank()
+            )
+        }
+
+        var strictResult = loadStrict(credentials)
+        if (strictResult == null && credentials.fingerprint.isNullOrBlank()) {
+            if (rehydrateCredentials(keystoreData)) {
+                credentials = resolveCredentials()
+                strictResult = loadStrict(credentials)
+            }
+        }
+
+        strictResult ?: throw IllegalArgumentException("Invalid keystore credentials")
 
         val keyMaterial = strictResult.keyMaterial
         if (credentials.fingerprint.isNullOrBlank() || strictResult.storePassOverride != null) {
