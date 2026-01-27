@@ -5,11 +5,13 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -382,59 +384,61 @@ fun BundleItem(
     val visibleActionKeys = remember(orderedActionKeys, hiddenActionsPref) {
         orderedActionKeys.filterNot { it.storageId in hiddenActionsPref }
     }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .consumeHorizontalScroll(actionScrollState)
-            .horizontalScroll(actionScrollState),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        visibleActionKeys.forEach { key ->
-            when (key) {
-                PatchBundleActionKey.EDIT -> BundleActionPill(
-                    text = stringResource(R.string.edit),
-                    icon = Icons.Outlined.Edit,
-                    enabled = src.enabled,
-                    onClick = { showRenameDialog = true }
-                )
-                PatchBundleActionKey.REFRESH -> if (showUpdate) {
-                    BundleActionPill(
-                        text = stringResource(R.string.refresh),
-                        icon = Icons.Outlined.Update,
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .widthIn(min = maxWidth)
+                .consumeHorizontalScroll(actionScrollState)
+                .horizontalScroll(actionScrollState),
+            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            visibleActionKeys.forEach { key ->
+                when (key) {
+                    PatchBundleActionKey.EDIT -> BundleActionPill(
+                        text = stringResource(R.string.edit),
+                        icon = Icons.Outlined.Edit,
                         enabled = src.enabled,
-                        onClick = onUpdate,
-                        onLongClick = { showForceUpdateDialog = true }
+                        onClick = { showRenameDialog = true }
                     )
-                }
-                PatchBundleActionKey.LINKS -> BundleActionPill(
-                    text = stringResource(R.string.bundle_links),
-                    icon = FontAwesomeIcons.Brands.Github,
-                    enabled = src.enabled,
-                    onClick = { showLinkSheet = true }
-                )
-                PatchBundleActionKey.TOGGLE -> {
-                    val toggleIcon = if (src.enabled) Icons.Outlined.Block else Icons.Outlined.CheckCircle
-                    val toggleLabel = if (src.enabled) R.string.disable else R.string.enable
-                    BundleActionPill(
-                        text = stringResource(toggleLabel),
-                        icon = toggleIcon,
-                        enabled = true,
-                        onClick = {
-                            if (src.enabled) {
-                                showDisableConfirmationDialog = true
-                            } else {
-                                showEnableConfirmationDialog = true
+                    PatchBundleActionKey.REFRESH -> if (showUpdate) {
+                        BundleActionPill(
+                            text = stringResource(R.string.refresh),
+                            icon = Icons.Outlined.Update,
+                            enabled = src.enabled,
+                            onClick = onUpdate,
+                            onLongClick = { showForceUpdateDialog = true }
+                        )
+                    }
+                    PatchBundleActionKey.LINKS -> BundleActionPill(
+                        text = stringResource(R.string.bundle_links),
+                        icon = FontAwesomeIcons.Brands.Github,
+                        enabled = src.enabled,
+                        onClick = { showLinkSheet = true }
+                    )
+                    PatchBundleActionKey.TOGGLE -> {
+                        val toggleIcon = if (src.enabled) Icons.Outlined.Block else Icons.Outlined.CheckCircle
+                        val toggleLabel = if (src.enabled) R.string.disable else R.string.enable
+                        BundleActionPill(
+                            text = stringResource(toggleLabel),
+                            icon = toggleIcon,
+                            enabled = true,
+                            onClick = {
+                                if (src.enabled) {
+                                    showDisableConfirmationDialog = true
+                                } else {
+                                    showEnableConfirmationDialog = true
+                                }
                             }
-                        }
+                        )
+                    }
+                    PatchBundleActionKey.DELETE -> BundleActionPill(
+                        text = stringResource(R.string.delete),
+                        icon = Icons.Outlined.Delete,
+                        enabled = true,
+                        onClick = { showDeleteConfirmationDialog = true }
                     )
                 }
-                PatchBundleActionKey.DELETE -> BundleActionPill(
-                    text = stringResource(R.string.delete),
-                    icon = Icons.Outlined.Delete,
-                    enabled = true,
-                    onClick = { showDeleteConfirmationDialog = true }
-                )
             }
         }
     }

@@ -10,6 +10,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
@@ -439,6 +441,10 @@ fun PatchProfilesScreen(
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                                Divider(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    color = MaterialTheme.colorScheme.surfaceVariant
+                                )
                             }
                             if (loadingProfileId == profile.id) {
                                 CircularProgressIndicator(
@@ -464,32 +470,40 @@ fun PatchProfilesScreen(
                             )
                         }
                         if (!selectionActive) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.horizontalScroll(rememberScrollState())
-                            ) {
-                                ProfileActionPill(
-                                    text = stringResource(R.string.patch_profile_rename),
-                                    icon = Icons.Outlined.Edit
-                                ) {
-                                    renameProfileId = profile.id
-                                    renameProfileName = profile.name
-                                }
-                                ProfileActionPill(
-                                    text = stringResource(
-                                        if (expanded) R.string.patch_profile_show_less
-                                        else R.string.patch_profile_show_more
+                            val actionScrollState = rememberScrollState()
+                            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(
+                                        8.dp,
+                                        Alignment.CenterHorizontally
                                     ),
-                                    icon = Icons.Outlined.Extension
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .widthIn(min = maxWidth)
+                                        .horizontalScroll(actionScrollState)
                                 ) {
-                                    expandedProfiles[profile.id] = !expanded
-                                }
-                                ProfileActionPill(
-                                    text = stringResource(R.string.settings),
-                                    icon = Icons.Outlined.Settings
-                                ) {
-                                    settingsDialogProfile = profile
+                                    ProfileActionPill(
+                                        text = stringResource(R.string.patch_profile_rename),
+                                        icon = Icons.Outlined.Edit
+                                    ) {
+                                        renameProfileId = profile.id
+                                        renameProfileName = profile.name
+                                    }
+                                    ProfileActionPill(
+                                        text = stringResource(
+                                            if (expanded) R.string.patch_profile_show_less
+                                            else R.string.patch_profile_show_more
+                                        ),
+                                        icon = Icons.Outlined.Extension
+                                    ) {
+                                        expandedProfiles[profile.id] = !expanded
+                                    }
+                                    ProfileActionPill(
+                                        text = stringResource(R.string.settings),
+                                        icon = Icons.Outlined.Settings
+                                    ) {
+                                        settingsDialogProfile = profile
+                                    }
                                 }
                             }
                         }
@@ -1291,8 +1305,8 @@ private fun ProfileActionPill(
     onClick: () -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
-    val background = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (enabled) 0.9f else 0.5f)
-    val contentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 1f else 0.6f)
+    val background = MaterialTheme.colorScheme.surface.copy(alpha = if (enabled) 0.9f else 0.5f)
+    val contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.6f)
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
@@ -1304,7 +1318,7 @@ private fun ProfileActionPill(
                 onClick = onClick,
                 onLongClick = null
             )
-            .padding(horizontal = 10.dp, vertical = 6.dp),
+            .padding(horizontal = 10.dp, vertical = 4.dp),
         contentAlignment = Alignment.Center
     ) {
         Row(

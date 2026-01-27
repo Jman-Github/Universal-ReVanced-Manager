@@ -15,8 +15,8 @@
 - Added a `Latest` filter and option in the three dot menu to the `Patch bundle discovery`
 - Updated the split-apk merger to use APKEditor instead of ARSCLib
 - Improved split-apk merger validation, normalization and cleanup
-- Made the two FAB buttons on the `Patch bundles` tab collapsible/expandable
-- Increased the pill text box size of the tab titles so devices with smaller screens won't have the text cut off
+- Made the two FAB buttons on the `Patch bundles` tab collapsible/expandable https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/146
+- Increased the pill text box size of the tab titles so devices with smaller screens won't have the text cut off https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/146
 
 
 # Bug fixes
