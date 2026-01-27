@@ -95,10 +95,7 @@ class MorpheProcessRuntime(
             val runtimeLimit = if (aggressiveLimit) {
                 MemoryLimitConfig.maxLimitMb(context)
             } else {
-                MemoryLimitConfig.autoScaleLimitMb(context, requestedLimit)
-            }
-            if (runtimeLimit != requestedLimit && !aggressiveLimit) {
-                Log.d(tag, "Auto-scaled process memory limit from ${requestedLimit}MB to ${runtimeLimit}MB")
+                requestedLimit
             }
             val sanitizedLimit = MemoryLimitConfig.clampLimitMb(context, runtimeLimit)
             if (sanitizedLimit != runtimeLimit) {
