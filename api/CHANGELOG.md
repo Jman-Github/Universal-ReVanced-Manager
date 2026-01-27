@@ -14,6 +14,7 @@
 - Added more information to the patcher log such as bundle type, and whether the experimental patcher is toggled off or on
 - Added a `Latest` filter and option in the three dot menu to the `Patch bundle discovery`
 - Updated the split-apk merger to use APKEditor instead of ARSCLib
+- Improved split-apk merger validation, normalization and cleanup
 
 
 # Bug fixes
@@ -28,7 +29,9 @@
 - Fixed missing shimmer element when tapping refresh for the `Keystore diagnostics` panel
 - Fixed incorrect version listings on the patch selection screens patch widgets
 - Fixed the miscolored status bar on patch bundle information screens
-
+- Fixed issues with unicode characters causing resource compilation errors for certain apps https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/144
+- Fixed the ReVanced patcher runtime using the incorrect Aapt2 binary occasionally
+- 
 
 # v1.7.1 (2026-01-22)
 
