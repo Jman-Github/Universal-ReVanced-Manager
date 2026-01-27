@@ -3,7 +3,6 @@ package app.revanced.manager.ui.component
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExpandedFullScreenSearchBar
@@ -18,7 +17,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.unit.dp
 import androidx.compose.material3.SearchBarState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -46,7 +44,7 @@ fun SearchBar(
     }
     val inputField = @Composable {
         SearchBarDefaults.InputField(
-            modifier = Modifier.sizeIn(minWidth = 380.dp),
+            modifier = Modifier.fillMaxWidth(),
             textFieldState = textFieldState,
             searchBarState = searchBarState,
             onSearch = { query ->

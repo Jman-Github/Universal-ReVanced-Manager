@@ -12,8 +12,10 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -101,6 +103,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
@@ -115,6 +118,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.window.Popup
@@ -125,6 +129,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.net.Uri
 import android.os.Build
 import java.util.Locale
+import kotlin.math.max
 import app.universal.revanced.manager.R
 import app.revanced.manager.patcher.patch.Option
 import app.revanced.manager.patcher.patch.PatchBundleInfo
@@ -2328,11 +2333,8 @@ private class PatchSelectionActionsPopupPositionProvider(
         layoutDirection: LayoutDirection,
         popupContentSize: IntSize
     ): IntOffset {
-        val desiredX = when (layoutDirection) {
-            LayoutDirection.Ltr -> anchorBounds.right - popupContentSize.width
-            LayoutDirection.Rtl -> anchorBounds.left
-        }
-        val x = desiredX.coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0))
+        val x = ((windowSize.width - popupContentSize.width) / 2)
+            .coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0))
 
         val yBelow = anchorBounds.bottom + marginPx
         val yAbove = anchorBounds.top - popupContentSize.height - marginPx
@@ -2356,50 +2358,75 @@ private fun PatchSelectionActionsPopup(
     val splitIndex = (actionSpecs.size + 1) / 2
     val firstRow = remember(actionSpecs) { actionSpecs.take(splitIndex) }
     val secondRow = remember(actionSpecs) { actionSpecs.drop(splitIndex) }
+    var firstRowWidthPx by remember { mutableStateOf(0) }
+    var secondRowWidthPx by remember { mutableStateOf(0) }
+    BoxWithConstraints(modifier = modifier) {
+        val popupMaxWidth = (maxWidth - 32.dp)
+            .coerceAtLeast(0.dp)
+            .coerceAtMost(720.dp)
+        val maxRowWidthPx = max(firstRowWidthPx, secondRowWidthPx)
+        val measuredWidth = if (maxRowWidthPx > 0) {
+            with(LocalDensity.current) { maxRowWidthPx.toDp() + 32.dp }
+        } else {
+            popupMaxWidth
+        }
+        val popupWidth = measuredWidth.coerceAtMost(popupMaxWidth)
 
-    Surface(
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-        tonalElevation = 0.dp,
-        shadowElevation = 6.dp,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f)),
-        modifier = modifier.widthIn(max = 520.dp)
-    ) {
-        Box {
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .blur(26.dp)
-                    .background(
-                        Brush.radialGradient(
-                            colors = listOf(
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
-                                Color.Transparent
-                            ),
-                            radius = glowRadiusPx
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+            tonalElevation = 0.dp,
+            shadowElevation = 6.dp,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f)),
+            modifier = Modifier
+                .width(popupWidth)
+        ) {
+            Box {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .blur(26.dp)
+                        .background(
+                            Brush.radialGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                                    Color.Transparent
+                                ),
+                                radius = glowRadiusPx
+                            )
                         )
-                    )
-            )
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.22f))
-            )
-
-            Column(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                horizontalAlignment = Alignment.End
-            ) {
-                ActionChipRow(
-                    specs = firstRow,
-                    onActionClick = onActionClick
                 )
-                if (secondRow.isNotEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.22f))
+                )
+
+                Column(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.End
+                ) {
                     ActionChipRow(
-                        specs = secondRow,
-                        onActionClick = onActionClick
+                        specs = firstRow,
+                        onActionClick = onActionClick,
+                        onContentWidth = { width ->
+                            if (width != firstRowWidthPx) {
+                                firstRowWidthPx = width
+                            }
+                        }
                     )
+                    if (secondRow.isNotEmpty()) {
+                        ActionChipRow(
+                            specs = secondRow,
+                            onActionClick = onActionClick,
+                            onContentWidth = { width ->
+                                if (width != secondRowWidthPx) {
+                                    secondRowWidthPx = width
+                                }
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -2410,21 +2437,62 @@ private fun PatchSelectionActionsPopup(
 private fun ActionChipRow(
     specs: List<PatchActionSpec>,
     onActionClick: (PatchActionSpec) -> Unit,
+    onContentWidth: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    LazyRow(
-        modifier = modifier.fillMaxWidth(),
-        reverseLayout = true,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        items(
-            items = specs.asReversed(),
-            key = { spec -> spec.key?.storageId ?: "label:${spec.label}" }
-        ) { spec ->
-            PatchSelectionActionChip(
-                spec = spec,
-                onClick = { onActionClick(spec) }
+    val spacing = 6.dp
+    val scrollState = rememberScrollState()
+
+    SubcomposeLayout(modifier = modifier.fillMaxWidth()) { constraints ->
+        val contentPlaceable = subcompose("content") {
+            Row(horizontalArrangement = Arrangement.spacedBy(spacing)) {
+                specs.forEach { spec ->
+                    PatchSelectionActionChip(
+                        spec = spec,
+                        onClick = { onActionClick(spec) }
+                    )
+                }
+            }
+        }.first().measure(Constraints())
+
+        onContentWidth(contentPlaceable.width)
+        val layoutWidth = constraints.maxWidth
+        val layoutHeight = contentPlaceable.height
+        val scrollNeeded = contentPlaceable.width > layoutWidth
+
+        val rowPlaceable = subcompose("row") {
+            val rowModifier = if (scrollNeeded) {
+                Modifier.horizontalScroll(scrollState)
+            } else {
+                Modifier
+            }
+            val arrangement = if (scrollNeeded) {
+                Arrangement.spacedBy(spacing, Alignment.End)
+            } else {
+                Arrangement.spacedBy(spacing, Alignment.CenterHorizontally)
+            }
+            Row(
+                modifier = rowModifier.fillMaxWidth(),
+                horizontalArrangement = arrangement
+            ) {
+                specs.forEach { spec ->
+                    PatchSelectionActionChip(
+                        spec = spec,
+                        onClick = { onActionClick(spec) }
+                    )
+                }
+            }
+        }.first().measure(
+            Constraints(
+                minWidth = layoutWidth,
+                maxWidth = layoutWidth,
+                minHeight = 0,
+                maxHeight = constraints.maxHeight
             )
+        )
+
+        layout(layoutWidth, layoutHeight) {
+            rowPlaceable.place(0, 0)
         }
     }
 }
