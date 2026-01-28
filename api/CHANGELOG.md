@@ -23,6 +23,7 @@
 - Added the ability to export saved patched apps to storage
 - Added `Saved` dates to saved patched apps in the `Apps` tab https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/145
 - Added a refresh/reload button to the custom file picker
+- Improved the UI of export and saving dialogs for the custom file picker
 
 
 # Bug fixes

@@ -29,16 +29,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
@@ -276,11 +277,42 @@ fun ImportExportSettingsScreen(
     if (exportInProgress) {
         AlertDialog(
             onDismissRequest = {},
-            title = { Text(stringResource(R.string.export)) },
-            text = { Text(stringResource(R.string.patcher_step_group_saving)) },
-            icon = { CircularProgressIndicator() },
+            icon = {
+                Icon(
+                    Icons.Outlined.Save,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            title = {
+                Text(
+                    stringResource(R.string.export),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        stringResource(R.string.patcher_step_group_saving),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth(0.7f)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                    )
+                }
+            },
             confirmButton = {},
-            dismissButton = {}
+            dismissButton = {},
+            shape = RoundedCornerShape(28.dp)
         )
     }
 
@@ -1463,27 +1495,59 @@ private fun ExportFileNameDialog(
     val trimmedName = fileName.trim()
     AlertDialog(
         onDismissRequest = onDismiss,
+        title = {
+            Text(
+                stringResource(R.string.export),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        icon = {
+            Icon(
+                Icons.Outlined.Save,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+        },
         confirmButton = {
-            TextButton(
-                onClick = { onConfirm(trimmedName) },
-                enabled = trimmedName.isNotEmpty()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
             ) {
-                Text(stringResource(R.string.save))
+                TextButton(
+                    onClick = { onConfirm(trimmedName) },
+                    enabled = trimmedName.isNotEmpty()
+                ) {
+                    Text(stringResource(R.string.save))
+                }
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.cancel))
+                }
             }
         },
-        title = { Text(stringResource(R.string.export)) },
         text = {
-            OutlinedTextField(
-                value = fileName,
-                onValueChange = { fileName = it },
-                label = { Text(stringResource(R.string.file_name)) },
-                placeholder = { Text(stringResource(R.string.dialog_input_placeholder)) }
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = stringResource(R.string.file_name),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelMedium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = fileName,
+                    onValueChange = { fileName = it },
+                    placeholder = { Text(stringResource(R.string.dialog_input_placeholder)) },
+                    singleLine = true
+                )
+            }
         }
     )
 }

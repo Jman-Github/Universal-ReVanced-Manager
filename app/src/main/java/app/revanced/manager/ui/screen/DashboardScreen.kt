@@ -73,6 +73,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -99,6 +100,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -502,7 +504,6 @@ fun DashboardScreen(
             allowDirectorySelection = true,
             confirmButtonText = stringResource(R.string.save),
             onConfirm = { selection ->
-                showSavedAppsExportPicker = false
                 val exportDirectory = if (Files.isDirectory(selection)) {
                     selection
                 } else {
@@ -515,6 +516,7 @@ fun DashboardScreen(
                     exportFormat
                 ) { result ->
                     savedAppsExportInProgress = false
+                    showSavedAppsExportPicker = false
                     when {
                         result.total == 0 -> androidContext.toast(
                             androidContext.getString(R.string.saved_apps_export_empty)
@@ -536,11 +538,42 @@ fun DashboardScreen(
     if (savedAppsExportInProgress) {
         AlertDialog(
             onDismissRequest = {},
-            title = { Text(stringResource(R.string.export)) },
-            text = { Text(stringResource(R.string.patcher_step_group_saving)) },
-            icon = { CircularProgressIndicator() },
+            icon = {
+                Icon(
+                    Icons.Outlined.Save,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            title = {
+                Text(
+                    stringResource(R.string.export),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        stringResource(R.string.patcher_step_group_saving),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth(0.7f)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                    )
+                }
+            },
             confirmButton = {},
-            dismissButton = {}
+            dismissButton = {},
+            shape = RoundedCornerShape(28.dp)
         )
     }
 

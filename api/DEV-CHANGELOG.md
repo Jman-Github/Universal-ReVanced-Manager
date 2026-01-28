@@ -4,6 +4,7 @@
 # Features
 
 - Added a refresh/reload button to the custom file picker
+- Improved the UI of export and saving dialogs for the custom file picker
 
 
 # Bug fixes
