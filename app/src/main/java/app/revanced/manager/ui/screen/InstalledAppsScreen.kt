@@ -33,6 +33,7 @@ import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,7 +52,9 @@ import app.revanced.manager.ui.component.ShimmerBox
 import app.revanced.manager.ui.component.haptics.HapticCheckbox
 import app.revanced.manager.ui.viewmodel.InstalledAppsViewModel
 import app.revanced.manager.ui.viewmodel.InstalledAppsViewModel.AppBundleSummary
+import app.revanced.manager.util.relativeTime
 import app.universal.revanced.manager.R
+import kotlinx.coroutines.delay
 import org.koin.androidx.compose.koinViewModel
 import sh.calvin.reorderable.ReorderableCollectionItemScope
 import sh.calvin.reorderable.ReorderableItem
@@ -69,6 +72,12 @@ fun InstalledAppsScreen(
     val context = LocalContext.current
     val installedApps by viewModel.apps.collectAsStateWithLifecycle(initialValue = null)
     val selectionActive = viewModel.selectedApps.isNotEmpty()
+    val timeTick by produceState(initialValue = System.currentTimeMillis()) {
+        while (true) {
+            delay(60_000)
+            value = System.currentTimeMillis()
+        }
+    }
     val normalizedQuery = searchQuery.trim().lowercase()
     val filteredApps = installedApps?.let { apps ->
         if (normalizedQuery.isBlank()) {
@@ -161,6 +170,7 @@ fun InstalledAppsScreen(
                                 isSelectable = isSelectable,
                                 isMissingInstall = isMissingInstall,
                                 bundleSummaries = bundleSummaries,
+                                timeTick = timeTick,
                                 onClick = {
                                     when {
                                     selectionActive && isSelectable -> viewModel.toggleSelection(installedApp)
@@ -208,10 +218,12 @@ private fun InstalledAppCard(
     isSelectable: Boolean,
     isMissingInstall: Boolean,
     bundleSummaries: List<InstalledAppsViewModel.AppBundleSummary>,
+    timeTick: Long,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     onSelectionChange: (Boolean) -> Unit,
 ) {
+    val context = LocalContext.current
     val cardShape = RoundedCornerShape(16.dp)
     val elevation = if (isSelected) 6.dp else 2.dp
                     val formattedVersion = installedApp.version
@@ -221,6 +233,12 @@ private fun InstalledAppCard(
                         formattedVersion,
                         stringResource(installedApp.installType.stringResource)
                     ).joinToString(" • ")
+    val savedAtText = installedApp.createdAt
+        .takeIf { it > 0 && installedApp.installType == InstallType.SAVED }
+        ?.let { createdAt ->
+            val tick = timeTick
+            stringResource(R.string.saved_app_created_at, createdAt.relativeTime(context))
+        }
 
     Surface(
         modifier = Modifier
@@ -271,6 +289,13 @@ private fun InstalledAppCard(
                 if (detailLine.isNotBlank()) {
                     Text(
                         text = detailLine,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (!savedAtText.isNullOrBlank()) {
+                    Text(
+                        text = savedAtText,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

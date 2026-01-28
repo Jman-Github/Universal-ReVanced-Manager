@@ -4,6 +4,7 @@
 # Features
 
 - Added the ability to export saved patched apps to storage
+- Added `Saved` dates to saved patched apps in the `Apps` tab https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/145
 
 
 # Bug fixes
