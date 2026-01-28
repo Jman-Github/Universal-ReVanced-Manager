@@ -1,5 +1,6 @@
 package app.revanced.manager.ui.viewmodel
 
+import android.content.Context
 import android.content.pm.PackageInfo
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
@@ -18,6 +19,8 @@ import app.revanced.manager.util.FilenameUtils
 import app.revanced.manager.util.PM
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.mutableStateSetOf
+import app.revanced.manager.util.PatchedAppExportData
+import app.revanced.manager.util.ExportNameFormatter
 import app.revanced.manager.patcher.patch.PatchBundleInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
@@ -25,6 +28,11 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.StandardCopyOption
+import java.util.Locale
 
 class InstalledAppsViewModel(
     private val installedAppsRepository: InstalledAppRepository,
@@ -129,6 +137,12 @@ class InstalledAppsViewModel(
         val version: String?
     )
 
+    data class SavedAppsExportResult(
+        val exported: Int,
+        val failed: Int,
+        val total: Int
+    )
+
     fun toggleSelection(installedApp: InstalledApp) = viewModelScope.launch {
         val packageName = installedApp.currentPackageName
         val shouldSelect = packageName !in selectedApps
@@ -172,6 +186,27 @@ class InstalledAppsViewModel(
             packageInfoMap.remove(packageName)
             missingPackages.remove(packageName)
         }
+    }
+
+    fun exportSelectedSavedAppsToDirectory(
+        context: Context,
+        directory: Path,
+        exportTemplate: String?,
+        onResult: (SavedAppsExportResult) -> Unit = {}
+    ) = viewModelScope.launch {
+        val snapshot = apps.first()
+        val selected = snapshot.filter {
+            it.currentPackageName in selectedApps && it.installType == InstallType.SAVED
+        }
+        if (selected.isEmpty()) {
+            onResult(SavedAppsExportResult(0, 0, 0))
+            return@launch
+        }
+
+        val result = withContext(Dispatchers.IO) {
+            exportSelectedSavedAppsInternal(selected, directory, exportTemplate)
+        }
+        onResult(result)
     }
 
     private suspend fun setSelectionInternal(installedApp: InstalledApp, shouldSelect: Boolean) {
@@ -256,6 +291,79 @@ class InstalledAppsViewModel(
                 }
             }
         }
+
+    private fun exportSelectedSavedAppsInternal(
+        selected: List<InstalledApp>,
+        directory: Path,
+        exportTemplate: String?
+    ): SavedAppsExportResult {
+        Files.createDirectories(directory)
+
+        var exported = 0
+        var failed = 0
+        selected.forEach { app ->
+            val source = savedApkFile(app)
+            if (source == null || !source.exists()) {
+                failed++
+                return@forEach
+            }
+
+            val exportData = buildExportMetadata(app, source)
+            val fileName = ExportNameFormatter.format(exportTemplate, exportData)
+            val target = resolveUniqueTarget(directory, fileName)
+            val success = runCatching {
+                Files.copy(source.toPath(), target, StandardCopyOption.REPLACE_EXISTING)
+            }.isSuccess
+            if (success) exported++ else failed++
+        }
+
+        return SavedAppsExportResult(exported = exported, failed = failed, total = selected.size)
+    }
+
+    private fun buildExportMetadata(app: InstalledApp, source: File): PatchedAppExportData {
+        val packageInfo = pm.getPackageInfo(source)
+        val label = packageInfo?.applicationInfo
+            ?.loadLabel(pm.application.packageManager)
+            ?.toString()
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: app.currentPackageName
+        val summaries = bundleSummaries[app.currentPackageName].orEmpty()
+        val bundleVersions = summaries.mapNotNull { it.version?.takeIf(String::isNotBlank) }
+        val bundleNames = summaries.map { it.title }.filter(String::isNotBlank)
+        return PatchedAppExportData(
+            appName = label,
+            packageName = app.currentPackageName,
+            appVersion = app.version,
+            patchBundleVersions = bundleVersions,
+            patchBundleNames = bundleNames
+        )
+    }
+
+    private fun resolveUniqueTarget(directory: Path, fileName: String): Path {
+        val lower = fileName.lowercase(Locale.ROOT)
+        val ext = if (lower.endsWith(".apk")) ".apk" else ""
+        val base = if (ext.isNotEmpty()) fileName.dropLast(ext.length) else fileName
+        var candidate = directory.resolve(fileName)
+        if (!Files.exists(candidate)) return candidate
+
+        var counter = 2
+        while (true) {
+            candidate = directory.resolve("${base}_$counter$ext")
+            if (!Files.exists(candidate)) return candidate
+            counter++
+        }
+    }
+
+    private fun savedApkFile(app: InstalledApp): File? {
+        val candidates = listOf(
+            filesystem.getPatchedAppFile(app.currentPackageName, app.version),
+            filesystem.getPatchedAppFile(app.originalPackageName, app.version)
+        ).distinct()
+        candidates.firstOrNull { it.exists() }?.let { return it }
+        return filesystem.findPatchedAppFile(app.currentPackageName)
+            ?: filesystem.findPatchedAppFile(app.originalPackageName)
+    }
 
     private suspend fun loadAppliedPatches(packageName: String): PatchSelection =
         withContext(Dispatchers.IO) { installedAppsRepository.getAppliedPatches(packageName) }

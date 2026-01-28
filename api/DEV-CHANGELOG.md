@@ -3,6 +3,8 @@
 
 # Features
 
+- Added the ability to export saved patched apps to storage
+
 
 # Bug fixes
 

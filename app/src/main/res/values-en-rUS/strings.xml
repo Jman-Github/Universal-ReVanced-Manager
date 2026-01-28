@@ -820,6 +820,9 @@ Details: %2$s</string>
     <string name="save_apk_success">APK Saved</string>
     <string name="saved_app_export_success">Exported patched app</string>
     <string name="saved_app_export_failed">Failed to export patched app</string>
+    <string name="saved_apps_export_success">Exported %1$d saved app(s)</string>
+    <string name="saved_apps_export_failed">Failed to export saved apps</string>
+    <string name="saved_apps_export_empty">No saved apps selected</string>
     <string name="saved_app_removed_toast">Removed saved patched app</string>
     <string name="saved_app_copy_removed_toast">Removed saved copy</string>
     <string name="delete_saved_app_title">Delete saved app</string>
@@ -1089,5 +1092,4 @@ Details: %2$s</string>
     <string name="export">Export</string>
     <string name="confirm">Confirm</string>
 </resources>
-
 

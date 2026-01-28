@@ -56,6 +56,7 @@ import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Search
@@ -67,6 +68,8 @@ import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -133,6 +136,7 @@ import app.revanced.manager.util.isAllowedApkFile
 import app.revanced.manager.util.isAllowedPatchBundleFile
 import app.revanced.manager.util.toast
 import java.io.File
+import java.nio.file.Files
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -187,6 +191,7 @@ fun DashboardScreen(
     val fs = koinInject<Filesystem>()
     val prefs: PreferencesManager = koinInject()
     val savedAppsEnabled by prefs.enableSavedApps.getAsState()
+    val exportFormat by prefs.patchedAppExportFormat.getAsState()
     val storageRoots = remember { fs.storageRoots() }
     EventEffect(flow = storageVm.storageSelectionFlow) { selected ->
         onStorageSelect(selected)
@@ -235,6 +240,23 @@ fun DashboardScreen(
             showBundleFilePicker = true
         } else {
             bundlePermissionLauncher.launch(bundlePermissionName)
+        }
+    }
+
+    var showSavedAppsExportPicker by rememberSaveable { mutableStateOf(false) }
+    var savedAppsExportInProgress by rememberSaveable { mutableStateOf(false) }
+    val (exportPermissionContract, exportPermissionName) = remember { fs.permissionContract() }
+    val exportPermissionLauncher =
+        rememberLauncherForActivityResult(exportPermissionContract) { granted ->
+            if (granted) {
+                showSavedAppsExportPicker = true
+            }
+        }
+    fun requestSavedAppsExportPicker() {
+        if (fs.hasStoragePermission()) {
+            showSavedAppsExportPicker = true
+        } else {
+            exportPermissionLauncher.launch(exportPermissionName)
         }
     }
 
@@ -468,6 +490,59 @@ fun DashboardScreen(
             allowDirectorySelection = false
         )
     }
+    if (showSavedAppsExportPicker) {
+        PathSelectorDialog(
+            roots = storageRoots,
+            onSelect = { path ->
+                if (path == null) {
+                    showSavedAppsExportPicker = false
+                }
+            },
+            fileFilter = { false },
+            allowDirectorySelection = true,
+            confirmButtonText = stringResource(R.string.save),
+            onConfirm = { selection ->
+                showSavedAppsExportPicker = false
+                val exportDirectory = if (Files.isDirectory(selection)) {
+                    selection
+                } else {
+                    selection.parent ?: selection
+                }
+                savedAppsExportInProgress = true
+                installedAppsViewModel.exportSelectedSavedAppsToDirectory(
+                    androidContext,
+                    exportDirectory,
+                    exportFormat
+                ) { result ->
+                    savedAppsExportInProgress = false
+                    when {
+                        result.total == 0 -> androidContext.toast(
+                            androidContext.getString(R.string.saved_apps_export_empty)
+                        )
+                        result.exported > 0 -> androidContext.toast(
+                            androidContext.getString(
+                                R.string.saved_apps_export_success,
+                                result.exported
+                            )
+                        )
+                        else -> androidContext.toast(
+                            androidContext.getString(R.string.saved_apps_export_failed)
+                        )
+                    }
+                }
+            }
+        )
+    }
+    if (savedAppsExportInProgress) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text(stringResource(R.string.export)) },
+            text = { Text(stringResource(R.string.patcher_step_group_saving)) },
+            icon = { CircularProgressIndicator() },
+            confirmButton = {},
+            dismissButton = {}
+        )
+    }
 
     var showAddBundleDialog by rememberSaveable { mutableStateOf(false) }
     if (showAddBundleDialog) {
@@ -600,6 +675,14 @@ fun DashboardScreen(
                             )
                             },
                             actions = {
+                            IconButton(
+                                onClick = { requestSavedAppsExportPicker() }
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Save,
+                                    stringResource(R.string.export)
+                                )
+                            }
                             IconButton(
                                 onClick = { showDeleteSavedAppsDialog = true }
                             ) {
