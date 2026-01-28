@@ -39,6 +39,8 @@
 - Fixed `brut.androlib.exceptions.CantFindFrameworkResException` patching errors
 - Fixed issues with keystores from older versions of URV not being able to be imported into the newer versions of URV without signing errors https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/147
 - Fixed false OOM errors with patching on lower end devices https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/142
+- Possible fix for false OOM errors https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/142
+- Fixed issues with URV generated keystores from previous versions of the app not being imported correctly resulting in signing errors (again) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/147
 
 
 # v1.7.1 (2026-01-22)

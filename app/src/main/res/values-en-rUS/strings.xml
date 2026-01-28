@@ -1076,6 +1076,7 @@ Details: %2$s</string>
     <string name="keystore_diagnostics_refreshed">Refreshed</string>
     <string name="keystore_diagnostics_alias">Alias</string>
     <string name="keystore_diagnostics_password">Password</string>
+    <string name="keystore_diagnostics_password_empty">(empty)</string>
     <string name="keystore_diagnostics_type">Type: %1$s</string>
     <string name="keystore_diagnostics_fingerprint">Fingerprint: %1$s</string>
     <string name="keystore_diagnostics_keystore_file">Keystore file: %1$s</string>
@@ -1088,6 +1089,5 @@ Details: %2$s</string>
     <string name="export">Export</string>
     <string name="confirm">Confirm</string>
 </resources>
-
 
 

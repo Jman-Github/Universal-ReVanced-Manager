@@ -3,6 +3,7 @@ package app.revanced.manager.domain.manager
 import android.app.Application
 import android.content.Context
 import android.util.Log
+import android.widget.Toast
 import app.revanced.library.ApkSigner as RevancedApkSigner
 import com.android.apksig.ApkSigner as AndroidApkSigner
 import kotlinx.coroutines.Dispatchers
@@ -51,6 +52,7 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
     private val legacyKeystorePath = app.filesDir.resolve("manager.keystore")
     private val backupKeystorePath = app.getExternalFilesDir("keystore")?.resolve("manager.keystore")
     private val keystoreMutex = Mutex()
+    private val appContext = app.applicationContext
 
     private data class KeystoreCredentials(
         val alias: String,
@@ -391,7 +393,21 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
             }
         }
 
-        strictResult ?: throw IllegalArgumentException("Invalid keystore credentials")
+        if (strictResult == null) {
+            val recovered = recoverManagerKeystoreCredentials(keystoreData)
+            if (recovered == null) {
+                notifyInvalidKeystoreCredentials()
+                throw IllegalArgumentException("Invalid keystore credentials")
+            }
+            updatePrefs(
+                recovered.keyMaterial.alias,
+                recovered.storePass,
+                recovered.keyPass,
+                recovered.keyMaterial.storeType,
+                fingerprint
+            )
+            strictResult = StrictLoadResult(recovered.keyMaterial, null)
+        }
 
         val keyMaterial = strictResult.keyMaterial
         if (credentials.fingerprint.isNullOrBlank() || strictResult.storePassOverride != null) {
@@ -427,10 +443,65 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         val storePassOverride: String?
     )
 
+    private data class RecoveredCredentials(
+        val keyMaterial: KeyMaterial,
+        val storePass: String,
+        val keyPass: String,
+    )
+
     private fun resolveSigningType(credentials: KeystoreCredentials): String? {
         val type = credentials.type?.trim()?.uppercase()?.takeIf { it.isNotBlank() }
         if (type != null) return type
         return if (credentials.alias == DEFAULT) "BKS" else null
+    }
+
+    private fun recoverManagerKeystoreCredentials(keystoreData: ByteArray): RecoveredCredentials? {
+        val aliasCandidates = listOf(DEFAULT, "alias", "ReVanced Key")
+        val passCandidates = listOf(DEFAULT, LEGACY_DEFAULT_PASSWORD, "")
+        val types = keyStoreTypes(null)
+
+        for (type in types) {
+            for (storePass in passCandidates) {
+                val storeChars = storePass.takeIf { it.isNotEmpty() }?.toCharArray()
+                val ks = runCatching {
+                    KeyStore.getInstance(type).apply {
+                        load(ByteArrayInputStream(keystoreData), storeChars)
+                    }
+                }.getOrNull() ?: continue
+                val aliasesInStore = ks.aliases().toList()
+                if (aliasesInStore.isEmpty()) continue
+                for (alias in aliasCandidates) {
+                    val aliasSearch = if (aliasesInStore.contains(alias)) {
+                        listOf(alias)
+                    } else {
+                        aliasesInStore
+                    }
+                    for (candidateAlias in aliasSearch) {
+                        for (keyPass in passCandidates) {
+                            val keyChars = keyPass.takeIf { it.isNotEmpty() }?.toCharArray()
+                            val privateKey = ks.getKey(candidateAlias, keyChars) as? PrivateKey ?: continue
+                            val certs = ks.getCertificateChain(candidateAlias)
+                                ?.mapNotNull { it as? X509Certificate }
+                                ?.takeIf { it.isNotEmpty() }
+                                ?: continue
+                            val material = KeyMaterial(candidateAlias, privateKey, certs, type)
+                            return RecoveredCredentials(material, storePass, keyPass)
+                        }
+                    }
+                }
+            }
+        }
+        return null
+    }
+
+    private suspend fun notifyInvalidKeystoreCredentials() {
+        withContext(Dispatchers.Main) {
+            Toast.makeText(
+                appContext,
+                "Keystore credentials are not correct. Re-import or regenerate the keystore.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
     }
 
     private suspend fun regenerateLocked() {

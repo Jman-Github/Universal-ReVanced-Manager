@@ -6,7 +6,8 @@
 
 # Bug fixes
 
-Possible fix for false OOM errors https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/142
+- Possible fix for false OOM errors https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/142
+- Fixed issues with URV generated keystores from previous versions of the app not being imported correctly resulting in signing errors (again) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/147
 
 
 # v1.8.0-dev.02 (2026-01-27)

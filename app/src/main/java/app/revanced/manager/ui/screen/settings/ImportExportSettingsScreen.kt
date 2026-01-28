@@ -1035,14 +1035,25 @@ private fun KeystoreDiagnosticsPanel(
             if (showShimmer) {
                 ShimmerField()
             } else {
+                val passwordValue = diagnostics.storePass
+                val passwordEmpty = passwordValue.isBlank()
+                val passwordDisplay = if (passwordEmpty) {
+                    stringResource(R.string.keystore_diagnostics_password_empty)
+                } else {
+                    passwordValue
+                }
                 OutlinedTextField(
-                    value = diagnostics.storePass,
+                    value = passwordDisplay,
                     onValueChange = {},
                     readOnly = true,
                     singleLine = true,
                     colors = fieldColors,
                     shape = MaterialTheme.shapes.medium,
-                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    visualTransformation = if (passwordVisible || passwordEmpty) {
+                        VisualTransformation.None
+                    } else {
+                        PasswordVisualTransformation()
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     trailingIcon = {
                         Row(
@@ -1061,7 +1072,7 @@ private fun KeystoreDiagnosticsPanel(
                                 )
                             }
                             IconButton(
-                                onClick = { copy("Keystore password", diagnostics.storePass) },
+                                onClick = { copy("Keystore password", passwordValue) },
                                 modifier = Modifier.size(36.dp)
                             ) {
                                 Icon(
