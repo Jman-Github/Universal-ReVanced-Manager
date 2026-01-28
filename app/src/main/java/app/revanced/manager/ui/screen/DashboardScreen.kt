@@ -498,7 +498,7 @@ fun DashboardScreen(
                     showSavedAppsExportPicker = false
                 }
             },
-            fileFilter = { false },
+            fileFilter = ::isAllowedApkFile,
             allowDirectorySelection = true,
             confirmButtonText = stringResource(R.string.save),
             onConfirm = { selection ->

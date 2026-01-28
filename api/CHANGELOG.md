@@ -22,6 +22,7 @@
 - Centered the patch action button menu and expanded the search bar properly on the patch selection screen for devices with larger screens https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/148
 - Added the ability to export saved patched apps to storage
 - Added `Saved` dates to saved patched apps in the `Apps` tab https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/145
+- Added a refresh/reload button to the custom file picker
 
 
 # Bug fixes

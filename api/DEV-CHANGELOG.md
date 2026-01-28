@@ -1,3 +1,14 @@
+# v1.8.0-dev.04 (2026-01-29)
+
+
+# Features
+
+- Added a refresh/reload button to the custom file picker
+
+
+# Bug fixes
+
+
 # v1.8.0-dev.03 (2026-01-27)
 
 
