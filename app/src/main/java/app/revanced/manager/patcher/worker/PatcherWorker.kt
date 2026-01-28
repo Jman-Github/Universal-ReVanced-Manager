@@ -274,8 +274,8 @@ class PatcherWorker(
             val effectiveLimit = if (aggressiveLimit) {
                 MemoryLimitConfig.maxLimitMb(applicationContext)
             } else {
-                MemoryLimitConfig.autoScaleLimitMb(applicationContext, requestedLimit)
-            }.let { MemoryLimitConfig.clampLimitMb(applicationContext, it) }
+                requestedLimit
+            }
 
             args.logger.info(
                 "Patching started at ${System.currentTimeMillis()} " +

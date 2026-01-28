@@ -97,11 +97,7 @@ class MorpheProcessRuntime(
             } else {
                 requestedLimit
             }
-            val sanitizedLimit = MemoryLimitConfig.clampLimitMb(context, runtimeLimit)
-            if (sanitizedLimit != runtimeLimit) {
-                Log.w(tag, "Requested process memory limit ${runtimeLimit}MB exceeded device capabilities; clamped to ${sanitizedLimit}MB")
-            }
-            val limit = "${sanitizedLimit}M"
+            val limit = "${runtimeLimit}M"
             val usePropOverride = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
             val propOverride = if (usePropOverride) {
                 resolvePropOverride(context)?.absolutePath

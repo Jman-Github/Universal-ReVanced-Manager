@@ -1,3 +1,14 @@
+# v1.8.0-dev.03 (2026-01-28)
+
+
+# Features
+
+
+# Bug fixes
+
+Possible fix for false OOM errors https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/142
+
+
 # v1.8.0-dev.02 (2026-01-27)
 
 
