@@ -20,8 +20,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material.icons.outlined.Block
@@ -31,6 +33,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,6 +50,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
 import app.revanced.manager.domain.bundles.PatchBundleSource
+import app.revanced.manager.domain.bundles.PatchBundleChangelogEntry
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
 import app.revanced.manager.data.platform.NetworkInfo
@@ -103,6 +107,9 @@ fun BundleItem(
     }
     var showLinkSheet by rememberSaveable { mutableStateOf(false) }
     var showRenameDialog by rememberSaveable { mutableStateOf(false) }
+    var showBundleChangelog by rememberSaveable { mutableStateOf(false) }
+    var showBundleChangelogHistory by rememberSaveable { mutableStateOf(false) }
+    var changelogHistory by remember { mutableStateOf<List<PatchBundleChangelogEntry>>(emptyList()) }
 
     if (viewBundleDialogPage) {
         BundleInformationDialog(
@@ -123,6 +130,25 @@ fun BundleItem(
             onUpdate = onUpdate,
             onForceUpdate = onForceUpdate,
             autoOpenReleaseRequest = autoOpenReleaseRequest,
+        )
+    }
+
+    if (showBundleChangelog) {
+        val remote = src.asRemoteOrNull
+        if (remote != null) {
+            BundleChangelogDialog(
+                src = remote,
+                onDismissRequest = { showBundleChangelog = false }
+            )
+        } else {
+            showBundleChangelog = false
+        }
+    }
+
+    if (showBundleChangelogHistory) {
+        BundleChangelogHistoryDialog(
+            entries = changelogHistory.drop(1),
+            onDismissRequest = { showBundleChangelogHistory = false }
         )
     }
 
@@ -227,6 +253,12 @@ fun BundleItem(
         val latest = info.latestVersion
         val baseline = installedSignature ?: displayVersion
         !latest.isNullOrBlank() && baseline != null && latest != baseline
+    }
+
+    LaunchedEffect(showBundleChangelogHistory, src.uid, src.updatedAt) {
+        if (showBundleChangelogHistory && remoteSource != null) {
+            changelogHistory = bundleRepo.getChangelogHistory(src.uid)
+        }
     }
 
     val disabledAlpha = 0.38f
@@ -416,6 +448,22 @@ fun BundleItem(
                         enabled = src.enabled,
                         onClick = { showLinkSheet = true }
                     )
+                    PatchBundleActionKey.CHANGELOG_LATEST -> if (remoteSource != null) {
+                        BundleActionPill(
+                            text = stringResource(R.string.bundle_latest_changelog),
+                            icon = Icons.Outlined.Description,
+                            enabled = src.enabled,
+                            onClick = { showBundleChangelog = true }
+                        )
+                    }
+                    PatchBundleActionKey.CHANGELOG_HISTORY -> if (remoteSource != null) {
+                        BundleActionPill(
+                            text = stringResource(R.string.bundle_previous_changelogs),
+                            icon = Icons.Outlined.History,
+                            enabled = src.enabled,
+                            onClick = { showBundleChangelogHistory = true }
+                        )
+                    }
                     PatchBundleActionKey.TOGGLE -> {
                         val toggleIcon = if (src.enabled) Icons.Outlined.Block else Icons.Outlined.CheckCircle
                         val toggleLabel = if (src.enabled) R.string.disable else R.string.enable

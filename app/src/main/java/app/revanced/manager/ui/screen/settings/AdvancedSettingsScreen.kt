@@ -57,8 +57,10 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ClearAll
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.LayersClear
@@ -2078,6 +2080,8 @@ private fun previewIconForBundleAction(key: PatchBundleActionKey): ImageVector =
         PatchBundleActionKey.EDIT -> Icons.Outlined.Edit
         PatchBundleActionKey.REFRESH -> Icons.Outlined.Update
         PatchBundleActionKey.LINKS -> Icons.Outlined.Link
+        PatchBundleActionKey.CHANGELOG_LATEST -> Icons.Outlined.Description
+        PatchBundleActionKey.CHANGELOG_HISTORY -> Icons.Outlined.History
         PatchBundleActionKey.TOGGLE -> Icons.Outlined.Block
         PatchBundleActionKey.DELETE -> Icons.Outlined.Delete
     }
