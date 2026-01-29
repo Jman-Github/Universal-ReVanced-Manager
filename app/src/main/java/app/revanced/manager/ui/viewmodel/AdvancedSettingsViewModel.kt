@@ -34,6 +34,7 @@ import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import app.revanced.manager.ui.model.PatchSelectionActionKey
+import app.revanced.manager.ui.model.PatchBundleActionKey
 
 class AdvancedSettingsViewModel(
     val prefs: PreferencesManager,
@@ -152,6 +153,17 @@ class AdvancedSettingsViewModel(
         viewModelScope.launch(Dispatchers.Default) {
             val serialized = order.joinToString(",") { it.storageId }
             prefs.patchSelectionActionOrder.update(serialized)
+        }
+
+    fun setPatchBundleActionOrder(order: List<PatchBundleActionKey>) =
+        viewModelScope.launch(Dispatchers.Default) {
+            val serialized = order.joinToString(",") { it.storageId }
+            prefs.patchBundleActionOrder.update(serialized)
+        }
+
+    fun setPatchBundleHiddenActions(hidden: Set<String>) =
+        viewModelScope.launch(Dispatchers.Default) {
+            prefs.patchBundleHiddenActions.update(hidden)
         }
 
     fun setPatchSelectionHiddenActions(hidden: Set<String>) =

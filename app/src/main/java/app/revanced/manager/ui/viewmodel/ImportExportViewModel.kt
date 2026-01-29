@@ -197,11 +197,21 @@ class ImportExportViewModel(
         private set
     private var keystoreImportPath by mutableStateOf<Path?>(null)
     val showCredentialsDialog by derivedStateOf { keystoreImportPath != null }
+    var keystoreDiagnostics by mutableStateOf<KeystoreManager.KeystoreDiagnostics?>(null)
+        private set
 
     var resetDialogState by mutableStateOf<ResetDialogState?>(null)
 
     val packagesWithOptions = optionsRepository.getPackagesWithSavedOptions()
     val packagesWithSelection = selectionRepository.getPackagesWithSavedSelection()
+
+    init {
+        refreshKeystoreDiagnostics()
+    }
+
+    fun refreshKeystoreDiagnostics() = viewModelScope.launch {
+        keystoreDiagnostics = keystoreManager.getDiagnostics()
+    }
 
     fun resetOptionsForPackage(packageName: String) = viewModelScope.launch {
         optionsRepository.resetOptionsForPackage(packageName)
@@ -282,6 +292,7 @@ class ImportExportViewModel(
             if (keystoreManager.import(alias, storePass, keyPass, stream)) {
                 app.toast(app.getString(R.string.import_keystore_success))
                 cancelKeystoreImport()
+                refreshKeystoreDiagnostics()
                 return true
             }
         }
@@ -315,6 +326,7 @@ class ImportExportViewModel(
     fun regenerateKeystore() = viewModelScope.launch {
         keystoreManager.regenerate()
         app.toast(app.getString(R.string.regenerate_keystore_success))
+        refreshKeystoreDiagnostics()
     }
 
     fun resetSelection() = viewModelScope.launch {

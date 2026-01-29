@@ -32,11 +32,13 @@ import androidx.annotation.StringRes
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.patcher.patch.PatchInfo
 import app.revanced.manager.ui.component.bundle.BundleTopBar
 import app.revanced.manager.ui.component.bundle.PatchItem
 import app.revanced.manager.util.Options
 import app.universal.revanced.manager.R
+import org.koin.compose.koinInject
 
 data class AppliedPatchBundleUi(
     val uid: Int,
@@ -60,6 +62,8 @@ fun AppliedPatchesDialog(
     onConfirm: (() -> Unit)? = null,
     confirmEnabled: Boolean = true
 ) {
+    val prefs: PreferencesManager = koinInject()
+    val searchEngineHost by prefs.searchEngineHost.getAsState()
     FullscreenDialog(onDismissRequest = onDismissRequest) {
         Scaffold(
             topBar = {
@@ -188,6 +192,7 @@ fun AppliedPatchesDialog(
                                 onExpandVersions = { expandVersions = !expandVersions },
                                 expandOptions = expandOptions,
                                 onExpandOptions = { expandOptions = !expandOptions },
+                                searchEngineHost = searchEngineHost,
                                 showCompatibilityMeta = false,
                                 showOptionValues = true,
                                 optionValues = patchOptionValues

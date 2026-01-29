@@ -1,3 +1,57 @@
+# v1.8.0 (TBD)
+
+
+# Features
+
+- Redesigned and improved patch bundles widgets UI, moved the progress banner and improved tab switcher UI https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/135
+- Redesigned and improved patch profiles widgets UI along with adding an app icon to patch profiles that have an APK selected for instant patching https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/135
+- Added `Patch bundle action button order` setting in Settings > Advanced that lets the user disable and rearrange the action buttons on the patch bundles widget https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/135
+- Added a backup and restore system for keystores to mitigate any future missing keystore errors
+- Added a dialog that appears after missing keystore errors to give clarity to the user on what to do next
+- Added an information section/dignonstic panel for keystores which lists the keystore alias and password
+- Gave keystores its own section in Settings > `Import & Export` and moved relevant settings to that section
+- Added a `Effective memory` pill under the experimental patcher toggle to clarify to the user the max memory the app can use
+- Added more information to the patcher log such as bundle type, and whether the experimental patcher is toggled off or on
+- Added a `Latest` filter and option in the three dot menu to the `Patch bundle discovery`
+- Updated the split-apk merger to use APKEditor instead of ARSCLib
+- Improved split-apk merger validation, normalization and cleanup
+- Made the two FAB buttons on the `Patch bundles` tab collapsible/expandable https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/146
+- Increased the pill text box size of the tab titles so devices with smaller screens won't have the text cut off https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/146
+- Updated the patch profile widget to use the same button type as the patch bundle widgets https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/146
+- Centered patch profile & patch bundle widget action buttons https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/146
+- Centered the patch action button menu and expanded the search bar properly on the patch selection screen for devices with larger screens https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/148
+- Added the ability to export saved patched apps to storage
+- Added `Saved` dates to saved patched apps in the `Apps` tab https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/145
+- Added a refresh/reload button to the custom file picker
+- Improved the UI of export and saving dialogs for the custom file picker
+- Updated the view patches screen for patch bundles on the `Discover patch bundles` page to use the same UI as the view patches screen for imported patch bundles
+- Made version tags on patches on all view patch screens searchable with the user set search engine
+- Added patch options/sub-options to the view patches screen on the `Discover patch bundles` page. This is currently only implemented for patch bundles imported from the discovery page as the API dose not currently support patch option fetching for non-imported bundles
+- Make all view patch screens searchable by patch name and description
+- Added a `Latest changelog` and `Previous changelogs` action buttons to the patch bundle widget with options to hide and rearrange them in the corresponding setting
+
+
+# Bug fixes
+
+- Resolved redundancies within the `service.sh` script improved module regeneration https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/134
+- Mitigated issues with having to regenerate keystores & persistent errors with signing (even after regenerate the keystore) for some users
+- Fixed an issue where the experimental patcher was always on internally when patching with Morphe, and couldn't be turned off
+- Fixed alignment of accent presets in `Settings > General`
+- Fixed patch options/suboptions dialogs flickering in certain states
+- Fixed the `Patch bunblde discovery` screen incorrectly displaying the shimmer effect on the loading elements
+- Fixed `Keystore diagnostics` not being able to be searched through settings search bar
+- Fixed missing shimmer element when tapping refresh for the `Keystore diagnostics` panel
+- Fixed incorrect version listings on the patch selection screens patch widgets
+- Fixed the miscolored status bar on patch bundle information screens
+- Fixed issues with unicode characters causing resource compilation errors for certain apps https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/144
+- Fixed the ReVanced patcher runtime using the incorrect Aapt2 binary occasionally
+- Fixed `brut.androlib.exceptions.CantFindFrameworkResException` patching errors
+- Fixed issues with keystores from older versions of URV not being able to be imported into the newer versions of URV without signing errors https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/147
+- Fixed false OOM errors with patching on lower end devices https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/142
+- Possible fix for false OOM errors https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/142
+- Fixed issues with URV generated keystores from previous versions of the app not being imported correctly resulting in signing errors (again) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/147
+
+
 # v1.7.1 (2026-01-22)
 
 

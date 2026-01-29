@@ -187,12 +187,31 @@ class MainViewModel(
         }
         settings.keystore?.let { keystore ->
             val keystoreBytes = Base64.decode(keystore, Base64.DEFAULT)
-            keystoreManager.import(
+            val passwordCandidates = listOf(
+                settings.keystorePassword,
+                KeystoreManager.DEFAULT,
+                "s3cur3p@ssw0rd"
+            ).filter { it.isNotBlank() }.distinct()
+            val aliasCandidates = listOf(
+                KeystoreManager.DEFAULT,
                 "alias",
-                settings.keystorePassword,
-                settings.keystorePassword,
-                keystoreBytes.inputStream()
-            )
+                "ReVanced Key"
+            ).distinct()
+            var imported = false
+            for (alias in aliasCandidates) {
+                for (pass in passwordCandidates) {
+                    Log.d(tag, "Trying legacy keystore import alias=$alias")
+                    if (keystoreManager.import(alias, pass, pass, keystoreBytes.inputStream())) {
+                        Log.i(tag, "Legacy keystore import succeeded alias=$alias")
+                        imported = true
+                        break
+                    }
+                }
+                if (imported) break
+            }
+            if (!imported) {
+                Log.w(tag, "Legacy keystore import failed for all known aliases/passwords")
+            }
         }
         settings.patches?.let { selection ->
             patchSelectionRepository.import(0, selection)

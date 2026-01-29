@@ -31,7 +31,6 @@ import java.util.logging.Handler
 import java.util.logging.Level
 import java.util.logging.LogRecord
 import java.util.logging.Logger as JavaLogger
-import java.util.zip.ZipFile
 import kotlin.system.exitProcess
 
 /**
@@ -94,7 +93,6 @@ class PatcherProcess : IPatcherProcess.Stub() {
 
             logger.info("Memory limit: ${Runtime.getRuntime().maxMemory() / (1024 * 1024)}MB")
             logAapt2Info(parameters.aaptPath, logger)
-            ensureFrameworkApkHealthy(parameters.frameworkDir, logger)
 
             val aaptLogs = AaptLogCapture(onLine = ::handleDexCompileLine).apply { start() }
             val stdioCapture = StdIoCapture(onLine = ::handleDexCompileLine).apply { start() }
@@ -383,28 +381,6 @@ class PatcherProcess : IPatcherProcess.Stub() {
         }.getOrNull()
         if (!version.isNullOrBlank()) {
             logger.info("AAPT2 version: $version")
-        }
-    }
-
-    private fun ensureFrameworkApkHealthy(frameworkDir: String, logger: Logger) {
-        val framework = File(frameworkDir).resolve("1.apk")
-        if (!framework.exists()) {
-            logger.warn("Framework APK missing at ${framework.absolutePath}")
-            return
-        }
-        if (!framework.isFile || framework.length() <= 0L) {
-            logger.warn("Framework APK invalid. Deleting ${framework.absolutePath}")
-            framework.delete()
-            return
-        }
-        val valid = runCatching {
-            ZipFile(framework).use { zip ->
-                zip.getEntry("resources.arsc") != null || zip.getEntry("AndroidManifest.xml") != null
-            }
-        }.getOrDefault(false)
-        if (!valid) {
-            logger.warn("Framework APK corrupt. Deleting ${framework.absolutePath}")
-            framework.delete()
         }
     }
 

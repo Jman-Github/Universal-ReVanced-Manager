@@ -9,26 +9,34 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
@@ -48,6 +56,7 @@ import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Search
@@ -55,11 +64,16 @@ import androidx.compose.material.icons.outlined.Sort
 import androidx.compose.material.icons.outlined.Source
 import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -82,15 +96,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.revanced.manager.R
 import app.revanced.manager.data.platform.Filesystem
@@ -124,6 +138,7 @@ import app.revanced.manager.util.isAllowedApkFile
 import app.revanced.manager.util.isAllowedPatchBundleFile
 import app.revanced.manager.util.toast
 import java.io.File
+import java.nio.file.Files
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -178,6 +193,7 @@ fun DashboardScreen(
     val fs = koinInject<Filesystem>()
     val prefs: PreferencesManager = koinInject()
     val savedAppsEnabled by prefs.enableSavedApps.getAsState()
+    val exportFormat by prefs.patchedAppExportFormat.getAsState()
     val storageRoots = remember { fs.storageRoots() }
     EventEffect(flow = storageVm.storageSelectionFlow) { selected ->
         onStorageSelect(selected)
@@ -200,7 +216,6 @@ fun DashboardScreen(
     val bundleUpdateProgress by vm.bundleUpdateProgress.collectAsStateWithLifecycle(null)
     val bundleImportProgress by vm.bundleImportProgress.collectAsStateWithLifecycle(null)
     val androidContext = LocalContext.current
-    val density = LocalDensity.current
     val composableScope = rememberCoroutineScope()
     var showBundleOrderDialog by rememberSaveable { mutableStateOf(false) }
     var showAppsOrderDialog by rememberSaveable { mutableStateOf(false) }
@@ -222,7 +237,6 @@ fun DashboardScreen(
                 showBundleFilePicker = true
             }
         }
-    var tabRowHeightPx by remember { mutableIntStateOf(0) }
     fun requestBundleFilePicker() {
         if (fs.hasStoragePermission()) {
             showBundleFilePicker = true
@@ -231,8 +245,25 @@ fun DashboardScreen(
         }
     }
 
-    val tabRowHeight = with(density) { tabRowHeightPx.toDp() }
-    val bannerOffset = 6.dp
+    var showSavedAppsExportPicker by rememberSaveable { mutableStateOf(false) }
+    var savedAppsExportInProgress by rememberSaveable { mutableStateOf(false) }
+    val (exportPermissionContract, exportPermissionName) = remember { fs.permissionContract() }
+    val exportPermissionLauncher =
+        rememberLauncherForActivityResult(exportPermissionContract) { granted ->
+            if (granted) {
+                showSavedAppsExportPicker = true
+            }
+        }
+    fun requestSavedAppsExportPicker() {
+        if (fs.hasStoragePermission()) {
+            showSavedAppsExportPicker = true
+        } else {
+            exportPermissionLauncher.launch(exportPermissionName)
+        }
+    }
+
+    var bundlesFabCollapsed by rememberSaveable { mutableStateOf(false) }
+
     val dashboardSidePadding = 16.dp
 
     @Composable
@@ -461,6 +492,90 @@ fun DashboardScreen(
             allowDirectorySelection = false
         )
     }
+    if (showSavedAppsExportPicker) {
+        PathSelectorDialog(
+            roots = storageRoots,
+            onSelect = { path ->
+                if (path == null) {
+                    showSavedAppsExportPicker = false
+                }
+            },
+            fileFilter = ::isAllowedApkFile,
+            allowDirectorySelection = true,
+            confirmButtonText = stringResource(R.string.save),
+            onConfirm = { selection ->
+                val exportDirectory = if (Files.isDirectory(selection)) {
+                    selection
+                } else {
+                    selection.parent ?: selection
+                }
+                savedAppsExportInProgress = true
+                installedAppsViewModel.exportSelectedSavedAppsToDirectory(
+                    androidContext,
+                    exportDirectory,
+                    exportFormat
+                ) { result ->
+                    savedAppsExportInProgress = false
+                    showSavedAppsExportPicker = false
+                    when {
+                        result.total == 0 -> androidContext.toast(
+                            androidContext.getString(R.string.saved_apps_export_empty)
+                        )
+                        result.exported > 0 -> androidContext.toast(
+                            androidContext.getString(
+                                R.string.saved_apps_export_success,
+                                result.exported
+                            )
+                        )
+                        else -> androidContext.toast(
+                            androidContext.getString(R.string.saved_apps_export_failed)
+                        )
+                    }
+                }
+            }
+        )
+    }
+    if (savedAppsExportInProgress) {
+        AlertDialog(
+            onDismissRequest = {},
+            icon = {
+                Icon(
+                    Icons.Outlined.Save,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            title = {
+                Text(
+                    stringResource(R.string.export),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        stringResource(R.string.patcher_step_group_saving),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth(0.7f)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                    )
+                }
+            },
+            confirmButton = {},
+            dismissButton = {},
+            shape = RoundedCornerShape(28.dp)
+        )
+    }
 
     var showAddBundleDialog by rememberSaveable { mutableStateOf(false) }
     if (showAddBundleDialog) {
@@ -593,6 +708,14 @@ fun DashboardScreen(
                             )
                             },
                             actions = {
+                            IconButton(
+                                onClick = { requestSavedAppsExportPicker() }
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Save,
+                                    stringResource(R.string.export)
+                                )
+                            }
                             IconButton(
                                 onClick = { showDeleteSavedAppsDialog = true }
                             ) {
@@ -784,26 +907,56 @@ fun DashboardScreen(
         floatingActionButton = {
             when (pagerState.currentPage) {
                 DashboardPage.BUNDLES.ordinal -> {
+                    val enterExitSpec = tween<IntOffset>(durationMillis = 220, easing = FastOutSlowInEasing)
+                    val sizeSpec = tween<IntSize>(durationMillis = 220, easing = FastOutSlowInEasing)
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.height(56.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        HapticFloatingActionButton(
-                            onClick = onBundleDiscoveryClick
+                        AnimatedVisibility(
+                            visible = !bundlesFabCollapsed,
+                            enter = fadeIn(animationSpec = tween(180)) +
+                                expandHorizontally(expandFrom = Alignment.End, animationSpec = sizeSpec) +
+                                slideInHorizontally(
+                                    initialOffsetX = { it / 2 },
+                                    animationSpec = enterExitSpec
+                                ),
+                            exit = fadeOut(animationSpec = tween(180)) +
+                                shrinkHorizontally(shrinkTowards = Alignment.End, animationSpec = sizeSpec) +
+                                slideOutHorizontally(
+                                    targetOffsetX = { it / 2 },
+                                    animationSpec = enterExitSpec
+                                )
                         ) {
-                            Icon(
-                                Icons.Outlined.Public,
-                                stringResource(R.string.patch_bundle_discovery_title)
-                            )
-                        }
-                        HapticFloatingActionButton(
-                            onClick = {
-                                vm.cancelSourceSelection()
-                                installedAppsViewModel.clearSelection()
-                                patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
-                                showAddBundleDialog = true
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                HapticFloatingActionButton(
+                                    onClick = onBundleDiscoveryClick
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.Public,
+                                        stringResource(R.string.patch_bundle_discovery_title)
+                                    )
+                                }
+                                HapticFloatingActionButton(
+                                    onClick = {
+                                        vm.cancelSourceSelection()
+                                        installedAppsViewModel.clearSelection()
+                                        patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
+                                        showAddBundleDialog = true
+                                    }
+                                ) { Icon(Icons.Default.Add, stringResource(R.string.add)) }
                             }
-                        ) { Icon(Icons.Default.Add, stringResource(R.string.add)) }
+                        }
+                        Spacer(modifier = Modifier.size(2.dp))
+                        BundleFabHandle(
+                            collapsed = bundlesFabCollapsed,
+                            onToggle = { bundlesFabCollapsed = !bundlesFabCollapsed },
+                            modifier = Modifier.offset(x = 6.dp)
+                        )
                     }
                 }
 
@@ -832,13 +985,15 @@ fun DashboardScreen(
             TabRow(
                 selectedTabIndex = pagerState.currentPage,
                 containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp),
-                modifier = Modifier.onSizeChanged { tabRowHeightPx = it.height }
+                indicator = {},
+                divider = {}
             ) {
                 DashboardPage.entries.forEachIndexed { index, page ->
+                    val selected = pagerState.currentPage == index
                     HapticTab(
-                        selected = pagerState.currentPage == index,
+                        selected = selected,
                         onClick = { composableScope.launch { pagerState.animateScrollToPage(index) } },
-                        text = { Text(stringResource(page.titleResId)) },
+                        text = { DashboardTabLabel(text = stringResource(page.titleResId), selected = selected) },
                         icon = { Icon(page.icon, null) },
                         selectedContentColor = MaterialTheme.colorScheme.primary,
                         unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -953,6 +1108,10 @@ fun DashboardScreen(
                 )
             }
 
+            BundleProgressBanner(
+                modifier = Modifier.padding(top = 8.dp)
+            )
+
             HorizontalPager(
                 state = pagerState,
                 userScrollEnabled = true,
@@ -1011,13 +1170,6 @@ fun DashboardScreen(
                 }
             )
         }
-        BundleProgressBanner(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = tabRowHeight)
-                .offset(y = bannerOffset)
-                .zIndex(1f)
-            )
     }
 }
 }
@@ -1037,6 +1189,79 @@ fun Notifications(
                 notification()
             }
         }
+    }
+}
+
+@Composable
+private fun DashboardTabLabel(
+    text: String,
+    selected: Boolean
+) {
+    if (selected) {
+        Surface(
+            shape = RoundedCornerShape(999.dp),
+            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+        ) {
+            Text(
+                text = text,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Clip
+            )
+        }
+    } else {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun BundleFabHandle(
+    collapsed: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val shape = RoundedCornerShape(
+        topStart = 22.dp,
+        bottomStart = 22.dp,
+        topEnd = 0.dp,
+        bottomEnd = 0.dp
+    )
+    val interactionSource = remember { MutableInteractionSource() }
+    val container = MaterialTheme.colorScheme.primaryContainer
+    val contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+    val icon = if (collapsed) {
+        Icons.Outlined.ChevronRight
+    } else {
+        Icons.Outlined.ChevronLeft
+    }
+
+    Box(
+        modifier = modifier
+            .size(width = 22.dp, height = 56.dp)
+            .clip(shape)
+            .background(container)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onToggle
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = contentColor,
+            modifier = Modifier.size(16.dp)
+        )
     }
 }
 

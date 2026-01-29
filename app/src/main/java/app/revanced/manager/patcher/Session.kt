@@ -152,6 +152,7 @@ class Session(
             )
             logger.info("Writing patched files...")
             validateMissingResourceReferences()
+            validateInvalidNumericCharacterReferences()
             val result = patcher.get()
             val updatedDexNames = mergeDexNames(initialDexNames, result)
             if (updatedDexNames != initialDexNames) {
@@ -362,6 +363,191 @@ class Session(
         }
         factory.newDocumentBuilder().parse(file)
     }.getOrNull()
+
+    private fun validateInvalidNumericCharacterReferences() {
+        val apkDir = tempDir.resolve("apk")
+        val resDir = apkDir.resolve("res")
+        if (!resDir.exists()) return
+
+        val invalidRefs = mutableListOf<String>()
+        resDir.walkTopDown()
+            .filter { it.isFile && it.extension.equals("xml", ignoreCase = true) }
+            .filter { it.parentFile?.name?.startsWith("values") == true }
+            .forEach { file ->
+                var text = readXmlText(file) ?: return@forEach
+                val normalization = normalizeSurrogateNumericRefs(text)
+                if (normalization.replacements > 0) {
+                    logger.info(
+                        "Normalized ${normalization.replacements} surrogate numeric reference(s) in ${file.path}"
+                    )
+                    runCatching { file.writeText(normalization.text, Charsets.UTF_8) }
+                    text = normalization.text
+                }
+                invalidRefs += findInvalidNumericCharRefs(text, file)
+            }
+
+        if (invalidRefs.isNotEmpty()) {
+            val message = buildString {
+                appendLine("Invalid numeric character reference(s) detected:")
+                invalidRefs.distinct().sorted().forEach { appendLine(it) }
+            }
+            logger.error(message)
+            throw IllegalStateException("Invalid numeric character reference(s) detected.")
+        }
+    }
+
+    private fun findInvalidNumericCharRefs(text: String, file: File): List<String> {
+        val invalid = mutableListOf<String>()
+        val lines = text.split('\n')
+        val lineStarts = buildLineStarts(text)
+        var index = 0
+        while (true) {
+            val start = text.indexOf("&#", index)
+            if (start == -1) break
+            var cursor = start + 2
+            val isHex = cursor < text.length && (text[cursor] == 'x' || text[cursor] == 'X')
+            if (isHex) cursor++
+            val digitsStart = cursor
+            while (cursor < text.length && (if (isHex) text[cursor].isHexDigit() else text[cursor].isDigit())) {
+                cursor++
+            }
+            val digits = text.substring(digitsStart, cursor)
+            val hasSemicolon = cursor < text.length && text[cursor] == ';'
+            val numeric = if (digits.isNotEmpty()) digits.toLongOrNull(if (isHex) 16 else 10) else null
+            val valid = digits.isNotEmpty() && hasSemicolon && numeric != null && isValidXmlChar(numeric)
+            if (!valid) {
+                val lineIndex = lineIndexForOffset(lineStarts, start)
+                val lineNumber = lineIndex + 1
+                val lineStart = lineStarts[lineIndex]
+                val lineEnd = if (lineIndex + 1 < lineStarts.size) lineStarts[lineIndex + 1] - 1 else text.length
+                val line = text.substring(lineStart, lineEnd).trim()
+                val refEnd = if (hasSemicolon) cursor + 1 else cursor.coerceAtMost(text.length)
+                val refSnippet = text.substring(start, refEnd.coerceAtMost(text.length))
+                val nameHint = findNearestStringName(lines, lineIndex)?.let { " (name=$it)" } ?: ""
+                invalid.add("${file.path}:$lineNumber$nameHint: $refSnippet :: $line")
+            }
+            index = start + 2
+        }
+        return invalid
+    }
+
+    private fun Char.isHexDigit(): Boolean =
+        this in '0'..'9' || this in 'a'..'f' || this in 'A'..'F'
+
+    private data class SurrogateNormalization(
+        val text: String,
+        val replacements: Int
+    )
+
+    private fun normalizeSurrogateNumericRefs(text: String): SurrogateNormalization {
+        val pattern = Regex("&#(x?[0-9A-Fa-f]+);")
+        val matches = pattern.findAll(text).toList()
+        if (matches.isEmpty()) return SurrogateNormalization(text, 0)
+
+        val sb = StringBuilder(text.length)
+        var lastIndex = 0
+        var i = 0
+        var replacements = 0
+        while (i < matches.size) {
+            val match = matches[i]
+            val value = parseNumericRef(match.groupValues[1])
+            if (value == null) {
+                i += 1
+                continue
+            }
+            val isHigh = value in 0xD800..0xDBFF
+            if (isHigh && i + 1 < matches.size) {
+                val next = matches[i + 1]
+                if (next.range.first == match.range.last + 1) {
+                    val nextValue = parseNumericRef(next.groupValues[1])
+                    if (nextValue != null && nextValue in 0xDC00..0xDFFF) {
+                        val codePoint =
+                            0x10000 + ((value - 0xD800) shl 10) + (nextValue - 0xDC00)
+                        sb.append(text, lastIndex, match.range.first)
+                        sb.append(String(Character.toChars(codePoint)))
+                        lastIndex = next.range.last + 1
+                        replacements += 1
+                        i += 2
+                        continue
+                    }
+                }
+            }
+            i += 1
+        }
+        if (lastIndex == 0) return SurrogateNormalization(text, 0)
+        sb.append(text, lastIndex, text.length)
+        return SurrogateNormalization(sb.toString(), replacements)
+    }
+
+    private fun parseNumericRef(value: String): Int? {
+        return if (value.startsWith("x", ignoreCase = true)) {
+            value.substring(1).toIntOrNull(16)
+        } else {
+            value.toIntOrNull(10)
+        }
+    }
+
+    private fun readXmlText(file: File): String? {
+        val bytes = runCatching { file.readBytes() }.getOrNull() ?: return null
+        if (bytes.isEmpty()) return ""
+        val charset = detectXmlCharset(bytes) ?: Charsets.UTF_8
+        return runCatching {
+            if (charset == Charsets.UTF_8 && bytes.size >= 3 &&
+                bytes[0] == 0xEF.toByte() &&
+                bytes[1] == 0xBB.toByte() &&
+                bytes[2] == 0xBF.toByte()
+            ) {
+                bytes.copyOfRange(3, bytes.size).toString(charset)
+            } else {
+                bytes.toString(charset)
+            }
+        }.getOrNull()
+    }
+
+    private fun detectXmlCharset(bytes: ByteArray): java.nio.charset.Charset? {
+        if (bytes.size >= 2) {
+            val b0 = bytes[0]
+            val b1 = bytes[1]
+            if (b0 == 0xFE.toByte() && b1 == 0xFF.toByte()) return Charsets.UTF_16BE
+            if (b0 == 0xFF.toByte() && b1 == 0xFE.toByte()) return Charsets.UTF_16LE
+            if (b0 == 0x00.toByte() && b1 == 0x3C.toByte()) return Charsets.UTF_16BE
+            if (b0 == 0x3C.toByte() && b1 == 0x00.toByte()) return Charsets.UTF_16LE
+        }
+        return null
+    }
+
+    private fun buildLineStarts(text: String): IntArray {
+        val starts = ArrayList<Int>()
+        starts.add(0)
+        text.forEachIndexed { index, char ->
+            if (char == '\n') {
+                starts.add(index + 1)
+            }
+        }
+        return starts.toIntArray()
+    }
+
+    private fun lineIndexForOffset(lineStarts: IntArray, offset: Int): Int {
+        val idx = java.util.Arrays.binarySearch(lineStarts, offset)
+        return if (idx >= 0) idx else -idx - 2
+    }
+
+    private fun findNearestStringName(lines: List<String>, lineIndex: Int): String? {
+        val regex = Regex("<string[^>]*\\sname\\s*=\\s*[\"']([^\"']+)[\"']", RegexOption.IGNORE_CASE)
+        for (i in lineIndex downTo (lineIndex - 5).coerceAtLeast(0)) {
+            val match = regex.find(lines[i]) ?: continue
+            return match.groupValues.getOrNull(1)?.takeIf { it.isNotBlank() }
+        }
+        return null
+    }
+
+    private fun isValidXmlChar(value: Long): Boolean {
+        if (value == 0x9L || value == 0xAL || value == 0xDL) return true
+        if (value in 0x20..0xD7FF) return true
+        if (value in 0xE000..0xFFFD) return true
+        if (value in 0x10000..0x10FFFF) return true
+        return false
+    }
 
     private fun buildWriteApkSubSteps(
         compileSteps: List<String> = emptyList(),

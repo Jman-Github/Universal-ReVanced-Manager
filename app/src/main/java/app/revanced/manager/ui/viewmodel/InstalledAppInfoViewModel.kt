@@ -840,6 +840,11 @@ class InstalledAppInfoViewModel(
             context.toast(context.getString(R.string.unmounted))
             mountOperation = MountOperation.MOUNTING
             context.toast(context.getString(R.string.mounting_ellipsis))
+            val moduleReady = ensureMountModule(pkgName)
+            if (!moduleReady) {
+                context.toast(context.getString(R.string.saved_app_install_failed))
+                return@launch
+            }
             rootInstaller.mount(pkgName)
             isMounted = rootInstaller.isAppMounted(pkgName)
             context.toast(context.getString(R.string.mounted))
@@ -855,6 +860,27 @@ class InstalledAppInfoViewModel(
             }
             mountOperation = null
         }
+    }
+
+    private suspend fun ensureMountModule(packageName: String): Boolean = withContext(Dispatchers.IO) {
+        val apk = filesystem.findPatchedAppFile(packageName)
+        if (apk == null) {
+            return@withContext rootInstaller.isAppInstalled(packageName)
+        }
+
+        val packageInfo = pm.getPackageInfo(apk) ?: return@withContext false
+        if (packageInfo.packageName != packageName) return@withContext false
+
+        val versionName = packageInfo.versionName ?: installedApp?.version.orEmpty()
+        val label = with(pm) { packageInfo.label() }
+        rootInstaller.install(
+            patchedAPK = apk,
+            stockAPK = null,
+            packageName = packageInfo.packageName,
+            version = versionName,
+            label = label
+        )
+        true
     }
 
     fun unmountSavedInstallation() = viewModelScope.launch {
@@ -883,6 +909,11 @@ class InstalledAppInfoViewModel(
             } else {
                 mountOperation = MountOperation.MOUNTING
                 context.toast(context.getString(R.string.mounting_ellipsis))
+                val moduleReady = ensureMountModule(pkgName)
+                if (!moduleReady) {
+                    context.toast(context.getString(R.string.saved_app_install_failed))
+                    return@launch
+                }
                 rootInstaller.mount(pkgName)
                 isMounted = rootInstaller.isAppMounted(pkgName)
                 context.toast(context.getString(R.string.mounted))

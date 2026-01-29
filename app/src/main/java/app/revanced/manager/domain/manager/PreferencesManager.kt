@@ -15,6 +15,7 @@ import kotlin.io.path.isDirectory
 import kotlin.io.path.isReadable
 
 import app.revanced.manager.ui.model.PatchSelectionActionKey
+import app.revanced.manager.ui.model.PatchBundleActionKey
 
 enum class SearchForUpdatesBackgroundInterval(val displayName: Int, val value: Long) {
     NEVER(R.string.never, 0),
@@ -29,6 +30,8 @@ class PreferencesManager(
     companion object {
         private val PATCH_ACTION_ORDER_DEFAULT =
             PatchSelectionActionKey.DefaultOrder.joinToString(",") { it.storageId }
+        private val PATCH_BUNDLE_ACTION_ORDER_DEFAULT =
+            PatchBundleActionKey.DefaultOrder.joinToString(",") { it.storageId }
     }
     val dynamicColor = booleanPreference("dynamic_color", false)
     val pureBlackTheme = booleanPreference("pure_black_theme", false)
@@ -106,6 +109,10 @@ class PreferencesManager(
     val patchSelectionSortSettingsMode = stringPreference("patch_selection_sort_settings_mode", "None")
     val patchSelectionActionOrder =
         stringPreference("patch_selection_action_order", PATCH_ACTION_ORDER_DEFAULT)
+    val patchBundleActionOrder =
+        stringPreference("patch_bundle_action_order", PATCH_BUNDLE_ACTION_ORDER_DEFAULT)
+    val patchBundleHiddenActions =
+        stringSetPreference("patch_bundle_hidden_actions", emptySet())
     val patchSelectionHiddenActions =
         stringSetPreference("patch_selection_hidden_actions", emptySet())
     val patchSelectionShowVersionTags = booleanPreference("patch_selection_show_version_tags", true)
@@ -113,6 +120,7 @@ class PreferencesManager(
     val pathSelectorLastDirectory = stringPreference("path_selector_last_directory", "")
     val patchBundleDiscoveryShowRelease = booleanPreference("patch_bundle_discovery_show_release", true)
     val patchBundleDiscoveryShowPrerelease = booleanPreference("patch_bundle_discovery_show_prerelease", true)
+    val patchBundleDiscoveryLatest = booleanPreference("patch_bundle_discovery_latest", false)
 
     val acknowledgedDownloaderPlugins = stringSetPreference("acknowledged_downloader_plugins", emptySet())
     val autoSaveDownloaderApks = booleanPreference("auto_save_downloader_apks", true)
@@ -171,12 +179,15 @@ class PreferencesManager(
         val patchSelectionActionOrder: String? = null,
         val patchSelectionHiddenActions: Set<String>? = null,
         val patchSelectionShowVersionTags: Boolean? = null,
+        val patchBundleActionOrder: String? = null,
+        val patchBundleHiddenActions: Set<String>? = null,
         val acknowledgedDownloaderPlugins: Set<String>? = null,
         val autoSaveDownloaderApks: Boolean? = null,
         val pathSelectorFavorites: Set<String>? = null,
         val pathSelectorLastDirectory: String? = null,
         val patchBundleDiscoveryShowRelease: Boolean? = null,
         val patchBundleDiscoveryShowPrerelease: Boolean? = null,
+        val patchBundleDiscoveryLatest: Boolean? = null,
         val searchEngineHost: String? = null,
     )
 
@@ -232,12 +243,15 @@ class PreferencesManager(
         patchSelectionActionOrder = patchSelectionActionOrder.get(),
         patchSelectionHiddenActions = patchSelectionHiddenActions.get(),
         patchSelectionShowVersionTags = patchSelectionShowVersionTags.get(),
+        patchBundleActionOrder = patchBundleActionOrder.get(),
+        patchBundleHiddenActions = patchBundleHiddenActions.get(),
         acknowledgedDownloaderPlugins = acknowledgedDownloaderPlugins.get(),
         autoSaveDownloaderApks = autoSaveDownloaderApks.get(),
         pathSelectorFavorites = pathSelectorFavorites.get(),
         pathSelectorLastDirectory = pathSelectorLastDirectory.get().takeIf { it.isNotBlank() },
         patchBundleDiscoveryShowRelease = patchBundleDiscoveryShowRelease.get(),
         patchBundleDiscoveryShowPrerelease = patchBundleDiscoveryShowPrerelease.get(),
+        patchBundleDiscoveryLatest = patchBundleDiscoveryLatest.get(),
         searchEngineHost = searchEngineHost.get(),
     )
 
@@ -297,6 +311,8 @@ class PreferencesManager(
         snapshot.patchSelectionActionOrder?.let { patchSelectionActionOrder.value = it }
         snapshot.patchSelectionHiddenActions?.let { patchSelectionHiddenActions.value = it }
         snapshot.patchSelectionShowVersionTags?.let { patchSelectionShowVersionTags.value = it }
+        snapshot.patchBundleActionOrder?.let { patchBundleActionOrder.value = it }
+        snapshot.patchBundleHiddenActions?.let { patchBundleHiddenActions.value = it }
         snapshot.acknowledgedDownloaderPlugins?.let { acknowledgedDownloaderPlugins.value = it }
         snapshot.autoSaveDownloaderApks?.let { autoSaveDownloaderApks.value = it }
         snapshot.pathSelectorFavorites?.let { favorites ->
@@ -319,6 +335,7 @@ class PreferencesManager(
         }
         snapshot.patchBundleDiscoveryShowRelease?.let { patchBundleDiscoveryShowRelease.value = it }
         snapshot.patchBundleDiscoveryShowPrerelease?.let { patchBundleDiscoveryShowPrerelease.value = it }
+        snapshot.patchBundleDiscoveryLatest?.let { patchBundleDiscoveryLatest.value = it }
         snapshot.searchEngineHost?.let { searchEngineHost.value = it }
     }
 
@@ -342,3 +359,8 @@ suspend fun PreferencesManager.showInstallerComponent(component: ComponentName) 
     val flattened = component.flattenToString()
     installerHiddenComponents.value = installerHiddenComponents.value - flattened
 }
+
+
+
+
+

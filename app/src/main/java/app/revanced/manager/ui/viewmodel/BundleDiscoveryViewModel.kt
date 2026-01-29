@@ -478,6 +478,14 @@ class BundleDiscoveryViewModel(
         }
     }
 
+    suspend fun fetchLatestBundle(
+        owner: String,
+        repo: String,
+        prerelease: Boolean
+    ): ExternalBundleSnapshot? = withContext(Dispatchers.IO) {
+        api.getLatestBundle(owner, repo, prerelease).getOrNull()
+    }
+
     @Serializable
     private data class BundleCacheEntry(
         val bundles: List<ExternalBundleSnapshot>,
