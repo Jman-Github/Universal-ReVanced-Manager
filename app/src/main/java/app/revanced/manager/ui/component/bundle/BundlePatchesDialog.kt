@@ -11,6 +11,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -49,9 +51,18 @@ fun BundlePatchesDialog(
     val patchBundleRepository: PatchBundleRepository = koinInject()
     val prefs: PreferencesManager = koinInject()
     val searchEngineHost by prefs.searchEngineHost.getAsState()
+    var query by rememberSaveable(src.uid, "patches_query") { mutableStateOf("") }
     val patches by remember(src.uid) {
         patchBundleRepository.allBundlesInfoFlow.mapNotNull { it[src.uid]?.patches }
     }.collectAsStateWithLifecycle(emptyList())
+    val filteredPatches = remember(patches, query) {
+        val trimmed = query.trim()
+        if (trimmed.isBlank()) {
+            patches
+        } else {
+            patches.filter { it.matchesQuery(trimmed) }
+        }
+    }
 
     FullscreenDialog(
         onDismissRequest = onDismissRequest,
@@ -77,21 +88,56 @@ fun BundlePatchesDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(16.dp)
             ) {
-                itemsIndexed(
-                    items = patches,
-                    key = { index, patch -> src.uid to (patch.name + "-" + index) }
-                ) { _, patch ->
-                    var expandVersions by rememberSaveable(src.uid, patch.name, "versions") { mutableStateOf(false) }
-                    var expandOptions by rememberSaveable(src.uid, patch.name, "options") { mutableStateOf(false) }
-
-                    PatchItem(
-                        patch,
-                        expandVersions,
-                        onExpandVersions = { expandVersions = !expandVersions },
-                        expandOptions,
-                        onExpandOptions = { expandOptions = !expandOptions },
-                        searchEngineHost = searchEngineHost
+                item(key = "patches_search") {
+                    OutlinedTextField(
+                        modifier = Modifier.fillMaxWidth(),
+                        value = query,
+                        onValueChange = { query = it },
+                        singleLine = true,
+                        placeholder = { Text(stringResource(R.string.search_patches)) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Outlined.Search,
+                                contentDescription = stringResource(R.string.search)
+                            )
+                        },
+                        trailingIcon = {
+                            if (query.isNotEmpty()) {
+                                IconButton(onClick = { query = "" }) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Close,
+                                        contentDescription = stringResource(R.string.clear)
+                                    )
+                                }
+                            }
+                        }
                     )
+                }
+                if (filteredPatches.isEmpty() && query.isNotBlank()) {
+                    item(key = "patches_search_empty") {
+                        Text(
+                            text = stringResource(R.string.search_no_results),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    itemsIndexed(
+                        items = filteredPatches,
+                        key = { index, patch -> src.uid to (patch.name + "-" + index) }
+                    ) { _, patch ->
+                        var expandVersions by rememberSaveable(src.uid, patch.name, "versions") { mutableStateOf(false) }
+                        var expandOptions by rememberSaveable(src.uid, patch.name, "options") { mutableStateOf(false) }
+
+                        PatchItem(
+                            patch,
+                            expandVersions,
+                            onExpandVersions = { expandVersions = !expandVersions },
+                            expandOptions,
+                            onExpandOptions = { expandOptions = !expandOptions },
+                            searchEngineHost = searchEngineHost
+                        )
+                    }
                 }
             }
         }
@@ -373,4 +419,26 @@ private fun normalizeSearchHost(value: String): String {
     val noScheme = trimmed.removePrefix("https://").removePrefix("http://")
     val noPath = noScheme.substringBefore('/').substringBefore('?').substringBefore('#')
     return noPath.trim().trimEnd('/').ifBlank { "google.com" }
+}
+
+private fun PatchInfo.matchesQuery(query: String): Boolean {
+    val normalized = query.lowercase()
+    if (name.contains(normalized, ignoreCase = true)) return true
+    if (description?.contains(normalized, ignoreCase = true) == true) return true
+    if (compatiblePackages?.any { pkg ->
+            pkg.packageName.contains(normalized, ignoreCase = true) ||
+                (pkg.versions?.any { it.contains(normalized, ignoreCase = true) } == true)
+        } == true
+    ) {
+        return true
+    }
+    if (options?.any { option ->
+            option.title.contains(normalized, ignoreCase = true) ||
+                option.key.contains(normalized, ignoreCase = true) ||
+                option.description.contains(normalized, ignoreCase = true)
+        } == true
+    ) {
+        return true
+    }
+    return false
 }

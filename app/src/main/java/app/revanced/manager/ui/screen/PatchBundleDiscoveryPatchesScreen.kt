@@ -15,9 +15,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
@@ -42,6 +48,7 @@ import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemote
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.network.dto.ExternalBundlePatch
+import app.revanced.manager.patcher.patch.PatchInfo
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
 import app.revanced.manager.ui.component.ShimmerBox
@@ -66,6 +73,7 @@ fun PatchBundleDiscoveryPatchesScreen(
     val prefs: PreferencesManager = koinInject()
     val patchBundleRepository: PatchBundleRepository = koinInject()
     val searchEngineHost by prefs.searchEngineHost.getAsState()
+    var query by rememberSaveable(bundleId, "patches_query") { mutableStateOf("") }
     val sources by patchBundleRepository.sources.collectAsStateWithLifecycle(emptyList())
     val bundleInfos by patchBundleRepository.allBundlesInfoFlow.collectAsStateWithLifecycle(emptyMap())
     val bundles = viewModel.bundles
@@ -86,6 +94,22 @@ fun PatchBundleDiscoveryPatchesScreen(
     }
     val localPatches = importedUid?.let { bundleInfos[it]?.patches }
     val useLocalPatches = !localPatches.isNullOrEmpty()
+    val filteredLocalPatches = remember(localPatches, query) {
+        val trimmed = query.trim()
+        if (trimmed.isBlank()) {
+            localPatches
+        } else {
+            localPatches?.filter { it.matchesQuery(trimmed) }
+        }
+    }
+    val filteredExternalPatches = remember(patches, query) {
+        val trimmed = query.trim()
+        if (trimmed.isBlank()) {
+            patches
+        } else {
+            patches?.filter { it.matchesQuery(trimmed) }
+        }
+    }
 
     LaunchedEffect(bundleId, useLocalPatches) {
         if (!useLocalPatches) {
@@ -116,6 +140,31 @@ fun PatchBundleDiscoveryPatchesScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            item(key = "patches_search") {
+                OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = query,
+                    onValueChange = { query = it },
+                    singleLine = true,
+                    placeholder = { Text(stringResource(R.string.search_patches)) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Outlined.Search,
+                            contentDescription = stringResource(R.string.search)
+                        )
+                    },
+                    trailingIcon = {
+                        if (query.isNotEmpty()) {
+                            IconButton(onClick = { query = "" }) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Close,
+                                    contentDescription = stringResource(R.string.clear)
+                                )
+                            }
+                        }
+                    }
+                )
+            }
             when {
                 (isLoading && bundle == null) || (patchesLoading && !useLocalPatches) -> {
                     items(4) {
@@ -133,7 +182,23 @@ fun PatchBundleDiscoveryPatchesScreen(
                     }
                 }
 
-                !useLocalPatches && patches.isNullOrEmpty() -> {
+                query.isNotBlank() && useLocalPatches && filteredLocalPatches.isNullOrEmpty() -> {
+                    item {
+                        PatchBundlePatchesEmptyState(
+                            message = stringResource(R.string.search_no_results)
+                        )
+                    }
+                }
+
+                query.isNotBlank() && !useLocalPatches && filteredExternalPatches.isNullOrEmpty() -> {
+                    item {
+                        PatchBundlePatchesEmptyState(
+                            message = stringResource(R.string.search_no_results)
+                        )
+                    }
+                }
+
+                !useLocalPatches && filteredExternalPatches.isNullOrEmpty() -> {
                     item {
                         PatchBundlePatchesEmptyState(
                             message = stringResource(R.string.patch_bundle_discovery_patches_empty)
@@ -143,7 +208,7 @@ fun PatchBundleDiscoveryPatchesScreen(
 
                 useLocalPatches -> {
                     itemsIndexed(
-                        items = localPatches.orEmpty(),
+                        items = filteredLocalPatches.orEmpty(),
                         key = { index, patch -> "${importedUid ?: "bundle"}-${patch.name}-$index" }
                     ) { _, patch ->
                         var expandVersions by rememberSaveable(importedUid, patch.name, "versions") {
@@ -167,7 +232,7 @@ fun PatchBundleDiscoveryPatchesScreen(
                 // Currently used for discovery bundles that aren't imported (API has no options)
                 else -> {
                     itemsIndexed(
-                        items = patches.orEmpty(),
+                        items = filteredExternalPatches.orEmpty(),
                         key = { index, patch -> "${bundleId}-${patch.name ?: "patch"}-$index" }
                     ) { index, patch ->
                         PatchBundlePatchItem(
@@ -340,4 +405,40 @@ private fun normalizeSearchHost(value: String): String {
     val noScheme = trimmed.removePrefix("https://").removePrefix("http://")
     val noPath = noScheme.substringBefore('/').substringBefore('?').substringBefore('#')
     return noPath.trim().trimEnd('/').ifBlank { "google.com" }
+}
+
+private fun PatchInfo.matchesQuery(query: String): Boolean {
+    val normalized = query.lowercase()
+    if (name.contains(normalized, ignoreCase = true)) return true
+    if (description?.contains(normalized, ignoreCase = true) == true) return true
+    if (compatiblePackages?.any { pkg ->
+            pkg.packageName.contains(normalized, ignoreCase = true) ||
+                (pkg.versions?.any { it.contains(normalized, ignoreCase = true) } == true)
+        } == true
+    ) {
+        return true
+    }
+    if (options?.any { option ->
+            option.title.contains(normalized, ignoreCase = true) ||
+                option.key.contains(normalized, ignoreCase = true) ||
+                option.description.contains(normalized, ignoreCase = true)
+        } == true
+    ) {
+        return true
+    }
+    return false
+}
+
+private fun ExternalBundlePatch.matchesQuery(query: String): Boolean {
+    val normalized = query.lowercase()
+    if (name?.contains(normalized, ignoreCase = true) == true) return true
+    if (description?.contains(normalized, ignoreCase = true) == true) return true
+    if (compatiblePackages.any { pkg ->
+            pkg.name.contains(normalized, ignoreCase = true) ||
+                pkg.versions.any { it?.contains(normalized, ignoreCase = true) == true }
+        }
+    ) {
+        return true
+    }
+    return false
 }
