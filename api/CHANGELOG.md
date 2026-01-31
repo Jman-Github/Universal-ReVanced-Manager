@@ -29,6 +29,8 @@
 - Added patch options/sub-options to the view patches screen on the `Discover patch bundles` page. This is currently only implemented for patch bundles imported from the discovery page as the API dose not currently support patch option fetching for non-imported bundles
 - Make all view patch screens searchable by patch name and description
 - Added a `Latest changelog` and `Previous changelogs` action buttons to the patch bundle widget with options to hide and rearrange them in the corresponding setting
+- Improved the `Apps` tab saved patched app UI to follow the style of the other tabs
+- Made all action buttons for saved patched apps quick action buttons on their widgets along with a setting to hide and rearrange said buttons
 
 
 # Bug fixes

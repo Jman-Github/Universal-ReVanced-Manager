@@ -1306,8 +1306,7 @@ fun AdvancedSettingsScreen(
                                             Text(
                                                 text = stringResource(key.labelRes),
                                                 modifier = Modifier.weight(1f),
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                maxLines = 1
+                                                style = MaterialTheme.typography.bodyMedium
                                             )
                                             ExpressiveSettingsSwitch(
                                                 checked = visible,
@@ -1432,8 +1431,7 @@ fun AdvancedSettingsScreen(
                                         Text(
                                             text = stringResource(key.labelRes),
                                             modifier = Modifier.weight(1f),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            maxLines = 1
+                                            style = MaterialTheme.typography.bodyMedium
                                         )
                                         ExpressiveSettingsSwitch(
                                             checked = visible,
@@ -1546,8 +1544,7 @@ fun AdvancedSettingsScreen(
                                     Text(
                                         text = stringResource(key.labelRes),
                                         modifier = Modifier.weight(1f),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        maxLines = 1
+                                        style = MaterialTheme.typography.bodyMedium
                                     )
                                     ExpressiveSettingsSwitch(
                                         checked = visible,
