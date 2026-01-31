@@ -37,7 +37,8 @@ object SplitApkPreparer {
         stripNativeLibs: Boolean = false,
         skipUnneededSplits: Boolean = false,
         onProgress: ((String) -> Unit)? = null,
-        onSubSteps: ((List<String>) -> Unit)? = null
+        onSubSteps: ((List<String>) -> Unit)? = null,
+        sortMergedApkEntries: Boolean = false
     ): PreparationResult {
         if (!isSplitArchive(source)) {
             return PreparationResult(source, merged = false)
@@ -80,7 +81,8 @@ object SplitApkPreparer {
                 apkDir = modulesDir.toPath(),
                 outputApk = mergedApk,
                 skipModules = skippedModules,
-                onProgress = onProgress
+                onProgress = onProgress,
+                sortApkEntries = sortMergedApkEntries
             )
 
             if (stripNativeLibs) {

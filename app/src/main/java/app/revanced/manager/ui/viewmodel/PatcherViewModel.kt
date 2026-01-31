@@ -2127,6 +2127,18 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             activateResourceCompileStep(list, progress)
             return
         }
+        if (stepId == StepId.PrepareSplitApk &&
+            (normalized.equals("Writing merged APK", ignoreCase = true)
+                || normalized.equals("Finalizing merged APK", ignoreCase = true)
+                || normalized.equals("Stripping native libraries", ignoreCase = true))
+        ) {
+            val limit = if (existingIndex != -1) existingIndex else list.size
+            for (index in 0 until limit) {
+                val detail = list[index]
+                if (detail.skipped || detail.state == State.COMPLETED) continue
+                list[index] = detail.copy(state = State.COMPLETED, progress = null)
+            }
+        }
         if (existingIndex == -1 && list.isNotEmpty()) {
             existingIndex = findBestSubStepIndex(list, normalized)
         }
@@ -2146,6 +2158,13 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
         if (existingIndex != -1) {
             if (list[existingIndex].skipped) return
+            if (stepId == StepId.PrepareSplitApk && runningIndex != -1 && existingIndex < runningIndex) {
+                val existing = list[existingIndex]
+                if (existing.state != State.COMPLETED) {
+                    list[existingIndex] = existing.copy(state = State.COMPLETED, progress = null)
+                }
+                return
+            }
             if (runningIndex != -1 && existingIndex < runningIndex) {
                 return
             }

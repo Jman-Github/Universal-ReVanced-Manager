@@ -16,6 +16,8 @@
 
 # Bug fixes
 
+- Fixed issues with the split-apk merger where some apps would crash after being patched
+
 
 # v1.8.0-dev.03 (2026-01-27)
 
