@@ -173,6 +173,8 @@ android {
     namespace = "app.universal.revanced.manager"
     compileSdk = 35
     buildToolsVersion = "35.0.1"
+    // Pin to NDK r25c to restore 32-bit x86 support (NDK r27 dropped it).
+    ndkVersion = "25.2.9519653"
 
     defaultConfig {
         applicationId = "app.universal.revanced.manager"
@@ -189,8 +191,8 @@ android {
         }
         vectorDrawables.useSupportLibrary = true
         ndk {
-            // NDK r27 no longer supports 32-bit x86, so exclude it to avoid missing output.
-            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64")
+            // Include x86 now that the NDK is pinned to a version that still supports it.
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
         }
     }
 
