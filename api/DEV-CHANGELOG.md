@@ -1,3 +1,14 @@
+# v1.8.0-dev.05 (2026-02-01)
+
+
+# Features
+
+
+# Bug fixes
+
+- Fixed bundle recommendations not being available for split-apks https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/151
+
+
 # v1.8.0-dev.04 (2026-01-31)
 
 

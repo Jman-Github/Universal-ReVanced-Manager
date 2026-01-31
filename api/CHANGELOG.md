@@ -53,6 +53,7 @@
 - Possible fix for false OOM errors https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/142
 - Fixed issues with URV generated keystores from previous versions of the app not being imported correctly resulting in signing errors (again) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/147
 - Fixed issues with the split-apk merger where some apps would crash after being patched
+- Fixed bundle recommendations not being available for split-apks https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/151
 
 
 # v1.7.1 (2026-01-22)

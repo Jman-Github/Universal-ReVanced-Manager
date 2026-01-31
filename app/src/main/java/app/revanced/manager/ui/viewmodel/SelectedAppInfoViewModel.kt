@@ -184,10 +184,11 @@ class SelectedAppInfoViewModel(
     val effectiveDesiredVersion get() = preferredBundleVersion ?: desiredVersion
     val bundleRecommendationDetailsFlow = combine(
         bundleInfoFlow,
-        suggestedVersionsByBundle
-    ) { scopedBundles, versions ->
+        suggestedVersionsByBundle,
+        selectedAppState.map { it.packageName }
+    ) { scopedBundles, versions, activePackageName ->
         scopedBundles.mapNotNull { scoped ->
-            val support = scoped.collectBundleSupport(packageName)
+            val support = scoped.collectBundleSupport(activePackageName)
             if (!support.hasSupport) return@mapNotNull null
             val recommended = versions[scoped.uid]
             if (
