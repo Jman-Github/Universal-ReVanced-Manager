@@ -222,9 +222,20 @@ class InstalledAppInfoViewModel(
         }.filterValues { it.isNotEmpty() }
     }
 
+    suspend fun getRepatchSelection(): PatchSelection? = withContext(Dispatchers.IO) {
+        val app = installedApp ?: return@withContext null
+        val selection = appliedPatches ?: resolveAppliedSelection(app)
+        if (appliedPatches == null) {
+            withContext(Dispatchers.Main) {
+                appliedPatches = selection
+            }
+        }
+        selection
+    }
+
     fun launch() {
         val app = installedApp ?: return
-        if (app.installType == InstallType.SAVED) {
+        if (!isInstalledOnDevice) {
             context.toast(context.getString(R.string.saved_app_launch_unavailable))
         } else {
             pm.launch(app.currentPackageName)

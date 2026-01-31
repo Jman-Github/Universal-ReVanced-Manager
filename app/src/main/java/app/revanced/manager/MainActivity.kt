@@ -140,6 +140,9 @@ private fun ReVancedManager(vm: MainViewModel) {
 
     EventEffect(vm.appSelectFlow) { params ->
         navController.popBackStack(SelectedApplicationInfo.Main, inclusive = true)
+        if (params.returnToDashboard) {
+            navController.popBackStack(Dashboard, inclusive = false)
+        }
         navController.navigateComplex(
             SelectedApplicationInfo,
             params
@@ -164,6 +167,7 @@ private fun ReVancedManager(vm: MainViewModel) {
     ) {
         composable<Dashboard> {
             DashboardScreen(
+                mainVm = vm,
                 onSettingsClick = { navController.navigate(Settings) },
                 onAppSelectorClick = {
                     navController.navigate(AppSelector())
@@ -178,8 +182,8 @@ private fun ReVancedManager(vm: MainViewModel) {
                 onBundleDiscoveryClick = {
                     navController.navigate(PatchBundleDiscovery)
                 },
-                onAppClick = { packageName ->
-                    navController.navigate(InstalledApplicationInfo(packageName))
+                onAppClick = { packageName, action ->
+                    navController.navigate(InstalledApplicationInfo(packageName, action))
                 },
                 onProfileLaunch = { launchData ->
                     val apkFile = launchData.profile.apkPath
@@ -225,7 +229,8 @@ private fun ReVancedManager(vm: MainViewModel) {
                     vm.selectApp(packageName, selection, selectionPayload, persistConfiguration)
                 },
                 onBackClick = navController::popBackStack,
-                viewModel = koinViewModel { parametersOf(data.packageName) }
+                viewModel = koinViewModel { parametersOf(data.packageName) },
+                initialAction = data.action
             )
         }
 

@@ -2,19 +2,27 @@ package app.revanced.manager.ui.screen
 
 import android.content.pm.PackageInfo
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -22,6 +30,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.InstallMobile
+import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.outlined.SettingsBackupRestore
+import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -41,21 +55,27 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.revanced.manager.data.room.apps.installed.InstallType
 import app.revanced.manager.data.room.apps.installed.InstalledApp
+import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.ui.component.AppIcon
 import app.revanced.manager.ui.component.AppLabel
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
 import app.revanced.manager.ui.component.ShimmerBox
 import app.revanced.manager.ui.component.haptics.HapticCheckbox
+import app.revanced.manager.ui.model.InstalledAppAction
+import app.revanced.manager.ui.model.SavedAppActionKey
 import app.revanced.manager.ui.viewmodel.InstalledAppsViewModel
 import app.revanced.manager.ui.viewmodel.InstalledAppsViewModel.AppBundleSummary
+import app.revanced.manager.util.consumeHorizontalScroll
 import app.revanced.manager.util.relativeTime
 import app.universal.revanced.manager.R
 import kotlinx.coroutines.delay
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 import sh.calvin.reorderable.ReorderableCollectionItemScope
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
@@ -64,14 +84,27 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 @Composable
 fun InstalledAppsScreen(
     onAppClick: (InstalledApp) -> Unit,
+    onAppAction: (InstalledApp, InstalledAppAction) -> Unit,
     viewModel: InstalledAppsViewModel = koinViewModel(),
     showOrderDialog: Boolean = false,
     onDismissOrderDialog: () -> Unit = {},
     searchQuery: String = ""
 ) {
     val context = LocalContext.current
+    val prefs: PreferencesManager = koinInject()
     val installedApps by viewModel.apps.collectAsStateWithLifecycle(initialValue = null)
     val selectionActive = viewModel.selectedApps.isNotEmpty()
+    val savedActionOrderPref by prefs.savedAppActionOrder.getAsState()
+    val savedHiddenActionsPref by prefs.savedAppHiddenActions.getAsState()
+    val savedActionOrderList = remember(savedActionOrderPref) {
+        val parsed = savedActionOrderPref
+            .split(',')
+            .mapNotNull { SavedAppActionKey.fromStorageId(it.trim()) }
+        SavedAppActionKey.ensureComplete(parsed)
+    }
+    val visibleSavedActionKeys = remember(savedActionOrderList, savedHiddenActionsPref) {
+        savedActionOrderList.filterNot { it.storageId in savedHiddenActionsPref }
+    }
     val timeTick by produceState(initialValue = System.currentTimeMillis()) {
         while (true) {
             delay(60_000)
@@ -105,7 +138,7 @@ fun InstalledAppsScreen(
                 modifier = Modifier.fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Top,
-                contentPadding = PaddingValues(vertical = 12.dp)
+                contentPadding = PaddingValues(bottom = 12.dp)
             ) {
                 items(4) {
                     InstalledAppCardPlaceholder()
@@ -142,7 +175,7 @@ fun InstalledAppsScreen(
                 modifier = Modifier.fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Top,
-                contentPadding = PaddingValues(vertical = 12.dp)
+                contentPadding = PaddingValues(bottom = 12.dp)
             ) {
                 items(
                     filteredApps.orEmpty(),
@@ -157,6 +190,14 @@ fun InstalledAppsScreen(
                         val isMissingInstall = packageName in viewModel.missingPackages
                         val isSelectable = isSaved || isMissingInstall
                         val isSelected = packageName in viewModel.selectedApps
+                        val isInstalledOnDevice = viewModel.installedOnDeviceMap[packageName] == true
+                        val hasSavedCopy = viewModel.savedCopyMap[packageName] == true
+                        val isMounted = if (installedApp.installType == InstallType.MOUNT) {
+                            viewModel.mountedOnDeviceMap[packageName]
+                                ?: (viewModel.installedOnDeviceMap[packageName] == true)
+                        } else {
+                            false
+                        }
                         val bundleSummaries = viewModel.bundleSummaries[packageName].orEmpty()
 
                         if (showPlaceholder) {
@@ -169,8 +210,12 @@ fun InstalledAppsScreen(
                                 selectionActive = selectionActive,
                                 isSelectable = isSelectable,
                                 isMissingInstall = isMissingInstall,
+                                isInstalledOnDevice = isInstalledOnDevice,
+                                hasSavedCopy = hasSavedCopy,
+                                isMounted = isMounted,
                                 bundleSummaries = bundleSummaries,
                                 timeTick = timeTick,
+                                savedActionKeys = visibleSavedActionKeys,
                                 onClick = {
                                     when {
                                     selectionActive && isSelectable -> viewModel.toggleSelection(installedApp)
@@ -187,7 +232,8 @@ fun InstalledAppsScreen(
                             },
                             onSelectionChange = { checked ->
                                 viewModel.setSelection(installedApp, checked)
-                            }
+                            },
+                            onAppAction = onAppAction
                         )
                     }
                 }
@@ -217,24 +263,31 @@ private fun InstalledAppCard(
     selectionActive: Boolean,
     isSelectable: Boolean,
     isMissingInstall: Boolean,
+    isInstalledOnDevice: Boolean,
+    hasSavedCopy: Boolean,
+    isMounted: Boolean,
     bundleSummaries: List<InstalledAppsViewModel.AppBundleSummary>,
     timeTick: Long,
+    savedActionKeys: List<SavedAppActionKey>,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     onSelectionChange: (Boolean) -> Unit,
+    onAppAction: (InstalledApp, InstalledAppAction) -> Unit
 ) {
     val context = LocalContext.current
-    val cardShape = RoundedCornerShape(16.dp)
+    val isSaved = installedApp.installType == InstallType.SAVED
+    val cardShape = RoundedCornerShape(18.dp)
     val elevation = if (isSelected) 6.dp else 2.dp
-                    val formattedVersion = installedApp.version
-                        .takeIf { it.isNotBlank() }
-                        ?.let(::formatVersion)
-                    val detailLine = listOfNotNull(
-                        formattedVersion,
-                        stringResource(installedApp.installType.stringResource)
-                    ).joinToString(" • ")
+    val cardBase = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
+    val headerBase = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp)
+    val cardBackground = cardBase
+    val headerBackground = headerBase
+    val formattedVersion = installedApp.version
+        .takeIf { it.isNotBlank() }
+        ?.let(::formatVersion)
+    val detailLine = listOfNotNull(formattedVersion).joinToString(" • ")
     val savedAtText = installedApp.createdAt
-        .takeIf { it > 0 && installedApp.installType == InstallType.SAVED }
+        .takeIf { it > 0 && (isSaved || hasSavedCopy) }
         ?.let { createdAt ->
             val tick = timeTick
             stringResource(R.string.saved_app_created_at, createdAt.relativeTime(context))
@@ -251,36 +304,55 @@ private fun InstalledAppCard(
             ),
         shape = cardShape,
         tonalElevation = elevation,
-        color = MaterialTheme.colorScheme.surfaceColorAtElevation(elevation)
+        color = cardBackground
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (selectionActive) {
-                HapticCheckbox(
-                    checked = isSelected,
-                    onCheckedChange = if (isSelectable) onSelectionChange else null,
-                    enabled = isSelectable
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(headerBackground)
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (selectionActive) {
+                        HapticCheckbox(
+                            checked = isSelected,
+                            onCheckedChange = if (isSelectable) onSelectionChange else null,
+                            enabled = isSelectable
+                        )
+                    }
+                    AppIcon(
+                        packageInfo = packageInfo,
+                        contentDescription = null,
+                        modifier = Modifier.size(32.dp)
+                    )
+                    val titleScrollState = rememberScrollState()
+                    AppLabel(
+                        packageInfo = packageInfo,
+                        style = MaterialTheme.typography.titleMedium,
+                        defaultText = installedApp.currentPackageName,
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .consumeHorizontalScroll(titleScrollState)
+                            .horizontalScroll(titleScrollState)
+                    )
+                }
+                AppMetaPill(
+                    text = stringResource(installedApp.installType.stringResource),
+                    modifier = Modifier.align(Alignment.TopEnd)
                 )
             }
-            AppIcon(
-                packageInfo = packageInfo,
-                contentDescription = null,
-                modifier = Modifier.size(48.dp)
-            )
+
             Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                AppLabel(
-                    packageInfo = packageInfo,
-                    style = MaterialTheme.typography.titleMedium,
-                    defaultText = installedApp.currentPackageName
-                )
                 Text(
                     text = installedApp.currentPackageName,
                     style = MaterialTheme.typography.bodySmall,
@@ -320,6 +392,77 @@ private fun InstalledAppCard(
                             containerColor = MaterialTheme.colorScheme.errorContainer,
                             contentColor = MaterialTheme.colorScheme.onErrorContainer
                         )
+                    }
+                }
+                val hasPatchContext = installedApp.selectionPayload != null || bundleSummaries.isNotEmpty()
+                if (hasPatchContext && savedActionKeys.isNotEmpty()) {
+                    val actionScrollState = rememberScrollState()
+                    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier
+                                .widthIn(min = maxWidth)
+                                .consumeHorizontalScroll(actionScrollState)
+                                .horizontalScroll(actionScrollState),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            savedActionKeys.forEach { key ->
+                                when (key) {
+                                    SavedAppActionKey.OPEN -> AppActionPill(
+                                        text = stringResource(R.string.open_app),
+                                        icon = Icons.AutoMirrored.Outlined.OpenInNew,
+                                        enabled = isInstalledOnDevice,
+                                        onClick = { onAppAction(installedApp, InstalledAppAction.OPEN) }
+                                    )
+                                    SavedAppActionKey.EXPORT -> AppActionPill(
+                                        text = stringResource(R.string.export),
+                                        icon = Icons.Outlined.Save,
+                                        onClick = { onAppAction(installedApp, InstalledAppAction.EXPORT) }
+                                    )
+                                    SavedAppActionKey.INSTALL_UPDATE -> {
+                                        if (installedApp.installType == InstallType.MOUNT) {
+                                            val mountLabel = if (isMounted) {
+                                                stringResource(R.string.remount_saved_app)
+                                            } else {
+                                                stringResource(R.string.mount)
+                                            }
+                                            AppActionPill(
+                                                text = mountLabel,
+                                                icon = Icons.Outlined.SettingsBackupRestore,
+                                                onClick = { onAppAction(installedApp, InstalledAppAction.INSTALL_OR_UPDATE) },
+                                                onLongClick = if (isMounted) {
+                                                    { onAppAction(installedApp, InstalledAppAction.UNINSTALL) }
+                                                } else null
+                                            )
+                                        } else {
+                                            val installLabel = if (isInstalledOnDevice) {
+                                                stringResource(R.string.update_saved_app)
+                                            } else {
+                                                stringResource(R.string.install_saved_app)
+                                            }
+                                            AppActionPill(
+                                                text = installLabel,
+                                                icon = Icons.Outlined.InstallMobile,
+                                                onClick = { onAppAction(installedApp, InstalledAppAction.INSTALL_OR_UPDATE) },
+                                                onLongClick = if (isInstalledOnDevice) {
+                                                    { onAppAction(installedApp, InstalledAppAction.UNINSTALL) }
+                                                } else null
+                                            )
+                                        }
+                                    }
+                                    SavedAppActionKey.DELETE -> AppActionPill(
+                                        text = stringResource(R.string.delete),
+                                        icon = Icons.Outlined.Delete,
+                                        onClick = { onAppAction(installedApp, InstalledAppAction.DELETE) }
+                                    )
+                                    SavedAppActionKey.REPATCH -> AppActionPill(
+                                        text = stringResource(R.string.repatch),
+                                        icon = Icons.Outlined.Update,
+                                        onClick = { onAppAction(installedApp, InstalledAppAction.REPATCH) }
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -382,6 +525,74 @@ private fun StatusChip(
             style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
         )
+    }
+}
+
+@Composable
+private fun AppMetaPill(
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    val background = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)
+    val contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(999.dp),
+        tonalElevation = 0.dp,
+        color = background
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            color = contentColor,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+        )
+    }
+}
+
+@Composable
+private fun AppActionPill(
+    text: String,
+    icon: ImageVector,
+    enabled: Boolean = true,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val background = MaterialTheme.colorScheme.surface.copy(alpha = if (enabled) 0.9f else 0.5f)
+    val contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.6f)
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(background)
+            .combinedClickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = enabled,
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = text,
+                tint = contentColor,
+                modifier = Modifier.size(14.dp)
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelSmall,
+                color = contentColor,
+                maxLines = 1
+            )
+        }
     }
 }
 

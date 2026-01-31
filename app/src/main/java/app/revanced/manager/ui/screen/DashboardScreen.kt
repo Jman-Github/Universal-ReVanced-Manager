@@ -66,6 +66,7 @@ import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.ChevronLeft
+import androidx.compose.material.icons.outlined.Circle
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.AlertDialog
@@ -85,6 +86,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -117,12 +119,15 @@ import app.revanced.manager.ui.component.AvailableUpdateDialog
 import app.revanced.manager.ui.component.DownloadProgressBanner
 import app.revanced.manager.ui.component.NotificationCard
 import app.revanced.manager.ui.component.ConfirmDialog
+import app.revanced.manager.ui.component.ExportSavedApkFileNameDialog
 import app.revanced.manager.ui.component.bundle.BundleTopBar
 import app.revanced.manager.ui.component.bundle.ImportPatchBundleDialog
 import app.revanced.manager.ui.component.haptics.HapticFloatingActionButton
 import app.revanced.manager.ui.component.haptics.HapticTab
 import app.revanced.manager.ui.component.patches.PathSelectorDialog
 import app.revanced.manager.ui.viewmodel.DashboardViewModel
+import app.revanced.manager.ui.viewmodel.InstalledAppInfoViewModel
+import app.revanced.manager.ui.viewmodel.MainViewModel
 import app.revanced.manager.ui.model.SelectedApp
 import app.revanced.manager.ui.viewmodel.PatchProfileLaunchData
 import app.revanced.manager.ui.viewmodel.PatchProfilesViewModel
@@ -130,18 +135,29 @@ import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.domain.repository.PatchBundleRepository.BundleUpdatePhase
 import app.revanced.manager.domain.repository.PatchBundleRepository.BundleImportPhase
 import app.revanced.manager.ui.viewmodel.InstalledAppsViewModel
+import app.revanced.manager.data.room.apps.installed.InstalledApp
 import app.revanced.manager.ui.viewmodel.AppSelectorViewModel
+import app.revanced.manager.ui.model.InstalledAppAction
+import app.revanced.manager.ui.viewmodel.InstallResult
+import app.revanced.manager.ui.viewmodel.MountWarningAction
+import app.revanced.manager.ui.viewmodel.MountWarningReason
 import app.revanced.manager.util.RequestInstallAppsContract
 import app.revanced.manager.util.BundleDeepLink
 import app.revanced.manager.util.EventEffect
+import app.revanced.manager.util.ExportNameFormatter
+import app.revanced.manager.util.PatchedAppExportData
 import app.revanced.manager.util.isAllowedApkFile
 import app.revanced.manager.util.isAllowedPatchBundleFile
+import app.revanced.manager.util.PM
 import app.revanced.manager.util.toast
+import app.revanced.manager.data.room.apps.installed.InstallType
 import java.io.File
 import java.nio.file.Files
+import java.nio.file.Path
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
+import org.koin.core.parameter.parametersOf
 
 enum class DashboardPage(
     val titleResId: Int,
@@ -157,13 +173,14 @@ enum class DashboardPage(
 @Composable
 fun DashboardScreen(
     vm: DashboardViewModel = koinViewModel(),
+    mainVm: MainViewModel = koinViewModel(),
     onAppSelectorClick: () -> Unit,
     onStorageSelect: (SelectedApp.Local) -> Unit,
     onSettingsClick: () -> Unit,
     onUpdateClick: () -> Unit,
     onDownloaderPluginClick: () -> Unit,
     onBundleDiscoveryClick: () -> Unit,
-    onAppClick: (String) -> Unit,
+    onAppClick: (String, InstalledAppAction?) -> Unit,
     onProfileLaunch: (PatchProfileLaunchData) -> Unit,
     bundleDeepLink: BundleDeepLink? = null,
     onBundleDeepLinkConsumed: () -> Unit = {}
@@ -171,6 +188,7 @@ fun DashboardScreen(
     val installedAppsViewModel: InstalledAppsViewModel = koinViewModel()
     val patchProfilesViewModel: PatchProfilesViewModel = koinViewModel()
     val patchBundleRepository: PatchBundleRepository = koinInject()
+    val pm: PM = koinInject()
     val installedApps by installedAppsViewModel.apps.collectAsStateWithLifecycle(initialValue = emptyList())
     val profiles by patchProfilesViewModel.profiles.collectAsStateWithLifecycle(emptyList())
     val bundleSources by patchBundleRepository.sources.collectAsStateWithLifecycle(emptyList())
@@ -227,6 +245,38 @@ fun DashboardScreen(
     var highlightBundleUid by rememberSaveable { mutableStateOf<Int?>(null) }
     val appsSelectionActive = installedAppsViewModel.selectedApps.isNotEmpty()
     val selectedAppCount = installedAppsViewModel.selectedApps.size
+    var quickActionPackage by remember { mutableStateOf<String?>(null) }
+    var pendingQuickAction by remember { mutableStateOf<InstalledAppAction?>(null) }
+    var showQuickExportPicker by remember { mutableStateOf(false) }
+    var quickExportDialogState by remember { mutableStateOf<QuickExportDialogState?>(null) }
+    var pendingQuickExportConfirmation by remember { mutableStateOf<PendingQuickExportConfirmation?>(null) }
+    var quickExportInProgress by remember { mutableStateOf(false) }
+    var showQuickDeleteDialog by remember { mutableStateOf(false) }
+    var showQuickSavedUninstallDialog by remember { mutableStateOf(false) }
+    var showQuickUnmountDialog by remember { mutableStateOf(false) }
+    var showQuickMixedBundleDialog by remember { mutableStateOf(false) }
+    val quickActionApp = remember(quickActionPackage, installedApps) {
+        quickActionPackage?.let { pkg -> installedApps.firstOrNull { it.currentPackageName == pkg } }
+    }
+    val quickActionViewModel = quickActionPackage?.let { pkg ->
+        koinViewModel<InstalledAppInfoViewModel>(key = "quick-action-$pkg") { parametersOf(pkg) }
+    }
+    SideEffect {
+        quickActionViewModel?.onBackClick = {}
+    }
+    LaunchedEffect(
+        quickActionViewModel?.installedApp?.currentPackageName,
+        quickActionViewModel?.isMounted
+    ) {
+        val app = quickActionViewModel?.installedApp ?: return@LaunchedEffect
+        val packageName = app.currentPackageName
+        if (app.installType == InstallType.MOUNT) {
+            installedAppsViewModel.mountedOnDeviceMap[packageName] =
+                quickActionViewModel?.isMounted == true
+        } else {
+            installedAppsViewModel.mountedOnDeviceMap.remove(packageName)
+        }
+    }
 
     var showBundleFilePicker by rememberSaveable { mutableStateOf(false) }
     var selectedBundlePath by rememberSaveable { mutableStateOf<String?>(null) }
@@ -265,6 +315,26 @@ fun DashboardScreen(
     var bundlesFabCollapsed by rememberSaveable { mutableStateOf(false) }
 
     val dashboardSidePadding = 16.dp
+    fun resolveQuickExportName(app: InstalledApp): String {
+        val label = installedAppsViewModel.packageInfoMap[app.currentPackageName]
+            ?.applicationInfo
+            ?.loadLabel(androidContext.packageManager)
+            ?.toString()
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: app.currentPackageName
+        val summaries = installedAppsViewModel.bundleSummaries[app.currentPackageName].orEmpty()
+        val bundleVersions = summaries.mapNotNull { it.version?.takeIf(String::isNotBlank) }
+        val bundleNames = summaries.map { it.title }.filter(String::isNotBlank)
+        val exportData = PatchedAppExportData(
+            appName = label,
+            packageName = app.currentPackageName,
+            appVersion = app.version,
+            patchBundleVersions = bundleVersions,
+            patchBundleNames = bundleNames
+        )
+        return ExportNameFormatter.format(exportFormat, exportData)
+    }
 
     @Composable
     fun BundleProgressBanner(modifier: Modifier = Modifier) {
@@ -464,6 +534,112 @@ fun DashboardScreen(
             }
         } finally {
             onBundleDeepLinkConsumed()
+        }
+    }
+
+    LaunchedEffect(
+        pendingQuickAction,
+        quickActionViewModel?.installedApp,
+        quickActionViewModel?.appliedPatches
+    ) {
+        val action = pendingQuickAction ?: return@LaunchedEffect
+        val actionViewModel = quickActionViewModel ?: return@LaunchedEffect
+        val actionApp = actionViewModel.installedApp ?: return@LaunchedEffect
+
+        when (action) {
+            InstalledAppAction.OPEN -> {
+                actionViewModel.launch()
+                pendingQuickAction = null
+            }
+            InstalledAppAction.EXPORT -> {
+                showQuickExportPicker = true
+                pendingQuickAction = null
+            }
+            InstalledAppAction.INSTALL_OR_UPDATE -> {
+                if (actionApp.installType == InstallType.MOUNT) {
+                    if (!actionViewModel.primaryInstallerIsMount) {
+                        val mountAction = if (actionViewModel.isMounted) {
+                            MountWarningAction.UPDATE
+                        } else {
+                            MountWarningAction.INSTALL
+                        }
+                        actionViewModel.showMountWarning(
+                            mountAction,
+                            MountWarningReason.PRIMARY_NOT_MOUNT_FOR_MOUNT_APP
+                        )
+                    } else {
+                        if (actionViewModel.isMounted) {
+                            actionViewModel.remountSavedInstallation()
+                        } else {
+                            actionViewModel.mountOrUnmount()
+                        }
+                    }
+                } else if (actionViewModel.primaryInstallerIsMount) {
+                    val mountAction = if (actionViewModel.isInstalledOnDevice) {
+                        MountWarningAction.UPDATE
+                    } else {
+                        MountWarningAction.INSTALL
+                    }
+                    actionViewModel.showMountWarning(
+                        mountAction,
+                        MountWarningReason.PRIMARY_IS_MOUNT_FOR_NON_MOUNT_APP
+                    )
+                } else {
+                    actionViewModel.installSavedApp()
+                }
+                pendingQuickAction = null
+            }
+            InstalledAppAction.UNINSTALL -> {
+                if (actionApp.installType == InstallType.MOUNT) {
+                    if (!actionViewModel.primaryInstallerIsMount) {
+                        actionViewModel.showMountWarning(
+                            MountWarningAction.UNINSTALL,
+                            MountWarningReason.PRIMARY_NOT_MOUNT_FOR_MOUNT_APP
+                        )
+                    } else {
+                        showQuickUnmountDialog = true
+                    }
+                } else if (actionViewModel.primaryInstallerIsMount) {
+                    actionViewModel.showMountWarning(
+                        MountWarningAction.UNINSTALL,
+                        MountWarningReason.PRIMARY_IS_MOUNT_FOR_NON_MOUNT_APP
+                    )
+                } else {
+                    showQuickSavedUninstallDialog = true
+                }
+                pendingQuickAction = null
+            }
+            InstalledAppAction.DELETE -> {
+                showQuickDeleteDialog = true
+                pendingQuickAction = null
+            }
+            InstalledAppAction.REPATCH -> {
+                val selection = actionViewModel.getRepatchSelection()
+                    ?: installedAppsViewModel.getRepatchSelection(actionApp)
+                if (selection == null) {
+                    val hasPayload = actionApp.selectionPayload != null
+                    if (!hasPayload) {
+                        androidContext.toast(androidContext.getString(R.string.no_patches_selected))
+                        pendingQuickAction = null
+                    }
+                    return@LaunchedEffect
+                }
+                if (patchBundleRepository.selectionHasMixedBundleTypes(selection)) {
+                    showQuickMixedBundleDialog = true
+                    pendingQuickAction = null
+                    return@LaunchedEffect
+                }
+                val payload = actionApp.selectionPayload
+                val persistConfiguration = actionApp.installType != InstallType.SAVED
+                mainVm.selectApp(
+                    packageName = actionApp.originalPackageName,
+                    patches = selection,
+                    selectionPayload = payload,
+                    persistConfiguration = persistConfiguration,
+                    returnToDashboard = true
+                )
+                pendingQuickAction = null
+            }
         }
     }
 
@@ -694,20 +870,265 @@ fun DashboardScreen(
         )
     }
 
+    val quickExportApp = quickActionViewModel?.installedApp
+    if (showQuickExportPicker) {
+        if (quickExportApp == null) {
+            showQuickExportPicker = false
+        } else {
+            PathSelectorDialog(
+                roots = storageRoots,
+                onSelect = { path ->
+                    if (path == null) {
+                        showQuickExportPicker = false
+                    }
+                },
+                fileFilter = ::isAllowedApkFile,
+                allowDirectorySelection = false,
+                fileTypeLabel = ".apk",
+                confirmButtonText = stringResource(R.string.save),
+                onConfirm = { directory ->
+                    val exportName = resolveQuickExportName(quickExportApp)
+                    quickExportDialogState = QuickExportDialogState(directory, exportName)
+                }
+            )
+        }
+    }
+    quickExportDialogState?.let { state ->
+        ExportSavedApkFileNameDialog(
+            initialName = state.fileName,
+            onDismiss = { quickExportDialogState = null },
+            onConfirm = { fileName ->
+                val trimmedName = fileName.trim()
+                if (trimmedName.isBlank()) return@ExportSavedApkFileNameDialog
+                quickExportDialogState = null
+                val target = state.directory.resolve(trimmedName)
+                if (Files.exists(target)) {
+                    pendingQuickExportConfirmation = PendingQuickExportConfirmation(
+                        directory = state.directory,
+                        fileName = trimmedName
+                    )
+                } else {
+                    quickExportInProgress = true
+                    quickActionViewModel?.exportSavedAppToPath(target) { success ->
+                        quickExportInProgress = false
+                        if (success) {
+                            showQuickExportPicker = false
+                        }
+                    }
+                }
+            }
+        )
+    }
+    pendingQuickExportConfirmation?.let { state ->
+        ConfirmDialog(
+            onDismiss = {
+                pendingQuickExportConfirmation = null
+                quickExportDialogState = QuickExportDialogState(state.directory, state.fileName)
+            },
+            onConfirm = {
+                pendingQuickExportConfirmation = null
+                quickExportInProgress = true
+                quickActionViewModel?.exportSavedAppToPath(state.directory.resolve(state.fileName)) { success ->
+                    quickExportInProgress = false
+                    if (success) {
+                        showQuickExportPicker = false
+                    }
+                }
+            },
+            title = stringResource(R.string.export_overwrite_title),
+            description = stringResource(R.string.export_overwrite_description, state.fileName),
+            icon = Icons.Outlined.WarningAmber
+        )
+    }
+    if (quickExportInProgress) {
+        AlertDialog(
+            onDismissRequest = {},
+            icon = {
+                Icon(
+                    Icons.Outlined.Save,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            title = {
+                Text(
+                    stringResource(R.string.export),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        stringResource(R.string.patcher_step_group_saving),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp)
+                    )
+                }
+            },
+            confirmButton = {},
+            dismissButton = {}
+        )
+    }
+
+    quickActionViewModel?.installResult?.let { result ->
+        val (titleRes, message) = when (result) {
+            is InstallResult.Success -> R.string.install_app_success to result.message
+            is InstallResult.Failure -> R.string.install_app_fail_title to result.message
+        }
+        AlertDialog(
+            onDismissRequest = quickActionViewModel::clearInstallResult,
+            confirmButton = {
+                TextButton(onClick = quickActionViewModel::clearInstallResult) {
+                    Text(stringResource(R.string.ok))
+                }
+            },
+            title = { Text(stringResource(titleRes)) },
+            text = { Text(message) }
+        )
+    }
+
+    quickActionViewModel?.signatureMismatchPackage?.let {
+        AlertDialog(
+            onDismissRequest = quickActionViewModel::dismissSignatureMismatchPrompt,
+            confirmButton = {
+                TextButton(onClick = quickActionViewModel::confirmSignatureMismatchInstall) {
+                    Text(stringResource(R.string.installation_signature_mismatch_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = quickActionViewModel::dismissSignatureMismatchPrompt) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+            title = { Text(stringResource(R.string.installation_signature_mismatch_dialog_title)) },
+            text = { Text(stringResource(R.string.installation_signature_mismatch_description)) }
+        )
+    }
+
+    quickActionViewModel?.mountVersionMismatchMessage?.let { message ->
+        AlertDialog(
+            onDismissRequest = quickActionViewModel::dismissMountVersionMismatch,
+            confirmButton = {
+                TextButton(onClick = quickActionViewModel::dismissMountVersionMismatch) {
+                    Text(stringResource(R.string.ok))
+                }
+            },
+            title = { Text(stringResource(R.string.mount_version_mismatch_title)) },
+            text = { Text(message) }
+        )
+    }
+
+    quickActionViewModel?.mountWarning?.let { warning ->
+        val (descriptionRes, titleRes) = when (warning.reason) {
+            MountWarningReason.PRIMARY_IS_MOUNT_FOR_NON_MOUNT_APP ->
+                when (warning.action) {
+                    MountWarningAction.INSTALL -> R.string.installer_mount_warning_install
+                    MountWarningAction.UPDATE -> R.string.installer_mount_warning_update
+                    MountWarningAction.UNINSTALL -> R.string.installer_mount_warning_uninstall
+                } to R.string.installer_mount_warning_title
+
+            MountWarningReason.PRIMARY_NOT_MOUNT_FOR_MOUNT_APP ->
+                when (warning.action) {
+                    MountWarningAction.INSTALL -> R.string.installer_mount_mismatch_install
+                    MountWarningAction.UPDATE -> R.string.installer_mount_mismatch_update
+                    MountWarningAction.UNINSTALL -> R.string.installer_mount_mismatch_uninstall
+                } to R.string.installer_mount_mismatch_title
+        }
+
+        AlertDialog(
+            onDismissRequest = quickActionViewModel::clearMountWarning,
+            confirmButton = {
+                TextButton(onClick = quickActionViewModel::clearMountWarning) {
+                    Text(stringResource(R.string.ok))
+                }
+            },
+            title = { Text(stringResource(titleRes)) },
+            text = {
+                Text(
+                    text = stringResource(descriptionRes),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        )
+    }
+
+    if (showQuickUnmountDialog) {
+        ConfirmDialog(
+            onDismiss = { showQuickUnmountDialog = false },
+            onConfirm = {
+                showQuickUnmountDialog = false
+                quickActionViewModel?.unmountSavedInstallation()
+            },
+            title = stringResource(R.string.unmount),
+            description = stringResource(R.string.unmount_confirm_description),
+            icon = Icons.Outlined.Circle
+        )
+    }
+
+    if (showQuickSavedUninstallDialog) {
+        ConfirmDialog(
+            onDismiss = { showQuickSavedUninstallDialog = false },
+            onConfirm = {
+                showQuickSavedUninstallDialog = false
+                quickActionViewModel?.uninstallSavedInstallation()
+            },
+            title = stringResource(R.string.saved_app_uninstall_title),
+            description = stringResource(R.string.saved_app_uninstall_description),
+            icon = Icons.Outlined.Delete
+        )
+    }
+
+    if (showQuickDeleteDialog) {
+        ConfirmDialog(
+            onDismiss = { showQuickDeleteDialog = false },
+            onConfirm = {
+                showQuickDeleteDialog = false
+                quickActionViewModel?.removeSavedApp()
+            },
+            title = stringResource(R.string.delete_saved_app_title),
+            description = stringResource(R.string.delete_saved_app_description),
+            icon = Icons.Outlined.Delete
+        )
+    }
+
+    if (showQuickMixedBundleDialog) {
+        AlertDialog(
+            onDismissRequest = { showQuickMixedBundleDialog = false },
+            confirmButton = {
+                TextButton(onClick = { showQuickMixedBundleDialog = false }) {
+                    Text(stringResource(R.string.close))
+                }
+            },
+            title = { Text(stringResource(R.string.mixed_patch_bundles_title)) },
+            text = { Text(stringResource(R.string.mixed_patch_bundles_description)) }
+        )
+    }
+
     Scaffold(
         topBar = {
             when {
                 appsSelectionActive && pagerState.currentPage == DashboardPage.DASHBOARD.ordinal -> {
-                        BundleTopBar(
-                            title = stringResource(R.string.selected_apps_count, selectedAppCount),
-                            onBackClick = installedAppsViewModel::clearSelection,
-                            backIcon = {
-                                Icon(
+                    BundleTopBar(
+                        title = stringResource(R.string.selected_apps_count, selectedAppCount),
+                        onBackClick = installedAppsViewModel::clearSelection,
+                        backIcon = {
+                            Icon(
                                 imageVector = Icons.Default.Close,
                                 contentDescription = stringResource(R.string.back)
                             )
-                            },
-                            actions = {
+                        },
+                        actions = {
                             IconButton(
                                 onClick = { requestSavedAppsExportPicker() }
                             ) {
@@ -1125,7 +1546,38 @@ fun DashboardScreen(
                             InstalledAppsScreen(
                                 onAppClick = {
                                     installedAppsViewModel.clearSelection()
-                                    onAppClick(it.currentPackageName)
+                                    onAppClick(it.currentPackageName, null)
+                                },
+                                onAppAction = { app, action ->
+                                    installedAppsViewModel.clearSelection()
+                                    if (action == InstalledAppAction.REPATCH) {
+                                        composableScope.launch {
+                                            val selection = installedAppsViewModel.getRepatchSelection(app)
+                                            if (selection.isNullOrEmpty()) {
+                                                androidContext.toast(
+                                                    androidContext.getString(R.string.no_patches_selected)
+                                                )
+                                                return@launch
+                                            }
+                                            if (patchBundleRepository.selectionHasMixedBundleTypes(selection)) {
+                                                showQuickMixedBundleDialog = true
+                                                return@launch
+                                            }
+                                            val payload = app.selectionPayload
+                                            val persistConfiguration = app.installType != InstallType.SAVED
+                                            mainVm.selectApp(
+                                                packageName = app.originalPackageName,
+                                                patches = selection,
+                                                selectionPayload = payload,
+                                                persistConfiguration = persistConfiguration,
+                                                returnToDashboard = true
+                                            )
+                                        }
+                                        return@InstalledAppsScreen
+                                    }
+                                    quickActionPackage = app.currentPackageName
+                                    pendingQuickAction = null
+                                    pendingQuickAction = action
                                 },
                                 searchQuery = appsSearchQuery,
                                 showOrderDialog = showAppsOrderDialog,
@@ -1173,6 +1625,16 @@ fun DashboardScreen(
     }
 }
 }
+
+private data class QuickExportDialogState(
+    val directory: Path,
+    val fileName: String
+)
+
+private data class PendingQuickExportConfirmation(
+    val directory: Path,
+    val fileName: String
+)
 
 @Composable
 fun Notifications(

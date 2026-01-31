@@ -29,15 +29,16 @@ class InstalledAppRepository(
         version: String,
         installType: InstallType,
         patchSelection: PatchSelection,
-        selectionPayload: PatchProfilePayload? = null
+        selectionPayload: PatchProfilePayload? = null,
+        resetCreatedAt: Boolean = false
     ) {
         val existingApp = dao.get(currentPackageName)
         val existingSortOrder = dao.getSortOrder(currentPackageName)
         val sortOrder = existingSortOrder ?: ((dao.getMaxSortOrder() ?: -1) + 1)
         val createdAt = when {
-            installType == InstallType.SAVED -> System.currentTimeMillis()
-            existingApp != null -> existingApp.createdAt
-            else -> System.currentTimeMillis()
+            existingApp == null -> System.currentTimeMillis()
+            resetCreatedAt -> System.currentTimeMillis()
+            else -> existingApp.createdAt
         }
         dao.upsertApp(
             InstalledApp(

@@ -1026,7 +1026,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     finalVersion,
                     persistedInstallType,
                     sanitizedSelectionFinal,
-                    selectionPayload
+                    selectionPayload,
+                    resetCreatedAt = shouldSaveForLater && persistedInstallType == InstallType.SAVED
                 )
             }
 

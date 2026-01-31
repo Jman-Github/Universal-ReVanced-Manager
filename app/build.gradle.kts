@@ -188,6 +188,10 @@ android {
                     (preRelease?.substringAfterLast('.')?.toInt() ?: 0)
         }
         vectorDrawables.useSupportLibrary = true
+        ndk {
+            // NDK r27 no longer supports 32-bit x86, so exclude it to avoid missing output.
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64")
+        }
     }
 
     val keystoreFile = file("keystore.jks")

@@ -33,10 +33,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -61,6 +66,7 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.InstallMobile
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.LayersClear
@@ -68,7 +74,9 @@ import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Redo
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.MoreHoriz
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.SettingsBackupRestore
 import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material.icons.outlined.Block
@@ -136,6 +144,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
@@ -147,6 +156,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -178,21 +188,27 @@ import app.revanced.manager.util.withHapticFeedback
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.revanced.manager.ui.model.PatchSelectionActionKey
 import app.revanced.manager.ui.model.PatchBundleActionKey
+import app.revanced.manager.ui.model.SavedAppActionKey
 import app.revanced.manager.ui.model.navigation.Settings
 import app.revanced.manager.ui.screen.settings.SettingsSearchState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 import kotlin.math.ceil
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import kotlin.math.roundToInt
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, FlowPreview::class)
 @Composable
 fun AdvancedSettingsScreen(
     onBackClick: () -> Unit,
@@ -880,10 +896,12 @@ fun AdvancedSettingsScreen(
                     )
                 }
             }
-            val actionOrderPref by viewModel.prefs.patchSelectionActionOrder.getAsState()
-            val hiddenActionsPref by viewModel.prefs.patchSelectionHiddenActions.getAsState()
-            val bundleActionOrderPref by viewModel.prefs.patchBundleActionOrder.getAsState()
-            val bundleHiddenActionsPref by viewModel.prefs.patchBundleHiddenActions.getAsState()
+    val actionOrderPref by viewModel.prefs.patchSelectionActionOrder.getAsState()
+    val hiddenActionsPref by viewModel.prefs.patchSelectionHiddenActions.getAsState()
+    val bundleActionOrderPref by viewModel.prefs.patchBundleActionOrder.getAsState()
+    val bundleHiddenActionsPref by viewModel.prefs.patchBundleHiddenActions.getAsState()
+    val savedActionOrderPref by viewModel.prefs.savedAppActionOrder.getAsState()
+    val savedHiddenActionsPref by viewModel.prefs.savedAppHiddenActions.getAsState()
             val actionOrderList = remember(actionOrderPref) {
                 val parsed = actionOrderPref
                     .split(',')
@@ -920,17 +938,19 @@ fun AdvancedSettingsScreen(
                 bundleWorkingOrder.addAll(bundleActionOrderList)
             }
             var bundleActionsExpanded by rememberSaveable { mutableStateOf(false) }
-            val bundleBoundsMap = remember { mutableStateMapOf<PatchBundleActionKey, Rect>() }
-            var bundleDraggingKey by remember { mutableStateOf<PatchBundleActionKey?>(null) }
-            var bundleHoverTarget by remember { mutableStateOf<PatchBundleActionKey?>(null) }
-            var bundleDragPointerOffset by remember { mutableStateOf<Offset?>(null) }
-            var bundleDragStartRect by remember { mutableStateOf<Rect?>(null) }
-            var bundleLastDragPosition by remember { mutableStateOf<Offset?>(null) }
-            val bundleDragAnimatable = remember { Animatable(Offset.Zero, Offset.VectorConverter) }
-            var bundleDragDesiredTopLeft by remember { mutableStateOf<Offset?>(null) }
-            var bundleReturningToStart by remember { mutableStateOf(false) }
-            var bundlePreviewOrigin by remember { mutableStateOf(Offset.Zero) }
-            val bundleCoroutineScope = rememberCoroutineScope()
+
+            val savedActionOrderList = remember(savedActionOrderPref) {
+                val parsed = savedActionOrderPref
+                    .split(',')
+                    .mapNotNull { SavedAppActionKey.fromStorageId(it.trim()) }
+                SavedAppActionKey.ensureComplete(parsed)
+            }
+            val savedWorkingOrder = remember(savedActionOrderList) { savedActionOrderList.toMutableStateList() }
+            LaunchedEffect(savedActionOrderList) {
+                savedWorkingOrder.clear()
+                savedWorkingOrder.addAll(savedActionOrderList)
+            }
+            var savedActionsExpanded by rememberSaveable { mutableStateOf(false) }
 
             fun moveAction(action: PatchSelectionActionKey, target: PatchSelectionActionKey) {
                 if (action == target) return
@@ -954,26 +974,6 @@ fun AdvancedSettingsScreen(
                 workingOrder.add(insertionIndex.coerceIn(0, workingOrder.size), removed)
             }
 
-            fun moveBundleAction(action: PatchBundleActionKey, target: PatchBundleActionKey) {
-                if (action == target) return
-                val fromIndex = bundleWorkingOrder.indexOf(action)
-                val toIndex = bundleWorkingOrder.indexOf(target)
-                if (fromIndex == -1 || toIndex == -1) return
-                val removed = bundleWorkingOrder.removeAt(fromIndex)
-                val updatedTargetIndex = bundleWorkingOrder.indexOf(target).takeIf { it >= 0 } ?: run {
-                    bundleWorkingOrder.add(fromIndex.coerceIn(0, bundleWorkingOrder.size), removed)
-                    return
-                }
-
-                val insertionIndex = if (fromIndex < toIndex) {
-                    updatedTargetIndex + 1
-                } else {
-                    updatedTargetIndex
-                }
-
-                bundleWorkingOrder.add(insertionIndex.coerceIn(0, bundleWorkingOrder.size), removed)
-            }
-
             LaunchedEffect(Unit) {
                 snapshotFlow { dragDesiredTopLeft }
                     .filterNotNull()
@@ -983,12 +983,23 @@ fun AdvancedSettingsScreen(
                     }
             }
 
-            LaunchedEffect(Unit) {
-                snapshotFlow { bundleDragDesiredTopLeft }
-                    .filterNotNull()
-                    .collectLatest { desired ->
-                        if (bundleDraggingKey == null || bundleReturningToStart) return@collectLatest
-                        bundleDragAnimatable.snapTo(desired)
+            LaunchedEffect(bundleActionOrderList) {
+                snapshotFlow { bundleWorkingOrder.toList() }
+                    .distinctUntilChanged()
+                    .debounce(200)
+                    .collectLatest { order ->
+                        if (order == bundleActionOrderList) return@collectLatest
+                        viewModel.setPatchBundleActionOrder(order)
+                    }
+            }
+
+            LaunchedEffect(savedActionOrderList) {
+                snapshotFlow { savedWorkingOrder.toList() }
+                    .distinctUntilChanged()
+                    .debounce(200)
+                    .collectLatest { order ->
+                        if (order == savedActionOrderList) return@collectLatest
+                        viewModel.setSavedAppActionOrder(order)
                     }
             }
 
@@ -998,6 +1009,7 @@ fun AdvancedSettingsScreen(
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
             ) {
+                Column {
             SettingsSearchHighlight(
                 targetKey = R.string.patch_selection_action_order_title,
                 activeKey = highlightTarget,
@@ -1120,7 +1132,7 @@ fun AdvancedSettingsScreen(
                                     val pos = lastDragPosition
                                     val bounds = popupBounds
 
-                                    val dx = if (pos != null && bounds != null && pos.y >= bounds.top && pos.y <= bounds.bottom) {
+                                    val rawDx = if (pos != null && bounds != null && pos.y >= bounds.top && pos.y <= bounds.bottom) {
                                         when {
                                             pos.x < bounds.left + edgeThresholdPx -> {
                                                 val t = ((pos.x - bounds.left) / edgeThresholdPx).coerceIn(0f, 1f)
@@ -1134,6 +1146,14 @@ fun AdvancedSettingsScreen(
                                         }
                                     } else {
                                         0f
+                                    }
+
+                                    val canScrollLeft = firstRowState.canScrollBackward || secondRowState.canScrollBackward
+                                    val canScrollRight = firstRowState.canScrollForward || secondRowState.canScrollForward
+                                    val dx = when {
+                                        rawDx < 0f && !canScrollLeft -> 0f
+                                        rawDx > 0f && !canScrollRight -> 0f
+                                        else -> rawDx
                                     }
 
                                     if (dx != 0f) {
@@ -1356,231 +1376,24 @@ fun AdvancedSettingsScreen(
 
                 if (bundleActionsExpanded) {
                     ExpressiveSettingsDivider()
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
-                            .onGloballyPositioned { bundlePreviewOrigin = it.positionInRoot() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        val rowState = rememberLazyListState()
-                        var popupBounds by remember { mutableStateOf<Rect?>(null) }
-
-                        fun findSlot(
-                            position: Offset,
-                            excludeKey: PatchBundleActionKey? = null
-                        ): PatchBundleActionKey? {
-                            val rects = bundleWorkingOrder.mapNotNull { key ->
-                                if (key == excludeKey) return@mapNotNull null
-                                bundleBoundsMap[key]?.let { rect -> key to rect }
-                            }
-                            if (rects.isEmpty()) return null
-
-                            rects.firstOrNull { (_, rect) ->
-                                position.x >= rect.left &&
-                                    position.x <= rect.right &&
-                                    position.y >= rect.top &&
-                                    position.y <= rect.bottom
-                            }?.let { (key, _) -> return key }
-
-                            fun distanceSqToRect(rect: Rect): Float {
-                                val dx = when {
-                                    position.x < rect.left -> rect.left - position.x
-                                    position.x > rect.right -> position.x - rect.right
-                                    else -> 0f
-                                }
-                                val dy = when {
-                                    position.y < rect.top -> rect.top - position.y
-                                    position.y > rect.bottom -> position.y - rect.bottom
-                                    else -> 0f
-                                }
-                                return dx * dx + dy * dy
-                            }
-
-                            return rects.minBy { (_, rect) -> distanceSqToRect(rect) }.first
-                        }
-
-                        val density = LocalDensity.current
-                        val edgeThresholdPx = remember(density) { with(density) { 28.dp.toPx() } }
-                        val maxScrollPx = remember(density) { with(density) { 16.dp.toPx() } }
-
-                        fun finishDrag(releasePosition: Offset? = null) {
-                            val currentKey = bundleDraggingKey
-                            val startRect = bundleDragStartRect
-                            val pointerOffset = bundleDragPointerOffset
-                            val target = releasePosition?.let { findSlot(it, excludeKey = currentKey) }?.takeIf { it != currentKey }
-                                ?: bundleHoverTarget?.takeIf { it != currentKey }
-                                ?: bundleLastDragPosition?.let { findSlot(it, excludeKey = currentKey) }?.takeIf { it != currentKey }
-                            if (currentKey == null || startRect == null || pointerOffset == null) {
-                                bundleDraggingKey = null
-                                bundleHoverTarget = null
-                                bundleDragDesiredTopLeft = null
-                                bundleReturningToStart = false
-                                bundleDragPointerOffset = null
-                                bundleDragStartRect = null
-                                bundleLastDragPosition = null
-                                return
-                            }
-                            if (target != null) {
-                                moveBundleAction(currentKey, target)
-                                bundleDraggingKey = null
-                                bundleHoverTarget = null
-                                bundleDragDesiredTopLeft = null
-                                bundleReturningToStart = false
-                                bundleDragPointerOffset = null
-                                bundleDragStartRect = null
-                                bundleLastDragPosition = null
-                                viewModel.setPatchBundleActionOrder(bundleWorkingOrder.toList())
-                            } else {
-                                bundleReturningToStart = true
-                                bundleDragDesiredTopLeft = null
-                                bundleCoroutineScope.launch {
-                                    bundleDragAnimatable.animateTo(
-                                        startRect.topLeft,
-                                        tween(durationMillis = 220)
-                                    )
-                                    bundleDraggingKey = null
-                                    bundleHoverTarget = null
-                                    bundleDragPointerOffset = null
-                                    bundleDragStartRect = null
-                                    bundleLastDragPosition = null
-                                    bundleReturningToStart = false
-                                }
-                            }
-                        }
-
-                        LaunchedEffect(bundleDraggingKey) {
-                            while (true) {
-                                val activeKey = bundleDraggingKey ?: break
-                                val pos = bundleLastDragPosition
-                                val bounds = popupBounds
-
-                                val dx = if (pos != null && bounds != null && pos.y >= bounds.top && pos.y <= bounds.bottom) {
-                                    when {
-                                        pos.x < bounds.left + edgeThresholdPx -> {
-                                            val t = ((pos.x - bounds.left) / edgeThresholdPx).coerceIn(0f, 1f)
-                                            -maxScrollPx * (1f - t)
-                                        }
-                                        pos.x > bounds.right - edgeThresholdPx -> {
-                                            val t = ((bounds.right - pos.x) / edgeThresholdPx).coerceIn(0f, 1f)
-                                            maxScrollPx * (1f - t)
-                                        }
-                                        else -> 0f
-                                    }
-                                } else {
-                                    0f
-                                }
-
-                                if (dx != 0f) {
-                                    rowState.scrollBy(dx)
-                                    if (pos != null) {
-                                        bundleHoverTarget = findSlot(pos, excludeKey = activeKey).takeIf { it != activeKey }
-                                    }
-                                }
-
-                                kotlinx.coroutines.delay(16)
-                            }
-                        }
-
-                        val dragGestureModifier = Modifier.pointerInput(bundleActionsExpanded, bundleWorkingOrder.size) {
-                            if (!bundleActionsExpanded) return@pointerInput
-                            awaitEachGesture {
-                                if (bundleDraggingKey != null) return@awaitEachGesture
-
-                                val down = awaitFirstDown(requireUnconsumed = false)
-                                val globalDown = bundlePreviewOrigin + down.position
-                                val key = bundleBoundsMap.entries.firstOrNull { (_, rect) ->
-                                    globalDown.x >= rect.left &&
-                                        globalDown.x <= rect.right &&
-                                        globalDown.y >= rect.top &&
-                                        globalDown.y <= rect.bottom
-                                }?.key ?: return@awaitEachGesture
-
-                                val rect = bundleBoundsMap[key] ?: return@awaitEachGesture
-                                val pointerOffset = globalDown - rect.topLeft
-
-                                awaitLongPressOrCancellation(down.id) ?: return@awaitEachGesture
-
-                                bundleDraggingKey = key
-                                bundleHoverTarget = null
-                                bundleReturningToStart = false
-                                bundleDragPointerOffset = pointerOffset
-                                bundleDragStartRect = rect
-                                bundleLastDragPosition = globalDown
-                                bundleDragDesiredTopLeft = rect.topLeft
-
-                                var didFinish = false
-                                while (true) {
-                                    val event = awaitPointerEvent(PointerEventPass.Main)
-                                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
-
-                                    if (!change.pressed) {
-                                        val upPosition = bundlePreviewOrigin + change.position
-                                        bundleLastDragPosition = upPosition
-                                        finishDrag(releasePosition = upPosition)
-                                        didFinish = true
-                                        break
-                                    }
-
-                                    val global = bundlePreviewOrigin + change.position
-                                    bundleLastDragPosition = global
-                                    bundleDragDesiredTopLeft = global - pointerOffset
-                                    bundleHoverTarget = findSlot(global, excludeKey = key).takeIf { it != key }
-                                    change.consume()
-                                }
-
-                                if (!didFinish && bundleDraggingKey == key) {
-                                    finishDrag()
-                                }
-                            }
-                        }
-
-                        PatchBundleActionPreview(
-                            order = bundleWorkingOrder,
-                            hiddenActions = bundleHiddenActionsPref,
-                            modifier = dragGestureModifier,
-                            draggingKey = bundleDraggingKey,
-                            highlightKey = bundleHoverTarget,
-                            rowState = rowState,
-                            userScrollEnabled = bundleDraggingKey == null,
-                            onPopupBoundsChanged = { popupBounds = it },
-                            onBoundsChanged = { key, rect -> bundleBoundsMap[key] = rect },
-                            onBoundsDisposed = { key -> bundleBoundsMap.remove(key) },
-                        )
-                        val activeKey = bundleDraggingKey
-                        val pointerOffset = bundleDragPointerOffset
-                        if (activeKey != null && pointerOffset != null) {
-                            val overlayOffset = bundleDragAnimatable.value - bundlePreviewOrigin
-                            val bounds = popupBounds
-                            val startRect = bundleDragStartRect
-                            val constrainedOffset = if (bounds != null && startRect != null) {
-                                val minX = bounds.left - bundlePreviewOrigin.x
-                                val maxX = (bounds.right - bundlePreviewOrigin.x - startRect.width).coerceAtLeast(minX)
-                                val minY = bounds.top - bundlePreviewOrigin.y
-                                val maxY = (bounds.bottom - bundlePreviewOrigin.y - startRect.height).coerceAtLeast(minY)
-                                Offset(
-                                    x = overlayOffset.x.coerceIn(minX, maxX),
-                                    y = overlayOffset.y.coerceIn(minY, maxY)
-                                )
-                            } else {
-                                overlayOffset
-                            }
-                            SelectionActionPreviewChip(
-                                icon = previewIconForBundleAction(activeKey),
-                                label = stringResource(activeKey.labelRes),
-                                hidden = activeKey.storageId in bundleHiddenActionsPref,
-                                floating = true,
-                                modifier = Modifier
-                                    .align(Alignment.TopStart)
-                                    .offset {
-                                        IntOffset(
-                                            constrainedOffset.x.roundToInt(),
-                                            constrainedOffset.y.roundToInt()
-                                        )
-                                    }
-                            )
-                        }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val rowState = rememberLazyListState()
+                    val reorderableState = rememberReorderableLazyListState(rowState) { from, to ->
+                        bundleWorkingOrder.add(to.index, bundleWorkingOrder.removeAt(from.index))
                     }
+
+                    PatchBundleActionPreview(
+                        order = bundleWorkingOrder,
+                        hiddenActions = bundleHiddenActionsPref,
+                        rowState = rowState,
+                        reorderableState = reorderableState
+                    )
+                }
 
                     Column(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -1654,11 +1467,125 @@ fun AdvancedSettingsScreen(
                 }
             }
 
-            GroupHeader(stringResource(R.string.app_exporting))
-            ExpressiveSettingsCard(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
-            ) {
+            ExpressiveSettingsDivider()
+            SettingsSearchHighlight(
+                targetKey = R.string.saved_app_action_order_title,
+                activeKey = highlightTarget,
+                extraKeys = setOf(R.string.saved_app_action_visibility_title),
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                ExpressiveSettingsItem(
+                    modifier = highlightModifier,
+                    headlineContent = stringResource(R.string.saved_app_action_order_title),
+                    supportingContent = stringResource(R.string.saved_app_action_order_description),
+                    trailingContent = {
+                        Icon(
+                            imageVector = if (savedActionsExpanded) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
+                            contentDescription = null
+                        )
+                    },
+                    onClick = { savedActionsExpanded = !savedActionsExpanded }
+                )
+            }
+
+            if (savedActionsExpanded) {
+                ExpressiveSettingsDivider()
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val rowState = rememberLazyListState()
+                    val reorderableState = rememberReorderableLazyListState(rowState) { from, to ->
+                        savedWorkingOrder.add(to.index, savedWorkingOrder.removeAt(from.index))
+                    }
+
+                    SavedAppActionPreview(
+                        order = savedWorkingOrder,
+                        hiddenActions = savedHiddenActionsPref,
+                        rowState = rowState,
+                        reorderableState = reorderableState
+                    )
+                }
+
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.saved_app_action_visibility_title),
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Text(
+                        text = stringResource(R.string.saved_app_action_visibility_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        SavedAppActionKey.values()
+                            .forEach { key ->
+                                val visible = key.storageId !in savedHiddenActionsPref
+                                val setVisible: (Boolean) -> Unit = { isVisible ->
+                                    val updated = savedHiddenActionsPref.toMutableSet()
+                                    if (isVisible) updated.remove(key.storageId) else updated.add(key.storageId)
+                                    viewModel.setSavedAppHiddenActions(updated)
+                                }
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .clickable { setVisible(!visible) }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = stringResource(key.labelRes),
+                                        modifier = Modifier.weight(1f),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        maxLines = 1
+                                    )
+                                    ExpressiveSettingsSwitch(
+                                        checked = visible,
+                                        onCheckedChange = setVisible
+                                    )
+                                }
+                            }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = { viewModel.setSavedAppHiddenActions(emptySet()) }
+                        ) {
+                            Text(stringResource(R.string.saved_app_action_visibility_reset))
+                        }
+                        TextButton(
+                            onClick = {
+                                savedWorkingOrder.clear()
+                                savedWorkingOrder.addAll(SavedAppActionKey.DefaultOrder)
+                                viewModel.setSavedAppActionOrder(SavedAppActionKey.DefaultOrder)
+                            }
+                        ) {
+                            Text(stringResource(R.string.saved_app_action_order_reset))
+                        }
+                    }
+                }
+            }
+        }
+
+        GroupHeader(stringResource(R.string.app_exporting))
+        ExpressiveSettingsCard(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+        ) {
                 SettingsSearchHighlight(
                     targetKey = R.string.export_name_format,
                     activeKey = highlightTarget,
@@ -1746,6 +1673,7 @@ fun AdvancedSettingsScreen(
             }
         }
     }
+
 }
 
 private enum class InstallerDialogTarget {
@@ -1863,7 +1791,9 @@ private fun SelectionActionPreviewRow(
     onBoundsChanged: ((PatchSelectionActionKey, Rect) -> Unit)?
 ) {
     LazyRow(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp),
         state = state,
         userScrollEnabled = userScrollEnabled,
         horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End)
@@ -1875,15 +1805,20 @@ private fun SelectionActionPreviewRow(
             DisposableEffect(key) {
                 onDispose { onBoundsDisposed?.invoke(key) }
             }
-            SelectionActionPreviewChip(
-                icon = previewIconForAction(key),
-                label = stringResource(key.labelRes),
-                hidden = key.storageId in hiddenActions,
-                dragging = draggingKey == key,
-                highlighted = highlightKey == key,
-                ghost = draggingKey == key,
-                onBoundsChanged = { rect -> onBoundsChanged?.invoke(key, rect) }
-            )
+            Box(
+                modifier = Modifier.fillParentMaxHeight(),
+                contentAlignment = Alignment.Center
+            ) {
+                SelectionActionPreviewChip(
+                    icon = previewIconForAction(key),
+                    label = stringResource(key.labelRes),
+                    hidden = key.storageId in hiddenActions,
+                    dragging = draggingKey == key,
+                    highlighted = highlightKey == key,
+                    ghost = draggingKey == key,
+                    onBoundsChanged = { rect -> onBoundsChanged?.invoke(key, rect) }
+                )
+            }
         }
     }
 }
@@ -1901,6 +1836,18 @@ private fun SelectionActionPreviewChip(
     onBoundsChanged: ((Rect) -> Unit)? = null
 ) {
     var layoutCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+
+    val typography = MaterialTheme.typography
+    val labelStyle = remember(typography) {
+        typography.labelMedium.copy(
+            platformStyle = PlatformTextStyle(includeFontPadding = false),
+            lineHeight = typography.labelMedium.fontSize,
+            lineHeightStyle = LineHeightStyle(
+                alignment = LineHeightStyle.Alignment.Center,
+                trim = LineHeightStyle.Trim.Both
+            )
+        )
+    }
 
     Surface(
         shape = RoundedCornerShape(999.dp),
@@ -1927,15 +1874,24 @@ private fun SelectionActionPreviewChip(
                 }
             }
     ) {
+        val iconOffset = 2.dp
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            modifier = Modifier
+                .height(28.dp)
+                .padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp))
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(16.dp)
+                    .offset(y = iconOffset)
+            )
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelMedium,
+                style = labelStyle,
                 maxLines = 1
             )
             if (hidden) {
@@ -1943,8 +1899,10 @@ private fun SelectionActionPreviewChip(
                 Icon(
                     imageVector = Icons.Outlined.VisibilityOff,
                     contentDescription = null,
-                    modifier = Modifier.size(14.dp),
-                    tint = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
+                    tint = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f),
+                    modifier = Modifier
+                        .size(14.dp)
+                        .offset(y = iconOffset)
                 )
             }
         }
@@ -1969,13 +1927,8 @@ private fun PatchBundleActionPreview(
     order: List<PatchBundleActionKey>,
     hiddenActions: Set<String> = emptySet(),
     modifier: Modifier = Modifier,
-    draggingKey: PatchBundleActionKey? = null,
-    highlightKey: PatchBundleActionKey? = null,
     rowState: LazyListState = rememberLazyListState(),
-    userScrollEnabled: Boolean = true,
-    onPopupBoundsChanged: ((Rect) -> Unit)? = null,
-    onBoundsDisposed: ((PatchBundleActionKey) -> Unit)? = null,
-    onBoundsChanged: ((PatchBundleActionKey, Rect) -> Unit)? = null
+    reorderableState: sh.calvin.reorderable.ReorderableLazyListState
 ) {
     val density = LocalDensity.current
     val glowRadiusPx = remember(density) { with(density) { 200.dp.toPx() } }
@@ -1992,9 +1945,6 @@ private fun PatchBundleActionPreview(
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f)),
             modifier = Modifier
                 .widthIn(max = 520.dp)
-                .onGloballyPositioned { coords ->
-                    onPopupBoundsChanged?.invoke(coords.boundsInRoot())
-                }
         ) {
             Box {
                 Box(
@@ -2025,12 +1975,8 @@ private fun PatchBundleActionPreview(
                     PatchBundleActionPreviewRow(
                         keys = order,
                         hiddenActions = hiddenActions,
-                        draggingKey = draggingKey,
-                        highlightKey = highlightKey,
                         state = rowState,
-                        userScrollEnabled = userScrollEnabled,
-                        onBoundsDisposed = onBoundsDisposed,
-                        onBoundsChanged = onBoundsChanged
+                        reorderableState = reorderableState
                     )
                 }
             }
@@ -2042,35 +1988,138 @@ private fun PatchBundleActionPreview(
 private fun PatchBundleActionPreviewRow(
     keys: List<PatchBundleActionKey>,
     hiddenActions: Set<String>,
-    draggingKey: PatchBundleActionKey?,
-    highlightKey: PatchBundleActionKey?,
     state: LazyListState,
-    userScrollEnabled: Boolean,
-    onBoundsDisposed: ((PatchBundleActionKey) -> Unit)?,
-    onBoundsChanged: ((PatchBundleActionKey, Rect) -> Unit)?
+    reorderableState: sh.calvin.reorderable.ReorderableLazyListState
 ) {
     LazyRow(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp),
         state = state,
-        userScrollEnabled = userScrollEnabled,
-        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End)
+        contentPadding = PaddingValues(horizontal = 4.dp)
     ) {
         items(
             items = keys,
             key = { key -> key.storageId }
         ) { key ->
-            DisposableEffect(key) {
-                onDispose { onBoundsDisposed?.invoke(key) }
+            ReorderableItem(reorderableState, key = key.storageId) { isDragging ->
+                Box(
+                    modifier = Modifier
+                        .fillParentMaxHeight()
+                        .padding(horizontal = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    SelectionActionPreviewChip(
+                        icon = previewIconForBundleAction(key),
+                        label = stringResource(key.labelRes),
+                        dragging = isDragging,
+                        ghost = isDragging,
+                        hidden = key.storageId in hiddenActions,
+                        modifier = Modifier.longPressDraggableHandle()
+                    )
+                }
             }
-            SelectionActionPreviewChip(
-                icon = previewIconForBundleAction(key),
-                label = stringResource(key.labelRes),
-                dragging = draggingKey == key,
-                highlighted = highlightKey == key,
-                ghost = draggingKey == key,
-                hidden = key.storageId in hiddenActions,
-                onBoundsChanged = { rect -> onBoundsChanged?.invoke(key, rect) }
-            )
+        }
+    }
+}
+
+@Composable
+private fun SavedAppActionPreview(
+    order: List<SavedAppActionKey>,
+    hiddenActions: Set<String> = emptySet(),
+    modifier: Modifier = Modifier,
+    rowState: LazyListState = rememberLazyListState(),
+    reorderableState: sh.calvin.reorderable.ReorderableLazyListState
+) {
+    val density = LocalDensity.current
+    val glowRadiusPx = remember(density) { with(density) { 200.dp.toPx() } }
+
+    Box(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+            tonalElevation = 0.dp,
+            shadowElevation = 6.dp,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f)),
+            modifier = Modifier
+                .widthIn(max = 520.dp)
+        ) {
+            Box {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .blur(26.dp)
+                        .background(
+                            Brush.radialGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                    Color.Transparent
+                                ),
+                                radius = glowRadiusPx
+                            )
+                        )
+                )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.16f))
+                )
+
+                Column(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.End
+                ) {
+                    SavedAppActionPreviewRow(
+                        keys = order,
+                        hiddenActions = hiddenActions,
+                        state = rowState,
+                        reorderableState = reorderableState
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SavedAppActionPreviewRow(
+    keys: List<SavedAppActionKey>,
+    hiddenActions: Set<String>,
+    state: LazyListState,
+    reorderableState: sh.calvin.reorderable.ReorderableLazyListState
+) {
+    LazyRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp),
+        state = state,
+        contentPadding = PaddingValues(horizontal = 4.dp)
+    ) {
+        items(
+            items = keys,
+            key = { key -> key.storageId }
+        ) { key ->
+            ReorderableItem(reorderableState, key = key.storageId) { isDragging ->
+                Box(
+                    modifier = Modifier
+                        .fillParentMaxHeight()
+                        .padding(horizontal = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    SelectionActionPreviewChip(
+                        icon = previewIconForSavedAppAction(key),
+                        label = stringResource(key.labelRes),
+                        dragging = isDragging,
+                        ghost = isDragging,
+                        hidden = key.storageId in hiddenActions,
+                        modifier = Modifier.longPressDraggableHandle()
+                    )
+                }
+            }
         }
     }
 }
@@ -2084,6 +2133,15 @@ private fun previewIconForBundleAction(key: PatchBundleActionKey): ImageVector =
         PatchBundleActionKey.CHANGELOG_HISTORY -> Icons.Outlined.History
         PatchBundleActionKey.TOGGLE -> Icons.Outlined.Block
         PatchBundleActionKey.DELETE -> Icons.Outlined.Delete
+    }
+
+private fun previewIconForSavedAppAction(key: SavedAppActionKey): ImageVector =
+    when (key) {
+        SavedAppActionKey.OPEN -> Icons.AutoMirrored.Outlined.OpenInNew
+        SavedAppActionKey.EXPORT -> Icons.Outlined.Save
+        SavedAppActionKey.INSTALL_UPDATE -> Icons.Outlined.InstallMobile
+        SavedAppActionKey.DELETE -> Icons.Outlined.Delete
+        SavedAppActionKey.REPATCH -> Icons.Outlined.Update
     }
 
 @Composable
@@ -2225,8 +2283,6 @@ private fun ExportNameFormatDialog(
         }
     )
 }
-
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CustomInstallerManagerDialog(

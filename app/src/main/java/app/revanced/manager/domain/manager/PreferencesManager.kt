@@ -16,6 +16,7 @@ import kotlin.io.path.isReadable
 
 import app.revanced.manager.ui.model.PatchSelectionActionKey
 import app.revanced.manager.ui.model.PatchBundleActionKey
+import app.revanced.manager.ui.model.SavedAppActionKey
 
 enum class SearchForUpdatesBackgroundInterval(val displayName: Int, val value: Long) {
     NEVER(R.string.never, 0),
@@ -32,6 +33,8 @@ class PreferencesManager(
             PatchSelectionActionKey.DefaultOrder.joinToString(",") { it.storageId }
         private val PATCH_BUNDLE_ACTION_ORDER_DEFAULT =
             PatchBundleActionKey.DefaultOrder.joinToString(",") { it.storageId }
+        private val SAVED_APP_ACTION_ORDER_DEFAULT =
+            SavedAppActionKey.DefaultOrder.joinToString(",") { it.storageId }
     }
     val dynamicColor = booleanPreference("dynamic_color", false)
     val pureBlackTheme = booleanPreference("pure_black_theme", false)
@@ -113,6 +116,10 @@ class PreferencesManager(
         stringPreference("patch_bundle_action_order", PATCH_BUNDLE_ACTION_ORDER_DEFAULT)
     val patchBundleHiddenActions =
         stringSetPreference("patch_bundle_hidden_actions", emptySet())
+    val savedAppActionOrder =
+        stringPreference("saved_app_action_order", SAVED_APP_ACTION_ORDER_DEFAULT)
+    val savedAppHiddenActions =
+        stringSetPreference("saved_app_hidden_actions", emptySet())
     val patchSelectionHiddenActions =
         stringSetPreference("patch_selection_hidden_actions", emptySet())
     val patchSelectionShowVersionTags = booleanPreference("patch_selection_show_version_tags", true)
@@ -181,6 +188,8 @@ class PreferencesManager(
         val patchSelectionShowVersionTags: Boolean? = null,
         val patchBundleActionOrder: String? = null,
         val patchBundleHiddenActions: Set<String>? = null,
+        val savedAppActionOrder: String? = null,
+        val savedAppHiddenActions: Set<String>? = null,
         val acknowledgedDownloaderPlugins: Set<String>? = null,
         val autoSaveDownloaderApks: Boolean? = null,
         val pathSelectorFavorites: Set<String>? = null,
@@ -245,6 +254,8 @@ class PreferencesManager(
         patchSelectionShowVersionTags = patchSelectionShowVersionTags.get(),
         patchBundleActionOrder = patchBundleActionOrder.get(),
         patchBundleHiddenActions = patchBundleHiddenActions.get(),
+        savedAppActionOrder = savedAppActionOrder.get(),
+        savedAppHiddenActions = savedAppHiddenActions.get(),
         acknowledgedDownloaderPlugins = acknowledgedDownloaderPlugins.get(),
         autoSaveDownloaderApks = autoSaveDownloaderApks.get(),
         pathSelectorFavorites = pathSelectorFavorites.get(),
@@ -313,6 +324,8 @@ class PreferencesManager(
         snapshot.patchSelectionShowVersionTags?.let { patchSelectionShowVersionTags.value = it }
         snapshot.patchBundleActionOrder?.let { patchBundleActionOrder.value = it }
         snapshot.patchBundleHiddenActions?.let { patchBundleHiddenActions.value = it }
+        snapshot.savedAppActionOrder?.let { savedAppActionOrder.value = it }
+        snapshot.savedAppHiddenActions?.let { savedAppHiddenActions.value = it }
         snapshot.acknowledgedDownloaderPlugins?.let { acknowledgedDownloaderPlugins.value = it }
         snapshot.autoSaveDownloaderApks?.let { autoSaveDownloaderApks.value = it }
         snapshot.pathSelectorFavorites?.let { favorites ->

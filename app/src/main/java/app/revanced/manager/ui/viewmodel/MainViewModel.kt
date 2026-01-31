@@ -73,7 +73,8 @@ class MainViewModel(
         app: SelectedApp,
         patches: PatchSelection? = null,
         selectionPayload: PatchProfilePayload? = null,
-        persistConfiguration: Boolean = true
+        persistConfiguration: Boolean = true,
+        returnToDashboard: Boolean = false
     ) = viewModelScope.launch {
         val resolved = findDownloadedApp(app) ?: app
         val selectionPayloadJson = selectionPayload?.let { json.encodeToString(it) }
@@ -82,7 +83,8 @@ class MainViewModel(
                 app = resolved,
                 patches = patches,
                 selectionPayloadJson = selectionPayloadJson,
-                persistConfiguration = persistConfiguration
+                persistConfiguration = persistConfiguration,
+                returnToDashboard = returnToDashboard
             )
         )
     }
@@ -93,13 +95,15 @@ class MainViewModel(
         packageName: String,
         patches: PatchSelection? = null,
         selectionPayload: PatchProfilePayload? = null,
-        persistConfiguration: Boolean = true
+        persistConfiguration: Boolean = true,
+        returnToDashboard: Boolean = false
     ) = viewModelScope.launch {
         selectApp(
             SelectedApp.Search(packageName, suggestedVersion(packageName)),
             patches,
             selectionPayload,
-            persistConfiguration
+            persistConfiguration,
+            returnToDashboard
         )
     }
 

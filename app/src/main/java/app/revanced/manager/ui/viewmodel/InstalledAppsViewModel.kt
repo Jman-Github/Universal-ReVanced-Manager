@@ -1,10 +1,14 @@
 package app.revanced.manager.ui.viewmodel
 
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageInfo
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.core.content.ContextCompat
 import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.data.room.apps.installed.InstallType
 import app.revanced.manager.data.room.apps.installed.InstalledApp
@@ -15,6 +19,8 @@ import app.revanced.manager.domain.installer.RootInstaller
 import app.revanced.manager.domain.installer.RootServiceException
 import app.revanced.manager.domain.repository.InstalledAppRepository
 import app.revanced.manager.domain.repository.PatchBundleRepository
+import app.revanced.manager.domain.repository.remapAndExtractSelection
+import app.revanced.manager.domain.repository.toSignatureMap
 import app.revanced.manager.util.FilenameUtils
 import app.revanced.manager.util.PM
 import app.revanced.manager.util.PatchSelection
@@ -51,6 +57,9 @@ class InstalledAppsViewModel(
     }.flowOn(Dispatchers.IO)
 
     val packageInfoMap = mutableStateMapOf<String, PackageInfo?>()
+    val installedOnDeviceMap = mutableStateMapOf<String, Boolean>()
+    val mountedOnDeviceMap = mutableStateMapOf<String, Boolean>()
+    val savedCopyMap = mutableStateMapOf<String, Boolean>()
     val selectedApps = mutableStateSetOf<String>()
     val missingPackages = mutableStateSetOf<String>()
     val bundleSummaries = mutableStateMapOf<String, List<AppBundleSummary>>()
@@ -77,6 +86,9 @@ class InstalledAppsViewModel(
                 val stalePackages = packageInfoMap.keys.toSet() - seenPackages
                 stalePackages.forEach { packageName ->
                     packageInfoMap.remove(packageName)
+                    installedOnDeviceMap.remove(packageName)
+                    mountedOnDeviceMap.remove(packageName)
+                    savedCopyMap.remove(packageName)
                     missingPackages.remove(packageName)
                     selectedApps.remove(packageName)
                 }
@@ -109,11 +121,6 @@ class InstalledAppsViewModel(
                 val packageNames = installedApps.map { it.currentPackageName }.toSet()
 
                 installedApps.forEach { app ->
-                    if (app.installType != InstallType.SAVED) {
-                        bundleSummaries.remove(app.currentPackageName)
-                        bundleSummaryLoaded.remove(app.currentPackageName)
-                        return@forEach
-                    }
                     val selection = loadAppliedPatches(app.currentPackageName)
                     val summaries = buildBundleSummaries(app, selection, bundleInfo, sourceMap)
                     if (summaries.isEmpty()) {
@@ -132,6 +139,42 @@ class InstalledAppsViewModel(
         }
     }
 
+    private val packageChangeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val action = intent?.action ?: return
+            if (action == Intent.ACTION_PACKAGE_REMOVED &&
+                intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)
+            ) {
+                return
+            }
+
+            val packageName = intent.data?.schemeSpecificPart ?: return
+            if (packageName !in packageInfoMap && packageName !in installedOnDeviceMap) return
+
+            viewModelScope.launch {
+                val installedInfo = withContext(Dispatchers.IO) {
+                    pm.getPackageInfo(packageName)
+                }
+                installedOnDeviceMap[packageName] = installedInfo != null
+                if (installedInfo != null) {
+                    packageInfoMap[packageName] = installedInfo
+                }
+            }
+        }
+    }.also {
+        ContextCompat.registerReceiver(
+            pm.application,
+            it,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_PACKAGE_ADDED)
+                addAction(Intent.ACTION_PACKAGE_REPLACED)
+                addAction(Intent.ACTION_PACKAGE_REMOVED)
+                addDataScheme("package")
+            },
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+    }
+
     data class AppBundleSummary(
         val title: String,
         val version: String?
@@ -142,6 +185,39 @@ class InstalledAppsViewModel(
         val failed: Int,
         val total: Int
     )
+
+    suspend fun getRepatchSelection(app: InstalledApp): PatchSelection? = withContext(Dispatchers.IO) {
+        val selection = loadAppliedPatches(app.currentPackageName)
+        if (selection.isNotEmpty()) return@withContext selection
+
+        val payload = app.selectionPayload ?: return@withContext null
+        val sources = patchBundleRepository.sources.first()
+        val sourceIds = sources.map { it.uid }.toSet()
+        val signatures = patchBundleRepository.allBundlesInfoFlow.first().toSignatureMap()
+        val (remappedPayload, remappedSelection) = payload.remapAndExtractSelection(sources, signatures)
+        val persistableSelection = remappedSelection.filterKeys { it in sourceIds }
+        if (persistableSelection.isNotEmpty()) {
+            installedAppsRepository.addOrUpdate(
+                app.currentPackageName,
+                app.originalPackageName,
+                app.version,
+                app.installType,
+                persistableSelection,
+                remappedPayload
+            )
+        }
+        if (remappedSelection.isNotEmpty()) return@withContext remappedSelection
+
+        val fallback = payload.bundles.associate { bundle ->
+            bundle.bundleUid to bundle.patches.filter { it.isNotBlank() }.toSet()
+        }.filterValues { it.isNotEmpty() }
+        fallback.takeIf { it.isNotEmpty() }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        pm.application.unregisterReceiver(packageChangeReceiver)
+    }
 
     fun toggleSelection(installedApp: InstalledApp) = viewModelScope.launch {
         val packageName = installedApp.currentPackageName
@@ -241,6 +317,8 @@ class InstalledAppsViewModel(
     private suspend fun resolvePackageInfo(installedApp: InstalledApp): PackageInfo? =
         withContext(Dispatchers.IO) {
             val packageName = installedApp.currentPackageName
+            val hasSavedCopy = savedApkFile(installedApp) != null
+            savedCopyMap[packageName] = hasSavedCopy
             try {
                 if (
                     installedApp.installType == InstallType.MOUNT &&
@@ -253,8 +331,21 @@ class InstalledAppsViewModel(
                 // Ignore root service availability issues for mounted apps and fall back to package info lookup.
             }
 
+            if (installedApp.installType == InstallType.MOUNT) {
+                val mounted = runCatching { rootInstaller.isAppMounted(packageName) }
+                    .getOrDefault(false)
+                mountedOnDeviceMap[packageName] = mounted
+            } else {
+                mountedOnDeviceMap.remove(packageName)
+            }
+
             when (installedApp.installType) {
                 InstallType.SAVED -> {
+                    val installedInfo = pm.getPackageInfo(packageName)
+                    installedOnDeviceMap[packageName] = installedInfo != null
+                    if (installedInfo != null) {
+                        return@withContext installedInfo
+                    }
                     val savedFile = filesystem.getPatchedAppFile(packageName, installedApp.version)
                     val resolvedFile = if (savedFile.exists()) {
                         savedFile
@@ -284,7 +375,9 @@ class InstalledAppsViewModel(
                 }
 
                 else -> {
-                    pm.getPackageInfo(packageName) ?: run {
+                    val installedInfo = pm.getPackageInfo(packageName)
+                    installedOnDeviceMap[packageName] = installedInfo != null
+                    installedInfo ?: run {
                         val savedFile = filesystem.getPatchedAppFile(packageName, installedApp.version)
                         if (savedFile.exists()) pm.getPackageInfo(savedFile) else null
                     }

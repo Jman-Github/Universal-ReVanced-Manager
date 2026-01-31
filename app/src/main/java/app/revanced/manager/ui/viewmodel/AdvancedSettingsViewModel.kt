@@ -35,6 +35,7 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import app.revanced.manager.ui.model.PatchSelectionActionKey
 import app.revanced.manager.ui.model.PatchBundleActionKey
+import app.revanced.manager.ui.model.SavedAppActionKey
 
 class AdvancedSettingsViewModel(
     val prefs: PreferencesManager,
@@ -164,6 +165,17 @@ class AdvancedSettingsViewModel(
     fun setPatchBundleHiddenActions(hidden: Set<String>) =
         viewModelScope.launch(Dispatchers.Default) {
             prefs.patchBundleHiddenActions.update(hidden)
+        }
+
+    fun setSavedAppActionOrder(order: List<SavedAppActionKey>) =
+        viewModelScope.launch(Dispatchers.Default) {
+            val serialized = order.joinToString(",") { it.storageId }
+            prefs.savedAppActionOrder.update(serialized)
+        }
+
+    fun setSavedAppHiddenActions(hidden: Set<String>) =
+        viewModelScope.launch(Dispatchers.Default) {
+            prefs.savedAppHiddenActions.update(hidden)
         }
 
     fun setPatchSelectionHiddenActions(hidden: Set<String>) =

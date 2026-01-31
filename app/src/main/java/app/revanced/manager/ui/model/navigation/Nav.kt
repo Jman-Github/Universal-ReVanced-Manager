@@ -1,6 +1,7 @@
 package app.revanced.manager.ui.model.navigation
 
 import android.os.Parcelable
+import app.revanced.manager.ui.model.InstalledAppAction
 import app.revanced.manager.ui.model.SelectedApp
 import app.revanced.manager.util.Options
 import app.revanced.manager.util.PatchSelection
@@ -23,7 +24,7 @@ data class PatchBundleDiscoveryPatches(val bundleId: Int)
 data class AppSelector(val autoStorage: Boolean = false, val autoStorageReturn: Boolean = false)
 
 @Serializable
-data class InstalledApplicationInfo(val packageName: String)
+data class InstalledApplicationInfo(val packageName: String, val action: InstalledAppAction? = null)
 
 @Serializable
 data class Update(val downloadOnScreenEntry: Boolean = false)
@@ -37,6 +38,7 @@ data object SelectedApplicationInfo : ComplexParameter<SelectedApplicationInfo.V
         val selectionPayloadJson: String? = null,
         val persistConfiguration: Boolean = true,
         val profileId: Int? = null,
+        val returnToDashboard: Boolean = false,
         val requiresSourceSelection: Boolean = false
     ) : Parcelable
 

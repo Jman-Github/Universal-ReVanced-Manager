@@ -156,6 +156,8 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                     R.string.patch_selection_version_tags_title,
                     R.string.patch_bundle_action_order_title,
                     R.string.patch_bundle_action_visibility_title,
+                    R.string.saved_app_action_order_title,
+                    R.string.saved_app_action_visibility_title,
                     R.string.export_name_format,
                     R.string.debug_logs_export,
                     R.string.about_device
@@ -243,6 +245,8 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.patch_selection_version_tags_title, R.string.patch_selection_version_tags_description, R.string.advanced, Settings.Advanced),
             SearchEntry(R.string.patch_bundle_action_order_title, R.string.patch_bundle_action_order_description, R.string.advanced, Settings.Advanced),
             SearchEntry(R.string.patch_bundle_action_visibility_title, R.string.patch_bundle_action_visibility_description, R.string.advanced, Settings.Advanced),
+            SearchEntry(R.string.saved_app_action_order_title, R.string.saved_app_action_order_description, R.string.advanced, Settings.Advanced),
+            SearchEntry(R.string.saved_app_action_visibility_title, R.string.saved_app_action_visibility_description, R.string.advanced, Settings.Advanced),
             SearchEntry(R.string.export_name_format, R.string.export_name_format_description, R.string.advanced, Settings.Advanced),
             SearchEntry(R.string.debug_logs_export, null, R.string.advanced, Settings.Advanced),
             SearchEntry(R.string.about_device, null, R.string.advanced, Settings.Advanced),
