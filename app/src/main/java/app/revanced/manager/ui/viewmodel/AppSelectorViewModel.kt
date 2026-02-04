@@ -157,23 +157,16 @@ class AppSelectorViewModel(
             destination.delete()
             Files.copy(stream, destination.toPath())
 
-            if (SplitApkPreparer.isSplitArchive(destination)) {
+            val isSplitArchive = SplitApkPreparer.isSplitArchive(destination)
+            resolvePackageInfo(destination)?.let { packageInfo ->
                 SelectedApp.Local(
-                    packageName = destination.nameWithoutExtension,
-                    version = app.getString(R.string.app_version_unspecified),
+                    packageName = packageInfo.packageName,
+                    version = packageInfo.versionName
+                        ?: if (isSplitArchive) app.getString(R.string.app_version_unspecified) else "",
                     file = destination,
                     temporary = true,
-                    resolved = false
+                    resolved = true
                 )
-            } else {
-                resolvePackageInfo(destination)?.let { packageInfo ->
-                    SelectedApp.Local(
-                        packageName = packageInfo.packageName,
-                        version = packageInfo.versionName ?: "",
-                        file = destination,
-                        temporary = true
-                    )
-                }
             }
         }
 
@@ -186,23 +179,16 @@ class AppSelectorViewModel(
         destination.delete()
         Files.copy(file.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING)
 
-        return if (SplitApkPreparer.isSplitArchive(destination)) {
+        val isSplitArchive = SplitApkPreparer.isSplitArchive(destination)
+        return resolvePackageInfo(destination)?.let { packageInfo ->
             SelectedApp.Local(
-                packageName = destination.nameWithoutExtension,
-                version = app.getString(R.string.app_version_unspecified),
+                packageName = packageInfo.packageName,
+                version = packageInfo.versionName
+                    ?: if (isSplitArchive) app.getString(R.string.app_version_unspecified) else "",
                 file = destination,
                 temporary = true,
-                resolved = false
+                resolved = true
             )
-        } else {
-            resolvePackageInfo(destination)?.let { packageInfo ->
-                SelectedApp.Local(
-                    packageName = packageInfo.packageName,
-                    version = packageInfo.versionName ?: "",
-                    file = destination,
-                    temporary = true
-                )
-            }
         }
     }
 

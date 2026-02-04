@@ -63,6 +63,7 @@ import app.universal.revanced.manager.R.string.field_not_set
 import app.universal.revanced.manager.R.string.patches
 import app.universal.revanced.manager.R.string.patches_url
 import app.universal.revanced.manager.R.string.view_patches
+import app.revanced.manager.patcher.patch.PatchBundleType
 import app.revanced.manager.data.platform.NetworkInfo
 import app.revanced.manager.domain.bundles.LocalPatchBundle
 import app.revanced.manager.domain.bundles.PatchBundleChangelogEntry
@@ -85,6 +86,7 @@ import app.revanced.manager.util.simpleMessage
 import app.revanced.manager.util.toast
 import kotlinx.coroutines.launch
 import androidx.core.content.getSystemService
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import compose.icons.FontAwesomeIcons
 import compose.icons.fontawesomeicons.Brands
 import compose.icons.fontawesomeicons.brands.Github
@@ -123,6 +125,7 @@ fun BundleInformationDialog(
     val catalogUrl = remember(src) {
         if (src.isDefault) PatchListCatalog.revancedCatalogUrl() else PatchListCatalog.resolveCatalogUrl(src)
     }
+    val bundleInfo by bundleRepo.allBundlesInfoFlow.collectAsStateWithLifecycle(emptyMap())
     val (autoUpdate, endpoint, searchUpdate) = src.asRemoteOrNull?.let {
         Triple(it.autoUpdate, it.endpoint, it.searchUpdate)
     } ?: Triple(null, null, null)
@@ -377,6 +380,16 @@ fun BundleInformationDialog(
                     headlineText = stringResource(R.string.patches_display_name),
                     supportingText = src.displayName?.takeUnless { it.isBlank() }
                         ?: stringResource(field_not_set)
+                )
+
+                BundleListItem(
+                    headlineText = stringResource(R.string.bundle_type_label),
+                    supportingText = when (bundleInfo[src.uid]?.bundleType) {
+                        PatchBundleType.REVANCED -> stringResource(R.string.bundle_type_revanced)
+                        PatchBundleType.MORPHE -> stringResource(R.string.bundle_type_morphe)
+                        PatchBundleType.AMPLE -> stringResource(R.string.bundle_type_ample)
+                        null -> stringResource(field_not_set)
+                    }
                 )
 
                 if (isLocal) {

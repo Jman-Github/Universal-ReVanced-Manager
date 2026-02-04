@@ -2099,12 +2099,47 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
 
         val title = message.trim()
-        val normalized = normalizeWriteApkTitle(stepId, title)
+        val splitNormalized = if (stepId == StepId.PrepareSplitApk) {
+            normalizeSplitApkTitle(title)
+        } else {
+            title
+        }
+        val normalized = normalizeWriteApkTitle(stepId, splitNormalized)
         if (stepId == StepId.WriteAPK && isDexCompileTitle(normalized)) {
             seenDexCompiles.add(normalized)
         }
         var existingIndex = list.indexOfFirst { it.title == normalized }
         val runningIndex = list.indexOfFirst { !it.skipped && it.state == State.RUNNING }
+        if (stepId == StepId.PrepareSplitApk && list.isNotEmpty()) {
+            if (normalized.startsWith("Merging ", ignoreCase = true)) {
+                if (existingIndex == -1) {
+                    return
+                }
+                val nextExpectedIndex = if (runningIndex != -1) {
+                    var index = runningIndex + 1
+                    while (index < list.size && list[index].skipped) {
+                        index++
+                    }
+                    if (index < list.size) index else -1
+                } else {
+                    list.indexOfFirst { !it.skipped && it.state == State.WAITING }
+                }
+                when {
+                    runningIndex != -1 && existingIndex == runningIndex -> Unit
+                    nextExpectedIndex != -1 && existingIndex == nextExpectedIndex -> Unit
+                    nextExpectedIndex != -1 && existingIndex < nextExpectedIndex -> {
+                        val stale = list[existingIndex]
+                        if (!stale.skipped && stale.state != State.COMPLETED) {
+                            list[existingIndex] = stale.copy(state = State.COMPLETED, progress = null)
+                        }
+                        return
+                    }
+                    nextExpectedIndex != -1 && existingIndex > nextExpectedIndex -> {
+                        return
+                    }
+                }
+            }
+        }
         if (stepId == StepId.WriteAPK && isDexCompilePhaseTitle(normalized)) {
             completeWriteApkApplyChanges(list)
             val firstCompile = list.indexOfFirst { isDexCompileTitle(it.title) }
@@ -2196,6 +2231,20 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         } else {
             title
         }
+    }
+
+    private fun normalizeSplitApkTitle(title: String): String {
+        val trimmed = title.trim()
+        if (trimmed.isEmpty()) return trimmed
+        val prefix = when {
+            trimmed.startsWith("Merging:", ignoreCase = true) -> "Merging:"
+            trimmed.startsWith("Merging ", ignoreCase = true) -> "Merging "
+            else -> return trimmed
+        }
+        val raw = trimmed.substringAfter(prefix).trim()
+        if (raw.isEmpty()) return trimmed
+        val name = if (raw.endsWith(".apk", ignoreCase = true)) raw else "$raw.apk"
+        return "Merging $name"
     }
 
     private fun isDexCompileTitle(title: String): Boolean {
@@ -2380,7 +2429,11 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     if (input.selectedApp is SelectedApp.Local && input.selectedApp.temporary) {
                         inputFile?.takeIf { it.exists() }?.delete()
                         inputFile = null
-                        updateSplitStepRequirement(null)
+                        updateSplitStepRequirement(
+                            file = null,
+                            needsSplitOverride = requiresSplitPreparation,
+                            merged = true
+                        )
                     }
                     refreshExportMetadata()
                     _patcherSucceeded.value = true

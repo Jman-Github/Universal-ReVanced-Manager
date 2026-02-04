@@ -374,15 +374,7 @@ class Session(
             .filter { it.isFile && it.extension.equals("xml", ignoreCase = true) }
             .filter { it.parentFile?.name?.startsWith("values") == true }
             .forEach { file ->
-                var text = readXmlText(file) ?: return@forEach
-                val normalization = normalizeSurrogateNumericRefs(text)
-                if (normalization.replacements > 0) {
-                    logger.info(
-                        "Normalized ${normalization.replacements} surrogate numeric reference(s) in ${file.path}"
-                    )
-                    runCatching { file.writeText(normalization.text, Charsets.UTF_8) }
-                    text = normalization.text
-                }
+                val text = readXmlText(file) ?: return@forEach
                 invalidRefs += findInvalidNumericCharRefs(text, file)
             }
 
@@ -433,59 +425,6 @@ class Session(
 
     private fun Char.isHexDigit(): Boolean =
         this in '0'..'9' || this in 'a'..'f' || this in 'A'..'F'
-
-    private data class SurrogateNormalization(
-        val text: String,
-        val replacements: Int
-    )
-
-    private fun normalizeSurrogateNumericRefs(text: String): SurrogateNormalization {
-        val pattern = Regex("&#(x?[0-9A-Fa-f]+);")
-        val matches = pattern.findAll(text).toList()
-        if (matches.isEmpty()) return SurrogateNormalization(text, 0)
-
-        val sb = StringBuilder(text.length)
-        var lastIndex = 0
-        var i = 0
-        var replacements = 0
-        while (i < matches.size) {
-            val match = matches[i]
-            val value = parseNumericRef(match.groupValues[1])
-            if (value == null) {
-                i += 1
-                continue
-            }
-            val isHigh = value in 0xD800..0xDBFF
-            if (isHigh && i + 1 < matches.size) {
-                val next = matches[i + 1]
-                if (next.range.first == match.range.last + 1) {
-                    val nextValue = parseNumericRef(next.groupValues[1])
-                    if (nextValue != null && nextValue in 0xDC00..0xDFFF) {
-                        val codePoint =
-                            0x10000 + ((value - 0xD800) shl 10) + (nextValue - 0xDC00)
-                        sb.append(text, lastIndex, match.range.first)
-                        sb.append(String(Character.toChars(codePoint)))
-                        lastIndex = next.range.last + 1
-                        replacements += 1
-                        i += 2
-                        continue
-                    }
-                }
-            }
-            i += 1
-        }
-        if (lastIndex == 0) return SurrogateNormalization(text, 0)
-        sb.append(text, lastIndex, text.length)
-        return SurrogateNormalization(sb.toString(), replacements)
-    }
-
-    private fun parseNumericRef(value: String): Int? {
-        return if (value.startsWith("x", ignoreCase = true)) {
-            value.substring(1).toIntOrNull(16)
-        } else {
-            value.toIntOrNull(10)
-        }
-    }
 
     private fun readXmlText(file: File): String? {
         val bytes = runCatching { file.readBytes() }.getOrNull() ?: return null

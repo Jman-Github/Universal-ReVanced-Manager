@@ -17,6 +17,7 @@ plugins {
 
 val outputApkFileName = "universal-revanced-manager-$version.apk"
 val morpheRuntimeAssetsDir = layout.buildDirectory.dir("generated/morphe-runtime")
+val ampleRuntimeAssetsDir = layout.buildDirectory.dir("generated/ample-runtime")
 val devVersionSuffix = providers.gradleProperty("devVersionSuffix")
     .orNull
     ?.trim()
@@ -25,6 +26,9 @@ val devVersionSuffix = providers.gradleProperty("devVersionSuffix")
 
 val apkEditorLib by configurations.creating
 
+configurations.all {
+    exclude(group = "xmlpull", module = "xmlpull")
+}
 val strippedApkEditorLib by tasks.registering(Jar::class) {
     archiveFileName.set("APKEditor-android.jar")
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
@@ -295,6 +299,7 @@ android {
 
     sourceSets {
         getByName("main").assets.srcDir(morpheRuntimeAssetsDir)
+        getByName("main").assets.srcDir(ampleRuntimeAssetsDir)
     }
 
     externalNativeBuild {
@@ -349,8 +354,19 @@ tasks {
         rename { "morphe-runtime.apk" }
     }
 
+    val copyAmpleRuntimeApk by registering(Copy::class) {
+        val runtimeProject = project(":ample-runtime")
+        val runtimeApk = runtimeProject.layout.buildDirectory.file(
+            "outputs/apk/release/ample-runtime-release.apk"
+        )
+        dependsOn("${runtimeProject.path}:assembleRelease")
+        from(runtimeApk)
+        into(ampleRuntimeAssetsDir)
+        rename { "ample-runtime.apk" }
+    }
+
     named("preBuild") {
-        dependsOn(copyMorpheRuntimeApk)
+        dependsOn(copyMorpheRuntimeApk, copyAmpleRuntimeApk)
     }
 
 }

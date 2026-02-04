@@ -1333,7 +1333,11 @@ private fun ensureBundleExportExtension(name: String, bundle: ExternalBundleSnap
 
 private fun bundleExportExtension(bundle: ExternalBundleSnapshot): String {
     val type = bundle.bundleType.trim()
-    return if (type.startsWith("Morphe", ignoreCase = true)) "mpp" else "rvp"
+    return when {
+        type.startsWith("Morphe", ignoreCase = true) -> "mpp"
+        type.startsWith("Ample", ignoreCase = true) -> "rvp"
+        else -> "rvp"
+    }
 }
 
 private fun sanitizeFileName(value: String): String =
@@ -1343,6 +1347,9 @@ private fun formatBundleTypeLabel(rawType: String): String {
     val trimmed = rawType.trim()
     if (trimmed.startsWith("Morphe", ignoreCase = true)) {
         return "Morphe"
+    }
+    if (trimmed.startsWith("Ample", ignoreCase = true)) {
+        return "Ample"
     }
     if (trimmed.startsWith("ReVanced", ignoreCase = true)) {
         val version = trimmed.substringAfter(':', "").ifBlank {

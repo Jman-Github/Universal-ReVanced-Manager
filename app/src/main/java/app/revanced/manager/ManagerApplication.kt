@@ -12,6 +12,7 @@ import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.repository.DownloaderPluginRepository
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.domain.worker.WorkerRepository
+import app.revanced.manager.patcher.ample.AmpleRuntimeBridge
 import app.revanced.manager.patcher.morphe.MorpheRuntimeBridge
 import app.revanced.manager.network.service.HttpService
 import app.revanced.manager.util.AppForeground
@@ -67,6 +68,7 @@ class ManagerApplication : Application() {
 
         PatchListCatalog.initialize(this)
         MorpheRuntimeBridge.initialize(this)
+        AmpleRuntimeBridge.initialize(this)
 
         val pixels = 512
         Coil.setImageLoader(

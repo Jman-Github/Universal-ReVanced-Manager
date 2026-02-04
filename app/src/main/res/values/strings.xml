@@ -31,6 +31,10 @@
     <string name="patches_name_fallback">Unnamed</string>
     <string name="bundle_uid">Bundle UID</string>
     <string name="patches_display_name">Display name</string>
+    <string name="bundle_type_label">Bundle type</string>
+    <string name="bundle_type_revanced">ReVanced</string>
+    <string name="bundle_type_morphe">Morphe</string>
+    <string name="bundle_type_ample">Ample</string>
     <string name="android_11_bug_dialog_title">Android 11 bug</string>
     <string name="android_11_bug_dialog_description">The app installation permission must be granted ahead of time to avoid a bug in the Android 11 system that will negatively affect the user experience.</string>
     <string name="no_network_toast">No internet connection available</string>
@@ -116,7 +120,7 @@
     <string name="patch_count_overflow">999+</string>
     <string name="no_patches_selected">No patches selected</string>
     <string name="mixed_patch_bundles_title">Mixed patch bundles</string>
-    <string name="mixed_patch_bundles_description">ReVanced (.rvp) and Morphe (.mpp) patches cannot be combined. Select patches from only one bundle type. If you want to use both, you will have to patch a second time using the other patches you want.</string>
+    <string name="mixed_patch_bundles_description">ReVanced (.rvp), Ample (.rvp), and Morphe (.mpp) patches cannot be combined. Select patches from only one bundle type. If you want to use multiple, you will have to patch a second time using the other patches you want.</string>
     <string name="network_unavailable_warning">Your device is not connected to the internet. Downloading will fail later.</string>
     <string name="network_metered_warning">You are currently on a metered connection. Data charges from your service provider may apply.</string>
     <string name="apk_source_selector_item">Select APK source</string>

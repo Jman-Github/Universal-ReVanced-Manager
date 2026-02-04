@@ -1,12 +1,19 @@
-# v1.8.0-dev.05 (2026-02-01)
+# v1.8.0-dev.05 (2026-02-06)
 
 
 # Features
+
+- Added support for [AmpleReVanced Patches](https://github.com/AmpleReVanced/revanced-patches) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/152
+- Bumped ReVanced dependencies
+- Bumped Morphe dependencies
+- Added a bundle type field to the patch bundle information screen
 
 
 # Bug fixes
 
 - Fixed bundle recommendations not being available for split-apks https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/151
+- Fixed `Skip unneeded split APKs` toggle breaking some patched apps https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/153
+- Fixed patch options not saving correctly for split APKs
 
 
 # v1.8.0-dev.04 (2026-01-31)

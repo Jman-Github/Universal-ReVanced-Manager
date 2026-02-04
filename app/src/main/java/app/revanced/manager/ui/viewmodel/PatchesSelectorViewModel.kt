@@ -243,7 +243,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
 
     private var hasModifiedSelection = false
     var customPatchSelection: PersistentPatchSelection? by savedStateHandle.saveable(
-        key = "selection",
+        key = "selection_${packageName}",
         stateSaver = selectionSaver,
     ) {
         mutableStateOf(input.currentSelection?.toPersistentPatchSelection())

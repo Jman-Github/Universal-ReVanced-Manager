@@ -194,7 +194,14 @@ class DashboardViewModel(
                 }
 
                 try {
-                    patchBundleRepository.createLocal(size) {
+                    val displayName = runCatching {
+                        contentResolver.query(patchBundle, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+                            ?.use { cursor ->
+                                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                                if (index != -1 && cursor.moveToFirst()) cursor.getString(index) else null
+                            }
+                    }.getOrNull()
+                    patchBundleRepository.createLocal(size, displayName) {
                         contentResolver.openInputStream(patchBundle)
                             ?: throw FileNotFoundException("Unable to open $patchBundle")
                     }
@@ -222,7 +229,7 @@ class DashboardViewModel(
             withPersistentImportToast {
                 val file = File(path)
                 val length = file.length().takeIf { it > 0L }
-                patchBundleRepository.createLocal(length) {
+                patchBundleRepository.createLocal(length, file.name) {
                     FileInputStream(file)
                 }
             }

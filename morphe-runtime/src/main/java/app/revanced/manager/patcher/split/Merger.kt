@@ -151,6 +151,19 @@ internal object Merger {
                     }
                 }
 
+                // Remove split requirements so the merged APK installs as a single package.
+                manifestElement.removeElementsIf { element ->
+                    element.name == "uses-split"
+                }
+                arrayOf("splitName", "split").forEach { attrName ->
+                    manifestElement.removeAttributeIf { attribute ->
+                        attribute.name == attrName
+                    }
+                    applicationElement.removeAttributeIf { attribute ->
+                        attribute.name == attrName
+                    }
+                }
+
                 applicationElement.removeElementsIf { element ->
                     if (element.name != AndroidManifest.TAG_meta_data) return@removeElementsIf false
                     val nameAttr = element
