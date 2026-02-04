@@ -31,6 +31,10 @@
 - Added a `Latest changelog` and `Previous changelogs` action buttons to the patch bundle widget with options to hide and rearrange them in the corresponding setting
 - Improved the `Apps` tab saved patched app UI to follow the style of the other tabs
 - Made all action buttons for saved patched apps quick action buttons on their widgets along with a setting to hide and rearrange said buttons
+- Added support for [AmpleReVanced Patches](https://github.com/AmpleReVanced/revanced-patches) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/152
+- Bumped ReVanced dependencies
+- Bumped Morphe dependencies
+- Added a bundle type field to the patch bundle information screen
 
 
 # Bug fixes
@@ -54,6 +58,8 @@
 - Fixed issues with URV generated keystores from previous versions of the app not being imported correctly resulting in signing errors (again) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/147
 - Fixed issues with the split-apk merger where some apps would crash after being patched
 - Fixed bundle recommendations not being available for split-apks https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/151
+- Fixed `Skip unneeded split APKs` toggle breaking some patched apps https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/153
+- Fixed patch options not saving correctly for split APKs
 
 
 # v1.7.1 (2026-01-22)
