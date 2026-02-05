@@ -31,6 +31,8 @@ import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -99,6 +101,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
@@ -1456,9 +1459,31 @@ fun DashboardScreen(
             ) {
                 DashboardPage.entries.forEachIndexed { index, page ->
                     val selected = pagerState.currentPage == index
+                    val tabScale by animateFloatAsState(
+                        targetValue = if (selected) 1.06f else 1f,
+                        animationSpec = spring(
+                            stiffness = Spring.StiffnessMediumLow,
+                            dampingRatio = Spring.DampingRatioMediumBouncy
+                        ),
+                        label = "dashboardTabScale"
+                    )
+                    val tabOffsetY by animateDpAsState(
+                        targetValue = if (selected) (-2).dp else 0.dp,
+                        animationSpec = spring(
+                            stiffness = Spring.StiffnessMediumLow,
+                            dampingRatio = Spring.DampingRatioNoBouncy
+                        ),
+                        label = "dashboardTabOffset"
+                    )
                     HapticTab(
                         selected = selected,
                         onClick = { composableScope.launch { pagerState.animateScrollToPage(index) } },
+                        modifier = Modifier
+                            .graphicsLayer {
+                                scaleX = tabScale
+                                scaleY = tabScale
+                            }
+                            .offset(y = tabOffsetY),
                         text = { DashboardTabLabel(text = stringResource(page.titleResId), selected = selected) },
                         icon = { Icon(page.icon, null) },
                         selectedContentColor = MaterialTheme.colorScheme.primary,

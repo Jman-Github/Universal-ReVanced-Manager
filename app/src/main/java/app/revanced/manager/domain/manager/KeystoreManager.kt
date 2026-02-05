@@ -390,8 +390,9 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
                     }
                     for (candidateAlias in aliasCandidates) {
                         for (keyCandidate in keyCandidates) {
-                            val privateKey = ks.getKey(candidateAlias, keyCandidate) as? PrivateKey
-                                ?: continue
+                            val privateKey = runCatching {
+                                ks.getKey(candidateAlias, keyCandidate) as? PrivateKey
+                            }.getOrNull() ?: continue
                             val certs = ks.getCertificateChain(candidateAlias)
                                 ?.mapNotNull { it as? X509Certificate }
                                 ?.takeIf { it.isNotEmpty() }

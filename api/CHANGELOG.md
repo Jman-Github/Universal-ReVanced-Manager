@@ -37,6 +37,7 @@
 - Added a bundle type field to the patch bundle information screen
 - Made the FAB buttons on the `Apps` tab collapsible/expandable https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/155
 - Improved and cleaned up the patcher log
+- Added a popout animation when switching tabs on the main screen
 
 
 # Bug fixes
