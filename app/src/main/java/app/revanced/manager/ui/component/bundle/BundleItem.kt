@@ -348,6 +348,12 @@ fun BundleItem(
                         enabled = src.enabled,
                         modifier = Modifier.align(Alignment.TopEnd)
                     )
+                } else {
+                    BundleMetaPill(
+                        text = stringResource(R.string.bundle_type_local),
+                        enabled = src.enabled,
+                        modifier = Modifier.align(Alignment.TopEnd)
+                    )
                 }
             }
 
