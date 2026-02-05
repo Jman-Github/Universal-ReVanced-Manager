@@ -20,6 +20,7 @@ import java.io.ByteArrayOutputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.security.KeyStore
+import java.security.Provider
 import java.security.PrivateKey
 import java.security.cert.X509Certificate
 import java.security.KeyFactory
@@ -33,6 +34,7 @@ import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 import javax.crypto.EncryptedPrivateKeyInfo
 import kotlin.time.Duration.Companion.days
+import org.bouncycastle.jce.provider.BouncyCastleProvider
 
 class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
     companion object Constants {
@@ -53,6 +55,11 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
     private val backupKeystorePath = app.getExternalFilesDir("keystore")?.resolve("manager.keystore")
     private val keystoreMutex = Mutex()
     private val appContext = app.applicationContext
+    private val bcProvider: Provider by lazy {
+        // Use an explicit provider instance only when required (e.g., BKS) to avoid
+        // altering global provider order and impacting PKCS12/JKS loading.
+        BouncyCastleProvider()
+    }
 
     private data class KeystoreCredentials(
         val alias: String,
@@ -83,6 +90,12 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         val privateKey: PrivateKey,
         val certificates: List<X509Certificate>,
         val storeType: String
+    )
+
+    private data class LoadedKeyMaterial(
+        val keyMaterial: KeyMaterial,
+        val storePass: String,
+        val keyPass: String
     )
 
     private suspend fun updatePrefs(
@@ -231,18 +244,24 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
             val keystoreData = withContext(Dispatchers.IO) { keystore.readBytes() }
             val resolvedKeyPass = keyPass.takeIf { it.isNotBlank() } ?: storePass
 
-            val keyMaterial = tryLoadKeyMaterial(keystoreData, alias, storePass, resolvedKeyPass)
+            val loaded = tryLoadKeyMaterial(keystoreData, alias, storePass, resolvedKeyPass)
                 ?: run {
                     Log.w(LOG_TAG, "Keystore import failed: unable to load key material for alias=$alias")
                     return@withLock false
                 }
+            val keyMaterial = loaded.keyMaterial
+            val usedStorePass = loaded.storePass
+            val usedKeyPass = loaded.keyPass
+            val normalizedStorePass =
+                if (keyMaterial.storeType == "JKS") usedStorePass.ifBlank { usedKeyPass } else usedStorePass
+            val normalizedKeyPass = usedKeyPass.ifBlank { normalizedStorePass }
 
             val persistedType = if (keyMaterial.storeType == "JKS") "PKCS12" else keyMaterial.storeType
             val persistedBytes = if (keyMaterial.storeType == "JKS") {
                 buildPkcs12Keystore(
                     keyMaterial.alias,
-                    resolvedKeyPass,
-                    storePass,
+                    normalizedKeyPass,
+                    normalizedStorePass,
                     keyMaterial.privateKey,
                     keyMaterial.certificates
                 )
@@ -256,7 +275,7 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
                 writeBackupKeystore(persistedBytes)
             }
 
-            updatePrefs(keyMaterial.alias, storePass, resolvedKeyPass, persistedType, fingerprint)
+            updatePrefs(keyMaterial.alias, normalizedStorePass, normalizedKeyPass, persistedType, fingerprint)
             Log.i(LOG_TAG, "Keystore imported (alias=${keyMaterial.alias}, type=$persistedType)")
             true
         }
@@ -305,9 +324,39 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
     }
 
     private fun keyStoreTypes(preferred: String?): List<String> {
-        val base = listOf("PKCS12", "JKS", "BKS")
+        val base = listOf("PKCS12", "JKS", "BKS-V1", "BKS")
         val preferredNormalized = preferred?.trim()?.uppercase()?.takeIf { it.isNotBlank() }
         return (listOfNotNull(preferredNormalized) + base).distinct()
+    }
+
+    private fun keyStoreInstance(type: String, preferBc: Boolean): KeyStore {
+        if (preferBc && type.equals("BKS", ignoreCase = true)) {
+            bcProvider?.let { provider ->
+                return KeyStore.getInstance(type, provider)
+            }
+        }
+        return KeyStore.getInstance(type)
+    }
+
+    private fun loadKeyStoreFromBytes(
+        keystoreData: ByteArray,
+        type: String,
+        storePass: CharArray?,
+        preferBc: Boolean
+    ): KeyStore? {
+        val isBks = type.equals("BKS", ignoreCase = true) || type.equals("BKS-V1", ignoreCase = true)
+        val providers = if (preferBc && isBks) listOf<Provider?>(bcProvider, null) else listOf(null)
+        for (provider in providers) {
+            val ks = runCatching {
+                if (provider == null) KeyStore.getInstance(type) else KeyStore.getInstance(type, provider)
+            }.getOrNull() ?: continue
+            val loaded = runCatching {
+                ks.load(ByteArrayInputStream(keystoreData), storePass)
+                ks
+            }.getOrNull()
+            if (loaded != null) return loaded
+        }
+        return null
     }
 
     private fun tryLoadKeyMaterial(
@@ -316,7 +365,7 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         storePass: String,
         keyPass: String,
         preferredType: String? = null
-    ): KeyMaterial? {
+    ): LoadedKeyMaterial? {
         val keyCandidates = buildList<CharArray?> {
             if (keyPass.isNotBlank()) add(keyPass.toCharArray())
             if (storePass.isNotBlank()) add(storePass.toCharArray())
@@ -331,8 +380,8 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         for (type in keyStoreTypes(preferredType)) {
             for (storeCandidate in storeCandidates) {
                 try {
-                    val ks = KeyStore.getInstance(type)
-                    ks.load(ByteArrayInputStream(keystoreData), storeCandidate)
+                    val ks = loadKeyStoreFromBytes(keystoreData, type, storeCandidate, preferBc = true)
+                        ?: continue
                     val aliases = ks.aliases().toList()
                     val aliasCandidates = when {
                         aliases.isEmpty() -> listOf(alias)
@@ -347,7 +396,11 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
                                 ?.mapNotNull { it as? X509Certificate }
                                 ?.takeIf { it.isNotEmpty() }
                                 ?: continue
-                            return KeyMaterial(candidateAlias, privateKey, certs, type)
+                            return LoadedKeyMaterial(
+                                KeyMaterial(candidateAlias, privateKey, certs, type),
+                                storeCandidate?.concatToString().orEmpty(),
+                                keyCandidate?.concatToString().orEmpty()
+                            )
                         }
                     }
                 } catch (e: Exception) {
@@ -357,7 +410,9 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         }
 
         val jksMaterial = tryLoadJksKeyMaterial(keystoreData, alias, storePass, keyPass)
-        if (jksMaterial != null) return jksMaterial
+        if (jksMaterial != null) {
+            return jksMaterial
+        }
 
         return null
     }
@@ -375,14 +430,27 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
 
         fun loadStrict(creds: KeystoreCredentials): StrictLoadResult? {
             val signingType = resolveSigningType(creds) ?: return null
-            return loadKeyMaterialStrict(
-                keystoreData,
-                creds.alias,
-                creds.storePass,
-                creds.keyPass,
-                signingType,
-                creds.fingerprint.isNullOrBlank()
-            )
+            val allowNullStorePassFallback =
+                creds.fingerprint.isNullOrBlank() || creds.storePass.isBlank()
+            val typeCandidates = when {
+                signingType.equals("BKS", ignoreCase = true) ->
+                    listOf("BKS", "BKS-V1")
+                signingType.equals("BKS-V1", ignoreCase = true) ->
+                    listOf("BKS-V1", "BKS")
+                else -> listOf(signingType)
+            }
+            for (type in typeCandidates.distinct()) {
+                val loaded = loadKeyMaterialStrict(
+                    keystoreData,
+                    creds.alias,
+                    creds.storePass,
+                    creds.keyPass,
+                    type,
+                    allowNullStorePassFallback
+                )
+                if (loaded != null) return loaded
+            }
+            return null
         }
 
         var strictResult = loadStrict(credentials)
@@ -390,6 +458,25 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
             if (rehydrateCredentials(keystoreData)) {
                 credentials = resolveCredentials()
                 strictResult = loadStrict(credentials)
+            }
+        }
+        if (strictResult == null) {
+            val flexible = tryLoadKeyMaterial(
+                keystoreData,
+                credentials.alias,
+                credentials.storePass,
+                credentials.keyPass,
+                credentials.type
+            )
+            if (flexible != null) {
+                updatePrefs(
+                    flexible.keyMaterial.alias,
+                    flexible.storePass,
+                    flexible.keyPass,
+                    flexible.keyMaterial.storeType,
+                    fingerprint
+                )
+                strictResult = StrictLoadResult(flexible.keyMaterial, flexible.storePass)
             }
         }
 
@@ -463,11 +550,7 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         for (type in types) {
             for (storePass in passCandidates) {
                 val storeChars = storePass.takeIf { it.isNotEmpty() }?.toCharArray()
-                val ks = runCatching {
-                    KeyStore.getInstance(type).apply {
-                        load(ByteArrayInputStream(keystoreData), storeChars)
-                    }
-                }.getOrNull() ?: continue
+                val ks = loadKeyStoreFromBytes(keystoreData, type, storeChars, preferBc = true) ?: continue
                 val aliasesInStore = ks.aliases().toList()
                 if (aliasesInStore.isEmpty()) continue
                 for (alias in aliasCandidates) {
@@ -479,7 +562,9 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
                     for (candidateAlias in aliasSearch) {
                         for (keyPass in passCandidates) {
                             val keyChars = keyPass.takeIf { it.isNotEmpty() }?.toCharArray()
-                            val privateKey = ks.getKey(candidateAlias, keyChars) as? PrivateKey ?: continue
+                            val privateKey = runCatching {
+                                ks.getKey(candidateAlias, keyChars) as? PrivateKey
+                            }.getOrNull() ?: continue
                             val certs = ks.getCertificateChain(candidateAlias)
                                 ?.mapNotNull { it as? X509Certificate }
                                 ?.takeIf { it.isNotEmpty() }
@@ -580,15 +665,16 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         for (alias in aliasSearch) {
             for (storePass in passCandidates) {
                 for (keyPass in passCandidates) {
-                    val material = tryLoadKeyMaterial(
+                    val loaded = tryLoadKeyMaterial(
                         keystoreData,
                         alias,
                         storePass,
                         keyPass
                     ) ?: continue
-                    val resolvedStorePass = storePass.ifBlank { keyPass }.trim()
-                    val resolvedKeyPass = keyPass.ifBlank { storePass }.trim()
+                    val resolvedStorePass = loaded.storePass.ifBlank { loaded.keyPass }.trim()
+                    val resolvedKeyPass = loaded.keyPass.ifBlank { loaded.storePass }.trim()
                     if (resolvedStorePass.isBlank() || resolvedKeyPass.isBlank()) continue
+                    val material = loaded.keyMaterial
                     val persistedType = if (material.storeType == "JKS") "PKCS12" else material.storeType
                     updatePrefs(material.alias, resolvedStorePass, resolvedKeyPass, persistedType, fingerprint)
                     Log.i(
@@ -613,12 +699,16 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         val trimmedAlias = alias.trim()
         if (trimmedAlias.isEmpty()) return null
         fun loadWithStorePass(storePassChars: CharArray?): KeyMaterial? {
-            val ks = KeyStore.getInstance(type)
-            ks.load(ByteArrayInputStream(keystoreData), storePassChars)
-            val privateKey = ks.getKey(
-                trimmedAlias,
-                keyPass.takeIf { it.isNotBlank() }?.toCharArray()
-            ) as? PrivateKey ?: return null
+            val ks = loadKeyStoreFromBytes(keystoreData, type, storePassChars, preferBc = true)
+                ?: return null
+            val keyCandidates = buildList<CharArray?> {
+                if (keyPass.isNotBlank()) add(keyPass.toCharArray())
+                if (storePass.isNotBlank() && storePass != keyPass) add(storePass.toCharArray())
+                add(null)
+            }.distinctBy { it?.concatToString() }
+            val privateKey = keyCandidates.firstNotNullOfOrNull { candidate ->
+                runCatching { ks.getKey(trimmedAlias, candidate) as? PrivateKey }.getOrNull()
+            } ?: return null
             val certs = ks.getCertificateChain(trimmedAlias)
                 ?.mapNotNull { it as? X509Certificate }
                 ?.takeIf { it.isNotEmpty() }
@@ -640,7 +730,7 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         alias: String,
         storePass: String,
         keyPass: String
-    ): KeyMaterial? {
+    ): LoadedKeyMaterial? {
         val entries = readJksEntries(keystoreData) ?: return null
         if (entries.isEmpty()) return null
         val entryCandidates = when {
@@ -657,15 +747,23 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
 
         for (entry in entryCandidates) {
             val protectedCandidates = protectedKeyCandidates(entry.protectedKey)
+            var usedKeyPass = ""
             val keyBytes = keyCandidates.firstNotNullOfOrNull { candidate ->
                 protectedCandidates.firstNotNullOfOrNull { protectedKey ->
                     unprotectJksKey(protectedKey, candidate)
+                }?.also {
+                    usedKeyPass = candidate?.concatToString().orEmpty()
                 }
             } ?: continue
             val algorithm = entry.certificates.firstOrNull()?.publicKey?.algorithm ?: continue
             val privateKey = KeyFactory.getInstance(algorithm)
                 .generatePrivate(PKCS8EncodedKeySpec(keyBytes))
-            return KeyMaterial(entry.alias, privateKey, entry.certificates, "JKS")
+            val storePassUsed = storePass.ifBlank { usedKeyPass }
+            return LoadedKeyMaterial(
+                KeyMaterial(entry.alias, privateKey, entry.certificates, "JKS"),
+                storePassUsed,
+                usedKeyPass
+            )
         }
         return null
     }

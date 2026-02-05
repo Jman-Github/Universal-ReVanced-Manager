@@ -28,6 +28,7 @@ val apkEditorLib by configurations.creating
 
 configurations.all {
     exclude(group = "xmlpull", module = "xmlpull")
+    exclude(group = "org.bouncycastle", module = "bcprov-jdk18on")
 }
 val strippedApkEditorLib by tasks.registering(Jar::class) {
     archiveFileName.set("APKEditor-android.jar")
@@ -157,6 +158,7 @@ dependencies {
 
     // APK signing (supports JKS/PKCS12)
     implementation(libs.apksig)
+    implementation(libs.bcprov)
 
     // Ackpine
     implementation(libs.ackpine.core)

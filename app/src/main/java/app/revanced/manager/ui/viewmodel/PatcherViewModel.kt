@@ -912,6 +912,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private var currentWorkSource: LiveData<WorkInfo?>? = null
     private val handledFailureIds = mutableSetOf<UUID>()
     private var forceKeepLocalInput = false
+    private var lastLoggedErrorSignature: String? = null
 
     private var patcherWorkerId: ParcelUuid?
         get() = savedStateHandle.get("patcher_worker_id")
@@ -960,6 +961,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private fun startWorker() {
         resetDexCompileState()
+        resetFailureLogState()
         logBatteryOptimizationStatus()
         val workId = launchWorker()
         patcherWorkerId = ParcelUuid(workId)
@@ -2120,8 +2122,25 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
 
         if (event is ProgressEvent.Failed) {
+            if (shouldLogFailure(event.error)) {
+                val stepName = event.stepId?.let { it::class.java.simpleName } ?: "Unknown"
+                val message = event.error.message ?: event.error.type
+                logger.error("Failure in step=$stepName: $message")
+                logger.error(event.error.stackTrace)
+            }
             handleKeystoreMissing(event.error)
         }
+    }
+
+    private fun resetFailureLogState() {
+        lastLoggedErrorSignature = null
+    }
+
+    private fun shouldLogFailure(error: app.revanced.manager.patcher.RemoteError): Boolean {
+        val signature = listOf(error.type, error.message, error.stackTrace).joinToString("|")
+        if (signature == lastLoggedErrorSignature) return false
+        lastLoggedErrorSignature = signature
+        return true
     }
 
     private fun handleKeystoreMissing(error: app.revanced.manager.patcher.RemoteError) {
@@ -2248,6 +2267,13 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         if (stepId == StepId.WriteAPK && isResourceCompileTitle(normalized)) {
             activateResourceCompileStep(list, progress)
             return
+        }
+        if (stepId == StepId.WriteAPK &&
+            (normalized.equals("Writing output APK", ignoreCase = true)
+                || normalized.equals("Finalizing output", ignoreCase = true)
+                || normalized.equals("Stripping native libraries", ignoreCase = true))
+        ) {
+            completeResourceCompileIfPending(list)
         }
         if (stepId == StepId.PrepareSplitApk &&
             (normalized.equals("Writing merged APK", ignoreCase = true)
@@ -2378,6 +2404,16 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         if (index == -1) return
         val detail = list[index]
         if (detail.state == State.COMPLETED) return
+        list[index] = detail.copy(state = State.COMPLETED, progress = null)
+    }
+
+    private fun completeResourceCompileIfPending(list: SnapshotStateList<StepDetail>) {
+        val index = list.indexOfFirst {
+            it.title.equals("Compiling modified resources", ignoreCase = true)
+        }
+        if (index == -1) return
+        val detail = list[index]
+        if (detail.skipped || detail.state == State.COMPLETED) return
         list[index] = detail.copy(state = State.COMPLETED, progress = null)
     }
 
@@ -2607,6 +2643,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         ).toMutableStateList()
         steps.clear()
         resetDexCompileState()
+        resetFailureLogState()
         steps.addAll(newSteps)
         stepSubSteps.clear()
         _patcherSucceeded.value = null

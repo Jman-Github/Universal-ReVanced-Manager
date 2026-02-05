@@ -65,6 +65,7 @@
 - Fixed issues with action buttons on the saved patched apps widget not responding to taps and the delete button not being functional sometimes https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/155
 - Fixed issues with the saved patch apps widget `Open` button
 - Fixed local patch bundles not having a tag on the top right like remote patch bundles have
+- Fixed issues with Morphe Manager generated keystores not working https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/158
 
 
 # v1.7.1 (2026-01-22)
