@@ -2113,7 +2113,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         if (stepId == StepId.PrepareSplitApk && list.isNotEmpty()) {
             if (normalized.startsWith("Merging ", ignoreCase = true)) {
                 if (existingIndex == -1) {
-                    return
+                    existingIndex = findBestSubStepIndex(list, normalized)
+                    if (existingIndex == -1) {
+                        return
+                    }
                 }
                 val nextExpectedIndex = if (runningIndex != -1) {
                     var index = runningIndex + 1
@@ -2135,7 +2138,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                         return
                     }
                     nextExpectedIndex != -1 && existingIndex > nextExpectedIndex -> {
-                        return
+                        val moved = list.removeAt(existingIndex)
+                        list.add(nextExpectedIndex, moved)
+                        existingIndex = nextExpectedIndex
                     }
                 }
             }

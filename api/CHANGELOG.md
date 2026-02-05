@@ -62,6 +62,7 @@
 - Fixed `Skip unneeded split APKs` toggle breaking some patched apps https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/153
 - Fixed patch options not saving correctly for split APKs
 - Fixed issues with action buttons on the saved patched apps widget not responding to taps and the delete button not being functional sometimes https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/155
+- Fixed issues with the saved patch apps widget `Open` button
 
 
 # v1.7.1 (2026-01-22)

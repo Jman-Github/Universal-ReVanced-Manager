@@ -874,27 +874,23 @@ fun DashboardScreen(
     }
 
     val quickExportApp = quickActionViewModel?.installedApp
-    if (showQuickExportPicker) {
-        if (quickExportApp == null) {
-            showQuickExportPicker = false
-        } else {
-            PathSelectorDialog(
-                roots = storageRoots,
-                onSelect = { path ->
-                    if (path == null) {
-                        showQuickExportPicker = false
-                    }
-                },
-                fileFilter = ::isAllowedApkFile,
-                allowDirectorySelection = false,
-                fileTypeLabel = ".apk",
-                confirmButtonText = stringResource(R.string.save),
-                onConfirm = { directory ->
-                    val exportName = resolveQuickExportName(quickExportApp)
-                    quickExportDialogState = QuickExportDialogState(directory, exportName)
+    if (showQuickExportPicker && quickExportApp != null) {
+        PathSelectorDialog(
+            roots = storageRoots,
+            onSelect = { path ->
+                if (path == null) {
+                    showQuickExportPicker = false
                 }
-            )
-        }
+            },
+            fileFilter = ::isAllowedApkFile,
+            allowDirectorySelection = false,
+            fileTypeLabel = ".apk",
+            confirmButtonText = stringResource(R.string.save),
+            onConfirm = { directory ->
+                val exportName = resolveQuickExportName(quickExportApp)
+                quickExportDialogState = QuickExportDialogState(directory, exportName)
+            }
+        )
     }
     quickExportDialogState?.let { state ->
         ExportSavedApkFileNameDialog(
@@ -1104,7 +1100,8 @@ fun DashboardScreen(
                 showQuickDeleteDialog = false
                 quickDeleteApp = null
                 when {
-                    deleteApp != null && deleteEntry -> installedAppsViewModel.deleteSavedEntry(deleteApp)
+                    deleteApp != null && (deleteEntry || deleteApp.installType != InstallType.SAVED) ->
+                        installedAppsViewModel.deleteSavedEntry(deleteApp)
                     deleteApp != null -> installedAppsViewModel.removeSavedApp(deleteApp)
                     deleteEntry -> quickActionViewModel?.deleteSavedEntry()
                     else -> quickActionViewModel?.removeSavedApp()
@@ -1598,6 +1595,19 @@ fun DashboardScreen(
                                 },
                                 onAppAction = { app, action ->
                                     installedAppsViewModel.clearSelection()
+                                    if (action == InstalledAppAction.OPEN) {
+                                        val intent = androidContext.packageManager
+                                            .getLaunchIntentForPackage(app.currentPackageName)
+                                        if (intent == null) {
+                                            androidContext.toast(
+                                                androidContext.getString(R.string.saved_app_launch_unavailable)
+                                            )
+                                        } else {
+                                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            androidContext.startActivity(intent)
+                                        }
+                                        return@InstalledAppsScreen
+                                    }
                                     if (action == InstalledAppAction.DELETE) {
                                         quickDeleteApp = app
                                         quickDeleteIsEntry = app.installType != InstallType.SAVED &&
