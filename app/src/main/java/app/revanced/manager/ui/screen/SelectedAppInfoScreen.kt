@@ -312,9 +312,13 @@ fun SelectedAppInfoScreen(
 
         if (vm.showSourceSelector) {
             val requiredVersion by vm.requiredVersion.collectAsStateWithLifecycle(null)
+            val selectionRecommendedVersion by vm.selectionRecommendedVersionFlow.collectAsStateWithLifecycle(null)
             val effectiveVersion =
                 if (bundleTargetsAllVersions && selectedBundleUid != null) null
-                else preferredBundleVersion ?: vm.desiredVersion
+                else selectedBundleOverride?.takeUnless { it.isBlank() }
+                    ?: preferredBundleVersion
+                    ?: selectionRecommendedVersion
+                    ?: vm.desiredVersion
 
             AppSourceSelectorDialog(
                 plugins = plugins,

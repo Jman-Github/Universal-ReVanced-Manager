@@ -62,6 +62,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
 import kotlin.collections.ArrayDeque
@@ -657,8 +658,8 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         overrideAppVersion: String? = null,
         keepExistingProfileVersion: Boolean = false,
         existingProfileVersion: String? = null
-    ): Boolean {
-        if (selectedBundles.isEmpty()) return false
+    ): Boolean = withContext(Dispatchers.Default) {
+        if (selectedBundles.isEmpty()) return@withContext false
         val resolvedAppVersion = overrideAppVersion
             ?: resolveAppVersion(
                 selectedBundles,
@@ -686,17 +687,31 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         }
 
         val payload = PatchProfilePayload(bundles)
-        return try {
-            if (existingProfileId != null) {
-                val updated = patchProfileRepository.updateProfile(
-                    uid = existingProfileId,
-                    packageName = packageName,
-                    appVersion = resolvedAppVersion,
-                    name = name,
-                    payload = payload
-                )
-                if (updated != null) {
-                    app.toast(app.getString(R.string.patch_profile_updated_toast, name))
+        try {
+            withContext(Dispatchers.IO) {
+                if (existingProfileId != null) {
+                    val updated = patchProfileRepository.updateProfile(
+                        uid = existingProfileId,
+                        packageName = packageName,
+                        appVersion = resolvedAppVersion,
+                        name = name,
+                        payload = payload
+                    )
+                    if (updated != null) {
+                        withContext(Dispatchers.Main) {
+                            app.toast(app.getString(R.string.patch_profile_updated_toast, name))
+                        }
+                    } else {
+                        patchProfileRepository.createProfile(
+                            packageName = packageName,
+                            appVersion = resolvedAppVersion,
+                            name = name,
+                            payload = payload
+                        )
+                        withContext(Dispatchers.Main) {
+                            app.toast(app.getString(R.string.patch_profile_saved_toast, name))
+                        }
+                    }
                 } else {
                     patchProfileRepository.createProfile(
                         packageName = packageName,
@@ -704,24 +719,22 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
                         name = name,
                         payload = payload
                     )
-                    app.toast(app.getString(R.string.patch_profile_saved_toast, name))
+                    withContext(Dispatchers.Main) {
+                        app.toast(app.getString(R.string.patch_profile_saved_toast, name))
+                    }
                 }
-            } else {
-                patchProfileRepository.createProfile(
-                    packageName = packageName,
-                    appVersion = resolvedAppVersion,
-                    name = name,
-                    payload = payload
-                )
-                app.toast(app.getString(R.string.patch_profile_saved_toast, name))
             }
             true
         } catch (duplicate: DuplicatePatchProfileNameException) {
-            app.toast(app.getString(R.string.patch_profile_duplicate_toast, duplicate.profileName))
+            withContext(Dispatchers.Main) {
+                app.toast(app.getString(R.string.patch_profile_duplicate_toast, duplicate.profileName))
+            }
             false
         } catch (t: Exception) {
             Log.e(tag, "Failed to save patch profile", t)
-            app.toast(app.getString(R.string.patch_profile_save_failed_toast))
+            withContext(Dispatchers.Main) {
+                app.toast(app.getString(R.string.patch_profile_save_failed_toast))
+            }
             false
         }
     }

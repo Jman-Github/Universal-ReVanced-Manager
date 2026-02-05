@@ -20,6 +20,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.SavedStateHandleSaveableApi
 import androidx.lifecycle.viewmodel.compose.saveable
 import app.universal.revanced.manager.R
+import app.revanced.library.mostCommonCompatibleVersions as revancedMostCommonCompatibleVersions
 import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.data.room.apps.downloaded.DownloadedApp
 import app.revanced.manager.data.room.apps.installed.InstallType
@@ -41,6 +42,8 @@ import app.revanced.manager.domain.repository.remapLocalBundles
 import app.revanced.manager.domain.repository.toConfiguration
 import app.revanced.manager.patcher.patch.PatchBundleInfo
 import app.revanced.manager.patcher.patch.PatchBundleInfo.Extensions.toPatchSelection
+import app.revanced.manager.patcher.patch.PatchBundleType
+import app.revanced.manager.patcher.patch.PatchInfo
 import app.revanced.manager.patcher.split.SplitApkInspector
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.network.downloader.LoadedDownloaderPlugin
@@ -173,24 +176,70 @@ class SelectedAppInfoViewModel(
     val selectedBundleUidFlow = preferredBundleUidFlow
     val selectedBundleVersionOverrideFlow = preferredBundleOverrideFlow
     val preferredBundleTargetsAllVersionsFlow = preferredBundleAllVersionsFlow
+    private val selectedPatchNamesByBundleFlow = combine(
+        bundleInfoFlow,
+        snapshotFlow { selectionState },
+        prefs.disablePatchVersionCompatCheck.flow
+    ) { bundles, state, allowIncompatible ->
+        state.patches(bundles, allowIncompatible)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+    val selectionRecommendedVersionFlow = combine(
+        bundleInfoFlow,
+        selectedPatchNamesByBundleFlow,
+        selectedAppState.map { it.packageName }
+    ) { scopedBundles, selectedPatchNames, activePackageName ->
+        val selectedBundles = scopedBundles.filter { scoped ->
+            selectedPatchNames[scoped.uid]?.isNotEmpty() == true
+        }
+        val bundleType = selectedBundles.firstOrNull()?.bundleType
+        val patches = selectedBundles.flatMap { scoped ->
+            val selected = selectedPatchNames[scoped.uid].orEmpty()
+            scoped.patches.filter { it.name in selected }
+        }
+        when (bundleType) {
+            PatchBundleType.REVANCED -> {
+                val versionCounts = patches
+                    .asSequence()
+                    .map { it.toPatcherPatch() }
+                    .toSet()
+                    .revancedMostCommonCompatibleVersions(countUnusedPatches = true)[activePackageName]
+                pickRecommendedVersion(versionCounts.orEmpty())
+            }
+            PatchBundleType.MORPHE,
+            PatchBundleType.AMPLE -> suggestedVersionForMorphe(patches, activePackageName)
+            else -> null
+        }
+    }.distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+    private val recommendedVersionsByBundleFlow = combine(
+        bundleInfoFlow,
+        selectedPatchNamesByBundleFlow,
+        selectedAppState.map { it.packageName }
+    ) { scopedBundles, selectedPatchNames, activePackageName ->
+        scopedBundles.associate { scoped ->
+            val selected = selectedPatchNames[scoped.uid]?.takeIf { it.isNotEmpty() }
+            scoped.uid to scoped.recommendedVersionForSelection(activePackageName, selected)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
     val preferredBundleVersionFlow = combine(
         preferredBundleUidFlow,
         preferredBundleOverrideFlow,
-        suggestedVersionsByBundle
+        recommendedVersionsByBundleFlow
     ) { uid, override, versions ->
         if (uid == null) null else override ?: versions[uid]
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
     val preferredBundleVersion get() = preferredBundleVersionFlow.value
-    val effectiveDesiredVersion get() = preferredBundleVersion ?: desiredVersion
+    val effectiveDesiredVersion get() = preferredBundleVersion ?: selectionRecommendedVersionFlow.value ?: desiredVersion
     val bundleRecommendationDetailsFlow = combine(
         bundleInfoFlow,
-        suggestedVersionsByBundle,
+        selectedPatchNamesByBundleFlow,
         selectedAppState.map { it.packageName }
-    ) { scopedBundles, versions, activePackageName ->
+    ) { scopedBundles, selectedPatchNames, activePackageName ->
         scopedBundles.mapNotNull { scoped ->
-            val support = scoped.collectBundleSupport(activePackageName)
+            val selected = selectedPatchNames[scoped.uid]?.takeIf { it.isNotEmpty() }
+            val support = scoped.collectBundleSupport(activePackageName, selected)
             if (!support.hasSupport) return@mapNotNull null
-            val recommended = versions[scoped.uid]
+            val recommended = scoped.recommendedVersionForSelection(activePackageName, selected)
             if (
                 recommended == null &&
                 support.versions.isEmpty() &&
@@ -316,11 +365,27 @@ class SelectedAppInfoViewModel(
         }
 
         viewModelScope.launch {
-            preferredBundleVersionFlow.collect { version ->
-                val target = version ?: desiredVersion
+            combine(
+                preferredBundleVersionFlow,
+                selectionRecommendedVersionFlow,
+                preferredBundleAllVersionsFlow
+            ) { preferred, selectionRecommended, targetsAll ->
+                if (targetsAll) null else preferred ?: selectionRecommended ?: desiredVersion
+            }.distinctUntilChanged().collect { target ->
                 val current = selectedApp
-                if (current is SelectedApp.Search && current.version != target) {
-                    selectedApp = SelectedApp.Search(packageName, target)
+                when (current) {
+                    is SelectedApp.Search -> if (current.version != target) {
+                        selectedApp = current.copy(version = target)
+                    }
+
+                    is SelectedApp.Download -> if (
+                        current.version.isNullOrBlank() ||
+                        (target != null && current.version != target)
+                    ) {
+                        selectedApp = current.copy(version = target ?: current.version)
+                    }
+
+                    else -> Unit
                 }
             }
         }
@@ -552,11 +617,12 @@ class SelectedAppInfoViewModel(
     val requiredVersion = combine(
         prefs.suggestedVersionSafeguard.flow,
         bundleRepository.suggestedVersions,
+        selectionRecommendedVersionFlow,
         preferredBundleVersionFlow
-    ) { suggestedVersionSafeguard, suggestedVersions, preferred ->
+    ) { suggestedVersionSafeguard, suggestedVersions, selectionRecommended, preferred ->
         if (!suggestedVersionSafeguard) return@combine null
 
-        preferred ?: suggestedVersions[input.app.packageName]
+        preferred ?: selectionRecommended ?: suggestedVersions[input.app.packageName]
     }
 
     suspend fun awaitOptions(): Options {
@@ -752,24 +818,32 @@ class SelectedAppInfoViewModel(
         }
 
         // Keep the selected app version in sync when no APK has been chosen yet (Search/download flows).
-        val targetVersion = if (targetsAllVersions) null else versionOverride ?: preferredBundleVersion
+        val bundleRecommended = bundleUid?.let { recommendedVersionsByBundleFlow.value[it] }
+        val targetVersion = if (targetsAllVersions) {
+            null
+        } else {
+            versionOverride?.takeUnless { it.isBlank() }
+                ?: bundleRecommended
+                ?: selectionRecommendedVersionFlow.value
+                ?: desiredVersion
+        }
         when (val current = selectedApp) {
             is SelectedApp.Search -> {
                 if (current.version != targetVersion) {
-                    selectedApp = current.copy(version = targetVersion ?: desiredVersion)
+                    selectedApp = current.copy(version = targetVersion)
                 }
             }
 
             is SelectedApp.Download -> {
-                if (current.version.isNullOrBlank() || current.version != targetVersion) {
-                    selectedApp = current.copy(version = targetVersion ?: desiredVersion)
+                if (current.version.isNullOrBlank() || (targetVersion != null && current.version != targetVersion)) {
+                    selectedApp = current.copy(version = targetVersion ?: current.version)
                 }
             }
 
             else -> Unit
         }
 
-        if (bundleUid != null) {
+        if (bundleUid != null && selectionState is SelectionState.Default) {
             applyBundleRecommendationSelection(bundleUid)
         }
     }
@@ -816,8 +890,11 @@ class SelectedAppInfoViewModel(
                 }
 
                 val targetsAllVersions = preferredBundleAllVersionsFlow.value
+                val selectionRecommended = selectionRecommendedVersionFlow.value
+                val override = preferredBundleOverrideFlow.value?.takeUnless { it.isBlank() }
                 val targetVersion =
-                    if (targetsAllVersions) null else preferredBundleVersion ?: desiredVersion
+                    if (targetsAllVersions) null
+                    else override ?: preferredBundleVersion ?: selectionRecommended ?: desiredVersion
                 val result = withContext(Dispatchers.IO) {
                     plugin.get(scope, packageName, targetVersion)
                 }
@@ -830,9 +907,9 @@ class SelectedAppInfoViewModel(
 
                 val derivedVersion = resolveVersionFromDownloaderData(plugin, data, targetVersion)
                 val resolvedVersion = when {
-                    derivedVersion != null && !looksLikeVersionCode(derivedVersion) -> derivedVersion
                     targetVersion != null && !looksLikeVersionCode(targetVersion) -> targetVersion
-                    else -> preferredBundleVersion ?: desiredVersion
+                    derivedVersion != null && !looksLikeVersionCode(derivedVersion) -> derivedVersion
+                    else -> override ?: preferredBundleVersion ?: selectionRecommended ?: desiredVersion
                 }
                 if (targetVersion != null && resolvedVersion != targetVersion) {
                     Log.d(TAG, "Downloader provided $targetVersion, resolved version=$resolvedVersion")
@@ -965,12 +1042,16 @@ class SelectedAppInfoViewModel(
 
         selectionState = selection?.let(SelectionState::Customized) ?: SelectionState.Default
 
-        val filteredOptions = if (filterOptions) {
-            options.filtered(bundleInfoFlow.first())
-        } else {
-            options
+        val filteredOptions = withContext(Dispatchers.Default) {
+            if (filterOptions) {
+                options.filtered(bundleInfoFlow.first())
+            } else {
+                options
+            }
         }
-        this@SelectedAppInfoViewModel.options = filteredOptions
+        withContext(Dispatchers.Main) {
+            this@SelectedAppInfoViewModel.options = filteredOptions
+        }
 
         if (!persistConfiguration || !persistState) return@launch
         viewModelScope.launch(Dispatchers.Default) {
@@ -1002,12 +1083,22 @@ class SelectedAppInfoViewModel(
         NoPlugins(R.string.downloader_no_plugins_available)
     }
 
-    private fun PatchBundleInfo.Scoped.collectBundleSupport(packageName: String): BundleSupport {
+    private fun PatchBundleInfo.Scoped.collectBundleSupport(
+        packageName: String,
+        selectedPatches: Set<String>?
+    ): BundleSupport {
         var supportsAllVersions = false
         val versions = mutableSetOf<String>()
         var hasSupport = false
 
-        patches.forEach { patch ->
+        patches.asSequence()
+            .filter { selectedPatches == null || it.name in selectedPatches }
+            .forEach { patch ->
+            if (patch.compatiblePackages == null) {
+                hasSupport = true
+                supportsAllVersions = true
+                return@forEach
+            }
             patch.compatiblePackages
                 ?.filter { it.packageName.equals(packageName, ignoreCase = true) }
                 ?.forEach { compatible ->
@@ -1033,6 +1124,74 @@ class SelectedAppInfoViewModel(
         val supportsAllVersions: Boolean,
         val versions: Set<String>
     )
+
+    private fun PatchBundleInfo.Scoped.recommendedVersionForSelection(
+        packageName: String,
+        selectedPatches: Set<String>?
+    ): String? {
+        val patches = patches.filter { selectedPatches == null || it.name in selectedPatches }
+        if (patches.isEmpty()) return null
+
+        return when (bundleType) {
+            PatchBundleType.REVANCED -> {
+                val versionCounts = patches
+                    .asSequence()
+                    .map { it.toPatcherPatch() }
+                    .toSet()
+                    .revancedMostCommonCompatibleVersions(countUnusedPatches = true)[packageName]
+                    ?: return null
+                pickRecommendedVersion(versionCounts)
+            }
+
+            PatchBundleType.MORPHE,
+            PatchBundleType.AMPLE -> suggestedVersionForMorphe(patches, packageName)
+        }
+    }
+
+    private fun suggestedVersionForMorphe(
+        patches: Iterable<PatchInfo>,
+        packageName: String
+    ): String? {
+        val versions = linkedMapOf<String, Int>()
+
+        patches.forEach { patch ->
+            patch.compatiblePackages
+                ?.filter { it.packageName.equals(packageName, ignoreCase = true) }
+                ?.forEach { compatible ->
+                    val supportedVersions = compatible.versions ?: return@forEach
+                    supportedVersions.sorted().forEach { version ->
+                        versions[version] = (versions[version] ?: 0) + 1
+                    }
+                }
+        }
+
+        return pickRecommendedVersion(versions)
+    }
+
+    private fun pickRecommendedVersion(versions: Map<String, Int>): String? {
+        if (versions.isEmpty()) return null
+        if (versions.keys.size < 2) return versions.keys.firstOrNull()
+        return versions.entries.maxWithOrNull { a, b ->
+            val count = a.value.compareTo(b.value)
+            if (count != 0) count else compareVersionStrings(a.key, b.key)
+        }?.key
+    }
+
+    private fun compareVersionStrings(first: String, second: String): Int {
+        val aParts = first.split(Regex("[^0-9]+"))
+            .filter { it.isNotBlank() }
+            .map { it.toIntOrNull() ?: 0 }
+        val bParts = second.split(Regex("[^0-9]+"))
+            .filter { it.isNotBlank() }
+            .map { it.toIntOrNull() ?: 0 }
+        val max = maxOf(aParts.size, bParts.size)
+        for (index in 0 until max) {
+            val a = aParts.getOrElse(index) { 0 }
+            val b = bParts.getOrElse(index) { 0 }
+            if (a != b) return a.compareTo(b)
+        }
+        return first.compareTo(second, ignoreCase = true)
+    }
 
     private suspend fun resolveVersionFromDownloaderData(
         plugin: LoadedDownloaderPlugin,
