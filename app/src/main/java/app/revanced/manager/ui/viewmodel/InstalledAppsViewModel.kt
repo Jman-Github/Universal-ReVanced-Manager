@@ -186,6 +186,17 @@ class InstalledAppsViewModel(
         val total: Int
     )
 
+    fun removeSavedApp(app: InstalledApp) = viewModelScope.launch {
+        if (app.installType != InstallType.SAVED) return@launch
+        clearSavedData(app, deleteRecord = true)
+        savedCopyMap[app.currentPackageName] = false
+    }
+
+    fun deleteSavedEntry(app: InstalledApp) = viewModelScope.launch {
+        clearSavedData(app, deleteRecord = true)
+        savedCopyMap[app.currentPackageName] = false
+    }
+
     suspend fun getRepatchSelection(app: InstalledApp): PatchSelection? = withContext(Dispatchers.IO) {
         val selection = loadAppliedPatches(app.currentPackageName)
         if (selection.isNotEmpty()) return@withContext selection
@@ -456,6 +467,15 @@ class InstalledAppsViewModel(
         candidates.firstOrNull { it.exists() }?.let { return it }
         return filesystem.findPatchedAppFile(app.currentPackageName)
             ?: filesystem.findPatchedAppFile(app.originalPackageName)
+    }
+
+    private suspend fun clearSavedData(app: InstalledApp, deleteRecord: Boolean) {
+        if (deleteRecord) {
+            installedAppsRepository.delete(app)
+        }
+        withContext(Dispatchers.IO) {
+            savedApkFile(app)?.delete()
+        }
     }
 
     private suspend fun loadAppliedPatches(packageName: String): PatchSelection =

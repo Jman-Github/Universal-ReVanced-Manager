@@ -35,6 +35,7 @@
 - Bumped ReVanced dependencies
 - Bumped Morphe dependencies
 - Added a bundle type field to the patch bundle information screen
+- Made the FAB buttons on the `Apps` tab collapsible/expandable https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/155
 
 
 # Bug fixes
@@ -60,6 +61,7 @@
 - Fixed bundle recommendations not being available for split-apks https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/151
 - Fixed `Skip unneeded split APKs` toggle breaking some patched apps https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/153
 - Fixed patch options not saving correctly for split APKs
+- Fixed issues with action buttons on the saved patched apps widget not responding to taps and the delete button not being functional sometimes https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/155
 
 
 # v1.7.1 (2026-01-22)

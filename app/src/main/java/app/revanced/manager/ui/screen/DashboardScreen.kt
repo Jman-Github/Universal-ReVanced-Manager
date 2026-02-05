@@ -252,6 +252,8 @@ fun DashboardScreen(
     var pendingQuickExportConfirmation by remember { mutableStateOf<PendingQuickExportConfirmation?>(null) }
     var quickExportInProgress by remember { mutableStateOf(false) }
     var showQuickDeleteDialog by remember { mutableStateOf(false) }
+    var quickDeleteIsEntry by remember { mutableStateOf(false) }
+    var quickDeleteApp by remember { mutableStateOf<InstalledApp?>(null) }
     var showQuickSavedUninstallDialog by remember { mutableStateOf(false) }
     var showQuickUnmountDialog by remember { mutableStateOf(false) }
     var showQuickMixedBundleDialog by remember { mutableStateOf(false) }
@@ -313,6 +315,7 @@ fun DashboardScreen(
     }
 
     var bundlesFabCollapsed by rememberSaveable { mutableStateOf(false) }
+    var appsFabCollapsed by rememberSaveable { mutableStateOf(false) }
 
     val dashboardSidePadding = 16.dp
     fun resolveQuickExportName(app: InstalledApp): String {
@@ -1090,14 +1093,29 @@ fun DashboardScreen(
     }
 
     if (showQuickDeleteDialog) {
+        val deleteEntry = quickDeleteIsEntry
+        val deleteApp = quickDeleteApp
         ConfirmDialog(
-            onDismiss = { showQuickDeleteDialog = false },
+            onDismiss = {
+                showQuickDeleteDialog = false
+                quickDeleteApp = null
+            },
             onConfirm = {
                 showQuickDeleteDialog = false
-                quickActionViewModel?.removeSavedApp()
+                quickDeleteApp = null
+                when {
+                    deleteApp != null && deleteEntry -> installedAppsViewModel.deleteSavedEntry(deleteApp)
+                    deleteApp != null -> installedAppsViewModel.removeSavedApp(deleteApp)
+                    deleteEntry -> quickActionViewModel?.deleteSavedEntry()
+                    else -> quickActionViewModel?.removeSavedApp()
+                }
             },
-            title = stringResource(R.string.delete_saved_app_title),
-            description = stringResource(R.string.delete_saved_app_description),
+            title = stringResource(
+                if (deleteEntry) R.string.delete_saved_entry_title else R.string.delete_saved_app_title
+            ),
+            description = stringResource(
+                if (deleteEntry) R.string.delete_saved_entry_description else R.string.delete_saved_app_description
+            ),
             icon = Icons.Outlined.Delete
         )
     }
@@ -1382,18 +1400,48 @@ fun DashboardScreen(
                 }
 
                 DashboardPage.DASHBOARD.ordinal -> {
+                    val enterExitSpec = tween<IntOffset>(durationMillis = 220, easing = FastOutSlowInEasing)
+                    val sizeSpec = tween<IntSize>(durationMillis = 220, easing = FastOutSlowInEasing)
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.height(56.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        HapticFloatingActionButton(
-                            onClick = { attemptAppInput(openStoragePicker) }
+                        AnimatedVisibility(
+                            visible = !appsFabCollapsed,
+                            enter = fadeIn(animationSpec = tween(180)) +
+                                expandHorizontally(expandFrom = Alignment.End, animationSpec = sizeSpec) +
+                                slideInHorizontally(
+                                    initialOffsetX = { it / 2 },
+                                    animationSpec = enterExitSpec
+                                ),
+                            exit = fadeOut(animationSpec = tween(180)) +
+                                shrinkHorizontally(shrinkTowards = Alignment.End, animationSpec = sizeSpec) +
+                                slideOutHorizontally(
+                                    targetOffsetX = { it / 2 },
+                                    animationSpec = enterExitSpec
+                                )
                         ) {
-                            Icon(Icons.Default.Storage, stringResource(R.string.select_from_storage))
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                HapticFloatingActionButton(
+                                    onClick = { attemptAppInput(openStoragePicker) }
+                                ) {
+                                    Icon(Icons.Default.Storage, stringResource(R.string.select_from_storage))
+                                }
+                                HapticFloatingActionButton(
+                                    onClick = { attemptAppInput(onAppSelectorClick) }
+                                ) { Icon(Icons.Default.Add, stringResource(R.string.add)) }
+                            }
                         }
-                        HapticFloatingActionButton(
-                            onClick = { attemptAppInput(onAppSelectorClick) }
-                        ) { Icon(Icons.Default.Add, stringResource(R.string.add)) }
+                        Spacer(modifier = Modifier.size(2.dp))
+                        BundleFabHandle(
+                            collapsed = appsFabCollapsed,
+                            onToggle = { appsFabCollapsed = !appsFabCollapsed },
+                            modifier = Modifier.offset(x = 6.dp)
+                        )
                     }
                 }
 
@@ -1550,6 +1598,11 @@ fun DashboardScreen(
                                 },
                                 onAppAction = { app, action ->
                                     installedAppsViewModel.clearSelection()
+                                    if (action == InstalledAppAction.DELETE) {
+                                        quickDeleteApp = app
+                                        quickDeleteIsEntry = app.installType != InstallType.SAVED &&
+                                            installedAppsViewModel.savedCopyMap[app.currentPackageName] == true
+                                    }
                                     if (action == InstalledAppAction.REPATCH) {
                                         composableScope.launch {
                                             val selection = installedAppsViewModel.getRepatchSelection(app)

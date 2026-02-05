@@ -401,7 +401,6 @@ private fun InstalledAppCard(
                         Row(
                             modifier = Modifier
                                 .widthIn(min = maxWidth)
-                                .consumeHorizontalScroll(actionScrollState)
                                 .horizontalScroll(actionScrollState),
                             horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
                             verticalAlignment = Alignment.CenterVertically
