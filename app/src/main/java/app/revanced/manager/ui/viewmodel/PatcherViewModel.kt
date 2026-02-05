@@ -68,6 +68,7 @@ import app.revanced.manager.ui.model.StepCategory
 import app.revanced.manager.ui.model.StepDetail
 import app.revanced.manager.ui.model.withState
 import app.revanced.manager.ui.model.navigation.Patcher
+import app.universal.revanced.manager.BuildConfig
 import app.revanced.manager.util.PM
 import app.revanced.manager.util.asCode
 import app.revanced.manager.util.PatchedAppExportData
@@ -93,8 +94,11 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.time.withTimeout
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
+import java.util.zip.ZipFile
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
 import org.koin.core.component.inject
@@ -1206,33 +1210,111 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
 
     private fun buildLogContent(context: Context): String {
-        val stepLines = steps.mapIndexed { index, step ->
-            buildString {
-                append(index + 1)
-                append(". ")
-                append(step.title)
-                append(" [")
-                append(context.getString(step.category.displayName))
-                append("] - ")
-                append(step.state.name)
-                step.message?.takeIf { it.isNotBlank() }?.let {
-                    append(": ")
-                    append(it)
-                }
-            }
+        val logSnapshot = logs.toList()
+        val logMessages = logSnapshot.map { it.second }
+        fun findLogValue(prefix: String): String? =
+            logMessages.firstOrNull { it.startsWith(prefix) }
+                ?.removePrefix(prefix)
+                ?.trim()
+
+        data class LogPrefsSnapshot(
+            val requestedLimit: Int,
+            val aggressiveLimit: Boolean,
+            val experimental: Boolean,
+            val bundleType: String,
+            val stripNativeLibs: Boolean,
+            val skipUnusedSplits: Boolean
+        )
+        val prefsSnapshot = runBlocking {
+            val requested = prefs.patcherProcessMemoryLimit.get()
+            val aggressive = prefs.patcherProcessMemoryAggressive.get()
+            val experimentalEnabled = prefs.useProcessRuntime.get()
+            val bundle = patchBundleRepository.selectionBundleType(input.selectedPatches)?.name
+                ?: "UNKNOWN"
+            val stripNative = prefs.stripUnusedNativeLibs.get()
+            val skipSplits = prefs.skipUnneededSplitApks.get()
+            LogPrefsSnapshot(requested, aggressive, experimentalEnabled, bundle, stripNative, skipSplits)
+        }
+        val requestedLimit = prefsSnapshot.requestedLimit
+        val aggressiveLimit = prefsSnapshot.aggressiveLimit
+        val experimental = prefsSnapshot.experimental
+        val bundleType = prefsSnapshot.bundleType
+        val stripNativeLibs = prefsSnapshot.stripNativeLibs
+        val skipUnusedSplits = prefsSnapshot.skipUnusedSplits
+
+        val effectiveLimit = if (aggressiveLimit) {
+            MemoryLimitConfig.maxLimitMb(context)
+        } else {
+            requestedLimit
         }
 
-        val logLines = logs.toList().map { (level, msg) -> "[${level.name}]: $msg" }
+        val isIgnoring = context.getSystemService<PowerManager>()
+            ?.isIgnoringBatteryOptimizations(context.packageName) == true
+        val batteryOptimization = if (isIgnoring) "disabled" else "enabled"
+
+        val inputPath = inputFile?.absolutePath
+        val sizeBytes = inputFile?.length() ?: 0L
+        val sizeMb = if (sizeBytes > 0L) {
+            "${(sizeBytes / 1_000_000.0).roundToInt()}MB"
+        } else {
+            "unknown"
+        }
+        val splitCount = inputFile
+            ?.takeIf { SplitApkPreparer.isSplitArchive(it) }
+            ?.let { file ->
+                runCatching {
+                    ZipFile(file).use { zip ->
+                        zip.entries().asSequence().count { entry ->
+                            !entry.isDirectory && entry.name.endsWith(".apk", ignoreCase = true)
+                        }
+                    }
+                }.getOrNull()
+            }
+
+        val aapt2Sha = findLogValue("AAPT2 sha256:") ?: "unknown"
+        val aapt2Version = findLogValue("AAPT2 version:") ?: "unknown"
+
+        val appVersion = input.selectedApp.version
+            ?.takeUnless { it.isBlank() }
+            ?: "unspecified"
+        val patchCount = input.selectedPatches.values.sumOf { it.size }
+
+        val logLines = logSnapshot
+            .filterNot { (_, msg) ->
+                msg.startsWith("Battery optimization:") ||
+                    msg.startsWith("Patching started at ") ||
+                    msg.startsWith("Patcher runtime:") ||
+                    msg.startsWith("Memory limit:") ||
+                    msg.startsWith("AAPT2 sha256:") ||
+                    msg.startsWith("AAPT2 version:")
+            }
+            .map { (level, msg) -> "[${level.name}]: $msg" }
 
         return buildString {
-            appendLine("=== Patcher Steps ===")
-            if (stepLines.isEmpty()) {
-                appendLine("No steps recorded.")
-            } else {
-                stepLines.forEach { appendLine(it) }
-            }
+            appendLine("------------")
+            appendLine("Information:")
+            appendLine("------------")
+            appendLine("URV version: ${BuildConfig.VERSION_NAME}")
+            appendLine("Requested memory limit: ${requestedLimit}MB")
+            appendLine("Effective memory limit: ${effectiveLimit}MB")
+            appendLine("Bundle type: $bundleType")
+            appendLine("Experimental: $experimental")
+            appendLine("Aggressive: $aggressiveLimit")
+            appendLine("Strip native libs: ${if (stripNativeLibs) "on" else "off"}")
+            appendLine("Skip unused splits: ${if (skipUnusedSplits) "on" else "off"}")
+            appendLine("Battery optimization: $batteryOptimization")
+            appendLine("AAPT2 sha256: $aapt2Sha")
+            appendLine("AAPT2 version: $aapt2Version")
+            appendLine("App package: ${input.selectedApp.packageName}")
+            appendLine("App version: $appVersion")
+            appendLine("App input path: ${inputPath ?: "unknown"}")
+            appendLine("App size: $sizeMb")
+            splitCount?.let { appendLine("Split: $it") }
+            appendLine("Patches: $patchCount")
             appendLine()
-            appendLine("=== Patcher Log ===")
+            appendLine("------------")
+            appendLine("Patcher Log:")
+            appendLine("------------")
             if (logLines.isEmpty()) {
                 appendLine("No log messages recorded.")
             } else {
