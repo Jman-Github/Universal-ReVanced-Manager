@@ -68,6 +68,7 @@
 - Fixed local patch bundles not having a tag on the top right like remote patch bundles have
 - Fixed issues with Morphe Manager generated keystores not working https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/158
 - Fixed issues with the `Use default recommendation` toggle in the `Choose bundle recommendation` dialog not working correctly
+- Fixed AAPT2 failures on newer resource qualifier folders
 
 
 # v1.7.1 (2026-01-22)
