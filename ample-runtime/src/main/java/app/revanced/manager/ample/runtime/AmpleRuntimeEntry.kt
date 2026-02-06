@@ -5,6 +5,7 @@ import app.revanced.patcher.patch.Patch
 import app.revanced.manager.patcher.ProgressEvent
 import app.revanced.manager.patcher.RemoteError
 import app.revanced.manager.patcher.StepId
+import app.revanced.manager.patcher.aapt.AaptSelector
 import app.revanced.manager.patcher.logger.LogLevel
 import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.ample.AmplePatchBundleLoader
@@ -73,6 +74,7 @@ object AmpleRuntimeEntry {
 
         val aaptPath = params["aaptPath"] as? String
             ?: return "Missing aaptPath parameter."
+        val aaptFallbackPath = params["aaptFallbackPath"] as? String
         val frameworkDir = params["frameworkDir"] as? String
             ?: return "Missing frameworkDir parameter."
         val cacheDir = params["cacheDir"] as? String
@@ -95,7 +97,6 @@ object AmpleRuntimeEntry {
             apkEditorMergeJarPath,
             androidDataDir = androidDataDir
         )
-        logAapt2Info(aaptPath, logger)
         val aaptLogs = AaptLogCapture(onLine = ::handleDexCompileLine).apply { start() }
         val stdioCapture = StdIoCapture(::handleDexCompileLine).apply { start() }
 
@@ -194,11 +195,18 @@ object AmpleRuntimeEntry {
                 }
 
                 try {
+                    val selectedAaptPath = AaptSelector.select(
+                        aaptPath,
+                        aaptFallbackPath,
+                        preparation.file,
+                        logger
+                    )
+                    logAapt2Info(selectedAaptPath, logger)
                     val session = runStep(StepId.ReadAPK, ::onEvent) {
                         AmpleSession(
                             cacheDir = cacheDir,
                             frameworkDir = frameworkDir,
-                            aaptPath = aaptPath,
+                            aaptPath = selectedAaptPath,
                             logger = logger,
                             input = preparation.file,
                             onEvent = ::onEvent,

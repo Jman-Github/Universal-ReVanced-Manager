@@ -10,6 +10,7 @@ import android.os.Looper
 import app.universal.revanced.manager.morphe.runtime.BuildConfig
 import app.revanced.manager.patcher.ProgressEvent
 import app.revanced.manager.patcher.StepId
+import app.revanced.manager.patcher.aapt.AaptSelector
 import app.revanced.manager.patcher.logger.LogLevel
 import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.morphe.MorphePatchBundleLoader
@@ -90,7 +91,6 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
             }
 
             logger.info("Memory limit: ${Runtime.getRuntime().maxMemory() / (1024 * 1024)}MB")
-            logAapt2Info(parameters.aaptPath, logger)
             val aaptLogs = AaptLogCapture(onLine = ::handleDexCompileLine).apply { start() }
             val stdioCapture = StdIoCapture(onLine = ::handleDexCompileLine).apply { start() }
 
@@ -154,11 +154,18 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
                 }
 
                 try {
+                    val selectedAaptPath = AaptSelector.select(
+                        parameters.aaptPath,
+                        parameters.aaptFallbackPath,
+                        preparation.file,
+                        logger
+                    )
+                    logAapt2Info(selectedAaptPath, logger)
                     val session = runStep(StepId.ReadAPK, ::onEvent) {
                         MorpheSession(
                             cacheDir = parameters.cacheDir,
                             frameworkDir = parameters.frameworkDir,
-                            aaptPath = parameters.aaptPath,
+                            aaptPath = selectedAaptPath,
                             logger = logger,
                             input = preparation.file,
                             onEvent = ::onEvent,

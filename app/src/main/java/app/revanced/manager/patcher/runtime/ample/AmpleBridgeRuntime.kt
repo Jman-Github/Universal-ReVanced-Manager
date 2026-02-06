@@ -33,7 +33,8 @@ class AmpleBridgeRuntime(context: Context) : AmpleRuntime(context) {
         val apkEditorMergeJarPath = AmpleRuntimeAssets.ensureApkEditorMergeJar(appContext).absolutePath
 
         val params = mapOf(
-            "aaptPath" to aaptPath,
+            "aaptPath" to aaptPrimaryPath,
+            "aaptFallbackPath" to aaptFallbackPath,
             "frameworkDir" to frameworkPath,
             "cacheDir" to cacheDir,
             "apkEditorJarPath" to apkEditorJarPath,

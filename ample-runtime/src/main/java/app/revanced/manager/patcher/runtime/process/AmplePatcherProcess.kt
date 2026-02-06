@@ -10,6 +10,7 @@ import android.os.Looper
 import app.universal.revanced.manager.ample.runtime.BuildConfig
 import app.revanced.manager.patcher.ProgressEvent
 import app.revanced.manager.patcher.StepId
+import app.revanced.manager.patcher.aapt.AaptSelector
 import app.revanced.manager.patcher.logger.LogLevel
 import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.ample.AmplePatchBundleLoader
@@ -117,7 +118,6 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
                 androidDataDir
             )
             logger.info("Memory limit: ${Runtime.getRuntime().maxMemory() / (1024 * 1024)}MB")
-            logAapt2Info(parameters.aaptPath, logger)
             val aaptLogs = AaptLogCapture(onLine = ::handleDexCompileLine).apply { start() }
             val stdioCapture = StdIoCapture(onLine = ::handleDexCompileLine).apply { start() }
 
@@ -181,11 +181,18 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
                 }
 
                 try {
+                    val selectedAaptPath = AaptSelector.select(
+                        parameters.aaptPath,
+                        parameters.aaptFallbackPath,
+                        preparation.file,
+                        logger
+                    )
+                    logAapt2Info(selectedAaptPath, logger)
                     val session = runStep(StepId.ReadAPK, ::safeEvent) {
                         AmpleSession(
                             cacheDir = parameters.cacheDir,
                             frameworkDir = parameters.frameworkDir,
-                            aaptPath = parameters.aaptPath,
+                            aaptPath = selectedAaptPath,
                             logger = logger,
                             input = preparation.file,
                             onEvent = ::safeEvent,

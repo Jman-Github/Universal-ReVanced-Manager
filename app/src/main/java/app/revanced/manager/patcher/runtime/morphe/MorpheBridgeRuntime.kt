@@ -29,7 +29,8 @@ class MorpheBridgeRuntime(context: Context) : MorpheRuntime(context) {
         }
 
         val params = mapOf(
-            "aaptPath" to aaptPath,
+            "aaptPath" to aaptPrimaryPath,
+            "aaptFallbackPath" to aaptFallbackPath,
             "frameworkDir" to frameworkPath,
             "cacheDir" to cacheDir,
             "packageName" to packageName,

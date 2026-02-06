@@ -6,6 +6,8 @@ import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.patcher.ProgressEvent
 import app.revanced.manager.patcher.aapt.Aapt
+import app.revanced.manager.patcher.aapt.AaptSelector
+import app.revanced.manager.patcher.aapt.MorpheAapt
 import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.patch.PatchBundleType
 import app.revanced.manager.util.Options
@@ -13,6 +15,7 @@ import app.revanced.manager.util.PatchSelection
 import kotlinx.coroutines.flow.first
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
+import java.io.File
 import java.io.FileNotFoundException
 
 sealed class AmpleRuntime(context: Context) : KoinComponent {
@@ -21,12 +24,16 @@ sealed class AmpleRuntime(context: Context) : KoinComponent {
     protected val prefs: PreferencesManager by inject()
 
     protected val cacheDir: String = fs.tempDir.absolutePath
-    protected val aaptPath = Aapt.binary(context)?.absolutePath
+    protected val aaptPrimaryPath = Aapt.binary(context)?.absolutePath
         ?: throw FileNotFoundException("Could not resolve AAPT2.")
+    protected val aaptFallbackPath = MorpheAapt.binary(context)?.absolutePath
     protected val frameworkPath: String =
         context.cacheDir.resolve("framework_ample").also { it.mkdirs() }.absolutePath
 
     protected suspend fun bundles() = patchBundlesRepo.bundlesByType(PatchBundleType.AMPLE).first()
+
+    protected fun resolveAaptPath(inputFile: File, logger: Logger): String =
+        AaptSelector.select(aaptPrimaryPath, aaptFallbackPath, inputFile, logger)
 
     abstract suspend fun execute(
         inputFile: String,

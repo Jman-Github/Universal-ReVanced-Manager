@@ -167,7 +167,8 @@ class MorpheProcessRuntime(
             }
 
             val parameters = MorpheParameters(
-                aaptPath = aaptPath,
+                aaptPath = aaptPrimaryPath,
+                aaptFallbackPath = aaptFallbackPath,
                 frameworkDir = frameworkPath,
                 cacheDir = cacheDir,
                 packageName = packageName,

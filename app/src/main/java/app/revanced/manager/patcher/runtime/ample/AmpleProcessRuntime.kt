@@ -162,7 +162,8 @@ class AmpleProcessRuntime(
             }
 
             val parameters = AmpleParameters(
-                aaptPath = aaptPath,
+                aaptPath = aaptPrimaryPath,
+                aaptFallbackPath = aaptFallbackPath,
                 frameworkDir = frameworkPath,
                 cacheDir = cacheDir,
                 packageName = packageName,

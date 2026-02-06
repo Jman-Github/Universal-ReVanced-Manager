@@ -11,6 +11,7 @@ import app.universal.revanced.manager.BuildConfig
 import app.revanced.manager.patcher.ProgressEvent
 import app.revanced.manager.patcher.Session
 import app.revanced.manager.patcher.StepId
+import app.revanced.manager.patcher.aapt.AaptSelector
 import app.revanced.manager.patcher.logger.LogLevel
 import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.patch.PatchBundle
@@ -92,7 +93,6 @@ class PatcherProcess : IPatcherProcess.Stub() {
             }
 
             logger.info("Memory limit: ${Runtime.getRuntime().maxMemory() / (1024 * 1024)}MB")
-            logAapt2Info(parameters.aaptPath, logger)
 
             val aaptLogs = AaptLogCapture(onLine = ::handleDexCompileLine).apply { start() }
             val stdioCapture = StdIoCapture(onLine = ::handleDexCompileLine).apply { start() }
@@ -157,10 +157,17 @@ class PatcherProcess : IPatcherProcess.Stub() {
                 }
 
                 try {
+                    val selectedAaptPath = AaptSelector.select(
+                        parameters.aaptPath,
+                        parameters.aaptFallbackPath,
+                        preparation.file,
+                        logger
+                    )
+                    logAapt2Info(selectedAaptPath, logger)
                     val session = runStep(StepId.ReadAPK, ::onEvent) {
                         Session(
                             cacheDir = parameters.cacheDir,
-                            aaptPath = parameters.aaptPath,
+                            aaptPath = selectedAaptPath,
                             frameworkDir = parameters.frameworkDir,
                             logger = logger,
                             input = preparation.file,

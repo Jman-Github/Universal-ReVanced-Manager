@@ -1,3 +1,16 @@
+# v1.8.0-dev.05 (2026-02-06)
+
+
+# Features
+
+- 
+
+
+# Bug fixes
+
+- Fixed AAPT2 failures on newer resource qualifier folders
+
+
 # v1.8.0-dev.05 (2026-02-05)
 
 
