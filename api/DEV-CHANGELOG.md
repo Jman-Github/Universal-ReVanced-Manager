@@ -10,6 +10,7 @@
 
 - Fixed AAPT2 failures on newer resource qualifiers/types
 - Fixed numerous patching errors caused by the ReVanced dependency bump by downgrading
+- Fixed the `Official ReVanced Patches` bundle having the `Remote` tag on its widget instead of the `Pre-installed` tag
 
 
 # v1.8.0-dev.05 (2026-02-05)

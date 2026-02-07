@@ -55,6 +55,7 @@ import app.revanced.manager.domain.bundles.PatchBundleSource
 import app.revanced.manager.domain.bundles.PatchBundleChangelogEntry
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
+import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isPreinstalled
 import app.revanced.manager.data.platform.NetworkInfo
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.domain.repository.PatchBundleRepository.DisplayNameUpdateResult
@@ -342,19 +343,16 @@ fun BundleItem(
                         )
                     }
                 }
-                if (src.asRemoteOrNull != null) {
-                    BundleMetaPill(
-                        text = stringResource(R.string.bundle_type_remote),
-                        enabled = src.enabled,
-                        modifier = Modifier.align(Alignment.TopEnd)
-                    )
-                } else {
-                    BundleMetaPill(
-                        text = stringResource(R.string.bundle_type_local),
-                        enabled = src.enabled,
-                        modifier = Modifier.align(Alignment.TopEnd)
-                    )
+                val sourceTypeLabel = when {
+                    src.isPreinstalled -> R.string.bundle_type_preinstalled
+                    src.asRemoteOrNull != null -> R.string.bundle_type_remote
+                    else -> R.string.bundle_type_local
                 }
+                BundleMetaPill(
+                    text = stringResource(sourceTypeLabel),
+                    enabled = src.enabled,
+                    modifier = Modifier.align(Alignment.TopEnd)
+                )
             }
 
             Column(

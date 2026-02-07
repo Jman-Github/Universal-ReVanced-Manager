@@ -21,7 +21,7 @@ import app.revanced.manager.data.room.profile.PatchProfilePayload
 import app.revanced.manager.data.room.options.Option as StoredOption
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
-import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
+import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isPreinstalled
 import app.revanced.manager.domain.bundles.RemotePatchBundle
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.domain.repository.DuplicatePatchProfileNameException
@@ -132,7 +132,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         patchBundleRepository.sources.map { sources ->
             sources.associate { source ->
                 val type = when {
-                    source.isDefault -> BundleSourceType.Preinstalled
+                    source.isPreinstalled -> BundleSourceType.Preinstalled
                     source.asRemoteOrNull != null -> BundleSourceType.Remote
                     else -> BundleSourceType.Local
                 }

@@ -71,6 +71,7 @@
 - Fixed issues with the `Use default recommendation` toggle in the `Choose bundle recommendation` dialog not working correctly
 - Fixed AAPT2 failures on newer resource qualifiers/types
 - Fixed numerous patching errors caused by the ReVanced dependency bump by downgrading
+- Fixed the `Official ReVanced Patches` bundle having the `Remote` tag on its widget instead of the `Pre-installed` tag
 
 
 # v1.7.1 (2026-01-22)

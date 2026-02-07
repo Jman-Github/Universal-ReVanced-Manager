@@ -90,6 +90,7 @@ sealed class PatchBundleSource(
     companion object Extensions {
         private const val MIN_PATCH_BUNDLE_BYTES = 8L
         val PatchBundleSource.isDefault inline get() = uid == 0
+        val PatchBundleSource.isPreinstalled inline get() = uid == 0 || this is APIPatchBundle
         val PatchBundleSource.asRemoteOrNull inline get() = this as? RemotePatchBundle
         val PatchBundleSource.actualName inline get() = name
     }
