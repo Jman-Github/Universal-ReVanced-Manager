@@ -129,9 +129,16 @@ sealed class RemotePatchBundle(
         val latestSignature = normalizeVersionForCompare(info.version)
             ?: return@withContext null
         val installedSignature = normalizeVersionForCompare(installedVersionSignatureInternal)
-            ?: normalizeVersionForCompare(version)
-        if (hasInstalled() && installedSignature != null && latestSignature == installedSignature)
+        val manifestSignature = normalizeVersionForCompare(version)
+        if (
+            hasInstalled() &&
+            (
+                (installedSignature != null && latestSignature == installedSignature) ||
+                    (manifestSignature != null && latestSignature == manifestSignature)
+                )
+        ) {
             return@withContext null
+        }
 
         download(info, onProgress)
     }

@@ -41,6 +41,7 @@
 - Implemented XML surrogate sanitization to all runtimes
 - Added the ability to export all settings (not including the keystore) to a single JSON along with an option to import it https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/165
 - Adjusted the arrow FAB button on the `Apps` and `Patch bundles` tabs to be up against the right edge, removing the awkward gap https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/164
+- Added guards to the patcher logger to prevent massive patch log exports
 
 
 # Bug fixes
@@ -74,6 +75,7 @@
 - Fixed AAPT2 failures on newer resource qualifiers/types
 - Fixed numerous patching errors caused by the ReVanced dependency bump by downgrading
 - Fixed the `Official ReVanced Patches` bundle having the `Remote` tag on its widget instead of the `Pre-installed` tag
+- Fixes patching errors caused by missing framework APKs
 
 
 # v1.7.1 (2026-01-22)

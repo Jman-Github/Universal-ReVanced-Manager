@@ -41,11 +41,14 @@ class AmpleSession(
     private val onEvent: (ProgressEvent) -> Unit,
 ) : Closeable {
     private val tempDir = File(cacheDir).resolve("patcher").also { it.mkdirs() }
-    private val patcher = Patcher(
+    private val frameworkDirFile = File(frameworkDir).also { it.mkdirs() }
+    private var patcher = createPatcher()
+
+    private fun createPatcher() = Patcher(
         PatcherConfig(
             input,
             tempDir,
-            frameworkDir
+            frameworkDirFile.absolutePath
         )
     )
 
@@ -106,6 +109,108 @@ class AmpleSession(
         }
     }
 
+    private suspend fun executePatchesOnce(orderedPatches: AmplePatchList) {
+        with(patcher) {
+            if (orderedPatches.isNotEmpty()) {
+                onEvent(ProgressEvent.Started(StepId.ExecutePatch(0)))
+            }
+            logger.info("Merging integrations")
+            this += LinkedHashSet(orderedPatches)
+
+            logger.info("Applying patches...")
+            applyPatchesVerbose(
+                orderedPatches,
+                preStarted = if (orderedPatches.isNotEmpty()) setOf(0) else emptySet()
+            )
+        }
+    }
+
+    private suspend fun executePatchesWithFrameworkRecovery(orderedPatches: AmplePatchList) {
+        ensureFrameworkCacheIsValid()
+        try {
+            executePatchesOnce(orderedPatches)
+        } catch (error: Throwable) {
+            if (!isFrameworkCacheReadFailure(error)) throw error
+
+            logger.warn("Framework cache read failed. Clearing framework cache and retrying once.")
+            clearFrameworkCache("retry after framework read failure")
+            resetPatcher()
+            ensureFrameworkCacheIsValid()
+            executePatchesOnce(orderedPatches)
+        }
+    }
+
+    private fun ensureFrameworkCacheIsValid() {
+        val frameworkApk = frameworkDirFile.resolve(FRAMEWORK_APK_NAME)
+        if (!frameworkApk.exists()) return
+
+        val issue = frameworkApkValidationIssue(frameworkApk) ?: return
+        logger.warn("Invalid framework cache at ${frameworkApk.absolutePath}: $issue")
+        clearFrameworkCache("preflight validation failed")
+    }
+
+    private fun frameworkApkValidationIssue(file: File): String? {
+        if (!file.isFile) return "not a regular file"
+        if (file.length() <= 0L) return "file is empty"
+
+        return runCatching {
+            ZipFile(file).use { zip ->
+                if (zip.getEntry(FRAMEWORK_RESOURCES_TABLE) == null) {
+                    "missing $FRAMEWORK_RESOURCES_TABLE"
+                } else {
+                    null
+                }
+            }
+        }.getOrElse { error ->
+            "${error::class.java.simpleName}: ${error.message ?: "failed to parse zip"}"
+        }
+    }
+
+    private fun clearFrameworkCache(reason: String) {
+        frameworkDirFile.mkdirs()
+        val entries = frameworkDirFile.listFiles().orEmpty()
+        if (entries.isEmpty()) return
+
+        var failedDeletes = 0
+        entries.forEach { entry ->
+            if (!entry.deleteRecursively()) {
+                failedDeletes += 1
+            }
+        }
+
+        if (failedDeletes == 0) {
+            logger.warn("Cleared framework cache ($reason)")
+        } else {
+            logger.warn("Cleared framework cache ($reason) with $failedDeletes undeleted entr${if (failedDeletes == 1) "y" else "ies"}")
+        }
+    }
+
+    private fun resetPatcher() {
+        runCatching { patcher.close() }
+        patcher = createPatcher()
+    }
+
+    private fun isFrameworkCacheReadFailure(error: Throwable): Boolean {
+        val detail = buildString {
+            generateSequence(error) { it.cause }.forEach { cause ->
+                append(cause.message.orEmpty())
+                append('\n')
+                append(cause.stackTraceToString())
+                append('\n')
+            }
+        }
+
+        val hasFrameworkRef =
+            detail.contains("/framework/1.apk", ignoreCase = true) ||
+                detail.contains("\\framework\\1.apk", ignoreCase = true)
+        if (!hasFrameworkRef) return false
+
+        val hasKnownFailure =
+            detail.contains("Could not load resources.arsc", ignoreCase = true) ||
+                detail.contains("zip file is empty", ignoreCase = true)
+        return hasKnownFailure
+    }
+
     suspend fun run(
         output: File,
         selectedPatches: AmplePatchList,
@@ -113,6 +218,7 @@ class AmpleSession(
         inputWasSplit: Boolean
     ) {
         val shouldStripNativeLibs = stripNativeLibs && !inputWasSplit
+        val orderedPatches = selectedPatches.sortedBy { it.name }
         runStep(StepId.ExecutePatches, onEvent) {
             java.util.logging.Logger.getLogger("").apply {
                 handlers.forEach {
@@ -122,18 +228,7 @@ class AmpleSession(
 
                 addHandler(logger.handler)
             }
-
-            with(patcher) {
-                val orderedPatches = selectedPatches.sortedBy { it.name }
-                if (orderedPatches.isNotEmpty()) {
-                    onEvent(ProgressEvent.Started(StepId.ExecutePatch(0)))
-                }
-                logger.info("Merging integrations")
-                this += LinkedHashSet(orderedPatches)
-
-                logger.info("Applying patches...")
-                applyPatchesVerbose(orderedPatches, preStarted = if (orderedPatches.isNotEmpty()) setOf(0) else emptySet())
-            }
+            executePatchesWithFrameworkRecovery(orderedPatches)
         }
 
         onEvent(
@@ -333,6 +428,8 @@ class AmpleSession(
     }
 
     companion object {
+        private const val FRAMEWORK_APK_NAME = "1.apk"
+        private const val FRAMEWORK_RESOURCES_TABLE = "resources.arsc"
         operator fun PatchResult.component1() = patch
         operator fun PatchResult.component2() = exception
     }

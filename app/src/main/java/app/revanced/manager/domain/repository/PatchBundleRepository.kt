@@ -575,7 +575,9 @@ class PatchBundleRepository(
             val bundleNormalized = normalizeVersionForCompare(bundleVersion) ?: return@forEach
             val storedNormalized = normalizeVersionForCompare(effectiveEntity.versionHash)
             if (storedNormalized == bundleNormalized) return@forEach
-            if (isExternal && !effectiveEntity.versionHash.isNullOrBlank()) {
+            // Keep the persisted remote signature once we have one.
+            // Falling back to the local manifest version is only needed to seed empty rows.
+            if (!effectiveEntity.versionHash.isNullOrBlank()) {
                 return@forEach
             }
             updateDb(uid) { it.copy(versionHash = bundleVersion) }
@@ -2062,8 +2064,12 @@ class PatchBundleRepository(
                 val latestSignature = normalizeVersionForCompare(info.version) ?: return@forEach
                 val installedSignature = normalizeVersionForCompare(bundle.installedVersionSignature)
                 val manifestSignature = normalizeVersionForCompare(bundle.version)
-                val currentSignature = installedSignature ?: manifestSignature ?: return@forEach
-                if (currentSignature == latestSignature) return@forEach
+                if (
+                    (installedSignature != null && installedSignature == latestSignature) ||
+                    (manifestSignature != null && manifestSignature == latestSignature)
+                ) {
+                    return@forEach
+                }
 
                 val versionLabel = latestSignature
                 if (normalizeVersionForCompare(bundle.lastNotifiedVersion) == versionLabel) return@forEach
@@ -2409,9 +2415,11 @@ class PatchBundleRepository(
                             val latestSignature = normalizeVersionForCompare(info.version)
                                 ?: return@async bundle.uid to null
                             val installedSignature = normalizeVersionForCompare(bundle.installedVersionSignature)
-                                ?: normalizeVersionForCompare(bundle.version)
-                                ?: return@async bundle.uid to null
-                            if (installedSignature == latestSignature) return@async bundle.uid to null
+                            val manifestSignature = normalizeVersionForCompare(bundle.version)
+                            val hasMatchingInstalledSignature =
+                                (installedSignature != null && installedSignature == latestSignature) ||
+                                    (manifestSignature != null && manifestSignature == latestSignature)
+                            if (hasMatchingInstalledSignature) return@async bundle.uid to null
                             bundle.uid to ManualBundleUpdateInfo(
                                 latestVersion = info.version,
                                 pageUrl = info.pageUrl

@@ -1,3 +1,16 @@
+# v1.8.0-dev.07 (2026-02-07)
+
+
+# Features
+
+- Added guards to the patcher logger to prevent massive patch log exports
+
+
+# Bug fixes
+
+- Fixes patching errors caused by missing framework APKs
+
+
 # v1.8.0-dev.06 (2026-02-07)
 
 

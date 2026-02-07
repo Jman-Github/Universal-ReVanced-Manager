@@ -800,10 +800,33 @@ fun proceedAfterMissingPatchWarning() {
     private val outputFile = tempDir.resolve("output.apk")
 
     private val logs by savedStateHandle.saveable<MutableList<Pair<LogLevel, String>>> { mutableListOf() }
+    private var droppedLogLineCount by savedStateHandle.saveableVar { 0 }
     private val dexCompilePattern =
         Regex("(Compiling|Compiled)\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
     private val dexWritePattern =
         Regex("Write\\s+\\[[^\\]]+\\]\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
+    private fun appendBoundedLog(level: LogLevel, message: String) {
+        val boundedMessage = if (message.length > PATCHER_LOG_MESSAGE_CHAR_LIMIT) {
+            buildString(PATCHER_LOG_MESSAGE_CHAR_LIMIT + 96) {
+                append(message.take(PATCHER_LOG_MESSAGE_CHAR_LIMIT))
+                append("\n[log message truncated to ")
+                append(PATCHER_LOG_MESSAGE_CHAR_LIMIT)
+                append(" characters]")
+            }
+        } else {
+            message
+        }
+
+        if (logs.size >= PATCHER_LOG_ENTRY_HARD_LIMIT) {
+            val trimCount = (logs.size - PATCHER_LOG_ENTRY_SOFT_LIMIT + 1).coerceAtLeast(1)
+            val safeTrimCount = trimCount.coerceAtMost(logs.size)
+            logs.subList(0, safeTrimCount).clear()
+            droppedLogLineCount += safeTrimCount
+        }
+
+        logs.add(level to boundedMessage)
+    }
+
     private val logger = object : Logger() {
         override fun log(level: LogLevel, message: String) {
             level.androidLog(message)
@@ -811,7 +834,7 @@ fun proceedAfterMissingPatchWarning() {
             handleDexCompileLine(message)
 
             viewModelScope.launch {
-                logs.add(level to message)
+                appendBoundedLog(level, message)
             }
         }
     }
@@ -1280,6 +1303,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             ?.takeUnless { it.isBlank() }
             ?: "unspecified"
         val patchCount = input.selectedPatches.values.sumOf { it.size }
+        val droppedLines = droppedLogLineCount
 
         val logLines = logSnapshot
             .filterNot { (_, msg) ->
@@ -1317,6 +1341,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             appendLine("------------")
             appendLine("Patcher Log:")
             appendLine("------------")
+            if (droppedLines > 0) {
+                appendLine("[WARN]: Log guard trimmed $droppedLines older line(s) to keep size bounded.")
+            }
             if (logLines.isEmpty()) {
                 appendLine("No log messages recorded.")
             } else {
@@ -2757,6 +2784,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         private const val INSTALL_PROGRESS_TOAST_INTERVAL_MS = 2500L
         private const val MEMORY_ADJUSTMENT_MB = 200
         private const val SUPPRESS_FAILURE_AFTER_SUCCESS_MS = 5000L
+        private const val PATCHER_LOG_ENTRY_SOFT_LIMIT = 9_000
+        private const val PATCHER_LOG_ENTRY_HARD_LIMIT = 12_000
+        private const val PATCHER_LOG_MESSAGE_CHAR_LIMIT = 12_000
         fun LogLevel.androidLog(msg: String) = when (this) {
             LogLevel.TRACE -> Log.v(TAG, msg)
             LogLevel.INFO -> Log.i(TAG, msg)
