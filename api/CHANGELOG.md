@@ -43,6 +43,7 @@
 - Adjusted the arrow FAB button on the `Apps` and `Patch bundles` tabs to be up against the right edge, removing the awkward gap https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/164
 - Added guards to the patcher logger to prevent massive patch log exports
 - Made the expandable/collapsable FAB buttons on the `Apps` and `Patch Bundles` tabs states persist
+- Made saved patched app entries in the `Apps` tab not overwrite each other unless the app has the same package name and was patched with the same patch bundle
 
 
 # Bug fixes
@@ -77,6 +78,8 @@
 - Fixed numerous patching errors caused by the ReVanced dependency bump by downgrading
 - Fixed the `Official ReVanced Patches` bundle having the `Remote` tag on its widget instead of the `Pre-installed` tag
 - Fixes patching errors caused by missing framework APKs
+- Fixed mounting errors that where occuring for some users
+- Fixed mount buttons on the saved patched app widget not being in the correct state
 
 
 # v1.7.1 (2026-01-22)

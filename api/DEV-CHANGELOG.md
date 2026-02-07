@@ -5,11 +5,14 @@
 
 - Added guards to the patcher logger to prevent massive patch log exports
 - Made the expandable/collapsable FAB buttons on the `Apps` and `Patch Bundles` tabs states persist
+- Made saved patched app entries in the `Apps` tab not overwrite each other unless the app has the same package name and was patched with the same patch bundle
 
 
 # Bug fixes
 
 - Fixes patching errors caused by missing framework APKs
+- Fixed mounting errors that where occuring for some users (needs testing)
+- Fixed mount buttons on the saved patched app widget not being in the correct state
 
 
 # v1.8.0-dev.06 (2026-02-07)

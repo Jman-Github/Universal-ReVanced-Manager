@@ -38,6 +38,7 @@ import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemote
 import app.revanced.manager.util.PM
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.asCode
+import app.revanced.manager.util.savedAppBasePackage
 import app.revanced.manager.util.simpleMessage
 import app.revanced.manager.util.tag
 import app.revanced.manager.util.awaitUserConfirmation
@@ -140,7 +141,7 @@ class InstalledAppInfoViewModel(
             val app = installedAppRepository.get(packageName)
             installedApp = app
             if (app != null) {
-                isMounted = rootInstaller.isAppMounted(app.currentPackageName)
+                isMounted = rootInstaller.isAppMounted(resolveDevicePackageName(app))
                 refreshAppState(app)
                 appliedPatches = resolveAppliedSelection(app)
             }
@@ -233,12 +234,34 @@ class InstalledAppInfoViewModel(
         selection
     }
 
+    private suspend fun resolveDevicePackageName(
+        app: InstalledApp,
+        savedApk: File? = null
+    ): String {
+        if (app.installType != InstallType.SAVED) return app.currentPackageName
+        val resolvedFromApk = (savedApk ?: savedApkFile(app))
+            ?.let(pm::getPackageInfo)
+            ?.packageName
+            ?.takeIf { it.isNotBlank() }
+        return resolvedFromApk
+            ?: app.originalPackageName.takeIf { it.isNotBlank() }
+            ?: savedAppBasePackage(app.currentPackageName)
+    }
+
+    private fun resolveDevicePackageNameFromState(app: InstalledApp): String {
+        if (app.installType != InstallType.SAVED) return app.currentPackageName
+        return appInfo?.packageName
+            ?.takeIf { it.isNotBlank() }
+            ?: app.originalPackageName.takeIf { it.isNotBlank() }
+            ?: savedAppBasePackage(app.currentPackageName)
+    }
+
     fun launch() {
         val app = installedApp ?: return
         if (!isInstalledOnDevice) {
             context.toast(context.getString(R.string.saved_app_launch_unavailable))
         } else {
-            pm.launch(app.currentPackageName)
+            pm.launch(resolveDevicePackageNameFromState(app))
         }
     }
 
@@ -261,7 +284,7 @@ class InstalledAppInfoViewModel(
         val app = installedApp ?: return
         val selection = appliedPatches ?: resolveAppliedSelection(app)
         val selectionPayload = app.selectionPayload
-        val targetPackage = packageNameOverride ?: app.currentPackageName
+        val targetPackage = packageNameOverride ?: resolveDevicePackageName(app)
         val resolvedVersion = versionName
             ?: pm.getPackageInfo(targetPackage)?.versionName
             ?: app.version
@@ -401,17 +424,18 @@ class InstalledAppInfoViewModel(
         externalInstallTimeoutJob?.cancel()
         externalInstallBaseline = null
         externalInstallStartTime = null
+        val targetPackage = resolveDevicePackageName(app, apk)
         val plan = installerManager.resolvePlan(
             InstallerManager.InstallTarget.SAVED_APP,
             apk,
-            app.currentPackageName,
+            targetPackage,
             appInfo?.applicationInfo?.loadLabel(context.packageManager)?.toString()
         )
         if (plan !is InstallerManager.InstallPlan.Mount &&
             isInstalledOnDevice &&
-            hasSignatureMismatch(app.currentPackageName, apk)
+            hasSignatureMismatch(targetPackage, apk)
         ) {
-            showSignatureMismatchPrompt(app.currentPackageName)
+            showSignatureMismatchPrompt(targetPackage)
             return@launch
         }
         isInstalling = true
@@ -449,7 +473,7 @@ class InstalledAppInfoViewModel(
                         }
                         val failureMessage = failure.message
                         if (installerManager.isSignatureMismatch(failureMessage)) {
-                            showSignatureMismatchPrompt(app.currentPackageName)
+                            showSignatureMismatchPrompt(targetPackage)
                             return@launch
                         }
                         val hint = installerManager.formatFailureHint(failure.asCode(), failureMessage)
@@ -492,7 +516,7 @@ class InstalledAppInfoViewModel(
 
                     val refreshedVersion = packageInfo.versionName ?: app.version
                     persistInstallMetadata(InstallType.MOUNT, refreshedVersion, packageInfo.packageName)
-                    isMounted = rootInstaller.isAppMounted(app.currentPackageName)
+                    isMounted = rootInstaller.isAppMounted(packageInfo.packageName)
                     markInstallSuccess(context.getString(R.string.saved_app_install_success))
                 } catch (e: Exception) {
                     Log.e(tag, "Failed to install saved app with root", e)
@@ -502,12 +526,12 @@ class InstalledAppInfoViewModel(
 
             is InstallerManager.InstallPlan.Shizuku -> {
                 try {
-                    shizukuInstaller.install(apk, app.currentPackageName)
+                    shizukuInstaller.install(apk, targetPackage)
                     val selection = appliedPatches ?: resolveAppliedSelection(app)
                     withContext(Dispatchers.IO) {
                         val payload = app.selectionPayload
                         installedAppRepository.addOrUpdate(
-                            app.currentPackageName,
+                            targetPackage,
                             app.originalPackageName,
                             app.version,
                             InstallType.SHIZUKU,
@@ -780,9 +804,10 @@ class InstalledAppInfoViewModel(
     fun uninstallSavedInstallation() = viewModelScope.launch {
         val app = installedApp ?: return@launch
         if (!isInstalledOnDevice) return@launch
+        val targetPackage = resolveDevicePackageName(app)
         deferUninstallProgressToasts = true
         startUninstallProgressToasts()
-        when (val result = runAckpineUninstall(app.currentPackageName)) {
+        when (val result = runAckpineUninstall(targetPackage)) {
             is Session.State.Failed<UninstallFailure> -> {
                 stopUninstallProgressToasts()
                 if (result.failure is UninstallFailure.Aborted) return@launch
@@ -840,8 +865,8 @@ class InstalledAppInfoViewModel(
     }
 
     fun remountSavedInstallation() = viewModelScope.launch {
-        val pkgName = installedApp?.currentPackageName ?: return@launch
         val app = installedApp ?: return@launch
+        val pkgName = resolveDevicePackageName(app)
         // Reflect state immediately while the remount sequence runs.
         mountOperation = MountOperation.UNMOUNTING
         isMounted = false
@@ -851,7 +876,7 @@ class InstalledAppInfoViewModel(
             context.toast(context.getString(R.string.unmounted))
             mountOperation = MountOperation.MOUNTING
             context.toast(context.getString(R.string.mounting_ellipsis))
-            val moduleReady = ensureMountModule(pkgName)
+            val moduleReady = ensureMountModule(pkgName, app)
             if (!moduleReady) {
                 context.toast(context.getString(R.string.saved_app_install_failed))
                 return@launch
@@ -873,8 +898,11 @@ class InstalledAppInfoViewModel(
         }
     }
 
-    private suspend fun ensureMountModule(packageName: String): Boolean = withContext(Dispatchers.IO) {
-        val apk = filesystem.findPatchedAppFile(packageName)
+    private suspend fun ensureMountModule(
+        packageName: String,
+        app: InstalledApp? = installedApp
+    ): Boolean = withContext(Dispatchers.IO) {
+        val apk = app?.let(::savedApkFile) ?: filesystem.findPatchedAppFile(packageName)
         if (apk == null) {
             return@withContext rootInstaller.isAppInstalled(packageName)
         }
@@ -895,7 +923,8 @@ class InstalledAppInfoViewModel(
     }
 
     fun unmountSavedInstallation() = viewModelScope.launch {
-        val pkgName = installedApp?.currentPackageName ?: return@launch
+        val app = installedApp ?: return@launch
+        val pkgName = resolveDevicePackageName(app)
         try {
             context.toast(context.getString(R.string.unmounting))
             rootInstaller.unmount(pkgName)
@@ -908,8 +937,8 @@ class InstalledAppInfoViewModel(
     }
 
     fun mountOrUnmount() = viewModelScope.launch {
-        val pkgName = installedApp?.currentPackageName ?: return@launch
         val app = installedApp ?: return@launch
+        val pkgName = resolveDevicePackageName(app)
         try {
             if (isMounted) {
                 mountOperation = MountOperation.UNMOUNTING
@@ -920,7 +949,7 @@ class InstalledAppInfoViewModel(
             } else {
                 mountOperation = MountOperation.MOUNTING
                 context.toast(context.getString(R.string.mounting_ellipsis))
-                val moduleReady = ensureMountModule(pkgName)
+                val moduleReady = ensureMountModule(pkgName, app)
                 if (!moduleReady) {
                     context.toast(context.getString(R.string.saved_app_install_failed))
                     return@launch
@@ -1076,8 +1105,9 @@ class InstalledAppInfoViewModel(
     }
 
     private suspend fun refreshAppState(app: InstalledApp) {
+        val devicePackageName = resolveDevicePackageName(app)
         val installedInfo = withContext(Dispatchers.IO) {
-            pm.getPackageInfo(app.currentPackageName)
+            pm.getPackageInfo(devicePackageName)
         }
         hasSavedCopy = withContext(Dispatchers.IO) { savedApkFile(app) != null }
 
@@ -1099,7 +1129,7 @@ class InstalledAppInfoViewModel(
                 Intent.ACTION_PACKAGE_REPLACED -> {
                     val pkg = intent.data?.schemeSpecificPart ?: return
                     val currentApp = installedApp ?: return
-                    if (pkg != currentApp.currentPackageName) return
+                    if (pkg != resolveDevicePackageNameFromState(currentApp)) return
 
                     if (pendingExternalInstall != null) {
                         handleExternalInstallSuccess(pkg)
@@ -1112,7 +1142,7 @@ class InstalledAppInfoViewModel(
                     if (intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) return
                     val pkg = intent.data?.schemeSpecificPart ?: return
                     val currentApp = installedApp ?: return
-                    if (pkg != currentApp.currentPackageName) return
+                    if (pkg != resolveDevicePackageNameFromState(currentApp)) return
                     viewModelScope.launch {
                         refreshAppState(currentApp)
                         isMounted = false

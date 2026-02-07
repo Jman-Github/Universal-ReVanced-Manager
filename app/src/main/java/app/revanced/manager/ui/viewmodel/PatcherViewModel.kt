@@ -75,6 +75,8 @@ import app.revanced.manager.util.PatchedAppExportData
 import app.revanced.manager.util.Options
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.patcher.patch.PatchBundleInfo
+import app.revanced.manager.util.buildSavedAppEntryKey
+import app.revanced.manager.util.isSavedAppEntryForPackage
 import app.revanced.manager.util.saveableVar
 import app.revanced.manager.util.saver.snapshotStateListSaver
 import app.revanced.manager.util.simpleMessage
@@ -1001,9 +1003,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         if (latestInstalledApp != installedApp) {
             installedApp = latestInstalledApp
         }
-        val preserveSavedEntry =
-            savedAppsEnabled && latestInstalledApp?.installType == InstallType.SAVED
-        val shouldSaveForLater = savedAppsEnabled || forceSave || preserveSavedEntry
+        val shouldSaveForLater = savedAppsEnabled || forceSave
         return withContext(Dispatchers.IO) {
             val installedPackageInfo = currentPackageName?.let(pm::getPackageInfo)
             val patchedPackageInfo = pm.getPackageInfo(outputFile)
@@ -1015,21 +1015,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
             val finalPackageName = packageInfo.packageName
             val finalVersion = packageInfo.versionName?.takeUnless { it.isBlank() } ?: version ?: "unspecified"
-
-            val savedCopy = fs.getPatchedAppFile(finalPackageName, finalVersion)
-            if (shouldSaveForLater) {
-                try {
-                    savedCopy.parentFile?.mkdirs()
-                    outputFile.copyTo(savedCopy, overwrite = true)
-                } catch (error: IOException) {
-                    if (installType == InstallType.SAVED) {
-                        Log.e(TAG, "Failed to copy patched APK for later", error)
-                        return@withContext false
-                    } else {
-                        Log.w(TAG, "Failed to update saved copy for $finalPackageName", error)
-                    }
-                }
-            }
 
             val metadata = buildExportMetadata(patchedPackageInfo ?: packageInfo)
             withContext(Dispatchers.Main) {
@@ -1047,16 +1032,62 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 sanitizedOptionsFinal
             )
 
+            val newBundleUids = sanitizedSelectionFinal.keys.toSet()
+            val savedEntriesForPackage = installedAppRepository.getByInstallType(InstallType.SAVED)
+                .filter { savedApp ->
+                    isSavedAppEntryForPackage(savedApp.currentPackageName, finalPackageName)
+                }
+            val matchingSavedEntry = savedEntriesForPackage.firstOrNull { savedApp ->
+                savedEntryBundleUids(savedApp) == newBundleUids
+            }
+            val preserveSavedEntry =
+                savedAppsEnabled && (
+                    latestInstalledApp?.installType == InstallType.SAVED ||
+                        matchingSavedEntry != null
+                    )
             val persistedInstallType = if (preserveSavedEntry) InstallType.SAVED else installType
-            if (shouldSaveForLater || persistedInstallType != InstallType.SAVED) {
+            val existingFinalPackageEntry = installedAppRepository.get(finalPackageName)
+            val persistedPackageName = if (persistedInstallType == InstallType.SAVED) {
+                matchingSavedEntry?.currentPackageName ?: run {
+                    val canUseBaseKey = savedEntriesForPackage.isEmpty() &&
+                        (existingFinalPackageEntry == null || existingFinalPackageEntry.installType == InstallType.SAVED)
+                    if (canUseBaseKey) finalPackageName
+                    else buildSavedAppEntryKey(finalPackageName, newBundleUids)
+                }
+            } else {
+                finalPackageName
+            }
+
+            val effectiveShouldSaveForLater = shouldSaveForLater || preserveSavedEntry
+            val savedCopyPackageName = if (persistedInstallType == InstallType.SAVED) {
+                persistedPackageName
+            } else {
+                finalPackageName
+            }
+            val savedCopy = fs.getPatchedAppFile(savedCopyPackageName, finalVersion)
+            if (effectiveShouldSaveForLater) {
+                try {
+                    savedCopy.parentFile?.mkdirs()
+                    outputFile.copyTo(savedCopy, overwrite = true)
+                } catch (error: IOException) {
+                    if (installType == InstallType.SAVED) {
+                        Log.e(TAG, "Failed to copy patched APK for later", error)
+                        return@withContext false
+                    } else {
+                        Log.w(TAG, "Failed to update saved copy for $savedCopyPackageName", error)
+                    }
+                }
+            }
+
+            if (effectiveShouldSaveForLater || persistedInstallType != InstallType.SAVED) {
                 installedAppRepository.addOrUpdate(
-                    finalPackageName,
+                    persistedPackageName,
                     packageName,
                     finalVersion,
                     persistedInstallType,
                     sanitizedSelectionFinal,
                     selectionPayload,
-                    resetCreatedAt = shouldSaveForLater && persistedInstallType == InstallType.SAVED
+                    resetCreatedAt = effectiveShouldSaveForLater && persistedInstallType == InstallType.SAVED
                 )
             }
 
@@ -1070,7 +1101,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             appliedOptions = sanitizedOptionsOriginal
 
             savedPatchedApp = savedPatchedApp ||
-                (shouldSaveForLater && (installType == InstallType.SAVED || savedCopy.exists()))
+                (effectiveShouldSaveForLater && (installType == InstallType.SAVED || savedCopy.exists()))
             true
         }
     }
@@ -1502,9 +1533,20 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                             packageInfo.label()
                         }
                         val patchedVersion = packageInfo.versionName ?: ""
+                        val packageInstalledForMount = if (existingPackageInfo != null) {
+                            true
+                        } else if (rootInstaller.hasRootAccess()) {
+                            runCatching {
+                                rootInstaller.isPackageResolvableForMount(currentPackageInfo.packageName)
+                            }.onFailure {
+                                Log.w(TAG, "Failed to resolve package for mount using root shell", it)
+                            }.getOrDefault(false)
+                        } else {
+                            false
+                        }
 
-                        // Check for base APK, first check if the app is already installed
-                        if (existingPackageInfo == null) {
+                        // Check for base APK. If package manager cannot resolve the app, verify via root shell.
+                        if (!packageInstalledForMount) {
                             // If the app is not installed, check if the output file is a base apk
                             if (currentPackageInfo.splitNames?.isNotEmpty() == true) {
                                 val hint =
@@ -1525,10 +1567,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                             ?: inputFile?.let(pm::getPackageInfo)?.versionName
                             ?: throw Exception("Failed to determine input APK version")
 
-                        // Only reinstall stock when the app is not currently installed.
-                        val stockForMount = if (existingPackageInfo == null) {
+                        // Only reinstall stock when the app is not currently installed/resolvable.
+                        val stockForMount = if (!packageInstalledForMount) {
                             inputFile ?: run {
-                                showInstallFailure(app.getString(R.string.install_app_fail, "Missing original APK for mount install"))
+                                showInstallFailure(app.getString(R.string.install_app_fail, "Missing original APK for install"))
                                 return
                             }
                         } else {
@@ -2770,6 +2812,16 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             }
             if (filtered.isNotEmpty()) put(uid, filtered)
         }
+    }
+
+    private suspend fun savedEntryBundleUids(installedApp: InstalledApp): Set<Int> {
+        val payloadBundles = installedApp.selectionPayload
+            ?.bundles
+            ?.map { it.bundleUid }
+            ?.toSet()
+            .orEmpty()
+        if (payloadBundles.isNotEmpty()) return payloadBundles
+        return installedAppRepository.getAppliedPatches(installedApp.currentPackageName).keys
     }
 
     private companion object {

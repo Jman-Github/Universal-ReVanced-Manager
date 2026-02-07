@@ -96,6 +96,7 @@ import app.revanced.manager.util.ExportNameFormatter
 import app.revanced.manager.util.PatchedAppExportData
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.isAllowedApkFile
+import app.revanced.manager.util.savedAppBasePackage
 import app.revanced.manager.util.tag
 import app.revanced.manager.util.toast
 import kotlinx.coroutines.launch
@@ -707,6 +708,12 @@ fun InstalledAppInfoScreen(
                 .padding(paddingValues)
         ) {
             val installedApp = installedAppState ?: return@ColumnWithScrollbar
+            val displayPackageName = if (installedApp.installType == InstallType.SAVED) {
+                installedApp.originalPackageName.takeIf { it.isNotBlank() }
+                    ?: savedAppBasePackage(installedApp.currentPackageName)
+            } else {
+                installedApp.currentPackageName
+            }
 
             AppInfo(
                 appInfo = viewModel.appInfo,
@@ -738,12 +745,12 @@ fun InstalledAppInfoScreen(
         viewModel.appInfo
     ) {
         val label = viewModel.appInfo?.applicationInfo?.loadLabel(context.packageManager)?.toString()
-            ?: installedApp.currentPackageName
+            ?: displayPackageName
         val bundleVersions = appliedBundles.mapNotNull { it.version?.takeIf(String::isNotBlank) }
         val bundleNames = appliedBundles.map { it.title }.filter(String::isNotBlank)
         PatchedAppExportData(
             appName = label,
-            packageName = installedApp.currentPackageName,
+            packageName = viewModel.appInfo?.packageName ?: displayPackageName,
             appVersion = installedApp.version,
             patchBundleVersions = bundleVersions,
             patchBundleNames = bundleNames
@@ -1253,10 +1260,10 @@ fun InstalledAppInfoScreen(
 
                 SettingsListItem(
                     headlineContent = stringResource(R.string.package_name),
-                    supportingContent = installedApp.currentPackageName
+                    supportingContent = displayPackageName
                 )
 
-                if (installedApp.originalPackageName != installedApp.currentPackageName) {
+                if (installedApp.originalPackageName != displayPackageName) {
                     SettingsListItem(
                         headlineContent = stringResource(R.string.original_package_name),
                         supportingContent = installedApp.originalPackageName

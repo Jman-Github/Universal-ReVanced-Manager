@@ -27,6 +27,7 @@ import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.mutableStateSetOf
 import app.revanced.manager.util.PatchedAppExportData
 import app.revanced.manager.util.ExportNameFormatter
+import app.revanced.manager.util.savedAppBasePackage
 import app.revanced.manager.patcher.patch.PatchBundleInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
@@ -60,6 +61,7 @@ class InstalledAppsViewModel(
     val installedOnDeviceMap = mutableStateMapOf<String, Boolean>()
     val mountedOnDeviceMap = mutableStateMapOf<String, Boolean>()
     val savedCopyMap = mutableStateMapOf<String, Boolean>()
+    private val devicePackageLookupMap = mutableStateMapOf<String, String>()
     val selectedApps = mutableStateSetOf<String>()
     val missingPackages = mutableStateSetOf<String>()
     val bundleSummaries = mutableStateMapOf<String, List<AppBundleSummary>>()
@@ -89,6 +91,7 @@ class InstalledAppsViewModel(
                     installedOnDeviceMap.remove(packageName)
                     mountedOnDeviceMap.remove(packageName)
                     savedCopyMap.remove(packageName)
+                    devicePackageLookupMap.remove(packageName)
                     missingPackages.remove(packageName)
                     selectedApps.remove(packageName)
                 }
@@ -139,6 +142,26 @@ class InstalledAppsViewModel(
         }
     }
 
+    fun refreshDeviceAndMountState() = viewModelScope.launch {
+        val installedApps = apps.first()
+        val newMissing = mutableSetOf<String>()
+
+        installedApps.forEach { installedApp ->
+            val packageName = installedApp.currentPackageName
+            val packageInfo = resolvePackageInfo(installedApp)
+            packageInfoMap[packageName] = packageInfo
+
+            if (installedApp.installType != InstallType.SAVED && packageInfo == null) {
+                newMissing += packageName
+            }
+        }
+
+        val missingToRemove = missingPackages.filterNot { it in newMissing }.toSet()
+        missingPackages.removeAll(missingToRemove)
+        val missingToAdd = newMissing.filterNot { it in missingPackages }.toSet()
+        missingPackages.addAll(missingToAdd)
+    }
+
     private val packageChangeReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val action = intent?.action ?: return
@@ -149,15 +172,28 @@ class InstalledAppsViewModel(
             }
 
             val packageName = intent.data?.schemeSpecificPart ?: return
-            if (packageName !in packageInfoMap && packageName !in installedOnDeviceMap) return
+            val matchingEntries = devicePackageLookupMap
+                .filterValues { it == packageName }
+                .keys
+                .toSet()
+            val targetEntries = if (matchingEntries.isNotEmpty()) {
+                matchingEntries
+            } else if (packageName in packageInfoMap || packageName in installedOnDeviceMap) {
+                setOf(packageName)
+            } else {
+                emptySet()
+            }
+            if (targetEntries.isEmpty()) return
 
             viewModelScope.launch {
                 val installedInfo = withContext(Dispatchers.IO) {
                     pm.getPackageInfo(packageName)
                 }
-                installedOnDeviceMap[packageName] = installedInfo != null
-                if (installedInfo != null) {
-                    packageInfoMap[packageName] = installedInfo
+                targetEntries.forEach { key ->
+                    installedOnDeviceMap[key] = installedInfo != null
+                    if (installedInfo != null) {
+                        packageInfoMap[key] = installedInfo
+                    }
                 }
             }
         }
@@ -352,16 +388,23 @@ class InstalledAppsViewModel(
 
             when (installedApp.installType) {
                 InstallType.SAVED -> {
-                    val installedInfo = pm.getPackageInfo(packageName)
-                    installedOnDeviceMap[packageName] = installedInfo != null
-                    if (installedInfo != null) {
-                        return@withContext installedInfo
-                    }
                     val savedFile = filesystem.getPatchedAppFile(packageName, installedApp.version)
                     val resolvedFile = if (savedFile.exists()) {
                         savedFile
                     } else {
                         filesystem.findPatchedAppFile(packageName)
+                    }
+                    val archivePackageInfo = resolvedFile?.let(pm::getPackageInfo)
+                    val devicePackageName = archivePackageInfo?.packageName
+                        ?.takeIf { it.isNotBlank() }
+                        ?: installedApp.originalPackageName.takeIf { it.isNotBlank() }
+                        ?: savedAppBasePackage(packageName)
+                    devicePackageLookupMap[packageName] = devicePackageName
+
+                    val installedInfo = pm.getPackageInfo(devicePackageName)
+                    installedOnDeviceMap[packageName] = installedInfo != null
+                    if (installedInfo != null) {
+                        return@withContext installedInfo
                     }
                     if (resolvedFile == null) {
                         return@withContext null
@@ -382,10 +425,11 @@ class InstalledAppsViewModel(
                             selectionPayload = installedApp.selectionPayload
                         )
                     }
-                    pm.getPackageInfo(resolvedFile)
+                    archivePackageInfo ?: pm.getPackageInfo(resolvedFile)
                 }
 
                 else -> {
+                    devicePackageLookupMap[packageName] = packageName
                     val installedInfo = pm.getPackageInfo(packageName)
                     installedOnDeviceMap[packageName] = installedInfo != null
                     installedInfo ?: run {
@@ -426,18 +470,24 @@ class InstalledAppsViewModel(
 
     private fun buildExportMetadata(app: InstalledApp, source: File): PatchedAppExportData {
         val packageInfo = pm.getPackageInfo(source)
+        val displayPackageName = if (app.installType == InstallType.SAVED) {
+            app.originalPackageName.takeIf { it.isNotBlank() }
+                ?: savedAppBasePackage(app.currentPackageName)
+        } else {
+            app.currentPackageName
+        }
         val label = packageInfo?.applicationInfo
             ?.loadLabel(pm.application.packageManager)
             ?.toString()
             ?.trim()
             ?.takeIf { it.isNotEmpty() }
-            ?: app.currentPackageName
+            ?: displayPackageName
         val summaries = bundleSummaries[app.currentPackageName].orEmpty()
         val bundleVersions = summaries.mapNotNull { it.version?.takeIf(String::isNotBlank) }
         val bundleNames = summaries.map { it.title }.filter(String::isNotBlank)
         return PatchedAppExportData(
             appName = label,
-            packageName = app.currentPackageName,
+            packageName = packageInfo?.packageName ?: displayPackageName,
             appVersion = app.version,
             patchBundleVersions = bundleVersions,
             patchBundleNames = bundleNames

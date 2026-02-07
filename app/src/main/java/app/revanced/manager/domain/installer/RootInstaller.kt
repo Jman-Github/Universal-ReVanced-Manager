@@ -110,6 +110,9 @@ class RootInstaller(
         } ?: false
     }
 
+    suspend fun isPackageResolvableForMount(packageName: String): Boolean =
+        resolveStockApkPathForMount(packageName) != null
+
     suspend fun mount(packageName: String) {
         if (isAppMounted(packageName)) return
 
@@ -270,6 +273,27 @@ class RootInstaller(
         if (remoteFS.getFile(revancedApk).exists()) return revancedApk
 
         throw Exception("Patched APK not found for mount")
+    }
+
+    private suspend fun resolveStockApkPathForMount(packageName: String): String? = withContext(Dispatchers.IO) {
+        val command = """
+            stock_path_data="${'$'}(pm path "$packageName" 2>/dev/null | grep base | grep /data/app/ | head -n 1 | sed 's/package://g')"
+            stock_path_fallback="${'$'}(pm path "$packageName" 2>/dev/null | grep base | head -n 1 | sed 's/package://g')"
+            if [ -z "${'$'}stock_path_data" ] && [ -z "${'$'}stock_path_fallback" ]; then
+              stock_path_cmd="${'$'}(cmd package path "$packageName" 2>/dev/null | grep base | head -n 1 | sed 's/package://g')"
+            else
+              stock_path_cmd=""
+            fi
+            stock_path="${'$'}{stock_path_data:-${'$'}{stock_path_fallback:-${'$'}stock_path_cmd}}"
+            if [ -n "${'$'}stock_path" ] && [ -f "${'$'}stock_path" ]; then
+              echo "${'$'}stock_path"
+            fi
+        """.trimIndent().replace("\n", "; ")
+        val result = execute(command)
+        result.out
+            .asSequence()
+            .map { it.trim() }
+            .firstOrNull { it.startsWith("/") }
     }
 }
 

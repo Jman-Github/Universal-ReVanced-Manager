@@ -72,6 +72,7 @@ import app.revanced.manager.ui.viewmodel.InstalledAppsViewModel
 import app.revanced.manager.ui.viewmodel.InstalledAppsViewModel.AppBundleSummary
 import app.revanced.manager.util.consumeHorizontalScroll
 import app.revanced.manager.util.relativeTime
+import app.revanced.manager.util.savedAppBasePackage
 import app.universal.revanced.manager.R
 import kotlinx.coroutines.delay
 import org.koin.androidx.compose.koinViewModel
@@ -117,11 +118,20 @@ fun InstalledAppsScreen(
             apps
         } else {
             apps.filter { app ->
-                val packageName = app.currentPackageName
-                val packageInfo = viewModel.packageInfoMap[packageName]
+                val packageName = if (app.installType == InstallType.SAVED) {
+                    app.originalPackageName.takeIf { it.isNotBlank() }
+                        ?: savedAppBasePackage(app.currentPackageName)
+                } else {
+                    app.currentPackageName
+                }
+                val packageInfo = viewModel.packageInfoMap[app.currentPackageName]
                 val label = packageInfo?.applicationInfo?.loadLabel(context.packageManager)?.toString().orEmpty()
                 val searchText = buildString {
                     append(packageName)
+                    if (packageName != app.currentPackageName) {
+                        append(' ')
+                        append(app.currentPackageName)
+                    }
                     if (label.isNotBlank()) {
                         append(' ')
                         append(label)
@@ -276,6 +286,12 @@ private fun InstalledAppCard(
 ) {
     val context = LocalContext.current
     val isSaved = installedApp.installType == InstallType.SAVED
+    val displayPackageName = if (isSaved) {
+        installedApp.originalPackageName.takeIf { it.isNotBlank() }
+            ?: savedAppBasePackage(installedApp.currentPackageName)
+    } else {
+        installedApp.currentPackageName
+    }
     val cardShape = RoundedCornerShape(18.dp)
     val elevation = if (isSelected) 6.dp else 2.dp
     val cardBase = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
@@ -334,7 +350,7 @@ private fun InstalledAppCard(
                     AppLabel(
                         packageInfo = packageInfo,
                         style = MaterialTheme.typography.titleMedium,
-                        defaultText = installedApp.currentPackageName,
+                        defaultText = displayPackageName,
                         modifier = Modifier
                             .weight(1f, fill = false)
                             .consumeHorizontalScroll(titleScrollState)
@@ -354,7 +370,7 @@ private fun InstalledAppCard(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = installedApp.currentPackageName,
+                    text = displayPackageName,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -658,6 +674,12 @@ private fun ReorderableCollectionItemScope.AppsOrderRow(
     packageInfo: PackageInfo?,
     interactionSource: MutableInteractionSource
 ) {
+    val displayPackageName = if (app.installType == InstallType.SAVED) {
+        app.originalPackageName.takeIf { it.isNotBlank() }
+            ?: savedAppBasePackage(app.currentPackageName)
+    } else {
+        app.currentPackageName
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -674,7 +696,7 @@ private fun ReorderableCollectionItemScope.AppsOrderRow(
             AppLabel(
                 packageInfo = packageInfo,
                 style = MaterialTheme.typography.bodyLarge,
-                defaultText = app.currentPackageName
+                defaultText = displayPackageName
             )
             val installTypeLabel = stringResource(app.installType.stringResource)
             Text(

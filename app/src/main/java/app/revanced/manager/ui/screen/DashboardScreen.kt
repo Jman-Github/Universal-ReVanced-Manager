@@ -87,6 +87,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
@@ -110,7 +111,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.universal.revanced.manager.R
 import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.domain.manager.PreferencesManager
@@ -152,6 +156,7 @@ import app.revanced.manager.util.PatchedAppExportData
 import app.revanced.manager.util.isAllowedApkFile
 import app.revanced.manager.util.isAllowedPatchBundleFile
 import app.revanced.manager.util.PM
+import app.revanced.manager.util.savedAppBasePackage
 import app.revanced.manager.util.toast
 import app.revanced.manager.data.room.apps.installed.InstallType
 import java.io.File
@@ -268,6 +273,18 @@ fun DashboardScreen(
     val quickActionViewModel = quickActionPackage?.let { pkg ->
         koinViewModel<InstalledAppInfoViewModel>(key = "quick-action-$pkg") { parametersOf(pkg) }
     }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, installedAppsViewModel) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                installedAppsViewModel.refreshDeviceAndMountState()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
     SideEffect {
         quickActionViewModel?.onBackClick = {}
     }
@@ -321,19 +338,26 @@ fun DashboardScreen(
 
     val dashboardSidePadding = 16.dp
     fun resolveQuickExportName(app: InstalledApp): String {
+        val displayPackageName = if (app.installType == InstallType.SAVED) {
+            app.originalPackageName.takeIf { it.isNotBlank() }
+                ?: savedAppBasePackage(app.currentPackageName)
+        } else {
+            app.currentPackageName
+        }
         val label = installedAppsViewModel.packageInfoMap[app.currentPackageName]
             ?.applicationInfo
             ?.loadLabel(androidContext.packageManager)
             ?.toString()
             ?.trim()
             ?.takeIf { it.isNotEmpty() }
-            ?: app.currentPackageName
+            ?: displayPackageName
         val summaries = installedAppsViewModel.bundleSummaries[app.currentPackageName].orEmpty()
         val bundleVersions = summaries.mapNotNull { it.version?.takeIf(String::isNotBlank) }
         val bundleNames = summaries.map { it.title }.filter(String::isNotBlank)
         val exportData = PatchedAppExportData(
             appName = label,
-            packageName = app.currentPackageName,
+            packageName = installedAppsViewModel.packageInfoMap[app.currentPackageName]?.packageName
+                ?: displayPackageName,
             appVersion = app.version,
             patchBundleVersions = bundleVersions,
             patchBundleNames = bundleNames
@@ -1628,8 +1652,16 @@ fun DashboardScreen(
                                 onAppAction = { app, action ->
                                     installedAppsViewModel.clearSelection()
                                     if (action == InstalledAppAction.OPEN) {
+                                        val launchPackage = if (app.installType == InstallType.SAVED) {
+                                            installedAppsViewModel.packageInfoMap[app.currentPackageName]
+                                                ?.packageName
+                                                ?: app.originalPackageName.takeIf { it.isNotBlank() }
+                                                ?: savedAppBasePackage(app.currentPackageName)
+                                        } else {
+                                            app.currentPackageName
+                                        }
                                         val intent = androidContext.packageManager
-                                            .getLaunchIntentForPackage(app.currentPackageName)
+                                            .getLaunchIntentForPackage(launchPackage)
                                         if (intent == null) {
                                             androidContext.toast(
                                                 androidContext.getString(R.string.saved_app_launch_unavailable)
