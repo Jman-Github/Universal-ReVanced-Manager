@@ -40,6 +40,7 @@
 - Added a popout animation when switching tabs on the main screen
 - Implemented XML surrogate sanitization to all runtimes
 - Added the ability to export all settings (not including the keystore) to a single JSON along with an option to import it https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/165
+- Adjusted the arrow FAB button on the `Apps` and `Patch bundles` tabs to be up against the right edge, removing the awkward gap https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/164
 
 
 # Bug fixes

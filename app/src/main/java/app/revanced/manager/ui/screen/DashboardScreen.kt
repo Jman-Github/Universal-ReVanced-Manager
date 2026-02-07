@@ -1349,8 +1349,10 @@ fun DashboardScreen(
                     val enterExitSpec = tween<IntOffset>(durationMillis = 220, easing = FastOutSlowInEasing)
                     val sizeSpec = tween<IntSize>(durationMillis = 220, easing = FastOutSlowInEasing)
                     Row(
-                        modifier = Modifier.height(56.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier
+                            .height(56.dp)
+                            .offset(x = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         AnimatedVisibility(
@@ -1390,11 +1392,9 @@ fun DashboardScreen(
                                 ) { Icon(Icons.Default.Add, stringResource(R.string.add)) }
                             }
                         }
-                        Spacer(modifier = Modifier.size(2.dp))
                         BundleFabHandle(
                             collapsed = bundlesFabCollapsed,
-                            onToggle = { bundlesFabCollapsed = !bundlesFabCollapsed },
-                            modifier = Modifier.offset(x = 6.dp)
+                            onToggle = { bundlesFabCollapsed = !bundlesFabCollapsed }
                         )
                     }
                 }
@@ -1403,8 +1403,10 @@ fun DashboardScreen(
                     val enterExitSpec = tween<IntOffset>(durationMillis = 220, easing = FastOutSlowInEasing)
                     val sizeSpec = tween<IntSize>(durationMillis = 220, easing = FastOutSlowInEasing)
                     Row(
-                        modifier = Modifier.height(56.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier
+                            .height(56.dp)
+                            .offset(x = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         AnimatedVisibility(
@@ -1436,11 +1438,9 @@ fun DashboardScreen(
                                 ) { Icon(Icons.Default.Add, stringResource(R.string.add)) }
                             }
                         }
-                        Spacer(modifier = Modifier.size(2.dp))
                         BundleFabHandle(
                             collapsed = appsFabCollapsed,
-                            onToggle = { appsFabCollapsed = !appsFabCollapsed },
-                            modifier = Modifier.offset(x = 6.dp)
+                            onToggle = { appsFabCollapsed = !appsFabCollapsed }
                         )
                     }
                 }
