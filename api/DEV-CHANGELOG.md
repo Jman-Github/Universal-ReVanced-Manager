@@ -4,6 +4,7 @@
 # Features
 
 - Added guards to the patcher logger to prevent massive patch log exports
+- Made the expandable/collapsable FAB buttons on the `Apps` and `Patch Bundles` tabs states persist
 
 
 # Bug fixes

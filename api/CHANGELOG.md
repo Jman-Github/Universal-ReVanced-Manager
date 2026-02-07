@@ -42,6 +42,7 @@
 - Added the ability to export all settings (not including the keystore) to a single JSON along with an option to import it https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/165
 - Adjusted the arrow FAB button on the `Apps` and `Patch bundles` tabs to be up against the right edge, removing the awkward gap https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/164
 - Added guards to the patcher logger to prevent massive patch log exports
+- Made the expandable/collapsable FAB buttons on the `Apps` and `Patch Bundles` tabs states persist
 
 
 # Bug fixes

@@ -215,6 +215,8 @@ fun DashboardScreen(
     val prefs: PreferencesManager = koinInject()
     val savedAppsEnabled by prefs.enableSavedApps.getAsState()
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
+    val bundlesFabCollapsed by prefs.dashboardBundlesFabCollapsed.getAsState()
+    val appsFabCollapsed by prefs.dashboardAppsFabCollapsed.getAsState()
     val storageRoots = remember { fs.storageRoots() }
     EventEffect(flow = storageVm.storageSelectionFlow) { selected ->
         onStorageSelect(selected)
@@ -316,9 +318,6 @@ fun DashboardScreen(
             exportPermissionLauncher.launch(exportPermissionName)
         }
     }
-
-    var bundlesFabCollapsed by rememberSaveable { mutableStateOf(false) }
-    var appsFabCollapsed by rememberSaveable { mutableStateOf(false) }
 
     val dashboardSidePadding = 16.dp
     fun resolveQuickExportName(app: InstalledApp): String {
@@ -1394,7 +1393,11 @@ fun DashboardScreen(
                         }
                         BundleFabHandle(
                             collapsed = bundlesFabCollapsed,
-                            onToggle = { bundlesFabCollapsed = !bundlesFabCollapsed }
+                            onToggle = {
+                                composableScope.launch {
+                                    prefs.dashboardBundlesFabCollapsed.update(!bundlesFabCollapsed)
+                                }
+                            }
                         )
                     }
                 }
@@ -1440,7 +1443,11 @@ fun DashboardScreen(
                         }
                         BundleFabHandle(
                             collapsed = appsFabCollapsed,
-                            onToggle = { appsFabCollapsed = !appsFabCollapsed }
+                            onToggle = {
+                                composableScope.launch {
+                                    prefs.dashboardAppsFabCollapsed.update(!appsFabCollapsed)
+                                }
+                            }
                         )
                     }
                 }
