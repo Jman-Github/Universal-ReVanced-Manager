@@ -163,6 +163,7 @@ fun ImportExportSettingsScreen(
             ExportPicker.PatchBundles -> vm.exportPatchBundles(target)
             ExportPicker.PatchProfiles -> vm.exportPatchProfiles(target)
             ExportPicker.ManagerSettings -> vm.exportManagerSettings(target)
+            ExportPicker.Everything -> vm.exportEverything(target)
             ExportPicker.PatchSelection -> when (vm.selectionAction) {
                 ImportExportViewModel.SelectionAction.ExportAllBundles ->
                     vm.executeSelectionExportAllBundles(target)
@@ -340,6 +341,7 @@ fun ImportExportSettingsScreen(
                     ImportPicker.PatchBundles,
                     ImportPicker.PatchProfiles,
                     ImportPicker.ManagerSettings,
+                    ImportPicker.Everything,
                     ImportPicker.PatchSelection -> ::isJsonFile
                 }
                 PathSelectorDialog(
@@ -357,6 +359,7 @@ fun ImportExportSettingsScreen(
                             ImportPicker.PatchBundles -> vm.importPatchBundles(path)
                             ImportPicker.PatchProfiles -> vm.importPatchProfiles(path)
                             ImportPicker.ManagerSettings -> vm.importManagerSettings(path)
+                            ImportPicker.Everything -> vm.importEverything(path)
                             ImportPicker.PatchSelection -> when (vm.selectionAction) {
                                 ImportExportViewModel.SelectionAction.ImportAllBundles ->
                                     vm.executeSelectionImportAllBundles(path)
@@ -374,6 +377,7 @@ fun ImportExportSettingsScreen(
                     ExportPicker.PatchBundles,
                     ExportPicker.PatchProfiles,
                     ExportPicker.ManagerSettings,
+                    ExportPicker.Everything,
                     ExportPicker.PatchSelection -> ::isJsonFile
                 }
                 val fileTypeLabel = when (picker) {
@@ -381,6 +385,7 @@ fun ImportExportSettingsScreen(
                     ExportPicker.PatchBundles,
                     ExportPicker.PatchProfiles,
                     ExportPicker.ManagerSettings,
+                    ExportPicker.Everything,
                     ExportPicker.PatchSelection -> ".json"
                 }
                 PathSelectorDialog(
@@ -576,6 +581,21 @@ fun ImportExportSettingsScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
                 SettingsSearchHighlight(
+                    targetKey = R.string.import_everything,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    GroupItem(
+                        modifier = highlightModifier,
+                        onClick = {
+                            openImportPicker(ImportPicker.Everything)
+                        },
+                        headline = R.string.import_everything,
+                        description = R.string.import_everything_description
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
                     targetKey = R.string.import_patch_selection,
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }
@@ -649,6 +669,21 @@ fun ImportExportSettingsScreen(
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
+                SettingsSearchHighlight(
+                    targetKey = R.string.export_everything,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    GroupItem(
+                        modifier = highlightModifier,
+                        onClick = {
+                            openExportPicker(ExportPicker.Everything)
+                        },
+                        headline = R.string.export_everything,
+                        description = R.string.export_everything_description
+                    )
+                }
+                ExpressiveSettingsDivider()
 
                 SettingsSearchHighlight(
                     targetKey = R.string.export_patch_selection,
@@ -1460,6 +1495,7 @@ private data class PendingExportConfirmation(
 
 private enum class ExportPicker(val defaultName: String) {
     Keystore("Manager.keystore"),
+    Everything("urv_backup_all.json"),
     PatchBundles("urv_patch_bundles.json"),
     PatchProfiles("urv_patch_profiles.json"),
     ManagerSettings("urv_settings.json"),
@@ -1468,6 +1504,7 @@ private enum class ExportPicker(val defaultName: String) {
 
 private enum class ImportPicker {
     Keystore,
+    Everything,
     PatchBundles,
     PatchProfiles,
     ManagerSettings,

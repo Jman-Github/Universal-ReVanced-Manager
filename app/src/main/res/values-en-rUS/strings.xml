@@ -256,6 +256,9 @@
     <string name="import_manager_settings_description">Restore saved manager settings from a JSON file</string>
     <string name="import_manager_settings_fail">Could not import manager settings: %s</string>
     <string name="import_manager_settings_success">Imported manager settings</string>
+    <string name="import_everything">Import everything</string>
+    <string name="import_everything_description">Import patch selections, patch bundles, patch profiles, and manager settings from a single JSON file</string>
+    <string name="import_everything_fail">Could not import backup file: %s</string>
     <string name="export_patch_selection">Export patch selection</string>
     <string name="export_patch_selection_description">Export patch selection to a JSON file</string>
     <string name="export_patch_selection_bundle">Export patch selection per bundle</string>
@@ -293,6 +296,10 @@
     <string name="export_manager_settings_description">Save all manager settings to a JSON file</string>
     <string name="export_manager_settings_fail">Could not export manager settings: %s</string>
     <string name="export_manager_settings_success">Exported manager settings</string>
+    <string name="export_everything">Export everything</string>
+    <string name="export_everything_description">Export patch selections, patch bundles, patch profiles, and manager settings to one JSON file (keystore is not included)</string>
+    <string name="export_everything_fail">Could not export backup file: %s</string>
+    <string name="export_everything_success">Exported backup file</string>
     <string name="reset_patch_selection">Reset patch selection</string>
     <string name="reset_patch_selection_description">Reset the stored patch selection</string>
     <string name="reset_patch_options">Reset patch options</string>

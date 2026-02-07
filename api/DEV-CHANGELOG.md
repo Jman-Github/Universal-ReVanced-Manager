@@ -4,6 +4,7 @@
 # Features
 
 - Implemented XML surrogate sanitization to all runtimes
+- Added the ability to export all settings (not including the keystore) to a single JSON along with an option to import it https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/165
 
 
 # Bug fixes
