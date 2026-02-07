@@ -13,6 +13,7 @@ import app.revanced.manager.patcher.morphe.MorpheSession.Companion.component2
 import app.revanced.manager.patcher.runStep
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.patcher.util.NativeLibStripper
+import app.revanced.manager.patcher.util.XmlSurrogateSanitizer
 import app.revanced.manager.patcher.toRemoteError
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
@@ -165,6 +166,7 @@ class MorpheSession(
                 )
             )
             logger.info("Writing patched files...")
+            XmlSurrogateSanitizer.sanitize(tempDir.resolve("apk"), logger)
             ensureMissingDrawables()
             validateMissingResourceReferences()
             val result = patcher.get()

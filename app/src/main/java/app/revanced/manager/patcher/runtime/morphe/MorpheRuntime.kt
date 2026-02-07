@@ -5,7 +5,7 @@ import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.patcher.ProgressEvent
-import app.revanced.manager.patcher.aapt.Aapt
+import app.revanced.manager.patcher.aapt.AaptModern
 import app.revanced.manager.patcher.aapt.AaptSelector
 import app.revanced.manager.patcher.aapt.MorpheAapt
 import app.revanced.manager.patcher.logger.Logger
@@ -26,7 +26,7 @@ sealed class MorpheRuntime(context: Context) : KoinComponent {
     protected val cacheDir: String = fs.tempDir.absolutePath
     protected val aaptPrimaryPath = MorpheAapt.binary(context)?.absolutePath
         ?: throw FileNotFoundException("Could not resolve Morphe aapt.")
-    protected val aaptFallbackPath = Aapt.binary(context)?.absolutePath
+    protected val aaptFallbackPath = AaptModern.binary(context)?.absolutePath
     protected val frameworkPath: String =
         context.cacheDir.resolve("framework_morphe").also { it.mkdirs() }.absolutePath
 

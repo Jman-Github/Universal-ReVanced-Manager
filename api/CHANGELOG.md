@@ -38,6 +38,7 @@
 - Made the FAB buttons on the `Apps` tab collapsible/expandable https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/155
 - Improved and cleaned up the patcher log
 - Added a popout animation when switching tabs on the main screen
+- Implemented XML surrogate sanitization to all runtimes
 
 
 # Bug fixes
@@ -68,7 +69,8 @@
 - Fixed local patch bundles not having a tag on the top right like remote patch bundles have
 - Fixed issues with Morphe Manager generated keystores not working https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/158
 - Fixed issues with the `Use default recommendation` toggle in the `Choose bundle recommendation` dialog not working correctly
-- Fixed AAPT2 failures on newer resource qualifier folders
+- Fixed AAPT2 failures on newer resource qualifiers/types
+- Fixed numerous patching errors caused by the ReVanced dependency bump by downgrading
 
 
 # v1.7.1 (2026-01-22)

@@ -9,6 +9,7 @@ import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.runStep
 import app.revanced.manager.patcher.toRemoteError
 import app.revanced.manager.patcher.util.NativeLibStripper
+import app.revanced.manager.patcher.util.XmlSurrogateSanitizer
 import app.revanced.patcher.Patcher
 import app.revanced.patcher.PatcherConfig
 import app.revanced.patcher.PatcherResult
@@ -160,6 +161,7 @@ class AmpleSession(
                 )
             )
             logger.info("Writing patched files...")
+            XmlSurrogateSanitizer.sanitize(tempDir.resolve("apk"), logger)
             val result = patcher.get()
             val updatedDexNames = mergeDexNames(initialDexNames, result)
             if (updatedDexNames != initialDexNames) {

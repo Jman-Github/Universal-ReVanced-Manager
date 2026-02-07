@@ -6,6 +6,7 @@ import app.revanced.manager.patcher.Session.Companion.component2
 import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.patcher.util.NativeLibStripper
+import app.revanced.manager.patcher.util.XmlSurrogateSanitizer
 import app.revanced.patcher.Patcher
 import app.revanced.patcher.PatcherConfig
 import app.revanced.patcher.PatcherResult
@@ -151,6 +152,7 @@ class Session(
                 )
             )
             logger.info("Writing patched files...")
+            XmlSurrogateSanitizer.sanitize(tempDir.resolve("apk"), logger)
             validateMissingResourceReferences()
             validateInvalidNumericCharacterReferences()
             val result = patcher.get()

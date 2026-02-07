@@ -1,14 +1,15 @@
-# v1.8.0-dev.05 (2026-02-06)
+# v1.8.0-dev.05 (2026-02-07)
 
 
 # Features
 
-- 
+- Implemented XML surrogate sanitization to all runtimes
 
 
 # Bug fixes
 
-- Fixed AAPT2 failures on newer resource qualifier folders
+- Fixed AAPT2 failures on newer resource qualifiers/types
+- Fixed numerous patching errors caused by the ReVanced dependency bump by downgrading
 
 
 # v1.8.0-dev.05 (2026-02-05)

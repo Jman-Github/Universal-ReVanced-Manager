@@ -154,11 +154,17 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
                 }
 
                 try {
+                    val relatedBundleArchives = parameters.configurations
+                        .asSequence()
+                        .filter { it.patches.isNotEmpty() }
+                        .map { File(it.bundlePath) }
+                        .toList()
                     val selectedAaptPath = AaptSelector.select(
                         parameters.aaptPath,
                         parameters.aaptFallbackPath,
                         preparation.file,
-                        logger
+                        logger,
+                        additionalArchives = relatedBundleArchives
                     )
                     logAapt2Info(selectedAaptPath, logger)
                     val session = runStep(StepId.ReadAPK, ::onEvent) {

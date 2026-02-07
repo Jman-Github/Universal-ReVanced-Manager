@@ -195,11 +195,17 @@ object AmpleRuntimeEntry {
                 }
 
                 try {
+                    val relatedBundleArchives = configs
+                        .asSequence()
+                        .filter { it.patches.isNotEmpty() }
+                        .map { File(it.bundlePath) }
+                        .toList()
                     val selectedAaptPath = AaptSelector.select(
                         aaptPath,
                         aaptFallbackPath,
                         preparation.file,
-                        logger
+                        logger,
+                        additionalArchives = relatedBundleArchives
                     )
                     logAapt2Info(selectedAaptPath, logger)
                     val session = runStep(StepId.ReadAPK, ::onEvent) {
