@@ -218,6 +218,7 @@ fun PathSelectorDialog(
         onDismissRequest = { onSelect(null) },
     ) {
         Scaffold(
+            containerColor = MaterialTheme.colorScheme.surface,
             topBar = {
                 AppTopBar(
                     title = stringResource(R.string.path_selector),

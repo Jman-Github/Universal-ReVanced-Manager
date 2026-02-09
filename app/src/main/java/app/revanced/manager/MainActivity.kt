@@ -2,21 +2,35 @@ package app.revanced.manager
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
+import android.net.Uri
 import android.os.Bundle
 import android.os.Parcelable
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import androidx.compose.ui.platform.LocalContext
@@ -67,12 +81,16 @@ import app.revanced.manager.ui.viewmodel.SelectedAppInfoViewModel
 import app.revanced.manager.util.EventEffect
 import app.revanced.manager.util.AppForeground
 import app.universal.revanced.manager.R
+import coil.compose.AsyncImage
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koin.androidx.compose.koinViewModel
 import org.koin.androidx.compose.navigation.koinNavViewModel
 import org.koin.core.parameter.parametersOf
 import org.koin.androidx.viewmodel.ext.android.getViewModel as getActivityViewModel
 import java.io.File
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
     @ExperimentalAnimationApi
@@ -97,6 +115,7 @@ class MainActivity : AppCompatActivity() {
             val pureBlackOnSystemDark by vm.prefs.pureBlackOnSystemDark.getAsState()
             val customAccentColor by vm.prefs.customAccentColor.getAsState()
             val customThemeColor by vm.prefs.customThemeColor.getAsState()
+            val customBackgroundImageUri by vm.prefs.customBackgroundImageUri.getAsState()
             val systemDark = isSystemInDarkTheme()
             val darkThemeEnabled = theme == Theme.SYSTEM && systemDark || theme == Theme.DARK
             val pureBlackEnabled = pureBlackTheme || (pureBlackOnSystemDark && theme == Theme.SYSTEM && systemDark)
@@ -113,9 +132,15 @@ class MainActivity : AppCompatActivity() {
                 dynamicColor = dynamicColor,
                 pureBlackTheme = pureBlackEnabled,
                 accentColorHex = customAccentColor.takeUnless { it.isBlank() },
-                themeColorHex = customThemeColor.takeUnless { it.isBlank() }
+                themeColorHex = customThemeColor.takeUnless { it.isBlank() },
+                hasCustomBackground = !customBackgroundImageUri.isNullOrBlank()
             ) {
-                ReVancedManager(vm)
+                ReVancedManagerBackground(customBackgroundImageUri.takeUnless { it.isBlank() }) {
+                    ReVancedManager(
+                        vm = vm,
+                        disableScreenSlideTransitions = !customBackgroundImageUri.isNullOrBlank()
+                    )
+                }
             }
         }
     }
@@ -133,7 +158,95 @@ class MainActivity : AppCompatActivity() {
 }
 
 @Composable
-private fun ReVancedManager(vm: MainViewModel) {
+private fun ReVancedManagerBackground(
+    customBackgroundImageUri: String?,
+    content: @Composable () -> Unit
+) {
+    Box(modifier = androidx.compose.ui.Modifier.fillMaxSize()) {
+        if (!customBackgroundImageUri.isNullOrBlank()) {
+            // Keep a single shared base/tint layer outside screen transitions.
+            Box(
+                modifier = androidx.compose.ui.Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surface)
+            )
+            CustomBackgroundImage(
+                customBackgroundImageUri = customBackgroundImageUri,
+                modifier = androidx.compose.ui.Modifier.fillMaxSize()
+            )
+            Box(
+                modifier = androidx.compose.ui.Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.93f))
+            )
+        }
+        content()
+    }
+}
+
+@Composable
+private fun CustomBackgroundImage(
+    customBackgroundImageUri: String,
+    modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier
+) {
+    val context = LocalContext.current
+    val uri = remember(customBackgroundImageUri) { Uri.parse(customBackgroundImageUri) }
+    val isFileUri = remember(uri) { uri.scheme.equals("file", ignoreCase = true) }
+    val fileUriPath = remember(uri, isFileUri) { uri.path?.takeIf { isFileUri && it.isNotBlank() } }
+    val asyncImageModel = remember(uri, fileUriPath) {
+        fileUriPath?.let(::File) ?: uri
+    }
+    val mimeType = remember(uri) {
+        runCatching { context.contentResolver.getType(uri) }
+            .getOrNull()
+            .orEmpty()
+            .lowercase(Locale.ROOT)
+    }
+    val pathSegment = remember(uri) { uri.lastPathSegment.orEmpty().lowercase(Locale.ROOT) }
+    val isTiff = mimeType == "image/tiff" || pathSegment.endsWith(".tif") || pathSegment.endsWith(".tiff")
+
+    val tiffBitmap by produceState<ImageBitmap?>(initialValue = null, key1 = uri, key2 = isTiff) {
+        if (!isTiff) {
+            value = null
+            return@produceState
+        }
+
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                val bitmap = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                    fileUriPath?.let { ImageDecoder.decodeBitmap(ImageDecoder.createSource(File(it))) }
+                        ?: ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri))
+                } else {
+                    fileUriPath?.let(BitmapFactory::decodeFile)
+                        ?: context.contentResolver.openInputStream(uri)?.use(BitmapFactory::decodeStream)
+                }
+                bitmap?.asImageBitmap()
+            }.getOrNull()
+        }
+    }
+
+    if (isTiff && tiffBitmap != null) {
+        Image(
+            bitmap = tiffBitmap!!,
+            contentDescription = null,
+            modifier = modifier,
+            contentScale = ContentScale.Crop
+        )
+    } else {
+        AsyncImage(
+            model = asyncImageModel,
+            contentDescription = null,
+            modifier = modifier,
+            contentScale = ContentScale.Crop
+        )
+    }
+}
+
+@Composable
+private fun ReVancedManager(
+    vm: MainViewModel,
+    disableScreenSlideTransitions: Boolean
+) {
     val navController = rememberNavController()
     var pendingBundleDeepLink by remember { mutableStateOf<app.revanced.manager.util.BundleDeepLink?>(null) }
     val context = LocalContext.current
@@ -160,10 +273,22 @@ private fun ReVancedManager(vm: MainViewModel) {
     NavHost(
         navController = navController,
         startDestination = Dashboard,
-        enterTransition = { slideInHorizontally(initialOffsetX = { it }) },
-        exitTransition = { slideOutHorizontally(targetOffsetX = { -it / 3 }) },
-        popEnterTransition = { slideInHorizontally(initialOffsetX = { -it / 3 }) },
-        popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) },
+        enterTransition = {
+            if (disableScreenSlideTransitions) EnterTransition.None
+            else slideInHorizontally(initialOffsetX = { it })
+        },
+        exitTransition = {
+            if (disableScreenSlideTransitions) ExitTransition.None
+            else slideOutHorizontally(targetOffsetX = { -it / 3 })
+        },
+        popEnterTransition = {
+            if (disableScreenSlideTransitions) EnterTransition.None
+            else slideInHorizontally(initialOffsetX = { -it / 3 })
+        },
+        popExitTransition = {
+            if (disableScreenSlideTransitions) ExitTransition.None
+            else slideOutHorizontally(targetOffsetX = { it })
+        },
     ) {
         composable<Dashboard> {
             DashboardScreen(

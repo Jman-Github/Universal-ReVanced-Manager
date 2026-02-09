@@ -186,6 +186,11 @@
     <string name="theme_preset_default">Follow system</string>
     <string name="theme_preset_amoled">Pure black</string>
     <string name="theme_preset_dynamic">Material You</string>
+    <string name="custom_background_image">Custom background image</string>
+    <string name="custom_background_image_description">Set a background image for the app. Supported types: JPEG, PNG, GIF, SVG, TIFF, WebP.</string>
+    <string name="custom_background_image_selected">Current image: %1$s</string>
+    <string name="clear_custom_background_image">Clear custom background image</string>
+    <string name="clear_custom_background_image_description">Disable the custom background image and return to the default background.</string>
     <string name="theme_reset">Reset all theme settings</string>
     <string name="color_channel_red">Red</string>
     <string name="color_channel_green">Green</string>

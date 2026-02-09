@@ -86,6 +86,7 @@ fun ReVancedManagerTheme(
     pureBlackTheme: Boolean,
     accentColorHex: String? = null,
     themeColorHex: String? = null,
+    hasCustomBackground: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val baseScheme = when {
@@ -114,6 +115,11 @@ fun ReVancedManagerTheme(
     val finalScheme = parseCustomColor(themeColorHex)?.let {
         applyCustomThemeColor(schemeWithAccent, it, darkTheme)
     } ?: schemeWithAccent
+    val resolvedScheme = if (hasCustomBackground) {
+        finalScheme.copy(background = Color.Transparent)
+    } else {
+        finalScheme
+    }
 
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -131,7 +137,7 @@ fun ReVancedManagerTheme(
     }
 
     MaterialTheme(
-        colorScheme = finalScheme,
+        colorScheme = resolvedScheme,
         typography = Typography,
         content = content
     )

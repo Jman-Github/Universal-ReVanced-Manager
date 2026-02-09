@@ -80,6 +80,14 @@ class GeneralSettingsViewModel(
         prefs.pureBlackOnSystemDark.update(enabled)
     }
 
+    fun setCustomBackgroundImageUri(uri: String) = viewModelScope.launch {
+        prefs.customBackgroundImageUri.update(uri)
+    }
+
+    fun clearCustomBackgroundImageUri() = viewModelScope.launch {
+        prefs.customBackgroundImageUri.update("")
+    }
+
     fun setAppLanguage(languageCode: String) = viewModelScope.launch {
         prefs.appLanguage.update(languageCode)
         withContext(Dispatchers.Main) {

@@ -1,3 +1,14 @@
+# v1.8.0-dev.08 (2026-02-09)
+
+
+# Features
+
+- Added the ability to set a image of choice as the app background
+
+
+# Bug fixes
+
+
 # v1.8.0-dev.07 (2026-02-07)
 
 

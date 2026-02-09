@@ -1,6 +1,7 @@
 package app.revanced.manager.ui.screen.settings
 
 import android.graphics.Color as AndroidColor
+import android.net.Uri
 import android.os.Build
 import androidx.annotation.StringRes
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -71,9 +72,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
+import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.ColumnWithScrollbar
 import app.revanced.manager.ui.component.GroupHeader
+import app.revanced.manager.ui.component.patches.PathSelectorDialog
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsCard
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsDivider
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsItem
@@ -88,6 +91,8 @@ import app.revanced.manager.util.toColorOrNull
 import app.revanced.manager.util.toHexString
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
+import java.nio.file.Path
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -104,9 +109,11 @@ fun GeneralSettingsScreen(
 
     val customAccentColorHex by prefs.customAccentColor.getAsState()
     val customThemeColorHex by prefs.customThemeColor.getAsState()
+    val customBackgroundImageUri by prefs.customBackgroundImageUri.getAsState()
     val theme by prefs.theme.getAsState()
     val appLanguage by prefs.appLanguage.getAsState()
     var showLanguageDialog by rememberSaveable { mutableStateOf(false) }
+    var showCustomBackgroundImagePicker by rememberSaveable { mutableStateOf(false) }
     // Allow selecting the AMOLED preset regardless of the current theme since selecting it switches to dark mode anyway.
     val allowPureBlackPreset = true
     val dynamicColorEnabled by prefs.dynamicColor.getAsState()
@@ -151,6 +158,34 @@ fun GeneralSettingsScreen(
 
     if (!canAdjustThemeColor && showThemeColorPicker) showThemeColorPicker = false
     if (!canAdjustAccentColor && showAccentPicker) showAccentPicker = false
+    val context = LocalContext.current
+    val filesystem: Filesystem = koinInject()
+    val storageRoots = remember { filesystem.storageRoots() }
+    val supportedBackgroundImageExtensions = remember {
+        setOf("jpg", "jpeg", "png", "gif", "svg", "tif", "tiff", "webp")
+    }
+    val supportedBackgroundImageLabel = ".jpg .jpeg .png .gif .svg .tif .tiff .webp"
+    val customBackgroundFileName = remember(customBackgroundImageUri) {
+        customBackgroundImageUri.takeIf { it.isNotBlank() }
+            ?.let(Uri::parse)
+            ?.lastPathSegment
+            ?.substringAfterLast('/')
+            ?.takeIf { it.isNotBlank() }
+    }
+    if (showCustomBackgroundImagePicker) {
+        PathSelectorDialog(
+            roots = storageRoots,
+            onSelect = { path ->
+                showCustomBackgroundImagePicker = false
+                if (path == null) return@PathSelectorDialog
+                viewModel.setCustomBackgroundImageUri(Uri.fromFile(path.toFile()).toString())
+            },
+            fileFilter = { isSupportedBackgroundImageFile(it, supportedBackgroundImageExtensions) },
+            allowDirectorySelection = false,
+            fileTypeLabel = supportedBackgroundImageLabel
+        )
+    }
+
     if (showThemeColorPicker) {
         val currentThemeColor = customThemeColorHex.toColorOrNull()
         ColorPickerDialog(
@@ -177,7 +212,6 @@ fun GeneralSettingsScreen(
             onDismiss = { showAccentPicker = false }
         )
     }
-    val context = LocalContext.current
     if (showLanguageDialog) {
         LanguageDialog(
             options = languageOptions,
@@ -354,6 +388,41 @@ fun GeneralSettingsScreen(
                         },
                         enabled = theme == Theme.SYSTEM,
                         onClick = { viewModel.setPureBlackOnSystemDark(!pureBlackOnSystemDark) }
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.custom_background_image,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(R.string.custom_background_image),
+                        supportingContent = customBackgroundFileName?.let {
+                            stringResource(R.string.custom_background_image_selected, it)
+                        } ?: stringResource(R.string.custom_background_image_description),
+                        onClick = {
+                            showCustomBackgroundImagePicker = true
+                        }
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.clear_custom_background_image,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(R.string.clear_custom_background_image),
+                        supportingContent = stringResource(R.string.clear_custom_background_image_description),
+                        enabled = customBackgroundImageUri.isNotBlank(),
+                        onClick = {
+                            if (customBackgroundImageUri.isNotBlank()) {
+                                viewModel.clearCustomBackgroundImageUri()
+                            }
+                        }
                     )
                 }
             }
@@ -547,6 +616,14 @@ fun GeneralSettingsScreen(
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
+}
+
+private fun isSupportedBackgroundImageFile(path: Path, extensions: Set<String>): Boolean {
+    val extension = path.fileName?.toString()
+        ?.substringAfterLast('.', "")
+        ?.lowercase()
+        .orEmpty()
+    return extension in extensions
 }
 
 private data class ThemePresetSwatch(val preset: ThemePreset, @StringRes val labelRes: Int, val colors: List<Color>)

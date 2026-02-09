@@ -22,6 +22,9 @@ import app.revanced.manager.util.applyAppLanguage
 import kotlinx.coroutines.Dispatchers
 import coil.Coil
 import coil.ImageLoader
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
+import coil.decode.SvgDecoder
 import com.topjohnwu.superuser.Shell
 import com.topjohnwu.superuser.internal.BuilderImpl
 import kotlinx.coroutines.MainScope
@@ -76,6 +79,12 @@ class ManagerApplication : Application() {
                 .components {
                     add(AppIconKeyer())
                     add(AppIconFetcher.Factory(pixels, true, this@ManagerApplication))
+                    add(SvgDecoder.Factory())
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        add(ImageDecoderDecoder.Factory())
+                    } else {
+                        add(GifDecoder.Factory())
+                    }
                 }
                 .build()
         )

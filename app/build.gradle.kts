@@ -77,6 +77,8 @@ dependencies {
 
     // Coil (async image loading, network image)
     implementation(libs.coil.compose)
+    implementation(libs.coil.gif)
+    implementation(libs.coil.svg)
     implementation(libs.coil.appiconloader)
 
     // KotlinX

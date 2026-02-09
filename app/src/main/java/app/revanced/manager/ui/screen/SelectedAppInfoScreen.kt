@@ -125,6 +125,8 @@ fun SelectedAppInfoScreen(
     val allowIncompatiblePatches by vm.prefs.disablePatchVersionCompatCheck.getAsState()
     val suggestedVersionSafeguard by vm.prefs.suggestedVersionSafeguard.getAsState()
     val showPatchSummaryDialogSetting by vm.prefs.showPatchSelectionSummary.getAsState()
+    val customBackgroundImageUri by vm.prefs.customBackgroundImageUri.getAsState()
+    val useCardStylePageItems = customBackgroundImageUri.isNotBlank()
     val bundleRecommendationsEnabled = allowIncompatiblePatches && !suggestedVersionSafeguard
     val patches = vm.getPatches(bundles, allowIncompatiblePatches)
     val selectedPatchCount = patches.values.sumOf { it.size }
@@ -369,6 +371,7 @@ fun SelectedAppInfoScreen(
                     R.string.patch_selector_item_description,
                     selectedPatchCount
                 ),
+                useCardStyle = useCardStylePageItems,
                 onClick = {
                     composableScope.launch {
                         val optionsSnapshot = vm.awaitOptions()
@@ -413,6 +416,7 @@ fun SelectedAppInfoScreen(
                 PageItem(
                     R.string.bundle_version_item,
                     bundleSummary,
+                    useCardStyle = useCardStylePageItems,
                     onClick = { showBundleRecommendationDialog = true }
                 )
             }
@@ -433,6 +437,7 @@ fun SelectedAppInfoScreen(
                         else
                             stringResource(R.string.apk_source_downloaded)
                 },
+                useCardStyle = useCardStylePageItems,
                 onClick = {
                     vm.showSourceSelector()
                 }
@@ -882,29 +887,66 @@ private fun SelectionBadge(
 }
 
 @Composable
-private fun PageItem(@StringRes title: Int, description: String, onClick: () -> Unit) {
-    ListItem(
-        modifier = Modifier
-            .clickable(onClick = onClick)
-            .padding(start = 8.dp),
-        headlineContent = {
-            Text(
-                stringResource(title),
-                color = MaterialTheme.colorScheme.onSurface,
-                style = MaterialTheme.typography.titleLarge
+private fun PageItem(
+    @StringRes title: Int,
+    description: String,
+    useCardStyle: Boolean = false,
+    onClick: () -> Unit
+) {
+    if (useCardStyle) {
+        Surface(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.68f),
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp
+        ) {
+            ListItem(
+                modifier = Modifier.clickable(onClick = onClick),
+                headlineContent = {
+                    Text(
+                        stringResource(title),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                },
+                supportingContent = {
+                    Text(
+                        description,
+                        color = MaterialTheme.colorScheme.outline,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                },
+                trailingContent = {
+                    Icon(Icons.AutoMirrored.Outlined.ArrowRight, null)
+                },
+                colors = transparentListItemColors
             )
-        },
-        supportingContent = {
-            Text(
-                description,
-                color = MaterialTheme.colorScheme.outline,
-                style = MaterialTheme.typography.bodyMedium
-            )
-        },
-        trailingContent = {
-            Icon(Icons.AutoMirrored.Outlined.ArrowRight, null)
         }
-    )
+    } else {
+        ListItem(
+            modifier = Modifier
+                .clickable(onClick = onClick)
+                .padding(start = 8.dp),
+            headlineContent = {
+                Text(
+                    stringResource(title),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.titleLarge
+                )
+            },
+            supportingContent = {
+                Text(
+                    description,
+                    color = MaterialTheme.colorScheme.outline,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            trailingContent = {
+                Icon(Icons.AutoMirrored.Outlined.ArrowRight, null)
+            }
+        )
+    }
 }
 
 @Composable
