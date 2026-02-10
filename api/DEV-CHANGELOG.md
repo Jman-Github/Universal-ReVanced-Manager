@@ -4,6 +4,7 @@
 # Features
 
 - Added the ability to set a image of choice as the app background
+- Added `Always create new saved app entry` toggle in Settings > Advanced that toggles saved patch app entries from being overwritten
 
 
 # Bug fixes

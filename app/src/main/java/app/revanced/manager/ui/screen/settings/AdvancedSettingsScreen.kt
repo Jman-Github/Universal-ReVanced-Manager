@@ -867,18 +867,33 @@ fun AdvancedSettingsScreen(
                     )
                 }
                 ExpressiveSettingsDivider()
+                val savedAppsEnabled by viewModel.prefs.enableSavedApps.getAsState()
                 SettingsSearchHighlight(
                     targetKey = R.string.patcher_saved_apps_title,
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
-                    val savedAppsEnabled by viewModel.prefs.enableSavedApps.getAsState()
                     BooleanItem(
                         modifier = highlightModifier,
                         value = savedAppsEnabled,
                         onValueChange = viewModel::setSavedAppsEnabled,
                         headline = R.string.patcher_saved_apps_title,
                         description = R.string.patcher_saved_apps_description,
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.saved_apps_disable_overwrite_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.disableSavedAppOverwrite,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.saved_apps_disable_overwrite_title,
+                        description = R.string.saved_apps_disable_overwrite_description,
+                        enabled = savedAppsEnabled
                     )
                 }
                 ExpressiveSettingsDivider()

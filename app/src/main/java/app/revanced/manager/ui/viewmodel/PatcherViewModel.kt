@@ -999,6 +999,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         forceSave: Boolean = false
     ): Boolean {
         val savedAppsEnabled = prefs.enableSavedApps.get()
+        val disableSavedAppOverwrite = prefs.disableSavedAppOverwrite.get()
         val latestInstalledApp = installedAppRepository.get(packageName)
         if (latestInstalledApp != installedApp) {
             installedApp = latestInstalledApp
@@ -1037,22 +1038,30 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 .filter { savedApp ->
                     isSavedAppEntryForPackage(savedApp.currentPackageName, finalPackageName)
                 }
-            val matchingSavedEntry = savedEntriesForPackage.firstOrNull { savedApp ->
-                savedEntryBundleUids(savedApp) == newBundleUids
+            val matchingSavedEntry = if (disableSavedAppOverwrite) {
+                null
+            } else {
+                savedEntriesForPackage.firstOrNull { savedApp ->
+                    savedEntryBundleUids(savedApp) == newBundleUids
+                }
             }
             val preserveSavedEntry =
-                savedAppsEnabled && (
+                !disableSavedAppOverwrite && savedAppsEnabled && (
                     latestInstalledApp?.installType == InstallType.SAVED ||
                         matchingSavedEntry != null
                     )
             val persistedInstallType = if (preserveSavedEntry) InstallType.SAVED else installType
             val existingFinalPackageEntry = installedAppRepository.get(finalPackageName)
             val persistedPackageName = if (persistedInstallType == InstallType.SAVED) {
-                matchingSavedEntry?.currentPackageName ?: run {
-                    val canUseBaseKey = savedEntriesForPackage.isEmpty() &&
-                        (existingFinalPackageEntry == null || existingFinalPackageEntry.installType == InstallType.SAVED)
-                    if (canUseBaseKey) finalPackageName
-                    else buildSavedAppEntryKey(finalPackageName, newBundleUids)
+                if (disableSavedAppOverwrite) {
+                    buildUniqueSavedAppEntryKey(finalPackageName, newBundleUids)
+                } else {
+                    matchingSavedEntry?.currentPackageName ?: run {
+                        val canUseBaseKey = savedEntriesForPackage.isEmpty() &&
+                            (existingFinalPackageEntry == null || existingFinalPackageEntry.installType == InstallType.SAVED)
+                        if (canUseBaseKey) finalPackageName
+                        else buildSavedAppEntryKey(finalPackageName, newBundleUids)
+                    }
                 }
             } else {
                 finalPackageName
@@ -2822,6 +2831,12 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             .orEmpty()
         if (payloadBundles.isNotEmpty()) return payloadBundles
         return installedAppRepository.getAppliedPatches(installedApp.currentPackageName).keys
+    }
+
+    private fun buildUniqueSavedAppEntryKey(packageName: String, bundleUids: Set<Int>): String {
+        val keyBase = buildSavedAppEntryKey(packageName, bundleUids)
+        val nonce = UUID.randomUUID().toString().replace("-", "").take(8)
+        return "${keyBase}__${nonce}"
     }
 
     private companion object {

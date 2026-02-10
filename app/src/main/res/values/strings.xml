@@ -473,6 +473,8 @@ Patch profiles are not affected.</string>
     <string name="patcher_auto_expand_steps_description">Automatically expand a patcher progress widget when it starts running</string>
     <string name="patcher_saved_apps_title">Save patched apps for later</string>
     <string name="patcher_saved_apps_description">When enabled, the manager saves a patched app entry and APK so it stays in the Apps tab and can be reinstalled later. Turning this off skips saving and deletes all saved patched apps. Any apps installed through the Rooted mount installer remain visible</string>
+    <string name="saved_apps_disable_overwrite_title">Always create a new saved app entry</string>
+    <string name="saved_apps_disable_overwrite_description">Prevent saved patched app entries from being overwritten. When enabled, every new saved patched app creates a separate Apps tab entry.</string>
     <string name="patch_bundle_rename">Rename patch bundle</string>
     <string name="patch_profile_view_options">View options</string>
     <string name="patch_profile_patch_options_title">Options for %1$s</string>
