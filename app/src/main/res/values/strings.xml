@@ -193,6 +193,8 @@
     <string name="clear_custom_background_image">Clear custom background image</string>
     <string name="clear_custom_background_image_description">Disable the custom background image and return to the default background.</string>
     <string name="theme_reset">Reset all theme settings</string>
+    <string name="hide_main_tab_labels">Hide main tab labels</string>
+    <string name="hide_main_tab_labels_description">Hide the text labels under the Apps, Patch Bundles, and Patch Profiles tab icons on the main screen.</string>
     <string name="color_channel_red">Red</string>
     <string name="color_channel_green">Green</string>
     <string name="color_channel_blue">Blue</string>

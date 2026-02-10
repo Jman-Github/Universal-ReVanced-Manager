@@ -219,6 +219,7 @@ fun DashboardScreen(
     val fs = koinInject<Filesystem>()
     val prefs: PreferencesManager = koinInject()
     val savedAppsEnabled by prefs.enableSavedApps.getAsState()
+    val hideMainTabLabels by prefs.hideMainTabLabels.getAsState()
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
     val bundlesFabCollapsed by prefs.dashboardBundlesFabCollapsed.getAsState()
     val appsFabCollapsed by prefs.dashboardAppsFabCollapsed.getAsState()
@@ -1515,7 +1516,9 @@ fun DashboardScreen(
                                 scaleY = tabScale
                             }
                             .offset(y = tabOffsetY),
-                        text = { DashboardTabLabel(text = stringResource(page.titleResId), selected = selected) },
+                        text = if (hideMainTabLabels) null else {
+                            { DashboardTabLabel(text = stringResource(page.titleResId), selected = selected) }
+                        },
                         icon = { Icon(page.icon, null) },
                         selectedContentColor = MaterialTheme.colorScheme.primary,
                         unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant

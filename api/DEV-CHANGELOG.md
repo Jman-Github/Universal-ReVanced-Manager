@@ -1,10 +1,11 @@
-# v1.8.0-dev.08 (2026-02-09)
+# v1.8.0-dev.08 (2026-02-10)
 
 
 # Features
 
 - Added the ability to set a image of choice as the app background
 - Added `Always create new saved app entry` toggle in Settings > Advanced that toggles saved patch app entries from being overwritten
+- Added `Hide main tab labels` toggle in Settings > General that toggles the labels under the tab icons on the main screen
 
 
 # Bug fixes

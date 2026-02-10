@@ -81,6 +81,7 @@ import app.revanced.manager.ui.component.settings.ExpressiveSettingsCard
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsDivider
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsItem
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsSwitch
+import app.revanced.manager.ui.component.settings.BooleanItem
 import app.revanced.manager.ui.component.settings.SettingsSearchHighlight
 import app.revanced.manager.ui.model.navigation.Settings
 import app.revanced.manager.ui.theme.Theme
@@ -90,6 +91,7 @@ import app.revanced.manager.ui.screen.settings.SettingsSearchState
 import app.revanced.manager.util.toColorOrNull
 import app.revanced.manager.util.toHexString
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import java.nio.file.Path
@@ -388,6 +390,20 @@ fun GeneralSettingsScreen(
                         },
                         enabled = theme == Theme.SYSTEM,
                         onClick = { viewModel.setPureBlackOnSystemDark(!pureBlackOnSystemDark) }
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.hide_main_tab_labels,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = prefs.hideMainTabLabels,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.hide_main_tab_labels,
+                        description = R.string.hide_main_tab_labels_description
                     )
                 }
                 ExpressiveSettingsDivider()
