@@ -51,6 +51,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -66,6 +67,7 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.first
 import kotlin.coroutines.coroutineContext
@@ -656,9 +658,15 @@ class PatchBundleRepository(
         return all
     }
 
-    fun discoveryImportKey(bundle: ExternalBundleSnapshot): String {
+    fun discoveryImportKey(bundle: ExternalBundleSnapshot, preferLatestAcrossChannels: Boolean = false): String {
         if (bundle.bundleId > 0) {
-            val channel = if (bundle.isPrerelease) "prerelease" else "release"
+            val channel = if (preferLatestAcrossChannels) {
+                "latest"
+            } else if (bundle.isPrerelease) {
+                "prerelease"
+            } else {
+                "release"
+            }
             return "${bundle.bundleId}|$channel"
         }
         val owner = bundle.ownerName.trim().lowercase(Locale.US)
@@ -671,16 +679,23 @@ class PatchBundleRepository(
                 bundle.downloadUrl.trim().lowercase(Locale.US)
             else -> "unknown"
         }
-        val channel = if (bundle.isPrerelease) "prerelease" else "release"
+        val channel = if (preferLatestAcrossChannels) {
+            "latest"
+        } else if (bundle.isPrerelease) {
+            "prerelease"
+        } else {
+            "release"
+        }
         return "$base|$channel"
     }
 
     suspend fun enqueueDiscoveryImport(
         bundle: ExternalBundleSnapshot,
         searchUpdate: Boolean,
-        autoUpdate: Boolean
+        autoUpdate: Boolean,
+        preferLatestAcrossChannels: Boolean = false
     ): DiscoveryImportEnqueueResult {
-        val bundleKey = discoveryImportKey(bundle)
+        val bundleKey = discoveryImportKey(bundle, preferLatestAcrossChannels)
         return discoveryImportMutex.withLock {
             val inProgress = discoveryImportProgressFlow.value.containsKey(bundleKey)
             val alreadyQueued = discoveryImportQueuedKeys.contains(bundleKey)
@@ -692,7 +707,13 @@ class PatchBundleRepository(
                 discoveryImportQueuedKeys.isNotEmpty()
             discoveryImportQueuedKeys.add(bundleKey)
             discoveryImportQueue.addLast(
-                DiscoveryImportRequest(bundleKey, bundle, searchUpdate, autoUpdate)
+                DiscoveryImportRequest(
+                    key = bundleKey,
+                    bundle = bundle,
+                    searchUpdate = searchUpdate,
+                    autoUpdate = autoUpdate,
+                    preferLatestAcrossChannels = preferLatestAcrossChannels
+                )
             )
             discoveryImportProgressFlow.update { current ->
                 if (current.containsKey(bundleKey)) current
@@ -1746,13 +1767,14 @@ class PatchBundleRepository(
         bundle: ExternalBundleSnapshot,
         searchUpdate: Boolean,
         autoUpdate: Boolean,
+        preferLatestAcrossChannels: Boolean = false,
         onProgress: PatchBundleDownloadProgress? = null,
     ) {
         if (bundle.isBundleV3) {
             toast(R.string.patch_bundle_discovery_v3_warning)
             return
         }
-        val rawUrl = externalBundleEndpoint(bundle).trim()
+        val rawUrl = externalBundleEndpoint(bundle, preferLatestAcrossChannels).trim()
         if (rawUrl.isBlank()) {
             toast(R.string.patch_bundle_discovery_error)
             return
@@ -1767,19 +1789,22 @@ class PatchBundleRepository(
 
         val metadata = ExternalBundleMetadata(
             bundleId = bundle.bundleId,
-            downloadUrl = validatedUrl,
+            downloadUrl = bundle.downloadUrl
+                ?.trim()
+                ?.takeUnless { it.isBlank() }
+                ?: validatedUrl,
             signatureDownloadUrl = bundle.signatureDownloadUrl,
             version = bundle.version.ifBlank { "unknown" },
             createdAt = bundle.createdAt.takeUnless { it.isBlank() },
             description = bundle.description,
             ownerName = bundle.ownerName.takeIf { it.isNotBlank() },
             repoName = bundle.repoName.takeIf { it.isNotBlank() },
-            isPrerelease = bundle.isPrerelease
+            isPrerelease = if (preferLatestAcrossChannels) null else bundle.isPrerelease
         )
 
         val entity = createEntity(
             "",
-            SourceInfo.from(externalBundleEndpoint(bundle)),
+            SourceInfo.from(externalBundleEndpoint(bundle, preferLatestAcrossChannels)),
             autoUpdate,
             searchUpdate = searchUpdate
         )
@@ -1803,12 +1828,19 @@ class PatchBundleRepository(
         )
     }
 
-    private fun externalBundleEndpoint(bundle: ExternalBundleSnapshot): String {
+    private fun externalBundleEndpoint(
+        bundle: ExternalBundleSnapshot,
+        preferLatestAcrossChannels: Boolean = false
+    ): String {
         val owner = bundle.ownerName.trim()
         val repo = bundle.repoName.trim()
         if (owner.isNotBlank() && repo.isNotBlank()) {
-            val prerelease = bundle.isPrerelease
-            return "https://revanced-external-bundles.brosssh.com/api/v1/bundle/$owner/$repo/latest?prerelease=$prerelease"
+            return if (preferLatestAcrossChannels) {
+                "https://revanced-external-bundles.brosssh.com/api/v1/bundle/$owner/$repo/latest"
+            } else {
+                val prerelease = bundle.isPrerelease
+                "https://revanced-external-bundles.brosssh.com/api/v1/bundle/$owner/$repo/latest?prerelease=$prerelease"
+            }
         }
         return externalBundleEndpoint(bundle.bundleId)
     }
@@ -2245,6 +2277,7 @@ class PatchBundleRepository(
                 )
             }
 
+            var hadBundleFailures = false
             val updated: Map<RemotePatchBundle, PatchBundleDownloadResult> = try {
                 val results = LinkedHashMap<RemotePatchBundle, PatchBundleDownloadResult>()
                 var completed = 0
@@ -2258,6 +2291,18 @@ class PatchBundleRepository(
                         return@coroutineScope false
                     }
                     if (isRemoteUpdateCancelled(bundle.uid)) {
+                        completed = (completed + 1).coerceAtMost(total)
+                        if (showProgress) {
+                            bundleUpdateProgressFlow.update { progress ->
+                                progress?.copy(
+                                    completed = completed,
+                                    currentBundleName = progressLabelFor(bundle),
+                                    phase = BundleUpdatePhase.Finalizing,
+                                    bytesRead = 0L,
+                                    bytesTotal = null,
+                                )
+                            }
+                        }
                         continue
                     }
 
@@ -2293,14 +2338,28 @@ class PatchBundleRepository(
                     }
 
                     val result = try {
-                        if (force) bundle.downloadLatest(onProgress) else bundle.update(onProgress)
+                        withTimeout(REMOTE_BUNDLE_UPDATE_TIMEOUT_MS) {
+                            if (force) bundle.downloadLatest(onProgress) else bundle.update(onProgress)
+                        }
                     } catch (e: BundleUpdateCancelled) {
-                        continue
+                        null
+                    } catch (e: TimeoutCancellationException) {
+                        hadBundleFailures = true
+                        Log.e(tag, "Timed out while updating patch bundle: ${bundle.name}", e)
+                        null
+                    } catch (e: Exception) {
+                        hadBundleFailures = true
+                        Log.e(tag, "Failed to update patch bundle: ${bundle.name}", e)
+                        null
                     }
 
-                    val downloadedName = runCatching {
-                        PatchBundle(bundle.patchesJarFile.absolutePath).manifestAttributes?.name
-                    }.getOrNull()?.trim().takeUnless { it.isNullOrBlank() }
+                    val downloadedName = if (result != null) {
+                        runCatching {
+                            PatchBundle(bundle.patchesJarFile.absolutePath).manifestAttributes?.name
+                        }.getOrNull()?.trim().takeUnless { it.isNullOrBlank() }
+                    } else {
+                        null
+                    }
                     if (downloadedName != null && showProgress) {
                         bundleUpdateProgressFlow.update { progress ->
                             progress?.copy(currentBundleName = downloadedName)
@@ -2340,7 +2399,13 @@ class PatchBundleRepository(
             }
 
             if (updated.isEmpty()) {
-                if (showToast) toast(R.string.patches_update_unavailable)
+                if (showToast) {
+                    if (hadBundleFailures) {
+                        toast(R.string.patches_download_fail, "Some bundles failed to update")
+                    } else {
+                        toast(R.string.patches_update_unavailable)
+                    }
+                }
                 return@coroutineScope false
             }
 
@@ -2557,6 +2622,7 @@ class PatchBundleRepository(
         const val DEFAULT_SOURCE_UID = 0
         const val LOCAL_IMPORT_STEPS = 2
         const val LOCAL_BUNDLE_HINT_FILE = "bundle_hint.txt"
+        const val REMOTE_BUNDLE_UPDATE_TIMEOUT_MS = 120_000L
         fun defaultSource() = PatchBundleEntity(
             uid = DEFAULT_SOURCE_UID,
             name = "",
@@ -2577,7 +2643,8 @@ class PatchBundleRepository(
         val key: String,
         val bundle: ExternalBundleSnapshot,
         val searchUpdate: Boolean,
-        val autoUpdate: Boolean
+        val autoUpdate: Boolean,
+        val preferLatestAcrossChannels: Boolean
     )
 
     data class DiscoveryImportProgress(
@@ -2632,6 +2699,7 @@ class PatchBundleRepository(
                         bundle = request.bundle,
                         searchUpdate = request.searchUpdate,
                         autoUpdate = request.autoUpdate,
+                        preferLatestAcrossChannels = request.preferLatestAcrossChannels,
                         onProgress = { bytesRead, bytesTotal ->
                             discoveryImportProgressFlow.update { current ->
                                 if (!current.containsKey(bundleKey)) current

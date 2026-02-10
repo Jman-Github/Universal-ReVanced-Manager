@@ -211,13 +211,19 @@ class BundleDiscoveryViewModel(
         }
     }
 
-    fun importBundle(bundle: ExternalBundleSnapshot, autoUpdate: Boolean, searchUpdate: Boolean) {
+    fun importBundle(
+        bundle: ExternalBundleSnapshot,
+        autoUpdate: Boolean,
+        searchUpdate: Boolean,
+        preferLatestAcrossChannels: Boolean = false
+    ) {
         viewModelScope.launch {
-            val key = patchBundleRepository.discoveryImportKey(bundle)
+            val key = patchBundleRepository.discoveryImportKey(bundle, preferLatestAcrossChannels)
             val result = patchBundleRepository.enqueueDiscoveryImport(
                 bundle = bundle,
                 searchUpdate = searchUpdate,
-                autoUpdate = autoUpdate
+                autoUpdate = autoUpdate,
+                preferLatestAcrossChannels = preferLatestAcrossChannels
             )
             if (result != PatchBundleRepository.DiscoveryImportEnqueueResult.Duplicate) {
                 localQueuedKeys[key] = true
@@ -262,6 +268,8 @@ class BundleDiscoveryViewModel(
     fun bundleEndpoints(bundle: ExternalBundleSnapshot): Set<String> {
         val endpoints = mutableSetOf<String>()
         bundle.downloadUrl?.let { endpoints.add(it) }
+        graphqlBundleEndpoint(bundle, useDev = false, prerelease = null)?.let { endpoints.add(it) }
+        graphqlBundleEndpoint(bundle, useDev = true, prerelease = null)?.let { endpoints.add(it) }
         graphqlBundleEndpoint(bundle, useDev = false)?.let { endpoints.add(it) }
         graphqlBundleEndpoint(bundle, useDev = true)?.let { endpoints.add(it) }
         legacyEndpoint(bundle.bundleId)?.let { endpoints.add(it) }
@@ -286,7 +294,11 @@ class BundleDiscoveryViewModel(
     private fun legacyEndpoint(bundleId: Int): String? =
         "https://revanced-external-bundles.brosssh.com/bundles/id?id=$bundleId"
 
-    private fun graphqlBundleEndpoint(bundle: ExternalBundleSnapshot, useDev: Boolean): String? {
+    private fun graphqlBundleEndpoint(
+        bundle: ExternalBundleSnapshot,
+        useDev: Boolean,
+        prerelease: Boolean? = bundle.isPrerelease
+    ): String? {
         val owner = bundle.ownerName.trim()
         val repo = bundle.repoName.trim()
         if (owner.isBlank() || repo.isBlank()) return null
@@ -295,7 +307,11 @@ class BundleDiscoveryViewModel(
         } else {
             "revanced-external-bundles.brosssh.com"
         }
-        return "https://$host/api/v1/bundle/$owner/$repo/latest?prerelease=${bundle.isPrerelease}"
+        return if (prerelease == null) {
+            "https://$host/api/v1/bundle/$owner/$repo/latest"
+        } else {
+            "https://$host/api/v1/bundle/$owner/$repo/latest?prerelease=$prerelease"
+        }
     }
 
     fun loadPatches(bundleId: Int) {
@@ -327,16 +343,22 @@ class BundleDiscoveryViewModel(
         bundle: ExternalBundleSnapshot,
         isImported: Boolean
     ): PatchBundleRepository.DiscoveryImportProgress? {
-        val key = patchBundleRepository.discoveryImportKey(bundle)
-        val progress = importProgressSnapshot[key]
+        val keys = buildList {
+            add(patchBundleRepository.discoveryImportKey(bundle))
+            add(patchBundleRepository.discoveryImportKey(bundle, preferLatestAcrossChannels = true))
+        }.distinct()
+
+        val progressKey = keys.firstOrNull { importProgressSnapshot.containsKey(it) }
+        val progress = progressKey?.let(importProgressSnapshot::get)
         if (progress != null) {
-            localQueuedKeys.remove(key)
+            progressKey?.let(localQueuedKeys::remove)
             return progress
         }
 
-        val queuedFromRepo = queuedImportSnapshot.contains(key)
+        val queuedKey = keys.firstOrNull { queuedImportSnapshot.contains(it) }
+        val queuedFromRepo = queuedKey != null
         if (queuedFromRepo) {
-            localQueuedKeys.remove(key)
+            queuedKey?.let(localQueuedKeys::remove)
             return PatchBundleRepository.DiscoveryImportProgress(
                 bytesRead = 0L,
                 bytesTotal = null,
@@ -344,7 +366,7 @@ class BundleDiscoveryViewModel(
             )
         }
 
-        if (localQueuedKeys.containsKey(key)) {
+        if (keys.any(localQueuedKeys::containsKey)) {
             return PatchBundleRepository.DiscoveryImportProgress(
                 bytesRead = 0L,
                 bytesTotal = null,
@@ -353,7 +375,7 @@ class BundleDiscoveryViewModel(
         }
 
         if (isImported) {
-            localQueuedKeys.remove(key)
+            keys.forEach(localQueuedKeys::remove)
         }
         return null
     }

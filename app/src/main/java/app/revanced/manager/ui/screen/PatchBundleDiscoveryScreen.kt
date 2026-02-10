@@ -764,7 +764,8 @@ fun PatchBundleDiscoveryScreen(
                                 viewModel.importBundle(
                                     bundle,
                                     autoUpdate = true,
-                                    searchUpdate = true
+                                    searchUpdate = true,
+                                    preferLatestAcrossChannels = useLatest
                                 )
                             },
                             onViewPatches = { bundle ->
