@@ -357,10 +357,15 @@ private fun InstalledAppCard(
                             .horizontalScroll(titleScrollState)
                     )
                 }
-                AppMetaPill(
-                    text = stringResource(installedApp.installType.stringResource),
-                    modifier = Modifier.align(Alignment.TopEnd)
-                )
+                Column(
+                    modifier = Modifier.align(Alignment.TopEnd),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalAlignment = Alignment.End
+                ) {
+                    AppMetaPill(
+                        text = stringResource(installedApp.installType.stringResource)
+                    )
+                }
             }
 
             Column(
@@ -393,11 +398,25 @@ private fun InstalledAppCard(
                         bundleSummaries.forEach { summary ->
                             val versionText = summary.version?.let(::formatVersion)
                             val bundleLine = listOfNotNull(summary.title, versionText).joinToString(" • ")
-                            Text(
-                                text = bundleLine,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = bundleLine,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                if (summary.hasUpdate) {
+                                    AppMetaPill(
+                                        text = stringResource(R.string.bundle_update_manual_available),
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -546,15 +565,15 @@ private fun StatusChip(
 @Composable
 private fun AppMetaPill(
     text: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+    contentColor: Color = MaterialTheme.colorScheme.onSurfaceVariant
 ) {
-    val background = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)
-    val contentColor = MaterialTheme.colorScheme.onSurfaceVariant
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(999.dp),
         tonalElevation = 0.dp,
-        color = background
+        color = containerColor
     ) {
         Text(
             text = text,

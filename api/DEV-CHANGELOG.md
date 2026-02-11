@@ -7,6 +7,9 @@
 - Added `Always create new saved app entry` toggle in Settings > Advanced that toggles saved patch app entries from being overwritten
 - Added `Hide main tab labels` toggle in Settings > General that toggles the labels under the tab icons on the main screen
 - Added to the app information screen shown after selecting an app or APK to patch a listing displaying the apps package name
+- Made the `View patches` screen for patch bundles and the patch bundle discovery have tap to search package tags
+- Made `Any package` tags not searchable for the `View patches` screens patch widgets (and also the `Any version` tag when the `Any package` tag exists with it)
+- Added an update notice tag to saved patched apps when the imported patch bundle version is newer than the one used to patch the app https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/163
 
 
 # Bug fixes

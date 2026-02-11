@@ -276,6 +276,8 @@ private fun PatchBundlePatchItem(
     stateKey: String,
 ) {
     val context = LocalContext.current
+    val anyPackageLabel = stringResource(R.string.patches_view_any_package)
+    val anyVersionLabel = stringResource(R.string.patches_view_any_version)
     var expandVersions by rememberSaveable(stateKey) { mutableStateOf(false) }
 
     ElevatedCard(
@@ -308,13 +310,10 @@ private fun PatchBundlePatchItem(
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                     ) {
                         PatchInfoChip(
-                            text = "$PACKAGE_ICON ${stringResource(R.string.patches_view_any_package)}"
+                            text = "$PACKAGE_ICON $anyPackageLabel"
                         )
                         PatchInfoChip(
-                            text = "$VERSION_ICON ${stringResource(R.string.patches_view_any_version)}",
-                            onClick = {
-                                context.openUrl(buildSearchUrl("android.app", null, searchEngineHost))
-                            }
+                            text = "$VERSION_ICON $anyVersionLabel"
                         )
                     }
                 } else {
@@ -324,6 +323,7 @@ private fun PatchBundlePatchItem(
                             .filterNotNull()
                             .filter { it.isNotBlank() }
                             .reversed()
+                        val packageIsAny = isAnyPackageTag(packageName, anyPackageLabel)
 
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -331,30 +331,54 @@ private fun PatchBundlePatchItem(
                         ) {
                             PatchInfoChip(
                                 modifier = Modifier.align(androidx.compose.ui.Alignment.CenterVertically),
-                                text = "$PACKAGE_ICON $packageName"
+                                text = "$PACKAGE_ICON $packageName",
+                                onClick = if (packageIsAny) {
+                                    null
+                                } else {
+                                    {
+                                        context.openUrl(buildSearchUrl(packageName, null, searchEngineHost))
+                                    }
+                                }
                             )
 
                             if (versions.isNotEmpty()) {
                                 if (expandVersions) {
                                     versions.forEach { version ->
+                                        val versionIsAny = isAnyVersionTag(version, anyVersionLabel)
+                                        val searchable = !(packageIsAny && versionIsAny)
                                         PatchInfoChip(
                                             modifier = Modifier.align(androidx.compose.ui.Alignment.CenterVertically),
                                             text = "$VERSION_ICON $version",
-                                            onClick = {
-                                                context.openUrl(
-                                                    buildSearchUrl(packageName, version, searchEngineHost)
-                                                )
+                                            onClick = if (!searchable) {
+                                                null
+                                            } else {
+                                                {
+                                                    val queryVersion = if (versionIsAny) null else version
+                                                    val queryPackage = if (packageIsAny) "android.app" else packageName
+                                                    context.openUrl(
+                                                        buildSearchUrl(queryPackage, queryVersion, searchEngineHost)
+                                                    )
+                                                }
                                             }
                                         )
                                     }
                                 } else {
+                                    val displayedVersion = versions.first()
+                                    val versionIsAny = isAnyVersionTag(displayedVersion, anyVersionLabel)
+                                    val searchable = !(packageIsAny && versionIsAny)
                                     PatchInfoChip(
                                         modifier = Modifier.align(androidx.compose.ui.Alignment.CenterVertically),
-                                        text = "$VERSION_ICON ${versions.first()}",
-                                        onClick = {
-                                            context.openUrl(
-                                                buildSearchUrl(packageName, versions.first(), searchEngineHost)
-                                            )
+                                        text = "$VERSION_ICON $displayedVersion",
+                                        onClick = if (!searchable) {
+                                            null
+                                        } else {
+                                            {
+                                                val queryVersion = if (versionIsAny) null else displayedVersion
+                                                val queryPackage = if (packageIsAny) "android.app" else packageName
+                                                context.openUrl(
+                                                    buildSearchUrl(queryPackage, queryVersion, searchEngineHost)
+                                                )
+                                            }
                                         }
                                     )
                                 }
@@ -405,6 +429,24 @@ private fun normalizeSearchHost(value: String): String {
     val noScheme = trimmed.removePrefix("https://").removePrefix("http://")
     val noPath = noScheme.substringBefore('/').substringBefore('?').substringBefore('#')
     return noPath.trim().trimEnd('/').ifBlank { "google.com" }
+}
+
+private fun isAnyPackageTag(value: String?, anyPackageLabel: String): Boolean {
+    val normalized = value.orEmpty().trim().lowercase()
+    if (normalized.isBlank()) return true
+    val normalizedLabel = anyPackageLabel.trim().lowercase()
+    return normalized == normalizedLabel ||
+        normalized == "any package" ||
+        normalized == "*"
+}
+
+private fun isAnyVersionTag(value: String?, anyVersionLabel: String): Boolean {
+    val normalized = value.orEmpty().trim().lowercase()
+    if (normalized.isBlank()) return true
+    val normalizedLabel = anyVersionLabel.trim().lowercase()
+    return normalized == normalizedLabel ||
+        normalized == "any version" ||
+        normalized == "*"
 }
 
 private fun PatchInfo.matchesQuery(query: String): Boolean {

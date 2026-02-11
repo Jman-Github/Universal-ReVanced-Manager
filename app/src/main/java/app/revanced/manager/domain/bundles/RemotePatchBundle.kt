@@ -144,7 +144,7 @@ sealed class RemotePatchBundle(
     }
 
     suspend fun fetchLatestReleaseInfo(): ReVancedAsset {
-        val key = "$uid|$endpoint"
+        val key = "$uid|${latestInfoCacheIdentity()}"
         val now = System.currentTimeMillis()
         val cached = changelogCacheMutex.withLock {
             changelogCache[key]?.takeIf { now - it.timestamp <= CHANGELOG_CACHE_TTL }
@@ -157,6 +157,8 @@ sealed class RemotePatchBundle(
         }
         return asset
     }
+
+    protected open suspend fun latestInfoCacheIdentity(): String = endpoint
 
     companion object {
         const val updateFailMsg = "Failed to update patches"
@@ -271,16 +273,13 @@ class APIPatchBundle(
     private val prefs: PreferencesManager by inject()
 
     override suspend fun getLatestInfo() = withContext(Dispatchers.IO) {
-        val preferLatestAcrossChannels = prefs.patchBundleDiscoveryLatest.get()
         val includePrerelease = prefs.usePatchesPrereleases.get()
-        if (!preferLatestAcrossChannels) {
-            return@withContext api.getPatchesUpdate(prerelease = includePrerelease).getOrThrow()
-        }
+        api.getPatchesUpdate(prerelease = includePrerelease).getOrThrow()
+    }
 
-        val latestRelease = api.getPatchesUpdate(prerelease = false).getOrNull()
-        val latestPrerelease = api.getPatchesUpdate(prerelease = true).getOrNull()
-        pickNewestAsset(latestRelease, latestPrerelease)
-            ?: api.getPatchesUpdate(prerelease = includePrerelease).getOrThrow()
+    override suspend fun latestInfoCacheIdentity(): String {
+        val includePrerelease = prefs.usePatchesPrereleases.get()
+        return "$endpoint|prerelease=$includePrerelease"
     }
     override fun copy(
         error: Throwable?,
@@ -308,14 +307,6 @@ class APIPatchBundle(
         enabled
     )
 
-    private fun pickNewestAsset(
-        release: ReVancedAsset?,
-        prerelease: ReVancedAsset?
-    ): ReVancedAsset? {
-        if (release == null) return prerelease
-        if (prerelease == null) return release
-        return if (prerelease.createdAt > release.createdAt) prerelease else release
-    }
 }
 
 // PR #35: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35

@@ -213,7 +213,8 @@ class InstalledAppsViewModel(
 
     data class AppBundleSummary(
         val title: String,
-        val version: String?
+        val version: String?,
+        val hasUpdate: Boolean
     )
 
     data class SavedAppsExportResult(
@@ -570,7 +571,33 @@ class InstalledAppsViewModel(
             ?: info?.name
             ?: return null
 
-        val version = payloadBundle?.version?.takeUnless { it.isBlank() } ?: info?.version
-        return AppBundleSummary(title = title, version = version)
+        val payloadVersion = payloadBundle?.version?.takeUnless { it.isBlank() }
+        val currentVersion = info?.version?.takeUnless { it.isBlank() }
+        val version = payloadVersion ?: currentVersion
+        val hasUpdate = payloadVersion != null &&
+            currentVersion != null &&
+            compareVersionStrings(currentVersion, payloadVersion) > 0
+
+        return AppBundleSummary(
+            title = title,
+            version = version,
+            hasUpdate = hasUpdate
+        )
+    }
+
+    private fun compareVersionStrings(first: String, second: String): Int {
+        val aParts = first.split(Regex("[^0-9]+"))
+            .filter { it.isNotBlank() }
+            .map { it.toIntOrNull() ?: 0 }
+        val bParts = second.split(Regex("[^0-9]+"))
+            .filter { it.isNotBlank() }
+            .map { it.toIntOrNull() ?: 0 }
+        val max = maxOf(aParts.size, bParts.size)
+        for (index in 0 until max) {
+            val a = aParts.getOrElse(index) { 0 }
+            val b = bParts.getOrElse(index) { 0 }
+            if (a != b) return a.compareTo(b)
+        }
+        return first.compareTo(second, ignoreCase = true)
     }
 }
