@@ -85,6 +85,7 @@
 - Fixed mount buttons on the saved patched app widget not being in the correct state
 - Fixed Patch Bundle Discovery `Latest` imports getting stuck to release/pre-release and not actually the latest https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/169
 - Fixed issues with the progress bar during update checks getting stuck indefinitely when a imported patch bundle is errored/not correctly imported
+- Fixed mounting errors that where occuring for some users (again) (needs testing) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/166
 
 
 # v1.7.1 (2026-01-22)

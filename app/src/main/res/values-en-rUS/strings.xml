@@ -836,7 +836,7 @@ Details: %2$s</string>
     <string name="install_app_success">Installed successfully</string>
     <string name="install_app_fail_title">Installation failed</string>
     <string name="install_app_fail">Failed to install app: %s</string>
-    <string name="install_app_fail_missing_stock">Missing original APK for mount install.</string>
+    <string name="install_app_fail_missing_stock">Missing original APK for mount.</string>
     <string name="mount_split_not_supported">Rooted mount installer does not support split APKs. Use system installer instead.</string>
     <string name="mount_app_fail_title">Mount failed</string>
     <string name="install_timeout_message">Installation did not finish. Check the system installer dialog and try again.</string>

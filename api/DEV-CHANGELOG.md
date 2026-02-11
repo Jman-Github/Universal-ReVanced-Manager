@@ -12,6 +12,7 @@
 
 - Fixed Patch Bundle Discovery `Latest` imports getting stuck to release/pre-release and not actually the latest https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/169
 - Fixed issues with the progress bar during update checks getting stuck indefinitely when a imported patch bundle is errored/not correctly imported
+- Fixed mounting errors that where occuring for some users (again) (needs testing) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/166
 
 
 # v1.8.0-dev.07 (2026-02-07)

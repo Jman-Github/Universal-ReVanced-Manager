@@ -404,10 +404,9 @@ fun proceedAfterMissingPatchWarning() {
         if (lastSuccessInstallType == InstallType.SHIZUKU) return
         if (installStatus is InstallCompletionStatus.Success || suppressFailureAfterSuccess) return
         val adjusted = if (activeInstallType == InstallType.MOUNT) {
-            val replaced = message.replace("install", "mount", ignoreCase = true)
-            replaced.replaceFirstChar { ch ->
-                if (ch.isLowerCase()) ch.titlecase() else ch.toString()
-            }
+            message
+                .replace("Failed to install app:", "Failed to mount app:", ignoreCase = true)
+                .replace("for install", "for mount", ignoreCase = true)
         } else message
         if (activeInstallType != null) {
             lastInstallType = activeInstallType
@@ -1542,11 +1541,13 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                             packageInfo.label()
                         }
                         val patchedVersion = packageInfo.versionName ?: ""
-                        val packageInstalledForMount = if (existingPackageInfo != null) {
+                        val mountTargetPackage = packageName
+                        val mountPackageInfo = pm.getPackageInfo(mountTargetPackage)
+                        val packageInstalledForMount = if (mountPackageInfo != null) {
                             true
                         } else if (rootInstaller.hasRootAccess()) {
                             runCatching {
-                                rootInstaller.isPackageResolvableForMount(currentPackageInfo.packageName)
+                                rootInstaller.isPackageResolvableForMount(mountTargetPackage)
                             }.onFailure {
                                 Log.w(TAG, "Failed to resolve package for mount using root shell", it)
                             }.getOrDefault(false)
@@ -1579,7 +1580,12 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                         // Only reinstall stock when the app is not currently installed/resolvable.
                         val stockForMount = if (!packageInstalledForMount) {
                             inputFile ?: run {
-                                showInstallFailure(app.getString(R.string.install_app_fail, "Missing original APK for install"))
+                                showInstallFailure(
+                                    app.getString(
+                                        R.string.install_app_fail,
+                                        app.getString(R.string.install_app_fail_missing_stock)
+                                    )
+                                )
                                 return
                             }
                         } else {
