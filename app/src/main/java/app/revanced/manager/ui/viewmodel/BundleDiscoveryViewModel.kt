@@ -283,7 +283,8 @@ class BundleDiscoveryViewModel(
         val owner = bundle.ownerName.trim()
         val repo = bundle.repoName.trim()
         return if (owner.isNotBlank() && repo.isNotBlank()) {
-            "https://$host/api/v1/bundle/$owner/$repo/latest?prerelease=${bundle.isPrerelease}"
+            val channel = if (bundle.isPrerelease) "prerelease" else "stable"
+            "https://$host/api/v2/bundle/$owner/$repo/latest?channel=$channel"
         } else if (bundle.bundleId > 0) {
             "https://$host/bundles/id?id=${bundle.bundleId}"
         } else {
@@ -307,11 +308,12 @@ class BundleDiscoveryViewModel(
         } else {
             "revanced-external-bundles.brosssh.com"
         }
-        return if (prerelease == null) {
-            "https://$host/api/v1/bundle/$owner/$repo/latest"
-        } else {
-            "https://$host/api/v1/bundle/$owner/$repo/latest?prerelease=$prerelease"
+        val channel = when (prerelease) {
+            null -> "any"
+            true -> "prerelease"
+            false -> "stable"
         }
+        return "https://$host/api/v2/bundle/$owner/$repo/latest?channel=$channel"
     }
 
     fun loadPatches(bundleId: Int) {

@@ -1835,12 +1835,12 @@ class PatchBundleRepository(
         val owner = bundle.ownerName.trim()
         val repo = bundle.repoName.trim()
         if (owner.isNotBlank() && repo.isNotBlank()) {
-            return if (preferLatestAcrossChannels) {
-                "https://revanced-external-bundles.brosssh.com/api/v1/bundle/$owner/$repo/latest"
-            } else {
-                val prerelease = bundle.isPrerelease
-                "https://revanced-external-bundles.brosssh.com/api/v1/bundle/$owner/$repo/latest?prerelease=$prerelease"
+            val channel = when {
+                preferLatestAcrossChannels -> "any"
+                bundle.isPrerelease -> "prerelease"
+                else -> "stable"
             }
+            return "https://revanced-external-bundles.brosssh.com/api/v2/bundle/$owner/$repo/latest?channel=$channel"
         }
         return externalBundleEndpoint(bundle.bundleId)
     }
@@ -1862,7 +1862,11 @@ class PatchBundleRepository(
         val isExternalBundlesHost = host == "revanced-external-bundles.brosssh.com" ||
             host == "revanced-external-bundles-dev.brosssh.com"
         val isExternalBundlesEndpoint = isExternalBundlesHost &&
-            (pathNoQuery.startsWith("/api/v1/bundle/") || pathNoQuery.startsWith("/bundles/id"))
+            (
+                pathNoQuery.startsWith("/api/v1/bundle/") ||
+                    pathNoQuery.startsWith("/api/v2/bundle/") ||
+                    pathNoQuery.startsWith("/bundles/id")
+                )
         if (!isJson && !isExternalBundlesEndpoint) {
             throw IllegalArgumentException(
                 "Patch bundle URL must point to a .json file or a supported external bundles API URL."
@@ -1932,7 +1936,11 @@ class PatchBundleRepository(
         if (host.equals("revanced-external-bundles.brosssh.com", ignoreCase = true) ||
             host.equals("revanced-external-bundles-dev.brosssh.com", ignoreCase = true)
         ) {
-            if (pathNoQuery.startsWith("/bundles/id") || pathNoQuery.startsWith("/api/v1/bundle/")) {
+            if (
+                pathNoQuery.startsWith("/bundles/id") ||
+                pathNoQuery.startsWith("/api/v1/bundle/") ||
+                pathNoQuery.startsWith("/api/v2/bundle/")
+            ) {
                 val query = parsed.encodedQuery.takeIf { it.isNotEmpty() }?.let { "?$it" }.orEmpty()
                 return "https://$host$normalizedPath$query"
             }

@@ -493,12 +493,46 @@ class ExternalGraphqlPatchBundle(
 ) {
     private val api: ExternalBundlesApi by inject()
     private val officialApi: ReVancedAPI by inject()
+    private data class EndpointMetadata(
+        val owner: String?,
+        val repo: String?,
+        val prerelease: Boolean?,
+        val hasExplicitChannel: Boolean,
+        val isV2LatestEndpoint: Boolean
+    )
 
     override suspend fun getLatestInfo(): ReVancedAsset = withContext(Dispatchers.IO) {
-        val (endpointOwner, endpointRepo, endpointPrerelease) = parseEndpointMetadata()
-        val owner = metadata.ownerName?.trim().takeIf { !it.isNullOrBlank() } ?: endpointOwner.orEmpty()
-        val repo = metadata.repoName?.trim().takeIf { !it.isNullOrBlank() } ?: endpointRepo.orEmpty()
-        val prerelease = metadata.isPrerelease ?: endpointPrerelease
+        val endpointMetadata = parseEndpointMetadata()
+        val owner = endpointMetadata.owner?.trim().takeIf { !it.isNullOrBlank() }
+            ?: metadata.ownerName?.trim().takeIf { !it.isNullOrBlank() }
+            ?: ""
+        val repo = endpointMetadata.repo?.trim().takeIf { !it.isNullOrBlank() }
+            ?: metadata.repoName?.trim().takeIf { !it.isNullOrBlank() }
+            ?: ""
+        val prerelease = if (endpointMetadata.hasExplicitChannel) {
+            endpointMetadata.prerelease
+        } else {
+            metadata.isPrerelease ?: endpointMetadata.prerelease
+        }
+        val endpointAsset = if (endpointMetadata.hasExplicitChannel && endpointMetadata.isV2LatestEndpoint) {
+            http.request<ReVancedAsset> { url(endpoint) }.getOrNull()
+        } else {
+            null
+        }
+        if (endpointAsset != null) {
+            metadata = metadata.copy(
+                downloadUrl = endpointAsset.downloadUrl,
+                signatureDownloadUrl = endpointAsset.signatureDownloadUrl,
+                version = endpointAsset.version,
+                createdAt = endpointAsset.createdAt.toString(),
+                description = endpointAsset.description.ifBlank { metadata.description },
+                ownerName = owner.takeIf { it.isNotBlank() } ?: metadata.ownerName,
+                repoName = repo.takeIf { it.isNotBlank() } ?: metadata.repoName,
+                isPrerelease = prerelease
+            )
+            ExternalBundleMetadataStore.write(directory, metadata)
+            return@withContext endpointAsset
+        }
         if (owner.equals("ReVanced", ignoreCase = true) && repo.equals("revanced-patches", ignoreCase = true)) {
             val officialAsset = if (prerelease == null) {
                 val latestRelease = officialApi.getPatchesUpdate(prerelease = false).getOrNull()
@@ -525,9 +559,12 @@ class ExternalGraphqlPatchBundle(
             if (prerelease != null) {
                 api.getLatestBundle(owner, repo, prerelease).getOrNull()
             } else {
-                val latestRelease = api.getLatestBundle(owner, repo, prerelease = false).getOrNull()
-                val latestPrerelease = api.getLatestBundle(owner, repo, prerelease = true).getOrNull()
-                pickLatestSnapshot(latestRelease, latestPrerelease)
+                api.getLatestBundleAny(owner, repo).getOrNull()
+                    ?: run {
+                        val latestRelease = api.getLatestBundle(owner, repo, prerelease = false).getOrNull()
+                        val latestPrerelease = api.getLatestBundle(owner, repo, prerelease = true).getOrNull()
+                        pickLatestSnapshot(latestRelease, latestPrerelease)
+                    }
             }
         } else {
             null
@@ -604,29 +641,49 @@ class ExternalGraphqlPatchBundle(
         )
     }
 
-    private fun parseEndpointMetadata(): Triple<String?, String?, Boolean?> {
+    private fun parseEndpointMetadata(): EndpointMetadata {
         val candidates = listOfNotNull(endpoint, metadata.downloadUrl)
         for (candidate in candidates) {
             val parsed = runCatching { Url(candidate) }.getOrNull() ?: continue
             val segments = parsed.encodedPath.trim('/').split('/').filter { it.isNotBlank() }
             if (segments.size >= 5 &&
                 segments[0].equals("api", ignoreCase = true) &&
-                segments[1].equals("v1", ignoreCase = true) &&
+                (segments[1].equals("v1", ignoreCase = true) || segments[1].equals("v2", ignoreCase = true)) &&
                 segments[2].equals("bundle", ignoreCase = true)
             ) {
                 val owner = segments[3]
                 val repo = segments[4]
-                val prerelease = parsed.parameters["prerelease"]?.lowercase()?.let { value ->
-                    when (value) {
-                        "true" -> true
-                        "false" -> false
-                        else -> null
+                val (hasExplicitChannel, prerelease) = if (segments[1].equals("v2", ignoreCase = true)) {
+                    when (parsed.parameters["channel"]?.lowercase()) {
+                        "any" -> true to null
+                        "stable" -> true to false
+                        "prerelease" -> true to true
+                        else -> false to null
+                    }
+                } else {
+                    when (parsed.parameters["prerelease"]?.lowercase()) {
+                        "true" -> true to true
+                        "false" -> true to false
+                        else -> false to null
                     }
                 }
-                return Triple(owner, repo, prerelease)
+                return EndpointMetadata(
+                    owner = owner,
+                    repo = repo,
+                    prerelease = prerelease,
+                    hasExplicitChannel = hasExplicitChannel,
+                    isV2LatestEndpoint = segments[1].equals("v2", ignoreCase = true) &&
+                        segments.getOrNull(5).equals("latest", ignoreCase = true)
+                )
             }
         }
-        return Triple(null, null, null)
+        return EndpointMetadata(
+            owner = null,
+            repo = null,
+            prerelease = null,
+            hasExplicitChannel = false,
+            isV2LatestEndpoint = false
+        )
     }
 
     private fun safeArtifactUrl(raw: String?): String? {
@@ -643,7 +700,9 @@ class ExternalGraphqlPatchBundle(
             host == "revanced-external-bundles-dev.brosssh.com"
         if (!isExternalBundlesHost) return false
         val pathNoQuery = parsed.encodedPath.substringBefore('?').substringBefore('#')
-        return pathNoQuery.startsWith("/api/v1/bundle/") || pathNoQuery.startsWith("/bundles/id")
+        return pathNoQuery.startsWith("/api/v1/bundle/") ||
+            pathNoQuery.startsWith("/api/v2/bundle/") ||
+            pathNoQuery.startsWith("/bundles/id")
     }
 
     private fun parseCreatedAt(raw: String?): LocalDateTime {
