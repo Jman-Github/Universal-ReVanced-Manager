@@ -53,6 +53,8 @@
 - Added an update notice tag to saved patched apps when the imported patch bundle version is newer than the one used to patch the app https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/163
 - Updated Patch Bundle Discovery to use the new `api/v2` & `latest?channel=` URLs while keeping backwards compatibility with `api/v1` URLs
 - Added a draggable transparency adjustment bar to Settings > General for when a image is set as the background
+- Made the state of the progress banner persist
+- Made the collapsed version of the progress banner show a minimal view of progress https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/162
 
 
 # Bug fixes

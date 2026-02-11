@@ -223,6 +223,7 @@ fun DashboardScreen(
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
     val bundlesFabCollapsed by prefs.dashboardBundlesFabCollapsed.getAsState()
     val appsFabCollapsed by prefs.dashboardAppsFabCollapsed.getAsState()
+    val progressBannerCollapsed by prefs.dashboardProgressBannerCollapsed.getAsState()
     val storageRoots = remember { fs.storageRoots() }
     EventEffect(flow = storageVm.storageSelectionFlow) { selected ->
         onStorageSelect(selected)
@@ -368,8 +369,6 @@ fun DashboardScreen(
 
     @Composable
     fun BundleProgressBanner(modifier: Modifier = Modifier) {
-        var importCollapsed by rememberSaveable { mutableStateOf(false) }
-        var updateCollapsed by rememberSaveable { mutableStateOf(false) }
         val bannerSizeSpec = tween<IntSize>(durationMillis = 260, easing = FastOutSlowInEasing)
         val bannerOffsetSpec = tween<IntOffset>(durationMillis = 260, easing = FastOutSlowInEasing)
         val bannerExitAlphaSpec = tween<Float>(durationMillis = 240, easing = FastOutSlowInEasing)
@@ -377,9 +376,6 @@ fun DashboardScreen(
             modifier = modifier,
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            LaunchedEffect(bundleImportProgress != null) {
-                if (bundleImportProgress != null) importCollapsed = false
-            }
             AnimatedVisibility(
                 visible = bundleImportProgress != null,
                 enter = fadeIn(animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing)) +
@@ -397,13 +393,18 @@ fun DashboardScreen(
             ) {
                 bundleImportProgress?.let { progress ->
                     val context = LocalContext.current
+                    val total = progress.total.coerceAtLeast(1)
+                    val collapsedCount = if (progress.isStepBased) {
+                        (progress.processed + 1).coerceIn(1, total)
+                    } else {
+                        progress.processed.coerceIn(0, total)
+                    }
                     val subtitleParts = buildList {
-                        val total = progress.total.coerceAtLeast(1)
                         val stepLabel = if (progress.isStepBased) {
-                            val step = (progress.processed + 1).coerceAtMost(total)
+                            val step = collapsedCount
                             stringResource(R.string.import_patch_bundles_banner_steps, step, total)
                         } else {
-                            stringResource(R.string.import_patch_bundles_banner_subtitle, progress.processed, total)
+                            stringResource(R.string.import_patch_bundles_banner_subtitle, collapsedCount, total)
                         }
                         add(stepLabel)
                         val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList
@@ -446,8 +447,17 @@ fun DashboardScreen(
                         title = stringResource(R.string.import_patch_bundles_banner_title),
                         subtitle = subtitleParts.joinToString(" - "),
                         progress = progress.ratio,
-                        collapsed = importCollapsed,
-                        onToggleCollapsed = { importCollapsed = !importCollapsed },
+                        collapsedLabel = stringResource(
+                            R.string.import_patch_bundles_banner_collapsed,
+                            collapsedCount,
+                            total
+                        ),
+                        collapsed = progressBannerCollapsed,
+                        onToggleCollapsed = {
+                            composableScope.launch {
+                                prefs.dashboardProgressBannerCollapsed.update(!progressBannerCollapsed)
+                            }
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = dashboardSidePadding, vertical = 8.dp)
@@ -455,9 +465,6 @@ fun DashboardScreen(
                 }
             }
 
-            LaunchedEffect(bundleUpdateProgress != null) {
-                if (bundleUpdateProgress != null) updateCollapsed = false
-            }
             AnimatedVisibility(
                 visible = bundleUpdateProgress != null,
                 enter = fadeIn(animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing)) +
@@ -525,8 +532,17 @@ fun DashboardScreen(
                         title = stringResource(R.string.bundle_update_banner_title),
                         subtitle = subtitleParts.joinToString(" - "),
                         progress = progressFraction,
-                        collapsed = updateCollapsed,
-                        onToggleCollapsed = { updateCollapsed = !updateCollapsed },
+                        collapsedLabel = stringResource(
+                            R.string.bundle_update_banner_collapsed,
+                            progress.completed.coerceAtMost(progress.total),
+                            progress.total
+                        ),
+                        collapsed = progressBannerCollapsed,
+                        onToggleCollapsed = {
+                            composableScope.launch {
+                                prefs.dashboardProgressBannerCollapsed.update(!progressBannerCollapsed)
+                            }
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = dashboardSidePadding, vertical = 8.dp)

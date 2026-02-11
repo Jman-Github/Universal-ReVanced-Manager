@@ -75,6 +75,7 @@ class PreferencesManager(
     val patchBundleCacheVersionCode = intPreference("patch_bundle_cache_version_code", -1)
     val dashboardBundlesFabCollapsed = booleanPreference("dashboard_bundles_fab_collapsed", false)
     val dashboardAppsFabCollapsed = booleanPreference("dashboard_apps_fab_collapsed", false)
+    val dashboardProgressBannerCollapsed = booleanPreference("dashboard_progress_banner_collapsed", false)
     val autoCollapsePatcherSteps = booleanPreference("auto_collapse_patcher_steps", false)
     val autoExpandRunningSteps = booleanPreference("auto_expand_running_steps", true)
     val enableSavedApps = booleanPreference("enable_saved_apps", true)
@@ -170,6 +171,7 @@ class PreferencesManager(
         val officialBundleCustomDisplayName: String? = null,
         val dashboardBundlesFabCollapsed: Boolean? = null,
         val dashboardAppsFabCollapsed: Boolean? = null,
+        val dashboardProgressBannerCollapsed: Boolean? = null,
         val allowMeteredUpdates: Boolean? = null,
         val installerPrimary: String? = null,
         val installerFallback: String? = null,
@@ -242,6 +244,7 @@ class PreferencesManager(
         officialBundleCustomDisplayName = officialBundleCustomDisplayName.get(),
         dashboardBundlesFabCollapsed = dashboardBundlesFabCollapsed.get(),
         dashboardAppsFabCollapsed = dashboardAppsFabCollapsed.get(),
+        dashboardProgressBannerCollapsed = dashboardProgressBannerCollapsed.get(),
         allowMeteredUpdates = allowMeteredUpdates.get(),
         installerPrimary = installerPrimary.get(),
         installerFallback = installerFallback.get(),
@@ -314,6 +317,7 @@ class PreferencesManager(
         snapshot.officialBundleCustomDisplayName?.let { officialBundleCustomDisplayName.value = it }
         snapshot.dashboardBundlesFabCollapsed?.let { dashboardBundlesFabCollapsed.value = it }
         snapshot.dashboardAppsFabCollapsed?.let { dashboardAppsFabCollapsed.value = it }
+        snapshot.dashboardProgressBannerCollapsed?.let { dashboardProgressBannerCollapsed.value = it }
         snapshot.allowMeteredUpdates?.let { allowMeteredUpdates.value = it }
         snapshot.installerPrimary?.let { installerPrimary.value = it }
         snapshot.installerFallback?.let { installerFallback.value = it }

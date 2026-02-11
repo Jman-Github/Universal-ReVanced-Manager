@@ -64,6 +64,7 @@
     <string name="patch_bundle_force_redownload_description">Redownload %1$s and overwrite the local copy?</string>
     <string name="bundle_update_progress">%1$d/%2$d bundles processed</string>
     <string name="bundle_update_banner_title">Updating patch bundles</string>
+    <string name="bundle_update_banner_collapsed">Updating patch bundles • %1$d out of %2$d</string>
     <string name="bundle_updates_notification_progress">Updating %1$d of %2$d: %3$s</string>
     <string name="bundle_updates_notification_completed">Update completed</string>
     <string name="bundle_updates_notification_completed_with_available">Update completed. %1$d updates available.</string>
@@ -250,6 +251,7 @@
     <string name="import_patch_bundles_updated">Updated %d patch bundles</string>
     <string name="import_patch_bundles_none">No new patch bundles were imported</string>
     <string name="import_patch_bundles_banner_title">Importing patch bundles</string>
+    <string name="import_patch_bundles_banner_collapsed">Importing patch bundles • %1$d out of %2$d</string>
     <string name="import_patch_bundles_banner_subtitle">%1$d of %2$d processed</string>
     <string name="import_patch_bundles_banner_steps">Step %1$d of %2$d</string>
     <string name="no_packages_available">No packages available.</string>
