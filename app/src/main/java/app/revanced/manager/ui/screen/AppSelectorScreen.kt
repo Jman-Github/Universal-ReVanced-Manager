@@ -34,6 +34,7 @@ import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -290,14 +291,20 @@ fun AppSelectorScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        val appFilterChipColors = FilterChipDefaults.filterChipColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp),
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
                         CheckedFilterChip(
                             selected = filterInstalledOnly,
                             onClick = { filterInstalledOnly = !filterInstalledOnly },
+                            colors = appFilterChipColors,
                             label = { Text(stringResource(R.string.app_filter_installed_only)) }
                         )
                         CheckedFilterChip(
                             selected = filterPatchesAvailable,
                             onClick = { filterPatchesAvailable = !filterPatchesAvailable },
+                            colors = appFilterChipColors,
                             label = { Text(stringResource(R.string.app_filter_patches_available)) }
                         )
                     }

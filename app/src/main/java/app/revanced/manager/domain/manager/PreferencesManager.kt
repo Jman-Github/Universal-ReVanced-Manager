@@ -44,6 +44,7 @@ class PreferencesManager(
     val customAccentColor = stringPreference("custom_accent_color", "")
     val customThemeColor = stringPreference("custom_theme_color", "")
     val customBackgroundImageUri = stringPreference("custom_background_image_uri", "")
+    val customBackgroundImageOpacity = floatPreference("custom_background_image_opacity", 0.65f)
     val hideMainTabLabels = booleanPreference("hide_main_tab_labels", false)
     val theme = enumPreference("theme", Theme.SYSTEM)
     val appLanguage = stringPreference("app_language", "system")
@@ -146,6 +147,7 @@ class PreferencesManager(
         val customAccentColor: String? = null,
         val customThemeColor: String? = null,
         val customBackgroundImageUri: String? = null,
+        val customBackgroundImageOpacity: Float? = null,
         val hideMainTabLabels: Boolean? = null,
         val themePresetSelectionName: String? = null,
         val themePresetSelectionEnabled: Boolean? = null,
@@ -217,6 +219,7 @@ class PreferencesManager(
         customAccentColor = customAccentColor.get(),
         customThemeColor = customThemeColor.get(),
         customBackgroundImageUri = customBackgroundImageUri.get(),
+        customBackgroundImageOpacity = customBackgroundImageOpacity.get(),
         hideMainTabLabels = hideMainTabLabels.get(),
         themePresetSelectionName = themePresetSelectionName.get(),
         themePresetSelectionEnabled = themePresetSelectionEnabled.get(),
@@ -288,6 +291,7 @@ class PreferencesManager(
         snapshot.customAccentColor?.let { customAccentColor.value = it }
         snapshot.customThemeColor?.let { customThemeColor.value = it }
         snapshot.customBackgroundImageUri?.let { customBackgroundImageUri.value = it }
+        snapshot.customBackgroundImageOpacity?.let { customBackgroundImageOpacity.value = it.coerceIn(0f, 1f) }
         snapshot.hideMainTabLabels?.let { hideMainTabLabels.value = it }
         snapshot.themePresetSelectionName?.let { themePresetSelectionName.value = it }
         snapshot.themePresetSelectionEnabled?.let { themePresetSelectionEnabled.value = it }

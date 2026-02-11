@@ -116,6 +116,7 @@ class MainActivity : AppCompatActivity() {
             val customAccentColor by vm.prefs.customAccentColor.getAsState()
             val customThemeColor by vm.prefs.customThemeColor.getAsState()
             val customBackgroundImageUri by vm.prefs.customBackgroundImageUri.getAsState()
+            val customBackgroundImageOpacity by vm.prefs.customBackgroundImageOpacity.getAsState()
             val systemDark = isSystemInDarkTheme()
             val darkThemeEnabled = theme == Theme.SYSTEM && systemDark || theme == Theme.DARK
             val pureBlackEnabled = pureBlackTheme || (pureBlackOnSystemDark && theme == Theme.SYSTEM && systemDark)
@@ -135,7 +136,10 @@ class MainActivity : AppCompatActivity() {
                 themeColorHex = customThemeColor.takeUnless { it.isBlank() },
                 hasCustomBackground = !customBackgroundImageUri.isNullOrBlank()
             ) {
-                ReVancedManagerBackground(customBackgroundImageUri.takeUnless { it.isBlank() }) {
+                ReVancedManagerBackground(
+                    customBackgroundImageUri = customBackgroundImageUri.takeUnless { it.isBlank() },
+                    imageOverlayAlpha = customBackgroundImageOpacity
+                ) {
                     ReVancedManager(
                         vm = vm,
                         disableScreenSlideTransitions = !customBackgroundImageUri.isNullOrBlank()
@@ -160,6 +164,7 @@ class MainActivity : AppCompatActivity() {
 @Composable
 private fun ReVancedManagerBackground(
     customBackgroundImageUri: String?,
+    imageOverlayAlpha: Float,
     content: @Composable () -> Unit
 ) {
     Box(modifier = androidx.compose.ui.Modifier.fillMaxSize()) {
@@ -177,7 +182,7 @@ private fun ReVancedManagerBackground(
             Box(
                 modifier = androidx.compose.ui.Modifier
                     .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.93f))
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = imageOverlayAlpha.coerceIn(0f, 1f)))
             )
         }
         content()

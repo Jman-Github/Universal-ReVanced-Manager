@@ -11,6 +11,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -576,21 +577,24 @@ private class ListOptionEditor<T : Serializable>(private val elementEditor: Opti
             scope.submitDialog(items.mapNotNull { it.value })
         }
 
-        FullscreenDialog(
-            onDismissRequest = back,
-        ) {
-            Scaffold(
-                topBar = {
-                    AppTopBar(
-                        title = if (deleteMode) pluralStringResource(
-                            R.plurals.selected_count,
+            FullscreenDialog(
+                onDismissRequest = back,
+            ) {
+                Scaffold(
+                    modifier = Modifier.fillMaxSize(),
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    topBar = {
+                        AppTopBar(
+                            title = if (deleteMode) pluralStringResource(
+                                R.plurals.selected_count,
                             deletionTargets.size,
                             deletionTargets.size
-                        ) else scope.option.title,
-                        onBackClick = back,
-                        backIcon = {
-                            if (deleteMode) {
-                                return@AppTopBar Icon(
+                            ) else scope.option.title,
+                            onBackClick = back,
+                            applyContainerColor = true,
+                            backIcon = {
+                                if (deleteMode) {
+                                    return@AppTopBar Icon(
                                     Icons.Filled.Close,
                                     stringResource(R.string.cancel)
                                 )

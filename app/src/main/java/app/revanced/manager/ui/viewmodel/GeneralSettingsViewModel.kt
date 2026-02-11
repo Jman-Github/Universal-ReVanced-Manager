@@ -88,6 +88,10 @@ class GeneralSettingsViewModel(
         prefs.customBackgroundImageUri.update("")
     }
 
+    fun setCustomBackgroundImageOpacity(value: Float) = viewModelScope.launch {
+        prefs.customBackgroundImageOpacity.update(value.coerceIn(0f, 1f))
+    }
+
     fun setAppLanguage(languageCode: String) = viewModelScope.launch {
         prefs.appLanguage.update(languageCode)
         withContext(Dispatchers.Main) {

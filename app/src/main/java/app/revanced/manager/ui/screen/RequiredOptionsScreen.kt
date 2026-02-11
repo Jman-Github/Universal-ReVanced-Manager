@@ -73,11 +73,13 @@ fun RequiredOptionsScreen(
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             AppTopBar(
                 title = stringResource(R.string.required_options_screen),
                 scrollBehavior = scrollBehavior,
-                onBackClick = onBackClick
+                onBackClick = onBackClick,
+                applyContainerColor = true
             )
         },
         floatingActionButton = {

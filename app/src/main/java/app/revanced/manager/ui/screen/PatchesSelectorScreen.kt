@@ -2658,10 +2658,13 @@ private fun OptionsDialog(
     selectionWarningEnabled: Boolean
 ) = FullscreenDialog(onDismissRequest = onDismissRequest) {
     Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             AppTopBar(
                 title = patch.name,
                 onBackClick = onDismissRequest,
+                applyContainerColor = true,
                 actions = {
                     IconButton(onClick = reset) {
                         Icon(Icons.Outlined.Restore, stringResource(R.string.reset))

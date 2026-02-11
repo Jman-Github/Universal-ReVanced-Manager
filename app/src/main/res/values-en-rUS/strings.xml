@@ -189,6 +189,8 @@
     <string name="custom_background_image">Custom background image</string>
     <string name="custom_background_image_description">Set a background image for the app. Supported types: JPEG, PNG, GIF, SVG, TIFF, WebP.</string>
     <string name="custom_background_image_selected">Current image: %1$s</string>
+    <string name="custom_background_image_transparency">Background image transparency</string>
+    <string name="custom_background_image_transparency_description">Adjust how transparent the custom background image appears.</string>
     <string name="clear_custom_background_image">Clear custom background image</string>
     <string name="clear_custom_background_image_description">Disable the custom background image and return to the default background.</string>
     <string name="theme_reset">Reset all theme settings</string>

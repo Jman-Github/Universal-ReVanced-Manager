@@ -112,6 +112,7 @@ fun GeneralSettingsScreen(
     val customAccentColorHex by prefs.customAccentColor.getAsState()
     val customThemeColorHex by prefs.customThemeColor.getAsState()
     val customBackgroundImageUri by prefs.customBackgroundImageUri.getAsState()
+    val customBackgroundImageOpacity by prefs.customBackgroundImageOpacity.getAsState()
     val theme by prefs.theme.getAsState()
     val appLanguage by prefs.appLanguage.getAsState()
     var showLanguageDialog by rememberSaveable { mutableStateOf(false) }
@@ -422,6 +423,62 @@ fun GeneralSettingsScreen(
                             showCustomBackgroundImagePicker = true
                         }
                     )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.custom_background_image_transparency,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    val hasCustomBackground = customBackgroundImageUri.isNotBlank()
+                    val clampedOpacity = customBackgroundImageOpacity.coerceIn(0f, 1f)
+                    val transparencyPercent = (clampedOpacity * 100f).roundToInt()
+                    Column(
+                        modifier = highlightModifier
+                            .fillMaxWidth()
+                            .alpha(if (hasCustomBackground) 1f else 0.5f)
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = stringResource(R.string.custom_background_image_transparency),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(999.dp),
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            ) {
+                                Text(
+                                    text = "$transparencyPercent%",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                        Text(
+                            text = stringResource(R.string.custom_background_image_transparency_description),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Slider(
+                            value = clampedOpacity,
+                            onValueChange = { value ->
+                                if (hasCustomBackground) {
+                                    viewModel.setCustomBackgroundImageOpacity(value)
+                                }
+                            },
+                            enabled = hasCustomBackground,
+                            valueRange = 0f..1f
+                        )
+                    }
                 }
                 ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
