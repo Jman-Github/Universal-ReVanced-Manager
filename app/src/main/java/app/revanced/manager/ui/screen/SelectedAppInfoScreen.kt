@@ -351,7 +351,16 @@ fun SelectedAppInfoScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            AppInfo(vm.selectedAppInfo, placeholderLabel = packageName) {
+            AppInfo(
+                appInfo = vm.selectedAppInfo,
+                placeholderLabel = packageName,
+                placeholderMetaLines = 2
+            ) {
+                Text(
+                    packageName,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                )
                 val versionLabel = when {
                     bundleTargetsAllVersions && selectedBundleUid != null ->
                         stringResource(R.string.bundle_version_all_versions)
