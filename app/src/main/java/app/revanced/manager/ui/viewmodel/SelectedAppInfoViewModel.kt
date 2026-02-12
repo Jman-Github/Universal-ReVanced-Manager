@@ -304,13 +304,19 @@ class SelectedAppInfoViewModel(
     private var selectionState: SelectionState by mutableStateOf(
         if (input.patches != null) SelectionState.Customized(input.patches) else SelectionState.Default
     )
+    private val shouldLoadPersistedSelection = input.patches == null
 
     init {
-        if (input.patches == null) {
+        if (shouldLoadPersistedSelection) {
             selectionLoadJob = viewModelScope.launch {
+                if (!prefs.disableSelectionWarning.get()) return@launch
                 val previous = selectionRepository.getSelection(packageName)
                 if (previous.values.sumOf { it.size } == 0) return@launch
                 selectionState = SelectionState.Customized(previous)
+                pruneSelectionForAvailability(
+                    bundleInfoFlowInternal.value,
+                    prefs.disablePatchVersionCompatCheck.get()
+                )
             }
             loadOptionsFromRepository()
         }
@@ -351,16 +357,20 @@ class SelectedAppInfoViewModel(
                     bundleRepository.scopedBundleInfoFlow(app.packageName, app.version)
                 }
                 .combine(allowUniversalFlow.distinctUntilChanged()) { bundles, allowUniversal ->
-                    allowUniversal to if (allowUniversal) {
+                    allowUniversal to bundles
+                }
+                .combine(prefs.disablePatchVersionCompatCheck.flow) { (allowUniversal, bundles), allowIncompatible ->
+                    Triple(allowUniversal, bundles, allowIncompatible)
+                }
+                .collect { (allowUniversal, bundles, allowIncompatible) ->
+                    allowUniversalPatches = allowUniversal
+                    val visibleBundles = if (allowUniversal) {
                         bundles
                     } else {
                         bundles.map(PatchBundleInfo.Scoped::withoutUniversalPatches)
                     }
-                }
-                .collect { (allowUniversal, bundles) ->
-                    allowUniversalPatches = allowUniversal
-                    bundleInfoFlowInternal.value = bundles
-                    if (!allowUniversal) pruneSelectionForUniversal(bundles)
+                    bundleInfoFlowInternal.value = visibleBundles
+                    pruneSelectionForAvailability(visibleBundles, allowIncompatible)
                 }
         }
 
@@ -403,6 +413,27 @@ class SelectedAppInfoViewModel(
             }.collect { (overridesAllowed, hasSelection) ->
                 if (!overridesAllowed && hasSelection) {
                     selectBundleRecommendation(null, null)
+                }
+            }
+        }
+
+        if (shouldLoadPersistedSelection) {
+            viewModelScope.launch {
+                prefs.disableSelectionWarning.flow.distinctUntilChanged().collect { allowCustomSelection ->
+                    if (allowCustomSelection) {
+                        if (selectionState is SelectionState.Customized) return@collect
+                        val previous = selectionRepository.getSelection(packageName)
+                        if (previous.values.sumOf { it.size } == 0) return@collect
+                        selectionState = SelectionState.Customized(previous)
+                        pruneSelectionForAvailability(
+                            bundleInfoFlowInternal.value,
+                            prefs.disablePatchVersionCompatCheck.get()
+                        )
+                    } else {
+                        if (selectionState is SelectionState.Customized) {
+                            selectionState = SelectionState.Default
+                        }
+                    }
                 }
             }
         }
@@ -588,13 +619,16 @@ class SelectedAppInfoViewModel(
             ).join()
         }
     }
-    private fun pruneSelectionForUniversal(bundles: List<PatchBundleInfo.Scoped>) {
+    private fun pruneSelectionForAvailability(
+        bundles: List<PatchBundleInfo.Scoped>,
+        allowIncompatible: Boolean
+    ) {
         if (bundles.isEmpty()) return
 
         val currentState = selectionState
         if (currentState is SelectionState.Customized) {
             val available = bundles.associate { bundle ->
-                bundle.uid to bundle.patches.map { it.name }.toSet()
+                bundle.uid to bundle.patchSequence(allowIncompatible).map { it.name }.toSet()
             }
             val filteredSelection = buildMap<Int, Set<String>> {
                 currentState.patchSelection.forEach { (bundleUid, patches) ->
@@ -604,7 +638,26 @@ class SelectedAppInfoViewModel(
                 }
             }
             if (filteredSelection != currentState.patchSelection) {
-                selectionState = SelectionState.Customized(filteredSelection)
+                val hadSelectedBefore = currentState.patchSelection.values.any { it.isNotEmpty() }
+                selectionState = if (filteredSelection.isEmpty() && hadSelectedBefore) {
+                    SelectionState.Default
+                } else {
+                    SelectionState.Customized(filteredSelection)
+                }
+            }
+        }
+
+        val autoRecommendationMode =
+            preferredBundleUidFlow.value == null &&
+                preferredBundleOverrideFlow.value.isNullOrBlank()
+        val currentSelectionState = selectionState
+        if (autoRecommendationMode && currentSelectionState is SelectionState.Customized) {
+            val hasAnySelectablePatch = currentSelectionState
+                .patches(bundles, allowIncompatible)
+                .values
+                .any { it.isNotEmpty() }
+            if (!hasAnySelectablePatch) {
+                selectionState = SelectionState.Default
             }
         }
 
@@ -623,6 +676,37 @@ class SelectedAppInfoViewModel(
         if (!suggestedVersionSafeguard) return@combine null
 
         preferred ?: selectionRecommended ?: suggestedVersions[input.app.packageName]
+    }
+
+    var nonSuggestedVersionDialogSubject by mutableStateOf<SelectedApp.Local?>(null)
+        private set
+    var nonSuggestedVersionDialogSuggestedVersion by mutableStateOf<String?>(null)
+        private set
+    var nonSuggestedVersionDialogRequiresUniversalEnabled by mutableStateOf(false)
+        private set
+    var universalFallbackDialogSubject by mutableStateOf<SelectedApp.Local?>(null)
+        private set
+    var universalFallbackDialogSuggestedVersion by mutableStateOf<String?>(null)
+        private set
+
+    fun dismissNonSuggestedVersionDialog() {
+        nonSuggestedVersionDialogSubject = null
+        nonSuggestedVersionDialogSuggestedVersion = null
+        nonSuggestedVersionDialogRequiresUniversalEnabled = false
+    }
+
+    fun dismissUniversalFallbackDialog() {
+        universalFallbackDialogSubject = null
+        universalFallbackDialogSuggestedVersion = null
+    }
+
+    fun continueWithUniversalFallbackSelection() {
+        val local = universalFallbackDialogSubject ?: return
+        dismissUniversalFallbackDialog()
+        dismissNonSuggestedVersionDialog()
+        selectBundleRecommendation(null, null)
+        selectedApp = local
+        dismissSourceSelector()
     }
 
     suspend fun awaitOptions(): Options {
@@ -681,8 +765,7 @@ class SelectedAppInfoViewModel(
                 }
                 return@launch
             }
-            selectedApp = local
-            dismissSourceSelector()
+            handleSelectedStorageApk(local)
         }
     }
 
@@ -703,9 +786,34 @@ class SelectedAppInfoViewModel(
                 }
                 return@launch
             }
-            selectedApp = local
-            dismissSourceSelector()
+            handleSelectedStorageApk(local)
         }
+    }
+
+    private suspend fun handleSelectedStorageApk(local: SelectedApp.Local) {
+        val assessment = bundleRepository.assessVersionSelection(local.packageName, local.version)
+        if (!assessment.isAllowed) {
+            if (assessment.canContinueWithUniversalFallback) {
+                universalFallbackDialogSubject = local
+                universalFallbackDialogSuggestedVersion = assessment.suggestedVersion
+                dismissNonSuggestedVersionDialog()
+            } else {
+                nonSuggestedVersionDialogSubject = local
+                nonSuggestedVersionDialogSuggestedVersion = assessment.suggestedVersion
+                nonSuggestedVersionDialogRequiresUniversalEnabled =
+                    assessment.requiresUniversalPatchesEnabled
+                dismissUniversalFallbackDialog()
+            }
+
+            dismissSourceSelector()
+            return
+        }
+
+        dismissUniversalFallbackDialog()
+        dismissNonSuggestedVersionDialog()
+        selectBundleRecommendation(null, null)
+        selectedApp = local
+        dismissSourceSelector()
     }
 
     private suspend fun loadLocalApk(uri: Uri): SelectedApp.Local? =
@@ -807,10 +915,19 @@ class SelectedAppInfoViewModel(
         versionOverride: String?,
         targetsAllVersions: Boolean = false
     ) {
+        val customSelectionEmpty =
+            (selectionState as? SelectionState.Customized)
+                ?.patchSelection
+                ?.values
+                ?.all { it.isEmpty() } == true
+
         if (bundleUid == null) {
             savedStateHandle["preferred_bundle_uid"] = null
             savedStateHandle["preferred_bundle_override"] = null
             savedStateHandle["preferred_bundle_all_versions"] = false
+            if (customSelectionEmpty) {
+                selectionState = SelectionState.Default
+            }
         } else {
             savedStateHandle["preferred_bundle_uid"] = bundleUid
             savedStateHandle["preferred_bundle_override"] = versionOverride
@@ -843,7 +960,7 @@ class SelectedAppInfoViewModel(
             else -> Unit
         }
 
-        if (bundleUid != null && selectionState is SelectionState.Default) {
+        if (bundleUid != null && (selectionState is SelectionState.Default || customSelectionEmpty)) {
             applyBundleRecommendationSelection(bundleUid)
         }
     }
@@ -856,6 +973,23 @@ class SelectedAppInfoViewModel(
             .filter { it.include }
             .map { it.name }
             .toSet()
+            .ifEmpty {
+                bundle.patchSequence(false)
+                    .filter { it.include }
+                    .map { it.name }
+                    .toSet()
+            }
+            .ifEmpty {
+                bundle.patchSequence(false)
+                    .map { it.name }
+                    .toSet()
+            }
+
+        if (selectedPatches.isEmpty()) {
+            selectionState = SelectionState.Default
+            return@launch
+        }
+
         selectionState = SelectionState.Customized(mapOf(bundleUid to selectedPatches))
     }
 

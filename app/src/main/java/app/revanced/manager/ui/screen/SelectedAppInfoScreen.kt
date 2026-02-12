@@ -74,6 +74,8 @@ import app.revanced.manager.ui.component.AppliedPatchBundleUi
 import app.revanced.manager.ui.component.AppliedPatchesDialog
 import app.revanced.manager.ui.component.ColumnWithScrollbar
 import app.revanced.manager.ui.component.LoadingIndicator
+import app.revanced.manager.ui.component.NonSuggestedVersionDialog
+import app.revanced.manager.ui.component.UniversalFallbackVersionDialog
 import app.revanced.manager.ui.component.NotificationCard
 import app.revanced.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.revanced.manager.ui.component.SafeguardHintCard
@@ -269,6 +271,23 @@ fun SelectedAppInfoScreen(
 
     val error by vm.errorFlow.collectAsStateWithLifecycle(null)
     val profileLaunchState by vm.profileLaunchState.collectAsStateWithLifecycle(null)
+
+    vm.universalFallbackDialogSubject?.let {
+        UniversalFallbackVersionDialog(
+            onContinue = vm::continueWithUniversalFallbackSelection,
+            onDismiss = vm::dismissUniversalFallbackDialog
+        )
+    }
+
+    vm.nonSuggestedVersionDialogSubject?.let { local ->
+        NonSuggestedVersionDialog(
+            suggestedVersion = vm.nonSuggestedVersionDialogSuggestedVersion
+                ?.takeUnless { it.isBlank() }
+                ?: local.version,
+            requiresUniversalPatchesEnabled = vm.nonSuggestedVersionDialogRequiresUniversalEnabled,
+            onDismiss = vm::dismissNonSuggestedVersionDialog
+        )
+    }
 
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
 

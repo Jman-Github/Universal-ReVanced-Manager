@@ -127,6 +127,8 @@ import app.revanced.manager.ui.component.DownloadProgressBanner
 import app.revanced.manager.ui.component.NotificationCard
 import app.revanced.manager.ui.component.ConfirmDialog
 import app.revanced.manager.ui.component.ExportSavedApkFileNameDialog
+import app.revanced.manager.ui.component.NonSuggestedVersionDialog
+import app.revanced.manager.ui.component.UniversalFallbackVersionDialog
 import app.revanced.manager.ui.component.bundle.BundleTopBar
 import app.revanced.manager.ui.component.bundle.ImportPatchBundleDialog
 import app.revanced.manager.ui.component.haptics.HapticFloatingActionButton
@@ -245,6 +247,7 @@ fun DashboardScreen(
     }
     val bundleUpdateProgress by vm.bundleUpdateProgress.collectAsStateWithLifecycle(null)
     val bundleImportProgress by vm.bundleImportProgress.collectAsStateWithLifecycle(null)
+    val storageSuggestedVersions by storageVm.suggestedAppVersions.collectAsStateWithLifecycle(emptyMap())
     val androidContext = LocalContext.current
     val composableScope = rememberCoroutineScope()
     var showBundleOrderDialog by rememberSaveable { mutableStateOf(false) }
@@ -701,6 +704,21 @@ fun DashboardScreen(
             },
             fileFilter = ::isAllowedApkFile,
             allowDirectorySelection = false
+        )
+    }
+    storageVm.universalFallbackDialogSubject?.let {
+        UniversalFallbackVersionDialog(
+            onContinue = storageVm::continueWithUniversalFallback,
+            onDismiss = storageVm::dismissUniversalFallbackDialog
+        )
+    }
+    storageVm.nonSuggestedVersionDialogSubject?.let { local ->
+        NonSuggestedVersionDialog(
+            suggestedVersion = storageVm.nonSuggestedVersionDialogSuggestedVersion
+                ?.takeUnless { it.isBlank() }
+                ?: storageSuggestedVersions[local.packageName].orEmpty().ifBlank { local.version },
+            requiresUniversalPatchesEnabled = storageVm.nonSuggestedVersionDialogRequiresUniversalEnabled,
+            onDismiss = storageVm::dismissNonSuggestedVersionDialog
         )
     }
     if (showBundleFilePicker) {

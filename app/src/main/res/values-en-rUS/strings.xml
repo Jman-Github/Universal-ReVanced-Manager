@@ -579,6 +579,8 @@ Patch profiles are not affected.</string>
     <string name="patch_options_reset_toast">Patch options have been reset</string>
     <string name="non_suggested_version_warning_title">Non suggested version</string>
     <string name="non_suggested_version_warning_description">The version of the app you have selected does not match the suggested version.\nPlease use the suggested version: %s\n\nTo continue anyway, disable \"Require suggested app version\" in the advanced settings.</string>
+    <string name="universal_fallback_warning_title">Use universal patches?</string>
+    <string name="universal_fallback_warning_description">This app version does not match package-specific suggested versions.\nOnly universal patches are currently compatible.\n\nContinue anyway and use universal patches?</string>
     <string name="selection_warning_description">It is recommended to use the default patch selection and options. Changing them may result in unexpected issues.\n\nYou need to turn on \"Allow changing patch selection and options\" in the advanced settings before toggling patches.</string>
     <string name="patch_profile_save_action">Save patch profile</string>
     <string name="patch_profile_select_bundles_title">Select patch bundles</string>

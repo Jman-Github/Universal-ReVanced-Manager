@@ -72,6 +72,7 @@ import app.revanced.manager.ui.component.CheckedFilterChip
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
 import app.revanced.manager.ui.component.ShimmerBox
 import app.revanced.manager.ui.component.NonSuggestedVersionDialog
+import app.revanced.manager.ui.component.UniversalFallbackVersionDialog
 import app.revanced.manager.ui.component.patches.PathSelectorDialog
 import app.revanced.manager.ui.component.SafeguardHintCard
 import app.revanced.manager.ui.component.SearchView
@@ -131,17 +132,10 @@ fun AppSelectorScreen(
             permissionLauncher.launch(permissionName)
         }
     }
-    val quickStorageOnly = autoOpenStorage && returnToDashboardOnStorage
     LaunchedEffect(autoOpenStorage) {
         if (autoOpenStorage) {
             openStoragePicker()
         }
-    }
-
-    if (quickStorageOnly) {
-        // Skip rendering the selector UI; just trigger the picker and wait for result/back navigation.
-        androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize())
-        return
     }
 
     if (showStorageDialog) {
@@ -191,9 +185,19 @@ fun AppSelectorScreen(
             .toList()
     }
 
-    vm.nonSuggestedVersionDialogSubject?.let {
+    vm.universalFallbackDialogSubject?.let {
+        UniversalFallbackVersionDialog(
+            onContinue = vm::continueWithUniversalFallback,
+            onDismiss = vm::dismissUniversalFallbackDialog
+        )
+    }
+
+    vm.nonSuggestedVersionDialogSubject?.let { local ->
         NonSuggestedVersionDialog(
-            suggestedVersion = suggestedVersions[it.packageName].orEmpty(),
+            suggestedVersion = vm.nonSuggestedVersionDialogSuggestedVersion
+                ?.takeUnless { it.isBlank() }
+                ?: suggestedVersions[local.packageName].orEmpty().ifBlank { local.version },
+            requiresUniversalPatchesEnabled = vm.nonSuggestedVersionDialogRequiresUniversalEnabled,
             onDismiss = vm::dismissNonSuggestedVersionDialog
         )
     }

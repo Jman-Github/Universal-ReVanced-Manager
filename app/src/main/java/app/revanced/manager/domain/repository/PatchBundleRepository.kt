@@ -1018,12 +1018,100 @@ class PatchBundleRepository(
         return metadata
     }
 
-    suspend fun isVersionAllowed(packageName: String, version: String) =
+    suspend fun findBestBundleVersionMatch(packageName: String, version: String?): BundleVersionMatch? =
         withContext(Dispatchers.Default) {
-            if (!prefs.suggestedVersionSafeguard.get()) return@withContext true
+            val scopedBundles = scopedBundleInfoFlow(packageName, version).first()
+            if (scopedBundles.isEmpty()) return@withContext null
 
-            val suggestedVersion = suggestedVersions.first()[packageName] ?: return@withContext true
-            suggestedVersion == version
+            val suggestedByBundle = suggestedVersionsByBundle.first()
+            val normalizedVersion = version?.trim().orEmpty()
+            var best: BundleVersionCandidate? = null
+
+            scopedBundles.forEach { bundle ->
+                val recommendedVersion = suggestedByBundle[bundle.uid]?.get(packageName)
+                val hasPackageSpecificCompatibility = bundle.compatible.any { patch ->
+                    patch.compatiblePackages?.any { compatible -> compatible.packageName == packageName } == true
+                }
+                val hasPackageSpecificAllVersionCompatibility = bundle.compatible.any { patch ->
+                    patch.compatiblePackages?.any { compatible ->
+                        compatible.packageName == packageName && compatible.versions == null
+                    } == true
+                }
+                val hasUniversalCompatibility = bundle.universal.isNotEmpty()
+                val targetsAllVersions = hasPackageSpecificAllVersionCompatibility || hasUniversalCompatibility
+                val hasCompatibility = hasPackageSpecificCompatibility || hasUniversalCompatibility
+                if (!hasCompatibility) return@forEach
+
+                val recommendedMatchesInput =
+                    hasPackageSpecificCompatibility &&
+                        recommendedVersion?.equals(normalizedVersion, ignoreCase = true) == true
+                val score = when {
+                    recommendedMatchesInput -> 3
+                    hasPackageSpecificCompatibility -> 2
+                    hasUniversalCompatibility -> 1
+                    else -> 0
+                }
+                val versionOverride = when {
+                    targetsAllVersions -> null
+                    recommendedMatchesInput -> null
+                    normalizedVersion.isBlank() -> null
+                    else -> normalizedVersion
+                }
+                val candidate = BundleVersionCandidate(
+                    bundleUid = bundle.uid,
+                    score = score,
+                    versionOverride = versionOverride,
+                    targetsAllVersions = targetsAllVersions,
+                    usesUniversalFallback = !hasPackageSpecificCompatibility && hasUniversalCompatibility
+                )
+                if (best == null || candidate.score > best!!.score) {
+                    best = candidate
+                }
+            }
+
+            best?.let {
+                BundleVersionMatch(
+                    bundleUid = it.bundleUid,
+                    versionOverride = it.versionOverride,
+                    targetsAllVersions = it.targetsAllVersions,
+                    usesUniversalFallback = it.usesUniversalFallback
+                )
+            }
+        }
+
+    suspend fun isVersionAllowed(packageName: String, version: String) =
+        assessVersionSelection(packageName, version).isAllowed
+
+    suspend fun assessVersionSelection(packageName: String, version: String) =
+        withContext(Dispatchers.Default) {
+            val match = findBestBundleVersionMatch(packageName, version)
+            val suggestedVersion = suggestedVersions.first()[packageName]
+            val allowUniversalPatches = prefs.disableUniversalPatchCheck.get()
+            val allowIncompatiblePatches = prefs.disablePatchVersionCompatCheck.get()
+            val requireSuggestedVersion = prefs.suggestedVersionSafeguard.get()
+            val usesUniversalFallback = match?.usesUniversalFallback == true
+            val requiresUniversalPatchesEnabled =
+                usesUniversalFallback && !allowUniversalPatches
+            val canContinueWithUniversalFallback =
+                requireSuggestedVersion &&
+                    !allowIncompatiblePatches &&
+                    allowUniversalPatches &&
+                    usesUniversalFallback
+
+            val isAllowed = when {
+                requiresUniversalPatchesEnabled -> false
+                !requireSuggestedVersion -> true
+                match == null -> false
+                canContinueWithUniversalFallback -> false
+                else -> true
+            }
+
+            VersionSelectionAssessment(
+                isAllowed = isAllowed,
+                suggestedVersion = suggestedVersion,
+                canContinueWithUniversalFallback = canContinueWithUniversalFallback,
+                requiresUniversalPatchesEnabled = requiresUniversalPatchesEnabled
+            )
         }
 
     /**
@@ -2563,6 +2651,28 @@ class PatchBundleRepository(
             }.key
         }
     }
+
+    data class BundleVersionMatch(
+        val bundleUid: Int,
+        val versionOverride: String?,
+        val targetsAllVersions: Boolean,
+        val usesUniversalFallback: Boolean = false
+    )
+
+    data class VersionSelectionAssessment(
+        val isAllowed: Boolean,
+        val suggestedVersion: String?,
+        val canContinueWithUniversalFallback: Boolean = false,
+        val requiresUniversalPatchesEnabled: Boolean = false
+    )
+
+    private data class BundleVersionCandidate(
+        val bundleUid: Int,
+        val score: Int,
+        val versionOverride: String?,
+        val targetsAllVersions: Boolean,
+        val usesUniversalFallback: Boolean
+    )
 
     data class State(
         val sources: PersistentMap<Int, PatchBundleSource> = persistentMapOf(),

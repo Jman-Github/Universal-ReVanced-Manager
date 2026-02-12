@@ -107,12 +107,34 @@ class AppSelectorViewModel(
 
     var nonSuggestedVersionDialogSubject by mutableStateOf<SelectedApp.Local?>(null)
         private set
+    var nonSuggestedVersionDialogSuggestedVersion by mutableStateOf<String?>(null)
+        private set
+    var nonSuggestedVersionDialogRequiresUniversalEnabled by mutableStateOf(false)
+        private set
+    var universalFallbackDialogSubject by mutableStateOf<SelectedApp.Local?>(null)
+        private set
+    var universalFallbackDialogSuggestedVersion by mutableStateOf<String?>(null)
+        private set
 
     fun loadLabel(app: PackageInfo?) =
         with(pm) { app?.label() ?: this@AppSelectorViewModel.app.getString(R.string.not_installed) }
 
     fun dismissNonSuggestedVersionDialog() {
         nonSuggestedVersionDialogSubject = null
+        nonSuggestedVersionDialogSuggestedVersion = null
+        nonSuggestedVersionDialogRequiresUniversalEnabled = false
+    }
+
+    fun dismissUniversalFallbackDialog() {
+        universalFallbackDialogSubject = null
+        universalFallbackDialogSuggestedVersion = null
+    }
+
+    fun continueWithUniversalFallback() = viewModelScope.launch {
+        val selectedApp = universalFallbackDialogSubject ?: return@launch
+        dismissUniversalFallbackDialog()
+        dismissNonSuggestedVersionDialog()
+        storageSelectionChannel.send(selectedApp)
     }
 
     fun handleStorageResult(uri: Uri) = viewModelScope.launch {
@@ -124,12 +146,7 @@ class AppSelectorViewModel(
             app.toast(app.getString(R.string.failed_to_load_apk))
             return@launch
         }
-
-        if (patchBundleRepository.isVersionAllowed(selectedApp.packageName, selectedApp.version)) {
-            storageSelectionChannel.send(selectedApp)
-        } else {
-            nonSuggestedVersionDialogSubject = selectedApp
-        }
+        handleSelectedStorageApp(selectedApp)
     }
 
     fun handleStorageFile(file: File) = viewModelScope.launch {
@@ -142,10 +159,30 @@ class AppSelectorViewModel(
             return@launch
         }
 
-        if (patchBundleRepository.isVersionAllowed(selectedApp.packageName, selectedApp.version)) {
+        handleSelectedStorageApp(selectedApp)
+    }
+
+
+    private suspend fun handleSelectedStorageApp(selectedApp: SelectedApp.Local) {
+        val assessment =
+            patchBundleRepository.assessVersionSelection(selectedApp.packageName, selectedApp.version)
+        if (assessment.isAllowed) {
+            dismissUniversalFallbackDialog()
+            dismissNonSuggestedVersionDialog()
             storageSelectionChannel.send(selectedApp)
+            return
+        }
+
+        if (assessment.canContinueWithUniversalFallback) {
+            universalFallbackDialogSubject = selectedApp
+            universalFallbackDialogSuggestedVersion = assessment.suggestedVersion
+            dismissNonSuggestedVersionDialog()
         } else {
             nonSuggestedVersionDialogSubject = selectedApp
+            nonSuggestedVersionDialogSuggestedVersion = assessment.suggestedVersion
+            nonSuggestedVersionDialogRequiresUniversalEnabled =
+                assessment.requiresUniversalPatchesEnabled
+            dismissUniversalFallbackDialog()
         }
     }
 
