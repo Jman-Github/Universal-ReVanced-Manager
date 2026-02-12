@@ -103,6 +103,7 @@
   - When OFF: app-list and storage APK selections always use default selection (ignore saved custom selections)
   - When ON again: saved custom selections are restored automatically (if present)
 
+
 # v1.7.1 (2026-01-22)
 
 
