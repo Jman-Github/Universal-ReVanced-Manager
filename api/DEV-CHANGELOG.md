@@ -1,3 +1,26 @@
+# v1.8.0-dev.09 (2026-02-11)
+
+
+# Features
+
+- Updated Patch Bundle Discovery to use the new `api/v2` & `latest?channel=` URLs while keeping backwards compatibility with `api/v1` URLs
+- Added a draggable transparency adjustment bar to Settings > General for when a image is set as the background
+- Made the state of the progress banner persist
+- Made the collapsed version of the progress banner show a minimal view of progress https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/162
+- Added bundle-aware APK version assessment that finds the best matching bundle/version for storage-selected APKs
+- Added a universal fallback confirmation dialog (`Use universal patches?`) when only universal patches are compatible
+- Added a specific blocked-state message when only universal patches match but universal patches are disabled
+- Expanded safeguard dialog support to allow confirm/cancel actions
+
+
+# Bug fixes
+
+- Fixed latest bundles so they correctly resolve the true latest version
+- Fixed Allow changing patch selection and options behavior:
+  - When OFF: app-list and storage APK selections always use default selection (ignore saved custom selections)
+  - When ON again: saved custom selections are restored automatically (if present)
+
+
 # v1.8.0-dev.08 (2026-02-10)
 
 
