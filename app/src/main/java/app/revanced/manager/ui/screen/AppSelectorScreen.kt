@@ -1,6 +1,7 @@
 package app.revanced.manager.ui.screen
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import android.content.pm.PackageInfo
 import android.net.Uri
@@ -106,6 +107,7 @@ fun AppSelectorScreen(
     val suggestedVersionSafeguard by prefs.suggestedVersionSafeguard.getAsState()
     val bundleRecommendationsEnabled = allowIncompatiblePatches && !suggestedVersionSafeguard
     val allowUniversalPatches by prefs.disableUniversalPatchCheck.getAsState()
+    val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val searchEngineHost by prefs.searchEngineHost.getAsState()
 
     EventEffect(flow = vm.storageSelectionFlow) {
@@ -125,11 +127,29 @@ fun AppSelectorScreen(
                 onBackClick()
             }
         }
+    val openDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            vm.handleStorageResult(uri)
+        } else if (returnToDashboardOnStorage) {
+            onBackClick()
+        }
+    }
     val openStoragePicker = {
-        if (fs.hasStoragePermission()) {
-            showStorageDialog = true
+        if (useCustomFilePicker) {
+            if (fs.hasStoragePermission()) {
+                showStorageDialog = true
+            } else {
+                permissionLauncher.launch(permissionName)
+            }
         } else {
-            permissionLauncher.launch(permissionName)
+            openDocumentLauncher.launch(arrayOf("*/*"))
+        }
+    }
+    LaunchedEffect(useCustomFilePicker) {
+        if (!useCustomFilePicker) {
+            showStorageDialog = false
         }
     }
     LaunchedEffect(autoOpenStorage) {
@@ -138,7 +158,7 @@ fun AppSelectorScreen(
         }
     }
 
-    if (showStorageDialog) {
+    if (showStorageDialog && useCustomFilePicker) {
         PathSelectorDialog(
             roots = storageRoots,
             onSelect = { path ->

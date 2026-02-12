@@ -3,6 +3,7 @@ package app.revanced.manager.ui.screen
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.net.Uri
+import android.provider.OpenableColumns
 import android.provider.Settings
 import android.text.format.Formatter
 import androidx.activity.compose.BackHandler
@@ -221,6 +222,7 @@ fun DashboardScreen(
     val fs = koinInject<Filesystem>()
     val prefs: PreferencesManager = koinInject()
     val savedAppsEnabled by prefs.enableSavedApps.getAsState()
+    val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val hideMainTabLabels by prefs.hideMainTabLabels.getAsState()
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
     val bundlesFabCollapsed by prefs.dashboardBundlesFabCollapsed.getAsState()
@@ -238,11 +240,22 @@ fun DashboardScreen(
                 showStorageDialog = true
             }
         }
+    val openStorageDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            storageVm.handleStorageResult(uri)
+        }
+    }
     val openStoragePicker = {
-        if (fs.hasStoragePermission()) {
-            showStorageDialog = true
+        if (useCustomFilePicker) {
+            if (fs.hasStoragePermission()) {
+                showStorageDialog = true
+            } else {
+                permissionLauncher.launch(permissionName)
+            }
         } else {
-            permissionLauncher.launch(permissionName)
+            openStorageDocumentLauncher.launch(arrayOf("*/*"))
         }
     }
     val bundleUpdateProgress by vm.bundleUpdateProgress.collectAsStateWithLifecycle(null)
@@ -309,6 +322,7 @@ fun DashboardScreen(
 
     var showBundleFilePicker by rememberSaveable { mutableStateOf(false) }
     var selectedBundlePath by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedBundleUri by remember { mutableStateOf<Uri?>(null) }
     val (bundlePermissionContract, bundlePermissionName) = remember { fs.permissionContract() }
     val bundlePermissionLauncher =
         rememberLauncherForActivityResult(bundlePermissionContract) { granted ->
@@ -316,11 +330,35 @@ fun DashboardScreen(
                 showBundleFilePicker = true
             }
         }
+    val bundleDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            selectedBundleUri = uri
+            val displayName = runCatching {
+                androidContext.contentResolver.query(
+                    uri,
+                    arrayOf(OpenableColumns.DISPLAY_NAME),
+                    null,
+                    null,
+                    null
+                )?.use { cursor ->
+                    val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (index != -1 && cursor.moveToFirst()) cursor.getString(index) else null
+                }
+            }.getOrNull()
+            selectedBundlePath = displayName ?: uri.lastPathSegment ?: uri.toString()
+        }
+    }
     fun requestBundleFilePicker() {
-        if (fs.hasStoragePermission()) {
-            showBundleFilePicker = true
+        if (useCustomFilePicker) {
+            if (fs.hasStoragePermission()) {
+                showBundleFilePicker = true
+            } else {
+                bundlePermissionLauncher.launch(bundlePermissionName)
+            }
         } else {
-            bundlePermissionLauncher.launch(bundlePermissionName)
+            bundleDocumentLauncher.launch(arrayOf("*/*"))
         }
     }
 
@@ -333,11 +371,42 @@ fun DashboardScreen(
                 showSavedAppsExportPicker = true
             }
         }
+    val savedAppsExportTreeLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        savedAppsExportInProgress = true
+        installedAppsViewModel.exportSelectedSavedAppsToTreeUri(
+            context = androidContext,
+            treeUri = uri,
+            exportTemplate = exportFormat
+        ) { result ->
+            savedAppsExportInProgress = false
+            when {
+                result.total == 0 -> androidContext.toast(
+                    androidContext.getString(R.string.saved_apps_export_empty)
+                )
+                result.exported > 0 -> androidContext.toast(
+                    androidContext.getString(
+                        R.string.saved_apps_export_success,
+                        result.exported
+                    )
+                )
+                else -> androidContext.toast(
+                    androidContext.getString(R.string.saved_apps_export_failed)
+                )
+            }
+        }
+    }
     fun requestSavedAppsExportPicker() {
-        if (fs.hasStoragePermission()) {
-            showSavedAppsExportPicker = true
+        if (useCustomFilePicker) {
+            if (fs.hasStoragePermission()) {
+                showSavedAppsExportPicker = true
+            } else {
+                exportPermissionLauncher.launch(exportPermissionName)
+            }
         } else {
-            exportPermissionLauncher.launch(exportPermissionName)
+            savedAppsExportTreeLauncher.launch(null)
         }
     }
 
@@ -368,6 +437,25 @@ fun DashboardScreen(
             patchBundleNames = bundleNames
         )
         return ExportNameFormatter.format(exportFormat, exportData)
+    }
+    val quickExportDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/vnd.android.package-archive")
+    ) { uri ->
+        val viewModel = quickActionViewModel
+        if (uri != null && viewModel != null) {
+            viewModel.exportSavedApp(uri)
+        }
+        showQuickExportPicker = false
+    }
+
+    LaunchedEffect(useCustomFilePicker) {
+        if (!useCustomFilePicker) {
+            showStorageDialog = false
+            showBundleFilePicker = false
+            showSavedAppsExportPicker = false
+            quickExportDialogState = null
+            pendingQuickExportConfirmation = null
+        }
     }
 
     @Composable
@@ -695,7 +783,7 @@ fun DashboardScreen(
     val firstLaunch by vm.prefs.firstLaunch.getAsState()
     if (firstLaunch) AutoUpdatesDialog(vm::applyAutoUpdatePrefs)
 
-    if (showStorageDialog) {
+    if (showStorageDialog && useCustomFilePicker) {
         PathSelectorDialog(
             roots = storageRoots,
             onSelect = { path ->
@@ -721,18 +809,19 @@ fun DashboardScreen(
             onDismiss = storageVm::dismissNonSuggestedVersionDialog
         )
     }
-    if (showBundleFilePicker) {
+    if (showBundleFilePicker && useCustomFilePicker) {
         PathSelectorDialog(
             roots = storageRoots,
             onSelect = { path ->
                 showBundleFilePicker = false
+                selectedBundleUri = null
                 path?.let { selectedBundlePath = it.toString() }
             },
             fileFilter = ::isAllowedPatchBundleFile,
             allowDirectorySelection = false
         )
     }
-    if (showSavedAppsExportPicker) {
+    if (showSavedAppsExportPicker && useCustomFilePicker) {
         PathSelectorDialog(
             roots = storageRoots,
             onSelect = { path ->
@@ -824,7 +913,13 @@ fun DashboardScreen(
             onLocalSubmit = { path ->
                 showAddBundleDialog = false
                 selectedBundlePath = null
-                vm.createLocalSourceFromFile(path)
+                val selectedUri = selectedBundleUri
+                selectedBundleUri = null
+                if (selectedUri != null) {
+                    vm.createLocalSource(selectedUri)
+                } else {
+                    vm.createLocalSourceFromFile(path)
+                }
             },
             onRemoteSubmit = { url, autoUpdate, searchUpdate ->
                 showAddBundleDialog = false
@@ -935,7 +1030,7 @@ fun DashboardScreen(
     }
 
     val quickExportApp = quickActionViewModel?.installedApp
-    if (showQuickExportPicker && quickExportApp != null) {
+    if (showQuickExportPicker && quickExportApp != null && useCustomFilePicker) {
         PathSelectorDialog(
             roots = storageRoots,
             onSelect = { path ->
@@ -952,6 +1047,11 @@ fun DashboardScreen(
                 quickExportDialogState = QuickExportDialogState(directory, exportName)
             }
         )
+    }
+    LaunchedEffect(showQuickExportPicker, quickExportApp?.currentPackageName, useCustomFilePicker) {
+        if (showQuickExportPicker && quickExportApp != null && !useCustomFilePicker) {
+            quickExportDocumentLauncher.launch(resolveQuickExportName(quickExportApp))
+        }
     }
     quickExportDialogState?.let { state ->
         ExportSavedApkFileNameDialog(

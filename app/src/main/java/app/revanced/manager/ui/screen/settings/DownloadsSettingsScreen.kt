@@ -1,6 +1,7 @@
 package app.revanced.manager.ui.screen.settings
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -85,6 +86,7 @@ fun DownloadsSettingsScreen(
     viewModel: DownloadsViewModel = koinViewModel()
 ) {
     val prefs: PreferencesManager = koinInject()
+    val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val downloadedApps by viewModel.downloadedApps.collectAsStateWithLifecycle(emptyList())
     val pluginStates by viewModel.downloaderPluginStates.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
@@ -97,6 +99,7 @@ fun DownloadsSettingsScreen(
     val (permissionContract, permissionName) = remember { fs.permissionContract() }
     var pendingExportState by rememberSaveable { mutableStateOf<DownloadedAppsExportState?>(null) }
     var activeExportState by rememberSaveable { mutableStateOf<DownloadedAppsExportState?>(null) }
+    var pendingDocumentExportState by rememberSaveable { mutableStateOf<DownloadedAppsExportState?>(null) }
     var exportFileDialogState by remember { mutableStateOf<DownloadedAppsExportDialogState?>(null) }
     var pendingExportConfirmation by remember { mutableStateOf<PendingDownloadedAppsExportConfirmation?>(null) }
     var exportInProgress by rememberSaveable { mutableStateOf(false) }
@@ -107,12 +110,34 @@ fun DownloadsSettingsScreen(
             }
             pendingExportState = null
         }
+    val exportDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("*/*")
+    ) { uri ->
+        val exportState = pendingDocumentExportState
+        pendingDocumentExportState = null
+        if (uri != null && exportState != null) {
+            viewModel.exportSelectedApps(context, uri, exportState.asArchive)
+        }
+    }
     fun openExportPicker(state: DownloadedAppsExportState) {
-        if (fs.hasStoragePermission()) {
-            activeExportState = state
+        if (useCustomFilePicker) {
+            if (fs.hasStoragePermission()) {
+                activeExportState = state
+            } else {
+                pendingExportState = state
+                permissionLauncher.launch(permissionName)
+            }
         } else {
-            pendingExportState = state
-            permissionLauncher.launch(permissionName)
+            pendingDocumentExportState = state
+            exportDocumentLauncher.launch(state.defaultFileName)
+        }
+    }
+    LaunchedEffect(useCustomFilePicker) {
+        if (!useCustomFilePicker) {
+            activeExportState = null
+            pendingExportState = null
+            exportFileDialogState = null
+            pendingExportConfirmation = null
         }
     }
 
@@ -144,6 +169,7 @@ fun DownloadsSettingsScreen(
         )
     }
     activeExportState?.let { state ->
+        if (!useCustomFilePicker) return@let
         val fileFilter = if (state.asArchive) ::isZipFile else ::isAllowedApkFile
         PathSelectorDialog(
             roots = storageRoots,

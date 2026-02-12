@@ -1,6 +1,8 @@
 package app.revanced.manager.ui.screen
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -121,6 +123,9 @@ fun PatchProfilesScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val prefs = koinInject<PreferencesManager>()
+    val useCustomFilePicker by prefs.useCustomFilePicker.flow.collectAsStateWithLifecycle(
+        initialValue = prefs.useCustomFilePicker.default
+    )
     val allowUniversal by prefs.disableUniversalPatchCheck.flow.collectAsStateWithLifecycle(
         initialValue = prefs.disableUniversalPatchCheck.default
     )
@@ -140,6 +145,7 @@ fun PatchProfilesScreen(
     var versionDialogSaving by remember { mutableStateOf(false) }
     var settingsDialogProfile by remember { mutableStateOf<PatchProfileListItem?>(null) }
     var apkPickerProfile by remember { mutableStateOf<PatchProfileListItem?>(null) }
+    var pendingDocumentApkPickerProfile by remember { mutableStateOf<PatchProfileListItem?>(null) }
     var apkPickerBusy by remember { mutableStateOf(false) }
     data class ChangeUidTarget(val profileId: Int, val bundleUid: Int, val bundleName: String?)
     var changeUidTarget by remember { mutableStateOf<ChangeUidTarget?>(null) }
@@ -187,7 +193,52 @@ fun PatchProfilesScreen(
 
     BackHandler(enabled = selectionActive) { viewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL) }
 
+    fun handleApkSelectionResult(profileName: String, result: PatchProfilesViewModel.ApkSelectionResult) {
+        when (result) {
+            PatchProfilesViewModel.ApkSelectionResult.SUCCESS -> context.toast(
+                context.getString(R.string.patch_profile_apk_saved_toast, profileName)
+            )
+            PatchProfilesViewModel.ApkSelectionResult.INVALID_FILE -> context.toast(
+                context.getString(R.string.patch_profile_apk_invalid_toast)
+            )
+            PatchProfilesViewModel.ApkSelectionResult.PACKAGE_MISMATCH -> context.toast(
+                context.getString(R.string.patch_profile_apk_mismatch_toast)
+            )
+            PatchProfilesViewModel.ApkSelectionResult.PROFILE_NOT_FOUND,
+            PatchProfilesViewModel.ApkSelectionResult.FAILED,
+            PatchProfilesViewModel.ApkSelectionResult.CLEARED -> context.toast(
+                context.getString(R.string.patch_profile_apk_failed_toast)
+            )
+        }
+    }
+    val apkDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        val profile = pendingDocumentApkPickerProfile
+        pendingDocumentApkPickerProfile = null
+        apkPickerProfile = null
+        if (profile == null || uri == null) return@rememberLauncherForActivityResult
+        apkPickerBusy = true
+        scope.launch {
+            val tempFile = withContext(Dispatchers.IO) {
+                val file = File.createTempFile("patch-profile-apk", ".apk", context.cacheDir)
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    file.outputStream().use { output -> input.copyTo(output) }
+                }
+                file
+            }
+            try {
+                val result = viewModel.updateProfileApk(profile.id, tempFile)
+                handleApkSelectionResult(profile.name, result)
+            } finally {
+                withContext(Dispatchers.IO) { tempFile.delete() }
+                apkPickerBusy = false
+            }
+        }
+    }
+
     apkPickerProfile?.let { profile ->
+        if (!useCustomFilePicker) return@let
         PathSelectorDialog(
             roots = storageRoots,
             onSelect = { path ->
@@ -197,22 +248,7 @@ fun PatchProfilesScreen(
                 scope.launch {
                     try {
                         val result = viewModel.updateProfileApk(profile.id, File(path.toString()))
-                        when (result) {
-                            PatchProfilesViewModel.ApkSelectionResult.SUCCESS -> context.toast(
-                                context.getString(R.string.patch_profile_apk_saved_toast, profile.name)
-                            )
-                            PatchProfilesViewModel.ApkSelectionResult.INVALID_FILE -> context.toast(
-                                context.getString(R.string.patch_profile_apk_invalid_toast)
-                            )
-                            PatchProfilesViewModel.ApkSelectionResult.PACKAGE_MISMATCH -> context.toast(
-                                context.getString(R.string.patch_profile_apk_mismatch_toast)
-                            )
-                            PatchProfilesViewModel.ApkSelectionResult.PROFILE_NOT_FOUND,
-                            PatchProfilesViewModel.ApkSelectionResult.FAILED,
-                            PatchProfilesViewModel.ApkSelectionResult.CLEARED -> context.toast(
-                                context.getString(R.string.patch_profile_apk_failed_toast)
-                            )
-                        }
+                        handleApkSelectionResult(profile.name, result)
                     } finally {
                         apkPickerBusy = false
                     }
@@ -222,6 +258,13 @@ fun PatchProfilesScreen(
             allowDirectorySelection = false,
             fileTypeLabel = stringResource(R.string.apk_file_type)
         )
+    }
+    LaunchedEffect(apkPickerProfile?.id, useCustomFilePicker) {
+        val profile = apkPickerProfile
+        if (profile != null && !useCustomFilePicker) {
+            pendingDocumentApkPickerProfile = profile
+            apkDocumentLauncher.launch(arrayOf("*/*"))
+        }
     }
 
     renameProfileId?.let { targetId ->

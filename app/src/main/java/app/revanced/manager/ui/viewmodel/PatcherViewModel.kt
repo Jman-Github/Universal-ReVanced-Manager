@@ -1422,6 +1422,37 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         onResult(true)
     }
 
+    fun exportLogsToUri(
+        context: Context,
+        target: Uri?,
+        onResult: (Boolean) -> Unit = {}
+    ) = viewModelScope.launch {
+        if (target == null) {
+            onResult(false)
+            return@launch
+        }
+
+        val exportSucceeded = runCatching {
+            withContext(Dispatchers.IO) {
+                app.contentResolver.openOutputStream(target, "wt")
+                    ?.bufferedWriter(StandardCharsets.UTF_8)
+                    ?.use { writer ->
+                        writer.write(buildLogContent(context))
+                    }
+                    ?: throw IOException("Could not open output stream for log export")
+            }
+        }.isSuccess
+
+        if (!exportSucceeded) {
+            app.toast(app.getString(R.string.patcher_log_export_failed))
+            onResult(false)
+            return@launch
+        }
+
+        app.toast(app.getString(R.string.patcher_log_export_success))
+        onResult(true)
+    }
+
     fun exportLogs(context: Context) {
         val content = buildLogContent(context)
 

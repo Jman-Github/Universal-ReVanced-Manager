@@ -5,10 +5,12 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageInfo
+import android.net.Uri
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.core.content.ContextCompat
+import androidx.documentfile.provider.DocumentFile
 import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.data.room.apps.installed.InstallType
 import app.revanced.manager.data.room.apps.installed.InstalledApp
@@ -333,6 +335,61 @@ class InstalledAppsViewModel(
         onResult(result)
     }
 
+    fun exportSelectedSavedAppsToTreeUri(
+        context: Context,
+        treeUri: Uri,
+        exportTemplate: String?,
+        onResult: (SavedAppsExportResult) -> Unit = {}
+    ) = viewModelScope.launch {
+        val snapshot = apps.first()
+        val selected = snapshot.filter {
+            it.currentPackageName in selectedApps && it.installType == InstallType.SAVED
+        }
+        if (selected.isEmpty()) {
+            onResult(SavedAppsExportResult(0, 0, 0))
+            return@launch
+        }
+
+        val root = DocumentFile.fromTreeUri(context, treeUri)
+        if (root == null || !root.isDirectory) {
+            onResult(SavedAppsExportResult(0, selected.size, selected.size))
+            return@launch
+        }
+
+        val result = withContext(Dispatchers.IO) {
+            var exported = 0
+            var failed = 0
+
+            selected.forEach { app ->
+                val source = savedApkFile(app)
+                if (source == null || !source.exists()) {
+                    failed++
+                    return@forEach
+                }
+
+                val exportData = buildExportMetadata(app, source)
+                val fileName = ExportNameFormatter.format(exportTemplate, exportData)
+                val targetName = resolveUniqueDocumentName(root, fileName)
+                val target = root.createFile("application/vnd.android.package-archive", targetName)
+                if (target == null) {
+                    failed++
+                    return@forEach
+                }
+
+                val success = runCatching {
+                    context.contentResolver.openOutputStream(target.uri)?.use { output ->
+                        source.inputStream().use { input -> input.copyTo(output) }
+                    } ?: error("Could not open output stream")
+                }.isSuccess
+
+                if (success) exported++ else failed++
+            }
+
+            SavedAppsExportResult(exported = exported, failed = failed, total = selected.size)
+        }
+        onResult(result)
+    }
+
     private suspend fun setSelectionInternal(installedApp: InstalledApp, shouldSelect: Boolean) {
         val packageName = installedApp.currentPackageName
         if (shouldSelect && !isSelectable(installedApp)) return
@@ -506,6 +563,20 @@ class InstalledAppsViewModel(
         while (true) {
             candidate = directory.resolve("${base}_$counter$ext")
             if (!Files.exists(candidate)) return candidate
+            counter++
+        }
+    }
+
+    private fun resolveUniqueDocumentName(directory: DocumentFile, fileName: String): String {
+        val lower = fileName.lowercase(Locale.ROOT)
+        val ext = if (lower.endsWith(".apk")) ".apk" else ""
+        val base = if (ext.isNotEmpty()) fileName.dropLast(ext.length) else fileName
+        if (directory.findFile(fileName) == null) return fileName
+
+        var counter = 2
+        while (true) {
+            val candidate = "${base}_$counter$ext"
+            if (directory.findFile(candidate) == null) return candidate
             counter++
         }
     }

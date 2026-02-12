@@ -370,12 +370,42 @@ class ImportExportViewModel(
         }
     }
 
+    fun executeSelectionImport(target: Uri) = viewModelScope.launch {
+        val source = selectedBundle ?: return@launch
+        clearSelectionAction()
+
+        uiSafe(app, R.string.import_patch_selection_fail, "Failed to restore patch selection") {
+            val selection = withContext(Dispatchers.IO) {
+                contentResolver.openInputStream(target)!!.use {
+                    Json.decodeFromStream<SerializedSelection>(it)
+                }
+            }
+
+            selectionRepository.import(source.uid, selection)
+            app.toast(app.getString(R.string.import_patch_selection_success))
+        }
+    }
+
     fun executeSelectionImportAllBundles(target: Path) = viewModelScope.launch {
         clearSelectionAction()
 
         uiSafe(app, R.string.import_patch_selection_fail, "Failed to restore patch selection") {
             val exportFile = withContext(Dispatchers.IO) {
                 target.inputStream().use {
+                    Json.decodeFromStream<PatchSelectionExportFile>(it)
+                }
+            }
+
+            importPatchSelectionExportFile(exportFile)
+        }
+    }
+
+    fun executeSelectionImportAllBundles(target: Uri) = viewModelScope.launch {
+        clearSelectionAction()
+
+        uiSafe(app, R.string.import_patch_selection_fail, "Failed to restore patch selection") {
+            val exportFile = withContext(Dispatchers.IO) {
+                contentResolver.openInputStream(target)!!.use {
                     Json.decodeFromStream<PatchSelectionExportFile>(it)
                 }
             }
@@ -1232,11 +1262,81 @@ class ImportExportViewModel(
         }
     }
 
+    fun exportEverything(target: Uri) = viewModelScope.launch {
+        uiSafe(app, R.string.export_everything_fail, "Failed to export all data") {
+            val bundleResult = buildPatchBundleExportResult()
+            val profileExport = PatchProfileExportFile(patchProfileRepository.exportProfiles())
+            val settingsExport = ManagerSettingsExportFile(settings = preferencesManager.exportSettings())
+            val selectionExport = buildPatchSelectionExportFile()
+            val exportFile = EverythingExportFile(
+                patchBundles = bundleResult.exportFile,
+                patchProfiles = profileExport,
+                managerSettings = settingsExport,
+                patchSelection = selectionExport
+            )
+
+            withContext(Dispatchers.IO) {
+                contentResolver.openOutputStream(target, "wt")!!.use { output ->
+                    Json.Default.encodeToStream(exportFile, output)
+                }
+            }
+
+            app.toast(app.getString(R.string.export_everything_success))
+        }
+    }
+
     fun importEverything(source: Path) = viewModelScope.launch {
         withContext(NonCancellable) {
             uiSafe(app, R.string.import_everything_fail, "Failed to import all data") {
                 val exportFile = withContext(Dispatchers.IO) {
                     source.inputStream().use { input ->
+                        tolerantJson.decodeFromStream<EverythingExportFile>(input)
+                    }
+                }
+
+                val tempDir = withContext(Dispatchers.IO) {
+                    Files.createTempDirectory(app.cacheDir.toPath(), "urv-import-all-")
+                }
+
+                try {
+                    val bundlesPath = tempDir.resolve("patch-bundles.json")
+                    val profilesPath = tempDir.resolve("patch-profiles.json")
+                    val settingsPath = tempDir.resolve("manager-settings.json")
+                    val selectionPath = tempDir.resolve("patch-selection.json")
+
+                    withContext(Dispatchers.IO) {
+                        Files.newOutputStream(bundlesPath).use {
+                            Json.Default.encodeToStream(exportFile.patchBundles, it)
+                        }
+                        Files.newOutputStream(profilesPath).use {
+                            Json.Default.encodeToStream(exportFile.patchProfiles, it)
+                        }
+                        Files.newOutputStream(settingsPath).use {
+                            Json.Default.encodeToStream(exportFile.managerSettings, it)
+                        }
+                        Files.newOutputStream(selectionPath).use {
+                            Json.Default.encodeToStream(exportFile.patchSelection, it)
+                        }
+                    }
+
+                    importPatchBundles(bundlesPath).join()
+                    importPatchProfiles(profilesPath).join()
+                    importManagerSettings(settingsPath).join()
+                    executeSelectionImportAllBundles(selectionPath).join()
+                } finally {
+                    withContext(Dispatchers.IO) {
+                        tempDir.toFile().deleteRecursively()
+                    }
+                }
+            }
+        }
+    }
+
+    fun importEverything(source: Uri) = viewModelScope.launch {
+        withContext(NonCancellable) {
+            uiSafe(app, R.string.import_everything_fail, "Failed to import all data") {
+                val exportFile = withContext(Dispatchers.IO) {
+                    contentResolver.openInputStream(source)!!.use { input ->
                         tolerantJson.decodeFromStream<EverythingExportFile>(input)
                     }
                 }

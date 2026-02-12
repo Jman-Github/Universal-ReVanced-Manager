@@ -3,6 +3,7 @@ package app.revanced.manager.ui.screen
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
@@ -130,6 +131,7 @@ fun InstalledAppInfoScreen(
     val allowBundleOverride by prefs.allowPatchProfileBundleOverride.getAsState()
     val savedAppsEnabled by prefs.enableSavedApps.getAsState()
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
+    val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     var showAppliedPatchesDialog by rememberSaveable { mutableStateOf(false) }
     var showUniversalBlockedDialog by rememberSaveable { mutableStateOf(false) }
     var showMixedBundleDialog by rememberSaveable { mutableStateOf(false) }
@@ -154,11 +156,21 @@ fun InstalledAppInfoScreen(
                 showExportPicker = true
             }
         }
+    val exportDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/vnd.android.package-archive")
+    ) { uri ->
+        viewModel.exportSavedApp(uri)
+        showExportPicker = false
+    }
     fun openExportPicker() {
-        if (fs.hasStoragePermission()) {
-            showExportPicker = true
+        if (useCustomFilePicker) {
+            if (fs.hasStoragePermission()) {
+                showExportPicker = true
+            } else {
+                permissionLauncher.launch(permissionName)
+            }
         } else {
-            permissionLauncher.launch(permissionName)
+            showExportPicker = true
         }
     }
     val selectionPayload = installedAppState?.selectionPayload
@@ -759,7 +771,7 @@ fun InstalledAppInfoScreen(
     val exportFileName = remember(exportMetadata, exportFormat) {
         ExportNameFormatter.format(exportFormat, exportMetadata)
     }
-    if (showExportPicker) {
+    if (showExportPicker && useCustomFilePicker) {
         PathSelectorDialog(
             roots = storageRoots,
             onSelect = { path ->
@@ -775,6 +787,17 @@ fun InstalledAppInfoScreen(
                 exportFileDialogState = ExportSavedApkDialogState(directory, exportFileName)
             }
         )
+    }
+    LaunchedEffect(showExportPicker, useCustomFilePicker, exportFileName) {
+        if (showExportPicker && !useCustomFilePicker) {
+            exportDocumentLauncher.launch(exportFileName)
+        }
+    }
+    LaunchedEffect(useCustomFilePicker) {
+        if (!useCustomFilePicker) {
+            exportFileDialogState = null
+            pendingExportConfirmation = null
+        }
     }
     exportFileDialogState?.let { state ->
         ExportSavedApkFileNameDialog(

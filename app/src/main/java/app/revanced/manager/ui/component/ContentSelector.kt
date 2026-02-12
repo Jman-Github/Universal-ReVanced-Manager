@@ -2,14 +2,17 @@ package app.revanced.manager.ui.component
 
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.Button
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import app.revanced.manager.data.platform.Filesystem
+import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.ui.component.patches.PathSelectorDialog
 import org.koin.compose.koinInject
 import java.nio.file.Path
@@ -17,6 +20,8 @@ import java.nio.file.Path
 @Composable
 fun ContentSelector(mime: String, onSelect: (Uri) -> Unit, content: @Composable () -> Unit) {
     val fs: Filesystem = koinInject()
+    val prefs: PreferencesManager = koinInject()
+    val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val storageRoots = remember { fs.storageRoots() }
     val (permissionContract, permissionName) = remember { fs.permissionContract() }
     var showPicker by rememberSaveable { mutableStateOf(false) }
@@ -28,8 +33,13 @@ fun ContentSelector(mime: String, onSelect: (Uri) -> Unit, content: @Composable 
         }
         pendingPicker = false
     }
+    val openDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let(onSelect)
+    }
 
-    if (showPicker) {
+    if (showPicker && useCustomFilePicker) {
         PathSelectorDialog(
             roots = storageRoots,
             onSelect = { path ->
@@ -40,14 +50,26 @@ fun ContentSelector(mime: String, onSelect: (Uri) -> Unit, content: @Composable 
             allowDirectorySelection = false
         )
     }
+    LaunchedEffect(useCustomFilePicker) {
+        if (!useCustomFilePicker) {
+            showPicker = false
+            pendingPicker = false
+        }
+    }
 
     Button(
         onClick = {
-            if (fs.hasStoragePermission()) {
-                showPicker = true
+            if (useCustomFilePicker) {
+                if (fs.hasStoragePermission()) {
+                    showPicker = true
+                } else {
+                    pendingPicker = true
+                    permissionLauncher.launch(permissionName)
+                }
             } else {
-                pendingPicker = true
-                permissionLauncher.launch(permissionName)
+                openDocumentLauncher.launch(
+                    if (mime.isBlank()) arrayOf("*/*") else arrayOf(mime)
+                )
             }
         }
     ) {

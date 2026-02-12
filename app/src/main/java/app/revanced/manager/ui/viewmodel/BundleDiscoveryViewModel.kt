@@ -1,6 +1,7 @@
 package app.revanced.manager.ui.viewmodel
 
 import android.app.Application
+import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -261,6 +262,43 @@ class BundleDiscoveryViewModel(
                 app.toast(app.getString(R.string.patch_bundle_export_fail, e.simpleMessage()))
             } finally {
                 bundleExports.remove(bundleId)
+            }
+        }
+    }
+
+    fun exportBundle(bundle: ExternalBundleSnapshot, target: Uri?) {
+        if (target == null) return
+        viewModelScope.launch {
+            val bundleId = bundle.bundleId
+            val url = bundle.downloadUrl?.trim().takeIf { !it.isNullOrBlank() }
+            if (url.isNullOrBlank()) {
+                app.toast(app.getString(R.string.patch_bundle_discovery_error))
+                return@launch
+            }
+            bundleExports[bundleId] = BundleExportProgress(0L, null)
+            val tempFile = File.createTempFile("bundle-export-$bundleId-", ".tmp", cacheDir)
+            try {
+                withContext(Dispatchers.IO) {
+                    http.downloadToFile(
+                        saveLocation = tempFile,
+                        builder = { url(url) },
+                        onProgress = { bytesRead, bytesTotal ->
+                            viewModelScope.launch(Dispatchers.Main) {
+                                bundleExports[bundleId] = BundleExportProgress(bytesRead, bytesTotal)
+                            }
+                        }
+                    )
+                    app.contentResolver.openOutputStream(target)?.use { output ->
+                        tempFile.inputStream().use { input -> input.copyTo(output) }
+                    } ?: error("Could not open output stream for bundle export")
+                }
+                val successName = bundle.repoName.ifBlank { "bundle" }
+                app.toast(app.getString(R.string.patch_bundle_export_success, successName))
+            } catch (e: Exception) {
+                app.toast(app.getString(R.string.patch_bundle_export_fail, e.simpleMessage()))
+            } finally {
+                bundleExports.remove(bundleId)
+                tempFile.delete()
             }
         }
     }

@@ -106,6 +106,7 @@ fun PatcherScreen(
     val context = LocalContext.current
     val prefs: PreferencesManager = koinInject()
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
+    val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val autoCollapsePatcherSteps by prefs.autoCollapsePatcherSteps.getAsState()
     val autoExpandRunningSteps by prefs.autoExpandRunningSteps.getAsState()
     val savedAppsEnabled by prefs.enableSavedApps.getAsState()
@@ -149,11 +150,38 @@ fun PatcherScreen(
                 showExportPicker = true
             }
         }
+    val exportDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/vnd.android.package-archive")
+    ) { uri ->
+        viewModel.export(uri)
+        showExportPicker = false
+    }
+    val logExportDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/plain")
+    ) { uri ->
+        viewModel.exportLogsToUri(context, uri)
+        showLogExportPicker = false
+    }
     fun openExportPicker() {
-        if (fs.hasStoragePermission()) {
-            showExportPicker = true
+        if (useCustomFilePicker) {
+            if (fs.hasStoragePermission()) {
+                showExportPicker = true
+            } else {
+                permissionLauncher.launch(permissionName)
+            }
         } else {
-            permissionLauncher.launch(permissionName)
+            exportDocumentLauncher.launch(exportFileName)
+        }
+    }
+
+    LaunchedEffect(useCustomFilePicker) {
+        if (!useCustomFilePicker) {
+            showExportPicker = false
+            showLogExportPicker = false
+            exportFileDialogState = null
+            pendingExportConfirmation = null
+            logExportFileDialogState = null
+            pendingLogExportConfirmation = null
         }
     }
 
@@ -276,7 +304,7 @@ fun PatcherScreen(
         )
     }
 
-    if (showExportPicker) {
+    if (showExportPicker && useCustomFilePicker) {
         PathSelectorDialog(
             roots = storageRoots,
             onSelect = { path ->
@@ -293,7 +321,7 @@ fun PatcherScreen(
             }
         )
     }
-    if (showLogExportPicker) {
+    if (showLogExportPicker && useCustomFilePicker) {
         PathSelectorDialog(
             roots = storageRoots,
             onSelect = { path ->
@@ -309,6 +337,16 @@ fun PatcherScreen(
                 logExportFileDialogState = LogExportDialogState(directory, logFileName)
             }
         )
+    }
+    LaunchedEffect(showExportPicker, useCustomFilePicker, exportFileName) {
+        if (showExportPicker && !useCustomFilePicker) {
+            exportDocumentLauncher.launch(exportFileName)
+        }
+    }
+    LaunchedEffect(showLogExportPicker, useCustomFilePicker, logFileName) {
+        if (showLogExportPicker && !useCustomFilePicker) {
+            logExportDocumentLauncher.launch(logFileName)
+        }
     }
     logExportFileDialogState?.let { state ->
         ExportLogFileNameDialog(

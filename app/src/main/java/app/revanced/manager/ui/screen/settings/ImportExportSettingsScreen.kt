@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.spring
@@ -95,6 +96,7 @@ import app.revanced.manager.ui.screen.settings.SettingsSearchState
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.uiSafe
 import app.revanced.manager.domain.repository.PatchBundleRepository.BundleImportPhase
+import app.revanced.manager.domain.manager.PreferencesManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
@@ -109,6 +111,8 @@ fun ImportExportSettingsScreen(
     vm: ImportExportViewModel = koinViewModel()
 ) {
     val context = LocalContext.current
+    val prefs: PreferencesManager = koinInject()
+    val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val searchTarget by SettingsSearchState.target.collectAsStateWithLifecycle()
     var highlightTarget by rememberSaveable { mutableStateOf<Int?>(null) }
     val coroutineScope = rememberCoroutineScope()
@@ -120,6 +124,8 @@ fun ImportExportSettingsScreen(
     var activeImportPicker by rememberSaveable { mutableStateOf<ImportPicker?>(null) }
     var pendingExportPicker by rememberSaveable { mutableStateOf<ExportPicker?>(null) }
     var activeExportPicker by rememberSaveable { mutableStateOf<ExportPicker?>(null) }
+    var pendingDocumentImportPicker by rememberSaveable { mutableStateOf<ImportPicker?>(null) }
+    var pendingDocumentExportPicker by rememberSaveable { mutableStateOf<ExportPicker?>(null) }
     var exportFileDialogState by remember { mutableStateOf<ExportFileDialogState?>(null) }
     var pendingExportConfirmation by remember { mutableStateOf<PendingExportConfirmation?>(null) }
     var exportInProgress by rememberSaveable { mutableStateOf(false) }
@@ -140,20 +146,90 @@ fun ImportExportSettingsScreen(
         pendingImportPicker = null
         pendingExportPicker = null
     }
+    val importDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        val picker = pendingDocumentImportPicker
+        pendingDocumentImportPicker = null
+        if (picker == null) return@rememberLauncherForActivityResult
+        if (uri == null) {
+            if (picker == ImportPicker.PatchSelection) vm.clearSelectionAction()
+            return@rememberLauncherForActivityResult
+        }
+        when (picker) {
+            ImportPicker.Keystore -> vm.startKeystoreImport(uri)
+            ImportPicker.PatchBundles -> vm.importPatchBundles(uri)
+            ImportPicker.PatchProfiles -> vm.importPatchProfiles(uri)
+            ImportPicker.ManagerSettings -> vm.importManagerSettings(uri)
+            ImportPicker.Everything -> vm.importEverything(uri)
+            ImportPicker.PatchSelection -> when (vm.selectionAction) {
+                ImportExportViewModel.SelectionAction.ImportAllBundles ->
+                    vm.executeSelectionImportAllBundles(uri)
+                else -> vm.executeSelectionImport(uri)
+            }
+        }
+    }
+    val exportDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        val picker = pendingDocumentExportPicker
+        pendingDocumentExportPicker = null
+        if (picker == null) return@rememberLauncherForActivityResult
+        if (uri == null) {
+            if (picker == ExportPicker.PatchSelection) vm.clearSelectionAction()
+            return@rememberLauncherForActivityResult
+        }
+        exportInProgress = true
+        val job = when (picker) {
+            ExportPicker.Keystore -> vm.exportKeystore(uri)
+            ExportPicker.PatchBundles -> vm.exportPatchBundles(uri)
+            ExportPicker.PatchProfiles -> vm.exportPatchProfiles(uri)
+            ExportPicker.ManagerSettings -> vm.exportManagerSettings(uri)
+            ExportPicker.Everything -> vm.exportEverything(uri)
+            ExportPicker.PatchSelection -> when (vm.selectionAction) {
+                ImportExportViewModel.SelectionAction.ExportAllBundles ->
+                    vm.executeSelectionExportAllBundles(uri)
+                else -> vm.executeSelectionExport(uri)
+            }
+        }
+        coroutineScope.launch {
+            job.join()
+            exportInProgress = false
+            activeExportPicker = null
+        }
+    }
     val openImportPicker = { target: ImportPicker ->
-        if (fs.hasStoragePermission()) {
-            activeImportPicker = target
+        if (useCustomFilePicker) {
+            if (fs.hasStoragePermission()) {
+                activeImportPicker = target
+            } else {
+                pendingImportPicker = target
+                permissionLauncher.launch(permissionName)
+            }
         } else {
-            pendingImportPicker = target
-            permissionLauncher.launch(permissionName)
+            pendingDocumentImportPicker = target
+            val types = when (target) {
+                ImportPicker.Keystore -> arrayOf("*/*")
+                ImportPicker.PatchBundles,
+                ImportPicker.PatchProfiles,
+                ImportPicker.ManagerSettings,
+                ImportPicker.Everything,
+                ImportPicker.PatchSelection -> arrayOf("application/json", "text/json", "*/*")
+            }
+            importDocumentLauncher.launch(types)
         }
     }
     val openExportPicker = { target: ExportPicker ->
-        if (fs.hasStoragePermission()) {
-            activeExportPicker = target
+        if (useCustomFilePicker) {
+            if (fs.hasStoragePermission()) {
+                activeExportPicker = target
+            } else {
+                pendingExportPicker = target
+                permissionLauncher.launch(permissionName)
+            }
         } else {
-            pendingExportPicker = target
-            permissionLauncher.launch(permissionName)
+            pendingDocumentExportPicker = target
+            exportDocumentLauncher.launch(target.defaultName)
         }
     }
     val runExport = { picker: ExportPicker, target: Path ->
@@ -194,16 +270,33 @@ fun ImportExportSettingsScreen(
             SettingsSearchState.clear()
         }
     }
+    LaunchedEffect(useCustomFilePicker) {
+        if (!useCustomFilePicker) {
+            pendingImportPicker = null
+            activeImportPicker = null
+            pendingExportPicker = null
+            activeExportPicker = null
+            exportFileDialogState = null
+            pendingExportConfirmation = null
+        } else {
+            pendingDocumentImportPicker = null
+            pendingDocumentExportPicker = null
+        }
+    }
 
     vm.selectionAction?.let { action ->
         when (action) {
             ImportExportViewModel.SelectionAction.ExportAllBundles -> {
-                if (activeExportPicker == null && !exportInProgress) {
+                if (
+                    activeExportPicker == null &&
+                    pendingDocumentExportPicker == null &&
+                    !exportInProgress
+                ) {
                     openExportPicker(ExportPicker.PatchSelection)
                 }
             }
             ImportExportViewModel.SelectionAction.ImportAllBundles -> {
-                if (activeImportPicker == null) {
+                if (activeImportPicker == null && pendingDocumentImportPicker == null) {
                     openImportPicker(ImportPicker.PatchSelection)
                 }
             }
@@ -335,7 +428,7 @@ fun ImportExportSettingsScreen(
                 .padding(paddingValues)
         ) {
             selectorDialog?.invoke()
-            activeImportPicker?.let { picker ->
+            if (useCustomFilePicker) activeImportPicker?.let { picker ->
                 val fileFilter = when (picker) {
                     ImportPicker.Keystore -> ::isKeystoreFile
                     ImportPicker.PatchBundles,
@@ -371,7 +464,7 @@ fun ImportExportSettingsScreen(
                     allowDirectorySelection = false
                 )
             }
-            activeExportPicker?.let { picker ->
+            if (useCustomFilePicker) activeExportPicker?.let { picker ->
                 val fileFilter = when (picker) {
                     ExportPicker.Keystore -> ::isKeystoreFile
                     ExportPicker.PatchBundles,
@@ -408,7 +501,7 @@ fun ImportExportSettingsScreen(
                     }
                 )
             }
-            exportFileDialogState?.let { state ->
+            if (useCustomFilePicker) exportFileDialogState?.let { state ->
                 ExportFileNameDialog(
                     initialName = state.fileName,
                     onDismiss = {

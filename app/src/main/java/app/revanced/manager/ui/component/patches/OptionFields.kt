@@ -3,6 +3,7 @@ package app.revanced.manager.ui.component.patches
 import android.app.Application
 import android.os.Parcelable
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
@@ -60,6 +61,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
 import app.revanced.manager.data.platform.Filesystem
+import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.patcher.patch.Option
 import app.revanced.manager.ui.component.AlertDialogExtended
 import app.revanced.manager.ui.component.AppTopBar
@@ -242,13 +244,22 @@ private object StringOptionEditor : OptionEditor<String> {
         }
 
         val fs: Filesystem = koinInject()
+        val prefs: PreferencesManager = koinInject()
+        val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
         val storageRoots = remember { fs.storageRoots() }
         val (contract, permissionName) = fs.permissionContract()
         val permissionLauncher = rememberLauncherForActivityResult(contract = contract) {
             showFileDialog = it
         }
+        val openDocumentLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.OpenDocument()
+        ) { uri ->
+            uri?.let { selectedUri ->
+                fieldValue = selectedUri.toString()
+            }
+        }
 
-        if (showFileDialog) {
+        if (showFileDialog && useCustomFilePicker) {
             PathSelectorDialog(
                 roots = storageRoots,
                 onSelect = {
@@ -257,6 +268,11 @@ private object StringOptionEditor : OptionEditor<String> {
                     fieldValue = path.toString()
                 }
             })
+        }
+        LaunchedEffect(useCustomFilePicker) {
+            if (!useCustomFilePicker) {
+                showFileDialog = false
+            }
         }
 
         AlertDialog(
@@ -303,10 +319,14 @@ private object StringOptionEditor : OptionEditor<String> {
                                 },
                                 onClick = {
                                     showDropdownMenu = false
-                                    if (fs.hasStoragePermission()) {
-                                        showFileDialog = true
+                                    if (useCustomFilePicker) {
+                                        if (fs.hasStoragePermission()) {
+                                            showFileDialog = true
+                                        } else {
+                                            permissionLauncher.launch(permissionName)
+                                        }
                                     } else {
-                                        permissionLauncher.launch(permissionName)
+                                        openDocumentLauncher.launch(arrayOf("*/*"))
                                     }
                                 }
                             )

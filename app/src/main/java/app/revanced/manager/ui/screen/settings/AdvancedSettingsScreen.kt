@@ -517,6 +517,20 @@ fun AdvancedSettingsScreen(
                         onClick = { showSearchEngineDialog = true }
                     )
                 }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.use_custom_file_picker_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.useCustomFilePicker,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.use_custom_file_picker_title,
+                        description = R.string.use_custom_file_picker_description,
+                    )
+                }
             }
 
             if (showCustomInstallerDialog) {

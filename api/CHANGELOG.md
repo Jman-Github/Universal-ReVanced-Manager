@@ -59,6 +59,7 @@
 - Added a universal fallback confirmation dialog (`Use universal patches?`) when only universal patches are compatible
 - Added a specific blocked-state message when only universal patches match but universal patches are disabled
 - Expanded safeguard dialog support to allow confirm/cancel actions
+- Added a `Use custom file picker` toggle in Settings > Advanced that when toggled off, disables the custom file picker and uses the built in android file picker (documents provider)
 
 
 # Bug fixes

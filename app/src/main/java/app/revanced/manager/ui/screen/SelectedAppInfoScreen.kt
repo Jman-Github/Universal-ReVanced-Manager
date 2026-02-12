@@ -176,6 +176,7 @@ fun SelectedAppInfoScreen(
         launcher.launch(intent)
     }
     val fs = koinInject<Filesystem>()
+    val useCustomFilePicker by vm.prefs.useCustomFilePicker.getAsState()
     val storageRoots = remember { fs.storageRoots() }
     var showStorageDialog by rememberSaveable { mutableStateOf(false) }
     val (permissionContract, permissionName) = remember { fs.permissionContract() }
@@ -185,17 +186,33 @@ fun SelectedAppInfoScreen(
                 showStorageDialog = true
             }
         }
+    val openDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            vm.handleStorageResult(uri)
+        }
+    }
     val openStoragePicker = {
-        if (fs.hasStoragePermission()) {
-            showStorageDialog = true
+        if (useCustomFilePicker) {
+            if (fs.hasStoragePermission()) {
+                showStorageDialog = true
+            } else {
+                permissionLauncher.launch(permissionName)
+            }
         } else {
-            permissionLauncher.launch(permissionName)
+            openDocumentLauncher.launch(arrayOf("*/*"))
+        }
+    }
+    LaunchedEffect(useCustomFilePicker) {
+        if (!useCustomFilePicker) {
+            showStorageDialog = false
         }
     }
     EventEffect(flow = vm.requestStorageSelection) {
         openStoragePicker()
     }
-    if (showStorageDialog) {
+    if (showStorageDialog && useCustomFilePicker) {
         PathSelectorDialog(
             roots = storageRoots,
             onSelect = { path ->

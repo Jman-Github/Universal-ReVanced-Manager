@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.text.format.Formatter
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.clickable
@@ -134,6 +136,7 @@ fun PatchBundleDiscoveryScreen(
     val showReleasePref by prefs.patchBundleDiscoveryShowRelease.getAsState()
     val showPrereleasePref by prefs.patchBundleDiscoveryShowPrerelease.getAsState()
     val latestPref by prefs.patchBundleDiscoveryLatest.getAsState()
+    val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     var showRelease by remember { mutableStateOf(showReleasePref) }
     var showPrerelease by remember { mutableStateOf(showPrereleasePref) }
     var latestSelected by remember { mutableStateOf(latestPref) }
@@ -284,10 +287,32 @@ fun PatchBundleDiscoveryScreen(
         "$groupKey|${if (prerelease) "prerelease" else "release"}"
     var activeBundleMenu by remember { mutableStateOf<BundleMenuState?>(null) }
     var activeExportBundle by remember { mutableStateOf<ExternalBundleSnapshot?>(null) }
+    var pendingDocumentExportBundle by remember { mutableStateOf<ExternalBundleSnapshot?>(null) }
     var exportFileDialogState by remember { mutableStateOf<BundleExportFileDialogState?>(null) }
     var pendingExportConfirmation by remember { mutableStateOf<PendingBundleExportConfirmation?>(null) }
+    val bundleExportDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("*/*")
+    ) { uri ->
+        val bundle = pendingDocumentExportBundle
+        pendingDocumentExportBundle = null
+        if (bundle != null && uri != null) {
+            viewModel.exportBundle(bundle, uri)
+        }
+    }
+
+    LaunchedEffect(activeExportBundle?.bundleId, useCustomFilePicker) {
+        val bundle = activeExportBundle
+        if (bundle != null && !useCustomFilePicker) {
+            pendingDocumentExportBundle = bundle
+            activeExportBundle = null
+            exportFileDialogState = null
+            pendingExportConfirmation = null
+            bundleExportDocumentLauncher.launch(defaultBundleExportName(bundle))
+        }
+    }
 
     activeExportBundle?.let { bundle ->
+        if (!useCustomFilePicker) return@let
         PathSelectorDialog(
             roots = storageRoots,
             onSelect = { path ->

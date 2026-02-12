@@ -1,9 +1,12 @@
 package app.revanced.manager.ui.screen.settings
 
 import android.graphics.Color as AndroidColor
+import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import androidx.annotation.StringRes
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -113,6 +116,7 @@ fun GeneralSettingsScreen(
     val customThemeColorHex by prefs.customThemeColor.getAsState()
     val customBackgroundImageUri by prefs.customBackgroundImageUri.getAsState()
     val customBackgroundImageOpacity by prefs.customBackgroundImageOpacity.getAsState()
+    val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val theme by prefs.theme.getAsState()
     val appLanguage by prefs.appLanguage.getAsState()
     var showLanguageDialog by rememberSaveable { mutableStateOf(false) }
@@ -175,7 +179,20 @@ fun GeneralSettingsScreen(
             ?.substringAfterLast('/')
             ?.takeIf { it.isNotBlank() }
     }
-    if (showCustomBackgroundImagePicker) {
+    val backgroundImageDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        showCustomBackgroundImagePicker = false
+        if (uri == null) return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        }
+        viewModel.setCustomBackgroundImageUri(uri.toString())
+    }
+    if (showCustomBackgroundImagePicker && useCustomFilePicker) {
         PathSelectorDialog(
             roots = storageRoots,
             onSelect = { path ->
@@ -187,6 +204,21 @@ fun GeneralSettingsScreen(
             allowDirectorySelection = false,
             fileTypeLabel = supportedBackgroundImageLabel
         )
+    }
+    LaunchedEffect(showCustomBackgroundImagePicker, useCustomFilePicker) {
+        if (showCustomBackgroundImagePicker && !useCustomFilePicker) {
+            backgroundImageDocumentLauncher.launch(
+                arrayOf(
+                    "image/jpeg",
+                    "image/jpg",
+                    "image/png",
+                    "image/gif",
+                    "image/svg+xml",
+                    "image/tiff",
+                    "image/webp"
+                )
+            )
+        }
     }
 
     if (showThemeColorPicker) {

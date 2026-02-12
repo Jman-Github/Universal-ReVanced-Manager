@@ -132,6 +132,7 @@ class PreferencesManager(
     val patchSelectionShowVersionTags = booleanPreference("patch_selection_show_version_tags", true)
     val pathSelectorFavorites = stringSetPreference("path_selector_favorites", emptySet())
     val pathSelectorLastDirectory = stringPreference("path_selector_last_directory", "")
+    val useCustomFilePicker = booleanPreference("use_custom_file_picker", true)
     val patchBundleDiscoveryShowRelease = booleanPreference("patch_bundle_discovery_show_release", true)
     val patchBundleDiscoveryShowPrerelease = booleanPreference("patch_bundle_discovery_show_prerelease", true)
     val patchBundleDiscoveryLatest = booleanPreference("patch_bundle_discovery_latest", false)
@@ -208,6 +209,7 @@ class PreferencesManager(
         val autoSaveDownloaderApks: Boolean? = null,
         val pathSelectorFavorites: Set<String>? = null,
         val pathSelectorLastDirectory: String? = null,
+        val useCustomFilePicker: Boolean? = null,
         val patchBundleDiscoveryShowRelease: Boolean? = null,
         val patchBundleDiscoveryShowPrerelease: Boolean? = null,
         val patchBundleDiscoveryLatest: Boolean? = null,
@@ -281,6 +283,7 @@ class PreferencesManager(
         autoSaveDownloaderApks = autoSaveDownloaderApks.get(),
         pathSelectorFavorites = pathSelectorFavorites.get(),
         pathSelectorLastDirectory = pathSelectorLastDirectory.get().takeIf { it.isNotBlank() },
+        useCustomFilePicker = useCustomFilePicker.get(),
         patchBundleDiscoveryShowRelease = patchBundleDiscoveryShowRelease.get(),
         patchBundleDiscoveryShowPrerelease = patchBundleDiscoveryShowPrerelease.get(),
         patchBundleDiscoveryLatest = patchBundleDiscoveryLatest.get(),
@@ -374,6 +377,7 @@ class PreferencesManager(
                 pathSelectorLastDirectory.value = target.toString()
             }
         }
+        snapshot.useCustomFilePicker?.let { useCustomFilePicker.value = it }
         snapshot.patchBundleDiscoveryShowRelease?.let { patchBundleDiscoveryShowRelease.value = it }
         snapshot.patchBundleDiscoveryShowPrerelease?.let { patchBundleDiscoveryShowPrerelease.value = it }
         snapshot.patchBundleDiscoveryLatest?.let { patchBundleDiscoveryLatest.value = it }
