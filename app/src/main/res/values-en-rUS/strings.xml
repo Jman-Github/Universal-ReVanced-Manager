@@ -602,6 +602,9 @@ Patch profiles are not affected.</string>
     <string name="tools_youtube_assets_missing_header_images">Select both light and dark header images first.</string>
     <string name="tools_youtube_assets_no_image_selected">No image selected</string>
     <string name="tools_youtube_assets_reset_transform">Reset position</string>
+    <string name="tools_youtube_assets_image_load_failed">Unable to load the selected image. Choose a supported image file.</string>
+    <string name="tools_youtube_assets_name_conflict_adaptive">Adaptive foreground and background file names must be different.</string>
+    <string name="tools_youtube_assets_name_conflict_headers">Light and dark header file names must be different.</string>
     <string name="tools_merge_split_title">Merge split APKs</string>
     <string name="tools_merge_split_description">Merge split APK archives (.xapk, .apkm, .apks, .zip) into a single installable APK.</string>
     <string name="tools_merge_split_progress_title">Split merge progress</string>

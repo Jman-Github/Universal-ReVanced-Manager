@@ -1,5 +1,6 @@
 package app.revanced.manager.ui.screen
 
+import android.content.Intent
 import android.graphics.Color as AndroidColor
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -154,7 +155,12 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
     var generationMode by rememberSaveable { mutableStateOf(AssetGenerationMode.BOTH) }
     var showGenerationModeMenu by rememberSaveable { mutableStateOf(false) }
 
-    fun applyImageSelection(target: PickerTarget?, source: String) {
+    suspend fun applyImageSelection(target: PickerTarget?, source: String): Boolean {
+        val decoded = withContext(Dispatchers.IO) { decodeBitmap(context, source) }
+        if (decoded == null) {
+            errorText = context.getString(R.string.tools_youtube_assets_image_load_failed)
+            return false
+        }
         when (target) {
             PickerTarget.ADAPTIVE -> {
                 adaptiveSource = source
@@ -170,6 +176,7 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
             }
             null -> Unit
         }
+        return true
     }
 
     val openImage = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -177,7 +184,15 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
         showPicker = false
         activePicker = null
         val source = uri?.toString() ?: return@rememberLauncherForActivityResult
-        applyImageSelection(target, source)
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        }
+        scope.launch {
+            applyImageSelection(target, source)
+        }
     }
 
     val saveDocument = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
@@ -204,9 +219,14 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
     }
 
     fun generate() {
+        generatedZip = null
         val adaptive = adaptiveBitmap
         val light = lightBitmap
         val dark = darkBitmap
+        val sanitizedForeground = sanitizeName(foregroundName)
+        val sanitizedBackground = sanitizeName(backgroundName)
+        val sanitizedLight = sanitizeName(lightName)
+        val sanitizedDark = sanitizeName(darkName)
         val missingMessage = when (generationMode) {
             AssetGenerationMode.BOTH -> if (adaptive == null || light == null || dark == null) {
                 context.getString(R.string.tools_youtube_assets_missing_images)
@@ -222,13 +242,32 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
             errorText = missingMessage
             return
         }
+        val nameConflictMessage = when (generationMode) {
+            AssetGenerationMode.BOTH -> when {
+                sanitizedForeground == sanitizedBackground -> context.getString(R.string.tools_youtube_assets_name_conflict_adaptive)
+                sanitizedLight == sanitizedDark -> context.getString(R.string.tools_youtube_assets_name_conflict_headers)
+                else -> null
+            }
+            AssetGenerationMode.ADAPTIVE_ONLY -> if (sanitizedForeground == sanitizedBackground) {
+                context.getString(R.string.tools_youtube_assets_name_conflict_adaptive)
+            } else null
+            AssetGenerationMode.HEADER_ONLY -> if (sanitizedLight == sanitizedDark) {
+                context.getString(R.string.tools_youtube_assets_name_conflict_headers)
+            } else null
+        }
+        if (nameConflictMessage != null) {
+            errorText = nameConflictMessage
+            return
+        }
         generating = true
         errorText = null
         scope.launch {
             runCatching {
                 withContext(Dispatchers.Default) {
+                    val cacheDir = context.cacheDir.resolve("youtube-assets-tools").apply { mkdirs() }
+                    cleanupOldGeneratedZips(cacheDir)
                     generateArchive(
-                        cacheDir = context.cacheDir.resolve("youtube-assets-tools").apply { mkdirs() },
+                        cacheDir = cacheDir,
                         request = AssetRequest(
                             mode = generationMode,
                             adaptiveForeground = adaptive,
@@ -241,10 +280,10 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
                             adaptiveSize = adaptiveSize,
                             lightSize = lightSize,
                             darkSize = darkSize,
-                            foregroundName = sanitizeName(foregroundName),
-                            backgroundName = sanitizeName(backgroundName),
-                            lightName = sanitizeName(lightName),
-                            darkName = sanitizeName(darkName)
+                            foregroundName = sanitizedForeground,
+                            backgroundName = sanitizedBackground,
+                            lightName = sanitizedLight,
+                            darkName = sanitizedDark
                         )
                     )
                 }
@@ -252,6 +291,7 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
                 generatedZip = it
                 context.toast(context.getString(R.string.tools_youtube_assets_generated))
             }.onFailure {
+                generatedZip = null
                 errorText = it.message ?: context.getString(R.string.tools_youtube_assets_generate_failed)
             }
             generating = false
@@ -269,9 +309,12 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
                 }
                 if (Files.isDirectory(path)) return@PathSelectorDialog
                 val source = Uri.fromFile(path.toFile()).toString()
-                applyImageSelection(activePicker, source)
+                val target = activePicker
                 showPicker = false
                 activePicker = null
+                scope.launch {
+                    applyImageSelection(target, source)
+                }
             },
             fileFilter = { it.extension.lowercase(Locale.ROOT) in imageExtensions },
             allowDirectorySelection = false,
@@ -1019,6 +1062,14 @@ private fun sanitizeName(input: String): String {
 private fun String.ensureZip(): String {
     val trimmed = trim().ifBlank { "youtube-assets.zip" }
     return if (trimmed.lowercase(Locale.ROOT).endsWith(".zip")) trimmed else "$trimmed.zip"
+}
+
+private fun cleanupOldGeneratedZips(cacheDir: File, keepCount: Int = 3) {
+    val zipFiles = cacheDir.listFiles { file ->
+        file.isFile && file.name.startsWith("youtube-assets-") && file.name.endsWith(".zip")
+    }?.sortedByDescending { it.lastModified() } ?: return
+    if (zipFiles.size <= keepCount) return
+    zipFiles.drop(keepCount).forEach { stale -> runCatching { stale.delete() } }
 }
 
 @Composable
