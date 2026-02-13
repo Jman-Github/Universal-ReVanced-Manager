@@ -1,4 +1,4 @@
-# v1.8.0-dev.10 (2026-02-13)
+# v1.8.0-dev.10 (2026-02-12)
 
 
 # Features
@@ -12,6 +12,7 @@
 # Bug fixes
 
 - Fixed the app language selector dialog layout having an extra bottom spacing/clipping near the `Cancel` button https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/172
+- Fixed issues with patch bundle importing and loading https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/138
 
 
 # v1.8.0-dev.09 (2026-02-11)
