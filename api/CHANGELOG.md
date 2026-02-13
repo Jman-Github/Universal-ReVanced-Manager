@@ -61,7 +61,8 @@
 - Expanded safeguard dialog support to allow confirm/cancel actions
 - Added a `Use custom file picker` toggle in Settings > Advanced that when toggled off, disables the custom file picker and uses the built in android file picker (documents provider)
 - Added a `Tools` tab
-- Added a `Merge split APKs` tool in the `Tools` tab that just merges the selected split APK and allows the user to save it to storage after
+- Added a `Merge split APKs` tool in the `Tools` tab that just merges the selected split APK and allows the user to save it to storage after https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/171
+- Added a `Create custom YouTube icons & headers` tool to the `Tools` tab (inspired by [Morphe Managers implementation](https://github.com/MorpheApp/morphe-manager/pull/138))
 
 
 # Bug fixes
@@ -105,7 +106,7 @@
 - Fixed Allow changing patch selection and options behavior:
   - When OFF: app-list and storage APK selections always use default selection (ignore saved custom selections)
   - When ON again: saved custom selections are restored automatically (if present)
-- Fixed the app language selector dialog layout having an extra bottom spacing/clipping near the `Cancel` button
+- Fixed the app language selector dialog layout having an extra bottom spacing/clipping near the `Cancel` button https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/172
 
 
 # v1.7.1 (2026-01-22)

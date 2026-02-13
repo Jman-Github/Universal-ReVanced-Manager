@@ -45,6 +45,7 @@ import androidx.navigation.toRoute
 import androidx.appcompat.app.AppCompatActivity
 import app.revanced.manager.ui.model.navigation.AppSelector
 import app.revanced.manager.ui.model.navigation.ComplexParameter
+import app.revanced.manager.ui.model.navigation.CreateYoutubeAssets
 import app.revanced.manager.ui.model.navigation.Dashboard
 import app.revanced.manager.ui.model.navigation.InstalledApplicationInfo
 import app.revanced.manager.ui.model.navigation.MergeSplitApk
@@ -56,6 +57,7 @@ import app.revanced.manager.ui.model.navigation.Settings
 import app.revanced.manager.ui.model.navigation.Update
 import app.revanced.manager.ui.model.SelectedApp
 import app.revanced.manager.ui.screen.AppSelectorScreen
+import app.revanced.manager.ui.screen.CreateYoutubeAssetsScreen
 import app.revanced.manager.ui.screen.DashboardScreen
 import app.revanced.manager.ui.screen.InstalledAppInfoScreen
 import app.revanced.manager.ui.screen.MergeSplitApkScreen
@@ -320,6 +322,9 @@ private fun ReVancedManager(
                 onMergeSplitClick = {
                     navController.navigate(MergeSplitApk)
                 },
+                onCreateYoutubeAssetsClick = {
+                    navController.navigate(CreateYoutubeAssets)
+                },
                 onAppClick = { packageName, action ->
                     navController.navigate(InstalledApplicationInfo(packageName, action))
                 },
@@ -442,6 +447,12 @@ private fun ReVancedManager(
             MergeSplitApkScreen(
                 onBackClick = navController::popBackStack,
                 vm = dashboardVm
+            )
+        }
+
+        composable<CreateYoutubeAssets> {
+            CreateYoutubeAssetsScreen(
+                onBackClick = navController::popBackStack
             )
         }
 

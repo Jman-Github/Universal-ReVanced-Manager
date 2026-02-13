@@ -24,6 +24,9 @@ data class PatchBundleDiscoveryPatches(val bundleId: Int)
 data object MergeSplitApk
 
 @Serializable
+data object CreateYoutubeAssets
+
+@Serializable
 data class AppSelector(val autoStorage: Boolean = false, val autoStorageReturn: Boolean = false)
 
 @Serializable

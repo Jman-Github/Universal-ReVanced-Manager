@@ -62,6 +62,7 @@ import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Search
@@ -200,6 +201,7 @@ fun DashboardScreen(
     onDownloaderPluginClick: () -> Unit,
     onBundleDiscoveryClick: () -> Unit,
     onMergeSplitClick: () -> Unit,
+    onCreateYoutubeAssetsClick: () -> Unit,
     onAppClick: (String, InstalledAppAction?) -> Unit,
     onProfileLaunch: (PatchProfileLaunchData) -> Unit,
     bundleDeepLink: BundleDeepLink? = null,
@@ -1962,7 +1964,8 @@ fun DashboardScreen(
 
                         DashboardPage.TOOLS -> {
                             ToolsTabScreen(
-                                onOpenMergeScreen = ::launchSplitMerge
+                                onOpenMergeScreen = ::launchSplitMerge,
+                                onOpenYoutubeAssetsScreen = onCreateYoutubeAssetsClick
                             )
                         }
                     }
@@ -1984,7 +1987,8 @@ private enum class SplitPermissionRequest {
 
 @Composable
 private fun ToolsTabScreen(
-    onOpenMergeScreen: () -> Unit
+    onOpenMergeScreen: () -> Unit,
+    onOpenYoutubeAssetsScreen: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -1992,6 +1996,53 @@ private fun ToolsTabScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            tonalElevation = 2.dp,
+            shadowElevation = 6.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpenYoutubeAssetsScreen)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                    modifier = Modifier.size(52.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Image,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .padding(11.dp)
+                            .size(30.dp)
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.tools_youtube_assets_title),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.tools_youtube_assets_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
         Surface(
             shape = RoundedCornerShape(20.dp),
             tonalElevation = 2.dp,

@@ -1,3 +1,19 @@
+# v1.8.0-dev.10 (2026-02-13)
+
+
+# Features
+
+- Added a `Use custom file picker` toggle in Settings > Advanced that when toggled off, disables the custom file picker and uses the built in android file picker (documents provider)
+- Added a `Tools` tab
+- Added a `Merge split APKs` tool in the `Tools` tab that just merges the selected split APK and allows the user to save it to storage after https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/171
+- Added a `Create custom YouTube icons & headers` tool to the `Tools` tab (inspired by [Morphe Managers implementation](https://github.com/MorpheApp/morphe-manager/pull/138))
+
+
+# Bug fixes
+
+- Fixed the app language selector dialog layout having an extra bottom spacing/clipping near the `Cancel` button https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/172
+
+
 # v1.8.0-dev.09 (2026-02-11)
 
 
