@@ -223,23 +223,25 @@ fun DashboardScreen(
     var profilesSearchQuery by rememberSaveable { mutableStateOf("") }
     var selectedSourceCount by rememberSaveable { mutableIntStateOf(0) }
     var selectedSourcesHasEnabled by rememberSaveable { mutableStateOf(true) }
-    val bundlesSelectable by remember { derivedStateOf { selectedSourceCount > 0 } }
-    val selectedProfileCount by remember { derivedStateOf { patchProfilesViewModel.selectedProfiles.size } }
-    val profilesSelectable = selectedProfileCount > 0
-    val availablePatches by vm.availablePatches.collectAsStateWithLifecycle(0)
-    val showNewDownloaderPluginsNotification by vm.newDownloaderPluginsAvailable.collectAsStateWithLifecycle(
-        false
-    )
     val storageVm: AppSelectorViewModel = koinViewModel()
     val fs = koinInject<Filesystem>()
     val prefs: PreferencesManager = koinInject()
     val savedAppsEnabled by prefs.enableSavedApps.getAsState()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val hideMainTabLabels by prefs.hideMainTabLabels.getAsState()
+    val showPatchProfilesTab by prefs.showPatchProfilesTab.getAsState()
+    val showToolsTab by prefs.showToolsTab.getAsState()
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
     val bundlesFabCollapsed by prefs.dashboardBundlesFabCollapsed.getAsState()
     val appsFabCollapsed by prefs.dashboardAppsFabCollapsed.getAsState()
     val progressBannerCollapsed by prefs.dashboardProgressBannerCollapsed.getAsState()
+    val bundlesSelectable by remember { derivedStateOf { selectedSourceCount > 0 } }
+    val selectedProfileCount by remember { derivedStateOf { patchProfilesViewModel.selectedProfiles.size } }
+    val profilesSelectable = showPatchProfilesTab && selectedProfileCount > 0
+    val availablePatches by vm.availablePatches.collectAsStateWithLifecycle(0)
+    val showNewDownloaderPluginsNotification by vm.newDownloaderPluginsAvailable.collectAsStateWithLifecycle(
+        false
+    )
     val storageRoots = remember { fs.storageRoots() }
     EventEffect(flow = storageVm.storageSelectionFlow) { selected ->
         onStorageSelect(selected)
@@ -282,6 +284,16 @@ fun DashboardScreen(
         initialPage = DashboardPage.DASHBOARD.ordinal,
         initialPageOffsetFraction = 0f
     ) { DashboardPage.entries.size }
+    val visibleTabs = remember(showPatchProfilesTab, showToolsTab) {
+        DashboardPage.entries.filter { page ->
+            when (page) {
+                DashboardPage.PROFILES -> showPatchProfilesTab
+                DashboardPage.TOOLS -> showToolsTab
+                else -> true
+            }
+        }
+    }
+    val currentPage = DashboardPage.entries[pagerState.currentPage]
     var highlightBundleUid by rememberSaveable { mutableStateOf<Int?>(null) }
     val appsSelectionActive = installedAppsViewModel.selectedApps.isNotEmpty()
     val selectedAppCount = installedAppsViewModel.selectedApps.size
@@ -709,18 +721,33 @@ fun DashboardScreen(
         }
     }
 
-    LaunchedEffect(pagerState.currentPage) {
-        if (pagerState.currentPage != DashboardPage.DASHBOARD.ordinal) {
+    LaunchedEffect(currentPage) {
+        if (currentPage != DashboardPage.DASHBOARD) {
             installedAppsViewModel.clearSelection()
             showAppsOrderDialog = false
         }
-        if (pagerState.currentPage != DashboardPage.BUNDLES.ordinal) {
+        if (currentPage != DashboardPage.BUNDLES) {
             vm.cancelSourceSelection()
             showBundleOrderDialog = false
         }
-        if (pagerState.currentPage != DashboardPage.PROFILES.ordinal) {
+        if (currentPage != DashboardPage.PROFILES) {
             patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
             showProfilesOrderDialog = false
+        }
+    }
+
+    LaunchedEffect(currentPage, showPatchProfilesTab, showToolsTab) {
+        when {
+            currentPage == DashboardPage.PROFILES && !showPatchProfilesTab ->
+                pagerState.scrollToPage(DashboardPage.DASHBOARD.ordinal)
+            currentPage == DashboardPage.TOOLS && !showToolsTab -> {
+                val fallback = if (showPatchProfilesTab) {
+                    DashboardPage.PROFILES.ordinal
+                } else {
+                    DashboardPage.DASHBOARD.ordinal
+                }
+                pagerState.scrollToPage(fallback)
+            }
         }
     }
 
@@ -1374,7 +1401,7 @@ fun DashboardScreen(
     Scaffold(
         topBar = {
             when {
-                appsSelectionActive && pagerState.currentPage == DashboardPage.DASHBOARD.ordinal -> {
+                appsSelectionActive && currentPage == DashboardPage.DASHBOARD -> {
                     BundleTopBar(
                         title = stringResource(R.string.selected_apps_count, selectedAppCount),
                         onBackClick = installedAppsViewModel::clearSelection,
@@ -1489,9 +1516,9 @@ fun DashboardScreen(
                                     }
                                 }
                             }
-                            val isAppsTab = pagerState.currentPage == DashboardPage.DASHBOARD.ordinal
-                            val isBundlesTab = pagerState.currentPage == DashboardPage.BUNDLES.ordinal
-                            val isProfilesTab = pagerState.currentPage == DashboardPage.PROFILES.ordinal
+                            val isAppsTab = currentPage == DashboardPage.DASHBOARD
+                            val isBundlesTab = currentPage == DashboardPage.BUNDLES
+                            val isProfilesTab = currentPage == DashboardPage.PROFILES && showPatchProfilesTab
                             val searchActive = when {
                                 isAppsTab -> appsSearchActive
                                 isBundlesTab -> bundlesSearchActive
@@ -1523,7 +1550,7 @@ fun DashboardScreen(
                                     )
                                 }
                             }
-                            if (pagerState.currentPage == DashboardPage.BUNDLES.ordinal && !bundlesSelectable) {
+                            if (currentPage == DashboardPage.BUNDLES && !bundlesSelectable) {
                                 IconButton(
                                     onClick = {
                                         installedAppsViewModel.clearSelection()
@@ -1540,7 +1567,7 @@ fun DashboardScreen(
                                     Icon(Icons.Outlined.Sort, stringResource(R.string.bundle_reorder))
                                 }
                             }
-                            if (pagerState.currentPage == DashboardPage.DASHBOARD.ordinal && !appsSelectionActive) {
+                            if (currentPage == DashboardPage.DASHBOARD && !appsSelectionActive) {
                                 IconButton(
                                     onClick = {
                                         installedAppsViewModel.clearSelection()
@@ -1556,7 +1583,7 @@ fun DashboardScreen(
                                     Icon(Icons.Outlined.Sort, stringResource(R.string.apps_reorder))
                                 }
                             }
-                            if (pagerState.currentPage == DashboardPage.PROFILES.ordinal && !profilesSelectable) {
+                            if (currentPage == DashboardPage.PROFILES && showPatchProfilesTab && !profilesSelectable) {
                                 IconButton(
                                     onClick = {
                                         patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
@@ -1582,8 +1609,8 @@ fun DashboardScreen(
             }
         },
         floatingActionButton = {
-            when (pagerState.currentPage) {
-                DashboardPage.BUNDLES.ordinal -> {
+            when (currentPage) {
+                DashboardPage.BUNDLES -> {
                     val enterExitSpec = tween<IntOffset>(durationMillis = 220, easing = FastOutSlowInEasing)
                     val sizeSpec = tween<IntSize>(durationMillis = 220, easing = FastOutSlowInEasing)
                     Row(
@@ -1641,7 +1668,7 @@ fun DashboardScreen(
                     }
                 }
 
-                DashboardPage.DASHBOARD.ordinal -> {
+                DashboardPage.DASHBOARD -> {
                     val enterExitSpec = tween<IntOffset>(durationMillis = 220, easing = FastOutSlowInEasing)
                     val sizeSpec = tween<IntSize>(durationMillis = 220, easing = FastOutSlowInEasing)
                     Row(
@@ -1697,14 +1724,16 @@ fun DashboardScreen(
     ) { paddingValues ->
         Box(Modifier.padding(paddingValues)) {
             Column {
+            val selectedTabIndex = visibleTabs.indexOf(currentPage).coerceAtLeast(0)
             TabRow(
-                selectedTabIndex = pagerState.currentPage,
+                selectedTabIndex = selectedTabIndex,
                 containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp),
                 indicator = {},
                 divider = {}
             ) {
-                DashboardPage.entries.forEachIndexed { index, page ->
-                    val selected = pagerState.currentPage == index
+                visibleTabs.forEach { page ->
+                    val pageIndex = page.ordinal
+                    val selected = pagerState.currentPage == pageIndex
                     val tabScale by animateFloatAsState(
                         targetValue = if (selected) 1.02f else 1f,
                         animationSpec = spring(
@@ -1723,7 +1752,20 @@ fun DashboardScreen(
                     )
                     HapticTab(
                         selected = selected,
-                        onClick = { composableScope.launch { pagerState.animateScrollToPage(index) } },
+                        onClick = {
+                            composableScope.launch {
+                                val profilesPage = DashboardPage.PROFILES.ordinal
+                                val crossesHiddenProfiles = !showPatchProfilesTab && (
+                                    (pagerState.currentPage < profilesPage && pageIndex > profilesPage) ||
+                                        (pagerState.currentPage > profilesPage && pageIndex < profilesPage)
+                                    )
+                                if (crossesHiddenProfiles) {
+                                    pagerState.scrollToPage(pageIndex)
+                                } else {
+                                    pagerState.animateScrollToPage(pageIndex)
+                                }
+                            }
+                        },
                         modifier = Modifier
                             .graphicsLayer {
                                 scaleX = tabScale
@@ -1788,9 +1830,9 @@ fun DashboardScreen(
                 } else null
             )
 
-            val isAppsTab = pagerState.currentPage == DashboardPage.DASHBOARD.ordinal
-            val isBundlesTab = pagerState.currentPage == DashboardPage.BUNDLES.ordinal
-            val isProfilesTab = pagerState.currentPage == DashboardPage.PROFILES.ordinal
+            val isAppsTab = currentPage == DashboardPage.DASHBOARD
+            val isBundlesTab = currentPage == DashboardPage.BUNDLES
+            val isProfilesTab = currentPage == DashboardPage.PROFILES && showPatchProfilesTab
             val searchActive = when {
                 isAppsTab -> appsSearchActive
                 isBundlesTab -> bundlesSearchActive

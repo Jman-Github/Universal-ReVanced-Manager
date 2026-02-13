@@ -95,6 +95,7 @@ import app.revanced.manager.util.toColorOrNull
 import app.revanced.manager.util.toHexString
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import java.nio.file.Path
@@ -116,6 +117,8 @@ fun GeneralSettingsScreen(
     val customThemeColorHex by prefs.customThemeColor.getAsState()
     val customBackgroundImageUri by prefs.customBackgroundImageUri.getAsState()
     val customBackgroundImageOpacity by prefs.customBackgroundImageOpacity.getAsState()
+    val showPatchProfilesTab by prefs.showPatchProfilesTab.getAsState()
+    val showToolsTab by prefs.showToolsTab.getAsState()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val theme by prefs.theme.getAsState()
     val appLanguage by prefs.appLanguage.getAsState()
@@ -437,6 +440,42 @@ fun GeneralSettingsScreen(
                         coroutineScope = viewModel.viewModelScope,
                         headline = R.string.hide_main_tab_labels,
                         description = R.string.hide_main_tab_labels_description
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.hide_patch_profiles_tab,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        value = !showPatchProfilesTab,
+                        onValueChange = { hide ->
+                            viewModel.viewModelScope.launch {
+                                prefs.showPatchProfilesTab.update(!hide)
+                            }
+                        },
+                        headline = R.string.hide_patch_profiles_tab,
+                        description = R.string.hide_patch_profiles_tab_description,
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.hide_tools_tab,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        value = !showToolsTab,
+                        onValueChange = { hide ->
+                            viewModel.viewModelScope.launch {
+                                prefs.showToolsTab.update(!hide)
+                            }
+                        },
+                        headline = R.string.hide_tools_tab,
+                        description = R.string.hide_tools_tab_description,
                     )
                 }
                 ExpressiveSettingsDivider()

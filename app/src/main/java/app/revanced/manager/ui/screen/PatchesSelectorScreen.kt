@@ -209,14 +209,18 @@ fun PatchesSelectorScreen(
     val sortSettingsModePref by viewModel.prefs.patchSelectionSortSettingsMode.getAsState()
     val searchEngineHost by viewModel.prefs.searchEngineHost.getAsState()
     val showVersionTags by viewModel.prefs.patchSelectionShowVersionTags.getAsState()
+    val showPatchProfilesTab by viewModel.prefs.showPatchProfilesTab.getAsState()
     val orderedActionKeys = remember(actionOrderPref) {
         val parsed = actionOrderPref
             .split(',')
             .mapNotNull { PatchSelectionActionKey.fromStorageId(it.trim()) }
         PatchSelectionActionKey.ensureComplete(parsed)
     }
-    val visibleActionKeys = remember(orderedActionKeys, hiddenActionsPref) {
-        orderedActionKeys.filterNot { it.storageId in hiddenActionsPref }
+    val forcedHiddenActionIds = remember(showPatchProfilesTab) {
+        if (showPatchProfilesTab) emptySet() else setOf(PatchSelectionActionKey.SAVE_PROFILE.storageId)
+    }
+    val visibleActionKeys = remember(orderedActionKeys, hiddenActionsPref, forcedHiddenActionIds) {
+        orderedActionKeys.filterNot { it.storageId in hiddenActionsPref || it.storageId in forcedHiddenActionIds }
     }
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current

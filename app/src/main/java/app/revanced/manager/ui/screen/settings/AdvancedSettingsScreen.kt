@@ -927,6 +927,7 @@ fun AdvancedSettingsScreen(
             }
     val actionOrderPref by viewModel.prefs.patchSelectionActionOrder.getAsState()
     val hiddenActionsPref by viewModel.prefs.patchSelectionHiddenActions.getAsState()
+    val showPatchProfilesTab by viewModel.prefs.showPatchProfilesTab.getAsState()
     val bundleActionOrderPref by viewModel.prefs.patchBundleActionOrder.getAsState()
     val bundleHiddenActionsPref by viewModel.prefs.patchBundleHiddenActions.getAsState()
     val savedActionOrderPref by viewModel.prefs.savedAppActionOrder.getAsState()
@@ -1313,33 +1314,56 @@ fun AdvancedSettingsScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            if (!showPatchProfilesTab) {
+                                Text(
+                                    text = stringResource(R.string.patch_selection_action_visibility_forced_note),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
 
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 PatchSelectionActionKey.values()
                                     .forEach { key ->
-                                        val visible = key.storageId !in hiddenActionsPref
+                                        val forcedHidden =
+                                            !showPatchProfilesTab && key == PatchSelectionActionKey.SAVE_PROFILE
+                                        val visible = !forcedHidden && key.storageId !in hiddenActionsPref
                                         val setVisible: (Boolean) -> Unit = { isVisible ->
-                                            val updated = hiddenActionsPref.toMutableSet()
-                                            if (isVisible) updated.remove(key.storageId) else updated.add(key.storageId)
-                                            viewModel.setPatchSelectionHiddenActions(updated)
+                                            if (!forcedHidden) {
+                                                val updated = hiddenActionsPref.toMutableSet()
+                                                if (isVisible) updated.remove(key.storageId) else updated.add(key.storageId)
+                                                viewModel.setPatchSelectionHiddenActions(updated)
+                                            }
                                         }
 
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .clip(RoundedCornerShape(12.dp))
-                                                .clickable { setVisible(!visible) }
+                                                .clickable(enabled = !forcedHidden) { setVisible(!visible) }
+                                                .alpha(if (forcedHidden) 0.7f else 1f)
                                                 .padding(horizontal = 10.dp, vertical = 6.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Text(
-                                                text = stringResource(key.labelRes),
-                                                modifier = Modifier.weight(1f),
-                                                style = MaterialTheme.typography.bodyMedium
-                                            )
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = stringResource(key.labelRes),
+                                                    style = MaterialTheme.typography.bodyMedium
+                                                )
+                                                if (forcedHidden) {
+                                                    Text(
+                                                        text = stringResource(
+                                                            R.string.patch_selection_action_forced_hidden_profiles_disabled
+                                                        ),
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            }
                                             ExpressiveSettingsSwitch(
                                                 checked = visible,
-                                                onCheckedChange = setVisible
+                                                onCheckedChange = setVisible,
+                                                enabled = !forcedHidden
                                             )
                                         }
                                     }

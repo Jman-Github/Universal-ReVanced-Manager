@@ -64,7 +64,8 @@
 - Added a `Merge split APKs` tool in the `Tools` tab that just merges the selected split APK and allows the user to save it to storage after https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/171
 - Added a `Create custom YouTube icons & headers` tool to the `Tools` tab (inspired by [Morphe Managers implementation](https://github.com/MorpheApp/morphe-manager/pull/138))
 - Made main screen tab titles wrap to prevent them from being cut  off https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/175
-
+- Added the ability to hide & disable `Patch Profiles` and its associated tab with a toggle in Settings > General
+- Added the ability to hide the `Tools` tab with a toggle in Settings > General
 
 # Bug fixes
 
