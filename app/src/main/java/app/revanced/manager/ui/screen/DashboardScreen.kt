@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.pager.HorizontalPager
@@ -1705,7 +1706,7 @@ fun DashboardScreen(
                 DashboardPage.entries.forEachIndexed { index, page ->
                     val selected = pagerState.currentPage == index
                     val tabScale by animateFloatAsState(
-                        targetValue = if (selected) 1.06f else 1f,
+                        targetValue = if (selected) 1.02f else 1f,
                         animationSpec = spring(
                             stiffness = Spring.StiffnessMediumLow,
                             dampingRatio = Spring.DampingRatioMediumBouncy
@@ -2120,6 +2121,10 @@ private fun DashboardTabLabel(
     text: String,
     selected: Boolean
 ) {
+    val compactTabLabelStyle = MaterialTheme.typography.labelSmall.copy(
+        letterSpacing = 0.sp,
+        fontSize = 10.sp
+    )
     if (selected) {
         Surface(
             shape = RoundedCornerShape(999.dp),
@@ -2127,20 +2132,23 @@ private fun DashboardTabLabel(
         ) {
             Text(
                 text = text,
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp),
+                modifier = Modifier
+                    .widthIn(max = 74.dp)
+                    .padding(horizontal = 2.dp, vertical = 2.dp),
+                style = compactTabLabelStyle,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Clip
+                maxLines = 2,
+                textAlign = TextAlign.Center,
+                overflow = TextOverflow.Ellipsis
             )
         }
     } else {
         Text(
             text = text,
-            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp),
-            maxLines = 1,
-            softWrap = false,
+            modifier = Modifier.widthIn(max = 74.dp),
+            style = compactTabLabelStyle,
+            maxLines = 2,
+            textAlign = TextAlign.Center,
             overflow = TextOverflow.Ellipsis
         )
     }
