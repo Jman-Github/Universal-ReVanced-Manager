@@ -50,9 +50,11 @@ import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.material.icons.outlined.AccountTree
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Bookmarks
+import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DeleteOutline
@@ -112,6 +114,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -151,13 +154,17 @@ import app.revanced.manager.ui.model.InstalledAppAction
 import app.revanced.manager.ui.viewmodel.InstallResult
 import app.revanced.manager.ui.viewmodel.MountWarningAction
 import app.revanced.manager.ui.viewmodel.MountWarningReason
+import app.revanced.manager.ui.viewmodel.SplitMergeState
+import app.revanced.manager.ui.viewmodel.SplitMergeStepStatus
 import app.revanced.manager.util.RequestInstallAppsContract
 import app.revanced.manager.util.BundleDeepLink
 import app.revanced.manager.util.EventEffect
 import app.revanced.manager.util.ExportNameFormatter
 import app.revanced.manager.util.PatchedAppExportData
+import app.revanced.manager.util.SPLIT_ARCHIVE_MIME_TYPES
 import app.revanced.manager.util.isAllowedApkFile
 import app.revanced.manager.util.isAllowedPatchBundleFile
+import app.revanced.manager.util.isAllowedSplitArchiveFile
 import app.revanced.manager.util.PM
 import app.revanced.manager.util.savedAppBasePackage
 import app.revanced.manager.util.toast
@@ -177,6 +184,7 @@ enum class DashboardPage(
     DASHBOARD(R.string.tab_apps, Icons.Outlined.Apps),
     BUNDLES(R.string.tab_patches, Icons.Outlined.Source),
     PROFILES(R.string.tab_profiles, Icons.Outlined.Bookmarks),
+    TOOLS(R.string.tab_tools, Icons.Outlined.Build),
 }
 
 @SuppressLint("BatteryLife")
@@ -191,6 +199,7 @@ fun DashboardScreen(
     onUpdateClick: () -> Unit,
     onDownloaderPluginClick: () -> Unit,
     onBundleDiscoveryClick: () -> Unit,
+    onMergeSplitClick: () -> Unit,
     onAppClick: (String, InstalledAppAction?) -> Unit,
     onProfileLaunch: (PatchProfileLaunchData) -> Unit,
     bundleDeepLink: BundleDeepLink? = null,
@@ -362,6 +371,58 @@ fun DashboardScreen(
         }
     }
 
+    var showSplitInputPicker by rememberSaveable { mutableStateOf(false) }
+    var pendingSplitPermissionRequest by rememberSaveable {
+        mutableStateOf<SplitPermissionRequest?>(null)
+    }
+    val splitPermissionLauncher =
+        rememberLauncherForActivityResult(permissionContract) { granted ->
+            if (granted) {
+                when (pendingSplitPermissionRequest) {
+                    SplitPermissionRequest.INPUT -> showSplitInputPicker = true
+                    null -> Unit
+                }
+            }
+            pendingSplitPermissionRequest = null
+        }
+    val splitInputDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val displayName = runCatching {
+            androidContext.contentResolver.query(
+                uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (index != -1 && cursor.moveToFirst()) cursor.getString(index) else null
+            }
+        }.getOrNull()
+        vm.clearSplitMergeState()
+        vm.startSplitMergeFromUri(
+            inputUri = uri,
+            inputDisplayName = displayName ?: uri.lastPathSegment ?: "split.apks"
+        )
+        onMergeSplitClick()
+    }
+
+    fun launchSplitMerge() {
+        vm.clearSplitMergeState()
+        if (useCustomFilePicker) {
+            if (fs.hasStoragePermission()) {
+                showSplitInputPicker = true
+            } else {
+                pendingSplitPermissionRequest = SplitPermissionRequest.INPUT
+                splitPermissionLauncher.launch(permissionName)
+            }
+        } else {
+            splitInputDocumentLauncher.launch(SPLIT_ARCHIVE_MIME_TYPES)
+        }
+    }
+
     var showSavedAppsExportPicker by rememberSaveable { mutableStateOf(false) }
     var savedAppsExportInProgress by rememberSaveable { mutableStateOf(false) }
     val (exportPermissionContract, exportPermissionName) = remember { fs.permissionContract() }
@@ -453,6 +514,8 @@ fun DashboardScreen(
             showStorageDialog = false
             showBundleFilePicker = false
             showSavedAppsExportPicker = false
+            showSplitInputPicker = false
+            pendingSplitPermissionRequest = null
             quickExportDialogState = null
             pendingQuickExportConfirmation = null
         }
@@ -818,6 +881,20 @@ fun DashboardScreen(
                 path?.let { selectedBundlePath = it.toString() }
             },
             fileFilter = ::isAllowedPatchBundleFile,
+            allowDirectorySelection = false
+        )
+    }
+    if (showSplitInputPicker && useCustomFilePicker) {
+        PathSelectorDialog(
+            roots = storageRoots,
+            onSelect = { path ->
+                showSplitInputPicker = false
+                if (path == null) return@PathSelectorDialog
+                vm.clearSplitMergeState()
+                vm.startSplitMergeFromPath(path.toString())
+                onMergeSplitClick()
+            },
+            fileFilter = ::isAllowedSplitArchiveFile,
             allowDirectorySelection = false
         )
     }
@@ -1882,6 +1959,12 @@ fun DashboardScreen(
                                 viewModel = patchProfilesViewModel
                             )
                         }
+
+                        DashboardPage.TOOLS -> {
+                            ToolsTabScreen(
+                                onOpenMergeScreen = ::launchSplitMerge
+                            )
+                        }
                     }
                 }
             )
@@ -1894,6 +1977,69 @@ private data class QuickExportDialogState(
     val directory: Path,
     val fileName: String
 )
+
+private enum class SplitPermissionRequest {
+    INPUT
+}
+
+@Composable
+private fun ToolsTabScreen(
+    onOpenMergeScreen: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            tonalElevation = 2.dp,
+            shadowElevation = 6.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpenMergeScreen)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                    modifier = Modifier.size(52.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.AccountTree,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .padding(11.dp)
+                            .size(30.dp)
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.tools_merge_split_title),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.tools_merge_split_idle_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
 
 private data class PendingQuickExportConfirmation(
     val directory: Path,
@@ -1930,8 +2076,8 @@ private fun DashboardTabLabel(
         ) {
             Text(
                 text = text,
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp),
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                 maxLines = 1,
                 softWrap = false,
@@ -1941,7 +2087,7 @@ private fun DashboardTabLabel(
     } else {
         Text(
             text = text,
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp),
             maxLines = 1,
             softWrap = false,
             overflow = TextOverflow.Ellipsis

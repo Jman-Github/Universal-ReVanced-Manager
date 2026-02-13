@@ -47,6 +47,7 @@ import app.revanced.manager.ui.model.navigation.AppSelector
 import app.revanced.manager.ui.model.navigation.ComplexParameter
 import app.revanced.manager.ui.model.navigation.Dashboard
 import app.revanced.manager.ui.model.navigation.InstalledApplicationInfo
+import app.revanced.manager.ui.model.navigation.MergeSplitApk
 import app.revanced.manager.ui.model.navigation.Patcher
 import app.revanced.manager.ui.model.navigation.PatchBundleDiscovery
 import app.revanced.manager.ui.model.navigation.PatchBundleDiscoveryPatches
@@ -57,6 +58,7 @@ import app.revanced.manager.ui.model.SelectedApp
 import app.revanced.manager.ui.screen.AppSelectorScreen
 import app.revanced.manager.ui.screen.DashboardScreen
 import app.revanced.manager.ui.screen.InstalledAppInfoScreen
+import app.revanced.manager.ui.screen.MergeSplitApkScreen
 import app.revanced.manager.ui.screen.PatcherScreen
 import app.revanced.manager.ui.screen.PatchBundleDiscoveryScreen
 import app.revanced.manager.ui.screen.PatchBundleDiscoveryPatchesScreen
@@ -77,6 +79,7 @@ import app.revanced.manager.ui.screen.settings.update.UpdatesSettingsScreen
 import app.revanced.manager.ui.theme.ReVancedManagerTheme
 import app.revanced.manager.ui.theme.Theme
 import app.revanced.manager.ui.viewmodel.MainViewModel
+import app.revanced.manager.ui.viewmodel.DashboardViewModel
 import app.revanced.manager.ui.viewmodel.SelectedAppInfoViewModel
 import app.revanced.manager.util.EventEffect
 import app.revanced.manager.util.AppForeground
@@ -253,6 +256,7 @@ private fun ReVancedManager(
     disableScreenSlideTransitions: Boolean
 ) {
     val navController = rememberNavController()
+    val dashboardVm: DashboardViewModel = koinViewModel()
     var pendingBundleDeepLink by remember { mutableStateOf<app.revanced.manager.util.BundleDeepLink?>(null) }
     val context = LocalContext.current
 
@@ -297,6 +301,7 @@ private fun ReVancedManager(
     ) {
         composable<Dashboard> {
             DashboardScreen(
+                vm = dashboardVm,
                 mainVm = vm,
                 onSettingsClick = { navController.navigate(Settings) },
                 onAppSelectorClick = {
@@ -311,6 +316,9 @@ private fun ReVancedManager(
                 },
                 onBundleDiscoveryClick = {
                     navController.navigate(PatchBundleDiscovery)
+                },
+                onMergeSplitClick = {
+                    navController.navigate(MergeSplitApk)
                 },
                 onAppClick = { packageName, action ->
                     navController.navigate(InstalledApplicationInfo(packageName, action))
@@ -427,6 +435,13 @@ private fun ReVancedManager(
             PatchBundleDiscoveryPatchesScreen(
                 bundleId = data.bundleId,
                 onBackClick = navController::popBackStack
+            )
+        }
+
+        composable<MergeSplitApk> {
+            MergeSplitApkScreen(
+                onBackClick = navController::popBackStack,
+                vm = dashboardVm
             )
         }
 

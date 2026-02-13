@@ -60,6 +60,8 @@
 - Added a specific blocked-state message when only universal patches match but universal patches are disabled
 - Expanded safeguard dialog support to allow confirm/cancel actions
 - Added a `Use custom file picker` toggle in Settings > Advanced that when toggled off, disables the custom file picker and uses the built in android file picker (documents provider)
+- Added a `Tools` tab
+- Added a `Merge split APKs` tool in the `Tools` tab that just merges the selected split APK and allows the user to save it to storage after
 
 
 # Bug fixes

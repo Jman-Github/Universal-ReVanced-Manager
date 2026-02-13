@@ -26,5 +26,25 @@ val APK_FILE_EXTENSIONS = setOf(
     "xapk",
     "zip"
 )
+val SPLIT_ARCHIVE_FILE_EXTENSIONS = setOf(
+    "apkm",
+    "apks",
+    "xapk",
+    "zip"
+)
+val SPLIT_ARCHIVE_MIME_TYPES = arrayOf(
+    "application/zip",
+    "application/x-zip-compressed",
+    "application/x-apkm",
+    "application/x-apks",
+    "application/x-xapk",
+    "application/xapk",
+    "application/vnd.android.xapk",
+    "application/vnd.android.apkm",
+    "application/apkm",
+    "application/vnd.android.apks",
+    "application/apks",
+    BIN_MIMETYPE
+)
 const val JSON_MIMETYPE = "application/json"
 const val BIN_MIMETYPE = "application/octet-stream"

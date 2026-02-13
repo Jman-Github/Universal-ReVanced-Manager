@@ -21,6 +21,9 @@ object PatchBundleDiscovery
 data class PatchBundleDiscoveryPatches(val bundleId: Int)
 
 @Serializable
+data object MergeSplitApk
+
+@Serializable
 data class AppSelector(val autoStorage: Boolean = false, val autoStorageReturn: Boolean = false)
 
 @Serializable
