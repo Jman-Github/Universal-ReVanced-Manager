@@ -280,10 +280,6 @@ fun DashboardScreen(
     var showBundleOrderDialog by rememberSaveable { mutableStateOf(false) }
     var showAppsOrderDialog by rememberSaveable { mutableStateOf(false) }
     var showProfilesOrderDialog by rememberSaveable { mutableStateOf(false) }
-    val pagerState = rememberPagerState(
-        initialPage = DashboardPage.DASHBOARD.ordinal,
-        initialPageOffsetFraction = 0f
-    ) { DashboardPage.entries.size }
     val visibleTabs = remember(showPatchProfilesTab, showToolsTab) {
         DashboardPage.entries.filter { page ->
             when (page) {
@@ -293,7 +289,23 @@ fun DashboardScreen(
             }
         }
     }
-    val currentPage = DashboardPage.entries[pagerState.currentPage]
+    val pagerState = rememberPagerState(
+        initialPage = 0,
+        initialPageOffsetFraction = 0f
+    ) { visibleTabs.size }
+    val pageIndexByType = remember(visibleTabs) {
+        visibleTabs.withIndex().associate { (index, page) -> page to index }
+    }
+    val currentPage = visibleTabs.getOrElse(pagerState.currentPage) { DashboardPage.DASHBOARD }
+    suspend fun scrollToVisiblePage(page: DashboardPage, animated: Boolean) {
+        val targetIndex = pageIndexByType[page] ?: return
+        if (pagerState.currentPage == targetIndex) return
+        if (animated) {
+            pagerState.animateScrollToPage(targetIndex)
+        } else {
+            pagerState.scrollToPage(targetIndex)
+        }
+    }
     var highlightBundleUid by rememberSaveable { mutableStateOf<Int?>(null) }
     val appsSelectionActive = installedAppsViewModel.selectedApps.isNotEmpty()
     val selectedAppCount = installedAppsViewModel.selectedApps.size
@@ -736,30 +748,16 @@ fun DashboardScreen(
         }
     }
 
-    LaunchedEffect(currentPage, showPatchProfilesTab, showToolsTab) {
-        when {
-            currentPage == DashboardPage.PROFILES && !showPatchProfilesTab ->
-                pagerState.scrollToPage(DashboardPage.DASHBOARD.ordinal)
-            currentPage == DashboardPage.TOOLS && !showToolsTab -> {
-                val fallback = if (showPatchProfilesTab) {
-                    DashboardPage.PROFILES.ordinal
-                } else {
-                    DashboardPage.DASHBOARD.ordinal
-                }
-                pagerState.scrollToPage(fallback)
-            }
-        }
-    }
-
     LaunchedEffect(bundleDeepLink) {
         val deepLink = bundleDeepLink ?: return@LaunchedEffect
         highlightBundleUid = deepLink.bundleUid
         try {
-            if (pagerState.currentPage != DashboardPage.BUNDLES.ordinal) {
+            val bundleIndex = pageIndexByType[DashboardPage.BUNDLES]
+            if (bundleIndex != null && pagerState.currentPage != bundleIndex) {
                 runCatching {
-                    pagerState.animateScrollToPage(DashboardPage.BUNDLES.ordinal)
+                    scrollToVisiblePage(DashboardPage.BUNDLES, animated = true)
                 }.onFailure {
-                    pagerState.scrollToPage(DashboardPage.BUNDLES.ordinal)
+                    scrollToVisiblePage(DashboardPage.BUNDLES, animated = false)
                 }
             }
         } finally {
@@ -1082,7 +1080,7 @@ fun DashboardScreen(
         if (availablePatches < 1) {
             androidContext.toast(androidContext.getString(R.string.no_patch_found))
             composableScope.launch {
-                pagerState.animateScrollToPage(DashboardPage.BUNDLES.ordinal)
+                scrollToVisiblePage(DashboardPage.BUNDLES, animated = true)
             }
             return
         }
@@ -1732,8 +1730,7 @@ fun DashboardScreen(
                 divider = {}
             ) {
                 visibleTabs.forEach { page ->
-                    val pageIndex = page.ordinal
-                    val selected = pagerState.currentPage == pageIndex
+                    val selected = page == currentPage
                     val tabScale by animateFloatAsState(
                         targetValue = if (selected) 1.02f else 1f,
                         animationSpec = spring(
@@ -1752,20 +1749,7 @@ fun DashboardScreen(
                     )
                     HapticTab(
                         selected = selected,
-                        onClick = {
-                            composableScope.launch {
-                                val profilesPage = DashboardPage.PROFILES.ordinal
-                                val crossesHiddenProfiles = !showPatchProfilesTab && (
-                                    (pagerState.currentPage < profilesPage && pageIndex > profilesPage) ||
-                                        (pagerState.currentPage > profilesPage && pageIndex < profilesPage)
-                                    )
-                                if (crossesHiddenProfiles) {
-                                    pagerState.scrollToPage(pageIndex)
-                                } else {
-                                    pagerState.animateScrollToPage(pageIndex)
-                                }
-                            }
-                        },
+                        onClick = { composableScope.launch { scrollToVisiblePage(page, animated = true) } },
                         modifier = Modifier
                             .graphicsLayer {
                                 scaleX = tabScale
@@ -1898,7 +1882,7 @@ fun DashboardScreen(
                 userScrollEnabled = true,
                 modifier = Modifier.fillMaxSize(),
                 pageContent = { index ->
-                    when (DashboardPage.entries[index]) {
+                    when (visibleTabs[index]) {
                         DashboardPage.DASHBOARD -> {
                             BackHandler(enabled = appsSelectionActive) {
                                 installedAppsViewModel.clearSelection()
@@ -1975,9 +1959,7 @@ fun DashboardScreen(
                         DashboardPage.BUNDLES -> {
                             BackHandler {
                                 if (bundlesSelectable) vm.cancelSourceSelection() else composableScope.launch {
-                                    pagerState.animateScrollToPage(
-                                        DashboardPage.DASHBOARD.ordinal
-                                    )
+                                    scrollToVisiblePage(DashboardPage.DASHBOARD, animated = true)
                                 }
                             }
 
