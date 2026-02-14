@@ -18,12 +18,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.pager.HorizontalPager
@@ -153,6 +156,7 @@ import app.revanced.manager.domain.repository.PatchBundleRepository.BundleUpdate
 import app.revanced.manager.domain.repository.PatchBundleRepository.BundleImportPhase
 import app.revanced.manager.ui.viewmodel.InstalledAppsViewModel
 import app.revanced.manager.data.room.apps.installed.InstalledApp
+import app.revanced.manager.network.downloader.LoadedDownloaderPlugin
 import app.revanced.manager.ui.viewmodel.AppSelectorViewModel
 import app.revanced.manager.ui.model.InstalledAppAction
 import app.revanced.manager.ui.viewmodel.InstallResult
@@ -246,6 +250,7 @@ fun DashboardScreen(
     val showNewDownloaderPluginsNotification by vm.newDownloaderPluginsAvailable.collectAsStateWithLifecycle(
         false
     )
+    val downloaderPlugins by vm.loadedDownloaderPlugins.collectAsStateWithLifecycle(emptyList())
     val storageRoots = remember { fs.storageRoots() }
     EventEffect(flow = storageVm.storageSelectionFlow) { selected ->
         onStorageSelect(selected)
@@ -275,6 +280,16 @@ fun DashboardScreen(
         } else {
             openStorageDocumentLauncher.launch(arrayOf("*/*"))
         }
+    }
+    val downloaderPluginLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult(),
+        onResult = vm::handlePluginActivityResult
+    )
+    EventEffect(flow = vm.launchActivityFlow) { intent ->
+        downloaderPluginLauncher.launch(intent)
+    }
+    EventEffect(flow = vm.openSplitMergeScreenFlow) {
+        onMergeSplitClick()
     }
     val bundleUpdateProgress by vm.bundleUpdateProgress.collectAsStateWithLifecycle(null)
     val bundleImportProgress by vm.bundleImportProgress.collectAsStateWithLifecycle(null)
@@ -403,6 +418,10 @@ fun DashboardScreen(
     }
 
     var showSplitInputPicker by rememberSaveable { mutableStateOf(false) }
+    var showSplitSourceDialog by rememberSaveable { mutableStateOf(false) }
+    var showSplitPluginDialog by rememberSaveable { mutableStateOf(false) }
+    var splitPluginPackageName by rememberSaveable { mutableStateOf("") }
+    var splitPluginVersion by rememberSaveable { mutableStateOf("") }
     var pendingSplitPermissionRequest by rememberSaveable {
         mutableStateOf<SplitPermissionRequest?>(null)
     }
@@ -440,7 +459,7 @@ fun DashboardScreen(
         onMergeSplitClick()
     }
 
-    fun launchSplitMerge() {
+    fun launchSplitMergeFromStorage() {
         vm.clearSplitMergeState()
         if (useCustomFilePicker) {
             if (fs.hasStoragePermission()) {
@@ -452,6 +471,10 @@ fun DashboardScreen(
         } else {
             splitInputDocumentLauncher.launch(SPLIT_ARCHIVE_MIME_TYPES)
         }
+    }
+
+    fun launchSplitMerge() {
+        showSplitSourceDialog = true
     }
 
     var showSavedAppsExportPicker by rememberSaveable { mutableStateOf(false) }
@@ -914,6 +937,48 @@ fun DashboardScreen(
             },
             fileFilter = ::isAllowedPatchBundleFile,
             allowDirectorySelection = false
+        )
+    }
+    if (showSplitSourceDialog) {
+        MergeSplitSourceDialog(
+            hasDownloaderPlugins = downloaderPlugins.isNotEmpty(),
+            onDismissRequest = { showSplitSourceDialog = false },
+            onSelectStorage = {
+                showSplitSourceDialog = false
+                launchSplitMergeFromStorage()
+            },
+            onSelectDownloader = {
+                showSplitSourceDialog = false
+                if (downloaderPlugins.isEmpty()) {
+                    androidContext.toast(
+                        androidContext.getString(R.string.tools_merge_split_source_plugin_unavailable_plugins)
+                    )
+                    return@MergeSplitSourceDialog
+                }
+                splitPluginPackageName = ""
+                splitPluginVersion = ""
+                showSplitPluginDialog = true
+            }
+        )
+    }
+    if (showSplitPluginDialog) {
+        MergeSplitPluginDialog(
+            plugins = downloaderPlugins,
+            activePluginPackageName = vm.activeSplitMergePluginPackageName,
+            packageName = splitPluginPackageName,
+            version = splitPluginVersion,
+            onPackageNameChange = { splitPluginPackageName = it },
+            onVersionChange = { splitPluginVersion = it },
+            onDismissRequest = { showSplitPluginDialog = false },
+            onSelectPlugin = { plugin ->
+                vm.clearSplitMergeState()
+                vm.startSplitMergeFromPlugin(
+                    plugin = plugin,
+                    packageName = splitPluginPackageName,
+                    version = splitPluginVersion.takeIf { it.isNotBlank() }
+                )
+                showSplitPluginDialog = false
+            }
         )
     }
     if (showSplitInputPicker && useCustomFilePicker) {
@@ -2223,6 +2288,190 @@ private data class PendingQuickExportConfirmation(
     val directory: Path,
     val fileName: String
 )
+
+@Composable
+private fun MergeSplitSourceDialog(
+    hasDownloaderPlugins: Boolean,
+    onDismissRequest: () -> Unit,
+    onSelectStorage: () -> Unit,
+    onSelectDownloader: () -> Unit
+) {
+    AlertDialogExtended(
+        onDismissRequest = onDismissRequest,
+        confirmButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+        title = { Text(stringResource(R.string.tools_merge_split_source_title)) },
+        textHorizontalPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 0.dp),
+        text = {
+            Column {
+                MergeSplitSourceOption(
+                    title = stringResource(R.string.tools_merge_split_source_storage_title),
+                    description = stringResource(R.string.tools_merge_split_source_storage_description),
+                    enabled = true,
+                    onClick = onSelectStorage
+                )
+                MergeSplitSourceOption(
+                    title = stringResource(R.string.tools_merge_split_source_plugin_title),
+                    description = when {
+                        hasDownloaderPlugins ->
+                            stringResource(R.string.tools_merge_split_source_plugin_description)
+                        else ->
+                            stringResource(R.string.tools_merge_split_source_plugin_unavailable_plugins)
+                    },
+                    enabled = hasDownloaderPlugins,
+                    onClick = onSelectDownloader
+                )
+            }
+        }
+    )
+}
+
+@Composable
+private fun MergeSplitSourceOption(
+    title: String,
+    description: String,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick),
+        color = Color.Transparent
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MergeSplitPluginDialog(
+    plugins: List<LoadedDownloaderPlugin>,
+    activePluginPackageName: String?,
+    packageName: String,
+    version: String,
+    onPackageNameChange: (String) -> Unit,
+    onVersionChange: (String) -> Unit,
+    onDismissRequest: () -> Unit,
+    onSelectPlugin: (LoadedDownloaderPlugin) -> Unit
+) {
+    val canSelect = activePluginPackageName == null
+    AlertDialogExtended(
+        onDismissRequest = onDismissRequest,
+        confirmButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+        title = { Text(stringResource(R.string.tools_merge_split_source_plugin_title)) },
+        textHorizontalPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 0.dp),
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = stringResource(R.string.tools_merge_split_source_plugin_hint),
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                TextField(
+                    value = packageName,
+                    onValueChange = onPackageNameChange,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp),
+                    label = { Text(stringResource(R.string.tools_merge_split_source_plugin_package_label)) },
+                    singleLine = true,
+                    enabled = canSelect
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                TextField(
+                    value = version,
+                    onValueChange = onVersionChange,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp),
+                    label = { Text(stringResource(R.string.tools_merge_split_source_plugin_version_label)) },
+                    singleLine = true,
+                    enabled = canSelect
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                if (plugins.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.tools_merge_split_source_plugin_unavailable_plugins),
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 320.dp)
+                    ) {
+                        items(
+                            items = plugins,
+                            key = { it.packageName }
+                        ) { plugin ->
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable(
+                                        enabled = canSelect
+                                    ) { onSelectPlugin(plugin) },
+                                color = Color.Transparent
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = plugin.name,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = plugin.packageName,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    if (activePluginPackageName == plugin.packageName) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(18.dp),
+                                            strokeWidth = 2.dp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    )
+}
 
 @Composable
 fun Notifications(

@@ -90,13 +90,17 @@ fun MergeSplitApkScreen(
         if (uri == null) return@rememberLauncherForActivityResult
         vm.saveLastMergedToUri(
             outputUri = uri,
-            outputDisplayName = state.outputName ?: defaultMergedOutputName(state.inputName)
+            outputDisplayName = preferredMergedOutputName(state.outputName, state.inputName)
         )
     }
 
+    val canSaveNow = state.canSaveAgain &&
+        !state.inProgress &&
+        state.saveStep.status != SplitMergeStepStatus.RUNNING
+
     fun requestSave() {
-        if (!state.canSaveAgain) return
-        val defaultName = defaultMergedOutputName(state.outputName ?: state.inputName)
+        if (!canSaveNow) return
+        val defaultName = preferredMergedOutputName(state.outputName, state.inputName)
         if (useCustomFilePicker) {
             if (fs.hasStoragePermission()) {
                 showOutputPicker = true
@@ -160,7 +164,7 @@ fun MergeSplitApkScreen(
                 }
                 outputFileDialogState = OutputFileDialogState(
                     directory = exportDirectory,
-                    fileName = defaultMergedOutputName(state.outputName ?: state.inputName)
+                    fileName = preferredMergedOutputName(state.outputName, state.inputName)
                 )
             }
         )
@@ -183,8 +187,22 @@ fun MergeSplitApkScreen(
 
     val stepsByCategory by remember(state) {
         derivedStateOf {
-            linkedMapOf(
-                StepCategory.PREPARING to listOf(
+            val preparingSteps = buildList {
+                if (state.showDownloadStep) {
+                    add(
+                        Step(
+                            id = StepId.DownloadAPK,
+                            title = context.getString(R.string.merge_split_apk_step_download),
+                            category = StepCategory.PREPARING,
+                            state = state.downloadStep.status.toUiState(),
+                            message = state.downloadStep.message,
+                            progress = state.downloadStep.progressCurrent?.let { current ->
+                                current to state.downloadStep.progressTotal
+                            }
+                        )
+                    )
+                }
+                add(
                     Step(
                         id = StepId.PrepareSplitApk,
                         title = context.getString(R.string.merge_split_apk_step_merge),
@@ -192,8 +210,18 @@ fun MergeSplitApkScreen(
                         state = state.mergeStep.status.toUiState(),
                         message = state.mergeStep.message
                     )
-                ),
+                )
+            }
+            linkedMapOf(
+                StepCategory.PREPARING to preparingSteps,
                 StepCategory.SAVING to listOf(
+                    Step(
+                        id = StepId.SignAPK,
+                        title = context.getString(R.string.merge_split_apk_step_sign),
+                        category = StepCategory.SAVING,
+                        state = state.signStep.status.toUiState(),
+                        message = state.signStep.message
+                    ),
                     Step(
                         id = StepId.WriteAPK,
                         title = context.getString(R.string.merge_split_apk_step_save),
@@ -244,7 +272,7 @@ fun MergeSplitApkScreen(
             )
         },
         floatingActionButton = {
-            AnimatedVisibility(visible = state.canSaveAgain && !state.inProgress) {
+            AnimatedVisibility(visible = canSaveNow) {
                 HapticExtendedFloatingActionButton(
                     text = { Text(stringResource(R.string.save)) },
                     icon = { Icon(Icons.Outlined.Save, null) },
@@ -346,6 +374,14 @@ private fun defaultMergedOutputName(sourceName: String?): String {
         ?: "split.apks"
     val base = fileName.substringBeforeLast('.', fileName)
     return if (base.lowercase().endsWith("-merged")) "$base.apk" else "$base-merged.apk"
+}
+
+private fun preferredMergedOutputName(outputName: String?, inputName: String?): String {
+    val explicitName = outputName
+        ?.substringAfterLast('/')
+        ?.substringAfterLast('\\')
+        ?.takeIf { it.isNotBlank() }
+    return explicitName ?: defaultMergedOutputName(inputName)
 }
 
 private fun SplitMergeStepStatus.toUiState(): State = when (this) {
