@@ -922,6 +922,8 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="installer_hint_generic">The installation failed. Try again or switch to a different installer.</string>
     <string name="installer_hint_blocked">The installation was blocked by Android. Check Play Protect or security settings.</string>
     <string name="installer_hint_conflict">Another app with this package name is already installed. Uninstall it before continuing.</string>
+    <string name="installer_hint_conflict_generic">Android reported an installation conflict. This can be caused by signature mismatch, package state, or installer restrictions.</string>
+    <string name="installer_hint_downgrade">The APK version is lower than the installed app version. Android blocks downgrades by default.</string>
     <string name="installer_hint_incompatible">The APK is not compatible with this device or Android version.</string>
     <string name="installer_hint_invalid">The APK is invalid or corrupted.</string>
     <string name="installer_hint_storage">There is not enough storage space for the installation.</string>
@@ -1125,7 +1127,7 @@ Details: %2$s</string>
     <string name="installation_failed_description">The installation failed due to an unknown reason. Try again?</string>
     <string name="installation_aborted_description">The installation was cancelled manually. Try again?</string>
     <string name="installation_blocked_description">The installation was blocked. Review your device security settings and try again.</string>
-    <string name="installation_conflict_description">The installation was prevented by an existing installation of the app. Uninstall the installed app and try again?</string>
+    <string name="installation_conflict_description">Android reported an installation conflict. Review the error details and try another installer if needed.</string>
     <string name="installation_signature_mismatch_dialog_title">Signature mismatch</string>
     <string name="installation_signature_mismatch_description">The installed app is signed differently. Uninstall the installed app and install this one?</string>
     <string name="installation_incompatible_description">The app is incompatible with this device. Use an APK that is compatible by this device and try again.</string>

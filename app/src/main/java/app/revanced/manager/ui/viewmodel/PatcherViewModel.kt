@@ -1484,8 +1484,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             if (existingPackageInfo != null) {
                 // Check if the app version is less than the installed version
                 if (pm.getVersionCode(currentPackageInfo) < pm.getVersionCode(existingPackageInfo)) {
-                    val hint = installerManager.formatFailureHint(PackageInstaller.STATUS_FAILURE_CONFLICT, null)
-                        ?: app.getString(R.string.installer_hint_conflict)
+                    val hint = app.getString(R.string.installer_hint_downgrade)
                     showInstallFailure(app.getString(R.string.install_app_fail, hint))
                     return
                 }
@@ -1543,8 +1542,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                                 showSignatureMismatchPrompt(currentPackageInfo.packageName, plan)
                                 return
                             }
-                            val hint = installerManager.formatFailureHint(failure.asCode(), failureMessage)
-                            val message = hint ?: failureMessage ?: failure.asCode().toString()
+                            val backendReason = failureMessage ?: failure.javaClass.simpleName
+                            val hint = installerManager.formatFailureHint(failure.asCode(), backendReason)
+                            val message = hint ?: backendReason ?: failure.asCode().toString()
                             showInstallFailure(app.getString(R.string.install_app_fail, message))
                         }
 
@@ -1682,8 +1682,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             val existingPackageInfo = pm.getPackageInfo(currentPackageInfo.packageName)
             if (existingPackageInfo != null) {
                 if (pm.getVersionCode(currentPackageInfo) < pm.getVersionCode(existingPackageInfo)) {
-                    val hint = installerManager.formatFailureHint(PackageInstaller.STATUS_FAILURE_CONFLICT, null)
-                        ?: app.getString(R.string.installer_hint_conflict)
+                    val hint = app.getString(R.string.installer_hint_downgrade)
                     showInstallFailure(app.getString(R.string.install_app_fail, hint))
                     return
                 }
@@ -1713,7 +1712,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             lastSuccessAtMs = System.currentTimeMillis()
         } catch (error: ShizukuInstaller.InstallerOperationException) {
             Log.e(tag, "Failed to install via Shizuku", error)
-            val message = error.message ?: app.getString(R.string.installer_hint_generic)
+            val backendReason = error.message ?: error.javaClass.simpleName
+            val message = installerManager.formatFailureHint(error.status, backendReason)
+                ?: backendReason
+                ?: app.getString(R.string.installer_hint_generic)
             packageInstallerStatus = null
             showInstallFailure(app.getString(R.string.install_app_fail, message))
         } catch (error: Exception) {

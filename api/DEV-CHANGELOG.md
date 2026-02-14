@@ -3,17 +3,13 @@
 
 # Features
 
-- Made main screen tab titles wrap to prevent them from being cut  off https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/175
+- Made main screen tab titles wrap to prevent them from being cut off https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/175
 - Added the ability to hide & disable `Patch Profiles` and its associated tab with a toggle in Settings > General
 - Added the ability to hide the `Tools` tab with a toggle in Settings > General
 - Added a `Keystore creator` tool to the `Tools` tab
 - Added a `Keystore converter` tool to the `Tools` tab
 - Made text wrap on the `Create custom YouTube icons & headers` tool screen
-
-
-# Bug fixes
-
-
+- Improved installer error diagnosis and messaging
 
 
 # v1.8.0-dev.10 (2026-02-12)
