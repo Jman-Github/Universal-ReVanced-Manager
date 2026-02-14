@@ -69,6 +69,22 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         val fingerprint: String?
     )
 
+    enum class KeystoreFormat(
+        val label: String,
+        val extension: String,
+        val keyStoreType: String
+    ) {
+        BKS("BKS", "bks", "BKS"),
+        JKS("JKS", "jks", "JKS"),
+        PKCS12("PKCS12", "p12", "PKCS12")
+    }
+
+    data class KeystoreBinary(
+        val bytes: ByteArray,
+        val alias: String,
+        val format: KeystoreFormat
+    )
+
     data class KeystoreDiagnostics(
         val keystorePath: String,
         val keystoreSize: Long,
@@ -197,6 +213,89 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
     suspend fun regenerate() = withContext(Dispatchers.Default) {
         keystoreMutex.withLock {
             regenerateLocked()
+        }
+    }
+
+    suspend fun createKeystore(
+        alias: String,
+        storePass: String,
+        keyPass: String,
+        format: KeystoreFormat
+    ): KeystoreBinary = withContext(Dispatchers.Default) {
+        keystoreMutex.withLock {
+            val normalizedAlias = alias.trim()
+            require(normalizedAlias.isNotBlank()) { "Alias is required." }
+            val normalizedStorePass = storePass.takeIf { it.isNotBlank() }
+                ?: throw IllegalArgumentException("Keystore password is required.")
+            val normalizedKeyPass = keyPass.takeIf { it.isNotBlank() } ?: normalizedStorePass
+
+            val keyCertPair = RevancedApkSigner.newPrivateKeyCertificatePair(
+                normalizedAlias,
+                eightYearsFromNow
+            )
+            val generated = RevancedApkSigner.newKeyStore(
+                setOf(
+                    RevancedApkSigner.KeyStoreEntry(
+                        normalizedAlias,
+                        normalizedKeyPass,
+                        keyCertPair
+                    )
+                )
+            )
+            val generatedBytes = ByteArrayOutputStream().use { output ->
+                generated.store(output, normalizedStorePass.toCharArray())
+                output.toByteArray()
+            }
+
+            val loaded = tryLoadKeyMaterial(
+                generatedBytes,
+                normalizedAlias,
+                normalizedStorePass,
+                normalizedKeyPass
+            ) ?: throw IllegalStateException("Failed to load generated keystore.")
+
+            val converted = buildKeystoreBytes(
+                alias = loaded.keyMaterial.alias,
+                keyPass = normalizedKeyPass,
+                storePass = normalizedStorePass,
+                privateKey = loaded.keyMaterial.privateKey,
+                certificates = loaded.keyMaterial.certificates,
+                storeType = format.keyStoreType
+            )
+            KeystoreBinary(converted, loaded.keyMaterial.alias, format)
+        }
+    }
+
+    suspend fun convertKeystore(
+        keystore: InputStream,
+        alias: String,
+        storePass: String,
+        keyPass: String,
+        format: KeystoreFormat
+    ): KeystoreBinary = withContext(Dispatchers.Default) {
+        keystoreMutex.withLock {
+            val keystoreData = withContext(Dispatchers.IO) { keystore.readBytes() }
+            val normalizedStorePass = storePass.takeIf { it.isNotBlank() }
+                ?: throw IllegalArgumentException("Keystore password is required.")
+            val normalizedKeyPass = keyPass.takeIf { it.isNotBlank() } ?: normalizedStorePass
+            val requestedAlias = alias.trim()
+
+            val loaded = tryLoadKeyMaterial(
+                keystoreData,
+                requestedAlias,
+                normalizedStorePass,
+                normalizedKeyPass
+            ) ?: throw IllegalArgumentException("Wrong keystore credentials.")
+
+            val converted = buildKeystoreBytes(
+                alias = loaded.keyMaterial.alias,
+                keyPass = normalizedKeyPass,
+                storePass = normalizedStorePass,
+                privateKey = loaded.keyMaterial.privateKey,
+                certificates = loaded.keyMaterial.certificates,
+                storeType = format.keyStoreType
+            )
+            KeystoreBinary(converted, loaded.keyMaterial.alias, format)
         }
     }
 
@@ -908,5 +1007,43 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         val output = ByteArrayOutputStream()
         pkcs12.store(output, storePass.toCharArray())
         return output.toByteArray()
+    }
+
+    private fun buildKeystoreBytes(
+        alias: String,
+        keyPass: String,
+        storePass: String,
+        privateKey: PrivateKey,
+        certificates: List<X509Certificate>,
+        storeType: String
+    ): ByteArray {
+        val outputStoreType = resolveWritableStoreType(storeType)
+        val ks = keyStoreInstance(outputStoreType, preferBc = true).apply {
+            load(null, null)
+            setKeyEntry(
+                alias,
+                privateKey,
+                keyPass.toCharArray(),
+                certificates.toTypedArray()
+            )
+        }
+        return ByteArrayOutputStream().use { output ->
+            ks.store(output, storePass.toCharArray())
+            output.toByteArray()
+        }
+    }
+
+    private fun resolveWritableStoreType(requestedType: String): String {
+        val normalized = requestedType.trim().uppercase().ifBlank { "PKCS12" }
+        val candidates = when (normalized) {
+            "BKS" -> listOf("BKS", "BKS-V1", "PKCS12")
+            "JKS" -> listOf("JKS", "PKCS12")
+            "PKCS12" -> listOf("PKCS12")
+            else -> listOf(normalized, "PKCS12")
+        }.distinct()
+
+        return candidates.firstOrNull { candidate ->
+            runCatching { keyStoreInstance(candidate, preferBc = true) }.isSuccess
+        } ?: "PKCS12"
     }
 }

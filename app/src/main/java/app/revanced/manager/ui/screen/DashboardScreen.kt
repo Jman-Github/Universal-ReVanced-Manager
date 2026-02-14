@@ -64,11 +64,13 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Sort
 import androidx.compose.material.icons.outlined.Source
+import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material.icons.outlined.ChevronRight
@@ -203,6 +205,8 @@ fun DashboardScreen(
     onBundleDiscoveryClick: () -> Unit,
     onMergeSplitClick: () -> Unit,
     onCreateYoutubeAssetsClick: () -> Unit,
+    onOpenKeystoreCreatorClick: () -> Unit,
+    onOpenKeystoreConverterClick: () -> Unit,
     onAppClick: (String, InstalledAppAction?) -> Unit,
     onProfileLaunch: (PatchProfileLaunchData) -> Unit,
     bundleDeepLink: BundleDeepLink? = null,
@@ -1990,7 +1994,9 @@ fun DashboardScreen(
                         DashboardPage.TOOLS -> {
                             ToolsTabScreen(
                                 onOpenMergeScreen = ::launchSplitMerge,
-                                onOpenYoutubeAssetsScreen = onCreateYoutubeAssetsClick
+                                onOpenYoutubeAssetsScreen = onCreateYoutubeAssetsClick,
+                                onOpenKeystoreCreatorScreen = onOpenKeystoreCreatorClick,
+                                onOpenKeystoreConverterScreen = onOpenKeystoreConverterClick
                             )
                         }
                     }
@@ -2013,7 +2019,9 @@ private enum class SplitPermissionRequest {
 @Composable
 private fun ToolsTabScreen(
     onOpenMergeScreen: () -> Unit,
-    onOpenYoutubeAssetsScreen: () -> Unit
+    onOpenYoutubeAssetsScreen: () -> Unit,
+    onOpenKeystoreCreatorScreen: () -> Unit,
+    onOpenKeystoreConverterScreen: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -2108,6 +2116,100 @@ private fun ToolsTabScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = stringResource(R.string.tools_merge_split_idle_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            tonalElevation = 2.dp,
+            shadowElevation = 6.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpenKeystoreCreatorScreen)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                    modifier = Modifier.size(52.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Key,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .padding(11.dp)
+                            .size(30.dp)
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.tools_keystore_creator_title),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.tools_keystore_creator_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            tonalElevation = 2.dp,
+            shadowElevation = 6.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpenKeystoreConverterScreen)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                    modifier = Modifier.size(52.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.SwapVert,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .padding(11.dp)
+                            .size(30.dp)
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.tools_keystore_converter_title),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.tools_keystore_converter_description),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

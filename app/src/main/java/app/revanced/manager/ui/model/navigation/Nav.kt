@@ -27,6 +27,12 @@ data object MergeSplitApk
 data object CreateYoutubeAssets
 
 @Serializable
+data object KeystoreCreator
+
+@Serializable
+data object KeystoreConverter
+
+@Serializable
 data class AppSelector(val autoStorage: Boolean = false, val autoStorageReturn: Boolean = false)
 
 @Serializable

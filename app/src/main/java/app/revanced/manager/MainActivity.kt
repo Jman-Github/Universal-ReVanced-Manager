@@ -47,6 +47,8 @@ import app.revanced.manager.ui.model.navigation.AppSelector
 import app.revanced.manager.ui.model.navigation.ComplexParameter
 import app.revanced.manager.ui.model.navigation.CreateYoutubeAssets
 import app.revanced.manager.ui.model.navigation.Dashboard
+import app.revanced.manager.ui.model.navigation.KeystoreConverter
+import app.revanced.manager.ui.model.navigation.KeystoreCreator
 import app.revanced.manager.ui.model.navigation.InstalledApplicationInfo
 import app.revanced.manager.ui.model.navigation.MergeSplitApk
 import app.revanced.manager.ui.model.navigation.Patcher
@@ -60,6 +62,8 @@ import app.revanced.manager.ui.screen.AppSelectorScreen
 import app.revanced.manager.ui.screen.CreateYoutubeAssetsScreen
 import app.revanced.manager.ui.screen.DashboardScreen
 import app.revanced.manager.ui.screen.InstalledAppInfoScreen
+import app.revanced.manager.ui.screen.KeystoreConverterScreen
+import app.revanced.manager.ui.screen.KeystoreCreatorScreen
 import app.revanced.manager.ui.screen.MergeSplitApkScreen
 import app.revanced.manager.ui.screen.PatcherScreen
 import app.revanced.manager.ui.screen.PatchBundleDiscoveryScreen
@@ -325,6 +329,12 @@ private fun ReVancedManager(
                 onCreateYoutubeAssetsClick = {
                     navController.navigate(CreateYoutubeAssets)
                 },
+                onOpenKeystoreCreatorClick = {
+                    navController.navigate(KeystoreCreator)
+                },
+                onOpenKeystoreConverterClick = {
+                    navController.navigate(KeystoreConverter)
+                },
                 onAppClick = { packageName, action ->
                     navController.navigate(InstalledApplicationInfo(packageName, action))
                 },
@@ -452,6 +462,18 @@ private fun ReVancedManager(
 
         composable<CreateYoutubeAssets> {
             CreateYoutubeAssetsScreen(
+                onBackClick = navController::popBackStack
+            )
+        }
+
+        composable<KeystoreCreator> {
+            KeystoreCreatorScreen(
+                onBackClick = navController::popBackStack
+            )
+        }
+
+        composable<KeystoreConverter> {
+            KeystoreConverterScreen(
                 onBackClick = navController::popBackStack
             )
         }
