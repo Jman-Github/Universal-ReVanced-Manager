@@ -10,6 +10,7 @@ import android.os.Looper
 import app.universal.revanced.manager.morphe.runtime.BuildConfig
 import app.revanced.manager.patcher.ProgressEvent
 import app.revanced.manager.patcher.StepId
+import app.revanced.manager.patcher.aapt.AaptSelector
 import app.revanced.manager.patcher.logger.LogLevel
 import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.morphe.MorphePatchBundleLoader
@@ -30,7 +31,6 @@ import java.util.logging.Handler
 import java.util.logging.Level
 import java.util.logging.LogRecord
 import java.util.logging.Logger as JavaLogger
-import java.util.zip.ZipFile
 import kotlin.system.exitProcess
 
 /**
@@ -91,8 +91,6 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
             }
 
             logger.info("Memory limit: ${Runtime.getRuntime().maxMemory() / (1024 * 1024)}MB")
-            logAapt2Info(parameters.aaptPath, logger)
-            ensureFrameworkApkHealthy(parameters.frameworkDir, logger)
             val aaptLogs = AaptLogCapture(onLine = ::handleDexCompileLine).apply { start() }
             val stdioCapture = StdIoCapture(onLine = ::handleDexCompileLine).apply { start() }
 
@@ -156,11 +154,24 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
                 }
 
                 try {
+                    val relatedBundleArchives = parameters.configurations
+                        .asSequence()
+                        .filter { it.patches.isNotEmpty() }
+                        .map { File(it.bundlePath) }
+                        .toList()
+                    val selectedAaptPath = AaptSelector.select(
+                        parameters.aaptPath,
+                        parameters.aaptFallbackPath,
+                        preparation.file,
+                        logger,
+                        additionalArchives = relatedBundleArchives
+                    )
+                    logAapt2Info(selectedAaptPath, logger)
                     val session = runStep(StepId.ReadAPK, ::onEvent) {
                         MorpheSession(
                             cacheDir = parameters.cacheDir,
                             frameworkDir = parameters.frameworkDir,
-                            aaptPath = parameters.aaptPath,
+                            aaptPath = selectedAaptPath,
                             logger = logger,
                             input = preparation.file,
                             onEvent = ::onEvent,
@@ -383,28 +394,6 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
         }.getOrNull()
         if (!version.isNullOrBlank()) {
             logger.info("AAPT2 version: $version")
-        }
-    }
-
-    private fun ensureFrameworkApkHealthy(frameworkDir: String, logger: Logger) {
-        val framework = File(frameworkDir).resolve("1.apk")
-        if (!framework.exists()) {
-            logger.warn("Framework APK missing at ${framework.absolutePath}")
-            return
-        }
-        if (!framework.isFile || framework.length() <= 0L) {
-            logger.warn("Framework APK invalid. Deleting ${framework.absolutePath}")
-            framework.delete()
-            return
-        }
-        val valid = runCatching {
-            ZipFile(framework).use { zip ->
-                zip.getEntry("resources.arsc") != null || zip.getEntry("AndroidManifest.xml") != null
-            }
-        }.getOrDefault(false)
-        if (!valid) {
-            logger.warn("Framework APK corrupt. Deleting ${framework.absolutePath}")
-            framework.delete()
         }
     }
 

@@ -74,6 +74,8 @@ import app.revanced.manager.ui.component.AppliedPatchBundleUi
 import app.revanced.manager.ui.component.AppliedPatchesDialog
 import app.revanced.manager.ui.component.ColumnWithScrollbar
 import app.revanced.manager.ui.component.LoadingIndicator
+import app.revanced.manager.ui.component.NonSuggestedVersionDialog
+import app.revanced.manager.ui.component.UniversalFallbackVersionDialog
 import app.revanced.manager.ui.component.NotificationCard
 import app.revanced.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.revanced.manager.ui.component.SafeguardHintCard
@@ -125,6 +127,8 @@ fun SelectedAppInfoScreen(
     val allowIncompatiblePatches by vm.prefs.disablePatchVersionCompatCheck.getAsState()
     val suggestedVersionSafeguard by vm.prefs.suggestedVersionSafeguard.getAsState()
     val showPatchSummaryDialogSetting by vm.prefs.showPatchSelectionSummary.getAsState()
+    val customBackgroundImageUri by vm.prefs.customBackgroundImageUri.getAsState()
+    val useCardStylePageItems = customBackgroundImageUri.isNotBlank()
     val bundleRecommendationsEnabled = allowIncompatiblePatches && !suggestedVersionSafeguard
     val patches = vm.getPatches(bundles, allowIncompatiblePatches)
     val selectedPatchCount = patches.values.sumOf { it.size }
@@ -172,6 +176,7 @@ fun SelectedAppInfoScreen(
         launcher.launch(intent)
     }
     val fs = koinInject<Filesystem>()
+    val useCustomFilePicker by vm.prefs.useCustomFilePicker.getAsState()
     val storageRoots = remember { fs.storageRoots() }
     var showStorageDialog by rememberSaveable { mutableStateOf(false) }
     val (permissionContract, permissionName) = remember { fs.permissionContract() }
@@ -181,17 +186,33 @@ fun SelectedAppInfoScreen(
                 showStorageDialog = true
             }
         }
+    val openDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            vm.handleStorageResult(uri)
+        }
+    }
     val openStoragePicker = {
-        if (fs.hasStoragePermission()) {
-            showStorageDialog = true
+        if (useCustomFilePicker) {
+            if (fs.hasStoragePermission()) {
+                showStorageDialog = true
+            } else {
+                permissionLauncher.launch(permissionName)
+            }
         } else {
-            permissionLauncher.launch(permissionName)
+            openDocumentLauncher.launch(arrayOf("*/*"))
+        }
+    }
+    LaunchedEffect(useCustomFilePicker) {
+        if (!useCustomFilePicker) {
+            showStorageDialog = false
         }
     }
     EventEffect(flow = vm.requestStorageSelection) {
         openStoragePicker()
     }
-    if (showStorageDialog) {
+    if (showStorageDialog && useCustomFilePicker) {
         PathSelectorDialog(
             roots = storageRoots,
             onSelect = { path ->
@@ -268,6 +289,23 @@ fun SelectedAppInfoScreen(
     val error by vm.errorFlow.collectAsStateWithLifecycle(null)
     val profileLaunchState by vm.profileLaunchState.collectAsStateWithLifecycle(null)
 
+    vm.universalFallbackDialogSubject?.let {
+        UniversalFallbackVersionDialog(
+            onContinue = vm::continueWithUniversalFallbackSelection,
+            onDismiss = vm::dismissUniversalFallbackDialog
+        )
+    }
+
+    vm.nonSuggestedVersionDialogSubject?.let { local ->
+        NonSuggestedVersionDialog(
+            suggestedVersion = vm.nonSuggestedVersionDialogSuggestedVersion
+                ?.takeUnless { it.isBlank() }
+                ?: local.version,
+            requiresUniversalPatchesEnabled = vm.nonSuggestedVersionDialogRequiresUniversalEnabled,
+            onDismiss = vm::dismissNonSuggestedVersionDialog
+        )
+    }
+
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
 
     LaunchedEffect(profileLaunchState, vm.selectedApp) {
@@ -312,9 +350,13 @@ fun SelectedAppInfoScreen(
 
         if (vm.showSourceSelector) {
             val requiredVersion by vm.requiredVersion.collectAsStateWithLifecycle(null)
+            val selectionRecommendedVersion by vm.selectionRecommendedVersionFlow.collectAsStateWithLifecycle(null)
             val effectiveVersion =
                 if (bundleTargetsAllVersions && selectedBundleUid != null) null
-                else preferredBundleVersion ?: vm.desiredVersion
+                else selectedBundleOverride?.takeUnless { it.isBlank() }
+                    ?: preferredBundleVersion
+                    ?: selectionRecommendedVersion
+                    ?: vm.desiredVersion
 
             AppSourceSelectorDialog(
                 plugins = plugins,
@@ -345,7 +387,16 @@ fun SelectedAppInfoScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            AppInfo(vm.selectedAppInfo, placeholderLabel = packageName) {
+            AppInfo(
+                appInfo = vm.selectedAppInfo,
+                placeholderLabel = packageName,
+                placeholderMetaLines = 2
+            ) {
+                Text(
+                    packageName,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                )
                 val versionLabel = when {
                     bundleTargetsAllVersions && selectedBundleUid != null ->
                         stringResource(R.string.bundle_version_all_versions)
@@ -365,6 +416,7 @@ fun SelectedAppInfoScreen(
                     R.string.patch_selector_item_description,
                     selectedPatchCount
                 ),
+                useCardStyle = useCardStylePageItems,
                 onClick = {
                     composableScope.launch {
                         val optionsSnapshot = vm.awaitOptions()
@@ -409,6 +461,7 @@ fun SelectedAppInfoScreen(
                 PageItem(
                     R.string.bundle_version_item,
                     bundleSummary,
+                    useCardStyle = useCardStylePageItems,
                     onClick = { showBundleRecommendationDialog = true }
                 )
             }
@@ -429,6 +482,7 @@ fun SelectedAppInfoScreen(
                         else
                             stringResource(R.string.apk_source_downloaded)
                 },
+                useCardStyle = useCardStylePageItems,
                 onClick = {
                     vm.showSourceSelector()
                 }
@@ -878,29 +932,66 @@ private fun SelectionBadge(
 }
 
 @Composable
-private fun PageItem(@StringRes title: Int, description: String, onClick: () -> Unit) {
-    ListItem(
-        modifier = Modifier
-            .clickable(onClick = onClick)
-            .padding(start = 8.dp),
-        headlineContent = {
-            Text(
-                stringResource(title),
-                color = MaterialTheme.colorScheme.onSurface,
-                style = MaterialTheme.typography.titleLarge
+private fun PageItem(
+    @StringRes title: Int,
+    description: String,
+    useCardStyle: Boolean = false,
+    onClick: () -> Unit
+) {
+    if (useCardStyle) {
+        Surface(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.68f),
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp
+        ) {
+            ListItem(
+                modifier = Modifier.clickable(onClick = onClick),
+                headlineContent = {
+                    Text(
+                        stringResource(title),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                },
+                supportingContent = {
+                    Text(
+                        description,
+                        color = MaterialTheme.colorScheme.outline,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                },
+                trailingContent = {
+                    Icon(Icons.AutoMirrored.Outlined.ArrowRight, null)
+                },
+                colors = transparentListItemColors
             )
-        },
-        supportingContent = {
-            Text(
-                description,
-                color = MaterialTheme.colorScheme.outline,
-                style = MaterialTheme.typography.bodyMedium
-            )
-        },
-        trailingContent = {
-            Icon(Icons.AutoMirrored.Outlined.ArrowRight, null)
         }
-    )
+    } else {
+        ListItem(
+            modifier = Modifier
+                .clickable(onClick = onClick)
+                .padding(start = 8.dp),
+            headlineContent = {
+                Text(
+                    stringResource(title),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.titleLarge
+                )
+            },
+            supportingContent = {
+                Text(
+                    description,
+                    color = MaterialTheme.colorScheme.outline,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            trailingContent = {
+                Icon(Icons.AutoMirrored.Outlined.ArrowRight, null)
+            }
+        )
+    }
 }
 
 @Composable

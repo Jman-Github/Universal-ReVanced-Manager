@@ -3,6 +3,7 @@ package app.revanced.manager.ui.component.patches
 import android.app.Application
 import android.os.Parcelable
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
@@ -11,6 +12,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -59,6 +61,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
 import app.revanced.manager.data.platform.Filesystem
+import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.patcher.patch.Option
 import app.revanced.manager.ui.component.AlertDialogExtended
 import app.revanced.manager.ui.component.AppTopBar
@@ -241,13 +244,22 @@ private object StringOptionEditor : OptionEditor<String> {
         }
 
         val fs: Filesystem = koinInject()
+        val prefs: PreferencesManager = koinInject()
+        val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
         val storageRoots = remember { fs.storageRoots() }
         val (contract, permissionName) = fs.permissionContract()
         val permissionLauncher = rememberLauncherForActivityResult(contract = contract) {
             showFileDialog = it
         }
+        val openDocumentLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.OpenDocument()
+        ) { uri ->
+            uri?.let { selectedUri ->
+                fieldValue = selectedUri.toString()
+            }
+        }
 
-        if (showFileDialog) {
+        if (showFileDialog && useCustomFilePicker) {
             PathSelectorDialog(
                 roots = storageRoots,
                 onSelect = {
@@ -256,6 +268,11 @@ private object StringOptionEditor : OptionEditor<String> {
                     fieldValue = path.toString()
                 }
             })
+        }
+        LaunchedEffect(useCustomFilePicker) {
+            if (!useCustomFilePicker) {
+                showFileDialog = false
+            }
         }
 
         AlertDialog(
@@ -302,10 +319,14 @@ private object StringOptionEditor : OptionEditor<String> {
                                 },
                                 onClick = {
                                     showDropdownMenu = false
-                                    if (fs.hasStoragePermission()) {
-                                        showFileDialog = true
+                                    if (useCustomFilePicker) {
+                                        if (fs.hasStoragePermission()) {
+                                            showFileDialog = true
+                                        } else {
+                                            permissionLauncher.launch(permissionName)
+                                        }
                                     } else {
-                                        permissionLauncher.launch(permissionName)
+                                        openDocumentLauncher.launch(arrayOf("*/*"))
                                     }
                                 }
                             )
@@ -437,6 +458,15 @@ private class PresetOptionEditor<T : Any>(private val innerEditor: OptionEditor<
             var hidePresetsDialog by rememberSaveable {
                 mutableStateOf(false)
             }
+            var openCustomDialog by rememberSaveable {
+                mutableStateOf(false)
+            }
+            LaunchedEffect(openCustomDialog) {
+                if (openCustomDialog) {
+                    openCustomDialog = false
+                    this@inner.openDialog()
+                }
+            }
             if (hidePresetsDialog) return@inner
 
             // TODO: add a divider for scrollable content
@@ -451,9 +481,10 @@ private class PresetOptionEditor<T : Any>(private val innerEditor: OptionEditor<
                                 )
                             )
                             else {
-                                this@inner.openDialog()
                                 // Hide the presets dialog so it doesn't show up in the background.
                                 hidePresetsDialog = true
+                                // Open the custom dialog on the next frame to avoid flicker.
+                                openCustomDialog = true
                             }
                         }
                     ) {
@@ -566,21 +597,24 @@ private class ListOptionEditor<T : Serializable>(private val elementEditor: Opti
             scope.submitDialog(items.mapNotNull { it.value })
         }
 
-        FullscreenDialog(
-            onDismissRequest = back,
-        ) {
-            Scaffold(
-                topBar = {
-                    AppTopBar(
-                        title = if (deleteMode) pluralStringResource(
-                            R.plurals.selected_count,
+            FullscreenDialog(
+                onDismissRequest = back,
+            ) {
+                Scaffold(
+                    modifier = Modifier.fillMaxSize(),
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    topBar = {
+                        AppTopBar(
+                            title = if (deleteMode) pluralStringResource(
+                                R.plurals.selected_count,
                             deletionTargets.size,
                             deletionTargets.size
-                        ) else scope.option.title,
-                        onBackClick = back,
-                        backIcon = {
-                            if (deleteMode) {
-                                return@AppTopBar Icon(
+                            ) else scope.option.title,
+                            onBackClick = back,
+                            applyContainerColor = true,
+                            backIcon = {
+                                if (deleteMode) {
+                                    return@AppTopBar Icon(
                                     Icons.Filled.Close,
                                     stringResource(R.string.cancel)
                                 )

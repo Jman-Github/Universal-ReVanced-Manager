@@ -56,8 +56,9 @@ data class PatchBundle(val patchesJar: String) : Parcelable {
     object Loader {
         private fun loadBundle(bundle: PatchBundle): Collection<Patch<*>> {
             validateDexEntries(bundle.patchesJar)
+            val optimizedDexDirectory = optimizedDexDirectory(bundle.patchesJar)
             val patchFiles = runCatching {
-                loadPatchesFromDex(setOf(File(bundle.patchesJar))).byPatchesFile
+                loadPatchesFromDex(setOf(File(bundle.patchesJar)), optimizedDexDirectory).byPatchesFile
             }.getOrElse { error ->
                 throw IllegalStateException("Patch bundle is corrupted or incomplete", error)
             }
@@ -99,5 +100,9 @@ data class PatchBundle(val patchesJar: String) : Parcelable {
                 }
             }
         }
+
+        private fun optimizedDexDirectory(bundlePath: String): File? = runCatching {
+            File(bundlePath).absoluteFile.parentFile?.resolve("oat")?.apply { mkdirs() }
+        }.getOrNull()
     }
 }

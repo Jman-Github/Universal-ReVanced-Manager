@@ -15,6 +15,8 @@ import kotlin.io.path.isDirectory
 import kotlin.io.path.isReadable
 
 import app.revanced.manager.ui.model.PatchSelectionActionKey
+import app.revanced.manager.ui.model.PatchBundleActionKey
+import app.revanced.manager.ui.model.SavedAppActionKey
 
 enum class SearchForUpdatesBackgroundInterval(val displayName: Int, val value: Long) {
     NEVER(R.string.never, 0),
@@ -29,6 +31,10 @@ class PreferencesManager(
     companion object {
         private val PATCH_ACTION_ORDER_DEFAULT =
             PatchSelectionActionKey.DefaultOrder.joinToString(",") { it.storageId }
+        private val PATCH_BUNDLE_ACTION_ORDER_DEFAULT =
+            PatchBundleActionKey.DefaultOrder.joinToString(",") { it.storageId }
+        private val SAVED_APP_ACTION_ORDER_DEFAULT =
+            SavedAppActionKey.DefaultOrder.joinToString(",") { it.storageId }
     }
     val dynamicColor = booleanPreference("dynamic_color", false)
     val pureBlackTheme = booleanPreference("pure_black_theme", false)
@@ -37,6 +43,11 @@ class PreferencesManager(
     val themePresetSelectionName = stringPreference("theme_preset_selection_name", "DEFAULT")
     val customAccentColor = stringPreference("custom_accent_color", "")
     val customThemeColor = stringPreference("custom_theme_color", "")
+    val customBackgroundImageUri = stringPreference("custom_background_image_uri", "")
+    val customBackgroundImageOpacity = floatPreference("custom_background_image_opacity", 0.65f)
+    val hideMainTabLabels = booleanPreference("hide_main_tab_labels", false)
+    val showPatchProfilesTab = booleanPreference("show_patch_profiles_tab", true)
+    val showToolsTab = booleanPreference("show_tools_tab", true)
     val theme = enumPreference("theme", Theme.SYSTEM)
     val appLanguage = stringPreference("app_language", "system")
 
@@ -64,9 +75,13 @@ class PreferencesManager(
     val officialBundleSortOrder = intPreference("official_bundle_sort_order", -1)
     val officialBundleCustomDisplayName = stringPreference("official_bundle_custom_display_name", "")
     val patchBundleCacheVersionCode = intPreference("patch_bundle_cache_version_code", -1)
+    val dashboardBundlesFabCollapsed = booleanPreference("dashboard_bundles_fab_collapsed", false)
+    val dashboardAppsFabCollapsed = booleanPreference("dashboard_apps_fab_collapsed", false)
+    val dashboardProgressBannerCollapsed = booleanPreference("dashboard_progress_banner_collapsed", false)
     val autoCollapsePatcherSteps = booleanPreference("auto_collapse_patcher_steps", false)
     val autoExpandRunningSteps = booleanPreference("auto_expand_running_steps", true)
     val enableSavedApps = booleanPreference("enable_saved_apps", true)
+    val disableSavedAppOverwrite = booleanPreference("disable_saved_app_overwrite", false)
 
     val allowMeteredUpdates = booleanPreference("allow_metered_updates", true)
     val installerPrimary = stringPreference("installer_primary", InstallerPreferenceTokens.INTERNAL)
@@ -106,13 +121,23 @@ class PreferencesManager(
     val patchSelectionSortSettingsMode = stringPreference("patch_selection_sort_settings_mode", "None")
     val patchSelectionActionOrder =
         stringPreference("patch_selection_action_order", PATCH_ACTION_ORDER_DEFAULT)
+    val patchBundleActionOrder =
+        stringPreference("patch_bundle_action_order", PATCH_BUNDLE_ACTION_ORDER_DEFAULT)
+    val patchBundleHiddenActions =
+        stringSetPreference("patch_bundle_hidden_actions", emptySet())
+    val savedAppActionOrder =
+        stringPreference("saved_app_action_order", SAVED_APP_ACTION_ORDER_DEFAULT)
+    val savedAppHiddenActions =
+        stringSetPreference("saved_app_hidden_actions", emptySet())
     val patchSelectionHiddenActions =
         stringSetPreference("patch_selection_hidden_actions", emptySet())
     val patchSelectionShowVersionTags = booleanPreference("patch_selection_show_version_tags", true)
     val pathSelectorFavorites = stringSetPreference("path_selector_favorites", emptySet())
     val pathSelectorLastDirectory = stringPreference("path_selector_last_directory", "")
+    val useCustomFilePicker = booleanPreference("use_custom_file_picker", true)
     val patchBundleDiscoveryShowRelease = booleanPreference("patch_bundle_discovery_show_release", true)
     val patchBundleDiscoveryShowPrerelease = booleanPreference("patch_bundle_discovery_show_prerelease", true)
+    val patchBundleDiscoveryLatest = booleanPreference("patch_bundle_discovery_latest", false)
 
     val acknowledgedDownloaderPlugins = stringSetPreference("acknowledged_downloader_plugins", emptySet())
     val autoSaveDownloaderApks = booleanPreference("auto_save_downloader_apks", true)
@@ -125,6 +150,11 @@ class PreferencesManager(
         val pureBlackOnSystemDark: Boolean? = null,
         val customAccentColor: String? = null,
         val customThemeColor: String? = null,
+        val customBackgroundImageUri: String? = null,
+        val customBackgroundImageOpacity: Float? = null,
+        val hideMainTabLabels: Boolean? = null,
+        val showPatchProfilesTab: Boolean? = null,
+        val showToolsTab: Boolean? = null,
         val themePresetSelectionName: String? = null,
         val themePresetSelectionEnabled: Boolean? = null,
         val stripUnusedNativeLibs: Boolean? = null,
@@ -140,9 +170,13 @@ class PreferencesManager(
         val autoCollapsePatcherSteps: Boolean? = null,
         val autoExpandRunningSteps: Boolean? = null,
         val enableSavedApps: Boolean? = null,
+        val disableSavedAppOverwrite: Boolean? = null,
         val patchedAppExportFormat: String? = null,
         val officialBundleRemoved: Boolean? = null,
         val officialBundleCustomDisplayName: String? = null,
+        val dashboardBundlesFabCollapsed: Boolean? = null,
+        val dashboardAppsFabCollapsed: Boolean? = null,
+        val dashboardProgressBannerCollapsed: Boolean? = null,
         val allowMeteredUpdates: Boolean? = null,
         val installerPrimary: String? = null,
         val installerFallback: String? = null,
@@ -171,12 +205,18 @@ class PreferencesManager(
         val patchSelectionActionOrder: String? = null,
         val patchSelectionHiddenActions: Set<String>? = null,
         val patchSelectionShowVersionTags: Boolean? = null,
+        val patchBundleActionOrder: String? = null,
+        val patchBundleHiddenActions: Set<String>? = null,
+        val savedAppActionOrder: String? = null,
+        val savedAppHiddenActions: Set<String>? = null,
         val acknowledgedDownloaderPlugins: Set<String>? = null,
         val autoSaveDownloaderApks: Boolean? = null,
         val pathSelectorFavorites: Set<String>? = null,
         val pathSelectorLastDirectory: String? = null,
+        val useCustomFilePicker: Boolean? = null,
         val patchBundleDiscoveryShowRelease: Boolean? = null,
         val patchBundleDiscoveryShowPrerelease: Boolean? = null,
+        val patchBundleDiscoveryLatest: Boolean? = null,
         val searchEngineHost: String? = null,
     )
 
@@ -186,6 +226,11 @@ class PreferencesManager(
         pureBlackOnSystemDark = pureBlackOnSystemDark.get(),
         customAccentColor = customAccentColor.get(),
         customThemeColor = customThemeColor.get(),
+        customBackgroundImageUri = customBackgroundImageUri.get(),
+        customBackgroundImageOpacity = customBackgroundImageOpacity.get(),
+        hideMainTabLabels = hideMainTabLabels.get(),
+        showPatchProfilesTab = showPatchProfilesTab.get(),
+        showToolsTab = showToolsTab.get(),
         themePresetSelectionName = themePresetSelectionName.get(),
         themePresetSelectionEnabled = themePresetSelectionEnabled.get(),
         stripUnusedNativeLibs = stripUnusedNativeLibs.get(),
@@ -201,9 +246,13 @@ class PreferencesManager(
         autoCollapsePatcherSteps = autoCollapsePatcherSteps.get(),
         autoExpandRunningSteps = autoExpandRunningSteps.get(),
         enableSavedApps = enableSavedApps.get(),
+        disableSavedAppOverwrite = disableSavedAppOverwrite.get(),
         patchedAppExportFormat = patchedAppExportFormat.get(),
         officialBundleRemoved = officialBundleRemoved.get(),
         officialBundleCustomDisplayName = officialBundleCustomDisplayName.get(),
+        dashboardBundlesFabCollapsed = dashboardBundlesFabCollapsed.get(),
+        dashboardAppsFabCollapsed = dashboardAppsFabCollapsed.get(),
+        dashboardProgressBannerCollapsed = dashboardProgressBannerCollapsed.get(),
         allowMeteredUpdates = allowMeteredUpdates.get(),
         installerPrimary = installerPrimary.get(),
         installerFallback = installerFallback.get(),
@@ -232,12 +281,18 @@ class PreferencesManager(
         patchSelectionActionOrder = patchSelectionActionOrder.get(),
         patchSelectionHiddenActions = patchSelectionHiddenActions.get(),
         patchSelectionShowVersionTags = patchSelectionShowVersionTags.get(),
+        patchBundleActionOrder = patchBundleActionOrder.get(),
+        patchBundleHiddenActions = patchBundleHiddenActions.get(),
+        savedAppActionOrder = savedAppActionOrder.get(),
+        savedAppHiddenActions = savedAppHiddenActions.get(),
         acknowledgedDownloaderPlugins = acknowledgedDownloaderPlugins.get(),
         autoSaveDownloaderApks = autoSaveDownloaderApks.get(),
         pathSelectorFavorites = pathSelectorFavorites.get(),
         pathSelectorLastDirectory = pathSelectorLastDirectory.get().takeIf { it.isNotBlank() },
+        useCustomFilePicker = useCustomFilePicker.get(),
         patchBundleDiscoveryShowRelease = patchBundleDiscoveryShowRelease.get(),
         patchBundleDiscoveryShowPrerelease = patchBundleDiscoveryShowPrerelease.get(),
+        patchBundleDiscoveryLatest = patchBundleDiscoveryLatest.get(),
         searchEngineHost = searchEngineHost.get(),
     )
 
@@ -247,6 +302,11 @@ class PreferencesManager(
         snapshot.pureBlackOnSystemDark?.let { pureBlackOnSystemDark.value = it }
         snapshot.customAccentColor?.let { customAccentColor.value = it }
         snapshot.customThemeColor?.let { customThemeColor.value = it }
+        snapshot.customBackgroundImageUri?.let { customBackgroundImageUri.value = it }
+        snapshot.customBackgroundImageOpacity?.let { customBackgroundImageOpacity.value = it.coerceIn(0f, 1f) }
+        snapshot.hideMainTabLabels?.let { hideMainTabLabels.value = it }
+        snapshot.showPatchProfilesTab?.let { showPatchProfilesTab.value = it }
+        snapshot.showToolsTab?.let { showToolsTab.value = it }
         snapshot.themePresetSelectionName?.let { themePresetSelectionName.value = it }
         snapshot.themePresetSelectionEnabled?.let { themePresetSelectionEnabled.value = it }
         snapshot.stripUnusedNativeLibs?.let { stripUnusedNativeLibs.value = it }
@@ -262,9 +322,13 @@ class PreferencesManager(
         snapshot.autoCollapsePatcherSteps?.let { autoCollapsePatcherSteps.value = it }
         snapshot.autoExpandRunningSteps?.let { autoExpandRunningSteps.value = it }
         snapshot.enableSavedApps?.let { enableSavedApps.value = it }
+        snapshot.disableSavedAppOverwrite?.let { disableSavedAppOverwrite.value = it }
         snapshot.patchedAppExportFormat?.let { patchedAppExportFormat.value = it }
         snapshot.officialBundleRemoved?.let { officialBundleRemoved.value = it }
         snapshot.officialBundleCustomDisplayName?.let { officialBundleCustomDisplayName.value = it }
+        snapshot.dashboardBundlesFabCollapsed?.let { dashboardBundlesFabCollapsed.value = it }
+        snapshot.dashboardAppsFabCollapsed?.let { dashboardAppsFabCollapsed.value = it }
+        snapshot.dashboardProgressBannerCollapsed?.let { dashboardProgressBannerCollapsed.value = it }
         snapshot.allowMeteredUpdates?.let { allowMeteredUpdates.value = it }
         snapshot.installerPrimary?.let { installerPrimary.value = it }
         snapshot.installerFallback?.let { installerFallback.value = it }
@@ -297,6 +361,10 @@ class PreferencesManager(
         snapshot.patchSelectionActionOrder?.let { patchSelectionActionOrder.value = it }
         snapshot.patchSelectionHiddenActions?.let { patchSelectionHiddenActions.value = it }
         snapshot.patchSelectionShowVersionTags?.let { patchSelectionShowVersionTags.value = it }
+        snapshot.patchBundleActionOrder?.let { patchBundleActionOrder.value = it }
+        snapshot.patchBundleHiddenActions?.let { patchBundleHiddenActions.value = it }
+        snapshot.savedAppActionOrder?.let { savedAppActionOrder.value = it }
+        snapshot.savedAppHiddenActions?.let { savedAppHiddenActions.value = it }
         snapshot.acknowledgedDownloaderPlugins?.let { acknowledgedDownloaderPlugins.value = it }
         snapshot.autoSaveDownloaderApks?.let { autoSaveDownloaderApks.value = it }
         snapshot.pathSelectorFavorites?.let { favorites ->
@@ -317,8 +385,10 @@ class PreferencesManager(
                 pathSelectorLastDirectory.value = target.toString()
             }
         }
+        snapshot.useCustomFilePicker?.let { useCustomFilePicker.value = it }
         snapshot.patchBundleDiscoveryShowRelease?.let { patchBundleDiscoveryShowRelease.value = it }
         snapshot.patchBundleDiscoveryShowPrerelease?.let { patchBundleDiscoveryShowPrerelease.value = it }
+        snapshot.patchBundleDiscoveryLatest?.let { patchBundleDiscoveryLatest.value = it }
         snapshot.searchEngineHost?.let { searchEngineHost.value = it }
     }
 
@@ -342,3 +412,8 @@ suspend fun PreferencesManager.showInstallerComponent(component: ComponentName) 
     val flattened = component.flattenToString()
     installerHiddenComponents.value = installerHiddenComponents.value - flattened
 }
+
+
+
+
+

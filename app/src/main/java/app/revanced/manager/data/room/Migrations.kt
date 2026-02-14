@@ -119,3 +119,48 @@ val MIGRATION_11_12 = object : Migration(11, 12) {
         db.execSQL("ALTER TABLE patch_profiles ADD COLUMN apk_source_path TEXT")
     }
 }
+
+val MIGRATION_12_13 = object : Migration(12, 13) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS installed_app_new (
+                current_package_name TEXT NOT NULL,
+                original_package_name TEXT NOT NULL,
+                version TEXT NOT NULL,
+                install_type TEXT NOT NULL,
+                sort_order INTEGER NOT NULL,
+                selection_payload TEXT,
+                created_at INTEGER NOT NULL,
+                PRIMARY KEY(current_package_name)
+            )
+            """.trimIndent()
+        )
+
+        val now = System.currentTimeMillis()
+        val insertSql = """
+            INSERT INTO installed_app_new (
+                current_package_name,
+                original_package_name,
+                version,
+                install_type,
+                sort_order,
+                selection_payload,
+                created_at
+            )
+            SELECT
+                current_package_name,
+                original_package_name,
+                version,
+                install_type,
+                sort_order,
+                selection_payload,
+                ?
+            FROM installed_app
+        """.trimIndent()
+        db.execSQL(insertSql, arrayOf(now))
+
+        db.execSQL("DROP TABLE installed_app")
+        db.execSQL("ALTER TABLE installed_app_new RENAME TO installed_app")
+    }
+}

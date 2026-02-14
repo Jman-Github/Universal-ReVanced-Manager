@@ -157,8 +157,11 @@ class ReVancedAPI(
             ?.takeIf { it.version.removePrefix("v") != BuildConfig.VERSION_NAME }
     }
 
+    suspend fun getPatchesUpdate(prerelease: Boolean): APIResponse<ReVancedAsset> =
+        apiRequest("patches?prerelease=$prerelease")
+
     suspend fun getPatchesUpdate(): APIResponse<ReVancedAsset> =
-        apiRequest("patches?prerelease=${prefs.usePatchesPrereleases.get()}")
+        getPatchesUpdate(prefs.usePatchesPrereleases.get())
 
     suspend fun getContributors(): APIResponse<List<ReVancedGitRepository>> {
         val config = repoConfig()

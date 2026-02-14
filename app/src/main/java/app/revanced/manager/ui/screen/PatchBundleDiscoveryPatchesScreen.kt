@@ -1,5 +1,7 @@
 package app.revanced.manager.ui.screen
 
+import android.net.Uri
+import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -12,31 +14,53 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.revanced.manager.R
+import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
+import app.revanced.manager.domain.manager.PreferencesManager
+import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.network.dto.ExternalBundlePatch
+import app.revanced.manager.patcher.patch.PatchInfo
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
 import app.revanced.manager.ui.component.ShimmerBox
+import app.revanced.manager.ui.component.bundle.PACKAGE_ICON
+import app.revanced.manager.ui.component.bundle.PatchInfoChip
+import app.revanced.manager.ui.component.bundle.PatchItem
+import app.revanced.manager.ui.component.bundle.VERSION_ICON
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsCard
 import app.revanced.manager.ui.viewmodel.BundleDiscoveryViewModel
+import app.revanced.manager.util.openUrl
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,6 +70,12 @@ fun PatchBundleDiscoveryPatchesScreen(
     viewModel: BundleDiscoveryViewModel = koinViewModel(),
 ) {
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val prefs: PreferencesManager = koinInject()
+    val patchBundleRepository: PatchBundleRepository = koinInject()
+    val searchEngineHost by prefs.searchEngineHost.getAsState()
+    var query by rememberSaveable(bundleId, "patches_query") { mutableStateOf("") }
+    val sources by patchBundleRepository.sources.collectAsStateWithLifecycle(emptyList())
+    val bundleInfos by patchBundleRepository.allBundlesInfoFlow.collectAsStateWithLifecycle(emptyMap())
     val bundles = viewModel.bundles
     val isLoading = viewModel.isLoading
     val errorMessage = viewModel.errorMessage
@@ -56,8 +86,35 @@ fun PatchBundleDiscoveryPatchesScreen(
     val patchesLoading = viewModel.isPatchesLoading(bundleId)
     val patchesError = viewModel.getPatchesError(bundleId)
 
-    LaunchedEffect(bundleId) {
-        viewModel.loadPatches(bundleId)
+    val importedUid = remember(bundle, sources) {
+        val endpoints = bundle?.let { viewModel.bundleEndpoints(it) }.orEmpty()
+        sources.firstOrNull { src ->
+            src.asRemoteOrNull?.endpoint in endpoints
+        }?.uid
+    }
+    val localPatches = importedUid?.let { bundleInfos[it]?.patches }
+    val useLocalPatches = !localPatches.isNullOrEmpty()
+    val filteredLocalPatches = remember(localPatches, query) {
+        val trimmed = query.trim()
+        if (trimmed.isBlank()) {
+            localPatches
+        } else {
+            localPatches?.filter { it.matchesQuery(trimmed) }
+        }
+    }
+    val filteredExternalPatches = remember(patches, query) {
+        val trimmed = query.trim()
+        if (trimmed.isBlank()) {
+            patches
+        } else {
+            patches?.filter { it.matchesQuery(trimmed) }
+        }
+    }
+
+    LaunchedEffect(bundleId, useLocalPatches) {
+        if (!useLocalPatches) {
+            viewModel.loadPatches(bundleId)
+        }
     }
 
     val title = bundle?.let {
@@ -81,16 +138,41 @@ fun PatchBundleDiscoveryPatchesScreen(
                 .fillMaxSize()
                 .padding(paddingValues),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            item(key = "patches_search") {
+                OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = query,
+                    onValueChange = { query = it },
+                    singleLine = true,
+                    placeholder = { Text(stringResource(R.string.search_patches)) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Outlined.Search,
+                            contentDescription = stringResource(R.string.search)
+                        )
+                    },
+                    trailingIcon = {
+                        if (query.isNotEmpty()) {
+                            IconButton(onClick = { query = "" }) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Close,
+                                    contentDescription = stringResource(R.string.clear)
+                                )
+                            }
+                        }
+                    }
+                )
+            }
             when {
-                (isLoading && bundle == null) || patchesLoading -> {
+                (isLoading && bundle == null) || (patchesLoading && !useLocalPatches) -> {
                     items(4) {
                         PatchBundlePatchPlaceholderItem()
                     }
                 }
 
-                bundle == null || patchesError != null -> {
+                !useLocalPatches && (bundle == null || patchesError != null) -> {
                     item {
                         PatchBundlePatchesEmptyState(
                             message = patchesError ?: errorMessage ?: stringResource(
@@ -100,7 +182,23 @@ fun PatchBundleDiscoveryPatchesScreen(
                     }
                 }
 
-                patches.isNullOrEmpty() -> {
+                query.isNotBlank() && useLocalPatches && filteredLocalPatches.isNullOrEmpty() -> {
+                    item {
+                        PatchBundlePatchesEmptyState(
+                            message = stringResource(R.string.search_no_results)
+                        )
+                    }
+                }
+
+                query.isNotBlank() && !useLocalPatches && filteredExternalPatches.isNullOrEmpty() -> {
+                    item {
+                        PatchBundlePatchesEmptyState(
+                            message = stringResource(R.string.search_no_results)
+                        )
+                    }
+                }
+
+                !useLocalPatches && filteredExternalPatches.isNullOrEmpty() -> {
                     item {
                         PatchBundlePatchesEmptyState(
                             message = stringResource(R.string.patch_bundle_discovery_patches_empty)
@@ -108,9 +206,40 @@ fun PatchBundleDiscoveryPatchesScreen(
                     }
                 }
 
+                useLocalPatches -> {
+                    itemsIndexed(
+                        items = filteredLocalPatches.orEmpty(),
+                        key = { index, patch -> "${importedUid ?: "bundle"}-${patch.name}-$index" }
+                    ) { _, patch ->
+                        var expandVersions by rememberSaveable(importedUid, patch.name, "versions") {
+                            mutableStateOf(false)
+                        }
+                        var expandOptions by rememberSaveable(importedUid, patch.name, "options") {
+                            mutableStateOf(false)
+                        }
+
+                        PatchItem(
+                            patch,
+                            expandVersions,
+                            onExpandVersions = { expandVersions = !expandVersions },
+                            expandOptions,
+                            onExpandOptions = { expandOptions = !expandOptions },
+                            searchEngineHost = searchEngineHost
+                        )
+                    }
+                }
+
+                // Currently used for discovery bundles that aren't imported (API has no options)
                 else -> {
-                    items(patches.size, key = { index -> "${bundle.bundleId}-$index" }) { index ->
-                        PatchBundlePatchItem(patches, index)
+                    itemsIndexed(
+                        items = filteredExternalPatches.orEmpty(),
+                        key = { index, patch -> "${bundleId}-${patch.name ?: "patch"}-$index" }
+                    ) { index, patch ->
+                        PatchBundlePatchItem(
+                            patch = patch,
+                            searchEngineHost = searchEngineHost,
+                            stateKey = "${bundleId}-${patch.name ?: "patch"}-$index"
+                        )
                     }
                 }
             }
@@ -142,44 +271,125 @@ private fun PatchBundlePatchPlaceholderItem() {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PatchBundlePatchItem(
-    patches: List<ExternalBundlePatch>,
-    index: Int,
+    patch: ExternalBundlePatch,
+    searchEngineHost: String,
+    stateKey: String,
 ) {
-    val patch = patches[index]
-    ExpressiveSettingsCard(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(16.dp)
+    val context = LocalContext.current
+    val anyPackageLabel = stringResource(R.string.patches_view_any_package)
+    val anyVersionLabel = stringResource(R.string.patches_view_any_version)
+    var expandVersions by rememberSaveable(stateKey) { mutableStateOf(false) }
+
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
             Text(
                 text = patch.name ?: stringResource(R.string.patch_bundle_discovery_patch_unnamed),
-                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
             patch.description?.takeIf { it.isNotBlank() }?.let { description ->
                 Text(
                     text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    style = MaterialTheme.typography.bodyMedium
                 )
             }
-            if (patch.compatiblePackages.isNotEmpty()) {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    patch.compatiblePackages.forEach { pkg ->
-                        val versions = pkg.versions.filterNotNull().filter { it.isNotBlank() }
-                        val versionLabel = if (versions.isEmpty()) {
-                            stringResource(R.string.bundle_version_all_versions)
-                        } else {
-                            versions.joinToString(", ")
-                        }
-                        PatchPackageTag(
-                            name = pkg.name,
-                            versions = versionLabel
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                if (patch.compatiblePackages.isEmpty()) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        PatchInfoChip(
+                            text = "$PACKAGE_ICON $anyPackageLabel"
                         )
+                        PatchInfoChip(
+                            text = "$VERSION_ICON $anyVersionLabel"
+                        )
+                    }
+                } else {
+                    patch.compatiblePackages.forEach { compatiblePackage ->
+                        val packageName = compatiblePackage.name
+                        val versions = compatiblePackage.versions
+                            .filterNotNull()
+                            .filter { it.isNotBlank() }
+                            .reversed()
+                        val packageIsAny = isAnyPackageTag(packageName, anyPackageLabel)
+
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            PatchInfoChip(
+                                modifier = Modifier.align(androidx.compose.ui.Alignment.CenterVertically),
+                                text = "$PACKAGE_ICON $packageName",
+                                onClick = if (packageIsAny) {
+                                    null
+                                } else {
+                                    {
+                                        context.openUrl(buildSearchUrl(packageName, null, searchEngineHost))
+                                    }
+                                }
+                            )
+
+                            if (versions.isNotEmpty()) {
+                                if (expandVersions) {
+                                    versions.forEach { version ->
+                                        val versionIsAny = isAnyVersionTag(version, anyVersionLabel)
+                                        val searchable = !(packageIsAny && versionIsAny)
+                                        PatchInfoChip(
+                                            modifier = Modifier.align(androidx.compose.ui.Alignment.CenterVertically),
+                                            text = "$VERSION_ICON $version",
+                                            onClick = if (!searchable) {
+                                                null
+                                            } else {
+                                                {
+                                                    val queryVersion = if (versionIsAny) null else version
+                                                    val queryPackage = if (packageIsAny) "android.app" else packageName
+                                                    context.openUrl(
+                                                        buildSearchUrl(queryPackage, queryVersion, searchEngineHost)
+                                                    )
+                                                }
+                                            }
+                                        )
+                                    }
+                                } else {
+                                    val displayedVersion = versions.first()
+                                    val versionIsAny = isAnyVersionTag(displayedVersion, anyVersionLabel)
+                                    val searchable = !(packageIsAny && versionIsAny)
+                                    PatchInfoChip(
+                                        modifier = Modifier.align(androidx.compose.ui.Alignment.CenterVertically),
+                                        text = "$VERSION_ICON $displayedVersion",
+                                        onClick = if (!searchable) {
+                                            null
+                                        } else {
+                                            {
+                                                val queryVersion = if (versionIsAny) null else displayedVersion
+                                                val queryPackage = if (packageIsAny) "android.app" else packageName
+                                                context.openUrl(
+                                                    buildSearchUrl(queryPackage, queryVersion, searchEngineHost)
+                                                )
+                                            }
+                                        }
+                                    )
+                                }
+                                if (versions.size > 1) {
+                                    PatchInfoChip(
+                                        onClick = { expandVersions = !expandVersions },
+                                        text = if (expandVersions) stringResource(R.string.less) else "+${versions.size - 1}"
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -199,29 +409,78 @@ private fun PatchBundlePatchesEmptyState(message: String) {
     }
 }
 
-@Composable
-private fun PatchPackageTag(
-    name: String,
-    versions: String,
-) {
-    Surface(
-        shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            Text(
-                text = name,
-                style = MaterialTheme.typography.labelSmall
-            )
-            Text(
-                text = versions,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+private fun buildSearchUrl(packageName: String, version: String?, searchEngineHost: String): String {
+    val encodedPackage = Uri.encode(packageName)
+    val encodedVersion = version?.takeIf { it.isNotBlank() }?.let {
+        val formatted = if (it.startsWith("v", ignoreCase = true)) it else "v$it"
+        Uri.encode(formatted)
     }
+    val encodedArch = Build.SUPPORTED_ABIS.firstOrNull()
+        ?.takeIf { it.isNotBlank() }
+        ?.let(Uri::encode)
+    val query = listOfNotNull(encodedPackage, encodedVersion, encodedArch).joinToString("+")
+    val host = normalizeSearchHost(searchEngineHost)
+    return "https://$host/search?q=$query"
+}
+
+private fun normalizeSearchHost(value: String): String {
+    val trimmed = value.trim()
+    if (trimmed.isBlank()) return "google.com"
+    val noScheme = trimmed.removePrefix("https://").removePrefix("http://")
+    val noPath = noScheme.substringBefore('/').substringBefore('?').substringBefore('#')
+    return noPath.trim().trimEnd('/').ifBlank { "google.com" }
+}
+
+private fun isAnyPackageTag(value: String?, anyPackageLabel: String): Boolean {
+    val normalized = value.orEmpty().trim().lowercase()
+    if (normalized.isBlank()) return true
+    val normalizedLabel = anyPackageLabel.trim().lowercase()
+    return normalized == normalizedLabel ||
+        normalized == "any package" ||
+        normalized == "*"
+}
+
+private fun isAnyVersionTag(value: String?, anyVersionLabel: String): Boolean {
+    val normalized = value.orEmpty().trim().lowercase()
+    if (normalized.isBlank()) return true
+    val normalizedLabel = anyVersionLabel.trim().lowercase()
+    return normalized == normalizedLabel ||
+        normalized == "any version" ||
+        normalized == "*"
+}
+
+private fun PatchInfo.matchesQuery(query: String): Boolean {
+    val normalized = query.lowercase()
+    if (name.contains(normalized, ignoreCase = true)) return true
+    if (description?.contains(normalized, ignoreCase = true) == true) return true
+    if (compatiblePackages?.any { pkg ->
+            pkg.packageName.contains(normalized, ignoreCase = true) ||
+                (pkg.versions?.any { it.contains(normalized, ignoreCase = true) } == true)
+        } == true
+    ) {
+        return true
+    }
+    if (options?.any { option ->
+            option.title.contains(normalized, ignoreCase = true) ||
+                option.key.contains(normalized, ignoreCase = true) ||
+                option.description.contains(normalized, ignoreCase = true)
+        } == true
+    ) {
+        return true
+    }
+    return false
+}
+
+private fun ExternalBundlePatch.matchesQuery(query: String): Boolean {
+    val normalized = query.lowercase()
+    if (name?.contains(normalized, ignoreCase = true) == true) return true
+    if (description?.contains(normalized, ignoreCase = true) == true) return true
+    if (compatiblePackages.any { pkg ->
+            pkg.name.contains(normalized, ignoreCase = true) ||
+                pkg.versions.any { it?.contains(normalized, ignoreCase = true) == true }
+        }
+    ) {
+        return true
+    }
+    return false
 }

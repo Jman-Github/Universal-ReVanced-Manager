@@ -73,7 +73,8 @@ class MainViewModel(
         app: SelectedApp,
         patches: PatchSelection? = null,
         selectionPayload: PatchProfilePayload? = null,
-        persistConfiguration: Boolean = true
+        persistConfiguration: Boolean = true,
+        returnToDashboard: Boolean = false
     ) = viewModelScope.launch {
         val resolved = findDownloadedApp(app) ?: app
         val selectionPayloadJson = selectionPayload?.let { json.encodeToString(it) }
@@ -82,7 +83,8 @@ class MainViewModel(
                 app = resolved,
                 patches = patches,
                 selectionPayloadJson = selectionPayloadJson,
-                persistConfiguration = persistConfiguration
+                persistConfiguration = persistConfiguration,
+                returnToDashboard = returnToDashboard
             )
         )
     }
@@ -93,13 +95,15 @@ class MainViewModel(
         packageName: String,
         patches: PatchSelection? = null,
         selectionPayload: PatchProfilePayload? = null,
-        persistConfiguration: Boolean = true
+        persistConfiguration: Boolean = true,
+        returnToDashboard: Boolean = false
     ) = viewModelScope.launch {
         selectApp(
             SelectedApp.Search(packageName, suggestedVersion(packageName)),
             patches,
             selectionPayload,
-            persistConfiguration
+            persistConfiguration,
+            returnToDashboard
         )
     }
 
@@ -187,12 +191,31 @@ class MainViewModel(
         }
         settings.keystore?.let { keystore ->
             val keystoreBytes = Base64.decode(keystore, Base64.DEFAULT)
-            keystoreManager.import(
+            val passwordCandidates = listOf(
+                settings.keystorePassword,
+                KeystoreManager.DEFAULT,
+                "s3cur3p@ssw0rd"
+            ).filter { it.isNotBlank() }.distinct()
+            val aliasCandidates = listOf(
+                KeystoreManager.DEFAULT,
                 "alias",
-                settings.keystorePassword,
-                settings.keystorePassword,
-                keystoreBytes.inputStream()
-            )
+                "ReVanced Key"
+            ).distinct()
+            var imported = false
+            for (alias in aliasCandidates) {
+                for (pass in passwordCandidates) {
+                    Log.d(tag, "Trying legacy keystore import alias=$alias")
+                    if (keystoreManager.import(alias, pass, pass, keystoreBytes.inputStream())) {
+                        Log.i(tag, "Legacy keystore import succeeded alias=$alias")
+                        imported = true
+                        break
+                    }
+                }
+                if (imported) break
+            }
+            if (!imported) {
+                Log.w(tag, "Legacy keystore import failed for all known aliases/passwords")
+            }
         }
         settings.patches?.let { selection ->
             patchSelectionRepository.import(0, selection)

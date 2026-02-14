@@ -1,6 +1,7 @@
 package app.revanced.manager.ui.viewmodel
 
 import android.app.Application
+import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -211,13 +212,19 @@ class BundleDiscoveryViewModel(
         }
     }
 
-    fun importBundle(bundle: ExternalBundleSnapshot, autoUpdate: Boolean, searchUpdate: Boolean) {
+    fun importBundle(
+        bundle: ExternalBundleSnapshot,
+        autoUpdate: Boolean,
+        searchUpdate: Boolean,
+        preferLatestAcrossChannels: Boolean = false
+    ) {
         viewModelScope.launch {
-            val key = patchBundleRepository.discoveryImportKey(bundle)
+            val key = patchBundleRepository.discoveryImportKey(bundle, preferLatestAcrossChannels)
             val result = patchBundleRepository.enqueueDiscoveryImport(
                 bundle = bundle,
                 searchUpdate = searchUpdate,
-                autoUpdate = autoUpdate
+                autoUpdate = autoUpdate,
+                preferLatestAcrossChannels = preferLatestAcrossChannels
             )
             if (result != PatchBundleRepository.DiscoveryImportEnqueueResult.Duplicate) {
                 localQueuedKeys[key] = true
@@ -259,9 +266,48 @@ class BundleDiscoveryViewModel(
         }
     }
 
+    fun exportBundle(bundle: ExternalBundleSnapshot, target: Uri?) {
+        if (target == null) return
+        viewModelScope.launch {
+            val bundleId = bundle.bundleId
+            val url = bundle.downloadUrl?.trim().takeIf { !it.isNullOrBlank() }
+            if (url.isNullOrBlank()) {
+                app.toast(app.getString(R.string.patch_bundle_discovery_error))
+                return@launch
+            }
+            bundleExports[bundleId] = BundleExportProgress(0L, null)
+            val tempFile = File.createTempFile("bundle-export-$bundleId-", ".tmp", cacheDir)
+            try {
+                withContext(Dispatchers.IO) {
+                    http.downloadToFile(
+                        saveLocation = tempFile,
+                        builder = { url(url) },
+                        onProgress = { bytesRead, bytesTotal ->
+                            viewModelScope.launch(Dispatchers.Main) {
+                                bundleExports[bundleId] = BundleExportProgress(bytesRead, bytesTotal)
+                            }
+                        }
+                    )
+                    app.contentResolver.openOutputStream(target)?.use { output ->
+                        tempFile.inputStream().use { input -> input.copyTo(output) }
+                    } ?: error("Could not open output stream for bundle export")
+                }
+                val successName = bundle.repoName.ifBlank { "bundle" }
+                app.toast(app.getString(R.string.patch_bundle_export_success, successName))
+            } catch (e: Exception) {
+                app.toast(app.getString(R.string.patch_bundle_export_fail, e.simpleMessage()))
+            } finally {
+                bundleExports.remove(bundleId)
+                tempFile.delete()
+            }
+        }
+    }
+
     fun bundleEndpoints(bundle: ExternalBundleSnapshot): Set<String> {
         val endpoints = mutableSetOf<String>()
         bundle.downloadUrl?.let { endpoints.add(it) }
+        graphqlBundleEndpoint(bundle, useDev = false, prerelease = null)?.let { endpoints.add(it) }
+        graphqlBundleEndpoint(bundle, useDev = true, prerelease = null)?.let { endpoints.add(it) }
         graphqlBundleEndpoint(bundle, useDev = false)?.let { endpoints.add(it) }
         graphqlBundleEndpoint(bundle, useDev = true)?.let { endpoints.add(it) }
         legacyEndpoint(bundle.bundleId)?.let { endpoints.add(it) }
@@ -275,7 +321,8 @@ class BundleDiscoveryViewModel(
         val owner = bundle.ownerName.trim()
         val repo = bundle.repoName.trim()
         return if (owner.isNotBlank() && repo.isNotBlank()) {
-            "https://$host/api/v1/bundle/$owner/$repo/latest?prerelease=${bundle.isPrerelease}"
+            val channel = if (bundle.isPrerelease) "prerelease" else "stable"
+            "https://$host/api/v2/bundle/$owner/$repo/latest?channel=$channel"
         } else if (bundle.bundleId > 0) {
             "https://$host/bundles/id?id=${bundle.bundleId}"
         } else {
@@ -286,7 +333,11 @@ class BundleDiscoveryViewModel(
     private fun legacyEndpoint(bundleId: Int): String? =
         "https://revanced-external-bundles.brosssh.com/bundles/id?id=$bundleId"
 
-    private fun graphqlBundleEndpoint(bundle: ExternalBundleSnapshot, useDev: Boolean): String? {
+    private fun graphqlBundleEndpoint(
+        bundle: ExternalBundleSnapshot,
+        useDev: Boolean,
+        prerelease: Boolean? = bundle.isPrerelease
+    ): String? {
         val owner = bundle.ownerName.trim()
         val repo = bundle.repoName.trim()
         if (owner.isBlank() || repo.isBlank()) return null
@@ -295,7 +346,12 @@ class BundleDiscoveryViewModel(
         } else {
             "revanced-external-bundles.brosssh.com"
         }
-        return "https://$host/api/v1/bundle/$owner/$repo/latest?prerelease=${bundle.isPrerelease}"
+        val channel = when (prerelease) {
+            null -> "any"
+            true -> "prerelease"
+            false -> "stable"
+        }
+        return "https://$host/api/v2/bundle/$owner/$repo/latest?channel=$channel"
     }
 
     fun loadPatches(bundleId: Int) {
@@ -327,16 +383,22 @@ class BundleDiscoveryViewModel(
         bundle: ExternalBundleSnapshot,
         isImported: Boolean
     ): PatchBundleRepository.DiscoveryImportProgress? {
-        val key = patchBundleRepository.discoveryImportKey(bundle)
-        val progress = importProgressSnapshot[key]
+        val keys = buildList {
+            add(patchBundleRepository.discoveryImportKey(bundle))
+            add(patchBundleRepository.discoveryImportKey(bundle, preferLatestAcrossChannels = true))
+        }.distinct()
+
+        val progressKey = keys.firstOrNull { importProgressSnapshot.containsKey(it) }
+        val progress = progressKey?.let(importProgressSnapshot::get)
         if (progress != null) {
-            localQueuedKeys.remove(key)
+            progressKey?.let(localQueuedKeys::remove)
             return progress
         }
 
-        val queuedFromRepo = queuedImportSnapshot.contains(key)
+        val queuedKey = keys.firstOrNull { queuedImportSnapshot.contains(it) }
+        val queuedFromRepo = queuedKey != null
         if (queuedFromRepo) {
-            localQueuedKeys.remove(key)
+            queuedKey?.let(localQueuedKeys::remove)
             return PatchBundleRepository.DiscoveryImportProgress(
                 bytesRead = 0L,
                 bytesTotal = null,
@@ -344,7 +406,7 @@ class BundleDiscoveryViewModel(
             )
         }
 
-        if (localQueuedKeys.containsKey(key)) {
+        if (keys.any(localQueuedKeys::containsKey)) {
             return PatchBundleRepository.DiscoveryImportProgress(
                 bytesRead = 0L,
                 bytesTotal = null,
@@ -353,7 +415,7 @@ class BundleDiscoveryViewModel(
         }
 
         if (isImported) {
-            localQueuedKeys.remove(key)
+            keys.forEach(localQueuedKeys::remove)
         }
         return null
     }
@@ -476,6 +538,14 @@ class BundleDiscoveryViewModel(
             host == STABLE_BUNDLES_HOST -> STABLE_BUNDLES_HOST
             else -> null
         }
+    }
+
+    suspend fun fetchLatestBundle(
+        owner: String,
+        repo: String,
+        prerelease: Boolean
+    ): ExternalBundleSnapshot? = withContext(Dispatchers.IO) {
+        api.getLatestBundle(owner, repo, prerelease).getOrNull()
     }
 
     @Serializable

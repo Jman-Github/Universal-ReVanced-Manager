@@ -58,6 +58,12 @@ fun Exception.toRemoteError() = RemoteError(
     stackTrace = this.stackTraceToString(),
 )
 
+fun Throwable.toRemoteError() = RemoteError(
+    type = this::class.java.name,
+    message = this.message,
+    stackTrace = this.stackTraceToString(),
+)
+
 inline fun <T> runStep(
     stepId: StepId,
     onEvent: (ProgressEvent) -> Unit,
@@ -76,7 +82,7 @@ inline fun <T> runStep(
     )
     onEvent(ProgressEvent.Completed(stepId))
     value
-} catch (error: Exception) {
+} catch (error: Throwable) {
     onEvent(ProgressEvent.Failed(stepId, error.toRemoteError()))
     throw error
 }

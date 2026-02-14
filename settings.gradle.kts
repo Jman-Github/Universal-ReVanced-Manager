@@ -45,6 +45,17 @@ dependencyResolutionManagement {
             }
         }
         maven {
+            // AmpleReVanced packages are published to GitHub Packages.
+            url = uri("https://maven.pkg.github.com/AmpleReVanced/registry")
+            credentials {
+                val gprUser: String? = githubUser()
+                val gprKey: String? = githubToken()
+
+                username = gprUser.orEmpty().ifBlank { "anonymous" }
+                password = gprKey.orEmpty()
+            }
+        }
+        maven {
             // A repository must be specified for some reason. "registry" is a dummy.
             url = uri("https://maven.pkg.github.com/revanced/registry")
             credentials {
@@ -70,4 +81,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "universal-revanced-manager"
-include(":app", ":api", ":morphe-runtime")
+include(":app", ":api", ":morphe-runtime", ":ample-runtime")

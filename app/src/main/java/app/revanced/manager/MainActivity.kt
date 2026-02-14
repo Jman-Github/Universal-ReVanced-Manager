@@ -2,21 +2,35 @@ package app.revanced.manager
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
+import android.net.Uri
 import android.os.Bundle
 import android.os.Parcelable
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import androidx.compose.ui.platform.LocalContext
@@ -31,8 +45,12 @@ import androidx.navigation.toRoute
 import androidx.appcompat.app.AppCompatActivity
 import app.revanced.manager.ui.model.navigation.AppSelector
 import app.revanced.manager.ui.model.navigation.ComplexParameter
+import app.revanced.manager.ui.model.navigation.CreateYoutubeAssets
 import app.revanced.manager.ui.model.navigation.Dashboard
+import app.revanced.manager.ui.model.navigation.KeystoreConverter
+import app.revanced.manager.ui.model.navigation.KeystoreCreator
 import app.revanced.manager.ui.model.navigation.InstalledApplicationInfo
+import app.revanced.manager.ui.model.navigation.MergeSplitApk
 import app.revanced.manager.ui.model.navigation.Patcher
 import app.revanced.manager.ui.model.navigation.PatchBundleDiscovery
 import app.revanced.manager.ui.model.navigation.PatchBundleDiscoveryPatches
@@ -41,8 +59,12 @@ import app.revanced.manager.ui.model.navigation.Settings
 import app.revanced.manager.ui.model.navigation.Update
 import app.revanced.manager.ui.model.SelectedApp
 import app.revanced.manager.ui.screen.AppSelectorScreen
+import app.revanced.manager.ui.screen.CreateYoutubeAssetsScreen
 import app.revanced.manager.ui.screen.DashboardScreen
 import app.revanced.manager.ui.screen.InstalledAppInfoScreen
+import app.revanced.manager.ui.screen.KeystoreConverterScreen
+import app.revanced.manager.ui.screen.KeystoreCreatorScreen
+import app.revanced.manager.ui.screen.MergeSplitApkScreen
 import app.revanced.manager.ui.screen.PatcherScreen
 import app.revanced.manager.ui.screen.PatchBundleDiscoveryScreen
 import app.revanced.manager.ui.screen.PatchBundleDiscoveryPatchesScreen
@@ -63,16 +85,21 @@ import app.revanced.manager.ui.screen.settings.update.UpdatesSettingsScreen
 import app.revanced.manager.ui.theme.ReVancedManagerTheme
 import app.revanced.manager.ui.theme.Theme
 import app.revanced.manager.ui.viewmodel.MainViewModel
+import app.revanced.manager.ui.viewmodel.DashboardViewModel
 import app.revanced.manager.ui.viewmodel.SelectedAppInfoViewModel
 import app.revanced.manager.util.EventEffect
 import app.revanced.manager.util.AppForeground
 import app.universal.revanced.manager.R
+import coil.compose.AsyncImage
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koin.androidx.compose.koinViewModel
 import org.koin.androidx.compose.navigation.koinNavViewModel
 import org.koin.core.parameter.parametersOf
 import org.koin.androidx.viewmodel.ext.android.getViewModel as getActivityViewModel
 import java.io.File
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
     @ExperimentalAnimationApi
@@ -97,6 +124,8 @@ class MainActivity : AppCompatActivity() {
             val pureBlackOnSystemDark by vm.prefs.pureBlackOnSystemDark.getAsState()
             val customAccentColor by vm.prefs.customAccentColor.getAsState()
             val customThemeColor by vm.prefs.customThemeColor.getAsState()
+            val customBackgroundImageUri by vm.prefs.customBackgroundImageUri.getAsState()
+            val customBackgroundImageOpacity by vm.prefs.customBackgroundImageOpacity.getAsState()
             val systemDark = isSystemInDarkTheme()
             val darkThemeEnabled = theme == Theme.SYSTEM && systemDark || theme == Theme.DARK
             val pureBlackEnabled = pureBlackTheme || (pureBlackOnSystemDark && theme == Theme.SYSTEM && systemDark)
@@ -113,9 +142,18 @@ class MainActivity : AppCompatActivity() {
                 dynamicColor = dynamicColor,
                 pureBlackTheme = pureBlackEnabled,
                 accentColorHex = customAccentColor.takeUnless { it.isBlank() },
-                themeColorHex = customThemeColor.takeUnless { it.isBlank() }
+                themeColorHex = customThemeColor.takeUnless { it.isBlank() },
+                hasCustomBackground = !customBackgroundImageUri.isNullOrBlank()
             ) {
-                ReVancedManager(vm)
+                ReVancedManagerBackground(
+                    customBackgroundImageUri = customBackgroundImageUri.takeUnless { it.isBlank() },
+                    imageOverlayAlpha = customBackgroundImageOpacity
+                ) {
+                    ReVancedManager(
+                        vm = vm,
+                        disableScreenSlideTransitions = !customBackgroundImageUri.isNullOrBlank()
+                    )
+                }
             }
         }
     }
@@ -133,13 +171,106 @@ class MainActivity : AppCompatActivity() {
 }
 
 @Composable
-private fun ReVancedManager(vm: MainViewModel) {
+private fun ReVancedManagerBackground(
+    customBackgroundImageUri: String?,
+    imageOverlayAlpha: Float,
+    content: @Composable () -> Unit
+) {
+    Box(modifier = androidx.compose.ui.Modifier.fillMaxSize()) {
+        if (!customBackgroundImageUri.isNullOrBlank()) {
+            // Keep a single shared base/tint layer outside screen transitions.
+            Box(
+                modifier = androidx.compose.ui.Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surface)
+            )
+            CustomBackgroundImage(
+                customBackgroundImageUri = customBackgroundImageUri,
+                modifier = androidx.compose.ui.Modifier.fillMaxSize()
+            )
+            Box(
+                modifier = androidx.compose.ui.Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = imageOverlayAlpha.coerceIn(0f, 1f)))
+            )
+        }
+        content()
+    }
+}
+
+@Composable
+private fun CustomBackgroundImage(
+    customBackgroundImageUri: String,
+    modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier
+) {
+    val context = LocalContext.current
+    val uri = remember(customBackgroundImageUri) { Uri.parse(customBackgroundImageUri) }
+    val isFileUri = remember(uri) { uri.scheme.equals("file", ignoreCase = true) }
+    val fileUriPath = remember(uri, isFileUri) { uri.path?.takeIf { isFileUri && it.isNotBlank() } }
+    val asyncImageModel = remember(uri, fileUriPath) {
+        fileUriPath?.let(::File) ?: uri
+    }
+    val mimeType = remember(uri) {
+        runCatching { context.contentResolver.getType(uri) }
+            .getOrNull()
+            .orEmpty()
+            .lowercase(Locale.ROOT)
+    }
+    val pathSegment = remember(uri) { uri.lastPathSegment.orEmpty().lowercase(Locale.ROOT) }
+    val isTiff = mimeType == "image/tiff" || pathSegment.endsWith(".tif") || pathSegment.endsWith(".tiff")
+
+    val tiffBitmap by produceState<ImageBitmap?>(initialValue = null, key1 = uri, key2 = isTiff) {
+        if (!isTiff) {
+            value = null
+            return@produceState
+        }
+
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                val bitmap = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                    fileUriPath?.let { ImageDecoder.decodeBitmap(ImageDecoder.createSource(File(it))) }
+                        ?: ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri))
+                } else {
+                    fileUriPath?.let(BitmapFactory::decodeFile)
+                        ?: context.contentResolver.openInputStream(uri)?.use(BitmapFactory::decodeStream)
+                }
+                bitmap?.asImageBitmap()
+            }.getOrNull()
+        }
+    }
+
+    if (isTiff && tiffBitmap != null) {
+        Image(
+            bitmap = tiffBitmap!!,
+            contentDescription = null,
+            modifier = modifier,
+            contentScale = ContentScale.Crop
+        )
+    } else {
+        AsyncImage(
+            model = asyncImageModel,
+            contentDescription = null,
+            modifier = modifier,
+            contentScale = ContentScale.Crop
+        )
+    }
+}
+
+@Composable
+private fun ReVancedManager(
+    vm: MainViewModel,
+    disableScreenSlideTransitions: Boolean
+) {
     val navController = rememberNavController()
+    val dashboardVm: DashboardViewModel = koinViewModel()
     var pendingBundleDeepLink by remember { mutableStateOf<app.revanced.manager.util.BundleDeepLink?>(null) }
     val context = LocalContext.current
 
     EventEffect(vm.appSelectFlow) { params ->
         navController.popBackStack(SelectedApplicationInfo.Main, inclusive = true)
+        if (params.returnToDashboard) {
+            navController.popBackStack(Dashboard, inclusive = false)
+        }
         navController.navigateComplex(
             SelectedApplicationInfo,
             params
@@ -157,13 +288,27 @@ private fun ReVancedManager(vm: MainViewModel) {
     NavHost(
         navController = navController,
         startDestination = Dashboard,
-        enterTransition = { slideInHorizontally(initialOffsetX = { it }) },
-        exitTransition = { slideOutHorizontally(targetOffsetX = { -it / 3 }) },
-        popEnterTransition = { slideInHorizontally(initialOffsetX = { -it / 3 }) },
-        popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) },
+        enterTransition = {
+            if (disableScreenSlideTransitions) EnterTransition.None
+            else slideInHorizontally(initialOffsetX = { it })
+        },
+        exitTransition = {
+            if (disableScreenSlideTransitions) ExitTransition.None
+            else slideOutHorizontally(targetOffsetX = { -it / 3 })
+        },
+        popEnterTransition = {
+            if (disableScreenSlideTransitions) EnterTransition.None
+            else slideInHorizontally(initialOffsetX = { -it / 3 })
+        },
+        popExitTransition = {
+            if (disableScreenSlideTransitions) ExitTransition.None
+            else slideOutHorizontally(targetOffsetX = { it })
+        },
     ) {
         composable<Dashboard> {
             DashboardScreen(
+                vm = dashboardVm,
+                mainVm = vm,
                 onSettingsClick = { navController.navigate(Settings) },
                 onAppSelectorClick = {
                     navController.navigate(AppSelector())
@@ -178,8 +323,20 @@ private fun ReVancedManager(vm: MainViewModel) {
                 onBundleDiscoveryClick = {
                     navController.navigate(PatchBundleDiscovery)
                 },
-                onAppClick = { packageName ->
-                    navController.navigate(InstalledApplicationInfo(packageName))
+                onMergeSplitClick = {
+                    navController.navigate(MergeSplitApk)
+                },
+                onCreateYoutubeAssetsClick = {
+                    navController.navigate(CreateYoutubeAssets)
+                },
+                onOpenKeystoreCreatorClick = {
+                    navController.navigate(KeystoreCreator)
+                },
+                onOpenKeystoreConverterClick = {
+                    navController.navigate(KeystoreConverter)
+                },
+                onAppClick = { packageName, action ->
+                    navController.navigate(InstalledApplicationInfo(packageName, action))
                 },
                 onProfileLaunch = { launchData ->
                     val apkFile = launchData.profile.apkPath
@@ -225,7 +382,8 @@ private fun ReVancedManager(vm: MainViewModel) {
                     vm.selectApp(packageName, selection, selectionPayload, persistConfiguration)
                 },
                 onBackClick = navController::popBackStack,
-                viewModel = koinViewModel { parametersOf(data.packageName) }
+                viewModel = koinViewModel { parametersOf(data.packageName) },
+                initialAction = data.action
             )
         }
 
@@ -291,6 +449,31 @@ private fun ReVancedManager(vm: MainViewModel) {
             val data = it.toRoute<PatchBundleDiscoveryPatches>()
             PatchBundleDiscoveryPatchesScreen(
                 bundleId = data.bundleId,
+                onBackClick = navController::popBackStack
+            )
+        }
+
+        composable<MergeSplitApk> {
+            MergeSplitApkScreen(
+                onBackClick = navController::popBackStack,
+                vm = dashboardVm
+            )
+        }
+
+        composable<CreateYoutubeAssets> {
+            CreateYoutubeAssetsScreen(
+                onBackClick = navController::popBackStack
+            )
+        }
+
+        composable<KeystoreCreator> {
+            KeystoreCreatorScreen(
+                onBackClick = navController::popBackStack
+            )
+        }
+
+        composable<KeystoreConverter> {
+            KeystoreConverterScreen(
                 onBackClick = navController::popBackStack
             )
         }

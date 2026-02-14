@@ -8,8 +8,9 @@ import java.util.jar.JarFile
 object MorphePatchBundleLoader {
     fun loadBundle(bundlePath: String): Collection<Patch<*>> {
         validateDexEntries(bundlePath)
+        val optimizedDexDirectory = optimizedDexDirectory(bundlePath)
         val patchFiles = runCatching {
-            loadPatchesFromDex(setOf(File(bundlePath))).byPatchesFile
+            loadPatchesFromDex(setOf(File(bundlePath)), optimizedDexDirectory).byPatchesFile
         }.getOrElse { error ->
             throw IllegalStateException("Patch bundle is corrupted or incomplete", error)
         }
@@ -43,4 +44,8 @@ object MorphePatchBundleLoader {
             }
         }
     }
+
+    private fun optimizedDexDirectory(bundlePath: String): File? = runCatching {
+        File(bundlePath).absoluteFile.parentFile?.resolve("oat")?.apply { mkdirs() }
+    }.getOrNull()
 }

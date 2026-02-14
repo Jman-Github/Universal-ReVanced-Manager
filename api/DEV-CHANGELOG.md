@@ -1,3 +1,245 @@
+# v1.8.0-dev.12 (2026-02-14)
+
+
+# Features
+
+- Added a confirmation dialog for favoriting files with the custom file picker
+- Added an image preview dialog that opens when you tap the small image icon on the left for image files in the custom file picker https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/176
+- Made user-selected image backgrounds persistent by importing the selected image into the app’s internal storage, so the original file doesn’t need to remain on the device. Users who set a custom image background before dev.12 will need to reset and reselect their background for this change to take effect.
+- Replaced `Image selected: <filename>` with a preview of the selected background image
+- Added downloader support to the `Merge split APKs` tool
+- Added signing to the `Merge split APKs` tool so the output APK is not unsigned
+- Made the `Merge split APKs` tool always run in another process (due to the intensity of merging some split APKs). If a separate process can’t be used, it will fall back to running in-app
+
+
+# Bug fixes
+
+- Fixed issue with the patch selection screen causing crashes
+
+
+# v1.8.0-dev.11 (2026-02-13)
+
+
+# Features
+
+- Made main screen tab titles wrap to prevent them from being cut off https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/175
+- Added the ability to hide & disable `Patch Profiles` and its associated tab with a toggle in Settings > General
+- Added the ability to hide the `Tools` tab with a toggle in Settings > General
+- Added a `Keystore creator` tool to the `Tools` tab
+- Added a `Keystore converter` tool to the `Tools` tab
+- Made text wrap on the `Create custom YouTube icons & headers` tool screen
+- Improved installer error diagnosis and messaging
+
+
+# v1.8.0-dev.10 (2026-02-12)
+
+
+# Features
+
+- Added a `Use custom file picker` toggle in Settings > Advanced that when toggled off, disables the custom file picker and uses the built in android file picker (documents provider)
+- Added a `Tools` tab
+- Added a `Merge split APKs` tool in the `Tools` tab that just merges the selected split APK and allows the user to save it to storage after https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/171
+- Added a `Create custom YouTube icons & headers` tool to the `Tools` tab (inspired by [Morphe Managers implementation](https://github.com/MorpheApp/morphe-manager/pull/138))
+
+
+# Bug fixes
+
+- Fixed the app language selector dialog layout having an extra bottom spacing/clipping near the `Cancel` button https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/172
+- Fixed issues with patch bundle importing and loading https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/138
+
+
+# v1.8.0-dev.09 (2026-02-11)
+
+
+# Features
+
+- Updated Patch Bundle Discovery to use the new `api/v2` & `latest?channel=` URLs while keeping backwards compatibility with `api/v1` URLs
+- Added a draggable transparency adjustment bar to Settings > General for when a image is set as the background
+- Made the state of the progress banner persist
+- Made the collapsed version of the progress banner show a minimal view of progress https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/162
+- Added bundle-aware APK version assessment that finds the best matching bundle/version for storage-selected APKs
+- Added a universal fallback confirmation dialog (`Use universal patches?`) when only universal patches are compatible
+- Added a specific blocked-state message when only universal patches match but universal patches are disabled
+- Expanded safeguard dialog support to allow confirm/cancel actions
+
+
+# Bug fixes
+
+- Fixed latest bundles so they correctly resolve the true latest version
+- Fixed Allow changing patch selection and options behavior:
+  - When OFF: app-list and storage APK selections always use default selection (ignore saved custom selections)
+  - When ON again: saved custom selections are restored automatically (if present)
+
+
+# v1.8.0-dev.08 (2026-02-10)
+
+
+# Features
+
+- Added the ability to set a image of choice as the app background
+- Added `Always create new saved app entry` toggle in Settings > Advanced that toggles saved patch app entries from being overwritten
+- Added `Hide main tab labels` toggle in Settings > General that toggles the labels under the tab icons on the main screen
+- Added to the app information screen shown after selecting an app or APK to patch a listing displaying the apps package name
+- Made the `View patches` screen for patch bundles and the patch bundle discovery have tap to search package tags
+- Made `Any package` tags not searchable for the `View patches` screens patch widgets (and also the `Any version` tag when the `Any package` tag exists with it)
+- Added an update notice tag to saved patched apps when the imported patch bundle version is newer than the one used to patch the app https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/163
+
+
+# Bug fixes
+
+- Fixed Patch Bundle Discovery `Latest` imports getting stuck to release/pre-release and not actually the latest https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/169
+- Fixed issues with the progress bar during update checks getting stuck indefinitely when a imported patch bundle is errored/not correctly imported
+- Fixed mounting errors that where occuring for some users (again) (needs testing) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/166
+
+
+# v1.8.0-dev.07 (2026-02-07)
+
+
+# Features
+
+- Added guards to the patcher logger to prevent massive patch log exports
+- Made the expandable/collapsable FAB buttons on the `Apps` and `Patch Bundles` tabs states persist
+- Made saved patched app entries in the `Apps` tab not overwrite each other unless the app has the same package name and was patched with the same patch bundle
+
+
+# Bug fixes
+
+- Fixes patching errors caused by missing framework APKs
+- Fixed mounting errors that where occuring for some users (needs testing)
+- Fixed mount buttons on the saved patched app widget not being in the correct state
+
+
+# v1.8.0-dev.06 (2026-02-07)
+
+
+# Features
+
+- Implemented XML surrogate sanitization to all runtimes
+- Added the ability to export all settings (not including the keystore) to a single JSON along with an option to import it https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/165
+- Adjusted the arrow FAB button on the `Apps` and `Patch bundles` tabs to be up against the right edge, removing the awkward gap https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/164
+
+
+# Bug fixes
+
+- Fixed AAPT2 failures on newer resource qualifiers/types
+- Fixed numerous patching errors caused by the ReVanced dependency bump by downgrading
+- Fixed the `Official ReVanced Patches` bundle having the `Remote` tag on its widget instead of the `Pre-installed` tag
+
+
+# v1.8.0-dev.05 (2026-02-05)
+
+
+# Features
+
+- Added support for [AmpleReVanced Patches](https://github.com/AmpleReVanced/revanced-patches) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/152
+- Bumped ReVanced dependencies
+- Bumped Morphe dependencies
+- Added a bundle type field to the patch bundle information screen
+- Made the FAB buttons on the `Apps` tab collapsible/expandable https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/155
+- Improved and cleaned up the patchers log
+- Added a popout animation when switching tabs on the main screen
+
+
+# Bug fixes
+
+- Fixed bundle recommendations not being available for split-apks https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/151
+- Fixed `Skip unneeded split APKs` toggle breaking some patched apps https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/153
+- Fixed patch options not saving correctly for split APKs
+- Fixed issues with action buttons on the saved patched apps widget not responding to taps and the delete button not being functional sometimes https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/155
+- Fixed issues with the saved patch apps widget `Open` button
+- Fixed local patch bundles not having a tag on the top right like remote patch bundles have
+- Fixed issues with Morphe Manager generated keystores not working https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/158
+- Fixed issues with the `Use default recommendation` toggle in the `Choose bundle recommendation` dialog not working correctly
+
+
+# v1.8.0-dev.04 (2026-01-31)
+
+
+# Features
+
+- Added a refresh/reload button to the custom file picker
+- Improved the UI of export and saving dialogs for the custom file picker
+- Updated the view patches screen for patch bundles on the `Discover patch bundles` page to use the same UI as the view patches screen for imported patch bundles
+- Made version tags on patches on all view patch screens searchable with the user set search engine
+- Added patch options/sub-options to the view patches screen on the `Discover patch bundles` page. This is currently only implemented for patch bundles imported from the discovery page as the API dose not currently support patch option fetching for non-imported bundles
+- Make all view patch screens searchable by patch name and description
+- Added a `Latest changelog` and `Previous changelogs` action buttons to the patch bundle widget with options to hide and rearrange them in the corresponding setting
+- Improved the `Apps` tab saved patched app UI to follow the style of the other tabs
+- Made all action buttons for saved patched apps quick action buttons on their widgets along with a setting to hide and rearrange said buttons
+
+
+# Bug fixes
+
+- Fixed issues with the split-apk merger where some apps would crash after being patched
+
+
+# v1.8.0-dev.03 (2026-01-27)
+
+
+# Features
+
+- Added the ability to export saved patched apps to storage
+- Added `Saved` dates to saved patched apps in the `Apps` tab https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/145
+
+
+# Bug fixes
+
+- Possible fix for false OOM errors https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/142
+- Fixed issues with URV generated keystores from previous versions of the app not being imported correctly resulting in signing errors (again) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/147
+
+
+# v1.8.0-dev.02 (2026-01-27)
+
+
+# Features
+
+- Added a `Latest` filter and option in the three dot menu to the `Patch bundle discovery`
+- Updated the split-apk merger to use APKEditor instead of ARSCLib
+- Improved split-apk merger validation, normalization and cleanup
+- Made the two FAB buttons on the `Patch bundles` tab collapsible/expandable https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/146
+- Increased the pill text box size of the tab titles so devices with smaller screens won't have the text cut off https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/146
+- Centered patch profile & patch bundle widget action buttons https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/146
+- Updated the patch profile widget to use the same button type as the patch bundle widgets https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/146
+- Centered the patch action button menu and expanded the search bar properly on the patch selection screen for devices with larger screens https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/148
+
+
+# Bug fixes
+
+- Fixed the `Patch bunblde discovery` screen incorrectly displaying the shimmer effect on the loading elements
+- Fixed missing shimmer element when tapping refresh for the `Keystore dagnostics` panel
+- Fixed incorrect version listings on the patch selection screens patch widgets
+- Fixed the miscolored status bar on patch bundle information screens
+- Fixed issues with unicode characters causing resource compilation errors for certain apps https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/144
+- Fixed the ReVanced patcher runtime using the incorrect Aapt2 binary occasionally
+- Fixed `brut.androlib.exceptions.CantFindFrameworkResException` patching errors
+- Fixed issues with keystores from older versions of URV not being able to be imported into the newer versions of URV without signing errors https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/147
+- Fixed false OOM errors with patching on lower end devices (needs testing) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/142
+
+
+# v1.8.0-dev.01 (2026-01-25)
+
+
+# Features
+
+- Redesigned and improved patch bundles widgets UI, moved the progress banner and improved tab switcher UI https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/135
+- Redesigned and improved patch profiles widgets UI along with adding an app icon to patch profiles that have an APK selected for instant patching https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/135
+- Added `Patch bundle action button order` setting in Settings > Advanced that lets the user disable and rearrange the action buttons on the patch bundles widget https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/135
+- Added a backup and restore system for keystores to mitigate any future missing keystore errors
+- Added a dialog that appears after missing keystore errors to give clarity to the user on what to do next
+- Added an information section/dignonstic panel for keystores which lists the keystore alias and password
+- Gave keystores its own section in Settings > `Import & Export` and moved relevant settings to that section
+- Added a `Effective memory` pill under the experimental patcher toggle to clarify to the user the max memory the app can use
+
+
+# Bug fixes
+
+- Resolved redundancies within the `service.sh` script improved module regeneration https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/134
+- Mitigated issues with having to regenerate keystores & persistent errors with signing (even after regenerate the keystore) for some users
+- Fixed an issue where the experimental patcher was always on internally when patching with Morphe, and couldn't be turned off
+- Fixed alignment of accent presets in `Settings > General`
+- Fixed patch options/suboptions dialogs flickering in certain states
+
+
 # v1.7.1-dev.06 (2026-01-20)
 
 

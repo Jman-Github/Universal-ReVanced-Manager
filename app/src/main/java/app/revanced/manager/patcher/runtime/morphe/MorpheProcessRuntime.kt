@@ -34,7 +34,10 @@ import kotlinx.coroutines.withTimeout
 import java.util.concurrent.atomic.AtomicReference
 import java.io.File
 
-class MorpheProcessRuntime(private val context: Context) : MorpheRuntime(context) {
+class MorpheProcessRuntime(
+    private val context: Context,
+    private val useMemoryOverride: Boolean = true
+) : MorpheRuntime(context) {
     private val binderRef = AtomicReference<IMorphePatcherProcess?>()
 
     override fun cancel() {
@@ -82,40 +85,36 @@ class MorpheProcessRuntime(private val context: Context) : MorpheRuntime(context
         onEvent(ProgressEvent.Started(app.revanced.manager.patcher.StepId.LoadPatches))
         val runtimeClassPath = MorpheRuntimeAssets.ensureRuntimeClassPath(context).absolutePath
 
-        val requestedLimit = prefs.patcherProcessMemoryLimit.get()
-        val aggressiveLimit = prefs.patcherProcessMemoryAggressive.get()
-        val runtimeLimit = if (aggressiveLimit) {
-            MemoryLimitConfig.maxLimitMb(context)
-        } else {
-            MemoryLimitConfig.autoScaleLimitMb(context, requestedLimit)
-        }
-        if (runtimeLimit != requestedLimit && !aggressiveLimit) {
-            Log.d(tag, "Auto-scaled process memory limit from ${requestedLimit}MB to ${runtimeLimit}MB")
-        }
-        val sanitizedLimit = MemoryLimitConfig.clampLimitMb(context, runtimeLimit)
-        if (sanitizedLimit != runtimeLimit) {
-            Log.w(tag, "Requested process memory limit ${runtimeLimit}MB exceeded device capabilities; clamped to ${sanitizedLimit}MB")
-        }
-        val limit = "${sanitizedLimit}M"
-        val usePropOverride = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
-        val propOverride = if (usePropOverride) {
-            resolvePropOverride(context)?.absolutePath
-                ?: throw Exception("Couldn't find prop override library")
-        } else {
-            null
+        val env = System.getenv().toMutableMap().apply {
+            put("CLASSPATH", runtimeClassPath)
         }
 
-        val env =
-            System.getenv().toMutableMap().apply {
-                put("CLASSPATH", runtimeClassPath)
-                if (propOverride != null) {
-                    put("LD_PRELOAD", propOverride)
-                    put("PROP_dalvik.vm.heapgrowthlimit", limit)
-                    put("PROP_dalvik.vm.heapsize", limit)
-                } else {
-                    Log.w(tag, "Skipping prop override on Android ${Build.VERSION.SDK_INT}")
-                }
+        if (useMemoryOverride) {
+            val requestedLimit = prefs.patcherProcessMemoryLimit.get()
+            val aggressiveLimit = prefs.patcherProcessMemoryAggressive.get()
+            val runtimeLimit = if (aggressiveLimit) {
+                MemoryLimitConfig.maxLimitMb(context)
+            } else {
+                requestedLimit
             }
+            val limit = "${runtimeLimit}M"
+            val usePropOverride = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+            val propOverride = if (usePropOverride) {
+                resolvePropOverride(context)?.absolutePath
+                    ?: throw Exception("Couldn't find prop override library")
+            } else {
+                null
+            }
+            if (propOverride != null) {
+                env["LD_PRELOAD"] = propOverride
+                env["PROP_dalvik.vm.heapgrowthlimit"] = limit
+                env["PROP_dalvik.vm.heapsize"] = limit
+            } else {
+                Log.w(tag, "Skipping prop override on Android ${Build.VERSION.SDK_INT}")
+            }
+        } else {
+            Log.d(tag, "Morphe process runtime started without memory override")
+        }
 
         val appProcessBin = resolveAppProcessBin(context)
 
@@ -168,7 +167,8 @@ class MorpheProcessRuntime(private val context: Context) : MorpheRuntime(context
             }
 
             val parameters = MorpheParameters(
-                aaptPath = aaptPath,
+                aaptPath = aaptPrimaryPath,
+                aaptFallbackPath = aaptFallbackPath,
                 frameworkDir = frameworkPath,
                 cacheDir = cacheDir,
                 packageName = packageName,

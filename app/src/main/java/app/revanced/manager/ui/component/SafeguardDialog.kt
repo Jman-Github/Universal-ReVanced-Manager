@@ -18,14 +18,24 @@ fun SafeguardDialog(
     onDismiss: () -> Unit,
     @StringRes title: Int,
     body: String,
+    onConfirm: (() -> Unit)? = null,
+    @StringRes confirmText: Int = R.string.ok,
+    @StringRes dismissText: Int = R.string.cancel,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.ok))
+            TextButton(onClick = onConfirm ?: onDismiss) {
+                Text(stringResource(confirmText))
             }
         },
+        dismissButton = if (onConfirm != null) {
+            {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(dismissText))
+                }
+            }
+        } else null,
         icon = {
             Icon(Icons.Outlined.WarningAmber, null)
         },
@@ -42,10 +52,40 @@ fun SafeguardDialog(
 }
 
 @Composable
-fun NonSuggestedVersionDialog(suggestedVersion: String, onDismiss: () -> Unit) {
+fun NonSuggestedVersionDialog(
+    suggestedVersion: String?,
+    requiresUniversalPatchesEnabled: Boolean = false,
+    onDismiss: () -> Unit
+) {
+    val body = if (requiresUniversalPatchesEnabled) {
+        stringResource(
+            R.string.universal_patches_app_blocked_description,
+            stringResource(R.string.universal_patches_safeguard)
+        )
+    } else {
+        stringResource(
+            R.string.non_suggested_version_warning_description,
+            suggestedVersion.orEmpty()
+        )
+    }
+
     SafeguardDialog(
         onDismiss = onDismiss,
         title = R.string.non_suggested_version_warning_title,
-        body = stringResource(R.string.non_suggested_version_warning_description, suggestedVersion),
+        body = body,
+    )
+}
+
+@Composable
+fun UniversalFallbackVersionDialog(
+    onContinue: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    SafeguardDialog(
+        onDismiss = onDismiss,
+        title = R.string.universal_fallback_warning_title,
+        body = stringResource(R.string.universal_fallback_warning_description),
+        onConfirm = onContinue,
+        confirmText = R.string.continue_,
     )
 }

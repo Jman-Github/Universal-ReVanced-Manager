@@ -39,6 +39,8 @@ fun BundleChangelogHistoryDialog(
         onDismissRequest = onDismissRequest,
     ) {
         Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            containerColor = MaterialTheme.colorScheme.surface,
             topBar = {
                 BundleTopBar(
                     title = stringResource(R.string.bundle_previous_changelogs),

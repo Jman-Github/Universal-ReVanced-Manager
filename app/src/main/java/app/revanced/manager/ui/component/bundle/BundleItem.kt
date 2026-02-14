@@ -1,14 +1,19 @@
 package app.revanced.manager.ui.component.bundle
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -17,8 +22,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material.icons.outlined.Block
@@ -26,7 +33,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,11 +52,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
 import app.revanced.manager.domain.bundles.PatchBundleSource
+import app.revanced.manager.domain.bundles.PatchBundleChangelogEntry
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
+import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isPreinstalled
 import app.revanced.manager.data.platform.NetworkInfo
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.domain.repository.PatchBundleRepository.DisplayNameUpdateResult
+import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.ui.component.ConfirmDialog
 import app.revanced.manager.ui.component.TextInputDialog
 import app.revanced.manager.ui.component.bundle.BundleLinksSheet
@@ -55,6 +67,7 @@ import app.revanced.manager.ui.component.bundle.openBundleCatalogPage
 import app.revanced.manager.ui.component.bundle.openBundleReleasePage
 import app.revanced.manager.ui.component.haptics.HapticCheckbox
 import app.revanced.manager.ui.component.ShimmerBox
+import app.revanced.manager.ui.model.PatchBundleActionKey
 import app.revanced.manager.util.consumeHorizontalScroll
 import app.revanced.manager.util.PatchListCatalog
 import app.revanced.manager.util.relativeTime
@@ -90,12 +103,16 @@ fun BundleItem(
     val uriHandler = LocalUriHandler.current
     val networkInfo = koinInject<NetworkInfo>()
     val bundleRepo = koinInject<PatchBundleRepository>()
+    val prefs = koinInject<PreferencesManager>()
     val coroutineScope = rememberCoroutineScope()
     val catalogUrl = remember(src) {
         if (src.isDefault) PatchListCatalog.revancedCatalogUrl() else PatchListCatalog.resolveCatalogUrl(src)
     }
     var showLinkSheet by rememberSaveable { mutableStateOf(false) }
     var showRenameDialog by rememberSaveable { mutableStateOf(false) }
+    var showBundleChangelog by rememberSaveable { mutableStateOf(false) }
+    var showBundleChangelogHistory by rememberSaveable { mutableStateOf(false) }
+    var changelogHistory by remember { mutableStateOf<List<PatchBundleChangelogEntry>>(emptyList()) }
 
     if (viewBundleDialogPage) {
         BundleInformationDialog(
@@ -116,6 +133,25 @@ fun BundleItem(
             onUpdate = onUpdate,
             onForceUpdate = onForceUpdate,
             autoOpenReleaseRequest = autoOpenReleaseRequest,
+        )
+    }
+
+    if (showBundleChangelog) {
+        val remote = src.asRemoteOrNull
+        if (remote != null) {
+            BundleChangelogDialog(
+                src = remote,
+                onDismissRequest = { showBundleChangelog = false }
+            )
+        } else {
+            showBundleChangelog = false
+        }
+    }
+
+    if (showBundleChangelogHistory) {
+        BundleChangelogHistoryDialog(
+            entries = changelogHistory.drop(1),
+            onDismissRequest = { showBundleChangelogHistory = false }
         )
     }
 
@@ -222,6 +258,12 @@ fun BundleItem(
         !latest.isNullOrBlank() && baseline != null && latest != baseline
     }
 
+    LaunchedEffect(showBundleChangelogHistory, src.uid, src.updatedAt) {
+        if (showBundleChangelogHistory && remoteSource != null) {
+            changelogHistory = bundleRepo.getChangelogHistory(src.uid)
+        }
+    }
+
     val disabledAlpha = 0.38f
     val primaryTextColor = if (src.enabled) {
         MaterialTheme.colorScheme.onSurface
@@ -233,7 +275,11 @@ fun BundleItem(
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = disabledAlpha)
     }
-    val cardShape = RoundedCornerShape(16.dp)
+    val cardShape = RoundedCornerShape(18.dp)
+    val cardBase = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
+    val headerBase = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp)
+    val cardBackground = cardBase.copy(alpha = if (src.enabled) 1f else 0.6f)
+    val headerBackground = headerBase.copy(alpha = if (src.enabled) 1f else 0.7f)
 
     Surface(
         modifier = modifier
@@ -245,13 +291,13 @@ fun BundleItem(
                 onLongClick = onSelect,
             ),
         shape = cardShape,
-        tonalElevation = 2.dp
+        tonalElevation = 2.dp,
+        color = cardBackground
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(0.dp)
         ) {
             val statusIcon = remember(src.state) {
                 when (src.state) {
@@ -260,173 +306,196 @@ fun BundleItem(
                     is PatchBundleSource.State.Available -> null
                 }
             }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.Top
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(headerBackground)
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
-                if (selectable) {
-                    HapticCheckbox(
-                        checked = isBundleSelected,
-                        onCheckedChange = toggleSelection,
-                    )
-                }
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    val titleScrollState = rememberScrollState()
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = src.displayTitle,
-                            style = MaterialTheme.typography.titleMedium,
-                            maxLines = 1,
-                            color = primaryTextColor,
-                            modifier = Modifier
-                                .weight(1f, fill = false)
-                                .consumeHorizontalScroll(titleScrollState)
-                                .horizontalScroll(titleScrollState)
-                        )
-                        statusIcon?.let { (icon, description) ->
-                            Icon(
-                                icon,
-                                contentDescription = stringResource(description),
-                                tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-                    val hasCustomName =
-                        src.displayName?.takeUnless { it.isBlank() } != null && src.displayTitle != src.name
-                    if (hasCustomName) {
-                        val internalNameScrollState = rememberScrollState()
-                        Text(
-                            text = src.name,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = secondaryTextColor,
-                            modifier = Modifier
-                                .consumeHorizontalScroll(internalNameScrollState)
-                                .horizontalScroll(internalNameScrollState)
-                        )
-                    }
-                }
-                val showUpdate = manualUpdateBadge != null || src.asRemoteOrNull != null
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    ActionIconButton(onClick = { showRenameDialog = true }) {
-                        Icon(
-                            Icons.Outlined.Edit,
-                            contentDescription = stringResource(R.string.patch_bundle_rename),
-                            modifier = Modifier.size(ActionIconSize)
+                    if (selectable) {
+                        HapticCheckbox(
+                            checked = isBundleSelected,
+                            onCheckedChange = toggleSelection,
                         )
                     }
-                    ActionIconButton(onClick = { showLinkSheet = true }) {
+                    val titleScrollState = rememberScrollState()
+                    Text(
+                        text = src.displayTitle,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        color = primaryTextColor,
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .consumeHorizontalScroll(titleScrollState)
+                            .horizontalScroll(titleScrollState)
+                    )
+                    statusIcon?.let { (icon, description) ->
                         Icon(
-                            FontAwesomeIcons.Brands.Github,
-                            contentDescription = stringResource(R.string.bundle_release_page),
-                            modifier = Modifier.size(ActionIconSize)
+                            icon,
+                            contentDescription = stringResource(description),
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(18.dp)
                         )
-                    }
-                    if (showUpdate) {
-                        ActionIconButton(
-                            onClick = onUpdate,
-                            onLongClick = { showForceUpdateDialog = true }
-                        ) {
-                            Icon(
-                                Icons.Outlined.Update,
-                                contentDescription = stringResource(R.string.refresh),
-                                modifier = Modifier.size(ActionIconSize)
-                            )
-                        }
                     }
                 }
-            }
-
-            val patchCountText =
-                if (src.state is PatchBundleSource.State.Available) {
-                    pluralStringResource(R.plurals.patch_count, patchCount, patchCount)
-                } else null
-            val versionText = src.version?.let {
-                if (it.startsWith("v", ignoreCase = true)) it else "v$it"
-            }
-            val typeLabel = stringResource(
-                when {
-                    src.isDefault -> R.string.bundle_type_preinstalled
+                val sourceTypeLabel = when {
+                    src.isPreinstalled -> R.string.bundle_type_preinstalled
                     src.asRemoteOrNull != null -> R.string.bundle_type_remote
                     else -> R.string.bundle_type_local
                 }
-            )
-            val metaItems = listOfNotNull(patchCountText, versionText, typeLabel)
-            val metaScrollState = rememberScrollState()
-            if (metaItems.isNotEmpty() || manualUpdateBadge != null) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .consumeHorizontalScroll(metaScrollState)
-                        .horizontalScroll(metaScrollState),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    metaItems.forEach { item ->
-                        BundleMetaPill(text = item, enabled = src.enabled)
-                    }
-                    manualUpdateBadge?.let { info ->
-                        val label = info.latestVersion?.takeUnless { it.isBlank() }?.let { version ->
-                            stringResource(R.string.bundle_update_manual_available_with_version, version)
-                        } ?: stringResource(R.string.bundle_update_manual_available)
-                        BundleMetaPill(text = label, enabled = src.enabled, isAccent = true)
-                    }
-                }
-            }
-
-            val timestampLine = listOfNotNull(
-                src.createdAt?.takeIf { it > 0 }?.relativeTime(context)?.let {
-                    stringResource(R.string.bundle_created_at, it)
-                },
-                src.updatedAt?.takeIf { it > 0 }?.relativeTime(context)?.let {
-                    stringResource(R.string.bundle_updated_at, it)
-                }
-            ).joinToString(" • ")
-            if (timestampLine.isNotEmpty()) {
-                Text(
-                    text = timestampLine,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = secondaryTextColor
+                BundleMetaPill(
+                    text = stringResource(sourceTypeLabel),
+                    enabled = src.enabled,
+                    modifier = Modifier.align(Alignment.TopEnd)
                 )
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                val toggleIcon = if (src.enabled) Icons.Outlined.Block else Icons.Outlined.CheckCircle
-                val toggleLabel = if (src.enabled) R.string.disable else R.string.enable
-                ActionIconButton(onClick = {
-                    if (src.enabled) {
-                        showDisableConfirmationDialog = true
-                    } else {
-                        showEnableConfirmationDialog = true
+                val versionText = src.version?.let {
+                    if (it.startsWith("v", ignoreCase = true)) it else "v$it"
+                }
+                val titleLine = listOfNotNull(src.name.takeIf { it.isNotBlank() }, versionText)
+                    .joinToString(" • ")
+                if (titleLine.isNotBlank()) {
+                    Text(
+                        text = titleLine,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = primaryTextColor
+                    )
+                }
+
+                val patchCountText =
+                    if (src.state is PatchBundleSource.State.Available) {
+                        pluralStringResource(R.plurals.patch_count, patchCount, patchCount)
+                    } else null
+                patchCountText?.let { text ->
+                    Text(
+                        text = text,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = secondaryTextColor
+                    )
+                }
+
+                val timestampLine = listOfNotNull(
+                    src.createdAt?.takeIf { it > 0 }?.relativeTime(context)?.let {
+                        stringResource(R.string.bundle_created_at, it)
+                    },
+                    src.updatedAt?.takeIf { it > 0 }?.relativeTime(context)?.let {
+                        stringResource(R.string.bundle_updated_at, it)
                     }
-                }) {
-                    Icon(
-                        toggleIcon,
-                        contentDescription = stringResource(toggleLabel),
-                        modifier = Modifier.size(ActionIconSize)
+                ).joinToString(" • ")
+                if (timestampLine.isNotEmpty()) {
+                    Text(
+                        text = timestampLine,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = secondaryTextColor
                     )
                 }
-                ActionIconButton(onClick = { showDeleteConfirmationDialog = true }) {
-                    Icon(
-                        Icons.Outlined.Delete,
-                        contentDescription = stringResource(R.string.delete),
-                        modifier = Modifier.size(ActionIconSize)
+
+                manualUpdateBadge?.let { info ->
+                    val label = info.latestVersion?.takeUnless { it.isBlank() }?.let { version ->
+                        stringResource(R.string.bundle_update_manual_available_with_version, version)
+                    } ?: stringResource(R.string.bundle_update_manual_available)
+                    BundleMetaPill(text = label, enabled = src.enabled, isAccent = true)
+                }
+
+    val showUpdate = manualUpdateBadge != null || src.asRemoteOrNull != null
+    val actionScrollState = rememberScrollState()
+    val actionOrderPref by prefs.patchBundleActionOrder.getAsState()
+    val hiddenActionsPref by prefs.patchBundleHiddenActions.getAsState()
+    val orderedActionKeys = remember(actionOrderPref) {
+        val parsed = actionOrderPref
+            .split(',')
+            .mapNotNull { PatchBundleActionKey.fromStorageId(it.trim()) }
+        PatchBundleActionKey.ensureComplete(parsed)
+    }
+    val visibleActionKeys = remember(orderedActionKeys, hiddenActionsPref) {
+        orderedActionKeys.filterNot { it.storageId in hiddenActionsPref }
+    }
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .widthIn(min = maxWidth)
+                .consumeHorizontalScroll(actionScrollState)
+                .horizontalScroll(actionScrollState),
+            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            visibleActionKeys.forEach { key ->
+                when (key) {
+                    PatchBundleActionKey.EDIT -> BundleActionPill(
+                        text = stringResource(R.string.edit),
+                        icon = Icons.Outlined.Edit,
+                        enabled = src.enabled,
+                        onClick = { showRenameDialog = true }
+                    )
+                    PatchBundleActionKey.REFRESH -> if (showUpdate) {
+                        BundleActionPill(
+                            text = stringResource(R.string.refresh),
+                            icon = Icons.Outlined.Update,
+                            enabled = src.enabled,
+                            onClick = onUpdate,
+                            onLongClick = { showForceUpdateDialog = true }
+                        )
+                    }
+                    PatchBundleActionKey.LINKS -> BundleActionPill(
+                        text = stringResource(R.string.bundle_links),
+                        icon = FontAwesomeIcons.Brands.Github,
+                        enabled = src.enabled,
+                        onClick = { showLinkSheet = true }
+                    )
+                    PatchBundleActionKey.CHANGELOG_LATEST -> if (remoteSource != null) {
+                        BundleActionPill(
+                            text = stringResource(R.string.bundle_latest_changelog),
+                            icon = Icons.Outlined.Description,
+                            enabled = src.enabled,
+                            onClick = { showBundleChangelog = true }
+                        )
+                    }
+                    PatchBundleActionKey.CHANGELOG_HISTORY -> if (remoteSource != null) {
+                        BundleActionPill(
+                            text = stringResource(R.string.bundle_previous_changelogs),
+                            icon = Icons.Outlined.History,
+                            enabled = src.enabled,
+                            onClick = { showBundleChangelogHistory = true }
+                        )
+                    }
+                    PatchBundleActionKey.TOGGLE -> {
+                        val toggleIcon = if (src.enabled) Icons.Outlined.Block else Icons.Outlined.CheckCircle
+                        val toggleLabel = if (src.enabled) R.string.disable else R.string.enable
+                        BundleActionPill(
+                            text = stringResource(toggleLabel),
+                            icon = toggleIcon,
+                            enabled = true,
+                            onClick = {
+                                if (src.enabled) {
+                                    showDisableConfirmationDialog = true
+                                } else {
+                                    showEnableConfirmationDialog = true
+                                }
+                            }
+                        )
+                    }
+                    PatchBundleActionKey.DELETE -> BundleActionPill(
+                        text = stringResource(R.string.delete),
+                        icon = Icons.Outlined.Delete,
+                        enabled = true,
+                        onClick = { showDeleteConfirmationDialog = true }
                     )
                 }
+            }
+        }
+    }
             }
         }
     }
@@ -451,27 +520,47 @@ fun BundleItem(
 }
 
 @Composable
-private fun ActionIconButton(
+private fun BundleActionPill(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
-    content: @Composable () -> Unit
+    enabled: Boolean = true,
+    text: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector
 ) {
     val interactionSource = remember { MutableInteractionSource() }
+    val background = MaterialTheme.colorScheme.surface.copy(alpha = if (enabled) 0.9f else 0.5f)
+    val contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.6f)
     Box(
         modifier = modifier
-            .size(ActionButtonSize)
             .clip(RoundedCornerShape(999.dp))
+            .background(background)
             .combinedClickable(
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick,
                 onLongClick = onLongClick
             )
-            .padding(6.dp),
+            .padding(horizontal = 10.dp, vertical = 4.dp),
         contentAlignment = Alignment.Center
     ) {
-        content()
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                icon,
+                contentDescription = text,
+                tint = contentColor,
+                modifier = Modifier.size(14.dp)
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelSmall,
+                color = contentColor,
+                maxLines = 1
+            )
+        }
     }
 }
 
@@ -479,7 +568,7 @@ private fun ActionIconButton(
 fun BundleItemPlaceholder(
     modifier: Modifier = Modifier
 ) {
-    val cardShape = RoundedCornerShape(16.dp)
+    val cardShape = RoundedCornerShape(18.dp)
     Surface(
         modifier = modifier
             .fillMaxWidth()
@@ -491,38 +580,30 @@ fun BundleItemPlaceholder(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    ShimmerBox(modifier = Modifier.width(180.dp).height(18.dp))
-                    ShimmerBox(modifier = Modifier.width(120.dp).height(12.dp))
-                }
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    ShimmerBox(modifier = Modifier.size(28.dp))
-                    ShimmerBox(modifier = Modifier.size(28.dp))
-                    ShimmerBox(modifier = Modifier.size(28.dp))
-                }
+                ShimmerBox(modifier = Modifier.width(180.dp).height(18.dp))
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ShimmerBox(modifier = Modifier.width(74.dp).height(22.dp))
-                ShimmerBox(modifier = Modifier.width(92.dp).height(22.dp))
-                ShimmerBox(modifier = Modifier.width(64.dp).height(22.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ShimmerBox(modifier = Modifier.width(140.dp).height(14.dp))
+                ShimmerBox(modifier = Modifier.width(90.dp).height(12.dp))
+                ShimmerBox(modifier = Modifier.width(200.dp).height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ShimmerBox(modifier = Modifier.width(64.dp).height(22.dp))
+                    ShimmerBox(modifier = Modifier.width(64.dp).height(22.dp))
+                    ShimmerBox(modifier = Modifier.width(64.dp).height(22.dp))
+                }
             }
-
-            ShimmerBox(modifier = Modifier.width(200.dp).height(12.dp))
         }
     }
 }
@@ -562,5 +643,3 @@ private fun BundleMetaPill(
     }
 }
 
-private val ActionButtonSize = 36.dp
-private val ActionIconSize = 18.dp

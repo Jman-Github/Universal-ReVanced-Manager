@@ -129,15 +129,22 @@ sealed class RemotePatchBundle(
         val latestSignature = normalizeVersionForCompare(info.version)
             ?: return@withContext null
         val installedSignature = normalizeVersionForCompare(installedVersionSignatureInternal)
-            ?: normalizeVersionForCompare(version)
-        if (hasInstalled() && installedSignature != null && latestSignature == installedSignature)
+        val manifestSignature = normalizeVersionForCompare(version)
+        if (
+            hasInstalled() &&
+            (
+                (installedSignature != null && latestSignature == installedSignature) ||
+                    (manifestSignature != null && latestSignature == manifestSignature)
+                )
+        ) {
             return@withContext null
+        }
 
         download(info, onProgress)
     }
 
     suspend fun fetchLatestReleaseInfo(): ReVancedAsset {
-        val key = "$uid|$endpoint"
+        val key = "$uid|${latestInfoCacheIdentity()}"
         val now = System.currentTimeMillis()
         val cached = changelogCacheMutex.withLock {
             changelogCache[key]?.takeIf { now - it.timestamp <= CHANGELOG_CACHE_TTL }
@@ -150,6 +157,8 @@ sealed class RemotePatchBundle(
         }
         return asset
     }
+
+    protected open suspend fun latestInfoCacheIdentity(): String = endpoint
 
     companion object {
         const val updateFailMsg = "Failed to update patches"
@@ -261,8 +270,17 @@ class APIPatchBundle(
     enabled
 ) {
     private val api: ReVancedAPI by inject()
+    private val prefs: PreferencesManager by inject()
 
-    override suspend fun getLatestInfo() = api.getPatchesUpdate().getOrThrow()
+    override suspend fun getLatestInfo() = withContext(Dispatchers.IO) {
+        val includePrerelease = prefs.usePatchesPrereleases.get()
+        api.getPatchesUpdate(prerelease = includePrerelease).getOrThrow()
+    }
+
+    override suspend fun latestInfoCacheIdentity(): String {
+        val includePrerelease = prefs.usePatchesPrereleases.get()
+        return "$endpoint|prerelease=$includePrerelease"
+    }
     override fun copy(
         error: Throwable?,
         name: String,
@@ -288,6 +306,7 @@ class APIPatchBundle(
         lastNotifiedVersion,
         enabled
     )
+
 }
 
 // PR #35: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35
@@ -371,7 +390,7 @@ class GitHubPullRequestBundle(
                             var entry = zis.nextEntry
                             while (entry != null) {
                                 val entryName = entry.name.lowercase()
-                                if (!entry.isDirectory && (entryName.endsWith(".rvp") || entryName.endsWith(".mpp"))) {
+                                if (!entry.isDirectory && (entryName.endsWith(".rvp") || entryName.endsWith(".mpp") || entryName.endsWith(".arp"))) {
                                     extractedTotal = entry.size.takeIf { it > 0 }
                                     while (true) {
                                         val read = zis.read(buffer)
@@ -392,7 +411,7 @@ class GitHubPullRequestBundle(
                             }
 
                             if (copiedBytes <= 0L) {
-                                throw IOException("No .rvp or .mpp file found in the pull request artifact.")
+                                throw IOException("No .rvp, .mpp, or .arp file found in the pull request artifact.")
                             }
                             onProgress?.invoke(copiedBytes, extractedTotal)
                         }
@@ -473,19 +492,88 @@ class ExternalGraphqlPatchBundle(
     enabled
 ) {
     private val api: ExternalBundlesApi by inject()
+    private val officialApi: ReVancedAPI by inject()
+    private data class EndpointMetadata(
+        val owner: String?,
+        val repo: String?,
+        val prerelease: Boolean?,
+        val hasExplicitChannel: Boolean,
+        val isV2LatestEndpoint: Boolean
+    )
 
     override suspend fun getLatestInfo(): ReVancedAsset = withContext(Dispatchers.IO) {
-        val (endpointOwner, endpointRepo, endpointPrerelease) = parseEndpointMetadata()
-        val owner = metadata.ownerName?.trim().takeIf { !it.isNullOrBlank() } ?: endpointOwner.orEmpty()
-        val repo = metadata.repoName?.trim().takeIf { !it.isNullOrBlank() } ?: endpointRepo.orEmpty()
-        val prerelease = metadata.isPrerelease ?: endpointPrerelease
-        val latest = if (owner.isNotBlank() && repo.isNotBlank() && prerelease != null) {
-            api.getLatestBundle(owner, repo, prerelease).getOrNull()
+        val endpointMetadata = parseEndpointMetadata()
+        val owner = endpointMetadata.owner?.trim().takeIf { !it.isNullOrBlank() }
+            ?: metadata.ownerName?.trim().takeIf { !it.isNullOrBlank() }
+            ?: ""
+        val repo = endpointMetadata.repo?.trim().takeIf { !it.isNullOrBlank() }
+            ?: metadata.repoName?.trim().takeIf { !it.isNullOrBlank() }
+            ?: ""
+        val prerelease = if (endpointMetadata.hasExplicitChannel) {
+            endpointMetadata.prerelease
         } else {
-            api.getBundleById(metadata.bundleId).getOrNull()
+            metadata.isPrerelease ?: endpointMetadata.prerelease
         }
+        val endpointAsset = if (endpointMetadata.hasExplicitChannel && endpointMetadata.isV2LatestEndpoint) {
+            http.request<ReVancedAsset> { url(endpoint) }.getOrNull()
+        } else {
+            null
+        }
+        if (endpointAsset != null) {
+            metadata = metadata.copy(
+                downloadUrl = endpointAsset.downloadUrl,
+                signatureDownloadUrl = endpointAsset.signatureDownloadUrl,
+                version = endpointAsset.version,
+                createdAt = endpointAsset.createdAt.toString(),
+                description = endpointAsset.description.ifBlank { metadata.description },
+                ownerName = owner.takeIf { it.isNotBlank() } ?: metadata.ownerName,
+                repoName = repo.takeIf { it.isNotBlank() } ?: metadata.repoName,
+                isPrerelease = prerelease
+            )
+            ExternalBundleMetadataStore.write(directory, metadata)
+            return@withContext endpointAsset
+        }
+        if (owner.equals("ReVanced", ignoreCase = true) && repo.equals("revanced-patches", ignoreCase = true)) {
+            val officialAsset = if (prerelease == null) {
+                val latestRelease = officialApi.getPatchesUpdate(prerelease = false).getOrNull()
+                val latestPrerelease = officialApi.getPatchesUpdate(prerelease = true).getOrNull()
+                pickNewestOfficialAsset(latestRelease, latestPrerelease)
+            } else {
+                officialApi.getPatchesUpdate(prerelease = prerelease).getOrNull()
+            }
+            if (officialAsset != null) {
+                metadata = metadata.copy(
+                    downloadUrl = officialAsset.downloadUrl,
+                    signatureDownloadUrl = officialAsset.signatureDownloadUrl,
+                    version = officialAsset.version,
+                    createdAt = officialAsset.createdAt.toString(),
+                    description = officialAsset.description.ifBlank { metadata.description },
+                    isPrerelease = prerelease
+                )
+                ExternalBundleMetadataStore.write(directory, metadata)
+                return@withContext officialAsset
+            }
+        }
+        val trackLatestAcrossChannels = owner.isNotBlank() && repo.isNotBlank() && prerelease == null
+        val latest = if (owner.isNotBlank() && repo.isNotBlank()) {
+            if (prerelease != null) {
+                api.getLatestBundle(owner, repo, prerelease).getOrNull()
+            } else {
+                api.getLatestBundleAny(owner, repo).getOrNull()
+                    ?: run {
+                        val latestRelease = api.getLatestBundle(owner, repo, prerelease = false).getOrNull()
+                        val latestPrerelease = api.getLatestBundle(owner, repo, prerelease = true).getOrNull()
+                        pickLatestSnapshot(latestRelease, latestPrerelease)
+                    }
+            }
+        } else {
+            null
+        } ?: api.getBundleById(metadata.bundleId).getOrNull()
         if (latest != null) {
-            metadata = metadataFromSnapshot(latest)
+            metadata = metadataFromSnapshot(
+                snapshot = latest,
+                preserveChannelSelection = trackLatestAcrossChannels
+            )
             ExternalBundleMetadataStore.write(directory, metadata)
         }
         snapshotToAsset(latest)
@@ -518,20 +606,25 @@ class ExternalGraphqlPatchBundle(
         metadata
     )
 
-    private fun metadataFromSnapshot(snapshot: ExternalBundleSnapshot) = ExternalBundleMetadata(
+    private fun metadataFromSnapshot(
+        snapshot: ExternalBundleSnapshot,
+        preserveChannelSelection: Boolean
+    ) = ExternalBundleMetadata(
         bundleId = metadata.bundleId,
-        downloadUrl = snapshot.downloadUrl ?: metadata.downloadUrl,
+        downloadUrl = safeArtifactUrl(snapshot.downloadUrl) ?: metadata.downloadUrl,
         signatureDownloadUrl = snapshot.signatureDownloadUrl ?: metadata.signatureDownloadUrl,
         version = snapshot.version.ifBlank { metadata.version },
         createdAt = snapshot.createdAt.ifBlank { metadata.createdAt },
         description = snapshot.description ?: metadata.description,
         ownerName = snapshot.ownerName.takeIf { it.isNotBlank() } ?: metadata.ownerName,
         repoName = snapshot.repoName.takeIf { it.isNotBlank() } ?: metadata.repoName,
-        isPrerelease = snapshot.isPrerelease
+        isPrerelease = if (preserveChannelSelection) null else snapshot.isPrerelease
     )
 
     private fun snapshotToAsset(snapshot: ExternalBundleSnapshot?): ReVancedAsset {
-        val downloadUrl = snapshot?.downloadUrl ?: metadata.downloadUrl
+        val downloadUrl = safeArtifactUrl(snapshot?.downloadUrl)
+            ?: safeArtifactUrl(metadata.downloadUrl)
+            ?: throw IllegalStateException("External bundle metadata did not contain a downloadable artifact URL")
         val signatureUrl = snapshot?.signatureDownloadUrl ?: metadata.signatureDownloadUrl
         val version = snapshot?.version?.ifBlank { null } ?: metadata.version
         val description = snapshot?.description ?: metadata.description ?: ""
@@ -548,29 +641,68 @@ class ExternalGraphqlPatchBundle(
         )
     }
 
-    private fun parseEndpointMetadata(): Triple<String?, String?, Boolean?> {
+    private fun parseEndpointMetadata(): EndpointMetadata {
         val candidates = listOfNotNull(endpoint, metadata.downloadUrl)
         for (candidate in candidates) {
             val parsed = runCatching { Url(candidate) }.getOrNull() ?: continue
             val segments = parsed.encodedPath.trim('/').split('/').filter { it.isNotBlank() }
             if (segments.size >= 5 &&
                 segments[0].equals("api", ignoreCase = true) &&
-                segments[1].equals("v1", ignoreCase = true) &&
+                (segments[1].equals("v1", ignoreCase = true) || segments[1].equals("v2", ignoreCase = true)) &&
                 segments[2].equals("bundle", ignoreCase = true)
             ) {
                 val owner = segments[3]
                 val repo = segments[4]
-                val prerelease = parsed.parameters["prerelease"]?.lowercase()?.let { value ->
-                    when (value) {
-                        "true" -> true
-                        "false" -> false
-                        else -> null
+                val (hasExplicitChannel, prerelease) = if (segments[1].equals("v2", ignoreCase = true)) {
+                    when (parsed.parameters["channel"]?.lowercase()) {
+                        "any" -> true to null
+                        "stable" -> true to false
+                        "prerelease" -> true to true
+                        else -> false to null
+                    }
+                } else {
+                    when (parsed.parameters["prerelease"]?.lowercase()) {
+                        "true" -> true to true
+                        "false" -> true to false
+                        else -> false to null
                     }
                 }
-                return Triple(owner, repo, prerelease)
+                return EndpointMetadata(
+                    owner = owner,
+                    repo = repo,
+                    prerelease = prerelease,
+                    hasExplicitChannel = hasExplicitChannel,
+                    isV2LatestEndpoint = segments[1].equals("v2", ignoreCase = true) &&
+                        segments.getOrNull(5).equals("latest", ignoreCase = true)
+                )
             }
         }
-        return Triple(null, null, null)
+        return EndpointMetadata(
+            owner = null,
+            repo = null,
+            prerelease = null,
+            hasExplicitChannel = false,
+            isV2LatestEndpoint = false
+        )
+    }
+
+    private fun safeArtifactUrl(raw: String?): String? {
+        val trimmed = raw?.trim().orEmpty()
+        if (trimmed.isEmpty()) return null
+        if (isExternalBundleApiEndpoint(trimmed)) return null
+        return trimmed
+    }
+
+    private fun isExternalBundleApiEndpoint(raw: String): Boolean {
+        val parsed = runCatching { Url(raw) }.getOrNull() ?: return false
+        val host = parsed.host.lowercase()
+        val isExternalBundlesHost = host == "revanced-external-bundles.brosssh.com" ||
+            host == "revanced-external-bundles-dev.brosssh.com"
+        if (!isExternalBundlesHost) return false
+        val pathNoQuery = parsed.encodedPath.substringBefore('?').substringBefore('#')
+        return pathNoQuery.startsWith("/api/v1/bundle/") ||
+            pathNoQuery.startsWith("/api/v2/bundle/") ||
+            pathNoQuery.startsWith("/bundles/id")
     }
 
     private fun parseCreatedAt(raw: String?): LocalDateTime {
@@ -579,6 +711,41 @@ class ExternalGraphqlPatchBundle(
         if (instantParsed != null) return instantParsed
         val localParsed = runCatching { LocalDateTime.parse(trimmed) }.getOrNull()
         return localParsed ?: Clock.System.now().toLocalDateTime(TimeZone.UTC)
+    }
+
+    private fun pickLatestSnapshot(
+        release: ExternalBundleSnapshot?,
+        prerelease: ExternalBundleSnapshot?
+    ): ExternalBundleSnapshot? {
+        if (release == null) return prerelease
+        if (prerelease == null) return release
+
+        val releaseInstant = snapshotInstant(release)
+        val prereleaseInstant = snapshotInstant(prerelease)
+        if (releaseInstant == null && prereleaseInstant == null) return prerelease
+        if (releaseInstant == null) return prerelease
+        if (prereleaseInstant == null) return release
+        return if (prereleaseInstant > releaseInstant) prerelease else release
+    }
+
+    private fun snapshotInstant(snapshot: ExternalBundleSnapshot): Instant? =
+        parseInstant(snapshot.repoPushedAt)
+            ?: parseInstant(snapshot.lastRefreshedAt)
+            ?: parseInstant(snapshot.createdAt)
+
+    private fun parseInstant(raw: String?): Instant? {
+        val trimmed = raw?.trim().orEmpty()
+        if (trimmed.isEmpty()) return null
+        return runCatching { Instant.parse(trimmed) }.getOrNull()
+    }
+
+    private fun pickNewestOfficialAsset(
+        release: ReVancedAsset?,
+        prerelease: ReVancedAsset?
+    ): ReVancedAsset? {
+        if (release == null) return prerelease
+        if (prerelease == null) return release
+        return if (prerelease.createdAt > release.createdAt) prerelease else release
     }
 }
 

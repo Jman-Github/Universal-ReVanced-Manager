@@ -107,12 +107,34 @@ class AppSelectorViewModel(
 
     var nonSuggestedVersionDialogSubject by mutableStateOf<SelectedApp.Local?>(null)
         private set
+    var nonSuggestedVersionDialogSuggestedVersion by mutableStateOf<String?>(null)
+        private set
+    var nonSuggestedVersionDialogRequiresUniversalEnabled by mutableStateOf(false)
+        private set
+    var universalFallbackDialogSubject by mutableStateOf<SelectedApp.Local?>(null)
+        private set
+    var universalFallbackDialogSuggestedVersion by mutableStateOf<String?>(null)
+        private set
 
     fun loadLabel(app: PackageInfo?) =
         with(pm) { app?.label() ?: this@AppSelectorViewModel.app.getString(R.string.not_installed) }
 
     fun dismissNonSuggestedVersionDialog() {
         nonSuggestedVersionDialogSubject = null
+        nonSuggestedVersionDialogSuggestedVersion = null
+        nonSuggestedVersionDialogRequiresUniversalEnabled = false
+    }
+
+    fun dismissUniversalFallbackDialog() {
+        universalFallbackDialogSubject = null
+        universalFallbackDialogSuggestedVersion = null
+    }
+
+    fun continueWithUniversalFallback() = viewModelScope.launch {
+        val selectedApp = universalFallbackDialogSubject ?: return@launch
+        dismissUniversalFallbackDialog()
+        dismissNonSuggestedVersionDialog()
+        storageSelectionChannel.send(selectedApp)
     }
 
     fun handleStorageResult(uri: Uri) = viewModelScope.launch {
@@ -124,12 +146,7 @@ class AppSelectorViewModel(
             app.toast(app.getString(R.string.failed_to_load_apk))
             return@launch
         }
-
-        if (patchBundleRepository.isVersionAllowed(selectedApp.packageName, selectedApp.version)) {
-            storageSelectionChannel.send(selectedApp)
-        } else {
-            nonSuggestedVersionDialogSubject = selectedApp
-        }
+        handleSelectedStorageApp(selectedApp)
     }
 
     fun handleStorageFile(file: File) = viewModelScope.launch {
@@ -142,10 +159,30 @@ class AppSelectorViewModel(
             return@launch
         }
 
-        if (patchBundleRepository.isVersionAllowed(selectedApp.packageName, selectedApp.version)) {
+        handleSelectedStorageApp(selectedApp)
+    }
+
+
+    private suspend fun handleSelectedStorageApp(selectedApp: SelectedApp.Local) {
+        val assessment =
+            patchBundleRepository.assessVersionSelection(selectedApp.packageName, selectedApp.version)
+        if (assessment.isAllowed) {
+            dismissUniversalFallbackDialog()
+            dismissNonSuggestedVersionDialog()
             storageSelectionChannel.send(selectedApp)
+            return
+        }
+
+        if (assessment.canContinueWithUniversalFallback) {
+            universalFallbackDialogSubject = selectedApp
+            universalFallbackDialogSuggestedVersion = assessment.suggestedVersion
+            dismissNonSuggestedVersionDialog()
         } else {
             nonSuggestedVersionDialogSubject = selectedApp
+            nonSuggestedVersionDialogSuggestedVersion = assessment.suggestedVersion
+            nonSuggestedVersionDialogRequiresUniversalEnabled =
+                assessment.requiresUniversalPatchesEnabled
+            dismissUniversalFallbackDialog()
         }
     }
 
@@ -157,23 +194,16 @@ class AppSelectorViewModel(
             destination.delete()
             Files.copy(stream, destination.toPath())
 
-            if (SplitApkPreparer.isSplitArchive(destination)) {
+            val isSplitArchive = SplitApkPreparer.isSplitArchive(destination)
+            resolvePackageInfo(destination)?.let { packageInfo ->
                 SelectedApp.Local(
-                    packageName = destination.nameWithoutExtension,
-                    version = app.getString(R.string.app_version_unspecified),
+                    packageName = packageInfo.packageName,
+                    version = packageInfo.versionName
+                        ?: if (isSplitArchive) app.getString(R.string.app_version_unspecified) else "",
                     file = destination,
                     temporary = true,
-                    resolved = false
+                    resolved = true
                 )
-            } else {
-                resolvePackageInfo(destination)?.let { packageInfo ->
-                    SelectedApp.Local(
-                        packageName = packageInfo.packageName,
-                        version = packageInfo.versionName ?: "",
-                        file = destination,
-                        temporary = true
-                    )
-                }
             }
         }
 
@@ -186,23 +216,16 @@ class AppSelectorViewModel(
         destination.delete()
         Files.copy(file.toPath(), destination.toPath(), StandardCopyOption.REPLACE_EXISTING)
 
-        return if (SplitApkPreparer.isSplitArchive(destination)) {
+        val isSplitArchive = SplitApkPreparer.isSplitArchive(destination)
+        return resolvePackageInfo(destination)?.let { packageInfo ->
             SelectedApp.Local(
-                packageName = destination.nameWithoutExtension,
-                version = app.getString(R.string.app_version_unspecified),
+                packageName = packageInfo.packageName,
+                version = packageInfo.versionName
+                    ?: if (isSplitArchive) app.getString(R.string.app_version_unspecified) else "",
                 file = destination,
                 temporary = true,
-                resolved = false
+                resolved = true
             )
-        } else {
-            resolvePackageInfo(destination)?.let { packageInfo ->
-                SelectedApp.Local(
-                    packageName = packageInfo.packageName,
-                    version = packageInfo.versionName ?: "",
-                    file = destination,
-                    temporary = true
-                )
-            }
         }
     }
 
