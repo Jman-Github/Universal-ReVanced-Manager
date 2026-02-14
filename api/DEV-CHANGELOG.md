@@ -1,3 +1,14 @@
+# v1.8.0-dev.12 (2026-02-14)
+
+
+# Features
+
+
+# Bug fixes
+
+- Fixed issue with the patch selection screen causing crashes
+
+
 # v1.8.0-dev.11 (2026-02-13)
 
 

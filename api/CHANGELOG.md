@@ -114,6 +114,7 @@
   - When ON again: saved custom selections are restored automatically (if present)
 - Fixed the app language selector dialog layout having an extra bottom spacing/clipping near the `Cancel` button https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/172
 - Fixed issues with patch bundle importing and loading https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/138
+- Fixed issue with the patch selection screen causing crashes
 
 
 # v1.7.1 (2026-01-22)

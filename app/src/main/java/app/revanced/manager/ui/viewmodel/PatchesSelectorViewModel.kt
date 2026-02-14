@@ -38,9 +38,7 @@ import app.revanced.manager.util.Options
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.tag
 import app.revanced.manager.util.saver.Nullable
-import app.revanced.manager.util.saver.nullableSaver
 import app.revanced.manager.util.saver.persistentMapSaver
-import app.revanced.manager.util.saver.persistentSetSaver
 import app.revanced.manager.util.saver.snapshotStateMapSaver
 import app.revanced.manager.util.toast
 import kotlinx.collections.immutable.PersistentMap
@@ -243,12 +241,20 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
     }
 
     private var hasModifiedSelection = false
-    var customPatchSelection: PersistentPatchSelection? by savedStateHandle.saveable(
-        key = "selection_${packageName}",
-        stateSaver = selectionSaver,
-    ) {
-        mutableStateOf(input.currentSelection?.toPersistentPatchSelection())
-    }
+    private val customPatchSelectionKey = "selection_${packageName}"
+    private var customPatchSelectionState by mutableStateOf(
+        restoreInitialCustomPatchSelection(input.currentSelection)
+    )
+    var customPatchSelection: PersistentPatchSelection?
+        get() = customPatchSelectionState
+        set(value) {
+            customPatchSelectionState = value
+            if (value == null) {
+                savedStateHandle.remove<Any?>(customPatchSelectionKey)
+                return
+            }
+            savedStateHandle[customPatchSelectionKey] = Nullable(value.toPatchSelection())
+        }
 
     private val patchOptions: PersistentOptions by savedStateHandle.saveable(
         saver = optionsSaver,
@@ -910,6 +916,22 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
     private fun actionLabel(@StringRes labelRes: Int, vararg args: Any?): String =
         app.getString(labelRes, *args)
 
+    private fun restoreInitialCustomPatchSelection(
+        initialSelection: PatchSelection?
+    ): PersistentPatchSelection? {
+        if (initialSelection != null) {
+            return initialSelection.toPersistentPatchSelection()
+        }
+
+        val stored = runCatching { savedStateHandle.get<Any?>(customPatchSelectionKey) }.getOrNull()
+        val restored = stored.toPersistentPatchSelectionOrNull()
+        if (stored != null && restored == null) {
+            // Self-heal invalid saved state to prevent repeat crashes on next launch.
+            savedStateHandle.remove<Any?>(customPatchSelectionKey)
+        }
+        return restored
+    }
+
     private fun defaultFilterFlags(): Int =
         if (allowIncompatiblePatches || !suggestedVersionSafeguardEnabled)
             SHOW_INCOMPATIBLE
@@ -938,9 +960,6 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
                 valueSaver = persistentMapSaver()
             )
         )
-
-        private val selectionSaver: Saver<PersistentPatchSelection?, Nullable<PatchSelection>> =
-            nullableSaver(persistentMapSaver(valueSaver = persistentSetSaver()))
     }
 }
 
@@ -953,6 +972,46 @@ private fun PatchSelection.toPersistentPatchSelection(): PersistentPatchSelectio
 
 private fun PersistentPatchSelection.toPatchSelection(): PatchSelection =
     mapValues { (_, v) -> v.toSet() }
+
+private fun Any?.toPersistentPatchSelectionOrNull(): PersistentPatchSelection? = when (this) {
+    null -> null
+    is Nullable<*> -> when (val value = inner) {
+        null -> null
+        is Map<*, *> -> value.toPatchSelectionOrNull()?.toPersistentPatchSelection()
+        else -> null
+    }
+    is Map<*, *> -> toPatchSelectionOrNull()?.toPersistentPatchSelection()
+    else -> null
+}
+
+private fun Map<*, *>.toPatchSelectionOrNull(): PatchSelection? {
+    val parsed = buildMap<Int, Set<String>> {
+        forEach { (rawBundleUid, rawPatchNames) ->
+            val bundleUid = when (rawBundleUid) {
+                is Int -> rawBundleUid
+                is Number -> rawBundleUid.toInt()
+                is String -> rawBundleUid.toIntOrNull()
+                else -> null
+            } ?: return null
+
+            val patchNames = when (rawPatchNames) {
+                is Set<*> -> rawPatchNames.mapNotNull { it as? String }.toSet()
+                is Collection<*> -> rawPatchNames.mapNotNull { it as? String }.toSet()
+                is Array<*> -> {
+                    val parsedNames = mutableSetOf<String>()
+                    for (patchName in rawPatchNames) {
+                        if (patchName is String) parsedNames += patchName
+                    }
+                    parsedNames
+                }
+                else -> return null
+            }
+
+            put(bundleUid, patchNames)
+        }
+    }
+    return parsed
+}
 
 private fun PatchBundleInfo.Scoped.withoutUniversalPatches(): PatchBundleInfo.Scoped {
     if (universal.isEmpty()) return this
