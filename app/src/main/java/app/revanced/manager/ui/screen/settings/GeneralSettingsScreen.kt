@@ -1,12 +1,12 @@
 package app.revanced.manager.ui.screen.settings
 
 import android.graphics.Color as AndroidColor
-import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import androidx.annotation.StringRes
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -35,6 +35,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.Icon
@@ -68,6 +70,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
@@ -95,6 +98,7 @@ import app.revanced.manager.util.toColorOrNull
 import app.revanced.manager.util.toHexString
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -124,6 +128,7 @@ fun GeneralSettingsScreen(
     val appLanguage by prefs.appLanguage.getAsState()
     var showLanguageDialog by rememberSaveable { mutableStateOf(false) }
     var showCustomBackgroundImagePicker by rememberSaveable { mutableStateOf(false) }
+    var showCustomBackgroundImagePreview by rememberSaveable { mutableStateOf(false) }
     // Allow selecting the AMOLED preset regardless of the current theme since selecting it switches to dark mode anyway.
     val allowPureBlackPreset = true
     val dynamicColorEnabled by prefs.dynamicColor.getAsState()
@@ -175,25 +180,20 @@ fun GeneralSettingsScreen(
         setOf("jpg", "jpeg", "png", "gif", "svg", "tif", "tiff", "webp")
     }
     val supportedBackgroundImageLabel = ".jpg .jpeg .png .gif .svg .tif .tiff .webp"
-    val customBackgroundFileName = remember(customBackgroundImageUri) {
-        customBackgroundImageUri.takeIf { it.isNotBlank() }
-            ?.let(Uri::parse)
-            ?.lastPathSegment
-            ?.substringAfterLast('/')
-            ?.takeIf { it.isNotBlank() }
+    val customBackgroundPreviewUri = remember(customBackgroundImageUri) {
+        customBackgroundImageUri.takeIf { it.isNotBlank() }?.let(Uri::parse)
+    }
+    LaunchedEffect(customBackgroundImageUri) {
+        if (customBackgroundImageUri.isBlank()) {
+            showCustomBackgroundImagePreview = false
+        }
     }
     val backgroundImageDocumentLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
         showCustomBackgroundImagePicker = false
         if (uri == null) return@rememberLauncherForActivityResult
-        runCatching {
-            context.contentResolver.takePersistableUriPermission(
-                uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION
-            )
-        }
-        viewModel.setCustomBackgroundImageUri(uri.toString())
+        viewModel.importCustomBackgroundImageUri(context, uri)
     }
     if (showCustomBackgroundImagePicker && useCustomFilePicker) {
         PathSelectorDialog(
@@ -201,7 +201,7 @@ fun GeneralSettingsScreen(
             onSelect = { path ->
                 showCustomBackgroundImagePicker = false
                 if (path == null) return@PathSelectorDialog
-                viewModel.setCustomBackgroundImageUri(Uri.fromFile(path.toFile()).toString())
+                viewModel.importCustomBackgroundImagePath(context, path)
             },
             fileFilter = { isSupportedBackgroundImageFile(it, supportedBackgroundImageExtensions) },
             allowDirectorySelection = false,
@@ -484,16 +484,66 @@ fun GeneralSettingsScreen(
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
-                    ExpressiveSettingsItem(
-                        modifier = highlightModifier,
-                        headlineContent = stringResource(R.string.custom_background_image),
-                        supportingContent = customBackgroundFileName?.let {
-                            stringResource(R.string.custom_background_image_selected, it)
-                        } ?: stringResource(R.string.custom_background_image_description),
-                        onClick = {
-                            showCustomBackgroundImagePicker = true
+                    Column(
+                        modifier = highlightModifier.fillMaxWidth()
+                    ) {
+                        ExpressiveSettingsItem(
+                            headlineContent = stringResource(R.string.custom_background_image),
+                            supportingContent = stringResource(R.string.custom_background_image_description),
+                            onClick = {
+                                showCustomBackgroundImagePicker = true
+                            }
+                        )
+
+                        if (customBackgroundPreviewUri != null) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { showCustomBackgroundImagePreview = !showCustomBackgroundImagePreview }
+                                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.custom_background_image_preview),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Icon(
+                                    imageVector = if (showCustomBackgroundImagePreview) {
+                                        Icons.Outlined.ExpandLess
+                                    } else {
+                                        Icons.Outlined.ExpandMore
+                                    },
+                                    contentDescription = if (showCustomBackgroundImagePreview) {
+                                        stringResource(R.string.collapse_content)
+                                    } else {
+                                        stringResource(R.string.expand_content)
+                                    },
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+
+                            AnimatedVisibility(visible = showCustomBackgroundImagePreview) {
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
+                                ) {
+                                    AsyncImage(
+                                        model = customBackgroundPreviewUri,
+                                        contentDescription = stringResource(R.string.custom_background_image_preview),
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(min = 140.dp, max = 220.dp)
+                                    )
+                                }
+                            }
                         }
-                    )
+                    }
                 }
                 ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
@@ -564,7 +614,7 @@ fun GeneralSettingsScreen(
                         enabled = customBackgroundImageUri.isNotBlank(),
                         onClick = {
                             if (customBackgroundImageUri.isNotBlank()) {
-                                viewModel.clearCustomBackgroundImageUri()
+                                viewModel.clearCustomBackgroundImageUri(context)
                             }
                         }
                     )

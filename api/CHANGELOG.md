@@ -71,6 +71,8 @@
 - Made text wrap on the `Create custom YouTube icons & headers` tool screen
 - Added a confirmation dialog for favoriting files with the custom file picker
 - Added an image preview dialog that opens when you tap the small image icon on the left for image files in the custom file picker https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/176
+- Made user-selected image backgrounds persistent by importing the selected image into the app’s internal storage, so the original file doesn’t need to remain on the device. Users who set a custom image background before dev.12 will need to reset and reselect their background for this change to take effect.
+- Replaced `Image selected: <filename>` with a preview of the selected background image
 
 
 # Bug fixes

@@ -1,5 +1,8 @@
 package app.revanced.manager.ui.viewmodel
 
+import android.content.Context
+import android.net.Uri
+import android.util.Log
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -11,6 +14,10 @@ import app.revanced.manager.util.toHexString
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.InputStream
+import java.net.URLConnection
+import java.nio.file.Path
 
 enum class ThemePreset {
     DEFAULT,
@@ -31,6 +38,11 @@ private data class ThemePresetConfig(
 class GeneralSettingsViewModel(
     val prefs: PreferencesManager
 ) : ViewModel() {
+    companion object {
+        private const val tag = "GeneralSettingsViewModel"
+        private const val backgroundDirectoryName = "custom_background"
+        private const val backgroundFileBaseName = "background_image"
+    }
 
     private val presetConfigs = mapOf(
         ThemePreset.DEFAULT to ThemePresetConfig(
@@ -84,7 +96,49 @@ class GeneralSettingsViewModel(
         prefs.customBackgroundImageUri.update(uri)
     }
 
-    fun clearCustomBackgroundImageUri() = viewModelScope.launch {
+    fun importCustomBackgroundImageUri(context: Context, sourceUri: Uri) = viewModelScope.launch(Dispatchers.IO) {
+        val appContext = context.applicationContext
+        val sourceName = sourceUri.lastPathSegment
+        val mimeType = runCatching { appContext.contentResolver.getType(sourceUri) }.getOrNull()
+        runCatching {
+            appContext.contentResolver.openInputStream(sourceUri)?.use { input ->
+                val targetUri = writeCustomBackgroundToInternalStorage(
+                    appContext = appContext,
+                    sourceName = sourceName,
+                    mimeType = mimeType,
+                    input = input
+                )
+                prefs.customBackgroundImageUri.update(targetUri.toString())
+            } ?: error("Unable to open input stream for selected background image URI")
+        }.onFailure {
+            Log.w(tag, "Failed to import custom background image from URI", it)
+        }
+    }
+
+    fun importCustomBackgroundImagePath(context: Context, sourcePath: Path) = viewModelScope.launch(Dispatchers.IO) {
+        val appContext = context.applicationContext
+        val file = sourcePath.toFile()
+        runCatching {
+            val mimeType = URLConnection.guessContentTypeFromName(file.name)
+            val targetUri = writeCustomBackgroundToInternalStorage(
+                appContext = appContext,
+                sourceName = file.name,
+                mimeType = mimeType,
+                input = file.inputStream()
+            )
+            prefs.customBackgroundImageUri.update(targetUri.toString())
+        }.onFailure {
+            Log.w(tag, "Failed to import custom background image from file path", it)
+        }
+    }
+
+    fun clearCustomBackgroundImageUri(context: Context) = viewModelScope.launch(Dispatchers.IO) {
+        val appContext = context.applicationContext
+        runCatching {
+            deleteManagedCustomBackgroundFile(appContext, prefs.customBackgroundImageUri.get())
+        }.onFailure {
+            Log.w(tag, "Failed to delete managed custom background image", it)
+        }
         prefs.customBackgroundImageUri.update("")
     }
 
@@ -133,5 +187,83 @@ class GeneralSettingsViewModel(
         if (!prefs.themePresetSelectionEnabled.get()) return null
         val storedName = prefs.themePresetSelectionName.get().takeIf { it.isNotBlank() }
         return storedName?.let { runCatching { ThemePreset.valueOf(it) }.getOrNull() }
+    }
+
+    private fun writeCustomBackgroundToInternalStorage(
+        appContext: Context,
+        sourceName: String?,
+        mimeType: String?,
+        input: InputStream
+    ): Uri {
+        val directory = File(appContext.filesDir, backgroundDirectoryName)
+        if (!directory.exists()) {
+            directory.mkdirs()
+        }
+
+        val extension = resolveBackgroundImageExtension(sourceName, mimeType)
+        val targetFile = File(directory, "$backgroundFileBaseName.$extension")
+
+        // Keep only one managed background image file.
+        directory.listFiles()?.forEach { existing ->
+            if (existing.isFile && existing.name.startsWith(backgroundFileBaseName) && existing != targetFile) {
+                existing.delete()
+            }
+        }
+
+        val temporaryFile = File(directory, "$backgroundFileBaseName.tmp")
+        input.use { source ->
+            temporaryFile.outputStream().use { destination ->
+                source.copyTo(destination)
+            }
+        }
+
+        if (targetFile.exists()) {
+            targetFile.delete()
+        }
+        if (!temporaryFile.renameTo(targetFile)) {
+            temporaryFile.inputStream().use { source ->
+                targetFile.outputStream().use { destination ->
+                    source.copyTo(destination)
+                }
+            }
+            temporaryFile.delete()
+        }
+
+        return Uri.fromFile(targetFile)
+    }
+
+    private fun resolveBackgroundImageExtension(sourceName: String?, mimeType: String?): String {
+        val fromName = sourceName
+            ?.substringAfterLast('.', missingDelimiterValue = "")
+            ?.lowercase()
+            ?.takeIf { it.isNotBlank() }
+
+        val fromMime = mimeType?.lowercase()?.let {
+            when {
+                it.contains("jpeg") -> "jpg"
+                it.contains("png") -> "png"
+                it.contains("gif") -> "gif"
+                it.contains("svg") -> "svg"
+                it.contains("tiff") -> "tiff"
+                it.contains("webp") -> "webp"
+                else -> null
+            }
+        }
+
+        return fromName ?: fromMime ?: "img"
+    }
+
+    private fun deleteManagedCustomBackgroundFile(appContext: Context, uriString: String) {
+        if (uriString.isBlank()) return
+        val uri = runCatching { Uri.parse(uriString) }.getOrNull() ?: return
+        if (!uri.scheme.equals("file", ignoreCase = true)) return
+        val filePath = uri.path?.takeIf { it.isNotBlank() } ?: return
+        val file = File(filePath)
+        val managedDirectory = File(appContext.filesDir, backgroundDirectoryName)
+        val managedPath = runCatching { managedDirectory.canonicalFile.toPath() }.getOrNull() ?: return
+        val filePathCanonical = runCatching { file.canonicalFile.toPath() }.getOrNull() ?: return
+        if (filePathCanonical.startsWith(managedPath)) {
+            file.delete()
+        }
     }
 }
