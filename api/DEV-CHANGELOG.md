@@ -3,6 +3,9 @@
 
 # Features
 
+- Added a confirmation dialog for favoriting files with the custom file picker
+- Added an image preview dialog that opens when you tap the small image icon on the left for image files in the custom file picker https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/176
+
 
 # Bug fixes
 

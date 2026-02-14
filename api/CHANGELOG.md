@@ -69,6 +69,8 @@
 - Added a `Keystore creator` tool to the `Tools` tab
 - Added a `Keystore converter` tool to the `Tools` tab
 - Made text wrap on the `Create custom YouTube icons & headers` tool screen
+- Added a confirmation dialog for favoriting files with the custom file picker
+- Added an image preview dialog that opens when you tap the small image icon on the left for image files in the custom file picker https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/176
 
 
 # Bug fixes

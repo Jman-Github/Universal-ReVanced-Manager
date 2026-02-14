@@ -3,10 +3,12 @@ package app.revanced.manager.ui.component.patches
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -25,6 +27,7 @@ import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -44,6 +47,8 @@ import androidx.compose.runtime.setValue
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -66,6 +71,7 @@ import app.revanced.manager.util.toast
 import app.revanced.manager.util.APK_FILE_EXTENSIONS
 import app.revanced.manager.util.PM
 import app.revanced.manager.util.saver.PathSaver
+import coil.compose.AsyncImage
 import org.koin.compose.koinInject
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -182,6 +188,8 @@ fun PathSelectorDialog(
     }
     var favoritesExpanded by rememberSaveable { mutableStateOf(false) }
     var pendingRemoveFavorite by remember { mutableStateOf<Path?>(null) }
+    var pendingAddFavorite by remember { mutableStateOf<Path?>(null) }
+    var previewImagePath by remember { mutableStateOf<Path?>(null) }
 
     fun addFavorite(path: Path) {
         val key = path.absolutePathString()
@@ -203,7 +211,7 @@ fun PathSelectorDialog(
         if (favoriteSet.contains(path.absolutePathString())) {
             pendingRemoveFavorite = path
         } else {
-            addFavorite(path)
+            pendingAddFavorite = path
         }
     }
 
@@ -368,10 +376,15 @@ fun PathSelectorDialog(
                                 icon = if (isDir) Icons.Outlined.Folder else fileIconForPath(favorite),
                                 leadingContent = if (isDir) null else {
                                     {
-                                        ApkFileIcon(
+                                        FileLeadingIcon(
                                             path = favorite,
                                             pm = pm,
-                                            filesystem = filesystem
+                                            filesystem = filesystem,
+                                            onImagePreviewClick = if (isImagePreviewablePath(favorite)) {
+                                                { previewImagePath = favorite }
+                                            } else {
+                                                null
+                                            }
                                         )
                                     }
                                 },
@@ -445,10 +458,15 @@ fun PathSelectorDialog(
                             onLongClick = { handleFavoritePress(it) },
                             icon = fileIconForPath(it),
                             leadingContent = {
-                                ApkFileIcon(
+                                FileLeadingIcon(
                                     path = it,
                                     pm = pm,
-                                    filesystem = filesystem
+                                    filesystem = filesystem,
+                                    onImagePreviewClick = if (isImagePreviewablePath(it)) {
+                                        { previewImagePath = it }
+                                    } else {
+                                        null
+                                    }
                                 )
                             },
                             name = it.name
@@ -469,6 +487,44 @@ fun PathSelectorDialog(
                 title = stringResource(R.string.path_selector_favorite_remove_title),
                 description = stringResource(R.string.path_selector_favorite_remove_description, displayName),
                 icon = Icons.Outlined.Star
+            )
+        }
+
+        pendingAddFavorite?.let { target ->
+            val displayName = target.name.ifBlank { target.absolutePathString() }
+            ConfirmDialog(
+                onDismiss = { pendingAddFavorite = null },
+                onConfirm = {
+                    pendingAddFavorite = null
+                    addFavorite(target)
+                },
+                title = stringResource(R.string.path_selector_favorite_add_title),
+                description = stringResource(R.string.path_selector_favorite_add_description, displayName),
+                icon = Icons.Outlined.Star
+            )
+        }
+
+        previewImagePath?.let { target ->
+            val displayName = target.name.ifBlank { target.absolutePathString() }
+            AlertDialog(
+                onDismissRequest = { previewImagePath = null },
+                confirmButton = {
+                    TextButton(onClick = { previewImagePath = null }) {
+                        Text(stringResource(R.string.close))
+                    }
+                },
+                title = { Text(stringResource(R.string.path_selector_image_preview_title, displayName)) },
+                text = {
+                    AsyncImage(
+                        model = target.toFile(),
+                        contentDescription = stringResource(R.string.path_selector_image_preview_content_description, displayName),
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 160.dp, max = 420.dp)
+                            .clip(MaterialTheme.shapes.medium)
+                    )
+                }
             )
         }
     }
@@ -546,11 +602,30 @@ private fun PathSelectorGroupHeaderShimmer() {
 }
 
 @Composable
-private fun ApkFileIcon(
+private fun FileLeadingIcon(
     path: Path,
     pm: PM,
-    filesystem: Filesystem
+    filesystem: Filesystem,
+    onImagePreviewClick: (() -> Unit)? = null
 ) {
+    if (isImagePreviewablePath(path)) {
+        Box(
+            modifier = Modifier.then(
+                if (onImagePreviewClick != null) Modifier.clickable(onClick = onImagePreviewClick) else Modifier
+            )
+        ) {
+            AsyncImage(
+                model = path.toFile(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(24.dp)
+                    .clip(MaterialTheme.shapes.extraSmall)
+            )
+        }
+        return
+    }
+
     val fileName = path.fileName?.toString()?.lowercase().orEmpty()
     val extension = fileName.substringAfterLast('.', "")
     if (extension !in APK_FILE_EXTENSIONS) {
@@ -579,6 +654,19 @@ private fun ApkFileIcon(
     } else {
         Icon(Icons.AutoMirrored.Outlined.InsertDriveFile, contentDescription = null)
     }
+}
+
+private val IMAGE_PREVIEW_EXTENSIONS = setOf(
+    "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "tif", "tiff",
+    "avif", "heif", "heic", "jfif", "ico", "apng"
+)
+
+private fun isImagePreviewablePath(path: Path): Boolean {
+    val extension = path.fileName?.toString()
+        ?.substringAfterLast('.', "")
+        ?.lowercase(Locale.ROOT)
+        .orEmpty()
+    return extension in IMAGE_PREVIEW_EXTENSIONS
 }
 
 private data class ApkIconInfo(

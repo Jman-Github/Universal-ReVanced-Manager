@@ -857,8 +857,12 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="path_selector_search">Search folder</string>
     <string name="path_selector_favorite_added">Added to favorites</string>
     <string name="path_selector_favorite_removed">Removed from favorites</string>
+    <string name="path_selector_favorite_add_title">Add favorite?</string>
+    <string name="path_selector_favorite_add_description">Add “%1$s” to favorites?</string>
     <string name="path_selector_favorite_remove_title">Remove favorite?</string>
     <string name="path_selector_favorite_remove_description">Remove “%1$s” from favorites?</string>
+    <string name="path_selector_image_preview_title">Preview: %1$s</string>
+    <string name="path_selector_image_preview_content_description">Preview image %1$s</string>
     <string name="show_password_field">Show password</string>
     <string name="hide_password_field">Hide password</string>
     <string name="installer_primary_title">Primary installer</string>
