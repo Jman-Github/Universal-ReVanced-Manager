@@ -923,7 +923,14 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
             return initialSelection.toPersistentPatchSelection()
         }
 
-        val stored = runCatching { savedStateHandle.get<Any?>(customPatchSelectionKey) }.getOrNull()
+        val stored = try {
+            savedStateHandle.get<Any?>(customPatchSelectionKey)
+        } catch (exception: Exception) {
+            Log.w(tag, "Failed to restore custom patch selection; clearing corrupt saved state", exception)
+            savedStateHandle.remove<Any?>(customPatchSelectionKey)
+            return null
+        }
+
         val restored = stored.toPersistentPatchSelectionOrNull()
         if (stored != null && restored == null) {
             // Self-heal invalid saved state to prevent repeat crashes on next launch.
@@ -985,32 +992,40 @@ private fun Any?.toPersistentPatchSelectionOrNull(): PersistentPatchSelection? =
 }
 
 private fun Map<*, *>.toPatchSelectionOrNull(): PatchSelection? {
-    val parsed = buildMap<Int, Set<String>> {
-        forEach { (rawBundleUid, rawPatchNames) ->
-            val bundleUid = when (rawBundleUid) {
-                is Int -> rawBundleUid
-                is Number -> rawBundleUid.toInt()
-                is String -> rawBundleUid.toIntOrNull()
-                else -> null
-            } ?: return null
+    if (isEmpty()) return emptyMap()
 
-            val patchNames = when (rawPatchNames) {
-                is Set<*> -> rawPatchNames.mapNotNull { it as? String }.toSet()
-                is Collection<*> -> rawPatchNames.mapNotNull { it as? String }.toSet()
-                is Array<*> -> {
-                    val parsedNames = mutableSetOf<String>()
-                    for (patchName in rawPatchNames) {
-                        if (patchName is String) parsedNames += patchName
-                    }
-                    parsedNames
+    val parsed = mutableMapOf<Int, Set<String>>()
+    var validEntries = 0
+
+    for (entry in entries) {
+        val rawBundleUid: Any? = entry.key
+        val rawPatchNames: Any? = entry.value
+
+        val bundleUid = when (rawBundleUid) {
+            is Int -> rawBundleUid
+            is Number -> rawBundleUid.toInt()
+            is String -> rawBundleUid.toIntOrNull()
+            else -> null
+        } ?: continue
+
+        val patchNames = when (rawPatchNames) {
+            is Set<*> -> rawPatchNames.mapNotNull { it as? String }.toSet()
+            is Collection<*> -> rawPatchNames.mapNotNull { it as? String }.toSet()
+            is Array<*> -> {
+                val parsedNames = mutableSetOf<String>()
+                for (patchName in rawPatchNames) {
+                    if (patchName is String) parsedNames += patchName
                 }
-                else -> return null
+                parsedNames
             }
+            else -> null
+        } ?: continue
 
-            put(bundleUid, patchNames)
-        }
+        parsed[bundleUid] = patchNames
+        validEntries++
     }
-    return parsed
+
+    return if (validEntries > 0) parsed else null
 }
 
 private fun PatchBundleInfo.Scoped.withoutUniversalPatches(): PatchBundleInfo.Scoped {
