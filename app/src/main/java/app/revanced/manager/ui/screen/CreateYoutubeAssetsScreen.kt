@@ -77,7 +77,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -422,9 +421,7 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
                         }
                         Text(
                             text = stringResource(R.string.tools_youtube_assets_info),
-                            style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp, lineHeight = 14.sp),
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
+                            style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp, lineHeight = 14.sp)
                         )
                     }
                 }

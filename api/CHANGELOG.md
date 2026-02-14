@@ -68,6 +68,7 @@
 - Added the ability to hide the `Tools` tab with a toggle in Settings > General
 - Added a `Keystore creator` tool to the `Tools` tab
 - Added a `Keystore converter` tool to the `Tools` tab
+- Made text wrap on the `Create custom YouTube icons & headers` tool screen
 
 
 # Bug fixes
