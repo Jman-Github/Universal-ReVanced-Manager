@@ -24,24 +24,26 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.ui.text.style.TextOverflow
 
 @Composable
 fun DownloadProgressBanner(
     title: String,
     subtitle: String? = null,
     progress: Float?,
+    collapsedLabel: String? = null,
     collapsed: Boolean = false,
     onToggleCollapsed: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val clampedProgress = progress?.coerceIn(0f, 1f)
     val contentPadding = if (collapsed) {
-        PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+        PaddingValues(horizontal = 8.dp, vertical = 4.dp)
     } else {
         PaddingValues(horizontal = 16.dp, vertical = 12.dp)
     }
     val headerHeight = 24.dp
-    val collapsedHeaderHeight = 20.dp
+    val collapsedHeaderHeight = 24.dp
     Surface(
         modifier = modifier.then(
             if (onToggleCollapsed != null) {
@@ -63,10 +65,22 @@ fun DownloadProgressBanner(
                     .height(if (collapsed) collapsedHeaderHeight else headerHeight)
             ) {
                 if (collapsed) {
+                    if (!collapsedLabel.isNullOrBlank()) {
+                        Text(
+                            text = collapsedLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .align(Alignment.CenterStart)
+                                .padding(start = 8.dp, end = 36.dp)
+                        )
+                    }
                     if (onToggleCollapsed != null) {
                         IconButton(
                             onClick = onToggleCollapsed,
-                            modifier = Modifier.align(Alignment.Center)
+                            modifier = Modifier.align(Alignment.CenterEnd)
                         ) {
                             Icon(
                                 imageVector = Icons.Outlined.ExpandMore,

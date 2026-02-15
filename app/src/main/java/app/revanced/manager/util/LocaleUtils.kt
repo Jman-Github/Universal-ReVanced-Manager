@@ -7,6 +7,7 @@ import java.util.Locale
 private val supportedLanguages = setOf(
     "system",
     "en",
+    "fr",
     "id",
     "in",
     "hi",

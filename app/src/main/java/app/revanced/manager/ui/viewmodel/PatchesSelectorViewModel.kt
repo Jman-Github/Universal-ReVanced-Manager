@@ -21,7 +21,7 @@ import app.revanced.manager.data.room.profile.PatchProfilePayload
 import app.revanced.manager.data.room.options.Option as StoredOption
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
-import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
+import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isPreinstalled
 import app.revanced.manager.domain.bundles.RemotePatchBundle
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.domain.repository.DuplicatePatchProfileNameException
@@ -38,9 +38,7 @@ import app.revanced.manager.util.Options
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.tag
 import app.revanced.manager.util.saver.Nullable
-import app.revanced.manager.util.saver.nullableSaver
 import app.revanced.manager.util.saver.persistentMapSaver
-import app.revanced.manager.util.saver.persistentSetSaver
 import app.revanced.manager.util.saver.snapshotStateMapSaver
 import app.revanced.manager.util.toast
 import kotlinx.collections.immutable.PersistentMap
@@ -62,6 +60,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
 import kotlin.collections.ArrayDeque
@@ -131,7 +130,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         patchBundleRepository.sources.map { sources ->
             sources.associate { source ->
                 val type = when {
-                    source.isDefault -> BundleSourceType.Preinstalled
+                    source.isPreinstalled -> BundleSourceType.Preinstalled
                     source.asRemoteOrNull != null -> BundleSourceType.Remote
                     else -> BundleSourceType.Local
                 }
@@ -242,12 +241,20 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
     }
 
     private var hasModifiedSelection = false
-    var customPatchSelection: PersistentPatchSelection? by savedStateHandle.saveable(
-        key = "selection",
-        stateSaver = selectionSaver,
-    ) {
-        mutableStateOf(input.currentSelection?.toPersistentPatchSelection())
-    }
+    private val customPatchSelectionKey = "selection_${packageName}"
+    private var customPatchSelectionState by mutableStateOf(
+        restoreInitialCustomPatchSelection(input.currentSelection)
+    )
+    var customPatchSelection: PersistentPatchSelection?
+        get() = customPatchSelectionState
+        set(value) {
+            customPatchSelectionState = value
+            if (value == null) {
+                savedStateHandle.remove<Any?>(customPatchSelectionKey)
+                return
+            }
+            savedStateHandle[customPatchSelectionKey] = Nullable(value.toPatchSelection())
+        }
 
     private val patchOptions: PersistentOptions by savedStateHandle.saveable(
         saver = optionsSaver,
@@ -657,8 +664,8 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         overrideAppVersion: String? = null,
         keepExistingProfileVersion: Boolean = false,
         existingProfileVersion: String? = null
-    ): Boolean {
-        if (selectedBundles.isEmpty()) return false
+    ): Boolean = withContext(Dispatchers.Default) {
+        if (selectedBundles.isEmpty()) return@withContext false
         val resolvedAppVersion = overrideAppVersion
             ?: resolveAppVersion(
                 selectedBundles,
@@ -686,17 +693,31 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         }
 
         val payload = PatchProfilePayload(bundles)
-        return try {
-            if (existingProfileId != null) {
-                val updated = patchProfileRepository.updateProfile(
-                    uid = existingProfileId,
-                    packageName = packageName,
-                    appVersion = resolvedAppVersion,
-                    name = name,
-                    payload = payload
-                )
-                if (updated != null) {
-                    app.toast(app.getString(R.string.patch_profile_updated_toast, name))
+        try {
+            withContext(Dispatchers.IO) {
+                if (existingProfileId != null) {
+                    val updated = patchProfileRepository.updateProfile(
+                        uid = existingProfileId,
+                        packageName = packageName,
+                        appVersion = resolvedAppVersion,
+                        name = name,
+                        payload = payload
+                    )
+                    if (updated != null) {
+                        withContext(Dispatchers.Main) {
+                            app.toast(app.getString(R.string.patch_profile_updated_toast, name))
+                        }
+                    } else {
+                        patchProfileRepository.createProfile(
+                            packageName = packageName,
+                            appVersion = resolvedAppVersion,
+                            name = name,
+                            payload = payload
+                        )
+                        withContext(Dispatchers.Main) {
+                            app.toast(app.getString(R.string.patch_profile_saved_toast, name))
+                        }
+                    }
                 } else {
                     patchProfileRepository.createProfile(
                         packageName = packageName,
@@ -704,24 +725,22 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
                         name = name,
                         payload = payload
                     )
-                    app.toast(app.getString(R.string.patch_profile_saved_toast, name))
+                    withContext(Dispatchers.Main) {
+                        app.toast(app.getString(R.string.patch_profile_saved_toast, name))
+                    }
                 }
-            } else {
-                patchProfileRepository.createProfile(
-                    packageName = packageName,
-                    appVersion = resolvedAppVersion,
-                    name = name,
-                    payload = payload
-                )
-                app.toast(app.getString(R.string.patch_profile_saved_toast, name))
             }
             true
         } catch (duplicate: DuplicatePatchProfileNameException) {
-            app.toast(app.getString(R.string.patch_profile_duplicate_toast, duplicate.profileName))
+            withContext(Dispatchers.Main) {
+                app.toast(app.getString(R.string.patch_profile_duplicate_toast, duplicate.profileName))
+            }
             false
         } catch (t: Exception) {
             Log.e(tag, "Failed to save patch profile", t)
-            app.toast(app.getString(R.string.patch_profile_save_failed_toast))
+            withContext(Dispatchers.Main) {
+                app.toast(app.getString(R.string.patch_profile_save_failed_toast))
+            }
             false
         }
     }
@@ -897,6 +916,29 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
     private fun actionLabel(@StringRes labelRes: Int, vararg args: Any?): String =
         app.getString(labelRes, *args)
 
+    private fun restoreInitialCustomPatchSelection(
+        initialSelection: PatchSelection?
+    ): PersistentPatchSelection? {
+        if (initialSelection != null) {
+            return initialSelection.toPersistentPatchSelection()
+        }
+
+        val stored = try {
+            savedStateHandle.get<Any?>(customPatchSelectionKey)
+        } catch (exception: Exception) {
+            Log.w(tag, "Failed to restore custom patch selection; clearing corrupt saved state", exception)
+            savedStateHandle.remove<Any?>(customPatchSelectionKey)
+            return null
+        }
+
+        val restored = stored.toPersistentPatchSelectionOrNull()
+        if (stored != null && restored == null) {
+            // Self-heal invalid saved state to prevent repeat crashes on next launch.
+            savedStateHandle.remove<Any?>(customPatchSelectionKey)
+        }
+        return restored
+    }
+
     private fun defaultFilterFlags(): Int =
         if (allowIncompatiblePatches || !suggestedVersionSafeguardEnabled)
             SHOW_INCOMPATIBLE
@@ -925,9 +967,6 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
                 valueSaver = persistentMapSaver()
             )
         )
-
-        private val selectionSaver: Saver<PersistentPatchSelection?, Nullable<PatchSelection>> =
-            nullableSaver(persistentMapSaver(valueSaver = persistentSetSaver()))
     }
 }
 
@@ -940,6 +979,54 @@ private fun PatchSelection.toPersistentPatchSelection(): PersistentPatchSelectio
 
 private fun PersistentPatchSelection.toPatchSelection(): PatchSelection =
     mapValues { (_, v) -> v.toSet() }
+
+private fun Any?.toPersistentPatchSelectionOrNull(): PersistentPatchSelection? = when (this) {
+    null -> null
+    is Nullable<*> -> when (val value = inner) {
+        null -> null
+        is Map<*, *> -> value.toPatchSelectionOrNull()?.toPersistentPatchSelection()
+        else -> null
+    }
+    is Map<*, *> -> toPatchSelectionOrNull()?.toPersistentPatchSelection()
+    else -> null
+}
+
+private fun Map<*, *>.toPatchSelectionOrNull(): PatchSelection? {
+    if (isEmpty()) return emptyMap()
+
+    val parsed = mutableMapOf<Int, Set<String>>()
+    var validEntries = 0
+
+    for (entry in entries) {
+        val rawBundleUid: Any? = entry.key
+        val rawPatchNames: Any? = entry.value
+
+        val bundleUid = when (rawBundleUid) {
+            is Int -> rawBundleUid
+            is Number -> rawBundleUid.toInt()
+            is String -> rawBundleUid.toIntOrNull()
+            else -> null
+        } ?: continue
+
+        val patchNames = when (rawPatchNames) {
+            is Set<*> -> rawPatchNames.mapNotNull { it as? String }.toSet()
+            is Collection<*> -> rawPatchNames.mapNotNull { it as? String }.toSet()
+            is Array<*> -> {
+                val parsedNames = mutableSetOf<String>()
+                for (patchName in rawPatchNames) {
+                    if (patchName is String) parsedNames += patchName
+                }
+                parsedNames
+            }
+            else -> null
+        } ?: continue
+
+        parsed[bundleUid] = patchNames
+        validEntries++
+    }
+
+    return if (validEntries > 0) parsed else null
+}
 
 private fun PatchBundleInfo.Scoped.withoutUniversalPatches(): PatchBundleInfo.Scoped {
     if (universal.isEmpty()) return this

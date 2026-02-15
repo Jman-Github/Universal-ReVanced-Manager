@@ -16,7 +16,12 @@ import androidx.compose.ui.unit.dp
 import app.revanced.manager.ui.component.ShimmerBox
 
 @Composable
-fun AppInfo(appInfo: PackageInfo?, placeholderLabel: String? = null, extraContent: @Composable () -> Unit = {}) {
+fun AppInfo(
+    appInfo: PackageInfo?,
+    placeholderLabel: String? = null,
+    placeholderMetaLines: Int = 1,
+    extraContent: @Composable () -> Unit = {}
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -36,12 +41,19 @@ fun AppInfo(appInfo: PackageInfo?, placeholderLabel: String? = null, extraConten
                     .width(200.dp)
                     .height(22.dp)
             )
-            ShimmerBox(
-                modifier = Modifier
-                    .padding(top = 8.dp)
-                    .width(140.dp)
-                    .height(14.dp)
-            )
+            repeat(placeholderMetaLines.coerceAtLeast(1)) { index ->
+                val lineWidth = when (index) {
+                    0 -> 150.dp
+                    1 -> 130.dp
+                    else -> 110.dp
+                }
+                ShimmerBox(
+                    modifier = Modifier
+                        .padding(top = if (index == 0) 8.dp else 6.dp)
+                        .width(lineWidth)
+                        .height(14.dp)
+                )
+            }
         } else {
             AppIcon(
                 appInfo,

@@ -22,5 +22,6 @@ data class InstalledApp(
     @ColumnInfo(name = "version") val version: String,
     @ColumnInfo(name = "install_type") val installType: InstallType,
     @ColumnInfo(name = "sort_order") val sortOrder: Int,
-    @ColumnInfo(name = "selection_payload") val selectionPayload: PatchProfilePayload? = null
+    @ColumnInfo(name = "selection_payload") val selectionPayload: PatchProfilePayload? = null,
+    @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis()
 )

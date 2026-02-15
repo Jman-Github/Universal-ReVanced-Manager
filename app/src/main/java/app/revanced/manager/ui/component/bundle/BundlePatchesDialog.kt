@@ -1,5 +1,7 @@
 package app.revanced.manager.ui.component.bundle
 
+import android.net.Uri
+import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -9,6 +11,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -20,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -27,11 +32,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.revanced.manager.R
 import app.revanced.manager.domain.bundles.PatchBundleSource
+import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.patcher.patch.PatchInfo
 import app.revanced.manager.ui.component.ArrowButton
 import app.revanced.manager.ui.component.FullscreenDialog
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
+import app.revanced.manager.util.openUrl
 import kotlinx.coroutines.flow.mapNotNull
 import org.koin.compose.koinInject
 
@@ -42,14 +49,27 @@ fun BundlePatchesDialog(
     src: PatchBundleSource,
 ) {
     val patchBundleRepository: PatchBundleRepository = koinInject()
+    val prefs: PreferencesManager = koinInject()
+    val searchEngineHost by prefs.searchEngineHost.getAsState()
+    var query by rememberSaveable(src.uid, "patches_query") { mutableStateOf("") }
     val patches by remember(src.uid) {
         patchBundleRepository.allBundlesInfoFlow.mapNotNull { it[src.uid]?.patches }
     }.collectAsStateWithLifecycle(emptyList())
+    val filteredPatches = remember(patches, query) {
+        val trimmed = query.trim()
+        if (trimmed.isBlank()) {
+            patches
+        } else {
+            patches.filter { it.matchesQuery(trimmed) }
+        }
+    }
 
     FullscreenDialog(
         onDismissRequest = onDismissRequest,
     ) {
         Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            containerColor = MaterialTheme.colorScheme.surface,
             topBar = {
                 BundleTopBar(
                     title = stringResource(R.string.patches),
@@ -70,20 +90,56 @@ fun BundlePatchesDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(16.dp)
             ) {
-                itemsIndexed(
-                    items = patches,
-                    key = { index, patch -> src.uid to (patch.name + "-" + index) }
-                ) { _, patch ->
-                    var expandVersions by rememberSaveable(src.uid, patch.name, "versions") { mutableStateOf(false) }
-                    var expandOptions by rememberSaveable(src.uid, patch.name, "options") { mutableStateOf(false) }
-
-                    PatchItem(
-                        patch,
-                        expandVersions,
-                        onExpandVersions = { expandVersions = !expandVersions },
-                        expandOptions,
-                        onExpandOptions = { expandOptions = !expandOptions }
+                item(key = "patches_search") {
+                    OutlinedTextField(
+                        modifier = Modifier.fillMaxWidth(),
+                        value = query,
+                        onValueChange = { query = it },
+                        singleLine = true,
+                        placeholder = { Text(stringResource(R.string.search_patches)) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Outlined.Search,
+                                contentDescription = stringResource(R.string.search)
+                            )
+                        },
+                        trailingIcon = {
+                            if (query.isNotEmpty()) {
+                                IconButton(onClick = { query = "" }) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Close,
+                                        contentDescription = stringResource(R.string.clear)
+                                    )
+                                }
+                            }
+                        }
                     )
+                }
+                if (filteredPatches.isEmpty() && query.isNotBlank()) {
+                    item(key = "patches_search_empty") {
+                        Text(
+                            text = stringResource(R.string.search_no_results),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    itemsIndexed(
+                        items = filteredPatches,
+                        key = { index, patch -> src.uid to (patch.name + "-" + index) }
+                    ) { _, patch ->
+                        var expandVersions by rememberSaveable(src.uid, patch.name, "versions") { mutableStateOf(false) }
+                        var expandOptions by rememberSaveable(src.uid, patch.name, "options") { mutableStateOf(false) }
+
+                        PatchItem(
+                            patch,
+                            expandVersions,
+                            onExpandVersions = { expandVersions = !expandVersions },
+                            expandOptions,
+                            onExpandOptions = { expandOptions = !expandOptions },
+                            searchEngineHost = searchEngineHost
+                        )
+                    }
                 }
             }
         }
@@ -98,10 +154,14 @@ fun PatchItem(
     onExpandVersions: () -> Unit,
     expandOptions: Boolean,
     onExpandOptions: () -> Unit,
+    searchEngineHost: String,
     showCompatibilityMeta: Boolean = true,
     showOptionValues: Boolean = false,
     optionValues: Map<String, Any?>? = null
 ) {
+    val context = LocalContext.current
+    val anyPackageLabel = stringResource(R.string.patches_view_any_package)
+    val anyVersionLabel = stringResource(R.string.patches_view_any_version)
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
@@ -147,16 +207,17 @@ fun PatchItem(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             PatchInfoChip(
-                                text = "$PACKAGE_ICON ${stringResource(R.string.patches_view_any_package)}"
+                                text = "$PACKAGE_ICON $anyPackageLabel"
                             )
                             PatchInfoChip(
-                                text = "$VERSION_ICON ${stringResource(R.string.patches_view_any_version)}"
+                                text = "$VERSION_ICON $anyVersionLabel"
                             )
                         }
                     } else {
                         patch.compatiblePackages.forEach { compatiblePackage ->
                             val packageName = compatiblePackage.packageName
                             val versions = compatiblePackage.versions.orEmpty().reversed()
+                            val packageIsAny = isAnyPackageTag(packageName, anyPackageLabel)
 
                             FlowRow(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -164,21 +225,55 @@ fun PatchItem(
                             ) {
                                 PatchInfoChip(
                                     modifier = Modifier.align(Alignment.CenterVertically),
-                                    text = "$PACKAGE_ICON $packageName"
+                                    text = "$PACKAGE_ICON $packageName",
+                                    onClick = if (packageIsAny) {
+                                        null
+                                    } else {
+                                        {
+                                            context.openUrl(buildSearchUrl(packageName, null, searchEngineHost))
+                                        }
+                                    }
                                 )
 
                                 if (versions.isNotEmpty()) {
                                     if (expandVersions) {
                                         versions.forEach { version ->
+                                            val versionIsAny = isAnyVersionTag(version, anyVersionLabel)
+                                            val searchable = !(packageIsAny && versionIsAny)
                                             PatchInfoChip(
                                                 modifier = Modifier.align(Alignment.CenterVertically),
-                                                text = "$VERSION_ICON $version"
+                                                text = "$VERSION_ICON $version",
+                                                onClick = if (!searchable) {
+                                                    null
+                                                } else {
+                                                    {
+                                                        val queryVersion = if (versionIsAny) null else version
+                                                        val queryPackage = if (packageIsAny) "android.app" else packageName
+                                                        context.openUrl(
+                                                            buildSearchUrl(queryPackage, queryVersion, searchEngineHost)
+                                                        )
+                                                    }
+                                                }
                                             )
                                         }
                                     } else {
+                                        val displayedVersion = versions.first()
+                                        val versionIsAny = isAnyVersionTag(displayedVersion, anyVersionLabel)
+                                        val searchable = !(packageIsAny && versionIsAny)
                                         PatchInfoChip(
                                             modifier = Modifier.align(Alignment.CenterVertically),
-                                            text = "$VERSION_ICON ${versions.first()}"
+                                            text = "$VERSION_ICON $displayedVersion",
+                                            onClick = if (!searchable) {
+                                                null
+                                            } else {
+                                                {
+                                                    val queryVersion = if (versionIsAny) null else displayedVersion
+                                                    val queryPackage = if (packageIsAny) "android.app" else packageName
+                                                    context.openUrl(
+                                                        buildSearchUrl(queryPackage, queryVersion, searchEngineHost)
+                                                    )
+                                                }
+                                            }
                                         )
                                     }
                                     if (versions.size > 1) {
@@ -324,3 +419,65 @@ fun PatchInfoChip(
 
 const val PACKAGE_ICON = "\uD83D\uDCE6"
 const val VERSION_ICON = "\uD83C\uDFAF"
+
+private fun isAnyPackageTag(value: String?, anyPackageLabel: String): Boolean {
+    val normalized = value.orEmpty().trim().lowercase()
+    if (normalized.isBlank()) return true
+    val normalizedLabel = anyPackageLabel.trim().lowercase()
+    return normalized == normalizedLabel ||
+        normalized == "any package" ||
+        normalized == "*"
+}
+
+private fun isAnyVersionTag(value: String?, anyVersionLabel: String): Boolean {
+    val normalized = value.orEmpty().trim().lowercase()
+    if (normalized.isBlank()) return true
+    val normalizedLabel = anyVersionLabel.trim().lowercase()
+    return normalized == normalizedLabel ||
+        normalized == "any version" ||
+        normalized == "*"
+}
+
+private fun buildSearchUrl(packageName: String, version: String?, searchEngineHost: String): String {
+    val encodedPackage = Uri.encode(packageName)
+    val encodedVersion = version?.takeIf { it.isNotBlank() }?.let {
+        val formatted = if (it.startsWith("v", ignoreCase = true)) it else "v$it"
+        Uri.encode(formatted)
+    }
+    val encodedArch = Build.SUPPORTED_ABIS.firstOrNull()
+        ?.takeIf { it.isNotBlank() }
+        ?.let(Uri::encode)
+    val query = listOfNotNull(encodedPackage, encodedVersion, encodedArch).joinToString("+")
+    val host = normalizeSearchHost(searchEngineHost)
+    return "https://$host/search?q=$query"
+}
+
+private fun normalizeSearchHost(value: String): String {
+    val trimmed = value.trim()
+    if (trimmed.isBlank()) return "google.com"
+    val noScheme = trimmed.removePrefix("https://").removePrefix("http://")
+    val noPath = noScheme.substringBefore('/').substringBefore('?').substringBefore('#')
+    return noPath.trim().trimEnd('/').ifBlank { "google.com" }
+}
+
+private fun PatchInfo.matchesQuery(query: String): Boolean {
+    val normalized = query.lowercase()
+    if (name.contains(normalized, ignoreCase = true)) return true
+    if (description?.contains(normalized, ignoreCase = true) == true) return true
+    if (compatiblePackages?.any { pkg ->
+            pkg.packageName.contains(normalized, ignoreCase = true) ||
+                (pkg.versions?.any { it.contains(normalized, ignoreCase = true) } == true)
+        } == true
+    ) {
+        return true
+    }
+    if (options?.any { option ->
+            option.title.contains(normalized, ignoreCase = true) ||
+                option.key.contains(normalized, ignoreCase = true) ||
+                option.description.contains(normalized, ignoreCase = true)
+        } == true
+    ) {
+        return true
+    }
+    return false
+}

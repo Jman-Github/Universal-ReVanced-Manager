@@ -17,10 +17,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ExitToApp
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
@@ -56,8 +58,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
 import app.revanced.manager.data.platform.Filesystem
@@ -102,6 +106,7 @@ fun PatcherScreen(
     val context = LocalContext.current
     val prefs: PreferencesManager = koinInject()
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
+    val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val autoCollapsePatcherSteps by prefs.autoCollapsePatcherSteps.getAsState()
     val autoExpandRunningSteps by prefs.autoExpandRunningSteps.getAsState()
     val savedAppsEnabled by prefs.enableSavedApps.getAsState()
@@ -145,11 +150,38 @@ fun PatcherScreen(
                 showExportPicker = true
             }
         }
+    val exportDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/vnd.android.package-archive")
+    ) { uri ->
+        viewModel.export(uri)
+        showExportPicker = false
+    }
+    val logExportDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/plain")
+    ) { uri ->
+        viewModel.exportLogsToUri(context, uri)
+        showLogExportPicker = false
+    }
     fun openExportPicker() {
-        if (fs.hasStoragePermission()) {
-            showExportPicker = true
+        if (useCustomFilePicker) {
+            if (fs.hasStoragePermission()) {
+                showExportPicker = true
+            } else {
+                permissionLauncher.launch(permissionName)
+            }
         } else {
-            permissionLauncher.launch(permissionName)
+            exportDocumentLauncher.launch(exportFileName)
+        }
+    }
+
+    LaunchedEffect(useCustomFilePicker) {
+        if (!useCustomFilePicker) {
+            showExportPicker = false
+            showLogExportPicker = false
+            exportFileDialogState = null
+            pendingExportConfirmation = null
+            logExportFileDialogState = null
+            pendingLogExportConfirmation = null
         }
     }
 
@@ -272,7 +304,7 @@ fun PatcherScreen(
         )
     }
 
-    if (showExportPicker) {
+    if (showExportPicker && useCustomFilePicker) {
         PathSelectorDialog(
             roots = storageRoots,
             onSelect = { path ->
@@ -289,7 +321,7 @@ fun PatcherScreen(
             }
         )
     }
-    if (showLogExportPicker) {
+    if (showLogExportPicker && useCustomFilePicker) {
         PathSelectorDialog(
             roots = storageRoots,
             onSelect = { path ->
@@ -305,6 +337,16 @@ fun PatcherScreen(
                 logExportFileDialogState = LogExportDialogState(directory, logFileName)
             }
         )
+    }
+    LaunchedEffect(showExportPicker, useCustomFilePicker, exportFileName) {
+        if (showExportPicker && !useCustomFilePicker) {
+            exportDocumentLauncher.launch(exportFileName)
+        }
+    }
+    LaunchedEffect(showLogExportPicker, useCustomFilePicker, logFileName) {
+        if (showLogExportPicker && !useCustomFilePicker) {
+            logExportDocumentLauncher.launch(logFileName)
+        }
     }
     logExportFileDialogState?.let { state ->
         ExportLogFileNameDialog(
@@ -356,11 +398,42 @@ fun PatcherScreen(
     if (logExportInProgress) {
         AlertDialog(
             onDismissRequest = {},
-            title = { Text(stringResource(R.string.save_logs)) },
-            text = { Text(stringResource(R.string.patcher_log_exporting)) },
-            icon = { CircularProgressIndicator() },
+            icon = {
+                Icon(
+                    Icons.Outlined.Description,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            title = {
+                Text(
+                    stringResource(R.string.save_logs),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        stringResource(R.string.patcher_log_exporting),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth(0.7f)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                    )
+                }
+            },
             confirmButton = {},
-            dismissButton = {}
+            dismissButton = {},
+            shape = RoundedCornerShape(28.dp)
         )
     }
     exportFileDialogState?.let { state ->
@@ -413,11 +486,42 @@ fun PatcherScreen(
     if (exportInProgress) {
         AlertDialog(
             onDismissRequest = {},
-            title = { Text(stringResource(R.string.save_apk)) },
-            text = { Text(stringResource(R.string.patcher_step_group_saving)) },
-            icon = { CircularProgressIndicator() },
+            icon = {
+                Icon(
+                    Icons.Outlined.Save,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            title = {
+                Text(
+                    stringResource(R.string.save_apk),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        stringResource(R.string.patcher_step_group_saving),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth(0.7f)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                    )
+                }
+            },
             confirmButton = {},
-            dismissButton = {}
+            dismissButton = {},
+            shape = RoundedCornerShape(28.dp)
         )
     }
 
@@ -444,6 +548,27 @@ fun PatcherScreen(
                     Text(stringResource(R.string.cancel))
                 }
             }
+        )
+    }
+
+    if (viewModel.keystoreMissingDialog) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissKeystoreMissingDialog,
+            icon = { Icon(Icons.Outlined.WarningAmber, null) },
+            title = { Text(stringResource(R.string.keystore_missing_dialog_title)) },
+            text = {
+                Text(
+                    text = stringResource(R.string.keystore_missing_dialog_message),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissKeystoreMissingDialog) {
+                    Text(stringResource(R.string.ok))
+                }
+            },
+            dismissButton = {}
         )
     }
 
@@ -973,27 +1098,59 @@ private fun ExportApkFileNameDialog(
     val trimmedName = fileName.trim()
     AlertDialog(
         onDismissRequest = onDismiss,
+        title = {
+            Text(
+                stringResource(R.string.save_apk),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        icon = {
+            Icon(
+                Icons.Outlined.Save,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+        },
         confirmButton = {
-            TextButton(
-                onClick = { onConfirm(trimmedName) },
-                enabled = trimmedName.isNotEmpty()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
             ) {
-                Text(stringResource(R.string.save))
+                TextButton(
+                    onClick = { onConfirm(trimmedName) },
+                    enabled = trimmedName.isNotEmpty()
+                ) {
+                    Text(stringResource(R.string.save))
+                }
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.cancel))
+                }
             }
         },
-        title = { Text(stringResource(R.string.save_apk)) },
         text = {
-            OutlinedTextField(
-                value = fileName,
-                onValueChange = { fileName = it },
-                label = { Text(stringResource(R.string.file_name)) },
-                placeholder = { Text(stringResource(R.string.dialog_input_placeholder)) }
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = stringResource(R.string.file_name),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelMedium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = fileName,
+                    onValueChange = { fileName = it },
+                    placeholder = { Text(stringResource(R.string.dialog_input_placeholder)) },
+                    singleLine = true
+                )
+            }
         }
     )
 }
@@ -1008,27 +1165,59 @@ private fun ExportLogFileNameDialog(
     val trimmedName = fileName.trim()
     AlertDialog(
         onDismissRequest = onDismiss,
+        title = {
+            Text(
+                stringResource(R.string.save_logs),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        icon = {
+            Icon(
+                Icons.Outlined.Description,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+        },
         confirmButton = {
-            TextButton(
-                onClick = { onConfirm(trimmedName) },
-                enabled = trimmedName.isNotEmpty()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
             ) {
-                Text(stringResource(R.string.save))
+                TextButton(
+                    onClick = { onConfirm(trimmedName) },
+                    enabled = trimmedName.isNotEmpty()
+                ) {
+                    Text(stringResource(R.string.save))
+                }
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.cancel))
+                }
             }
         },
-        title = { Text(stringResource(R.string.save_logs)) },
         text = {
-            OutlinedTextField(
-                value = fileName,
-                onValueChange = { fileName = it },
-                label = { Text(stringResource(R.string.file_name)) },
-                placeholder = { Text(stringResource(R.string.dialog_input_placeholder)) }
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = stringResource(R.string.file_name),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelMedium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = fileName,
+                    onValueChange = { fileName = it },
+                    placeholder = { Text(stringResource(R.string.dialog_input_placeholder)) },
+                    singleLine = true
+                )
+            }
         }
     )
 }

@@ -20,42 +20,66 @@ import com.gigamole.composescrollbars.scrolltype.knobtype.ScrollbarsDynamicKnobT
 import com.gigamole.composescrollbars.scrolltype.knobtype.ScrollbarsStaticKnobType
 
 @Composable
-fun Scrollbar(scrollState: ScrollState, modifier: Modifier = Modifier) {
+fun Scrollbar(
+    scrollState: ScrollState,
+    modifier: Modifier = Modifier,
+    prominent: Boolean = false
+) {
     Scrollbar(
         ScrollbarsScrollType.Scroll(
             knobType = ScrollbarsStaticKnobType.Auto(),
             state = scrollState
         ),
-        modifier
+        modifier,
+        prominent
     )
 }
 
 @Composable
-fun Scrollbar(lazyListState: LazyListState, modifier: Modifier = Modifier) {
+fun Scrollbar(
+    lazyListState: LazyListState,
+    modifier: Modifier = Modifier,
+    prominent: Boolean = false
+) {
     Scrollbar(
         ScrollbarsScrollType.Lazy.List.Dynamic(
             knobType = ScrollbarsDynamicKnobType.Auto(),
             state = lazyListState
         ),
-        modifier
+        modifier,
+        prominent
     )
 }
 
 @Composable
-private fun Scrollbar(scrollType: ScrollbarsScrollType, modifier: Modifier = Modifier) {
+private fun Scrollbar(
+    scrollType: ScrollbarsScrollType,
+    modifier: Modifier = Modifier,
+    prominent: Boolean = false
+) {
+    val thickness = if (prominent) 6.dp else 4.dp
+    val idleAlpha = if (prominent) 0.6f else 0.35f
+    val visibilityType = if (prominent) {
+        ScrollbarsVisibilityType.Dynamic.Fade(
+            isVisibleOnTouchDown = true,
+            isStaticWhenScrollPossible = true
+        )
+    } else {
+        ScrollbarsVisibilityType.Dynamic.Fade(
+            isVisibleOnTouchDown = true,
+            isStaticWhenScrollPossible = false
+        )
+    }
     Scrollbars(
         state = ScrollbarsState(
             ScrollbarsConfig(
                 orientation = ScrollbarsOrientation.Vertical,
                 paddingValues = PaddingValues(0.dp),
-                layersType = ScrollbarsLayersType.Wrap(ScrollbarsThicknessType.Exact(4.dp)),
+                layersType = ScrollbarsLayersType.Wrap(ScrollbarsThicknessType.Exact(thickness)),
                 knobLayerContentType = ScrollbarsLayerContentType.Default.Colored.Idle(
-                    idleColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+                    idleColor = MaterialTheme.colorScheme.onSurface.copy(alpha = idleAlpha)
                 ),
-                visibilityType = ScrollbarsVisibilityType.Dynamic.Fade(
-                    isVisibleOnTouchDown = true,
-                    isStaticWhenScrollPossible = false
-                )
+                visibilityType = visibilityType
             ),
             scrollType
         ),

@@ -7,7 +7,6 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Environment
 import android.os.storage.StorageManager
-import android.os.storage.StorageVolume
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
 import app.revanced.manager.util.FilenameUtils
@@ -44,42 +43,80 @@ class Filesystem(private val app: Application) {
     fun storageRoots(): List<StorageRoot> {
         val roots = LinkedHashMap<String, StorageRoot>()
         val storageManager = app.getSystemService(Context.STORAGE_SERVICE) as StorageManager
-        storageManager.storageVolumes.forEach { volume ->
-            val directory = resolveStorageVolumeDirectory(volume) ?: return@forEach
-            val path = directory.toPath()
-            val label = volume.getDescription(app).takeIf { it.isNotBlank() } ?: path.toString()
-            roots.putIfAbsent(
-                path.toString(),
-                StorageRoot(path = path, label = label, isRemovable = volume.isRemovable)
-            )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            storageManager.storageVolumes.forEach { volume ->
+                val directory = volume.directory ?: return@forEach
+                addStorageRoot(
+                    roots = roots,
+                    directory = directory,
+                    labelCandidate = volume.getDescription(app),
+                    isRemovable = volume.isRemovable
+                )
+            }
+        } else {
+            app.getExternalFilesDirs(null).forEach { appSpecific ->
+                val root = appSpecific?.let(::resolveLegacyStorageRoot) ?: return@forEach
+                val volume = runCatching { storageManager.getStorageVolume(root) }.getOrNull()
+                addStorageRoot(
+                    roots = roots,
+                    directory = root,
+                    labelCandidate = volume?.getDescription(app),
+                    isRemovable = volume?.isRemovable
+                        ?: !Environment.isExternalStorageEmulated(root)
+                )
+            }
         }
 
-        val primaryPath = Environment.getExternalStorageDirectory().toPath()
-        roots.putIfAbsent(
-            primaryPath.toString(),
-            StorageRoot(path = primaryPath, label = primaryPath.toString(), isRemovable = false)
+        val primaryDir = Environment.getExternalStorageDirectory()
+        val primaryVolume = runCatching { storageManager.getStorageVolume(primaryDir) }.getOrNull()
+        addStorageRoot(
+            roots = roots,
+            directory = primaryDir,
+            labelCandidate = primaryVolume?.getDescription(app),
+            isRemovable = primaryVolume?.isRemovable ?: false
         )
 
         return roots.values.toList()
     }
 
-    private fun resolveStorageVolumeDirectory(volume: StorageVolume): File? {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            return volume.directory
-        }
-        val pathFile = runCatching {
-            val method = StorageVolume::class.java.getDeclaredMethod("getPathFile")
-            method.isAccessible = true
-            method.invoke(volume) as? File
-        }.getOrNull()
-        if (pathFile != null) return pathFile
+    private fun addStorageRoot(
+        roots: MutableMap<String, StorageRoot>,
+        directory: File,
+        labelCandidate: String?,
+        isRemovable: Boolean
+    ) {
+        val canonical = runCatching { directory.canonicalFile }.getOrElse { directory.absoluteFile }
+        if (!canonical.exists() || !canonical.isDirectory) return
 
-        val path = runCatching {
-            val method = StorageVolume::class.java.getDeclaredMethod("getPath")
-            method.isAccessible = true
-            method.invoke(volume) as? String
-        }.getOrNull()
-        return path?.let(::File)
+        val path = canonical.toPath()
+        val label = labelCandidate?.takeIf { it.isNotBlank() } ?: path.toString()
+        roots.putIfAbsent(
+            path.toString(),
+            StorageRoot(path = path, label = label, isRemovable = isRemovable)
+        )
+    }
+
+    private fun resolveLegacyStorageRoot(appSpecificDir: File): File? {
+        val canonical = runCatching { appSpecificDir.canonicalFile }.getOrElse { appSpecificDir.absoluteFile }
+
+        // Expected app-specific path form: <root>/Android/data/<package>/files
+        val filesDir = canonical.name == "files"
+        val packageDir = canonical.parentFile?.name == app.packageName
+        val dataDir = canonical.parentFile?.parentFile?.name == "data"
+        val androidDir = canonical.parentFile?.parentFile?.parentFile?.name == "Android"
+        if (filesDir && packageDir && dataDir && androidDir) {
+            return canonical.parentFile?.parentFile?.parentFile?.parentFile
+        }
+
+        // Fallback for vendor-modified paths.
+        val marker = "${File.separator}Android${File.separator}data${File.separator}"
+        val absolutePath = canonical.absolutePath
+        val markerIndex = absolutePath.indexOf(marker)
+        if (markerIndex > 0) {
+            return File(absolutePath.substring(0, markerIndex))
+        }
+
+        return null
     }
 
     private fun usesManagePermission() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R

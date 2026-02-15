@@ -1,24 +1,31 @@
 package app.revanced.manager.ui.screen
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
@@ -29,8 +36,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.outlined.Android
 import androidx.compose.material.icons.outlined.Bookmarks
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
@@ -46,6 +56,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -57,6 +69,7 @@ import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -64,23 +77,31 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.revanced.manager.ui.component.AppIcon
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
+import app.revanced.manager.ui.component.Scrollbar
 import app.revanced.manager.ui.component.TextInputDialog
 import app.revanced.manager.ui.component.haptics.HapticCheckbox
 import app.revanced.manager.ui.component.patches.PathSelectorDialog
 import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.domain.manager.PreferencesManager
+import app.revanced.manager.patcher.split.SplitApkInspector
+import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.ui.viewmodel.BundleSourceType
 import app.revanced.manager.ui.viewmodel.BundleOptionDisplay
 import app.revanced.manager.ui.viewmodel.PatchProfileLaunchData
 import app.revanced.manager.ui.viewmodel.PatchProfileListItem
 import app.revanced.manager.ui.viewmodel.PatchProfilesViewModel
 import app.revanced.manager.ui.viewmodel.PatchProfilesViewModel.RenameResult
+import app.revanced.manager.util.APK_FILE_EXTENSIONS
+import app.revanced.manager.util.PM
 import app.revanced.manager.util.relativeTime
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.isAllowedApkFile
 import app.universal.revanced.manager.R
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koin.compose.koinInject
 import sh.calvin.reorderable.ReorderableCollectionItemScope
 import sh.calvin.reorderable.ReorderableItem
@@ -102,6 +123,9 @@ fun PatchProfilesScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val prefs = koinInject<PreferencesManager>()
+    val useCustomFilePicker by prefs.useCustomFilePicker.flow.collectAsStateWithLifecycle(
+        initialValue = prefs.useCustomFilePicker.default
+    )
     val allowUniversal by prefs.disableUniversalPatchCheck.flow.collectAsStateWithLifecycle(
         initialValue = prefs.disableUniversalPatchCheck.default
     )
@@ -109,6 +133,7 @@ fun PatchProfilesScreen(
         initialValue = prefs.allowPatchProfileBundleOverride.default
     )
     val filesystem = koinInject<Filesystem>()
+    val pm = koinInject<PM>()
     val storageRoots = remember { filesystem.storageRoots() }
     var loadingProfileId by remember { mutableStateOf<Int?>(null) }
     var blockedProfile by remember { mutableStateOf<PatchProfileLaunchData?>(null) }
@@ -120,6 +145,7 @@ fun PatchProfilesScreen(
     var versionDialogSaving by remember { mutableStateOf(false) }
     var settingsDialogProfile by remember { mutableStateOf<PatchProfileListItem?>(null) }
     var apkPickerProfile by remember { mutableStateOf<PatchProfileListItem?>(null) }
+    var pendingDocumentApkPickerProfile by remember { mutableStateOf<PatchProfileListItem?>(null) }
     var apkPickerBusy by remember { mutableStateOf(false) }
     data class ChangeUidTarget(val profileId: Int, val bundleUid: Int, val bundleName: String?)
     var changeUidTarget by remember { mutableStateOf<ChangeUidTarget?>(null) }
@@ -167,7 +193,52 @@ fun PatchProfilesScreen(
 
     BackHandler(enabled = selectionActive) { viewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL) }
 
+    fun handleApkSelectionResult(profileName: String, result: PatchProfilesViewModel.ApkSelectionResult) {
+        when (result) {
+            PatchProfilesViewModel.ApkSelectionResult.SUCCESS -> context.toast(
+                context.getString(R.string.patch_profile_apk_saved_toast, profileName)
+            )
+            PatchProfilesViewModel.ApkSelectionResult.INVALID_FILE -> context.toast(
+                context.getString(R.string.patch_profile_apk_invalid_toast)
+            )
+            PatchProfilesViewModel.ApkSelectionResult.PACKAGE_MISMATCH -> context.toast(
+                context.getString(R.string.patch_profile_apk_mismatch_toast)
+            )
+            PatchProfilesViewModel.ApkSelectionResult.PROFILE_NOT_FOUND,
+            PatchProfilesViewModel.ApkSelectionResult.FAILED,
+            PatchProfilesViewModel.ApkSelectionResult.CLEARED -> context.toast(
+                context.getString(R.string.patch_profile_apk_failed_toast)
+            )
+        }
+    }
+    val apkDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        val profile = pendingDocumentApkPickerProfile
+        pendingDocumentApkPickerProfile = null
+        apkPickerProfile = null
+        if (profile == null || uri == null) return@rememberLauncherForActivityResult
+        apkPickerBusy = true
+        scope.launch {
+            val tempFile = withContext(Dispatchers.IO) {
+                val file = File.createTempFile("patch-profile-apk", ".apk", context.cacheDir)
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    file.outputStream().use { output -> input.copyTo(output) }
+                }
+                file
+            }
+            try {
+                val result = viewModel.updateProfileApk(profile.id, tempFile)
+                handleApkSelectionResult(profile.name, result)
+            } finally {
+                withContext(Dispatchers.IO) { tempFile.delete() }
+                apkPickerBusy = false
+            }
+        }
+    }
+
     apkPickerProfile?.let { profile ->
+        if (!useCustomFilePicker) return@let
         PathSelectorDialog(
             roots = storageRoots,
             onSelect = { path ->
@@ -177,22 +248,7 @@ fun PatchProfilesScreen(
                 scope.launch {
                     try {
                         val result = viewModel.updateProfileApk(profile.id, File(path.toString()))
-                        when (result) {
-                            PatchProfilesViewModel.ApkSelectionResult.SUCCESS -> context.toast(
-                                context.getString(R.string.patch_profile_apk_saved_toast, profile.name)
-                            )
-                            PatchProfilesViewModel.ApkSelectionResult.INVALID_FILE -> context.toast(
-                                context.getString(R.string.patch_profile_apk_invalid_toast)
-                            )
-                            PatchProfilesViewModel.ApkSelectionResult.PACKAGE_MISMATCH -> context.toast(
-                                context.getString(R.string.patch_profile_apk_mismatch_toast)
-                            )
-                            PatchProfilesViewModel.ApkSelectionResult.PROFILE_NOT_FOUND,
-                            PatchProfilesViewModel.ApkSelectionResult.FAILED,
-                            PatchProfilesViewModel.ApkSelectionResult.CLEARED -> context.toast(
-                                context.getString(R.string.patch_profile_apk_failed_toast)
-                            )
-                        }
+                        handleApkSelectionResult(profile.name, result)
                     } finally {
                         apkPickerBusy = false
                     }
@@ -202,6 +258,13 @@ fun PatchProfilesScreen(
             allowDirectorySelection = false,
             fileTypeLabel = stringResource(R.string.apk_file_type)
         )
+    }
+    LaunchedEffect(apkPickerProfile?.id, useCustomFilePicker) {
+        val profile = apkPickerProfile
+        if (profile != null && !useCustomFilePicker) {
+            pendingDocumentApkPickerProfile = profile
+            apkDocumentLauncher.launch(arrayOf("*/*"))
+        }
     }
 
     renameProfileId?.let { targetId ->
@@ -300,29 +363,25 @@ fun PatchProfilesScreen(
 
     LazyColumnWithScrollbar(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(vertical = 12.dp),
+        contentPadding = PaddingValues(bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         items(filteredProfiles, key = { it.id }) { profile ->
+            val patchCount = profile.bundleDetails.sumOf { it.patchCount }
+            val patchCountText = pluralStringResource(R.plurals.patch_count, patchCount, patchCount)
             val bundleCountText = pluralStringResource(
                 R.plurals.patch_profile_bundle_count,
                 profile.bundleCount,
                 profile.bundleCount
             )
-
-            val detailLine = buildList {
-                when (val version = profile.appVersion) {
-                    null -> add(stringResource(R.string.bundle_version_all_versions))
-                    else -> {
-                        val formatted = if (version.startsWith("v", ignoreCase = true)) version else "v$version"
-                        add(formatted)
-                    }
-                }
-                add(bundleCountText)
-            }.joinToString(" • ")
+            val versionLabel = when (val version = profile.appVersion) {
+                null -> stringResource(R.string.bundle_version_all_versions)
+                else -> if (version.startsWith("v", ignoreCase = true)) version else "v$version"
+            }
             val creationText = profile.createdAt.takeIf { it > 0 }?.relativeTime(context)?.let {
                 stringResource(R.string.patch_profile_created_at, it)
             }
+            val apkPath = profile.apkPath?.takeIf { it.isNotBlank() }
             val expanded = expandedProfiles[profile.id] == true
             val isSelected = profile.id in viewModel.selectedProfiles
             val cardShape = RoundedCornerShape(16.dp)
@@ -391,103 +450,106 @@ fun PatchProfilesScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.Top
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        if (selectionActive) {
-                            HapticCheckbox(
-                                checked = isSelected,
-                                onCheckedChange = { viewModel.setSelection(profile.id, it) }
-                            )
-                        }
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = profile.packageName,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.outline
-                            )
-                            Text(
-                                text = profile.name,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            if (detailLine.isNotEmpty()) {
-                                Text(
-                                    text = detailLine,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                            if (selectionActive) {
+                                HapticCheckbox(
+                                    checked = isSelected,
+                                    onCheckedChange = { viewModel.setSelection(profile.id, it) }
                                 )
                             }
-                            creationText?.let { created ->
-                                Text(
-                                    text = created,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                            if (apkPath != null) {
+                                PatchProfileApkIcon(
+                                    apkPath = apkPath,
+                                    pm = pm,
+                                    filesystem = filesystem,
+                                    modifier = Modifier.size(44.dp)
                                 )
                             }
-                        }
-                        if (loadingProfileId == profile.id) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
-                            )
-                        }
-                    }
-                    if (profile.bundleDetails.isNotEmpty()) {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            profile.bundleDetails.forEach { detail ->
-                                val countText = pluralStringResource(
-                                    R.plurals.patch_profile_bundle_patch_count,
-                                    detail.patchCount,
-                                    detail.patchCount
-                                )
-                                val name = detail.displayName
-                                    ?: stringResource(R.string.patches_name_fallback)
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
                                 Text(
-                                    text = stringResource(R.string.patch_profile_bundle_header, name, countText),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    text = profile.name,
                                     maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Text(
+                                    text = profile.packageName,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Divider(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    color = MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            }
+                            if (loadingProfileId == profile.id) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp
                                 )
                             }
                         }
-                    }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        ProfileActionText(
-                            text = stringResource(
-                                if (expanded) R.string.patch_profile_show_less
-                                else R.string.patch_profile_show_more
-                            ),
-                            enabled = !selectionActive
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.horizontalScroll(rememberScrollState())
                         ) {
-                            expandedProfiles[profile.id] = !expanded
+                            ProfileMetaPill(text = patchCountText)
+                            ProfileMetaPill(text = bundleCountText)
+                            ProfileMetaPill(text = versionLabel)
                         }
-                        Spacer(modifier = Modifier.weight(1f))
+                        creationText?.let { created ->
+                            Text(
+                                text = created,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         if (!selectionActive) {
-                            ProfileActionText(
-                                text = stringResource(R.string.patch_profile_rename)
-                            ) {
-                                renameProfileId = profile.id
-                                renameProfileName = profile.name
-                            }
-                            Spacer(modifier = Modifier.size(8.dp))
-                            IconButton(
-                                onClick = { settingsDialogProfile = profile }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Settings,
-                                    contentDescription = stringResource(R.string.patch_profile_version_override_action),
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp)
-                                )
+                            val actionScrollState = rememberScrollState()
+                            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(
+                                        8.dp,
+                                        Alignment.CenterHorizontally
+                                    ),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .widthIn(min = maxWidth)
+                                        .horizontalScroll(actionScrollState)
+                                ) {
+                                    ProfileActionPill(
+                                        text = stringResource(R.string.patch_profile_rename),
+                                        icon = Icons.Outlined.Edit
+                                    ) {
+                                        renameProfileId = profile.id
+                                        renameProfileName = profile.name
+                                    }
+                                    ProfileActionPill(
+                                        text = stringResource(
+                                            if (expanded) R.string.patch_profile_show_less
+                                            else R.string.patch_profile_show_more
+                                        ),
+                                        icon = Icons.Outlined.Extension
+                                    ) {
+                                        expandedProfiles[profile.id] = !expanded
+                                    }
+                                    ProfileActionPill(
+                                        text = stringResource(R.string.settings),
+                                        icon = Icons.Outlined.Settings
+                                    ) {
+                                        settingsDialogProfile = profile
+                                    }
+                                }
                             }
                         }
                     }
@@ -576,39 +638,69 @@ fun PatchProfilesScreen(
                                             }
                                         }
                                     }
-                                detail.patches.forEachIndexed { index, patchName ->
-                                    val optionList = detail.options[patchName]
-                                        ?: detail.options[patchName.trim()]
-                                        ?: detail.options.entries.firstOrNull { it.key.equals(patchName, ignoreCase = true) }?.value
-                                        ?: emptyList()
-                                    val hasOptions = optionList.isNotEmpty()
-                                    Column(
-                                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(12.dp),
+                                    tonalElevation = 1.dp,
+                                    color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
+                                ) {
+                                    val patchScrollState = rememberScrollState()
+                                    Box(
                                         modifier = Modifier
-                                            .then(
-                                                if (hasOptions) Modifier.clickable {
-                                                    optionDialogData = OptionDialogData(
-                                                        patchName = patchName,
-                                                        entries = optionList
-                                                    )
-                                                } else Modifier
-                                            )
+                                            .fillMaxWidth()
+                                            .padding(12.dp)
+                                            .heightIn(max = 220.dp)
                                     ) {
-                                        Text(
-                                            text = patchName,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        if (hasOptions) {
-                                            Text(
-                                                text = stringResource(R.string.patch_profile_view_options),
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.primary
-                                            )
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(end = 8.dp)
+                                                .verticalScroll(patchScrollState),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            detail.patches.forEachIndexed { index, patchName ->
+                                                val optionList = detail.options[patchName]
+                                                    ?: detail.options[patchName.trim()]
+                                                    ?: detail.options.entries.firstOrNull {
+                                                        it.key.equals(patchName, ignoreCase = true)
+                                                    }?.value
+                                                    ?: emptyList()
+                                                val hasOptions = optionList.isNotEmpty()
+                                                Column(
+                                                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                                                    modifier = Modifier
+                                                        .then(
+                                                            if (hasOptions) Modifier.clickable {
+                                                                optionDialogData = OptionDialogData(
+                                                                    patchName = patchName,
+                                                                    entries = optionList
+                                                                )
+                                                            } else Modifier
+                                                        )
+                                                ) {
+                                                    Text(
+                                                        text = patchName,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                    if (hasOptions) {
+                                                        Text(
+                                                            text = stringResource(R.string.patch_profile_view_options),
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = MaterialTheme.colorScheme.primary
+                                                        )
+                                                    }
+                                                }
+                                                if (index != detail.patches.lastIndex) {
+                                                    Spacer(modifier = Modifier.height(4.dp))
+                                                }
+                                            }
                                         }
-                                    }
-                                    if (index != detail.patches.lastIndex) {
-                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Scrollbar(
+                                            scrollState = patchScrollState,
+                                            modifier = Modifier.align(Alignment.CenterEnd),
+                                            prominent = true
+                                        )
                                     }
                                 }
                             }
@@ -1248,4 +1340,149 @@ private fun ProfileActionText(
             .clickable(enabled = enabled) { onClick() }
             .padding(horizontal = 8.dp, vertical = 4.dp)
     )
+}
+
+@Composable
+private fun ProfileActionPill(
+    text: String,
+    icon: ImageVector,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val background = MaterialTheme.colorScheme.surface.copy(alpha = if (enabled) 0.9f else 0.5f)
+    val contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.6f)
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(background)
+            .combinedClickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = enabled,
+                onClick = onClick,
+                onLongClick = null
+            )
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = text,
+                tint = contentColor,
+                modifier = Modifier.size(14.dp)
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelSmall,
+                color = contentColor,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProfileMetaPill(
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    val background = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)
+    val contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(999.dp),
+        tonalElevation = 0.dp,
+        color = background
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            color = contentColor,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+        )
+    }
+}
+
+@Composable
+private fun PatchProfileApkIcon(
+    apkPath: String,
+    pm: PM,
+    filesystem: Filesystem,
+    modifier: Modifier = Modifier
+) {
+    val containerShape = RoundedCornerShape(12.dp)
+    val containerColor = MaterialTheme.colorScheme.surfaceVariant
+    val containerBorder = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+    val apkFile = remember(apkPath) { File(apkPath) }
+    var iconInfo by remember(apkPath) { mutableStateOf<PatchProfileApkIconInfo?>(null) }
+    LaunchedEffect(apkPath) {
+        iconInfo?.cleanup?.invoke()
+        iconInfo = loadPatchProfileApkIconInfo(apkFile, pm, filesystem)
+    }
+    DisposableEffect(apkPath) {
+        onDispose { iconInfo?.cleanup?.invoke() }
+    }
+    val packageInfo = iconInfo?.packageInfo
+    Surface(
+        modifier = modifier,
+        shape = containerShape,
+        tonalElevation = 0.dp,
+        color = containerColor,
+        border = androidx.compose.foundation.BorderStroke(1.dp, containerBorder)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(6.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            if (packageInfo != null) {
+                AppIcon(
+                    packageInfo = packageInfo,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Outlined.Android,
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+private data class PatchProfileApkIconInfo(
+    val packageInfo: android.content.pm.PackageInfo?,
+    val cleanup: (() -> Unit)?
+)
+
+private suspend fun loadPatchProfileApkIconInfo(
+    file: File,
+    pm: PM,
+    filesystem: Filesystem
+): PatchProfileApkIconInfo? = withContext(Dispatchers.IO) {
+    if (!file.exists()) return@withContext null
+    val extension = file.extension.lowercase()
+    if (extension !in APK_FILE_EXTENSIONS) return@withContext null
+    val isSplitArchive = extension != "apk" && SplitApkPreparer.isSplitArchive(file)
+    if (extension != "apk" && !isSplitArchive) return@withContext null
+
+    if (isSplitArchive) {
+        val extracted = SplitApkInspector.extractRepresentativeApk(file, filesystem.tempDir)
+            ?: return@withContext null
+        val pkgInfo = pm.getPackageInfo(extracted.file)
+        PatchProfileApkIconInfo(pkgInfo, extracted.cleanup)
+    } else {
+        PatchProfileApkIconInfo(pm.getPackageInfo(file), null)
+    }
 }

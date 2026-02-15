@@ -6,21 +6,32 @@ import com.reandroid.apk.ApkBundle
 import com.reandroid.apk.ApkModule
 import com.reandroid.app.AndroidManifest
 import com.reandroid.archive.ZipEntryMap
-import com.reandroid.archive.block.ApkSignatureBlock
+import com.reandroid.arsc.chunk.xml.ResXmlElement
+import com.reandroid.arsc.container.SpecTypePair
 import com.reandroid.arsc.header.TableHeader
+import com.reandroid.arsc.model.ResourceEntry
+import com.reandroid.arsc.value.ValueType
 import java.io.Closeable
+import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.nio.charset.CoderMalfunctionError
 import java.nio.file.Path
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-private object ArscLogger : APKLogger {
-    private const val TAG = "ARSCLib"
+private class ApkEditorLogger(
+    private val onProgress: ((String) -> Unit)? = null
+) : APKLogger {
+    private companion object {
+        const val TAG = "APKEditor"
+        val MERGE_PATTERN = Regex("Merging\\s*:?\\s*(.+)", RegexOption.IGNORE_CASE)
+    }
 
     override fun logMessage(msg: String) {
         Log.i(TAG, msg)
+        emitMergeProgress(msg)
     }
 
     override fun logError(msg: String, tr: Throwable?) {
@@ -29,21 +40,43 @@ private object ArscLogger : APKLogger {
 
     override fun logVerbose(msg: String) {
         Log.v(TAG, msg)
+        emitMergeProgress(msg)
+    }
+
+    private fun emitMergeProgress(message: String) {
+        val match = MERGE_PATTERN.find(message) ?: return
+        val moduleName = match.groupValues.getOrNull(1)?.trim().orEmpty()
+        val normalized = normalizeMergeModuleName(moduleName)
+        if (normalized.isBlank()) return
+        onProgress?.invoke("Merging $normalized")
+    }
+
+    private fun normalizeMergeModuleName(name: String): String {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return trimmed
+        return if (trimmed.lowercase(Locale.ROOT).endsWith(".apk")) {
+            trimmed
+        } else {
+            "$trimmed.apk"
+        }
     }
 }
 
 internal object Merger {
     suspend fun merge(
         apkDir: Path,
+        outputApk: File,
         skipModules: Set<String> = emptySet(),
-        onProgress: ((String) -> Unit)? = null
-    ): ApkModule {
+        onProgress: ((String) -> Unit)? = null,
+        sortApkEntries: Boolean = false
+    ) {
         val closeables = mutableSetOf<Closeable>()
         try {
             val merged = withContext(Dispatchers.Default) {
                 try {
+                    val logger = ApkEditorLogger(onProgress)
                     val bundle = ApkBundle().apply {
-                        setAPKLogger(ArscLogger)
+                        setAPKLogger(logger)
                         loadApkDirectory(apkDir.toFile())
                     }
                     val modules = bundle.apkModuleList
@@ -51,49 +84,37 @@ internal object Merger {
                         throw FileNotFoundException("Nothing to merge, empty modules")
                     }
 
-                    closeables.addAll(modules)
+                    val skipped = skipModules
+                        .map { it.lowercase() }
+                        .toSet()
+                    if (skipped.isNotEmpty()) {
+                        val skipLookup = skipped.map(::normalizeModuleName).toSet()
+                        val baseModule = bundle.baseModule
+                        bundle.apkModuleList.toList().forEach { module ->
+                            if (module === baseModule) return@forEach
+                            val normalized = normalizeModuleName(module.moduleName)
+                            if (skipLookup.contains(normalized)) {
+                                bundle.removeApkModule(module.moduleName)
+                            }
+                        }
+                    }
 
-                    val mergedModule = ApkModule(generateMergedModuleName(bundle), ZipEntryMap()).apply {
-                        setAPKLogger(ArscLogger)
+                    closeables.add(bundle)
+
+                    val mergedModule = bundle.mergeModules(false).apply {
+                        setAPKLogger(logger)
                         setLoadDefaultFramework(false)
                     }
                     closeables.add(mergedModule)
 
-                    val mergeResources = false
-                    val baseModule = bundle.baseModule
-                        ?: findLargestTableModule(modules)
-                        ?: modules.first()
-                    val mergeOrder = buildMergeOrder(modules, baseModule)
-                    val skipped = skipModules
-                        .map { it.lowercase() }
-                        .toSet()
-
-                    var signatureBlock: ApkSignatureBlock? = null
-                    mergeOrder.forEach { module ->
-                        val displayName = moduleDisplayName(module)
-                        val shouldSkip =
-                            module !== baseModule && skipped.contains(displayName.lowercase())
-                        if (shouldSkip) return@forEach
-                        val moduleSignature = module.apkSignatureBlock
-                        if (module === baseModule && moduleSignature != null) {
-                            signatureBlock = moduleSignature
-                        }
-
-                        if (signatureBlock == null) {
-                            signatureBlock = moduleSignature
-                        }
-
-                        onProgress?.invoke("Merging $displayName")
-                        mergedModule.merge(module, mergeResources)
-                    }
-
-                    mergedModule.setApkSignatureBlock(signatureBlock)
-                    if (mergedModule.hasTableBlock()) {
+                    if (sortApkEntries && mergedModule.hasTableBlock()) {
                         val table = mergedModule.tableBlock
                         table.sortPackages()
                         table.refresh()
                     }
-                    mergedModule.zipEntryMap.autoSortApkFiles()
+                    if (sortApkEntries) {
+                        mergedModule.zipEntryMap.autoSortApkFiles()
+                    }
                     mergedModule
                 } catch (error: Throwable) {
                     val cause = error.cause
@@ -114,7 +135,8 @@ internal object Merger {
             merged.androidManifest.apply {
                 arrayOf(
                     AndroidManifest.ID_isSplitRequired,
-                    AndroidManifest.ID_extractNativeLibs
+                    AndroidManifest.ID_requiredSplitTypes,
+                    AndroidManifest.ID_splitTypes
                 ).forEach { id ->
                     applicationElement.removeAttributesWithId(id)
                     manifestElement.removeAttributesWithId(id)
@@ -129,20 +151,55 @@ internal object Merger {
                     }
                 }
 
-                val stampPattern = Regex("^com\\.android\\.(stamp|vending)\\.")
+                // Remove split requirements so the merged APK installs as a single package.
+                manifestElement.removeElementsIf { element ->
+                    element.name == "uses-split"
+                }
+                arrayOf("splitName", "split").forEach { attrName ->
+                    manifestElement.removeAttributeIf { attribute ->
+                        attribute.name == attrName
+                    }
+                    applicationElement.removeAttributeIf { attribute ->
+                        attribute.name == attrName
+                    }
+                }
+
                 applicationElement.removeElementsIf { element ->
                     if (element.name != AndroidManifest.TAG_meta_data) return@removeElementsIf false
                     val nameAttr = element
                         .getAttributes { it.nameId == AndroidManifest.ID_name }
                         .asSequence()
-                        .single()
-                    stampPattern.containsMatchIn(nameAttr.valueString)
+                        .singleOrNull()
+                        ?: return@removeElementsIf false
+                    val nameValue = nameAttr.valueString ?: return@removeElementsIf false
+                    val shouldRemove = when {
+                        nameValue == "com.android.dynamic.apk.fused.modules" -> {
+                            val valueAttr = element
+                                .getAttributes { it.nameId == AndroidManifest.ID_value }
+                                .asSequence()
+                                .firstOrNull()
+                            valueAttr?.valueString == "base"
+                        }
+                        nameValue.startsWith("com.android.vending.") -> true
+                        nameValue.startsWith("com.android.stamp.") -> true
+                        else -> false
+                    }
+                    if (!shouldRemove) return@removeElementsIf false
+                    removeSplitMetaResources(merged, element, nameValue)
+                    true
                 }
 
                 refresh()
             }
+            merged.refreshTable()
+            merged.refreshManifest()
+            applyExtractNativeLibs(merged)
 
-            return merged
+            outputApk.parentFile?.mkdirs()
+            withContext(Dispatchers.IO) {
+                onProgress?.invoke("Writing merged APK")
+                merged.writeApk(outputApk)
+            }
         } finally {
             closeables.forEach(Closeable::close)
         }
@@ -152,7 +209,7 @@ internal object Merger {
         val closeables = mutableSetOf<Closeable>()
         try {
             val bundle = ApkBundle().apply {
-                setAPKLogger(ArscLogger)
+                setAPKLogger(ApkEditorLogger())
                 loadApkDirectory(apkDir.toFile())
             }
             val modules = bundle.apkModuleList
@@ -214,5 +271,59 @@ internal object Merger {
     private fun moduleDisplayName(module: ApkModule): String {
         val name = module.moduleName
         return if (name.endsWith(".apk", ignoreCase = true)) name else "$name.apk"
+    }
+
+    private fun normalizeModuleName(name: String): String =
+        name.lowercase(Locale.ROOT).removeSuffix(".apk")
+
+    private fun removeSplitMetaResources(
+        module: ApkModule,
+        element: ResXmlElement,
+        nameValue: String
+    ) {
+        if (nameValue != "com.android.vending.splits") return
+        if (!module.hasTableBlock()) return
+        val valueAttr = element
+            .getAttributes {
+                it.nameId == AndroidManifest.ID_value || it.nameId == AndroidManifest.ID_resource
+            }
+            .asSequence()
+            .firstOrNull()
+            ?: return
+        if (valueAttr.valueType != ValueType.REFERENCE) return
+
+        val table = module.tableBlock
+        val resourceEntry = table.getResource(valueAttr.data) ?: return
+        val zipEntryMap = module.zipEntryMap
+        removeResourceEntryFiles(resourceEntry, zipEntryMap)
+        table.refresh()
+    }
+
+    private fun removeResourceEntryFiles(
+        resourceEntry: ResourceEntry,
+        zipEntryMap: ZipEntryMap
+    ) {
+        for (entry in resourceEntry) {
+            val resEntry = entry ?: continue
+            val resValue = resEntry.resValue ?: continue
+            val path = resValue.valueAsString
+            if (!path.isNullOrBlank()) {
+                zipEntryMap.remove(path)
+                Log.i("APKEditor", "Removed table entry $path")
+            }
+            resEntry.setNull(true)
+            val specTypePair: SpecTypePair = resEntry.typeBlock.parentSpecTypePair
+            specTypePair.removeNullEntries(resEntry.id)
+        }
+    }
+
+    private fun applyExtractNativeLibs(module: ApkModule) {
+        val value: Boolean? = if (module.hasAndroidManifest()) {
+            module.androidManifest.isExtractNativeLibs
+        } else {
+            null
+        }
+        Log.i("APKEditor", "Applying: extractNativeLibs=$value")
+        module.setExtractNativeLibs(value)
     }
 }

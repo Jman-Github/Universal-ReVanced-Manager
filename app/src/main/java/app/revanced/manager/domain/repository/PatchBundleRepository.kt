@@ -30,9 +30,11 @@ import app.revanced.manager.domain.bundles.PatchBundleDownloadProgress
 import app.revanced.manager.domain.bundles.PatchBundleDownloadResult
 import app.revanced.manager.domain.bundles.RemotePatchBundle
 import app.revanced.manager.domain.bundles.PatchBundleSource
+import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
 import app.revanced.manager.network.dto.ExternalBundleSnapshot
 import app.revanced.manager.domain.manager.PreferencesManager
+import app.revanced.manager.patcher.ample.AmpleRuntimeBridge
 import app.revanced.manager.patcher.morphe.MorpheRuntimeBridge
 import app.revanced.manager.patcher.patch.PatchInfo
 import app.revanced.manager.patcher.patch.PatchBundle
@@ -49,6 +51,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -64,6 +67,7 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.first
 import kotlin.coroutines.coroutineContext
@@ -78,6 +82,7 @@ import java.security.MessageDigest
 import java.net.URI
 import java.net.URISyntaxException
 import java.util.Locale
+import java.util.jar.JarFile
 import kotlin.collections.LinkedHashSet
 import kotlin.collections.joinToString
 import kotlin.collections.map
@@ -154,10 +159,14 @@ class PatchBundleRepository(
         val morphePatches = bundleInfos.values
             .filter { it.bundleType == PatchBundleType.MORPHE }
             .flatMap { info -> info.patches }
+        val amplePatches = bundleInfos.values
+            .filter { it.bundleType == PatchBundleType.AMPLE }
+            .flatMap { info -> info.patches }
 
         val morpheSuggested = suggestedVersionsForMorphe(morphePatches)
+        val ampleSuggested = suggestedVersionsForMorphe(amplePatches)
         val revancedSuggested = suggestedVersionsForRevanced(revancedPatches)
-        morpheSuggested + revancedSuggested
+        morpheSuggested + ampleSuggested + revancedSuggested
     }
 
     val suggestedVersionsByBundle = enabledBundlesInfoFlow.map { bundleInfos ->
@@ -168,6 +177,9 @@ class PatchBundleRepository(
                     suggestedVersionsForRevanced(patches)
                 }
                 PatchBundleType.MORPHE -> {
+                    suggestedVersionsForMorphe(info.patches)
+                }
+                PatchBundleType.AMPLE -> {
                     suggestedVersionsForMorphe(info.patches)
                 }
             }
@@ -548,12 +560,30 @@ class PatchBundleRepository(
         sources.forEach { (uid, source) ->
             val remote = source as? RemotePatchBundle ?: return@forEach
             val entity = entityByUid[uid] ?: return@forEach
+            val isExternal = remote is ExternalGraphqlPatchBundle
+            var effectiveEntity = entity
+
+            if (isExternal && entity.versionHash.isNullOrBlank()) {
+                val externalMeta = ExternalBundleMetadataStore.read(directoryOf(uid))
+                val externalVersion = externalMeta?.version?.takeIf { it.isNotBlank() }
+                if (externalVersion != null) {
+                    updateDb(uid) { it.copy(versionHash = externalVersion) }
+                    effectiveEntity = entity.copy(versionHash = externalVersion)
+                    sources[uid] = effectiveEntity.load()
+                }
+            }
+
             val bundleVersion = remote.version?.takeUnless { it.isBlank() } ?: return@forEach
             val bundleNormalized = normalizeVersionForCompare(bundleVersion) ?: return@forEach
-            val storedNormalized = normalizeVersionForCompare(entity.versionHash)
+            val storedNormalized = normalizeVersionForCompare(effectiveEntity.versionHash)
             if (storedNormalized == bundleNormalized) return@forEach
+            // Keep the persisted remote signature once we have one.
+            // Falling back to the local manifest version is only needed to seed empty rows.
+            if (!effectiveEntity.versionHash.isNullOrBlank()) {
+                return@forEach
+            }
             updateDb(uid) { it.copy(versionHash = bundleVersion) }
-            sources[uid] = entity.copy(versionHash = bundleVersion).load()
+            sources[uid] = effectiveEntity.copy(versionHash = bundleVersion).load()
         }
 
         val hasOutOfDateNames = sources.values.any { it.isNameOutOfDate }
@@ -628,9 +658,15 @@ class PatchBundleRepository(
         return all
     }
 
-    fun discoveryImportKey(bundle: ExternalBundleSnapshot): String {
+    fun discoveryImportKey(bundle: ExternalBundleSnapshot, preferLatestAcrossChannels: Boolean = false): String {
         if (bundle.bundleId > 0) {
-            val channel = if (bundle.isPrerelease) "prerelease" else "release"
+            val channel = if (preferLatestAcrossChannels) {
+                "latest"
+            } else if (bundle.isPrerelease) {
+                "prerelease"
+            } else {
+                "release"
+            }
             return "${bundle.bundleId}|$channel"
         }
         val owner = bundle.ownerName.trim().lowercase(Locale.US)
@@ -643,16 +679,23 @@ class PatchBundleRepository(
                 bundle.downloadUrl.trim().lowercase(Locale.US)
             else -> "unknown"
         }
-        val channel = if (bundle.isPrerelease) "prerelease" else "release"
+        val channel = if (preferLatestAcrossChannels) {
+            "latest"
+        } else if (bundle.isPrerelease) {
+            "prerelease"
+        } else {
+            "release"
+        }
         return "$base|$channel"
     }
 
     suspend fun enqueueDiscoveryImport(
         bundle: ExternalBundleSnapshot,
         searchUpdate: Boolean,
-        autoUpdate: Boolean
+        autoUpdate: Boolean,
+        preferLatestAcrossChannels: Boolean = false
     ): DiscoveryImportEnqueueResult {
-        val bundleKey = discoveryImportKey(bundle)
+        val bundleKey = discoveryImportKey(bundle, preferLatestAcrossChannels)
         return discoveryImportMutex.withLock {
             val inProgress = discoveryImportProgressFlow.value.containsKey(bundleKey)
             val alreadyQueued = discoveryImportQueuedKeys.contains(bundleKey)
@@ -664,7 +707,13 @@ class PatchBundleRepository(
                 discoveryImportQueuedKeys.isNotEmpty()
             discoveryImportQueuedKeys.add(bundleKey)
             discoveryImportQueue.addLast(
-                DiscoveryImportRequest(bundleKey, bundle, searchUpdate, autoUpdate)
+                DiscoveryImportRequest(
+                    key = bundleKey,
+                    bundle = bundle,
+                    searchUpdate = searchUpdate,
+                    autoUpdate = autoUpdate,
+                    preferLatestAcrossChannels = preferLatestAcrossChannels
+                )
             )
             discoveryImportProgressFlow.update { current ->
                 if (current.containsKey(bundleKey)) current
@@ -786,14 +835,44 @@ class PatchBundleRepository(
         }
     }
 
-    private fun loadBundleMetadataInternal(bundle: PatchBundle): Pair<PatchBundleType, List<PatchInfo>> {
+    private fun loadBundleMetadataInternal(
+        bundle: PatchBundle,
+        source: PatchBundleSource? = null
+    ): Pair<PatchBundleType, List<PatchInfo>> {
         val bundlePath = bundle.patchesJar
         val extension = File(bundlePath).extension.lowercase(Locale.US)
-        if (extension == "rvp") {
-            return PatchBundleType.REVANCED to PatchBundle.Loader.metadata(bundle)
-        }
         if (extension == "mpp") {
             return PatchBundleType.MORPHE to MorpheRuntimeBridge.loadMetadata(bundlePath)
+        }
+        if (extension == "arp") {
+            return PatchBundleType.AMPLE to AmpleRuntimeBridge.loadMetadata(bundlePath)
+        }
+
+        val ampleHint = bundle.manifestAttributes
+            ?.let { attributes ->
+                sequenceOf(
+                    attributes.name,
+                    attributes.source,
+                    attributes.author,
+                    attributes.website
+                )
+                    .filterNotNull()
+                    .any { value -> value.contains("ample", ignoreCase = true) }
+            } == true
+        val ampleEndpointHint = source
+            ?.asRemoteOrNull
+            ?.endpoint
+            ?.contains("ample", ignoreCase = true) == true
+        val localAmpleHint = source
+            ?.takeIf { it.asRemoteOrNull == null }
+            ?.let { bundleLooksAmple(bundlePath, it.uid) } == true
+
+        val isAmpleCandidate = ampleHint || ampleEndpointHint || localAmpleHint
+        if (isAmpleCandidate) {
+            val amplePreferred = runCatching { AmpleRuntimeBridge.loadMetadata(bundlePath) }
+            if (amplePreferred.isSuccess) {
+                return PatchBundleType.AMPLE to amplePreferred.getOrThrow()
+            }
         }
 
         val revancedResult = runCatching { PatchBundle.Loader.metadata(bundle) }
@@ -801,24 +880,93 @@ class PatchBundleRepository(
             return PatchBundleType.REVANCED to revancedResult.getOrThrow()
         }
 
+        if (extension == "rvp") {
+            val ampleResult = runCatching { AmpleRuntimeBridge.loadMetadata(bundlePath) }
+            if (ampleResult.isSuccess) {
+                return PatchBundleType.AMPLE to ampleResult.getOrThrow()
+            }
+
+            val error = IllegalStateException("Failed to load patch bundle metadata")
+            revancedResult.exceptionOrNull()?.let(error::addSuppressed)
+            ampleResult.exceptionOrNull()?.let(error::addSuppressed)
+            throw error
+        }
+
         val morpheResult = runCatching { MorpheRuntimeBridge.loadMetadata(bundlePath) }
         if (morpheResult.isSuccess) {
             return PatchBundleType.MORPHE to morpheResult.getOrThrow()
         }
 
+        val ampleResult = runCatching { AmpleRuntimeBridge.loadMetadata(bundlePath) }
+        if (ampleResult.isSuccess) {
+            return PatchBundleType.AMPLE to ampleResult.getOrThrow()
+        }
+
         val error = IllegalStateException("Failed to load patch bundle metadata")
         revancedResult.exceptionOrNull()?.let(error::addSuppressed)
         morpheResult.exceptionOrNull()?.let(error::addSuppressed)
+        ampleResult.exceptionOrNull()?.let(error::addSuppressed)
         throw error
     }
 
-    private suspend fun loadBundleMetadata(uid: Int, bundle: PatchBundle): Pair<PatchBundleType, List<PatchInfo>> {
+    private val ampleDetectionTokens = listOf(
+        "amplerevanced",
+        "ample/revanced",
+        "ample.revanced"
+    )
+
+    private fun bundleLooksAmple(bundlePath: String, localUid: Int?): Boolean {
+        if (localUid != null) {
+            val hint = readLocalBundleHint(localUid)
+            if (!hint.isNullOrBlank() && hint.contains("ample", ignoreCase = true)) {
+                return true
+            }
+        }
+        val jar = runCatching { JarFile(bundlePath) }.getOrNull() ?: return false
+        jar.use { jarFile ->
+            val entries = jarFile.entries()
+            while (entries.hasMoreElements()) {
+                val entry = entries.nextElement()
+                if (entry.isDirectory) continue
+                val name = entry.name.lowercase(Locale.US)
+                if (!name.endsWith(".dex")) continue
+                val payload = runCatching {
+                    jarFile.getInputStream(entry).use { stream ->
+                        String(stream.readBytes(), StandardCharsets.ISO_8859_1).lowercase(Locale.US)
+                    }
+                }.getOrNull() ?: continue
+
+                if (ampleDetectionTokens.any { token -> payload.contains(token) }) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    private fun readLocalBundleHint(uid: Int): String? {
+        val file = directoryOf(uid).resolve(LOCAL_BUNDLE_HINT_FILE)
+        if (!file.exists()) return null
+        return runCatching { file.readText().trim() }.getOrNull()?.takeIf { it.isNotBlank() }
+    }
+
+    private fun writeLocalBundleHint(uid: Int, hint: String?) {
+        val normalized = hint?.trim().takeIf { !it.isNullOrBlank() } ?: return
+        val file = directoryOf(uid).resolve(LOCAL_BUNDLE_HINT_FILE)
+        runCatching { file.writeText(normalized) }
+    }
+
+    private suspend fun loadBundleMetadata(
+        uid: Int,
+        bundle: PatchBundle,
+        source: PatchBundleSource? = null
+    ): Pair<PatchBundleType, List<PatchInfo>> {
         ensureBundleCacheValid(uid, bundle)
-        val initial = runCatching { loadBundleMetadataInternal(bundle) }
+        val initial = runCatching { loadBundleMetadataInternal(bundle, source) }
         if (initial.isSuccess) return initial.getOrThrow()
 
         clearBundleOdex(uid)
-        val retry = runCatching { loadBundleMetadataInternal(bundle) }
+        val retry = runCatching { loadBundleMetadataInternal(bundle, source) }
         if (retry.isSuccess) return retry.getOrThrow()
 
         val error = IllegalStateException("Failed to load patch bundle metadata")
@@ -842,7 +990,7 @@ class PatchBundleRepository(
 
         for ((bundle, src) in map) {
             try {
-                val (bundleType, patches) = loadBundleMetadata(src.uid, bundle)
+                val (bundleType, patches) = loadBundleMetadata(src.uid, bundle, src)
                 metadata[src.uid] = PatchBundleInfo.Global(
                     src.displayTitle,
                     bundle.manifestAttributes?.version,
@@ -870,12 +1018,100 @@ class PatchBundleRepository(
         return metadata
     }
 
-    suspend fun isVersionAllowed(packageName: String, version: String) =
+    suspend fun findBestBundleVersionMatch(packageName: String, version: String?): BundleVersionMatch? =
         withContext(Dispatchers.Default) {
-            if (!prefs.suggestedVersionSafeguard.get()) return@withContext true
+            val scopedBundles = scopedBundleInfoFlow(packageName, version).first()
+            if (scopedBundles.isEmpty()) return@withContext null
 
-            val suggestedVersion = suggestedVersions.first()[packageName] ?: return@withContext true
-            suggestedVersion == version
+            val suggestedByBundle = suggestedVersionsByBundle.first()
+            val normalizedVersion = version?.trim().orEmpty()
+            var best: BundleVersionCandidate? = null
+
+            scopedBundles.forEach { bundle ->
+                val recommendedVersion = suggestedByBundle[bundle.uid]?.get(packageName)
+                val hasPackageSpecificCompatibility = bundle.compatible.any { patch ->
+                    patch.compatiblePackages?.any { compatible -> compatible.packageName == packageName } == true
+                }
+                val hasPackageSpecificAllVersionCompatibility = bundle.compatible.any { patch ->
+                    patch.compatiblePackages?.any { compatible ->
+                        compatible.packageName == packageName && compatible.versions == null
+                    } == true
+                }
+                val hasUniversalCompatibility = bundle.universal.isNotEmpty()
+                val targetsAllVersions = hasPackageSpecificAllVersionCompatibility || hasUniversalCompatibility
+                val hasCompatibility = hasPackageSpecificCompatibility || hasUniversalCompatibility
+                if (!hasCompatibility) return@forEach
+
+                val recommendedMatchesInput =
+                    hasPackageSpecificCompatibility &&
+                        recommendedVersion?.equals(normalizedVersion, ignoreCase = true) == true
+                val score = when {
+                    recommendedMatchesInput -> 3
+                    hasPackageSpecificCompatibility -> 2
+                    hasUniversalCompatibility -> 1
+                    else -> 0
+                }
+                val versionOverride = when {
+                    targetsAllVersions -> null
+                    recommendedMatchesInput -> null
+                    normalizedVersion.isBlank() -> null
+                    else -> normalizedVersion
+                }
+                val candidate = BundleVersionCandidate(
+                    bundleUid = bundle.uid,
+                    score = score,
+                    versionOverride = versionOverride,
+                    targetsAllVersions = targetsAllVersions,
+                    usesUniversalFallback = !hasPackageSpecificCompatibility && hasUniversalCompatibility
+                )
+                if (best == null || candidate.score > best!!.score) {
+                    best = candidate
+                }
+            }
+
+            best?.let {
+                BundleVersionMatch(
+                    bundleUid = it.bundleUid,
+                    versionOverride = it.versionOverride,
+                    targetsAllVersions = it.targetsAllVersions,
+                    usesUniversalFallback = it.usesUniversalFallback
+                )
+            }
+        }
+
+    suspend fun isVersionAllowed(packageName: String, version: String) =
+        assessVersionSelection(packageName, version).isAllowed
+
+    suspend fun assessVersionSelection(packageName: String, version: String) =
+        withContext(Dispatchers.Default) {
+            val match = findBestBundleVersionMatch(packageName, version)
+            val suggestedVersion = suggestedVersions.first()[packageName]
+            val allowUniversalPatches = prefs.disableUniversalPatchCheck.get()
+            val allowIncompatiblePatches = prefs.disablePatchVersionCompatCheck.get()
+            val requireSuggestedVersion = prefs.suggestedVersionSafeguard.get()
+            val usesUniversalFallback = match?.usesUniversalFallback == true
+            val requiresUniversalPatchesEnabled =
+                usesUniversalFallback && !allowUniversalPatches
+            val canContinueWithUniversalFallback =
+                requireSuggestedVersion &&
+                    !allowIncompatiblePatches &&
+                    allowUniversalPatches &&
+                    usesUniversalFallback
+
+            val isAllowed = when {
+                requiresUniversalPatchesEnabled -> false
+                !requireSuggestedVersion -> true
+                match == null -> false
+                canContinueWithUniversalFallback -> false
+                else -> true
+            }
+
+            VersionSelectionAssessment(
+                isAllowed = isAllowed,
+                suggestedVersion = suggestedVersion,
+                canContinueWithUniversalFallback = canContinueWithUniversalFallback,
+                requiresUniversalPatchesEnabled = requiresUniversalPatchesEnabled
+            )
         }
 
     /**
@@ -1379,7 +1615,11 @@ class PatchBundleRepository(
         }
     }
 
-    suspend fun createLocal(expectedSize: Long? = null, createStream: suspend () -> InputStream) {
+    suspend fun createLocal(
+        expectedSize: Long? = null,
+        sourceNameHint: String? = null,
+        createStream: suspend () -> InputStream
+    ) {
         var copyTotal: Long? = expectedSize?.takeIf { it > 0L }
         var copyRead = 0L
         var displayName: String? = null
@@ -1467,6 +1707,9 @@ class PatchBundleRepository(
                         uid = uid,
                         displayName = existingProps?.displayName
                     )
+                    if (sourceNameHint?.contains("ample", ignoreCase = true) == true) {
+                        writeLocalBundleHint(uid, sourceNameHint)
+                    }
                     val localBundle = entity.load() as LocalPatchBundle
 
                     try {
@@ -1612,13 +1855,14 @@ class PatchBundleRepository(
         bundle: ExternalBundleSnapshot,
         searchUpdate: Boolean,
         autoUpdate: Boolean,
+        preferLatestAcrossChannels: Boolean = false,
         onProgress: PatchBundleDownloadProgress? = null,
     ) {
         if (bundle.isBundleV3) {
             toast(R.string.patch_bundle_discovery_v3_warning)
             return
         }
-        val rawUrl = externalBundleEndpoint(bundle).trim()
+        val rawUrl = externalBundleEndpoint(bundle, preferLatestAcrossChannels).trim()
         if (rawUrl.isBlank()) {
             toast(R.string.patch_bundle_discovery_error)
             return
@@ -1633,19 +1877,22 @@ class PatchBundleRepository(
 
         val metadata = ExternalBundleMetadata(
             bundleId = bundle.bundleId,
-            downloadUrl = validatedUrl,
+            downloadUrl = bundle.downloadUrl
+                ?.trim()
+                ?.takeUnless { it.isBlank() }
+                ?: validatedUrl,
             signatureDownloadUrl = bundle.signatureDownloadUrl,
             version = bundle.version.ifBlank { "unknown" },
             createdAt = bundle.createdAt.takeUnless { it.isBlank() },
             description = bundle.description,
             ownerName = bundle.ownerName.takeIf { it.isNotBlank() },
             repoName = bundle.repoName.takeIf { it.isNotBlank() },
-            isPrerelease = bundle.isPrerelease
+            isPrerelease = if (preferLatestAcrossChannels) null else bundle.isPrerelease
         )
 
         val entity = createEntity(
             "",
-            SourceInfo.from(externalBundleEndpoint(bundle)),
+            SourceInfo.from(externalBundleEndpoint(bundle, preferLatestAcrossChannels)),
             autoUpdate,
             searchUpdate = searchUpdate
         )
@@ -1669,12 +1916,19 @@ class PatchBundleRepository(
         )
     }
 
-    private fun externalBundleEndpoint(bundle: ExternalBundleSnapshot): String {
+    private fun externalBundleEndpoint(
+        bundle: ExternalBundleSnapshot,
+        preferLatestAcrossChannels: Boolean = false
+    ): String {
         val owner = bundle.ownerName.trim()
         val repo = bundle.repoName.trim()
         if (owner.isNotBlank() && repo.isNotBlank()) {
-            val prerelease = bundle.isPrerelease
-            return "https://revanced-external-bundles.brosssh.com/api/v1/bundle/$owner/$repo/latest?prerelease=$prerelease"
+            val channel = when {
+                preferLatestAcrossChannels -> "any"
+                bundle.isPrerelease -> "prerelease"
+                else -> "stable"
+            }
+            return "https://revanced-external-bundles.brosssh.com/api/v2/bundle/$owner/$repo/latest?channel=$channel"
         }
         return externalBundleEndpoint(bundle.bundleId)
     }
@@ -1696,7 +1950,11 @@ class PatchBundleRepository(
         val isExternalBundlesHost = host == "revanced-external-bundles.brosssh.com" ||
             host == "revanced-external-bundles-dev.brosssh.com"
         val isExternalBundlesEndpoint = isExternalBundlesHost &&
-            (pathNoQuery.startsWith("/api/v1/bundle/") || pathNoQuery.startsWith("/bundles/id"))
+            (
+                pathNoQuery.startsWith("/api/v1/bundle/") ||
+                    pathNoQuery.startsWith("/api/v2/bundle/") ||
+                    pathNoQuery.startsWith("/bundles/id")
+                )
         if (!isJson && !isExternalBundlesEndpoint) {
             throw IllegalArgumentException(
                 "Patch bundle URL must point to a .json file or a supported external bundles API URL."
@@ -1766,7 +2024,11 @@ class PatchBundleRepository(
         if (host.equals("revanced-external-bundles.brosssh.com", ignoreCase = true) ||
             host.equals("revanced-external-bundles-dev.brosssh.com", ignoreCase = true)
         ) {
-            if (pathNoQuery.startsWith("/bundles/id") || pathNoQuery.startsWith("/api/v1/bundle/")) {
+            if (
+                pathNoQuery.startsWith("/bundles/id") ||
+                pathNoQuery.startsWith("/api/v1/bundle/") ||
+                pathNoQuery.startsWith("/api/v2/bundle/")
+            ) {
                 val query = parsed.encodedQuery.takeIf { it.isNotEmpty() }?.let { "?$it" }.orEmpty()
                 return "https://$host$normalizedPath$query"
             }
@@ -1930,8 +2192,12 @@ class PatchBundleRepository(
                 val latestSignature = normalizeVersionForCompare(info.version) ?: return@forEach
                 val installedSignature = normalizeVersionForCompare(bundle.installedVersionSignature)
                 val manifestSignature = normalizeVersionForCompare(bundle.version)
-                val currentSignature = installedSignature ?: manifestSignature ?: return@forEach
-                if (currentSignature == latestSignature) return@forEach
+                if (
+                    (installedSignature != null && installedSignature == latestSignature) ||
+                    (manifestSignature != null && manifestSignature == latestSignature)
+                ) {
+                    return@forEach
+                }
 
                 val versionLabel = latestSignature
                 if (normalizeVersionForCompare(bundle.lastNotifiedVersion) == versionLabel) return@forEach
@@ -2107,6 +2373,7 @@ class PatchBundleRepository(
                 )
             }
 
+            var hadBundleFailures = false
             val updated: Map<RemotePatchBundle, PatchBundleDownloadResult> = try {
                 val results = LinkedHashMap<RemotePatchBundle, PatchBundleDownloadResult>()
                 var completed = 0
@@ -2120,6 +2387,18 @@ class PatchBundleRepository(
                         return@coroutineScope false
                     }
                     if (isRemoteUpdateCancelled(bundle.uid)) {
+                        completed = (completed + 1).coerceAtMost(total)
+                        if (showProgress) {
+                            bundleUpdateProgressFlow.update { progress ->
+                                progress?.copy(
+                                    completed = completed,
+                                    currentBundleName = progressLabelFor(bundle),
+                                    phase = BundleUpdatePhase.Finalizing,
+                                    bytesRead = 0L,
+                                    bytesTotal = null,
+                                )
+                            }
+                        }
                         continue
                     }
 
@@ -2155,14 +2434,28 @@ class PatchBundleRepository(
                     }
 
                     val result = try {
-                        if (force) bundle.downloadLatest(onProgress) else bundle.update(onProgress)
+                        withTimeout(REMOTE_BUNDLE_UPDATE_TIMEOUT_MS) {
+                            if (force) bundle.downloadLatest(onProgress) else bundle.update(onProgress)
+                        }
                     } catch (e: BundleUpdateCancelled) {
-                        continue
+                        null
+                    } catch (e: TimeoutCancellationException) {
+                        hadBundleFailures = true
+                        Log.e(tag, "Timed out while updating patch bundle: ${bundle.name}", e)
+                        null
+                    } catch (e: Exception) {
+                        hadBundleFailures = true
+                        Log.e(tag, "Failed to update patch bundle: ${bundle.name}", e)
+                        null
                     }
 
-                    val downloadedName = runCatching {
-                        PatchBundle(bundle.patchesJarFile.absolutePath).manifestAttributes?.name
-                    }.getOrNull()?.trim().takeUnless { it.isNullOrBlank() }
+                    val downloadedName = if (result != null) {
+                        runCatching {
+                            PatchBundle(bundle.patchesJarFile.absolutePath).manifestAttributes?.name
+                        }.getOrNull()?.trim().takeUnless { it.isNullOrBlank() }
+                    } else {
+                        null
+                    }
                     if (downloadedName != null && showProgress) {
                         bundleUpdateProgressFlow.update { progress ->
                             progress?.copy(currentBundleName = downloadedName)
@@ -2202,7 +2495,13 @@ class PatchBundleRepository(
             }
 
             if (updated.isEmpty()) {
-                if (showToast) toast(R.string.patches_update_unavailable)
+                if (showToast) {
+                    if (hadBundleFailures) {
+                        toast(R.string.patches_download_fail, "Some bundles failed to update")
+                    } else {
+                        toast(R.string.patches_update_unavailable)
+                    }
+                }
                 return@coroutineScope false
             }
 
@@ -2277,9 +2576,11 @@ class PatchBundleRepository(
                             val latestSignature = normalizeVersionForCompare(info.version)
                                 ?: return@async bundle.uid to null
                             val installedSignature = normalizeVersionForCompare(bundle.installedVersionSignature)
-                                ?: normalizeVersionForCompare(bundle.version)
-                                ?: return@async bundle.uid to null
-                            if (installedSignature == latestSignature) return@async bundle.uid to null
+                            val manifestSignature = normalizeVersionForCompare(bundle.version)
+                            val hasMatchingInstalledSignature =
+                                (installedSignature != null && installedSignature == latestSignature) ||
+                                    (manifestSignature != null && manifestSignature == latestSignature)
+                            if (hasMatchingInstalledSignature) return@async bundle.uid to null
                             bundle.uid to ManualBundleUpdateInfo(
                                 latestVersion = info.version,
                                 pageUrl = info.pageUrl
@@ -2351,6 +2652,28 @@ class PatchBundleRepository(
         }
     }
 
+    data class BundleVersionMatch(
+        val bundleUid: Int,
+        val versionOverride: String?,
+        val targetsAllVersions: Boolean,
+        val usesUniversalFallback: Boolean = false
+    )
+
+    data class VersionSelectionAssessment(
+        val isAllowed: Boolean,
+        val suggestedVersion: String?,
+        val canContinueWithUniversalFallback: Boolean = false,
+        val requiresUniversalPatchesEnabled: Boolean = false
+    )
+
+    private data class BundleVersionCandidate(
+        val bundleUid: Int,
+        val score: Int,
+        val versionOverride: String?,
+        val targetsAllVersions: Boolean,
+        val usesUniversalFallback: Boolean
+    )
+
     data class State(
         val sources: PersistentMap<Int, PatchBundleSource> = persistentMapOf(),
         val info: PersistentMap<Int, PatchBundleInfo.Global> = persistentMapOf()
@@ -2416,6 +2739,8 @@ class PatchBundleRepository(
     private companion object {
         const val DEFAULT_SOURCE_UID = 0
         const val LOCAL_IMPORT_STEPS = 2
+        const val LOCAL_BUNDLE_HINT_FILE = "bundle_hint.txt"
+        const val REMOTE_BUNDLE_UPDATE_TIMEOUT_MS = 120_000L
         fun defaultSource() = PatchBundleEntity(
             uid = DEFAULT_SOURCE_UID,
             name = "",
@@ -2436,7 +2761,8 @@ class PatchBundleRepository(
         val key: String,
         val bundle: ExternalBundleSnapshot,
         val searchUpdate: Boolean,
-        val autoUpdate: Boolean
+        val autoUpdate: Boolean,
+        val preferLatestAcrossChannels: Boolean
     )
 
     data class DiscoveryImportProgress(
@@ -2491,6 +2817,7 @@ class PatchBundleRepository(
                         bundle = request.bundle,
                         searchUpdate = request.searchUpdate,
                         autoUpdate = request.autoUpdate,
+                        preferLatestAcrossChannels = request.preferLatestAcrossChannels,
                         onProgress = { bytesRead, bytesTotal ->
                             discoveryImportProgressFlow.update { current ->
                                 if (!current.containsKey(bundleKey)) current

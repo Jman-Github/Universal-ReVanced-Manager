@@ -6,6 +6,7 @@ import app.revanced.manager.patcher.Session.Companion.component2
 import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.patcher.util.NativeLibStripper
+import app.revanced.manager.patcher.util.XmlSurrogateSanitizer
 import app.revanced.patcher.Patcher
 import app.revanced.patcher.PatcherConfig
 import app.revanced.patcher.PatcherResult
@@ -38,12 +39,16 @@ class Session(
     private val onEvent: (ProgressEvent) -> Unit,
 ) : Closeable {
     private val tempDir = File(cacheDir).resolve("patcher").also { it.mkdirs() }
-    private val patcher = Patcher(
+    private val frameworkDirFile = File(frameworkDir).also { it.mkdirs() }
+    private val resolvedAaptPath = aaptPath
+    private var patcher = createPatcher()
+
+    private fun createPatcher() = Patcher(
         PatcherConfig(
             apkFile = input,
             temporaryFilesPath = tempDir,
-            frameworkFileDirectory = frameworkDir,
-            aaptBinaryPath = aaptPath
+            frameworkFileDirectory = frameworkDirFile.absolutePath,
+            aaptBinaryPath = resolvedAaptPath
         )
     )
 
@@ -99,6 +104,102 @@ class Session(
         }
     }
 
+    private suspend fun executePatchesOnce(orderedPatches: PatchList) {
+        with(patcher) {
+            logger.info("Merging integrations")
+            this += LinkedHashSet(orderedPatches)
+
+            logger.info("Applying patches...")
+            applyPatchesVerbose(orderedPatches)
+        }
+    }
+
+    private suspend fun executePatchesWithFrameworkRecovery(orderedPatches: PatchList) {
+        ensureFrameworkCacheIsValid()
+        try {
+            executePatchesOnce(orderedPatches)
+        } catch (error: Throwable) {
+            if (!isFrameworkCacheReadFailure(error)) throw error
+
+            logger.warn("Framework cache read failed. Clearing framework cache and retrying once.")
+            clearFrameworkCache("retry after framework read failure")
+            resetPatcher()
+            ensureFrameworkCacheIsValid()
+            executePatchesOnce(orderedPatches)
+        }
+    }
+
+    private fun ensureFrameworkCacheIsValid() {
+        val frameworkApk = frameworkDirFile.resolve(FRAMEWORK_APK_NAME)
+        if (!frameworkApk.exists()) return
+
+        val issue = frameworkApkValidationIssue(frameworkApk) ?: return
+        logger.warn("Invalid framework cache at ${frameworkApk.absolutePath}: $issue")
+        clearFrameworkCache("preflight validation failed")
+    }
+
+    private fun frameworkApkValidationIssue(file: File): String? {
+        if (!file.isFile) return "not a regular file"
+        if (file.length() <= 0L) return "file is empty"
+
+        return runCatching {
+            ZipFile(file).use { zip ->
+                if (zip.getEntry(FRAMEWORK_RESOURCES_TABLE) == null) {
+                    "missing $FRAMEWORK_RESOURCES_TABLE"
+                } else {
+                    null
+                }
+            }
+        }.getOrElse { error ->
+            "${error::class.java.simpleName}: ${error.message ?: "failed to parse zip"}"
+        }
+    }
+
+    private fun clearFrameworkCache(reason: String) {
+        frameworkDirFile.mkdirs()
+        val entries = frameworkDirFile.listFiles().orEmpty()
+        if (entries.isEmpty()) return
+
+        var failedDeletes = 0
+        entries.forEach { entry ->
+            if (!entry.deleteRecursively()) {
+                failedDeletes += 1
+            }
+        }
+
+        if (failedDeletes == 0) {
+            logger.warn("Cleared framework cache ($reason)")
+        } else {
+            logger.warn("Cleared framework cache ($reason) with $failedDeletes undeleted entr${if (failedDeletes == 1) "y" else "ies"}")
+        }
+    }
+
+    private fun resetPatcher() {
+        runCatching { patcher.close() }
+        patcher = createPatcher()
+    }
+
+    private fun isFrameworkCacheReadFailure(error: Throwable): Boolean {
+        val detail = buildString {
+            generateSequence(error) { it.cause }.forEach { cause ->
+                append(cause.message.orEmpty())
+                append('\n')
+                append(cause.stackTraceToString())
+                append('\n')
+            }
+        }
+
+        val hasFrameworkRef =
+            detail.contains("/framework/1.apk", ignoreCase = true) ||
+                detail.contains("\\framework\\1.apk", ignoreCase = true)
+        if (!hasFrameworkRef) return false
+
+        val hasKnownFailure =
+            detail.contains("Could not load resources.arsc", ignoreCase = true) ||
+                detail.contains("zip file is empty", ignoreCase = true)
+        return hasKnownFailure
+    }
+
     suspend fun run(
         output: File,
         selectedPatches: PatchList,
@@ -106,6 +207,7 @@ class Session(
         inputWasSplit: Boolean
     ) {
         val shouldStripNativeLibs = stripNativeLibs && !inputWasSplit
+        val orderedPatches = selectedPatches.sortedBy { it.name }
         runStep(StepId.ExecutePatches, onEvent) {
             java.util.logging.Logger.getLogger("").apply {
                 handlers.forEach {
@@ -115,15 +217,7 @@ class Session(
 
                 addHandler(logger.handler)
             }
-
-            with(patcher) {
-                val orderedPatches = selectedPatches.sortedBy { it.name }
-                logger.info("Merging integrations")
-                this += LinkedHashSet(orderedPatches)
-
-                logger.info("Applying patches...")
-                applyPatchesVerbose(orderedPatches)
-            }
+            executePatchesWithFrameworkRecovery(orderedPatches)
         }
 
         onEvent(
@@ -151,7 +245,9 @@ class Session(
                 )
             )
             logger.info("Writing patched files...")
+            XmlSurrogateSanitizer.sanitize(tempDir.resolve("apk"), logger)
             validateMissingResourceReferences()
+            validateInvalidNumericCharacterReferences()
             val result = patcher.get()
             val updatedDexNames = mergeDexNames(initialDexNames, result)
             if (updatedDexNames != initialDexNames) {
@@ -363,6 +459,130 @@ class Session(
         factory.newDocumentBuilder().parse(file)
     }.getOrNull()
 
+    private fun validateInvalidNumericCharacterReferences() {
+        val apkDir = tempDir.resolve("apk")
+        val resDir = apkDir.resolve("res")
+        if (!resDir.exists()) return
+
+        val invalidRefs = mutableListOf<String>()
+        resDir.walkTopDown()
+            .filter { it.isFile && it.extension.equals("xml", ignoreCase = true) }
+            .filter { it.parentFile?.name?.startsWith("values") == true }
+            .forEach { file ->
+                val text = readXmlText(file) ?: return@forEach
+                invalidRefs += findInvalidNumericCharRefs(text, file)
+            }
+
+        if (invalidRefs.isNotEmpty()) {
+            val message = buildString {
+                appendLine("Invalid numeric character reference(s) detected:")
+                invalidRefs.distinct().sorted().forEach { appendLine(it) }
+            }
+            logger.error(message)
+            throw IllegalStateException("Invalid numeric character reference(s) detected.")
+        }
+    }
+
+    private fun findInvalidNumericCharRefs(text: String, file: File): List<String> {
+        val invalid = mutableListOf<String>()
+        val lines = text.split('\n')
+        val lineStarts = buildLineStarts(text)
+        var index = 0
+        while (true) {
+            val start = text.indexOf("&#", index)
+            if (start == -1) break
+            var cursor = start + 2
+            val isHex = cursor < text.length && (text[cursor] == 'x' || text[cursor] == 'X')
+            if (isHex) cursor++
+            val digitsStart = cursor
+            while (cursor < text.length && (if (isHex) text[cursor].isHexDigit() else text[cursor].isDigit())) {
+                cursor++
+            }
+            val digits = text.substring(digitsStart, cursor)
+            val hasSemicolon = cursor < text.length && text[cursor] == ';'
+            val numeric = if (digits.isNotEmpty()) digits.toLongOrNull(if (isHex) 16 else 10) else null
+            val valid = digits.isNotEmpty() && hasSemicolon && numeric != null && isValidXmlChar(numeric)
+            if (!valid) {
+                val lineIndex = lineIndexForOffset(lineStarts, start)
+                val lineNumber = lineIndex + 1
+                val lineStart = lineStarts[lineIndex]
+                val lineEnd = if (lineIndex + 1 < lineStarts.size) lineStarts[lineIndex + 1] - 1 else text.length
+                val line = text.substring(lineStart, lineEnd).trim()
+                val refEnd = if (hasSemicolon) cursor + 1 else cursor.coerceAtMost(text.length)
+                val refSnippet = text.substring(start, refEnd.coerceAtMost(text.length))
+                val nameHint = findNearestStringName(lines, lineIndex)?.let { " (name=$it)" } ?: ""
+                invalid.add("${file.path}:$lineNumber$nameHint: $refSnippet :: $line")
+            }
+            index = start + 2
+        }
+        return invalid
+    }
+
+    private fun Char.isHexDigit(): Boolean =
+        this in '0'..'9' || this in 'a'..'f' || this in 'A'..'F'
+
+    private fun readXmlText(file: File): String? {
+        val bytes = runCatching { file.readBytes() }.getOrNull() ?: return null
+        if (bytes.isEmpty()) return ""
+        val charset = detectXmlCharset(bytes) ?: Charsets.UTF_8
+        return runCatching {
+            if (charset == Charsets.UTF_8 && bytes.size >= 3 &&
+                bytes[0] == 0xEF.toByte() &&
+                bytes[1] == 0xBB.toByte() &&
+                bytes[2] == 0xBF.toByte()
+            ) {
+                bytes.copyOfRange(3, bytes.size).toString(charset)
+            } else {
+                bytes.toString(charset)
+            }
+        }.getOrNull()
+    }
+
+    private fun detectXmlCharset(bytes: ByteArray): java.nio.charset.Charset? {
+        if (bytes.size >= 2) {
+            val b0 = bytes[0]
+            val b1 = bytes[1]
+            if (b0 == 0xFE.toByte() && b1 == 0xFF.toByte()) return Charsets.UTF_16BE
+            if (b0 == 0xFF.toByte() && b1 == 0xFE.toByte()) return Charsets.UTF_16LE
+            if (b0 == 0x00.toByte() && b1 == 0x3C.toByte()) return Charsets.UTF_16BE
+            if (b0 == 0x3C.toByte() && b1 == 0x00.toByte()) return Charsets.UTF_16LE
+        }
+        return null
+    }
+
+    private fun buildLineStarts(text: String): IntArray {
+        val starts = ArrayList<Int>()
+        starts.add(0)
+        text.forEachIndexed { index, char ->
+            if (char == '\n') {
+                starts.add(index + 1)
+            }
+        }
+        return starts.toIntArray()
+    }
+
+    private fun lineIndexForOffset(lineStarts: IntArray, offset: Int): Int {
+        val idx = java.util.Arrays.binarySearch(lineStarts, offset)
+        return if (idx >= 0) idx else -idx - 2
+    }
+
+    private fun findNearestStringName(lines: List<String>, lineIndex: Int): String? {
+        val regex = Regex("<string[^>]*\\sname\\s*=\\s*[\"']([^\"']+)[\"']", RegexOption.IGNORE_CASE)
+        for (i in lineIndex downTo (lineIndex - 5).coerceAtLeast(0)) {
+            val match = regex.find(lines[i]) ?: continue
+            return match.groupValues.getOrNull(1)?.takeIf { it.isNotBlank() }
+        }
+        return null
+    }
+
+    private fun isValidXmlChar(value: Long): Boolean {
+        if (value == 0x9L || value == 0xAL || value == 0xDL) return true
+        if (value in 0x20..0xD7FF) return true
+        if (value in 0xE000..0xFFFD) return true
+        if (value in 0x10000..0x10FFFF) return true
+        return false
+    }
+
     private fun buildWriteApkSubSteps(
         compileSteps: List<String> = emptyList(),
         includeStripNativeLibs: Boolean = false
@@ -466,6 +686,8 @@ class Session(
     }
 
     companion object {
+        private const val FRAMEWORK_APK_NAME = "1.apk"
+        private const val FRAMEWORK_RESOURCES_TABLE = "resources.arsc"
         operator fun PatchResult.component1() = patch
         operator fun PatchResult.component2() = exception
     }

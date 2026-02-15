@@ -68,12 +68,15 @@ import app.revanced.manager.ui.model.StepCategory
 import app.revanced.manager.ui.model.StepDetail
 import app.revanced.manager.ui.model.withState
 import app.revanced.manager.ui.model.navigation.Patcher
+import app.universal.revanced.manager.BuildConfig
 import app.revanced.manager.util.PM
 import app.revanced.manager.util.asCode
 import app.revanced.manager.util.PatchedAppExportData
 import app.revanced.manager.util.Options
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.patcher.patch.PatchBundleInfo
+import app.revanced.manager.util.buildSavedAppEntryKey
+import app.revanced.manager.util.isSavedAppEntryForPackage
 import app.revanced.manager.util.saveableVar
 import app.revanced.manager.util.saver.snapshotStateListSaver
 import app.revanced.manager.util.simpleMessage
@@ -93,8 +96,11 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.time.withTimeout
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
+import java.util.zip.ZipFile
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
 import org.koin.core.component.inject
@@ -160,6 +166,8 @@ class PatcherViewModel(
     private var lastInstallExpectedPackage: String? = null
     private var lastInstallSourceLabel: String? = null
     private var pendingInstallFailureMessage: String? = null
+    var keystoreMissingDialog by mutableStateOf(false)
+        private set
 
     private var installedApp: InstalledApp? = null
     private val selectedApp = input.selectedApp
@@ -396,10 +404,9 @@ fun proceedAfterMissingPatchWarning() {
         if (lastSuccessInstallType == InstallType.SHIZUKU) return
         if (installStatus is InstallCompletionStatus.Success || suppressFailureAfterSuccess) return
         val adjusted = if (activeInstallType == InstallType.MOUNT) {
-            val replaced = message.replace("install", "mount", ignoreCase = true)
-            replaced.replaceFirstChar { ch ->
-                if (ch.isLowerCase()) ch.titlecase() else ch.toString()
-            }
+            message
+                .replace("Failed to install app:", "Failed to mount app:", ignoreCase = true)
+                .replace("for install", "for mount", ignoreCase = true)
         } else message
         if (activeInstallType != null) {
             lastInstallType = activeInstallType
@@ -794,10 +801,33 @@ fun proceedAfterMissingPatchWarning() {
     private val outputFile = tempDir.resolve("output.apk")
 
     private val logs by savedStateHandle.saveable<MutableList<Pair<LogLevel, String>>> { mutableListOf() }
+    private var droppedLogLineCount by savedStateHandle.saveableVar { 0 }
     private val dexCompilePattern =
         Regex("(Compiling|Compiled)\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
     private val dexWritePattern =
         Regex("Write\\s+\\[[^\\]]+\\]\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
+    private fun appendBoundedLog(level: LogLevel, message: String) {
+        val boundedMessage = if (message.length > PATCHER_LOG_MESSAGE_CHAR_LIMIT) {
+            buildString(PATCHER_LOG_MESSAGE_CHAR_LIMIT + 96) {
+                append(message.take(PATCHER_LOG_MESSAGE_CHAR_LIMIT))
+                append("\n[log message truncated to ")
+                append(PATCHER_LOG_MESSAGE_CHAR_LIMIT)
+                append(" characters]")
+            }
+        } else {
+            message
+        }
+
+        if (logs.size >= PATCHER_LOG_ENTRY_HARD_LIMIT) {
+            val trimCount = (logs.size - PATCHER_LOG_ENTRY_SOFT_LIMIT + 1).coerceAtLeast(1)
+            val safeTrimCount = trimCount.coerceAtMost(logs.size)
+            logs.subList(0, safeTrimCount).clear()
+            droppedLogLineCount += safeTrimCount
+        }
+
+        logs.add(level to boundedMessage)
+    }
+
     private val logger = object : Logger() {
         override fun log(level: LogLevel, message: String) {
             level.androidLog(message)
@@ -805,7 +835,7 @@ fun proceedAfterMissingPatchWarning() {
             handleDexCompileLine(message)
 
             viewModelScope.launch {
-                logs.add(level to message)
+                appendBoundedLog(level, message)
             }
         }
     }
@@ -906,6 +936,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private var currentWorkSource: LiveData<WorkInfo?>? = null
     private val handledFailureIds = mutableSetOf<UUID>()
     private var forceKeepLocalInput = false
+    private var lastLoggedErrorSignature: String? = null
 
     private var patcherWorkerId: ParcelUuid?
         get() = savedStateHandle.get("patcher_worker_id")
@@ -954,6 +985,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private fun startWorker() {
         resetDexCompileState()
+        resetFailureLogState()
         logBatteryOptimizationStatus()
         val workId = launchWorker()
         patcherWorkerId = ParcelUuid(workId)
@@ -966,13 +998,12 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         forceSave: Boolean = false
     ): Boolean {
         val savedAppsEnabled = prefs.enableSavedApps.get()
+        val disableSavedAppOverwrite = prefs.disableSavedAppOverwrite.get()
         val latestInstalledApp = installedAppRepository.get(packageName)
         if (latestInstalledApp != installedApp) {
             installedApp = latestInstalledApp
         }
-        val preserveSavedEntry =
-            savedAppsEnabled && latestInstalledApp?.installType == InstallType.SAVED
-        val shouldSaveForLater = savedAppsEnabled || forceSave || preserveSavedEntry
+        val shouldSaveForLater = savedAppsEnabled || forceSave
         return withContext(Dispatchers.IO) {
             val installedPackageInfo = currentPackageName?.let(pm::getPackageInfo)
             val patchedPackageInfo = pm.getPackageInfo(outputFile)
@@ -984,21 +1015,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
             val finalPackageName = packageInfo.packageName
             val finalVersion = packageInfo.versionName?.takeUnless { it.isBlank() } ?: version ?: "unspecified"
-
-            val savedCopy = fs.getPatchedAppFile(finalPackageName, finalVersion)
-            if (shouldSaveForLater) {
-                try {
-                    savedCopy.parentFile?.mkdirs()
-                    outputFile.copyTo(savedCopy, overwrite = true)
-                } catch (error: IOException) {
-                    if (installType == InstallType.SAVED) {
-                        Log.e(TAG, "Failed to copy patched APK for later", error)
-                        return@withContext false
-                    } else {
-                        Log.w(TAG, "Failed to update saved copy for $finalPackageName", error)
-                    }
-                }
-            }
 
             val metadata = buildExportMetadata(patchedPackageInfo ?: packageInfo)
             withContext(Dispatchers.Main) {
@@ -1016,15 +1032,70 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 sanitizedOptionsFinal
             )
 
+            val newBundleUids = sanitizedSelectionFinal.keys.toSet()
+            val savedEntriesForPackage = installedAppRepository.getByInstallType(InstallType.SAVED)
+                .filter { savedApp ->
+                    isSavedAppEntryForPackage(savedApp.currentPackageName, finalPackageName)
+                }
+            val matchingSavedEntry = if (disableSavedAppOverwrite) {
+                null
+            } else {
+                savedEntriesForPackage.firstOrNull { savedApp ->
+                    savedEntryBundleUids(savedApp) == newBundleUids
+                }
+            }
+            val preserveSavedEntry =
+                !disableSavedAppOverwrite && savedAppsEnabled && (
+                    latestInstalledApp?.installType == InstallType.SAVED ||
+                        matchingSavedEntry != null
+                    )
             val persistedInstallType = if (preserveSavedEntry) InstallType.SAVED else installType
-            if (shouldSaveForLater || persistedInstallType != InstallType.SAVED) {
+            val existingFinalPackageEntry = installedAppRepository.get(finalPackageName)
+            val persistedPackageName = if (persistedInstallType == InstallType.SAVED) {
+                if (disableSavedAppOverwrite) {
+                    buildUniqueSavedAppEntryKey(finalPackageName, newBundleUids)
+                } else {
+                    matchingSavedEntry?.currentPackageName ?: run {
+                        val canUseBaseKey = savedEntriesForPackage.isEmpty() &&
+                            (existingFinalPackageEntry == null || existingFinalPackageEntry.installType == InstallType.SAVED)
+                        if (canUseBaseKey) finalPackageName
+                        else buildSavedAppEntryKey(finalPackageName, newBundleUids)
+                    }
+                }
+            } else {
+                finalPackageName
+            }
+
+            val effectiveShouldSaveForLater = shouldSaveForLater || preserveSavedEntry
+            val savedCopyPackageName = if (persistedInstallType == InstallType.SAVED) {
+                persistedPackageName
+            } else {
+                finalPackageName
+            }
+            val savedCopy = fs.getPatchedAppFile(savedCopyPackageName, finalVersion)
+            if (effectiveShouldSaveForLater) {
+                try {
+                    savedCopy.parentFile?.mkdirs()
+                    outputFile.copyTo(savedCopy, overwrite = true)
+                } catch (error: IOException) {
+                    if (installType == InstallType.SAVED) {
+                        Log.e(TAG, "Failed to copy patched APK for later", error)
+                        return@withContext false
+                    } else {
+                        Log.w(TAG, "Failed to update saved copy for $savedCopyPackageName", error)
+                    }
+                }
+            }
+
+            if (effectiveShouldSaveForLater || persistedInstallType != InstallType.SAVED) {
                 installedAppRepository.addOrUpdate(
-                    finalPackageName,
+                    persistedPackageName,
                     packageName,
                     finalVersion,
                     persistedInstallType,
                     sanitizedSelectionFinal,
-                    selectionPayload
+                    selectionPayload,
+                    resetCreatedAt = effectiveShouldSaveForLater && persistedInstallType == InstallType.SAVED
                 )
             }
 
@@ -1038,7 +1109,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             appliedOptions = sanitizedOptionsOriginal
 
             savedPatchedApp = savedPatchedApp ||
-                (shouldSaveForLater && (installType == InstallType.SAVED || savedCopy.exists()))
+                (effectiveShouldSaveForLater && (installType == InstallType.SAVED || savedCopy.exists()))
             true
         }
     }
@@ -1203,33 +1274,128 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
 
     private fun buildLogContent(context: Context): String {
-        val stepLines = steps.mapIndexed { index, step ->
-            buildString {
-                append(index + 1)
-                append(". ")
-                append(step.title)
-                append(" [")
-                append(context.getString(step.category.displayName))
-                append("] - ")
-                append(step.state.name)
-                step.message?.takeIf { it.isNotBlank() }?.let {
-                    append(": ")
-                    append(it)
-                }
-            }
+        val logSnapshot = logs.toList()
+        val logMessages = logSnapshot.map { it.second }
+        fun findLogValue(prefix: String): String? =
+            logMessages.firstOrNull { it.startsWith(prefix) }
+                ?.removePrefix(prefix)
+                ?.trim()
+        fun parseMemoryLimitMb(raw: String?): Int? {
+            val value = raw?.trim() ?: return null
+            val match = Regex("""(\d+)\s*(?:m|mb|mib)?""", RegexOption.IGNORE_CASE)
+                .find(value)
+                ?: return null
+
+            return match.groupValues.getOrNull(1)?.toIntOrNull()
         }
 
-        val logLines = logs.toList().map { (level, msg) -> "[${level.name}]: $msg" }
+        data class LogPrefsSnapshot(
+            val requestedLimit: Int,
+            val aggressiveLimit: Boolean,
+            val experimental: Boolean,
+            val bundleType: String,
+            val stripNativeLibs: Boolean,
+            val skipUnusedSplits: Boolean
+        )
+        val prefsSnapshot = runBlocking {
+            val requested = prefs.patcherProcessMemoryLimit.get()
+            val aggressive = prefs.patcherProcessMemoryAggressive.get()
+            val experimentalEnabled = prefs.useProcessRuntime.get()
+            val bundle = patchBundleRepository.selectionBundleType(input.selectedPatches)?.name
+                ?: "UNKNOWN"
+            val stripNative = prefs.stripUnusedNativeLibs.get()
+            val skipSplits = prefs.skipUnneededSplitApks.get()
+            LogPrefsSnapshot(requested, aggressive, experimentalEnabled, bundle, stripNative, skipSplits)
+        }
+        val requestedLimit = prefsSnapshot.requestedLimit
+        val aggressiveLimit = prefsSnapshot.aggressiveLimit
+        val experimental = prefsSnapshot.experimental
+        val bundleType = prefsSnapshot.bundleType
+        val stripNativeLibs = prefsSnapshot.stripNativeLibs
+        val skipUnusedSplits = prefsSnapshot.skipUnusedSplits
+
+        val runtimeReportedLimit = parseMemoryLimitMb(
+            logMessages.lastOrNull { it.startsWith("Memory limit:") }
+                ?.removePrefix("Memory limit:")
+                ?.trim()
+        )
+        val effectiveLimit = runtimeReportedLimit ?: if (aggressiveLimit) {
+            MemoryLimitConfig.maxLimitMb(context)
+        } else {
+            requestedLimit
+        }
+
+        val isIgnoring = context.getSystemService<PowerManager>()
+            ?.isIgnoringBatteryOptimizations(context.packageName) == true
+        val batteryOptimization = if (isIgnoring) "disabled" else "enabled"
+
+        val inputPath = inputFile?.absolutePath
+        val sizeBytes = inputFile?.length() ?: 0L
+        val sizeMb = if (sizeBytes > 0L) {
+            "${(sizeBytes / 1_000_000.0).roundToInt()}MB"
+        } else {
+            "unknown"
+        }
+        val splitCount = inputFile
+            ?.takeIf { SplitApkPreparer.isSplitArchive(it) }
+            ?.let { file ->
+                runCatching {
+                    ZipFile(file).use { zip ->
+                        zip.entries().asSequence().count { entry ->
+                            !entry.isDirectory && entry.name.endsWith(".apk", ignoreCase = true)
+                        }
+                    }
+                }.getOrNull()
+            }
+
+        val aapt2Sha = findLogValue("AAPT2 sha256:") ?: "unknown"
+        val aapt2Version = findLogValue("AAPT2 version:") ?: "unknown"
+
+        val appVersion = input.selectedApp.version
+            ?.takeUnless { it.isBlank() }
+            ?: "unspecified"
+        val patchCount = input.selectedPatches.values.sumOf { it.size }
+        val droppedLines = droppedLogLineCount
+
+        val logLines = logSnapshot
+            .filterNot { (_, msg) ->
+                msg.startsWith("Battery optimization:") ||
+                    msg.startsWith("Patching started at ") ||
+                    msg.startsWith("Patcher runtime:") ||
+                    msg.startsWith("Memory limit:") ||
+                    msg.startsWith("AAPT2 sha256:") ||
+                    msg.startsWith("AAPT2 version:")
+            }
+            .map { (level, msg) -> "[${level.name}]: $msg" }
 
         return buildString {
-            appendLine("=== Patcher Steps ===")
-            if (stepLines.isEmpty()) {
-                appendLine("No steps recorded.")
-            } else {
-                stepLines.forEach { appendLine(it) }
-            }
+            appendLine("------------")
+            appendLine("Information:")
+            appendLine("------------")
+            appendLine("URV version: ${BuildConfig.VERSION_NAME}")
+            appendLine("Requested memory limit: ${requestedLimit}MB")
+            appendLine("Effective memory limit: ${effectiveLimit}MB")
+            appendLine("Bundle type: $bundleType")
+            appendLine("Experimental: $experimental")
+            appendLine("Aggressive: $aggressiveLimit")
+            appendLine("Strip native libs: ${if (stripNativeLibs) "on" else "off"}")
+            appendLine("Skip unused splits: ${if (skipUnusedSplits) "on" else "off"}")
+            appendLine("Battery optimization: $batteryOptimization")
+            appendLine("AAPT2 sha256: $aapt2Sha")
+            appendLine("AAPT2 version: $aapt2Version")
+            appendLine("App package: ${input.selectedApp.packageName}")
+            appendLine("App version: $appVersion")
+            appendLine("App input path: ${inputPath ?: "unknown"}")
+            appendLine("App size: $sizeMb")
+            splitCount?.let { appendLine("Split: $it") }
+            appendLine("Patches: $patchCount")
             appendLine()
-            appendLine("=== Patcher Log ===")
+            appendLine("------------")
+            appendLine("Patcher Log:")
+            appendLine("------------")
+            if (droppedLines > 0) {
+                appendLine("[WARN]: Log guard trimmed $droppedLines older line(s) to keep size bounded.")
+            }
             if (logLines.isEmpty()) {
                 appendLine("No log messages recorded.")
             } else {
@@ -1256,6 +1422,37 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 ).use { writer ->
                     writer.write(buildLogContent(context))
                 }
+            }
+        }.isSuccess
+
+        if (!exportSucceeded) {
+            app.toast(app.getString(R.string.patcher_log_export_failed))
+            onResult(false)
+            return@launch
+        }
+
+        app.toast(app.getString(R.string.patcher_log_export_success))
+        onResult(true)
+    }
+
+    fun exportLogsToUri(
+        context: Context,
+        target: Uri?,
+        onResult: (Boolean) -> Unit = {}
+    ) = viewModelScope.launch {
+        if (target == null) {
+            onResult(false)
+            return@launch
+        }
+
+        val exportSucceeded = runCatching {
+            withContext(Dispatchers.IO) {
+                app.contentResolver.openOutputStream(target, "wt")
+                    ?.bufferedWriter(StandardCharsets.UTF_8)
+                    ?.use { writer ->
+                        writer.write(buildLogContent(context))
+                    }
+                    ?: throw IOException("Could not open output stream for log export")
             }
         }.isSuccess
 
@@ -1300,8 +1497,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             if (existingPackageInfo != null) {
                 // Check if the app version is less than the installed version
                 if (pm.getVersionCode(currentPackageInfo) < pm.getVersionCode(existingPackageInfo)) {
-                    val hint = installerManager.formatFailureHint(PackageInstaller.STATUS_FAILURE_CONFLICT, null)
-                        ?: app.getString(R.string.installer_hint_conflict)
+                    val hint = app.getString(R.string.installer_hint_downgrade)
                     showInstallFailure(app.getString(R.string.install_app_fail, hint))
                     return
                 }
@@ -1359,8 +1555,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                                 showSignatureMismatchPrompt(currentPackageInfo.packageName, plan)
                                 return
                             }
-                            val hint = installerManager.formatFailureHint(failure.asCode(), failureMessage)
-                            val message = hint ?: failureMessage ?: failure.asCode().toString()
+                            val backendReason = failureMessage ?: failure.javaClass.simpleName
+                            val hint = installerManager.formatFailureHint(failure.asCode(), backendReason)
+                            val message = hint ?: backendReason ?: failure.asCode().toString()
                             showInstallFailure(app.getString(R.string.install_app_fail, message))
                         }
 
@@ -1388,9 +1585,22 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                             packageInfo.label()
                         }
                         val patchedVersion = packageInfo.versionName ?: ""
+                        val mountTargetPackage = packageName
+                        val mountPackageInfo = pm.getPackageInfo(mountTargetPackage)
+                        val packageInstalledForMount = if (mountPackageInfo != null) {
+                            true
+                        } else if (rootInstaller.hasRootAccess()) {
+                            runCatching {
+                                rootInstaller.isPackageResolvableForMount(mountTargetPackage)
+                            }.onFailure {
+                                Log.w(TAG, "Failed to resolve package for mount using root shell", it)
+                            }.getOrDefault(false)
+                        } else {
+                            false
+                        }
 
-                        // Check for base APK, first check if the app is already installed
-                        if (existingPackageInfo == null) {
+                        // Check for base APK. If package manager cannot resolve the app, verify via root shell.
+                        if (!packageInstalledForMount) {
                             // If the app is not installed, check if the output file is a base apk
                             if (currentPackageInfo.splitNames?.isNotEmpty() == true) {
                                 val hint =
@@ -1411,10 +1621,15 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                             ?: inputFile?.let(pm::getPackageInfo)?.versionName
                             ?: throw Exception("Failed to determine input APK version")
 
-                        // Only reinstall stock when the app is not currently installed.
-                        val stockForMount = if (existingPackageInfo == null) {
+                        // Only reinstall stock when the app is not currently installed/resolvable.
+                        val stockForMount = if (!packageInstalledForMount) {
                             inputFile ?: run {
-                                showInstallFailure(app.getString(R.string.install_app_fail, "Missing original APK for mount install"))
+                                showInstallFailure(
+                                    app.getString(
+                                        R.string.install_app_fail,
+                                        app.getString(R.string.install_app_fail_missing_stock)
+                                    )
+                                )
                                 return
                             }
                         } else {
@@ -1480,8 +1695,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             val existingPackageInfo = pm.getPackageInfo(currentPackageInfo.packageName)
             if (existingPackageInfo != null) {
                 if (pm.getVersionCode(currentPackageInfo) < pm.getVersionCode(existingPackageInfo)) {
-                    val hint = installerManager.formatFailureHint(PackageInstaller.STATUS_FAILURE_CONFLICT, null)
-                        ?: app.getString(R.string.installer_hint_conflict)
+                    val hint = app.getString(R.string.installer_hint_downgrade)
                     showInstallFailure(app.getString(R.string.install_app_fail, hint))
                     return
                 }
@@ -1511,7 +1725,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             lastSuccessAtMs = System.currentTimeMillis()
         } catch (error: ShizukuInstaller.InstallerOperationException) {
             Log.e(tag, "Failed to install via Shizuku", error)
-            val message = error.message ?: app.getString(R.string.installer_hint_generic)
+            val backendReason = error.message ?: error.javaClass.simpleName
+            val message = installerManager.formatFailureHint(error.status, backendReason)
+                ?: backendReason
+                ?: app.getString(R.string.installer_hint_generic)
             packageInstallerStatus = null
             showInstallFailure(app.getString(R.string.install_app_fail, message))
         } catch (error: Exception) {
@@ -2033,6 +2250,37 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 }
             }
         }
+
+        if (event is ProgressEvent.Failed) {
+            if (shouldLogFailure(event.error)) {
+                val stepName = event.stepId?.let { it::class.java.simpleName } ?: "Unknown"
+                val message = event.error.message ?: event.error.type
+                logger.error("Failure in step=$stepName: $message")
+                logger.error(event.error.stackTrace)
+            }
+            handleKeystoreMissing(event.error)
+        }
+    }
+
+    private fun resetFailureLogState() {
+        lastLoggedErrorSignature = null
+    }
+
+    private fun shouldLogFailure(error: app.revanced.manager.patcher.RemoteError): Boolean {
+        val signature = listOf(error.type, error.message, error.stackTrace).joinToString("|")
+        if (signature == lastLoggedErrorSignature) return false
+        lastLoggedErrorSignature = signature
+        return true
+    }
+
+    private fun handleKeystoreMissing(error: app.revanced.manager.patcher.RemoteError) {
+        if (keystoreMissingDialog) return
+        val needle = "Keystore missing"
+        val messageMatch = error.message?.contains(needle, ignoreCase = true) == true
+        val stackMatch = error.stackTrace.contains(needle, ignoreCase = true)
+        if (messageMatch || stackMatch) {
+            keystoreMissingDialog = true
+        }
     }
 
     private fun isExpandableStep(stepId: StepId) = when (stepId) {
@@ -2082,12 +2330,52 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
 
         val title = message.trim()
-        val normalized = normalizeWriteApkTitle(stepId, title)
+        val splitNormalized = if (stepId == StepId.PrepareSplitApk) {
+            normalizeSplitApkTitle(title)
+        } else {
+            title
+        }
+        val normalized = normalizeWriteApkTitle(stepId, splitNormalized)
         if (stepId == StepId.WriteAPK && isDexCompileTitle(normalized)) {
             seenDexCompiles.add(normalized)
         }
         var existingIndex = list.indexOfFirst { it.title == normalized }
         val runningIndex = list.indexOfFirst { !it.skipped && it.state == State.RUNNING }
+        if (stepId == StepId.PrepareSplitApk && list.isNotEmpty()) {
+            if (normalized.startsWith("Merging ", ignoreCase = true)) {
+                if (existingIndex == -1) {
+                    existingIndex = findBestSubStepIndex(list, normalized)
+                    if (existingIndex == -1) {
+                        return
+                    }
+                }
+                val nextExpectedIndex = if (runningIndex != -1) {
+                    var index = runningIndex + 1
+                    while (index < list.size && list[index].skipped) {
+                        index++
+                    }
+                    if (index < list.size) index else -1
+                } else {
+                    list.indexOfFirst { !it.skipped && it.state == State.WAITING }
+                }
+                when {
+                    runningIndex != -1 && existingIndex == runningIndex -> Unit
+                    nextExpectedIndex != -1 && existingIndex == nextExpectedIndex -> Unit
+                    nextExpectedIndex != -1 && existingIndex < nextExpectedIndex -> {
+                        val stale = list[existingIndex]
+                        if (!stale.skipped && stale.state != State.COMPLETED) {
+                            list[existingIndex] = stale.copy(state = State.COMPLETED, progress = null)
+                        }
+                        return
+                    }
+                    nextExpectedIndex != -1 && existingIndex > nextExpectedIndex -> {
+                        val moved = list.removeAt(existingIndex)
+                        list.add(nextExpectedIndex, moved)
+                        existingIndex = nextExpectedIndex
+                    }
+                }
+            }
+        }
         if (stepId == StepId.WriteAPK && isDexCompilePhaseTitle(normalized)) {
             completeWriteApkApplyChanges(list)
             val firstCompile = list.indexOfFirst { isDexCompileTitle(it.title) }
@@ -2110,6 +2398,25 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             activateResourceCompileStep(list, progress)
             return
         }
+        if (stepId == StepId.WriteAPK &&
+            (normalized.equals("Writing output APK", ignoreCase = true)
+                || normalized.equals("Finalizing output", ignoreCase = true)
+                || normalized.equals("Stripping native libraries", ignoreCase = true))
+        ) {
+            completeResourceCompileIfPending(list)
+        }
+        if (stepId == StepId.PrepareSplitApk &&
+            (normalized.equals("Writing merged APK", ignoreCase = true)
+                || normalized.equals("Finalizing merged APK", ignoreCase = true)
+                || normalized.equals("Stripping native libraries", ignoreCase = true))
+        ) {
+            val limit = if (existingIndex != -1) existingIndex else list.size
+            for (index in 0 until limit) {
+                val detail = list[index]
+                if (detail.skipped || detail.state == State.COMPLETED) continue
+                list[index] = detail.copy(state = State.COMPLETED, progress = null)
+            }
+        }
         if (existingIndex == -1 && list.isNotEmpty()) {
             existingIndex = findBestSubStepIndex(list, normalized)
         }
@@ -2129,6 +2436,13 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
         if (existingIndex != -1) {
             if (list[existingIndex].skipped) return
+            if (stepId == StepId.PrepareSplitApk && runningIndex != -1 && existingIndex < runningIndex) {
+                val existing = list[existingIndex]
+                if (existing.state != State.COMPLETED) {
+                    list[existingIndex] = existing.copy(state = State.COMPLETED, progress = null)
+                }
+                return
+            }
             if (runningIndex != -1 && existingIndex < runningIndex) {
                 return
             }
@@ -2160,6 +2474,20 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         } else {
             title
         }
+    }
+
+    private fun normalizeSplitApkTitle(title: String): String {
+        val trimmed = title.trim()
+        if (trimmed.isEmpty()) return trimmed
+        val prefix = when {
+            trimmed.startsWith("Merging:", ignoreCase = true) -> "Merging:"
+            trimmed.startsWith("Merging ", ignoreCase = true) -> "Merging "
+            else -> return trimmed
+        }
+        val raw = trimmed.substringAfter(prefix).trim()
+        if (raw.isEmpty()) return trimmed
+        val name = if (raw.endsWith(".apk", ignoreCase = true)) raw else "$raw.apk"
+        return "Merging $name"
     }
 
     private fun isDexCompileTitle(title: String): Boolean {
@@ -2206,6 +2534,16 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         if (index == -1) return
         val detail = list[index]
         if (detail.state == State.COMPLETED) return
+        list[index] = detail.copy(state = State.COMPLETED, progress = null)
+    }
+
+    private fun completeResourceCompileIfPending(list: SnapshotStateList<StepDetail>) {
+        val index = list.indexOfFirst {
+            it.title.equals("Compiling modified resources", ignoreCase = true)
+        }
+        if (index == -1) return
+        val detail = list[index]
+        if (detail.skipped || detail.state == State.COMPLETED) return
         list[index] = detail.copy(state = State.COMPLETED, progress = null)
     }
 
@@ -2344,7 +2682,11 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     if (input.selectedApp is SelectedApp.Local && input.selectedApp.temporary) {
                         inputFile?.takeIf { it.exists() }?.delete()
                         inputFile = null
-                        updateSplitStepRequirement(null)
+                        updateSplitStepRequirement(
+                            file = null,
+                            needsSplitOverride = requiresSplitPreparation,
+                            merged = true
+                        )
                     }
                     refreshExportMetadata()
                     _patcherSucceeded.value = true
@@ -2406,6 +2748,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         memoryAdjustmentDialog = null
     }
 
+    fun dismissKeystoreMissingDialog() {
+        keystoreMissingDialog = false
+    }
+
     fun retryAfterMemoryAdjustment() {
         viewModelScope.launch {
             memoryAdjustmentDialog = null
@@ -2427,6 +2773,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         ).toMutableStateList()
         steps.clear()
         resetDexCompileState()
+        resetFailureLogState()
         steps.addAll(newSteps)
         stepSubSteps.clear()
         _patcherSucceeded.value = null
@@ -2528,6 +2875,22 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
     }
 
+    private suspend fun savedEntryBundleUids(installedApp: InstalledApp): Set<Int> {
+        val payloadBundles = installedApp.selectionPayload
+            ?.bundles
+            ?.map { it.bundleUid }
+            ?.toSet()
+            .orEmpty()
+        if (payloadBundles.isNotEmpty()) return payloadBundles
+        return installedAppRepository.getAppliedPatches(installedApp.currentPackageName).keys
+    }
+
+    private fun buildUniqueSavedAppEntryKey(packageName: String, bundleUids: Set<Int>): String {
+        val keyBase = buildSavedAppEntryKey(packageName, bundleUids)
+        val nonce = UUID.randomUUID().toString().replace("-", "").take(8)
+        return "${keyBase}__${nonce}"
+    }
+
     private companion object {
         const val TAG = "ReVanced Patcher"
         const val SKIPPED_SUBSTEP_PREFIX = "[skipped]"
@@ -2540,6 +2903,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         private const val INSTALL_PROGRESS_TOAST_INTERVAL_MS = 2500L
         private const val MEMORY_ADJUSTMENT_MB = 200
         private const val SUPPRESS_FAILURE_AFTER_SUCCESS_MS = 5000L
+        private const val PATCHER_LOG_ENTRY_SOFT_LIMIT = 9_000
+        private const val PATCHER_LOG_ENTRY_HARD_LIMIT = 12_000
+        private const val PATCHER_LOG_MESSAGE_CHAR_LIMIT = 12_000
         fun LogLevel.androidLog(msg: String) = when (this) {
             LogLevel.TRACE -> Log.v(TAG, msg)
             LogLevel.INFO -> Log.i(TAG, msg)

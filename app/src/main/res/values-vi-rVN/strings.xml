@@ -431,10 +431,6 @@
     <string name="language_option_system">Theo ngôn ngữ hệ thống</string>
     <string name="language_option_english">Tiếng Anh</string>
     <string name="language_option_chinese_simplified">Tiếng Trung (giản thể)</string>
-    <string name="language_option_indonesian">Indonesian</string>
-    <string name="language_option_hindi">Hindi</string>
-    <string name="language_option_gujarati">Gujarati</string>
-    <string name="language_option_portuguese_brazil">Portuguese (Brazil)</string>
     <string name="language_option_korean">Tiếng Hàn</string>
     <string name="language_option_vietnamese">Tiếng Việt</string>
     <string name="language_option_japanese">Tiếng Nhật</string>
@@ -503,8 +499,6 @@
     <string name="patch_profile_changed_patches_toast">Một số bản vá và tùy chọn trong cấu hình này không còn khớp với gói và đã bị bỏ qua.</string>
     <string name="patch_profile_no_available_bundles_toast">Không có gói nào trong cấu hình này. Cập nhật gói và thử lại.</string>
     <string name="patch_profile_launch_error">Không thể mở cấu hình vá này.</string>
-    <string name="patch_profile_show_more">Xem thêm</string>
-    <string name="patch_profile_show_less">Thu gọn</string>
     <string name="patch_profile_created_at">Đã tạo %1$s</string>
     <string name="patch_profile_bundle_unavailable_suffix">%1$s (không có sẵn)</string>
     <string name="patch_profile_bundle_uid_label">Mã định danh: %1$d</string>
@@ -694,7 +688,6 @@ Chi tiết: %2$s</string>
     <string name="install_app_success">Đã cài đặt ứng dụng</string>
     <string name="install_app_fail_title">Không thể cài đặt</string>
     <string name="install_app_fail">Không thể cài đặt ứng dụng: %s</string>
-    <string name="install_app_fail_missing_stock">Thiếu APK gốc để cài đặt kiểu gắn kết.</string>
     <string name="mount_split_not_supported">Trình cài đặt gắn kết bằng root không hỗ trợ APK phân tách. Hãy chuyển sang trình cài đặt hệ thống.</string>
     <string name="mount_app_fail_title">Không thể gắn</string>
     <string name="install_timeout_message">Cài đặt không thành công. Kiểm tra hộp thoại cài đặt hệ thống và thử lại.</string>
@@ -854,7 +847,6 @@ Chi tiết: %2$s</string>
     <string name="installation_failed_description">Cài đặt không thành công với lý do không xác định. Bạn có muốn thử lại?</string>
     <string name="installation_aborted_description">Bạn đã hủy giữa quá trình cài đặt. Hãy thử lại?</string>
     <string name="installation_blocked_description">Cài đặt bị chặn bởi Android. Hãy xem cài đặt bảo mật thiết bị của bạn và thử lại.</string>
-    <string name="installation_conflict_description">Quá trình cài đặt đã xẩy ra xung đột bởi ứng dụng đã cài đặt trước đó. Bạn có muốn gỡ cài đặt chúng và thử lại?</string>
     <string name="installation_signature_mismatch_dialog_title">Không khớp chữ ký</string>
     <string name="installation_signature_mismatch_description">Ứng dụng đã cài có chữ ký khác. Gỡ ứng dụng này và cài bản mới?</string>
     <string name="installation_incompatible_description">Ứng dụng này không tương thích với thiết bị. Hãy sử dụng tệp APK tương thích với thiết bị của bạn và thử lại.</string>

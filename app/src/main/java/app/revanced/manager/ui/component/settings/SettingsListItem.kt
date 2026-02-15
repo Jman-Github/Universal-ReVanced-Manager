@@ -1,9 +1,12 @@
 package app.revanced.manager.ui.component.settings
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -101,7 +104,6 @@ fun ExpandableSettingListItem(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .animateContentSize()
             .then(modifier)
     ) {
         ExpressiveSettingsItem(
@@ -116,17 +118,19 @@ fun ExpandableSettingListItem(
             }
         )
 
-        AnimatedVisibility(visible = expanded) {
+        AnimatedVisibility(
+            visible = expanded,
+            enter = expandVertically(
+                animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing)
+            ) + fadeIn(animationSpec = tween(durationMillis = 160)),
+            exit = shrinkVertically(
+                animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing)
+            ) + fadeOut(animationSpec = tween(durationMillis = 160))
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 12.dp, start = 16.dp, end = 16.dp)
-                    .animateContentSize(
-                        animationSpec = tween(
-                            durationMillis = 500,
-                            easing = FastOutSlowInEasing
-                        )
-                    )
             ) {
                 expandableContent()
             }

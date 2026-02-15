@@ -641,7 +641,11 @@ class InstallerManager(
             PackageInstaller.STATUS_FAILURE -> app.getString(R.string.installer_hint_generic)
             PackageInstaller.STATUS_FAILURE_ABORTED -> app.getString(R.string.installer_hint_aborted)
             PackageInstaller.STATUS_FAILURE_BLOCKED -> app.getString(R.string.installer_hint_blocked)
-            PackageInstaller.STATUS_FAILURE_CONFLICT -> app.getString(R.string.installer_hint_conflict)
+            PackageInstaller.STATUS_FAILURE_CONFLICT -> when {
+                isVersionDowngrade(normalizedExtra) -> app.getString(R.string.installer_hint_downgrade)
+                isPackageAlreadyInstalledConflict(normalizedExtra) -> app.getString(R.string.installer_hint_conflict)
+                else -> app.getString(R.string.installer_hint_conflict_generic)
+            }
             PackageInstaller.STATUS_FAILURE_INCOMPATIBLE -> app.getString(R.string.installer_hint_incompatible)
             PackageInstaller.STATUS_FAILURE_INVALID -> app.getString(R.string.installer_hint_invalid)
             PackageInstaller.STATUS_FAILURE_STORAGE -> app.getString(R.string.installer_hint_storage)
@@ -663,6 +667,21 @@ class InstallerManager(
             normalized.contains("install_failed_signature_inconsistent") ||
             normalized.contains("signatures do not match") ||
             normalized.contains("signature mismatch")
+    }
+
+    fun isVersionDowngrade(message: String?): Boolean {
+        val normalized = message?.lowercase(Locale.ROOT)?.trim().orEmpty()
+        if (normalized.isEmpty()) return false
+        return normalized.contains("install_failed_version_downgrade") ||
+            normalized.contains("version downgrade")
+    }
+
+    private fun isPackageAlreadyInstalledConflict(message: String?): Boolean {
+        val normalized = message?.lowercase(Locale.ROOT)?.trim().orEmpty()
+        if (normalized.isEmpty()) return false
+        return normalized.contains("install_failed_already_exists") ||
+            normalized.contains("already exists") ||
+            normalized.contains("already installed")
     }
 }
 

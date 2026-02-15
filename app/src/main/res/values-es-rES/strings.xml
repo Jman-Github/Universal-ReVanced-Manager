@@ -1,2 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources></resources>
+<resources>
+    <string name="patches">Parches</string>
+    <string name="toast_copied_to_clipboard">¡Copiado!</string>
+    <string name="copy_to_clipboard">Copiar al portapapeles</string>
+    <string name="settings">Configuración</string>
+    <string name="settings_search_hint">Buscar configuraciones</string>
+    <string name="settings_search_no_results">Configuraciones no encontradas.</string>
+    <string name="select_app">Selecciona una aplicación</string>
+</resources>

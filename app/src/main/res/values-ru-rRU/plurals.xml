@@ -8,7 +8,7 @@
     </plurals>
     <plurals name="selected_count">
         <item quantity="one">%d выбран</item>
-        <item quantity="few">%d выбранные</item>
+        <item quantity="few">%d выбрано</item>
         <item quantity="many">%d выбранные</item>
         <item quantity="other">%d выбранные</item>
     </plurals>

@@ -27,8 +27,14 @@ class CoroutineRuntime(context: Context) : Runtime(context) {
         stripNativeLibs: Boolean,
         skipUnneededSplits: Boolean,
     ) {
+        val selectedBundles = selectedPatches.keys
+        val patchBundlesByUid = bundles()
+        val relatedBundleArchives = patchBundlesByUid
+            .filterKeys { it in selectedBundles }
+            .values
+            .map { File(it.patchesJar) }
+
         val patchList = runStep(StepId.LoadPatches, onEvent) {
-            val selectedBundles = selectedPatches.keys
             val bundles = bundles()
             val uids = bundles.entries.associate { (key, value) -> value to key }
 
@@ -90,11 +96,12 @@ class CoroutineRuntime(context: Context) : Runtime(context) {
         }
 
         try {
+            val selectedAaptPath = resolveAaptPath(preparation.file, logger, relatedBundleArchives)
             val session = runStep(StepId.ReadAPK, onEvent) {
                 Session(
                     cacheDir,
                     frameworkPath,
-                    aaptPath,
+                    selectedAaptPath,
                     logger,
                     preparation.file,
                     onEvent

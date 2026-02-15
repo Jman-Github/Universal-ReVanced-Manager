@@ -2,15 +2,23 @@ package app.revanced.manager.patcher.morphe
 
 import android.content.Context
 import app.revanced.manager.patcher.patch.PatchInfo
+import app.revanced.manager.patcher.ProgressEvent
+import app.revanced.manager.patcher.RemoteError
+import app.revanced.manager.patcher.StepId
+import app.revanced.manager.patcher.logger.LogLevel
+import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.runtime.morphe.MorpheRuntimeAssets
 import dalvik.system.DexClassLoader
 import java.io.File
 import java.lang.reflect.Method
+import java.lang.reflect.Proxy
 
 object MorpheRuntimeBridge {
     private const val ENTRY_CLASS_NAME = "app.revanced.manager.morphe.runtime.MorpheRuntimeEntry"
+    private const val CALLBACK_CLASS_NAME = "app.revanced.manager.morphe.runtime.MorpheRuntimeCallback"
     private const val LOAD_METADATA_METHOD = "loadMetadata"
     private const val LOAD_METADATA_FOR_BUNDLE_METHOD = "loadMetadataForBundle"
+    private const val RUN_PATCHER_METHOD = "runPatcher"
 
     @Volatile
     private var appContext: Context? = null
@@ -24,6 +32,10 @@ object MorpheRuntimeBridge {
     private var loadMetadataMethod: Method? = null
     @Volatile
     private var loadMetadataForBundleMethod: Method? = null
+    @Volatile
+    private var runPatcherMethod: Method? = null
+    @Volatile
+    private var callbackClass: Class<*>? = null
 
     private val lock = Any()
 
@@ -55,6 +67,38 @@ object MorpheRuntimeBridge {
         }.toMap()
     }
 
+    fun runPatcher(
+        params: Map<String, Any?>,
+        logger: Logger,
+        onEvent: (ProgressEvent) -> Unit
+    ): String? {
+        val entry = ensureEntryClass()
+        val callback = ensureCallbackClass()
+        val proxy = Proxy.newProxyInstance(
+            entry.classLoader,
+            arrayOf(callback)
+        ) { _, method, args ->
+            when (method.name) {
+                "log" -> {
+                    val level = args?.getOrNull(0) as? String
+                    val message = args?.getOrNull(1) as? String
+                    if (level != null && message != null) {
+                        logger.log(LogLevel.valueOf(level), message)
+                    }
+                    null
+                }
+                "event" -> {
+                    val raw = args?.getOrNull(0) as? Map<*, *> ?: return@newProxyInstance null
+                    onEvent(mapToProgressEvent(raw))
+                    null
+                }
+                else -> null
+            }
+        }
+        val method = ensureRunPatcherMethod()
+        return method.invoke(null, params, proxy) as? String
+    }
+
     private fun ensureLoadMetadataMethod(): Method = synchronized(lock) {
         loadMetadataMethod ?: run {
             val method = ensureEntryClass().getMethod(LOAD_METADATA_METHOD, List::class.java)
@@ -68,6 +112,26 @@ object MorpheRuntimeBridge {
             val method = ensureEntryClass().getMethod(LOAD_METADATA_FOR_BUNDLE_METHOD, String::class.java)
             loadMetadataForBundleMethod = method
             method
+        }
+    }
+
+    private fun ensureRunPatcherMethod(): Method = synchronized(lock) {
+        runPatcherMethod ?: run {
+            val method = ensureEntryClass().getMethod(
+                RUN_PATCHER_METHOD,
+                Map::class.java,
+                ensureCallbackClass()
+            )
+            runPatcherMethod = method
+            method
+        }
+    }
+
+    private fun ensureCallbackClass(): Class<*> = synchronized(lock) {
+        callbackClass ?: run {
+            val loaded = ensureClassLoader().loadClass(CALLBACK_CLASS_NAME)
+            callbackClass = loaded
+            loaded
         }
     }
 
@@ -100,7 +164,58 @@ object MorpheRuntimeBridge {
             entryClass = null
             loadMetadataMethod = null
             loadMetadataForBundleMethod = null
+            runPatcherMethod = null
+            callbackClass = null
             return loader
         }
     }
+
+    private fun mapToProgressEvent(map: Map<*, *>): ProgressEvent {
+        val type = map["type"] as? String ?: return ProgressEvent.Progress(StepId.LoadPatches)
+        val stepId = mapToStepId(map["stepId"] as? Map<*, *>)
+        return when (type) {
+            "Started" -> ProgressEvent.Started(stepId ?: StepId.LoadPatches)
+            "Completed" -> ProgressEvent.Completed(stepId ?: StepId.LoadPatches)
+            "Progress" -> ProgressEvent.Progress(
+                stepId = stepId ?: StepId.LoadPatches,
+                current = (map["current"] as? Number)?.toLong(),
+                total = (map["total"] as? Number)?.toLong(),
+                message = map["message"] as? String,
+                subSteps = (map["subSteps"] as? Iterable<*>)?.mapNotNull { it as? String }
+            )
+            "Failed" -> {
+                val error = map["error"] as? Map<*, *> ?: emptyMap<Any, Any?>()
+                ProgressEvent.Failed(
+                    stepId,
+                    RemoteError(
+                        type = error["type"] as? String ?: "UnknownError",
+                        message = error["message"] as? String,
+                        stackTrace = error["stackTrace"] as? String ?: ""
+                    )
+                )
+            }
+            else -> ProgressEvent.Progress(stepId ?: StepId.LoadPatches)
+        }
+    }
+
+    private fun mapToStepId(map: Map<*, *>?): StepId? {
+        val kind = map?.get("kind") as? String ?: return null
+        return when (kind) {
+            "DownloadAPK" -> StepId.DownloadAPK
+            "LoadPatches" -> StepId.LoadPatches
+            "PrepareSplitApk" -> StepId.PrepareSplitApk
+            "ReadAPK" -> StepId.ReadAPK
+            "ExecutePatches" -> StepId.ExecutePatches
+            "WriteAPK" -> StepId.WriteAPK
+            "SignAPK" -> StepId.SignAPK
+            "ExecutePatch" -> {
+                val index = (map["index"] as? Number)?.toInt() ?: 0
+                StepId.ExecutePatch(index)
+            }
+            else -> null
+        }
+    }
 }
+
+class MorpheBridgeFailureException(val originalStackTrace: String) :
+    Exception("Morphe in-process patcher failed")

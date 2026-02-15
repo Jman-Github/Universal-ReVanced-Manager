@@ -12,6 +12,7 @@ import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.repository.DownloaderPluginRepository
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.domain.worker.WorkerRepository
+import app.revanced.manager.patcher.ample.AmpleRuntimeBridge
 import app.revanced.manager.patcher.morphe.MorpheRuntimeBridge
 import app.revanced.manager.network.service.HttpService
 import app.revanced.manager.util.AppForeground
@@ -21,6 +22,9 @@ import app.revanced.manager.util.applyAppLanguage
 import kotlinx.coroutines.Dispatchers
 import coil.Coil
 import coil.ImageLoader
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
+import coil.decode.SvgDecoder
 import com.topjohnwu.superuser.Shell
 import com.topjohnwu.superuser.internal.BuilderImpl
 import kotlinx.coroutines.MainScope
@@ -67,6 +71,7 @@ class ManagerApplication : Application() {
 
         PatchListCatalog.initialize(this)
         MorpheRuntimeBridge.initialize(this)
+        AmpleRuntimeBridge.initialize(this)
 
         val pixels = 512
         Coil.setImageLoader(
@@ -74,6 +79,12 @@ class ManagerApplication : Application() {
                 .components {
                     add(AppIconKeyer())
                     add(AppIconFetcher.Factory(pixels, true, this@ManagerApplication))
+                    add(SvgDecoder.Factory())
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        add(ImageDecoderDecoder.Factory())
+                    } else {
+                        add(GifDecoder.Factory())
+                    }
                 }
                 .build()
         )

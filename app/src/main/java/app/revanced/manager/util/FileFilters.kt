@@ -11,5 +11,10 @@ fun isAllowedApkFile(path: Path): Boolean {
 
 fun isAllowedPatchBundleFile(path: Path): Boolean {
     val extension = path.name.substringAfterLast('.', "").lowercase(Locale.ROOT)
-    return extension == "rvp" || extension == "mpp"
+    return extension == "rvp" || extension == "mpp" || extension == "arp"
+}
+
+fun isAllowedSplitArchiveFile(path: Path): Boolean {
+    val extension = path.name.substringAfterLast('.', "").lowercase(Locale.ROOT)
+    return extension in SPLIT_ARCHIVE_FILE_EXTENSIONS
 }

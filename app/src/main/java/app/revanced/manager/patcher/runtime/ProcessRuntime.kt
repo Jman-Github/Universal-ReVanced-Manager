@@ -92,16 +92,9 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
         val runtimeLimit = if (aggressiveLimit) {
             MemoryLimitConfig.maxLimitMb(context)
         } else {
-            MemoryLimitConfig.autoScaleLimitMb(context, requestedLimit)
+            requestedLimit
         }
-        if (runtimeLimit != requestedLimit && !aggressiveLimit) {
-            Log.d(tag, "Auto-scaled process memory limit from ${requestedLimit}MB to ${runtimeLimit}MB")
-        }
-        val sanitizedLimit = MemoryLimitConfig.clampLimitMb(context, runtimeLimit)
-        if (sanitizedLimit != runtimeLimit) {
-            Log.w(tag, "Requested process memory limit ${runtimeLimit}MB exceeded device capabilities; clamped to ${sanitizedLimit}MB")
-        }
-        val limit = "${sanitizedLimit}M"
+        val limit = "${runtimeLimit}M"
         val usePropOverride = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
         val propOverride = if (usePropOverride) {
             resolvePropOverride(context)?.absolutePath
@@ -176,7 +169,8 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
             }
 
             val parameters = Parameters(
-                aaptPath = aaptPath,
+                aaptPath = aaptPrimaryPath,
+                aaptFallbackPath = aaptFallbackPath,
                 frameworkDir = frameworkPath,
                 cacheDir = cacheDir,
                 packageName = packageName,

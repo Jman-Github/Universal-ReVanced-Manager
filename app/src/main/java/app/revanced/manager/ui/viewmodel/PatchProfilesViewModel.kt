@@ -10,7 +10,7 @@ import app.revanced.manager.data.room.profile.PatchProfilePayload
 import app.revanced.manager.data.room.options.Option.SerializedValue as StoredOptionSerializedValue
 import app.revanced.manager.domain.bundles.PatchBundleSource
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
-import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
+import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.isPreinstalled
 import app.revanced.manager.domain.bundles.RemotePatchBundle
 import app.revanced.manager.domain.repository.DuplicatePatchProfileNameException
 import app.revanced.manager.domain.repository.PatchBundleRepository
@@ -604,7 +604,7 @@ class PatchProfilesViewModel(
 
 private fun PatchBundleSource?.determineType(bundle: PatchProfilePayload.Bundle): BundleSourceType {
     return when {
-        this?.isDefault == true || bundle.bundleUid == 0 -> BundleSourceType.Preinstalled
+        this?.isPreinstalled == true || bundle.bundleUid == 0 -> BundleSourceType.Preinstalled
         this?.asRemoteOrNull != null -> BundleSourceType.Remote
         this != null -> BundleSourceType.Local
         bundle.sourceEndpoint != null -> BundleSourceType.Remote

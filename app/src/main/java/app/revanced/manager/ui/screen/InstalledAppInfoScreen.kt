@@ -3,18 +3,23 @@ package app.revanced.manager.ui.screen
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -32,6 +37,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -39,8 +46,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -55,6 +64,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.activity.compose.BackHandler
@@ -73,8 +83,10 @@ import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.ColumnWithScrollbar
 import app.revanced.manager.ui.component.SegmentedButton
 import app.revanced.manager.ui.component.ConfirmDialog
+import app.revanced.manager.ui.component.ExportSavedApkFileNameDialog
 import app.revanced.manager.ui.component.patches.PathSelectorDialog
 import app.revanced.manager.ui.component.settings.SettingsListItem
+import app.revanced.manager.ui.model.InstalledAppAction
 import app.revanced.manager.ui.viewmodel.InstalledAppInfoViewModel
 import app.revanced.manager.ui.viewmodel.InstalledAppInfoViewModel.ReplaceSavedBundleResult
 import app.revanced.manager.ui.viewmodel.InstallResult
@@ -85,6 +97,7 @@ import app.revanced.manager.util.ExportNameFormatter
 import app.revanced.manager.util.PatchedAppExportData
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.isAllowedApkFile
+import app.revanced.manager.util.savedAppBasePackage
 import app.revanced.manager.util.tag
 import app.revanced.manager.util.toast
 import kotlinx.coroutines.launch
@@ -104,7 +117,8 @@ fun InstalledAppInfoScreen(
         persistConfiguration: Boolean
     ) -> Unit,
     onBackClick: () -> Unit,
-    viewModel: InstalledAppInfoViewModel
+    viewModel: InstalledAppInfoViewModel,
+    initialAction: InstalledAppAction? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -117,6 +131,7 @@ fun InstalledAppInfoScreen(
     val allowBundleOverride by prefs.allowPatchProfileBundleOverride.getAsState()
     val savedAppsEnabled by prefs.enableSavedApps.getAsState()
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
+    val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     var showAppliedPatchesDialog by rememberSaveable { mutableStateOf(false) }
     var showUniversalBlockedDialog by rememberSaveable { mutableStateOf(false) }
     var showMixedBundleDialog by rememberSaveable { mutableStateOf(false) }
@@ -125,8 +140,14 @@ fun InstalledAppInfoScreen(
     var exportFileDialogState by remember { mutableStateOf<ExportSavedApkDialogState?>(null) }
     var pendingExportConfirmation by remember { mutableStateOf<PendingSavedExportConfirmation?>(null) }
     var exportInProgress by rememberSaveable { mutableStateOf(false) }
+    var pendingAction by rememberSaveable { mutableStateOf(initialAction) }
+    var showSavedEntryDeleteDialog by rememberSaveable { mutableStateOf(false) }
+    var showSavedAppDeleteDialog by rememberSaveable { mutableStateOf(false) }
+    var showSavedUninstallDialog by rememberSaveable { mutableStateOf(false) }
+    var showUnmountConfirmation by rememberSaveable { mutableStateOf(false) }
     val appliedSelection = viewModel.appliedPatches
     val isInstalledOnDevice = viewModel.isInstalledOnDevice
+    val installedAppState = viewModel.installedApp
     val storageRoots = remember { fs.storageRoots() }
     val (permissionContract, permissionName) = remember { fs.permissionContract() }
     val permissionLauncher =
@@ -135,14 +156,24 @@ fun InstalledAppInfoScreen(
                 showExportPicker = true
             }
         }
+    val exportDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/vnd.android.package-archive")
+    ) { uri ->
+        viewModel.exportSavedApp(uri)
+        showExportPicker = false
+    }
     fun openExportPicker() {
-        if (fs.hasStoragePermission()) {
-            showExportPicker = true
+        if (useCustomFilePicker) {
+            if (fs.hasStoragePermission()) {
+                showExportPicker = true
+            } else {
+                permissionLauncher.launch(permissionName)
+            }
         } else {
-            permissionLauncher.launch(permissionName)
+            showExportPicker = true
         }
     }
-    val selectionPayload = viewModel.installedApp?.selectionPayload
+    val selectionPayload = installedAppState?.selectionPayload
     val savedBundleVersions = remember(selectionPayload) {
         selectionPayload?.bundles.orEmpty().associate { it.bundleUid to it.version }
     }
@@ -285,6 +316,12 @@ fun InstalledAppInfoScreen(
     )
     EventEffect(flow = viewModel.launchActivityFlow) { intent ->
         activityLauncher.launch(intent)
+    }
+
+    LaunchedEffect(initialAction) {
+        if (initialAction != null) {
+            pendingAction = initialAction
+        }
     }
 
     SideEffect {
@@ -657,6 +694,18 @@ fun InstalledAppInfoScreen(
                 scrollBehavior = scrollBehavior,
                 onBackClick = {
                     if (viewModel.isInstalling) showLeaveInstallDialog = true else onBackClick()
+                },
+                actions = {
+                    if (viewModel.hasSavedCopy) {
+                        IconButton(
+                            onClick = { openExportPicker() }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Save,
+                                contentDescription = stringResource(R.string.export)
+                            )
+                        }
+                    }
                 }
             )
         },
@@ -670,7 +719,13 @@ fun InstalledAppInfoScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            val installedApp = viewModel.installedApp ?: return@ColumnWithScrollbar
+            val installedApp = installedAppState ?: return@ColumnWithScrollbar
+            val displayPackageName = if (installedApp.installType == InstallType.SAVED) {
+                installedApp.originalPackageName.takeIf { it.isNotBlank() }
+                    ?: savedAppBasePackage(installedApp.currentPackageName)
+            } else {
+                installedApp.currentPackageName
+            }
 
             AppInfo(
                 appInfo = viewModel.appInfo,
@@ -702,12 +757,12 @@ fun InstalledAppInfoScreen(
         viewModel.appInfo
     ) {
         val label = viewModel.appInfo?.applicationInfo?.loadLabel(context.packageManager)?.toString()
-            ?: installedApp.currentPackageName
+            ?: displayPackageName
         val bundleVersions = appliedBundles.mapNotNull { it.version?.takeIf(String::isNotBlank) }
         val bundleNames = appliedBundles.map { it.title }.filter(String::isNotBlank)
         PatchedAppExportData(
             appName = label,
-            packageName = installedApp.currentPackageName,
+            packageName = viewModel.appInfo?.packageName ?: displayPackageName,
             appVersion = installedApp.version,
             patchBundleVersions = bundleVersions,
             patchBundleNames = bundleNames
@@ -716,7 +771,7 @@ fun InstalledAppInfoScreen(
     val exportFileName = remember(exportMetadata, exportFormat) {
         ExportNameFormatter.format(exportFormat, exportMetadata)
     }
-    if (showExportPicker) {
+    if (showExportPicker && useCustomFilePicker) {
         PathSelectorDialog(
             roots = storageRoots,
             onSelect = { path ->
@@ -732,6 +787,17 @@ fun InstalledAppInfoScreen(
                 exportFileDialogState = ExportSavedApkDialogState(directory, exportFileName)
             }
         )
+    }
+    LaunchedEffect(showExportPicker, useCustomFilePicker, exportFileName) {
+        if (showExportPicker && !useCustomFilePicker) {
+            exportDocumentLauncher.launch(exportFileName)
+        }
+    }
+    LaunchedEffect(useCustomFilePicker) {
+        if (!useCustomFilePicker) {
+            exportFileDialogState = null
+            pendingExportConfirmation = null
+        }
     }
     exportFileDialogState?.let { state ->
         ExportSavedApkFileNameDialog(
@@ -783,11 +849,42 @@ fun InstalledAppInfoScreen(
     if (exportInProgress) {
         AlertDialog(
             onDismissRequest = {},
-            title = { Text(stringResource(R.string.export)) },
-            text = { Text(stringResource(R.string.patcher_step_group_saving)) },
-            icon = { CircularProgressIndicator() },
+            icon = {
+                Icon(
+                    Icons.Outlined.Save,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            title = {
+                Text(
+                    stringResource(R.string.export),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        stringResource(R.string.patcher_step_group_saving),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth(0.7f)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                    )
+                }
+            },
             confirmButton = {},
-            dismissButton = {}
+            dismissButton = {},
+            shape = RoundedCornerShape(28.dp)
         )
     }
     FlowRow(
@@ -806,6 +903,107 @@ fun InstalledAppInfoScreen(
             }
         }
         val rootRequiredText = stringResource(R.string.installer_status_requires_root)
+        val primaryInstallerIsMount = viewModel.primaryInstallerIsMount
+        val isMounted = viewModel.isMounted
+
+        fun handleInstallOrUpdate() {
+            when (installType) {
+                InstallType.MOUNT -> {
+                    if (!primaryInstallerIsMount) {
+                        val action = if (isMounted) MountWarningAction.UPDATE else MountWarningAction.INSTALL
+                        viewModel.showMountWarning(action, MountWarningReason.PRIMARY_NOT_MOUNT_FOR_MOUNT_APP)
+                    } else {
+                        if (isMounted) viewModel.remountSavedInstallation() else viewModel.mountOrUnmount()
+                    }
+                }
+                else -> {
+                    if (primaryInstallerIsMount && installType != InstallType.MOUNT) {
+                        val action = if (isInstalledOnDevice) MountWarningAction.UPDATE else MountWarningAction.INSTALL
+                        viewModel.showMountWarning(action, MountWarningReason.PRIMARY_IS_MOUNT_FOR_NON_MOUNT_APP)
+                    } else {
+                        viewModel.installSavedApp()
+                    }
+                }
+            }
+        }
+
+        fun handleUninstall() {
+            when (installType) {
+                InstallType.MOUNT -> {
+                    if (isMounted) {
+                        if (!primaryInstallerIsMount) {
+                            viewModel.showMountWarning(
+                                MountWarningAction.UNINSTALL,
+                                MountWarningReason.PRIMARY_NOT_MOUNT_FOR_MOUNT_APP
+                            )
+                        } else {
+                            showUnmountConfirmation = true
+                        }
+                    }
+                }
+                InstallType.SAVED -> {
+                    if (isInstalledOnDevice) {
+                        if (primaryInstallerIsMount) {
+                            viewModel.showMountWarning(
+                                MountWarningAction.UNINSTALL,
+                                MountWarningReason.PRIMARY_IS_MOUNT_FOR_NON_MOUNT_APP
+                            )
+                        } else {
+                            showSavedUninstallDialog = true
+                        }
+                    }
+                }
+                else -> {
+                    if (isInstalledOnDevice) {
+                        showUninstallDialog = true
+                    }
+                }
+            }
+        }
+
+        fun handleDeleteSavedAction() {
+            when (installType) {
+                InstallType.SAVED -> showSavedAppDeleteDialog = true
+                else -> if (viewModel.hasSavedCopy) showSavedEntryDeleteDialog = true
+            }
+        }
+
+        LaunchedEffect(pendingAction, installedApp.currentPackageName, appliedSelection) {
+            val action = pendingAction ?: return@LaunchedEffect
+            when (action) {
+                InstalledAppAction.OPEN -> {
+                    if (isInstalledOnDevice) viewModel.launch()
+                    pendingAction = null
+                }
+                InstalledAppAction.EXPORT -> {
+                    openExportPicker()
+                    pendingAction = null
+                }
+                InstalledAppAction.INSTALL_OR_UPDATE -> {
+                    handleInstallOrUpdate()
+                    pendingAction = null
+                }
+                InstalledAppAction.UNINSTALL -> {
+                    handleUninstall()
+                    pendingAction = null
+                }
+                InstalledAppAction.DELETE -> {
+                    handleDeleteSavedAction()
+                    pendingAction = null
+                }
+                InstalledAppAction.REPATCH -> {
+                    val selection = appliedSelection
+                    if (selection == null) return@LaunchedEffect
+                    if (selection.isEmpty()) {
+                        context.toast(context.getString(R.string.no_patches_selected))
+                        pendingAction = null
+                        return@LaunchedEffect
+                    }
+                    handleRepatchClick(installedApp.originalPackageName)
+                    pendingAction = null
+                }
+            }
+        }
 
         if (viewModel.appInfo != null) {
             key("open") {
@@ -848,12 +1046,11 @@ fun InstalledAppInfoScreen(
                         )
                     }
 
-                    var showDeleteConfirmation by rememberSaveable { mutableStateOf(false) }
-                    if (showDeleteConfirmation) {
+                    if (showSavedEntryDeleteDialog) {
                         ConfirmDialog(
-                            onDismiss = { showDeleteConfirmation = false },
+                            onDismiss = { showSavedEntryDeleteDialog = false },
                             onConfirm = {
-                                showDeleteConfirmation = false
+                                showSavedEntryDeleteDialog = false
                                 viewModel.deleteSavedEntry()
                             },
                             title = stringResource(R.string.delete_saved_entry_title),
@@ -865,7 +1062,7 @@ fun InstalledAppInfoScreen(
                         SegmentedButton(
                             icon = Icons.Outlined.Delete,
                             text = stringResource(R.string.delete),
-                            onClick = { showDeleteConfirmation = true }
+                            onClick = { showSavedEntryDeleteDialog = true }
                         )
                     }
                 } else {
@@ -890,8 +1087,6 @@ fun InstalledAppInfoScreen(
             }
 
             InstallType.MOUNT -> {
-                var showUnmountConfirmation by rememberSaveable { mutableStateOf(false) }
-
                 if (showUnmountConfirmation) {
                     ConfirmDialog(
                         onDismiss = { showUnmountConfirmation = false },
@@ -943,12 +1138,11 @@ fun InstalledAppInfoScreen(
                     text = stringResource(R.string.export),
                     onClick = { openExportPicker() }
                 )
-                var showDeleteConfirmation by rememberSaveable { mutableStateOf(false) }
-                if (showDeleteConfirmation) {
+                if (showSavedEntryDeleteDialog) {
                     ConfirmDialog(
-                        onDismiss = { showDeleteConfirmation = false },
+                        onDismiss = { showSavedEntryDeleteDialog = false },
                         onConfirm = {
-                            showDeleteConfirmation = false
+                            showSavedEntryDeleteDialog = false
                             viewModel.deleteSavedEntry()
                         },
                         title = stringResource(R.string.delete_saved_entry_title),
@@ -959,7 +1153,7 @@ fun InstalledAppInfoScreen(
                 SegmentedButton(
                     icon = Icons.Outlined.Delete,
                     text = stringResource(R.string.delete),
-                    onClick = { showDeleteConfirmation = true }
+                    onClick = { showSavedEntryDeleteDialog = true }
                 )
                 SegmentedButton(
                     icon = Icons.Outlined.Update,
@@ -979,7 +1173,6 @@ fun InstalledAppInfoScreen(
                     )
                 }
 
-                var showSavedUninstallDialog by rememberSaveable { mutableStateOf(false) }
                 if (showSavedUninstallDialog) {
                     val confirmTitle = stringResource(R.string.saved_app_uninstall_title)
                     val confirmDescription = stringResource(R.string.saved_app_uninstall_description)
@@ -1028,12 +1221,11 @@ fun InstalledAppInfoScreen(
                 val deleteTitle = stringResource(R.string.delete_saved_app_title)
                 val deleteDescription = stringResource(R.string.delete_saved_app_description)
                 val deleteLabel = stringResource(R.string.delete)
-                var showDeleteConfirmation by rememberSaveable { mutableStateOf(false) }
-                if (showDeleteConfirmation) {
+                if (showSavedAppDeleteDialog) {
                     ConfirmDialog(
-                        onDismiss = { showDeleteConfirmation = false },
+                        onDismiss = { showSavedAppDeleteDialog = false },
                         onConfirm = {
-                            showDeleteConfirmation = false
+                            showSavedAppDeleteDialog = false
                             deleteAction()
                         },
                         title = deleteTitle,
@@ -1045,7 +1237,7 @@ fun InstalledAppInfoScreen(
                     SegmentedButton(
                         icon = Icons.Outlined.Delete,
                         text = deleteLabel,
-                        onClick = { showDeleteConfirmation = true }
+                        onClick = { showSavedAppDeleteDialog = true }
                     )
                 }
 
@@ -1091,10 +1283,10 @@ fun InstalledAppInfoScreen(
 
                 SettingsListItem(
                     headlineContent = stringResource(R.string.package_name),
-                    supportingContent = installedApp.currentPackageName
+                    supportingContent = displayPackageName
                 )
 
-                if (installedApp.originalPackageName != installedApp.currentPackageName) {
+                if (installedApp.originalPackageName != displayPackageName) {
                     SettingsListItem(
                         headlineContent = stringResource(R.string.original_package_name),
                         supportingContent = installedApp.originalPackageName
@@ -1232,38 +1424,3 @@ private data class PendingSavedExportConfirmation(
     val directory: Path,
     val fileName: String
 )
-
-@Composable
-private fun ExportSavedApkFileNameDialog(
-    initialName: String,
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit
-) {
-    var fileName by rememberSaveable(initialName) { mutableStateOf(initialName) }
-    val trimmedName = fileName.trim()
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(trimmedName) },
-                enabled = trimmedName.isNotEmpty()
-            ) {
-                Text(stringResource(R.string.save))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel))
-            }
-        },
-        title = { Text(stringResource(R.string.export)) },
-        text = {
-            OutlinedTextField(
-                value = fileName,
-                onValueChange = { fileName = it },
-                label = { Text(stringResource(R.string.file_name)) },
-                placeholder = { Text(stringResource(R.string.dialog_input_placeholder)) }
-            )
-        }
-    )
-}

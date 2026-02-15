@@ -8,6 +8,7 @@ import kotlinx.parcelize.RawValue
 data class MorpheParameters(
     val cacheDir: String,
     val aaptPath: String,
+    val aaptFallbackPath: String?,
     val frameworkDir: String,
     val packageName: String,
     val inputFile: String,

@@ -37,7 +37,8 @@ object SplitApkPreparer {
         stripNativeLibs: Boolean = false,
         skipUnneededSplits: Boolean = false,
         onProgress: ((String) -> Unit)? = null,
-        onSubSteps: ((List<String>) -> Unit)? = null
+        onSubSteps: ((List<String>) -> Unit)? = null,
+        sortMergedApkEntries: Boolean = false
     ): PreparationResult {
         if (!isSplitArchive(source)) {
             return PreparationResult(source, merged = false)
@@ -80,13 +81,13 @@ object SplitApkPreparer {
             }
             onSubSteps?.invoke(buildSplitSubSteps(mergeOrder, skippedModules, stripNativeLibs))
 
-            val module = Merger.merge(modulesDir.toPath(), skippedModules, onProgress)
-            module.use {
-                runInterruptible(Dispatchers.IO) {
-                    onProgress?.invoke("Writing merged APK")
-                    it.writeApk(mergedApk)
-                }
-            }
+            Merger.merge(
+                apkDir = modulesDir.toPath(),
+                outputApk = mergedApk,
+                skipModules = skippedModules,
+                onProgress = onProgress,
+                sortApkEntries = sortMergedApkEntries
+            )
 
             if (stripNativeLibs) {
                 onProgress?.invoke("Stripping native libraries")

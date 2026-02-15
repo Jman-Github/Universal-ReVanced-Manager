@@ -15,7 +15,7 @@
 
 # 💊 Universal ReVanced Manager
 
-Application for using ReVanced on Android.
+Application for using ReVanced, Morphe and AmpleReVanced all in a single app on Android.
 
 <p align="center">
   <img src="https://img.shields.io/badge/License-GPL%20v3-yellow.svg" alt="GPLv3 License" />
@@ -69,6 +69,7 @@ Universal ReVanced Manager includes powerful features that the official ReVanced
 <summary><strong>App Patching Flow</strong></summary>
 <ul>
   <li><strong>Morphe patch bundles support:</strong> Supports the <a href="https://github.com/MorpheApp/morphe-patcher">Morphe Patcher</a> without needing a computer or another app.</li>
+  <li><strong>Ample patch bundles support:</strong> Supports <a href="https://github.com/AmpleReVanced/revanced-patches">AmpleReVanced patch bundles</a> alongside ReVanced and Morphe runtimes.</li>
   <li><strong>Downloaded app source:</strong> Added a "Downloaded apps" source in the select source screen when patching. If the manager has cached an APK from a downloader plugin, you can pick it directly from there. This option only appears when that app is available.</li>
   <li><strong>Split APK support:</strong> .apkm, .apks, and .xapk file formats are automatically converted to the .apk format when patching. No need for outside tools.</li>
   <li><strong>Split merge sub-steps:</strong> Expandable sub-steps for the "Merging split APKs" step, plus sub-steps for "Writing patched APK".</li>
@@ -106,6 +107,16 @@ Universal ReVanced Manager includes powerful features that the official ReVanced
 </details>
 
 <details>
+<summary><strong>Tools</strong></summary>
+<ul>
+  <li><strong>Dedicated Tools tab:</strong> Includes standalone utilities outside the patching flow for common APK and asset workflows.</li>
+  <li><strong>Merge split APKs tool:</strong> Merge split archives (.xapk, .apkm, .apks, .zip) into a single installable APK, with signer integration and downloader-plugin input support.</li>
+  <li><strong>Create custom YouTube icons &amp; headers:</strong> Build adaptive icon and header asset packs with image positioning controls and export-ready outputs.</li>
+  <li><strong>Keystore creator and converter:</strong> Generate new signing keystores or convert existing keystores between supported formats directly in-app.</li>
+</ul>
+</details>
+
+<details>
 <summary><strong>Downloader & Storage Management</strong></summary>
 <ul>
   <li><strong>Cached downloads management:</strong> The manager can now keep multiple downloaded apps (from downloader plugins) inside the downloader settings. You can also export any of these APKs to your device's storage whenever you want.</li>
@@ -118,6 +129,7 @@ Universal ReVanced Manager includes powerful features that the official ReVanced
 <summary><strong>Appearance & Theming</strong></summary>
 <ul>
   <li><strong>Enhanced theming:</strong> Appearance settings include an accent color picker, theme color picker, color HEX code support, presets, and a live preview widget so you can choose a custom theme color and customize the app to your liking.</li>
+  <li><strong>Custom background images:</strong> Set your own background image with transparency controls and a preview panel; selected images are imported into app storage so they remain available even if the original file is moved or deleted.</li>
   <li><strong>Monochrome app icons:</strong> Support for Android monochrome icons.</li>
   <li><strong>Better long names:</strong> Long labels use horizontal swipe instead of auto-sliding or wrapping.</li>
 </ul>
@@ -136,6 +148,7 @@ Universal ReVanced Manager includes powerful features that the official ReVanced
   <li><strong>Always-visible developer options:</strong> Developer options are always available in Settings by default. No hidden or secret unlock flow.</li>
   <li><strong>Disable battery optimization banner:</strong> Developer option to hide the battery optimization warning banner.</li>
   <li><strong>Robust import and export:</strong> Export and import your patch bundles, your patch profiles, and your app settings to and from JSON files for easy backup, sharing, or migration between devices.</li>
+  <li><strong>Full settings export/import:</strong> Export and import all manager settings in one JSON (excluding keystores) for quick migration and recovery.</li>
 </ul>
 </details>
 
@@ -161,6 +174,8 @@ Universal ReVanced Manager includes powerful features that the official ReVanced
   <li><strong>Fillipino:</strong> User-selectable language option in settings.</li>
   <li><strong>Hindi:</strong> User-selectable language option in settings.</li>
   <li><strong>Gujarati:</strong> User-selectable language option in settings.</li>
+  <li><strong>French:</strong> User-selectable language option in settings.</li>
+
 </ul>
 </details>
 
@@ -276,6 +291,32 @@ To import patch bundles into Universal ReVanced Manager, use my [ReVanced Patch 
       <a href="https://crowdin.com/profile/fielph">fielph</a><br />
       Fillipino localization
     </td>
+  </tr>
+  <tr>
+    <td style="vertical-align:middle;padding-right:8px;">
+      <img src="https://images.weserv.nl/?url=crowdin-static.cf-downloads.crowdin.com%2Favatar%2F17552514%2Flarge%2F8cd18fa414c96aa3bd702eaeccb70b6d.jpeg&h=36&w=36&fit=cover&mask=circle" alt="srs4200 avatar" width="36" height="36" />
+    </td>
+    <td style="vertical-align:middle;padding-right:24px;">
+      <a href="https://crowdin.com/profile/srs4200">srs4200</a><br />
+      Bengali localization
+    </td>
+    <td style="vertical-align:middle;padding-right:8px;">
+      <img src="https://images.weserv.nl/?url=crowdin-static.cf-downloads.crowdin.com/avatar/16589059/small/65fcdfc7892c0e034a5b24fcba44b471_default.png&h=36&w=36&fit=cover&mask=circle" alt="mickael81 avatar" width="36" height="36" />
+    </td>
+    <td style="vertical-align:middle;padding-right:0;">
+      <a href="https://crowdin.com/profile/mickael81">mickael81</a><br />
+      French localization
+    </td>
+  </tr>
+  <tr>
+    <td style="vertical-align:middle;padding-right:8px;">
+      <img src="https://images.weserv.nl/?url=crowdin-static.cf-downloads.crowdin.com%2Favatar%2F15398900%2Flarge%2Feddf7f926deb28d0648c04e8d5494c44.png&h=36&w=36&fit=cover&mask=circle" alt="imx-sunner avatar" width="36" height="36" />
+    </td>
+    <td style="vertical-align:middle;padding-right:24px;">
+      <a href="https://crowdin.com/profile/imx-sunner">imx-sunner</a><br />
+      Spanish localization
+    </td>
+    <td colspan="2" style="vertical-align:middle;padding-right:0;"></td>
   </tr>
 </table>
 

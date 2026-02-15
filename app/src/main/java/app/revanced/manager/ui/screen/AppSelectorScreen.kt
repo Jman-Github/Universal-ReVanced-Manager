@@ -1,6 +1,7 @@
 package app.revanced.manager.ui.screen
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import android.content.pm.PackageInfo
 import android.net.Uri
@@ -34,6 +35,7 @@ import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -71,6 +73,7 @@ import app.revanced.manager.ui.component.CheckedFilterChip
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
 import app.revanced.manager.ui.component.ShimmerBox
 import app.revanced.manager.ui.component.NonSuggestedVersionDialog
+import app.revanced.manager.ui.component.UniversalFallbackVersionDialog
 import app.revanced.manager.ui.component.patches.PathSelectorDialog
 import app.revanced.manager.ui.component.SafeguardHintCard
 import app.revanced.manager.ui.component.SearchView
@@ -104,6 +107,7 @@ fun AppSelectorScreen(
     val suggestedVersionSafeguard by prefs.suggestedVersionSafeguard.getAsState()
     val bundleRecommendationsEnabled = allowIncompatiblePatches && !suggestedVersionSafeguard
     val allowUniversalPatches by prefs.disableUniversalPatchCheck.getAsState()
+    val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val searchEngineHost by prefs.searchEngineHost.getAsState()
 
     EventEffect(flow = vm.storageSelectionFlow) {
@@ -123,27 +127,38 @@ fun AppSelectorScreen(
                 onBackClick()
             }
         }
-    val openStoragePicker = {
-        if (fs.hasStoragePermission()) {
-            showStorageDialog = true
-        } else {
-            permissionLauncher.launch(permissionName)
+    val openDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            vm.handleStorageResult(uri)
+        } else if (returnToDashboardOnStorage) {
+            onBackClick()
         }
     }
-    val quickStorageOnly = autoOpenStorage && returnToDashboardOnStorage
+    val openStoragePicker = {
+        if (useCustomFilePicker) {
+            if (fs.hasStoragePermission()) {
+                showStorageDialog = true
+            } else {
+                permissionLauncher.launch(permissionName)
+            }
+        } else {
+            openDocumentLauncher.launch(arrayOf("*/*"))
+        }
+    }
+    LaunchedEffect(useCustomFilePicker) {
+        if (!useCustomFilePicker) {
+            showStorageDialog = false
+        }
+    }
     LaunchedEffect(autoOpenStorage) {
         if (autoOpenStorage) {
             openStoragePicker()
         }
     }
 
-    if (quickStorageOnly) {
-        // Skip rendering the selector UI; just trigger the picker and wait for result/back navigation.
-        androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize())
-        return
-    }
-
-    if (showStorageDialog) {
+    if (showStorageDialog && useCustomFilePicker) {
         PathSelectorDialog(
             roots = storageRoots,
             onSelect = { path ->
@@ -190,9 +205,19 @@ fun AppSelectorScreen(
             .toList()
     }
 
-    vm.nonSuggestedVersionDialogSubject?.let {
+    vm.universalFallbackDialogSubject?.let {
+        UniversalFallbackVersionDialog(
+            onContinue = vm::continueWithUniversalFallback,
+            onDismiss = vm::dismissUniversalFallbackDialog
+        )
+    }
+
+    vm.nonSuggestedVersionDialogSubject?.let { local ->
         NonSuggestedVersionDialog(
-            suggestedVersion = suggestedVersions[it.packageName].orEmpty(),
+            suggestedVersion = vm.nonSuggestedVersionDialogSuggestedVersion
+                ?.takeUnless { it.isBlank() }
+                ?: suggestedVersions[local.packageName].orEmpty().ifBlank { local.version },
+            requiresUniversalPatchesEnabled = vm.nonSuggestedVersionDialogRequiresUniversalEnabled,
             onDismiss = vm::dismissNonSuggestedVersionDialog
         )
     }
@@ -290,14 +315,20 @@ fun AppSelectorScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        val appFilterChipColors = FilterChipDefaults.filterChipColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp),
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
                         CheckedFilterChip(
                             selected = filterInstalledOnly,
                             onClick = { filterInstalledOnly = !filterInstalledOnly },
+                            colors = appFilterChipColors,
                             label = { Text(stringResource(R.string.app_filter_installed_only)) }
                         )
                         CheckedFilterChip(
                             selected = filterPatchesAvailable,
                             onClick = { filterPatchesAvailable = !filterPatchesAvailable },
+                            colors = appFilterChipColors,
                             label = { Text(stringResource(R.string.app_filter_patches_available)) }
                         )
                     }

@@ -19,6 +19,7 @@
 *.zip
 *.tar.gz
 *.rar
+!libs/APKEditor-1.4.7.jar
 
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
@@ -130,6 +131,7 @@ node_modules/
 local.properties
 
 .cxx
-AGENT.md
+AGENTS.md
 .gitignore
 to-do.txt
+.ai/mcp/mcp.json
