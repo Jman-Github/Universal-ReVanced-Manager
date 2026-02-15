@@ -549,6 +549,7 @@ Patch profiles are not affected.</string>
     <string name="language_dialog_title">Choose app language</string>
     <string name="language_option_system">Use device language</string>
     <string name="language_option_english">English</string>
+    <string name="language_option_french">French</string>
     <string name="language_option_chinese_simplified">Chinese (Simplified)</string>
     <string name="language_option_indonesian">Indonesian</string>
     <string name="language_option_hindi">Hindi</string>

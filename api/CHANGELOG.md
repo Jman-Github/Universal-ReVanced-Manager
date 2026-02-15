@@ -76,6 +76,8 @@
 - Added downloader support to the `Merge split APKs` tool
 - Added signing to the `Merge split APKs` tool so the output APK is not unsigned
 - Made the `Merge split APKs` tool always run in another process (due to the intensity of merging some split APKs). If a separate process can’t be used, it will fall back to running in-app
+- Added French to the in app language selector dialog
+- Synced Crowdin
 
 
 # Bug fixes

@@ -158,6 +158,7 @@ fun GeneralSettingsScreen(
         listOf(
             LanguageOption("system", R.string.language_option_system),
             LanguageOption("en", R.string.language_option_english),
+            LanguageOption("fr", R.string.language_option_french),
             LanguageOption("zh-CN", R.string.language_option_chinese_simplified),
             LanguageOption("in", R.string.language_option_indonesian),
             LanguageOption("hi", R.string.language_option_hindi),
