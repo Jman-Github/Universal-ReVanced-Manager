@@ -381,10 +381,6 @@
     <string name="language_option_system">跟随设备语言</string>
     <string name="language_option_english">英语</string>
     <string name="language_option_chinese_simplified">简体中文</string>
-    <string name="language_option_indonesian">Indonesian</string>
-    <string name="language_option_hindi">Hindi</string>
-    <string name="language_option_gujarati">Gujarati</string>
-    <string name="language_option_portuguese_brazil">Portuguese (Brazil)</string>
     <string name="language_option_japanese">日语</string>
     <string name="device_memory_limit_format">%1$dMB (正常) - %2$dMB (大)</string>
     <string name="patches_force_download">强制下载所有补丁包</string>
@@ -430,8 +426,6 @@
     <string name="patch_profile_changed_patches_toast">此配置文件中的某些补丁或选项不再与包匹配，已被跳过。</string>
     <string name="patch_profile_no_available_bundles_toast">此配置文件中没有可用的包。更新您的包后重试。</string>
     <string name="patch_profile_launch_error">无法打开此补丁配置文件。</string>
-    <string name="patch_profile_show_more">显示更多</string>
-    <string name="patch_profile_show_less">显示更少</string>
     <string name="patch_profile_created_at">创建于 %1$s</string>
     <string name="patch_profile_bundle_unavailable_suffix">%1$s (不可用)</string>
     <string name="patch_profile_bundle_uid_label">UID：%1$d</string>
@@ -701,7 +695,6 @@
     <string name="installation_failed_description">安装因未知原因失败。要重试吗？</string>
     <string name="installation_aborted_description">安装被手动取消。要重试吗？</string>
     <string name="installation_blocked_description">安装被阻止。请检查您的设备安全设置并重试。</string>
-    <string name="installation_conflict_description">安装被应用的现有安装阻止。要卸载已安装的应用并重试吗？</string>
     <string name="installation_incompatible_description">应用与此设备不兼容。请使用与此设备兼容的 APK 并重试。</string>
     <string name="installation_invalid_description">应用无效。要卸载该应用并重试吗？</string>
     <string name="installation_storage_issue_description">由于存储空间不足，无法安装应用。请释放一些空间后重试。</string>

@@ -3,12 +3,12 @@
     <plurals name="patch_count">
         <item quantity="one">%d патч</item>
         <item quantity="few">%d патчі</item>
-        <item quantity="many">%d патчі</item>
-        <item quantity="other">%d патчі</item>
+        <item quantity="many">%d патчів</item>
+        <item quantity="other">%d патчів</item>
     </plurals>
     <plurals name="selected_count">
         <item quantity="one">%d обраний</item>
-        <item quantity="few">%d обрані</item>
+        <item quantity="few">%d обрано</item>
         <item quantity="many">%d обрані</item>
         <item quantity="other">%d обрані</item>
     </plurals>
