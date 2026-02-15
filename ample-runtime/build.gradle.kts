@@ -102,7 +102,7 @@ dependencies {
     }
     apkEditorLib(files("$rootDir/libs/APKEditor-1.4.7.jar"))
     compileOnly(files("$rootDir/libs/APKEditor-1.4.7.jar"))
-    implementation("app.revanced:arsclib:1.3.8.3")
+    implementation("app.revanced:arsclib:1.3.9.1")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     compileOnly(libs.hidden.api.stub)
