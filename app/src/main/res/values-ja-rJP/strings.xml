@@ -394,10 +394,6 @@
     <string name="language_option_system">デバイスの言語を使用</string>
     <string name="language_option_english">英語</string>
     <string name="language_option_chinese_simplified">中国語（簡体字）</string>
-    <string name="language_option_indonesian">Indonesian</string>
-    <string name="language_option_hindi">Hindi</string>
-    <string name="language_option_gujarati">Gujarati</string>
-    <string name="language_option_portuguese_brazil">Portuguese (Brazil)</string>
     <string name="language_option_korean">韓国語</string>
     <string name="language_option_vietnamese">ベトナム語</string>
     <string name="language_option_japanese">日本語</string>
@@ -458,8 +454,6 @@
     <string name="patch_profile_changed_patches_toast">このプロファイル内の一部のパッチまたはオプションがバンドルと一致しなくなったため、スキップされました。</string>
     <string name="patch_profile_no_available_bundles_toast">このプロファイル内のバンドルは利用できません。バンドルを更新して再試行してください。</string>
     <string name="patch_profile_launch_error">このパッチ設定を開けませんでした。</string>
-    <string name="patch_profile_show_more">もっと見る</string>
-    <string name="patch_profile_show_less">少なく表示</string>
     <string name="patch_profile_created_at">作成日: %1$s</string>
     <string name="patch_profile_bundle_unavailable_suffix">%1$s (利用不可)</string>
     <string name="patch_profile_bundle_change_uid">UID を変更</string>
@@ -756,7 +750,6 @@
     <string name="installation_failed_description">不明な理由によりインストールに失敗しました。再試行しますか？</string>
     <string name="installation_aborted_description">インストールが手動でキャンセルされました。再試行しますか？</string>
     <string name="installation_blocked_description">インストールがブロックされました。デバイスのセキュリティ設定を確認して再試行してください。</string>
-    <string name="installation_conflict_description">アプリの既存のインストールにより、インストールが妨げられました。インストールされているアプリをアンインストールして再試行しますか？</string>
     <string name="installation_incompatible_description">アプリはこのデバイスと互換性がありません。このデバイスと互換性のある APK を使用して再試行してください。</string>
     <string name="installation_invalid_description">アプリが無効です。アプリをアンインストールして再試行しますか？</string>
     <string name="installation_storage_issue_description">ストレージ不足のため、アプリをインストールできませんでした。空き容量を増やして再試行してください。</string>
