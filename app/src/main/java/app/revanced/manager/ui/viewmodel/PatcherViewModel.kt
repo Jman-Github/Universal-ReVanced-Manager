@@ -1280,6 +1280,14 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             logMessages.firstOrNull { it.startsWith(prefix) }
                 ?.removePrefix(prefix)
                 ?.trim()
+        fun parseMemoryLimitMb(raw: String?): Int? {
+            val value = raw?.trim() ?: return null
+            val match = Regex("""(\d+)\s*(?:m|mb|mib)?""", RegexOption.IGNORE_CASE)
+                .find(value)
+                ?: return null
+
+            return match.groupValues.getOrNull(1)?.toIntOrNull()
+        }
 
         data class LogPrefsSnapshot(
             val requestedLimit: Int,
@@ -1306,7 +1314,12 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         val stripNativeLibs = prefsSnapshot.stripNativeLibs
         val skipUnusedSplits = prefsSnapshot.skipUnusedSplits
 
-        val effectiveLimit = if (aggressiveLimit) {
+        val runtimeReportedLimit = parseMemoryLimitMb(
+            logMessages.lastOrNull { it.startsWith("Memory limit:") }
+                ?.removePrefix("Memory limit:")
+                ?.trim()
+        )
+        val effectiveLimit = runtimeReportedLimit ?: if (aggressiveLimit) {
             MemoryLimitConfig.maxLimitMb(context)
         } else {
             requestedLimit
