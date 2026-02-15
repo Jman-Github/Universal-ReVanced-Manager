@@ -123,6 +123,7 @@
 - Fixed issues with patch bundle importing and loading https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/138
 - Fixed issue with the patch selection screen causing crashes
 - Fixed storage root detection on older Android versions by removing hidden API reflection and using public APIs only (improves Android 15+ compatibility)
+- Fixed AAPT2 runtime detection on older Android versions by replacing API 33-only byte reading with a minSdk-safe implementation
 
 
 # v1.7.1 (2026-01-22)

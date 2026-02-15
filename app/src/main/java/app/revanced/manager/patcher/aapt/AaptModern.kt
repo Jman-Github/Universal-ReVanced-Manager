@@ -65,7 +65,16 @@ object AaptModern : LibraryResolver() {
     }
 
     private fun isAndroidRunnableElf(file: File): Boolean = runCatching {
-        val bytes = file.inputStream().use { it.readNBytes(256) }
+        val bytes = file.inputStream().use { input ->
+            val buffer = ByteArray(256)
+            var totalRead = 0
+            while (totalRead < buffer.size) {
+                val count = input.read(buffer, totalRead, buffer.size - totalRead)
+                if (count <= 0) break
+                totalRead += count
+            }
+            buffer.copyOf(totalRead)
+        }
         if (bytes.size < 64) return@runCatching false
         if (bytes[0] != 0x7F.toByte() || bytes[1] != 'E'.code.toByte() ||
             bytes[2] != 'L'.code.toByte() || bytes[3] != 'F'.code.toByte()
