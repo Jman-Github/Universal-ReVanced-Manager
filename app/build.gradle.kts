@@ -189,7 +189,7 @@ android {
         minSdk = 26
         targetSdk = 35
 
-        val versionStr = if (version == "unspecified") "1.8.0" else version.toString()
+        val versionStr = if (version == "unspecified") "1.8.1" else version.toString()
         versionName = versionStr
         versionCode = with(versionStr.toVersion()) {
             major * 10_000_000 +
