@@ -873,7 +873,7 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="path_selector_dirs">Directories</string>
     <string name="path_selector_files">Files</string>
     <string name="path_selector_favorites">Favorites</string>
-    <string name="path_selector_search">Search folder</string>
+    <string name="path_selector_search">Search current directory</string>
     <string name="path_selector_favorite_added">Added to favorites</string>
     <string name="path_selector_favorite_removed">Removed from favorites</string>
     <string name="path_selector_favorite_add_title">Add favorite?</string>

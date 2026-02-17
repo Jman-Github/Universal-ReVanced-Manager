@@ -1,3 +1,14 @@
+# v1.8.1 (TBD)
+
+
+# Features
+
+- Adjusted the wording for the search bar in the custom file picker from `Search folder` to `Search current directory` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/183
+
+
+# Bug fixes
+
+
 # v1.8.0 (2026-02-15)
 
 
