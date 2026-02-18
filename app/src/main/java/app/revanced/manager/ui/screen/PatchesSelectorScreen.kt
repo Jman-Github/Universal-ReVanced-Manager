@@ -858,6 +858,7 @@ fun PatchesSelectorScreen(
                     },
                     compatible = compatible,
                     packageName = viewModel.appPackageName,
+                    optionValues = viewModel.getOptions(uid, patch),
                     suggestedVersion = suggestedVersion
                 )
             }
@@ -1668,6 +1669,7 @@ private fun PatchItem(
     onToggle: () -> Unit,
     compatible: Boolean = true,
     packageName: String,
+    optionValues: Map<String, Any?>?,
     suggestedVersion: String?,
     searchEngineHost: String,
     showVersionTags: Boolean
@@ -1713,6 +1715,39 @@ private fun PatchItem(
     }
     val hasChips = suggestedVersionInfo != null || showAllVersionsChip || hasMoreVersions
     var showVersionsDialog by rememberSaveable(patch.name) { mutableStateOf(false) }
+    var showOptionPreview by rememberSaveable(patch.name) { mutableStateOf(false) }
+    val optionValueEnabled = stringResource(R.string.option_value_enabled)
+    val optionValueDisabled = stringResource(R.string.option_value_disabled)
+    val optionValueUnset = stringResource(R.string.field_not_set)
+    val optionSummaries = remember(
+        patch.options,
+        optionValues,
+        optionValueEnabled,
+        optionValueDisabled,
+        optionValueUnset
+    ) {
+        patch.options.orEmpty().map { option ->
+            val resolvedValue = if (optionValues?.contains(option.key) == true) {
+                optionValues[option.key]
+            } else {
+                option.default
+            }
+            val presetLabel = option.presets
+                ?.entries
+                ?.firstOrNull { it.value == resolvedValue }
+                ?.key
+            val displayValue = when {
+                presetLabel != null -> presetLabel
+                resolvedValue == null -> optionValueUnset
+                resolvedValue is Boolean -> if (resolvedValue) optionValueEnabled else optionValueDisabled
+                resolvedValue is List<*> -> resolvedValue.joinToString(", ") { it?.toString().orEmpty() }
+                else -> resolvedValue.toString()
+            }
+            option.title to displayValue
+        }
+    }
+    val hasExpandableOptionPreview = optionSummaries.size > 1
+    val showExpandedOptionPreview = hasExpandableOptionPreview && showOptionPreview
     val dialogVersions = when {
         supportsAllVersions -> listOf(
             PatchVersionChipInfo(
@@ -1818,6 +1853,78 @@ private fun PatchItem(
                             outlined = true,
                             onClick = { showVersionsDialog = true }
                         )
+                    }
+                }
+            }
+            if (patch.options?.isNotEmpty() == true && optionSummaries.isNotEmpty()) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = stringResource(R.string.options),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            if (hasExpandableOptionPreview) {
+                                IconButton(
+                                    onClick = { showOptionPreview = !showOptionPreview },
+                                    modifier = Modifier.size(26.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (showExpandedOptionPreview) {
+                                            Icons.Outlined.UnfoldLess
+                                        } else {
+                                            Icons.Outlined.UnfoldMore
+                                        },
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+                        if (!showExpandedOptionPreview) {
+                            val first = optionSummaries.first()
+                            val moreCount = optionSummaries.size - 1
+                            Text(
+                                text = if (moreCount > 0) {
+                                    "${first.first}: ${first.second}  +$moreCount ${stringResource(R.string.more)}"
+                                } else {
+                                    "${first.first}: ${first.second}"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        } else {
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                optionSummaries.forEach { (title, value) ->
+                                    Text(
+                                        text = "$title: $value",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }

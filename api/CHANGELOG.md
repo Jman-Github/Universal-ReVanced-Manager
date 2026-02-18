@@ -8,6 +8,7 @@
 - Made the filter selection states on the `Select an app` screen persist https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/193
 - Added setting to disable the swipe gesture to switch between tabs on the main screen (located in Settings > General) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/196
 - Added the android document providers directory sort filters to the custom file picker https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/182
+- Added patch option & value preview cards to the patch selection screens patch widgets https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/188
 
 
 # Bug fixes
