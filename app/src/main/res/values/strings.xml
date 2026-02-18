@@ -882,6 +882,15 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="path_selector_favorite_add_description">Add “%1$s” to favorites?</string>
     <string name="path_selector_favorite_remove_title">Remove favorite?</string>
     <string name="path_selector_favorite_remove_description">Remove “%1$s” from favorites?</string>
+    <string name="path_selector_sort_title">Sort by</string>
+    <string name="path_selector_sort_name_asc">File name (A to Z)</string>
+    <string name="path_selector_sort_name_desc">File name (Z to A)</string>
+    <string name="path_selector_sort_modified_desc">Modified (newest first)</string>
+    <string name="path_selector_sort_modified_asc">Modified (oldest first)</string>
+    <string name="path_selector_sort_type_asc">Type (A to Z)</string>
+    <string name="path_selector_sort_type_desc">Type (Z to A)</string>
+    <string name="path_selector_sort_size_desc">Size (largest first)</string>
+    <string name="path_selector_sort_size_asc">Size (smallest first)</string>
     <string name="path_selector_image_preview_title">Preview: %1$s</string>
     <string name="path_selector_image_preview_content_description">Preview image %1$s</string>
     <string name="show_password_field">Show password</string>

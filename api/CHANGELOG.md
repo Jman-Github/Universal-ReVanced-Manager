@@ -7,6 +7,8 @@
 - Rename the `Show patch summary before patching` settings toggle to `Show patch confirmation screen` for consistency
 - Made the filter selection states on the `Select an app` screen persist https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/193
 - Added setting to disable the swipe gesture to switch between tabs on the main screen (located in Settings > General) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/196
+- Added the android document providers directory sort filters https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/182
+- Added the android document providers directory sort filters https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/182
 
 
 # Bug fixes
