@@ -46,6 +46,7 @@ class PreferencesManager(
     val customBackgroundImageUri = stringPreference("custom_background_image_uri", "")
     val customBackgroundImageOpacity = floatPreference("custom_background_image_opacity", 0.65f)
     val hideMainTabLabels = booleanPreference("hide_main_tab_labels", false)
+    val disableMainTabSwipe = booleanPreference("disable_main_tab_swipe", false)
     val showPatchProfilesTab = booleanPreference("show_patch_profiles_tab", true)
     val showToolsTab = booleanPreference("show_tools_tab", true)
     val theme = enumPreference("theme", Theme.SYSTEM)
@@ -155,6 +156,7 @@ class PreferencesManager(
         val customBackgroundImageUri: String? = null,
         val customBackgroundImageOpacity: Float? = null,
         val hideMainTabLabels: Boolean? = null,
+        val disableMainTabSwipe: Boolean? = null,
         val showPatchProfilesTab: Boolean? = null,
         val showToolsTab: Boolean? = null,
         val themePresetSelectionName: String? = null,
@@ -233,6 +235,7 @@ class PreferencesManager(
         customBackgroundImageUri = customBackgroundImageUri.get(),
         customBackgroundImageOpacity = customBackgroundImageOpacity.get(),
         hideMainTabLabels = hideMainTabLabels.get(),
+        disableMainTabSwipe = disableMainTabSwipe.get(),
         showPatchProfilesTab = showPatchProfilesTab.get(),
         showToolsTab = showToolsTab.get(),
         themePresetSelectionName = themePresetSelectionName.get(),
@@ -311,6 +314,7 @@ class PreferencesManager(
         snapshot.customBackgroundImageUri?.let { customBackgroundImageUri.value = it }
         snapshot.customBackgroundImageOpacity?.let { customBackgroundImageOpacity.value = it.coerceIn(0f, 1f) }
         snapshot.hideMainTabLabels?.let { hideMainTabLabels.value = it }
+        snapshot.disableMainTabSwipe?.let { disableMainTabSwipe.value = it }
         snapshot.showPatchProfilesTab?.let { showPatchProfilesTab.value = it }
         snapshot.showToolsTab?.let { showToolsTab.value = it }
         snapshot.themePresetSelectionName?.let { themePresetSelectionName.value = it }

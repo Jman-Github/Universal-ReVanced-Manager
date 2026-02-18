@@ -238,6 +238,7 @@ fun DashboardScreen(
     val savedAppsEnabled by prefs.enableSavedApps.getAsState()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val hideMainTabLabels by prefs.hideMainTabLabels.getAsState()
+    val disableMainTabSwipe by prefs.disableMainTabSwipe.getAsState()
     val showPatchProfilesTab by prefs.showPatchProfilesTab.getAsState()
     val showToolsTab by prefs.showToolsTab.getAsState()
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
@@ -345,8 +346,18 @@ fun DashboardScreen(
     var showQuickUnmountDialog by remember { mutableStateOf(false) }
     var showQuickMixedBundleDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(pagerState.settledPage, visibleTabs) {
-        visibleTabs.getOrNull(pagerState.settledPage)?.let { page ->
+    LaunchedEffect(
+        pagerState.currentPage,
+        pagerState.targetPage,
+        pagerState.isScrollInProgress,
+        visibleTabs
+    ) {
+        val pageIndex = if (pagerState.isScrollInProgress) {
+            pagerState.targetPage
+        } else {
+            pagerState.currentPage
+        }
+        visibleTabs.getOrNull(pageIndex)?.let { page ->
             if (activeDashboardPage != page) {
                 activeDashboardPage = page
             }
@@ -2014,7 +2025,7 @@ fun DashboardScreen(
 
             HorizontalPager(
                 state = pagerState,
-                userScrollEnabled = true,
+                userScrollEnabled = !disableMainTabSwipe,
                 modifier = Modifier.fillMaxSize(),
                 pageContent = { index ->
                     when (visibleTabs[index]) {
