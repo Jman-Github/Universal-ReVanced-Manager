@@ -8,6 +8,8 @@
 
 # Bug fixes
 
+- Fixed pressing the system back button on the `Patch Profiles` and `Tools` tabs sending the user back to the Android home screen instead of a different tab https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/191
+
 
 # v1.8.0 (2026-02-15)
 

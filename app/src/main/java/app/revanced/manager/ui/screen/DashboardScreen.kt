@@ -184,6 +184,7 @@ import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
+import kotlin.math.abs
 
 enum class DashboardPage(
     val titleResId: Int,
@@ -308,6 +309,7 @@ fun DashboardScreen(
             }
         }
     }
+    var activeDashboardPage by rememberSaveable { mutableStateOf(DashboardPage.DASHBOARD) }
     val pagerState = rememberPagerState(
         initialPage = 0,
         initialPageOffsetFraction = 0f
@@ -315,11 +317,13 @@ fun DashboardScreen(
     val pageIndexByType = remember(visibleTabs) {
         visibleTabs.withIndex().associate { (index, page) -> page to index }
     }
-    val currentPage = visibleTabs.getOrElse(pagerState.currentPage) { DashboardPage.DASHBOARD }
+    val currentPage = activeDashboardPage
     suspend fun scrollToVisiblePage(page: DashboardPage, animated: Boolean) {
         val targetIndex = pageIndexByType[page] ?: return
+        activeDashboardPage = page
         if (pagerState.currentPage == targetIndex) return
-        if (animated) {
+        val canAnimateDirectly = abs(pagerState.currentPage - targetIndex) <= 1
+        if (animated && canAnimateDirectly) {
             pagerState.animateScrollToPage(targetIndex)
         } else {
             pagerState.scrollToPage(targetIndex)
@@ -340,6 +344,68 @@ fun DashboardScreen(
     var showQuickSavedUninstallDialog by remember { mutableStateOf(false) }
     var showQuickUnmountDialog by remember { mutableStateOf(false) }
     var showQuickMixedBundleDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(pagerState.settledPage, visibleTabs) {
+        visibleTabs.getOrNull(pagerState.settledPage)?.let { page ->
+            if (activeDashboardPage != page) {
+                activeDashboardPage = page
+            }
+        }
+    }
+
+    LaunchedEffect(visibleTabs) {
+        if (activeDashboardPage !in visibleTabs) {
+            activeDashboardPage = DashboardPage.DASHBOARD
+            scrollToVisiblePage(DashboardPage.DASHBOARD, animated = false)
+        }
+    }
+
+    fun previousVisibleTab(page: DashboardPage): DashboardPage {
+        val currentIndex = visibleTabs.indexOf(page).takeIf { it >= 0 } ?: 0
+        val previousIndex = if (currentIndex == 0) visibleTabs.lastIndex else currentIndex - 1
+        return visibleTabs[previousIndex]
+    }
+
+    BackHandler(enabled = visibleTabs.size > 1 || appsSelectionActive || bundlesSelectable || profilesSelectable) {
+        when (currentPage) {
+            DashboardPage.DASHBOARD -> {
+                if (appsSelectionActive) {
+                    installedAppsViewModel.clearSelection()
+                } else {
+                    composableScope.launch {
+                        scrollToVisiblePage(previousVisibleTab(currentPage), animated = true)
+                    }
+                }
+            }
+
+            DashboardPage.BUNDLES -> {
+                if (bundlesSelectable) {
+                    vm.cancelSourceSelection()
+                } else {
+                    composableScope.launch {
+                        scrollToVisiblePage(previousVisibleTab(currentPage), animated = true)
+                    }
+                }
+            }
+
+            DashboardPage.PROFILES -> {
+                if (profilesSelectable) {
+                    patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
+                } else {
+                    composableScope.launch {
+                        scrollToVisiblePage(previousVisibleTab(currentPage), animated = true)
+                    }
+                }
+            }
+
+            DashboardPage.TOOLS -> {
+                composableScope.launch {
+                    scrollToVisiblePage(previousVisibleTab(currentPage), animated = true)
+                }
+            }
+        }
+    }
+
     val quickActionApp = remember(quickActionPackage, installedApps) {
         quickActionPackage?.let { pkg -> installedApps.firstOrNull { it.currentPackageName == pkg } }
     }
@@ -1953,9 +2019,6 @@ fun DashboardScreen(
                 pageContent = { index ->
                     when (visibleTabs[index]) {
                         DashboardPage.DASHBOARD -> {
-                            BackHandler(enabled = appsSelectionActive) {
-                                installedAppsViewModel.clearSelection()
-                            }
                             InstalledAppsScreen(
                                 onAppClick = {
                                     installedAppsViewModel.clearSelection()
@@ -2026,12 +2089,6 @@ fun DashboardScreen(
                         }
 
                         DashboardPage.BUNDLES -> {
-                            BackHandler {
-                                if (bundlesSelectable) vm.cancelSourceSelection() else composableScope.launch {
-                                    scrollToVisiblePage(DashboardPage.DASHBOARD, animated = true)
-                                }
-                            }
-
                             BundleListScreen(
                                 eventsFlow = vm.bundleListEventsFlow,
                                 setSelectedSourceCount = { selectedSourceCount = it },
