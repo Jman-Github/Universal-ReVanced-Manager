@@ -5,6 +5,7 @@
 
 - Adjusted the wording for the search bar in the custom file picker from `Search folder` to `Search current directory` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/183
 - Rename the `Show patch summary before patching` settings toggle to `Show patch confirmation screen` for consistency
+- Made the filter selection states on the `Select an app` screen persist https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/193
 
 
 # Bug fixes

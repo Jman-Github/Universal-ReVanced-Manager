@@ -51,6 +51,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -86,6 +87,7 @@ import app.revanced.manager.util.isAllowedApkFile
 import app.revanced.manager.util.consumeHorizontalScroll
 import app.revanced.manager.util.openUrl
 import java.io.File
+import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 
@@ -109,6 +111,9 @@ fun AppSelectorScreen(
     val allowUniversalPatches by prefs.disableUniversalPatchCheck.getAsState()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val searchEngineHost by prefs.searchEngineHost.getAsState()
+    val filterInstalledOnly by prefs.appSelectorFilterInstalledOnly.getAsState()
+    val filterPatchesAvailable by prefs.appSelectorFilterPatchesAvailable.getAsState()
+    val coroutineScope = rememberCoroutineScope()
 
     EventEffect(flow = vm.storageSelectionFlow) {
         onStorageSelect(it)
@@ -178,8 +183,6 @@ fun AppSelectorScreen(
 
     var filterText by rememberSaveable { mutableStateOf("") }
     var search by rememberSaveable { mutableStateOf(false) }
-    var filterInstalledOnly by rememberSaveable { mutableStateOf(false) }
-    var filterPatchesAvailable by rememberSaveable { mutableStateOf(false) }
 
     val appList by vm.appList.collectAsStateWithLifecycle(initialValue = emptyList())
     val filteredAppList = remember(
@@ -321,13 +324,21 @@ fun AppSelectorScreen(
                         )
                         CheckedFilterChip(
                             selected = filterInstalledOnly,
-                            onClick = { filterInstalledOnly = !filterInstalledOnly },
+                            onClick = {
+                                coroutineScope.launch {
+                                    prefs.appSelectorFilterInstalledOnly.update(!filterInstalledOnly)
+                                }
+                            },
                             colors = appFilterChipColors,
                             label = { Text(stringResource(R.string.app_filter_installed_only)) }
                         )
                         CheckedFilterChip(
                             selected = filterPatchesAvailable,
-                            onClick = { filterPatchesAvailable = !filterPatchesAvailable },
+                            onClick = {
+                                coroutineScope.launch {
+                                    prefs.appSelectorFilterPatchesAvailable.update(!filterPatchesAvailable)
+                                }
+                            },
                             colors = appFilterChipColors,
                             label = { Text(stringResource(R.string.app_filter_patches_available)) }
                         )

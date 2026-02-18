@@ -134,6 +134,8 @@ class PreferencesManager(
     val patchSelectionShowVersionTags = booleanPreference("patch_selection_show_version_tags", true)
     val pathSelectorFavorites = stringSetPreference("path_selector_favorites", emptySet())
     val pathSelectorLastDirectory = stringPreference("path_selector_last_directory", "")
+    val appSelectorFilterInstalledOnly = booleanPreference("app_selector_filter_installed_only", false)
+    val appSelectorFilterPatchesAvailable = booleanPreference("app_selector_filter_patches_available", false)
     val useCustomFilePicker = booleanPreference("use_custom_file_picker", true)
     val patchBundleDiscoveryShowRelease = booleanPreference("patch_bundle_discovery_show_release", true)
     val patchBundleDiscoveryShowPrerelease = booleanPreference("patch_bundle_discovery_show_prerelease", true)
@@ -213,6 +215,8 @@ class PreferencesManager(
         val autoSaveDownloaderApks: Boolean? = null,
         val pathSelectorFavorites: Set<String>? = null,
         val pathSelectorLastDirectory: String? = null,
+        val appSelectorFilterInstalledOnly: Boolean? = null,
+        val appSelectorFilterPatchesAvailable: Boolean? = null,
         val useCustomFilePicker: Boolean? = null,
         val patchBundleDiscoveryShowRelease: Boolean? = null,
         val patchBundleDiscoveryShowPrerelease: Boolean? = null,
@@ -289,6 +293,8 @@ class PreferencesManager(
         autoSaveDownloaderApks = autoSaveDownloaderApks.get(),
         pathSelectorFavorites = pathSelectorFavorites.get(),
         pathSelectorLastDirectory = pathSelectorLastDirectory.get().takeIf { it.isNotBlank() },
+        appSelectorFilterInstalledOnly = appSelectorFilterInstalledOnly.get(),
+        appSelectorFilterPatchesAvailable = appSelectorFilterPatchesAvailable.get(),
         useCustomFilePicker = useCustomFilePicker.get(),
         patchBundleDiscoveryShowRelease = patchBundleDiscoveryShowRelease.get(),
         patchBundleDiscoveryShowPrerelease = patchBundleDiscoveryShowPrerelease.get(),
@@ -385,6 +391,8 @@ class PreferencesManager(
                 pathSelectorLastDirectory.value = target.toString()
             }
         }
+        snapshot.appSelectorFilterInstalledOnly?.let { appSelectorFilterInstalledOnly.value = it }
+        snapshot.appSelectorFilterPatchesAvailable?.let { appSelectorFilterPatchesAvailable.value = it }
         snapshot.useCustomFilePicker?.let { useCustomFilePicker.value = it }
         snapshot.patchBundleDiscoveryShowRelease?.let { patchBundleDiscoveryShowRelease.value = it }
         snapshot.patchBundleDiscoveryShowPrerelease?.let { patchBundleDiscoveryShowPrerelease.value = it }
