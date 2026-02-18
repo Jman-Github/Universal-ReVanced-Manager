@@ -4,11 +4,13 @@
 # Features
 
 - Adjusted the wording for the search bar in the custom file picker from `Search folder` to `Search current directory` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/183
+- Rename the `Show patch summary before patching` settings toggle to `Show patch confirmation screen` for consistency
 
 
 # Bug fixes
 
 - Fixed pressing the system back button on the `Patch Profiles` and `Tools` tabs sending the user back to the Android home screen instead of a different tab https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/191
+- Fixed the `Patch confirmation` screen's scroll bar being very large https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/186
 
 
 # v1.8.0-dev.12 (2026-02-14)

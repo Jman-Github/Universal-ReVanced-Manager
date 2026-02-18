@@ -126,7 +126,6 @@ fun SelectedAppInfoScreen(
 
     val allowIncompatiblePatches by vm.prefs.disablePatchVersionCompatCheck.getAsState()
     val suggestedVersionSafeguard by vm.prefs.suggestedVersionSafeguard.getAsState()
-    val showPatchSummaryDialogSetting by vm.prefs.showPatchSelectionSummary.getAsState()
     val customBackgroundImageUri by vm.prefs.customBackgroundImageUri.getAsState()
     val useCardStylePageItems = customBackgroundImageUri.isNotBlank()
     val bundleRecommendationsEnabled = allowIncompatiblePatches && !suggestedVersionSafeguard
@@ -277,6 +276,7 @@ fun SelectedAppInfoScreen(
                 return@launch
             }
 
+            val showPatchSummaryDialogSetting = vm.prefs.showPatchSelectionSummary.get()
             if (showPatchSummaryDialogSetting) {
                 showPatchSummaryDialog = true
                 return@launch

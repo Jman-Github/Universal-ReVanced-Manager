@@ -349,8 +349,8 @@
     <string name="disable_patch_selection_confirmations">Disable action confirmations</string>
     <string name="disable_patch_selection_confirmations_description">Skip confirmation dialogs for patch selection actions</string>
     <string name="disable_patch_selection_confirmations_warning">Disabling confirmations may cause unintended bulk changes.</string>
-    <string name="show_patch_selection_summary">Show patch summary before patching</string>
-    <string name="show_patch_selection_summary_description">Display a summary of selected patches by bundle before starting the patcher</string>
+    <string name="show_patch_selection_summary">Show patch confirmation screen</string>
+    <string name="show_patch_selection_summary_description">Show a confirmation screen with selected patches by bundle before starting the patcher</string>
     <string name="patch_selection_collapse_on_toggle">Collapse actions after toggling patches</string>
     <string name="patch_selection_collapse_on_toggle_description">Automatically hide the patch selection action buttons whenever you select or deselect a patch</string>
     <string name="patch_selection_action_order_title">Patch selection action buttons order</string>
