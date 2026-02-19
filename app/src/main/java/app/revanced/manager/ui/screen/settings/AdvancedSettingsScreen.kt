@@ -150,7 +150,9 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -2200,10 +2202,12 @@ private fun ExportNameFormatDialog(
     onDismiss: () -> Unit,
     onSave: (String) -> Unit
 ) {
-    var value by rememberSaveable(currentValue) { mutableStateOf(currentValue) }
+    var value by rememberSaveable(currentValue, stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(currentValue, selection = TextRange(currentValue.length)))
+    }
     var showError by rememberSaveable { mutableStateOf(false) }
     val variables = remember { ExportNameFormatter.availableVariables() }
-    val preview = remember(value) { ExportNameFormatter.preview(value) }
+    val preview = remember(value.text) { ExportNameFormatter.preview(value.text) }
 
     val scrollState = rememberScrollState()
 
@@ -2211,10 +2215,10 @@ private fun ExportNameFormatDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(onClick = {
-                if (value.isBlank()) {
+                if (value.text.isBlank()) {
                     showError = true
                 } else {
-                    onSave(value.trim())
+                    onSave(value.text.trim())
                 }
             }) {
                 Text(stringResource(R.string.save))
@@ -2242,12 +2246,12 @@ private fun ExportNameFormatDialog(
                     value = value,
                     onValueChange = {
                         value = it
-                        if (showError) showError = false
+                        if (showError && it.text.isNotBlank()) showError = false
                     },
                     singleLine = true,
                     label = { Text(stringResource(R.string.export_name_format)) },
-                    isError = showError && value.isBlank(),
-                    supportingText = if (showError && value.isBlank()) {
+                    isError = showError && value.text.isBlank(),
+                    supportingText = if (showError && value.text.isBlank()) {
                         { Text(stringResource(R.string.export_name_format_error_blank)) }
                     } else null,
                     modifier = Modifier.fillMaxWidth()
@@ -2300,7 +2304,31 @@ private fun ExportNameFormatDialog(
                                         style = MaterialTheme.typography.titleMedium
                                     )
                                     TextButton(onClick = {
-                                        value += variable.token
+                                        val currentText = value.text
+                                        val selection = value.selection
+                                        val validSelection =
+                                            selection.start in 0..currentText.length &&
+                                                selection.end in 0..currentText.length &&
+                                                selection.start <= selection.end
+
+                                        value = if (validSelection) {
+                                            val updated = currentText.replaceRange(
+                                                selection.start,
+                                                selection.end,
+                                                variable.token
+                                            )
+                                            val cursor = selection.start + variable.token.length
+                                            TextFieldValue(
+                                                text = updated,
+                                                selection = TextRange(cursor)
+                                            )
+                                        } else {
+                                            val updated = currentText + variable.token
+                                            TextFieldValue(
+                                                text = updated,
+                                                selection = TextRange(updated.length)
+                                            )
+                                        }
                                         if (showError) showError = false
                                     }) {
                                         Text(stringResource(R.string.export_name_format_insert))
@@ -2322,7 +2350,11 @@ private fun ExportNameFormatDialog(
                 }
                 TextButton(
                     onClick = {
-                        value = ExportNameFormatter.DEFAULT_TEMPLATE
+                        val defaultTemplate = ExportNameFormatter.DEFAULT_TEMPLATE
+                        value = TextFieldValue(
+                            text = defaultTemplate,
+                            selection = TextRange(defaultTemplate.length)
+                        )
                         showError = false
                     },
                     modifier = Modifier.align(Alignment.Start)
