@@ -19,6 +19,7 @@
 
 - Fixed pressing the system back button on the `Patch Profiles` and `Tools` tabs sending the user back to the Android home screen instead of a different tab https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/191
 - Fixed the `Patch confirmation` screen's scroll bar being very large https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/186
+- Fixed the Android document provider file picker not resolving intents to local paths https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/202 
 
 
 # v1.8.0 (2026-02-15)

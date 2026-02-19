@@ -813,6 +813,7 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="search_bar_back_button_label">SearchBar back button</string>
     <string name="app_version_not_compatible">This patch is not compatible with the selected app version (%1$s).\n\nIt is only compatible with the following version(s): %2$s.</string>
     <string name="failed_to_load_apk">Failed to load APK</string>
+    <string name="failed_to_load_file">Failed to load file</string>
     <string name="loading">Loading…</string>
     <string name="not_installed">Not installed</string>
     <string name="installed">Installed</string>
