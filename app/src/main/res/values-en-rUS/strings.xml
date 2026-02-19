@@ -7,6 +7,8 @@
     <string name="manager">Manager</string>
     <string name="plugin_host_permission_label">Universal ReVanced Manager plugin host</string>
     <string name="plugin_host_permission_description">Used to control access to Universal ReVanced Manager plugins. Only Universal ReVanced Manager has this.</string>
+    <string name="downloader_host_permission_label">Universal ReVanced Manager downloader host</string>
+    <string name="downloader_host_permission_description">Used to control access to Universal ReVanced Manager downloaders. Only Universal ReVanced Manager has this.</string>
     <string name="toast_copied_to_clipboard">Copied!</string>
     <string name="copy_to_clipboard">Copy to clipboard</string>
     <string name="settings">Settings</string>

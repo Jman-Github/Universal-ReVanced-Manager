@@ -1116,11 +1116,11 @@ private fun AppSourceSelectorDialog(
                     }
                 }
 
-                items(plugins, key = { "plugin_${it.packageName}" }) { plugin ->
+                items(plugins, key = { "plugin_${it.id}" }) { plugin ->
                     ListItem(
                         modifier = Modifier.clickable(enabled = canSelect) { onSelectPlugin(plugin) },
                         headlineContent = { Text(plugin.name) },
-                        trailingContent = (@Composable { LoadingIndicator() }).takeIf { activeSearchJob == plugin.packageName },
+                        trailingContent = (@Composable { LoadingIndicator() }).takeIf { activeSearchJob == plugin.id },
                         colors = transparentListItemColors
                     )
                 }

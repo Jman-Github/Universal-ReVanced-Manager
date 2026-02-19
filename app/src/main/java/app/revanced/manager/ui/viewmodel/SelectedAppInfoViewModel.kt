@@ -722,7 +722,7 @@ class SelectedAppInfoViewModel(
     var showSourceSelector by mutableStateOf(requiresSourceSelection)
         private set
     private var pluginAction: Pair<LoadedDownloaderPlugin, Job>? by mutableStateOf(null)
-    val activePluginAction get() = pluginAction?.first?.packageName
+    val activePluginAction get() = pluginAction?.first?.id
     private var launchedActivity by mutableStateOf<CompletableDeferred<ActivityResult>?>(null)
     private val launchActivityChannel = Channel<Intent>()
     val launchActivityFlow = launchActivityChannel.receiveAsFlow()

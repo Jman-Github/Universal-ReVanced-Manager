@@ -7,8 +7,14 @@
         android:protectionLevel="signature"
         android:label="@string/plugin_host_permission_label"
         android:description="@string/plugin_host_permission_description" />
+    <permission
+        android:name="app.universal.revanced.manager.permission.DOWNLOADER_HOST"
+        android:protectionLevel="signature"
+        android:label="@string/downloader_host_permission_label"
+        android:description="@string/downloader_host_permission_description" />
 
     <uses-permission android:name="app.universal.revanced.manager.permission.PLUGIN_HOST" />
+    <uses-permission android:name="app.universal.revanced.manager.permission.DOWNLOADER_HOST" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -60,6 +66,7 @@
         </activity>
 
         <activity android:name="app.revanced.manager.plugin.downloader.webview.WebViewActivity" android:exported="false" android:theme="@style/Theme.WebViewActivity" />
+        <activity android:name="app.revanced.manager.downloader.webview.WebViewActivity" android:exported="false" android:theme="@style/Theme.WebViewActivity" />
 
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"

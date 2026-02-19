@@ -1041,7 +1041,7 @@ fun DashboardScreen(
     if (showSplitPluginDialog) {
         MergeSplitPluginDialog(
             plugins = downloaderPlugins,
-            activePluginPackageName = vm.activeSplitMergePluginPackageName,
+            activePluginId = vm.activeSplitMergePluginId,
             packageName = splitPluginPackageName,
             version = splitPluginVersion,
             onPackageNameChange = { splitPluginPackageName = it },
@@ -2434,7 +2434,7 @@ private fun MergeSplitSourceOption(
 @Composable
 private fun MergeSplitPluginDialog(
     plugins: List<LoadedDownloaderPlugin>,
-    activePluginPackageName: String?,
+    activePluginId: String?,
     packageName: String,
     version: String,
     onPackageNameChange: (String) -> Unit,
@@ -2442,7 +2442,7 @@ private fun MergeSplitPluginDialog(
     onDismissRequest: () -> Unit,
     onSelectPlugin: (LoadedDownloaderPlugin) -> Unit
 ) {
-    val canSelect = activePluginPackageName == null
+    val canSelect = activePluginId == null
     AlertDialogExtended(
         onDismissRequest = onDismissRequest,
         confirmButton = {
@@ -2496,7 +2496,7 @@ private fun MergeSplitPluginDialog(
                     ) {
                         items(
                             items = plugins,
-                            key = { it.packageName }
+                            key = { it.id }
                         ) { plugin ->
                             Surface(
                                 modifier = Modifier
@@ -2525,7 +2525,7 @@ private fun MergeSplitPluginDialog(
                                             overflow = TextOverflow.Ellipsis
                                         )
                                     }
-                                    if (activePluginPackageName == plugin.packageName) {
+                                    if (activePluginId == plugin.id) {
                                         CircularProgressIndicator(
                                             modifier = Modifier.size(18.dp),
                                             strokeWidth = 2.dp

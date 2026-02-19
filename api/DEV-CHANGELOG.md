@@ -13,6 +13,7 @@
 - Improved the metadata loader for split APKs on the `App info` screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/190
 - Made the patch bundle bar on the patch selection screen show even when theres only one bundle available https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/192
 - Added a versioned per-runtime framework cache keys and updated modern AAPT2 binaries to TechnoIndian builds that are used for SDK 35+ patching
+- Added upstream changes https://github.com/ReVanced/revanced-manager/pull/2916
 
 
 # Bug fixes
