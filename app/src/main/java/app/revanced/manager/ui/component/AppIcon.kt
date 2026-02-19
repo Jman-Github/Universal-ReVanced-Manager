@@ -1,6 +1,7 @@
 package app.revanced.manager.ui.component
 
 import android.content.pm.PackageInfo
+import android.graphics.drawable.Drawable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -16,17 +17,25 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import coil.compose.AsyncImage
+import com.google.accompanist.drawablepainter.rememberDrawablePainter
 import io.github.fornewid.placeholder.material3.placeholder
 
 @Composable
 fun AppIcon(
     packageInfo: PackageInfo?,
     contentDescription: String?,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    iconOverride: Drawable? = null
 ) {
     var showPlaceHolder by rememberSaveable { mutableStateOf(true) }
 
-    if (packageInfo == null) {
+    if (iconOverride != null) {
+        Image(
+            painter = rememberDrawablePainter(drawable = iconOverride),
+            contentDescription = contentDescription,
+            modifier = modifier
+        )
+    } else if (packageInfo == null) {
         val image = rememberVectorPainter(Icons.Default.Android)
         val colorFilter = ColorFilter.tint(LocalContentColor.current)
 

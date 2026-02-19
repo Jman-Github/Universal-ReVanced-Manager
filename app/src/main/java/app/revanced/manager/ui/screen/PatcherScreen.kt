@@ -94,15 +94,10 @@ import java.nio.file.Path
 @Composable
 fun PatcherScreen(
     onBackClick: () -> Unit,
+    onBackToDashboard: () -> Unit,
     onReviewSelection: (SelectedApp, PatchSelection, Options, List<String>) -> Unit,
     viewModel: PatcherViewModel
 ) {
-    fun onLeave() {
-        viewModel.suppressInstallProgressToasts()
-        viewModel.onBack()
-        onBackClick()
-    }
-
     val context = LocalContext.current
     val prefs: PreferencesManager = koinInject()
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
@@ -128,6 +123,7 @@ fun PatcherScreen(
     var showDismissConfirmationDialog by rememberSaveable { mutableStateOf(false) }
     var showInstallInProgressDialog by rememberSaveable { mutableStateOf(false) }
     var showSavePatchedAppDialog by rememberSaveable { mutableStateOf(false) }
+    var leaveToDashboardRequested by rememberSaveable { mutableStateOf(false) }
     var exportInProgress by rememberSaveable { mutableStateOf(false) }
     var showLogActionsDialog by rememberSaveable { mutableStateOf(false) }
     var showLogExportPicker by rememberSaveable { mutableStateOf(false) }
@@ -185,15 +181,41 @@ fun PatcherScreen(
         }
     }
 
-    fun onPageBack() = when {
-        patcherSucceeded == null -> showDismissConfirmationDialog = true
-        viewModel.isInstalling -> showInstallInProgressDialog = true
+    fun leaveCurrentScreen() {
+        viewModel.suppressInstallProgressToasts()
+        viewModel.onBack()
+        if (leaveToDashboardRequested) {
+            leaveToDashboardRequested = false
+            onBackToDashboard()
+        } else {
+            onBackClick()
+        }
+    }
+
+    fun requestLeave(toDashboard: Boolean) = when {
+        patcherSucceeded == null -> {
+            leaveToDashboardRequested = toDashboard
+            showDismissConfirmationDialog = true
+        }
+        viewModel.isInstalling -> {
+            leaveToDashboardRequested = toDashboard
+            showInstallInProgressDialog = true
+        }
         patcherSucceeded == true &&
             viewModel.installedPackageName == null &&
             !viewModel.hasSavedPatchedApp &&
-            savedAppsEnabled -> showSavePatchedAppDialog = true
-        else -> onLeave()
+            savedAppsEnabled -> {
+            leaveToDashboardRequested = toDashboard
+            showSavePatchedAppDialog = true
+        }
+        else -> {
+            leaveToDashboardRequested = toDashboard
+            leaveCurrentScreen()
+        }
     }
+
+    fun onPageBack() = requestLeave(toDashboard = false)
+    fun onPageBackToDashboard() = requestLeave(toDashboard = true)
 
     BackHandler(onBack = ::onPageBack)
 
@@ -218,7 +240,7 @@ fun PatcherScreen(
             onDismiss = { showDismissConfirmationDialog = false },
             onConfirm = {
                 showDismissConfirmationDialog = false
-                onLeave()
+                leaveCurrentScreen()
             },
             title = stringResource(R.string.patcher_stop_confirm_title),
             description = stringResource(R.string.patcher_stop_confirm_description),
@@ -251,7 +273,7 @@ fun PatcherScreen(
                     onClick = {
                         showInstallInProgressDialog = false
                         viewModel.suppressInstallProgressToasts()
-                        onLeave()
+                        leaveCurrentScreen()
                     }
                 ) {
                     Text(stringResource(R.string.patcher_install_in_progress_leave))
@@ -272,13 +294,13 @@ fun PatcherScreen(
             onDismiss = { showSavePatchedAppDialog = false },
             onLeave = {
                 showSavePatchedAppDialog = false
-                onLeave()
+                leaveCurrentScreen()
             },
             onSave = {
                 viewModel.savePatchedAppForLater(onResult = { success ->
                     if (success) {
                         showSavePatchedAppDialog = false
-                        onLeave()
+                        leaveCurrentScreen()
                     }
                 })
             }
@@ -795,7 +817,8 @@ fun PatcherScreen(
             AppTopBar(
                 title = stringResource(R.string.patcher),
                 scrollBehavior = scrollBehavior,
-                onBackClick = ::onPageBack
+                onBackClick = ::onPageBack,
+                onBackLongClick = ::onPageBackToDashboard
             )
         },
         bottomBar = {

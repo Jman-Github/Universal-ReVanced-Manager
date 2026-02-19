@@ -85,7 +85,7 @@ import app.revanced.manager.ui.component.haptics.HapticCheckbox
 import app.revanced.manager.ui.component.patches.PathSelectorDialog
 import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.domain.manager.PreferencesManager
-import app.revanced.manager.patcher.split.SplitApkInspector
+import app.revanced.manager.patcher.split.SplitArchiveDisplayResolver
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.ui.viewmodel.BundleSourceType
 import app.revanced.manager.ui.viewmodel.BundleOptionDisplay
@@ -1444,6 +1444,7 @@ private fun PatchProfileApkIcon(
             if (packageInfo != null) {
                 AppIcon(
                     packageInfo = packageInfo,
+                    iconOverride = iconInfo?.iconOverride,
                     contentDescription = null,
                     modifier = Modifier
                         .size(28.dp)
@@ -1463,6 +1464,7 @@ private fun PatchProfileApkIcon(
 
 private data class PatchProfileApkIconInfo(
     val packageInfo: android.content.pm.PackageInfo?,
+    val iconOverride: android.graphics.drawable.Drawable? = null,
     val cleanup: (() -> Unit)?
 )
 
@@ -1478,11 +1480,22 @@ private suspend fun loadPatchProfileApkIconInfo(
     if (extension != "apk" && !isSplitArchive) return@withContext null
 
     if (isSplitArchive) {
-        val extracted = SplitApkInspector.extractRepresentativeApk(file, filesystem.tempDir)
-            ?: return@withContext null
-        val pkgInfo = pm.getPackageInfo(extracted.file)
-        PatchProfileApkIconInfo(pkgInfo, extracted.cleanup)
+        val resolved = SplitArchiveDisplayResolver.resolve(
+            source = file,
+            workspace = filesystem.tempDir,
+            app = pm.application,
+            pm = pm
+        ) ?: return@withContext null
+        PatchProfileApkIconInfo(
+            packageInfo = resolved.packageInfo,
+            iconOverride = resolved.icon,
+            cleanup = null
+        )
     } else {
-        PatchProfileApkIconInfo(pm.getPackageInfo(file), null)
+        PatchProfileApkIconInfo(
+            packageInfo = pm.getPackageInfo(file),
+            iconOverride = null,
+            cleanup = null
+        )
     }
 }

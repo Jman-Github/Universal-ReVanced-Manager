@@ -1,6 +1,7 @@
 package app.revanced.manager.ui.component
 
 import android.content.pm.PackageInfo
+import android.graphics.drawable.Drawable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -18,6 +19,8 @@ import app.revanced.manager.ui.component.ShimmerBox
 @Composable
 fun AppInfo(
     appInfo: PackageInfo?,
+    labelOverride: String? = null,
+    iconOverride: Drawable? = null,
     placeholderLabel: String? = null,
     placeholderMetaLines: Int = 1,
     extraContent: @Composable () -> Unit = {}
@@ -57,6 +60,7 @@ fun AppInfo(
         } else {
             AppIcon(
                 appInfo,
+                iconOverride = iconOverride,
                 contentDescription = null,
                 modifier = Modifier
                     .size(100.dp)
@@ -65,6 +69,7 @@ fun AppInfo(
 
             AppLabel(
                 appInfo,
+                labelOverride = labelOverride,
                 modifier = Modifier.padding(top = 16.dp),
                 style = MaterialTheme.typography.titleLarge,
                 defaultText = placeholderLabel

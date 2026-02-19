@@ -9,6 +9,8 @@
 - Added setting to disable the swipe gesture to switch between tabs on the main screen (located in Settings > General) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/196
 - Added the android document providers directory sort filters to the custom file picker https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/182
 - Added patch option & value preview cards to the patch selection screens patch widgets https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/188
+- Made it so hold tapping on the top left back button on the patcher screen brings you back to the `Apps` screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/190
+- Improved the metadata loader for split APKs on the `App info` screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/190
 
 
 # Bug fixes

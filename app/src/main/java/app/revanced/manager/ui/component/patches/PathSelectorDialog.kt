@@ -62,7 +62,7 @@ import androidx.compose.ui.semantics.semantics
 import app.universal.revanced.manager.R
 import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.domain.manager.PreferencesManager
-import app.revanced.manager.patcher.split.SplitApkInspector
+import app.revanced.manager.patcher.split.SplitArchiveDisplayResolver
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.AppIcon
@@ -759,6 +759,7 @@ private fun FileLeadingIcon(
     if (packageInfo != null) {
         AppIcon(
             packageInfo = packageInfo,
+            iconOverride = iconInfo?.iconOverride,
             contentDescription = null,
             modifier = Modifier.size(24.dp)
         )
@@ -782,6 +783,7 @@ private fun isImagePreviewablePath(path: Path): Boolean {
 
 private data class ApkIconInfo(
     val packageInfo: android.content.pm.PackageInfo?,
+    val iconOverride: android.graphics.drawable.Drawable? = null,
     val cleanup: (() -> Unit)?
 )
 
@@ -797,12 +799,23 @@ private suspend fun loadApkIconInfo(
     if (extension != "apk" && !isSplitArchive) return@withContext null
 
     if (isSplitArchive) {
-        val extracted = SplitApkInspector.extractRepresentativeApk(file, filesystem.tempDir)
-            ?: return@withContext null
-        val pkgInfo = pm.getPackageInfo(extracted.file)
-        ApkIconInfo(pkgInfo, extracted.cleanup)
+        val resolved = SplitArchiveDisplayResolver.resolve(
+            source = file,
+            workspace = filesystem.tempDir,
+            app = pm.application,
+            pm = pm
+        ) ?: return@withContext null
+        ApkIconInfo(
+            packageInfo = resolved.packageInfo,
+            iconOverride = resolved.icon,
+            cleanup = null
+        )
     } else {
-        ApkIconInfo(pm.getPackageInfo(file), null)
+        ApkIconInfo(
+            packageInfo = pm.getPackageInfo(file),
+            iconOverride = null,
+            cleanup = null
+        )
     }
 }
 

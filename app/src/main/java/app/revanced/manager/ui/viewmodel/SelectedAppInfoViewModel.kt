@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.Application
 import android.content.Intent
 import android.content.pm.PackageInfo
+import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Parcelable
 import android.util.Log
@@ -44,7 +45,7 @@ import app.revanced.manager.patcher.patch.PatchBundleInfo
 import app.revanced.manager.patcher.patch.PatchBundleInfo.Extensions.toPatchSelection
 import app.revanced.manager.patcher.patch.PatchBundleType
 import app.revanced.manager.patcher.patch.PatchInfo
-import app.revanced.manager.patcher.split.SplitApkInspector
+import app.revanced.manager.patcher.split.SplitArchiveDisplayResolver
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.network.downloader.LoadedDownloaderPlugin
 import app.revanced.manager.network.downloader.ParceledDownloaderData
@@ -270,6 +271,10 @@ class SelectedAppInfoViewModel(
         }
 
     var selectedAppInfo: PackageInfo? by mutableStateOf(null)
+        private set
+    var selectedAppInfoLabelOverride: String? by mutableStateOf(null)
+        private set
+    var selectedAppInfoIconOverride: Drawable? by mutableStateOf(null)
         private set
 
     var selectedApp
@@ -868,17 +873,34 @@ class SelectedAppInfoViewModel(
         return resolved?.lowercase(Locale.ROOT).orEmpty()
     }
 
-    private suspend fun resolvePackageInfo(file: File): PackageInfo? {
-        if (!file.exists()) return null
-        if (!SplitApkPreparer.isSplitArchive(file)) return pm.getPackageInfo(file)
+    private suspend fun resolvePackageInfo(file: File): PackageInfo? =
+        resolveLocalPackageInfo(file).packageInfo
 
-        // For metadata/UI we only need the representative base split, not a full merge.
-        val representative = SplitApkInspector.extractRepresentativeApk(file, splitWorkspace) ?: return null
-        return pm.getPackageInfo(representative.file)?.also {
-            // Retain cleanup until the next resolution to keep label/icon loading working.
-            preparedApkCleanup = representative.cleanup
+    private suspend fun resolveLocalPackageInfo(file: File): PackageInfoResolution {
+        if (!file.exists()) return PackageInfoResolution(null)
+        if (!SplitApkPreparer.isSplitArchive(file)) {
+            return PackageInfoResolution(pm.getPackageInfo(file))
         }
+
+        val resolved = runCatching {
+            SplitArchiveDisplayResolver.resolve(file, splitWorkspace, app, pm)
+        }.getOrNull()
+        if (resolved != null) {
+            return PackageInfoResolution(
+                packageInfo = resolved.packageInfo,
+                labelOverride = resolved.label.takeUnless { it.isBlank() },
+                iconOverride = resolved.icon
+            )
+        }
+
+        return PackageInfoResolution(pm.getPackageInfo(file))
     }
+
+    private data class PackageInfoResolution(
+        val packageInfo: PackageInfo?,
+        val labelOverride: String? = null,
+        val iconOverride: Drawable? = null
+    )
 
     fun selectDownloadedApp(downloadedApp: DownloadedApp) {
         cancelPluginAction()
@@ -1077,9 +1099,11 @@ class SelectedAppInfoViewModel(
         val previousCleanup = preparedApkCleanup
         preparedApkCleanup = null
 
-        val info = when (val app = selectedApp) {
-            is SelectedApp.Local -> withContext(Dispatchers.IO) { resolvePackageInfo(app.file) }
-            is SelectedApp.Installed -> withContext(Dispatchers.IO) { pm.getPackageInfo(app.packageName) }
+        val resolution = when (val app = selectedApp) {
+            is SelectedApp.Local -> withContext(Dispatchers.IO) { resolveLocalPackageInfo(app.file) }
+            is SelectedApp.Installed -> withContext(Dispatchers.IO) {
+                PackageInfoResolution(pm.getPackageInfo(app.packageName))
+            }
             is SelectedApp.Download, is SelectedApp.Search -> withContext(Dispatchers.IO) {
                 val version = app.version
                 val downloaded = when {
@@ -1087,23 +1111,26 @@ class SelectedAppInfoViewModel(
                         ?: downloadedAppRepository.getLatest(app.packageName)
                     else -> downloadedAppRepository.getLatest(app.packageName)
                 }
-                downloaded?.let { resolvePackageInfo(downloadedAppRepository.getApkFileForApp(it)) }
-                    ?: pm.getPackageInfo(app.packageName)
+                downloaded?.let {
+                    resolveLocalPackageInfo(downloadedAppRepository.getApkFileForApp(it))
+                } ?: PackageInfoResolution(pm.getPackageInfo(app.packageName))
             }
-            else -> null
+            else -> PackageInfoResolution(null)
         }
 
-        selectedAppInfo = info
+        selectedAppInfo = resolution.packageInfo
+        selectedAppInfoLabelOverride = resolution.labelOverride
+        selectedAppInfoIconOverride = resolution.iconOverride
         // Now that UI is updated to new info, we can safely clean up the old prepared APK.
         previousCleanup?.invoke()
 
         val current = selectedApp
-        val resolvedVersion = info?.versionName?.takeUnless(String::isNullOrBlank)
-        if (info != null) {
+        val resolvedVersion = resolution.packageInfo?.versionName?.takeUnless(String::isNullOrBlank)
+        if (resolution.packageInfo != null) {
             when (current) {
                 is SelectedApp.Local -> if (!current.resolved || current.packageName == current.file.nameWithoutExtension) {
                     selectedApp = current.copy(
-                        packageName = info.packageName,
+                        packageName = resolution.packageInfo.packageName,
                         version = resolvedVersion ?: current.version,
                         resolved = true
                     )
@@ -1111,15 +1138,15 @@ class SelectedAppInfoViewModel(
 
                 is SelectedApp.Download -> if (current.version.isNullOrBlank() || current.packageName == current.version) {
                     selectedApp = current.copy(
-                        packageName = info.packageName,
-                        version = resolvedVersion ?: info.versionName
+                        packageName = resolution.packageInfo.packageName,
+                        version = resolvedVersion ?: resolution.packageInfo.versionName
                     )
                 }
 
                 is SelectedApp.Search -> if (current.version.isNullOrBlank()) {
                     selectedApp = current.copy(
-                        packageName = info.packageName,
-                        version = resolvedVersion ?: info.versionName
+                        packageName = resolution.packageInfo.packageName,
+                        version = resolvedVersion ?: resolution.packageInfo.versionName
                     )
                 }
 

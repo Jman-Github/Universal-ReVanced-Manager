@@ -402,6 +402,12 @@ private fun ReVancedManager(
             val params = it.getComplexArg<Patcher.ViewModelParams>()
             PatcherScreen(
                 onBackClick = navController::popBackStack,
+                onBackToDashboard = {
+                    navController.navigate(Dashboard) {
+                        popUpTo<Dashboard> { inclusive = true }
+                        launchSingleTop = true
+                    }
+                },
                 onReviewSelection = { app, selection, options, missing ->
                     val appWithVersion = when (app) {
                         is SelectedApp.Search -> app.copy(version = app.version ?: params.selectedApp.version)
