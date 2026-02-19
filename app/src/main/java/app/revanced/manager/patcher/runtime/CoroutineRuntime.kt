@@ -97,10 +97,17 @@ class CoroutineRuntime(context: Context) : Runtime(context) {
 
         try {
             val selectedAaptPath = resolveAaptPath(preparation.file, logger, relatedBundleArchives)
+            val frameworkDir = FrameworkCacheResolver.resolve(
+                baseFrameworkDir = frameworkPath,
+                runtimeTag = "revanced",
+                apkFile = preparation.file,
+                aaptPath = selectedAaptPath,
+                logger = logger
+            )
             val session = runStep(StepId.ReadAPK, onEvent) {
                 Session(
                     cacheDir,
-                    frameworkPath,
+                    frameworkDir,
                     selectedAaptPath,
                     logger,
                     preparation.file,

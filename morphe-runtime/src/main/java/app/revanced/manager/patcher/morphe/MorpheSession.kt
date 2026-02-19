@@ -133,17 +133,7 @@ class MorpheSession(
 
     private suspend fun executePatchesWithFrameworkRecovery(orderedPatches: MorphePatchList) {
         ensureFrameworkCacheIsValid()
-        try {
-            executePatchesOnce(orderedPatches)
-        } catch (error: Throwable) {
-            if (!isFrameworkCacheReadFailure(error)) throw error
-
-            logger.warn("Framework cache read failed. Clearing framework cache and retrying once.")
-            clearFrameworkCache("retry after framework read failure")
-            resetPatcher()
-            ensureFrameworkCacheIsValid()
-            executePatchesOnce(orderedPatches)
-        }
+        executePatchesOnce(orderedPatches)
     }
 
     private fun ensureFrameworkCacheIsValid() {
@@ -191,33 +181,6 @@ class MorpheSession(
         }
     }
 
-    private fun resetPatcher() {
-        runCatching { patcher.close() }
-        patcher = createPatcher()
-        resourcesDecoded = false
-    }
-
-    private fun isFrameworkCacheReadFailure(error: Throwable): Boolean {
-        val detail = buildString {
-            generateSequence(error) { it.cause }.forEach { cause ->
-                append(cause.message.orEmpty())
-                append('\n')
-                append(cause.stackTraceToString())
-                append('\n')
-            }
-        }
-
-        val hasFrameworkRef =
-            detail.contains("/framework/1.apk", ignoreCase = true) ||
-                detail.contains("\\framework\\1.apk", ignoreCase = true)
-        if (!hasFrameworkRef) return false
-
-        val hasKnownFailure =
-            detail.contains("Could not load resources.arsc", ignoreCase = true) ||
-                detail.contains("zip file is empty", ignoreCase = true)
-        return hasKnownFailure
-    }
-
     suspend fun run(
         output: File,
         selectedPatches: MorphePatchList,
@@ -245,81 +208,85 @@ class MorpheSession(
             )
         )
 
-        runStep(StepId.WriteAPK, onEvent) {
-            onEvent(
-                ProgressEvent.Progress(
-                    stepId = StepId.WriteAPK,
-                    message = "Copying base APK"
-                )
-            )
-            val initialDexNames = listDexNames(input)
-            onEvent(
-                ProgressEvent.Progress(
-                    stepId = StepId.WriteAPK,
-                    subSteps = buildWriteApkSubSteps(
-                        initialDexNames.map { "Compiling $it" },
-                        shouldStripNativeLibs
-                    )
-                )
-            )
-            logger.info("Writing patched files...")
-            XmlSurrogateSanitizer.sanitize(tempDir.resolve("apk"), logger)
-            ensureMissingDrawables()
-            validateMissingResourceReferences()
-            val result = patcher.get()
-
-            val patched = tempDir.resolve("result.apk")
-            runInterruptible(Dispatchers.IO) {
-                fastCopy(input, patched)
-            }
-            onEvent(
-                ProgressEvent.Progress(
-                    stepId = StepId.WriteAPK,
-                    message = "Applying patched changes"
-                )
-            )
-            result.applyTo(patched)
-
-            logger.info("Patched apk saved to $patched")
-
-            withContext(Dispatchers.IO) {
+        suspend fun writePatchedApkStep() {
+            runStep(StepId.WriteAPK, onEvent) {
                 onEvent(
                     ProgressEvent.Progress(
                         stepId = StepId.WriteAPK,
-                        message = "Writing output APK"
+                        message = "Copying base APK"
                     )
                 )
-                try {
-                    Files.move(
-                        patched.toPath(),
-                        output.toPath(),
-                        StandardCopyOption.REPLACE_EXISTING,
-                        StandardCopyOption.ATOMIC_MOVE
+                val initialDexNames = listDexNames(input)
+                onEvent(
+                    ProgressEvent.Progress(
+                        stepId = StepId.WriteAPK,
+                        subSteps = buildWriteApkSubSteps(
+                            initialDexNames.map { "Compiling $it" },
+                            shouldStripNativeLibs
+                        )
                     )
-                } catch (_: Exception) {
-                    Files.move(
-                        patched.toPath(),
-                        output.toPath(),
-                        StandardCopyOption.REPLACE_EXISTING
+                )
+                logger.info("Writing patched files...")
+                XmlSurrogateSanitizer.sanitize(tempDir.resolve("apk"), logger)
+                ensureMissingDrawables()
+                validateMissingResourceReferences()
+                val result = patcher.get()
+
+                val patched = tempDir.resolve("result.apk")
+                runInterruptible(Dispatchers.IO) {
+                    fastCopy(input, patched)
+                }
+                onEvent(
+                    ProgressEvent.Progress(
+                        stepId = StepId.WriteAPK,
+                        message = "Applying patched changes"
                     )
+                )
+                result.applyTo(patched)
+
+                logger.info("Patched apk saved to $patched")
+
+                withContext(Dispatchers.IO) {
+                    onEvent(
+                        ProgressEvent.Progress(
+                            stepId = StepId.WriteAPK,
+                            message = "Writing output APK"
+                        )
+                    )
+                    try {
+                        Files.move(
+                            patched.toPath(),
+                            output.toPath(),
+                            StandardCopyOption.REPLACE_EXISTING,
+                            StandardCopyOption.ATOMIC_MOVE
+                        )
+                    } catch (_: Exception) {
+                        Files.move(
+                            patched.toPath(),
+                            output.toPath(),
+                            StandardCopyOption.REPLACE_EXISTING
+                        )
+                    }
+                }
+                onEvent(
+                    ProgressEvent.Progress(
+                        stepId = StepId.WriteAPK,
+                        message = "Finalizing output"
+                    )
+                )
+                if (shouldStripNativeLibs) {
+                    onEvent(
+                        ProgressEvent.Progress(
+                            stepId = StepId.WriteAPK,
+                            message = "Stripping native libraries"
+                        )
+                    )
+                    NativeLibStripper.strip(output)
                 }
             }
-            onEvent(
-                ProgressEvent.Progress(
-                    stepId = StepId.WriteAPK,
-                    message = "Finalizing output"
-                )
-            )
-            if (shouldStripNativeLibs) {
-                onEvent(
-                    ProgressEvent.Progress(
-                        stepId = StepId.WriteAPK,
-                        message = "Stripping native libraries"
-                    )
-                )
-                NativeLibStripper.strip(output)
-            }
         }
+
+        writePatchedApkStep()
     }
 
     private fun buildWriteApkSubSteps(

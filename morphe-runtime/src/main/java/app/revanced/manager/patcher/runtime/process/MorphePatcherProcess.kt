@@ -15,6 +15,7 @@ import app.revanced.manager.patcher.logger.LogLevel
 import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.morphe.MorphePatchBundleLoader
 import app.revanced.manager.patcher.morphe.MorpheSession
+import app.revanced.manager.patcher.runtime.FrameworkCacheResolver
 import app.revanced.manager.patcher.runStep
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.patcher.toParcel
@@ -167,10 +168,17 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
                         additionalArchives = relatedBundleArchives
                     )
                     logAapt2Info(selectedAaptPath, logger)
+                    val frameworkDir = FrameworkCacheResolver.resolve(
+                        baseFrameworkDir = parameters.frameworkDir,
+                        runtimeTag = "morphe",
+                        apkFile = preparation.file,
+                        aaptPath = selectedAaptPath,
+                        logger = logger
+                    )
                     val session = runStep(StepId.ReadAPK, ::onEvent) {
                         MorpheSession(
                             cacheDir = parameters.cacheDir,
-                            frameworkDir = parameters.frameworkDir,
+                            frameworkDir = frameworkDir,
                             aaptPath = selectedAaptPath,
                             logger = logger,
                             input = preparation.file,

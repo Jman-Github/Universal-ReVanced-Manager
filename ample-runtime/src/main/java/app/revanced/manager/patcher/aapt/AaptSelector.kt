@@ -13,6 +13,7 @@ object AaptSelector {
     private val manifestTokens = listOf(
         "uri-relative-filter-group",
         "android:allow",
+        "intentMatchingFlags",
         "queryadvancedpattern",
         "querypattern",
         "queryprefix",
@@ -22,19 +23,31 @@ object AaptSelector {
         "fragmentprefix",
         "fragmentsuffix"
     )
+    private val normalizedManifestTokens = manifestTokens.map(::normalizeForTokenScan)
+    private val targetSdkRegex = Regex("targetSdkVersion:'(\\d+)'", RegexOption.IGNORE_CASE)
 
     fun select(
         primary: String,
         fallback: String?,
         apk: File,
         logger: Logger? = null,
-        additionalArchives: Collection<File> = emptyList()
+        additionalArchives: Collection<File> = emptyList(),
+        preferPrimary: Boolean = false
     ): String {
         if (fallback.isNullOrBlank() || primary == fallback) {
             return primary
         }
+        if (preferPrimary) {
+            logger?.info("AAPT2: primary binary forced by override")
+            return primary
+        }
 
         val archives = linkedSetOf(apk).apply { addAll(additionalArchives.filter { it.exists() }) }.toList()
+        if (shouldPreferModernByTargetSdk(fallback, apk, logger)) {
+            logger?.info("AAPT2: using fallback binary due to targetSdk >= 35")
+            return fallback
+        }
+
         val useFallback = when {
             containsGenderedQualifiers(archives) -> {
                 logger?.info("AAPT2: using fallback binary due to gendered resource qualifiers")
@@ -86,7 +99,6 @@ object AaptSelector {
     }
 
     private fun containsModernManifestFeatures(archives: Collection<File>): Boolean {
-        val loweredTokens = manifestTokens.map { it.lowercase(Locale.ROOT) }
         return archives.any { archive ->
             runCatching {
                 var found = false
@@ -96,10 +108,10 @@ object AaptSelector {
                         val entry = entries.nextElement()
                         val name = entry.name
                         if (!name.endsWith("AndroidManifest.xml")) continue
-                        val text = zip.getInputStream(entry).use { input ->
-                            String(input.readBytes(), StandardCharsets.ISO_8859_1).lowercase(Locale.ROOT)
+                        val normalizedText = zip.getInputStream(entry).use { input ->
+                            normalizeForTokenScan(String(input.readBytes(), StandardCharsets.ISO_8859_1))
                         }
-                        if (loweredTokens.any { token -> text.contains(token) }) {
+                        if (normalizedManifestTokens.any { token -> normalizedText.contains(token) }) {
                             found = true
                             break
                         }
@@ -156,10 +168,48 @@ object AaptSelector {
             }
 
             val output = process.inputStream.bufferedReader().use { it.readText() }
-            val lower = output.lowercase(Locale.ROOT)
-            manifestTokens.any { token -> lower.contains(token) }
+            val normalizedOutput = normalizeForTokenScan(output)
+            normalizedManifestTokens.any { token -> normalizedOutput.contains(token) }
         }.onFailure {
             logger?.warn("AAPT2 manifest probe failed: ${it.message}")
         }.getOrDefault(false)
+    }
+
+    private fun shouldPreferModernByTargetSdk(aaptPath: String, apk: File, logger: Logger?): Boolean {
+        val targetSdk = dumpTargetSdk(aaptPath, apk, logger) ?: return false
+        return targetSdk >= 35
+    }
+
+    private fun dumpTargetSdk(aaptPath: String, apk: File, logger: Logger?): Int? {
+        return runCatching {
+            val process = ProcessBuilder(
+                aaptPath,
+                "dump",
+                "badging",
+                apk.absolutePath
+            )
+                .redirectErrorStream(true)
+                .start()
+
+            val completed = process.waitFor(20, TimeUnit.SECONDS)
+            if (!completed) {
+                process.destroyForcibly()
+                logger?.warn("AAPT2 targetSdk probe timed out")
+                return@runCatching null
+            }
+
+            val output = process.inputStream.bufferedReader().use { it.readText() }
+            targetSdkRegex.find(output)?.groupValues?.getOrNull(1)?.toIntOrNull()
+        }.onFailure {
+            logger?.warn("AAPT2 targetSdk probe failed: ${it.message}")
+        }.getOrNull()
+    }
+
+    private fun normalizeForTokenScan(value: String): String = buildString(value.length) {
+        value.lowercase(Locale.ROOT).forEach { ch ->
+            if ((ch in 'a'..'z') || (ch in '0'..'9')) {
+                append(ch)
+            }
+        }
     }
 }

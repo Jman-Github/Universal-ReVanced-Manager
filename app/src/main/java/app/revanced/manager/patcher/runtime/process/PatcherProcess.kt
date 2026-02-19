@@ -15,6 +15,7 @@ import app.revanced.manager.patcher.aapt.AaptSelector
 import app.revanced.manager.patcher.logger.LogLevel
 import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.patch.PatchBundle
+import app.revanced.manager.patcher.runtime.FrameworkCacheResolver
 import app.revanced.manager.patcher.runStep
 import app.revanced.manager.patcher.runtime.ProcessRuntime
 import app.revanced.manager.patcher.split.SplitApkPreparer
@@ -170,11 +171,18 @@ class PatcherProcess : IPatcherProcess.Stub() {
                         additionalArchives = relatedBundleArchives
                     )
                     logAapt2Info(selectedAaptPath, logger)
+                    val frameworkDir = FrameworkCacheResolver.resolve(
+                        baseFrameworkDir = parameters.frameworkDir,
+                        runtimeTag = "revanced",
+                        apkFile = preparation.file,
+                        aaptPath = selectedAaptPath,
+                        logger = logger
+                    )
                     val session = runStep(StepId.ReadAPK, ::onEvent) {
                         Session(
                             cacheDir = parameters.cacheDir,
                             aaptPath = selectedAaptPath,
-                            frameworkDir = parameters.frameworkDir,
+                            frameworkDir = frameworkDir,
                             logger = logger,
                             input = preparation.file,
                             onEvent = ::onEvent,

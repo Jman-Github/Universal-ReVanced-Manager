@@ -10,6 +10,7 @@ import app.revanced.manager.patcher.logger.LogLevel
 import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.morphe.MorphePatchBundleLoader
 import app.revanced.manager.patcher.morphe.MorpheSession
+import app.revanced.manager.patcher.runtime.FrameworkCacheResolver
 import app.revanced.manager.patcher.runStep
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.patcher.toRemoteError
@@ -199,10 +200,17 @@ object MorpheRuntimeEntry {
                         additionalArchives = relatedBundleArchives
                     )
                     logAapt2Info(selectedAaptPath, logger)
+                    val frameworkCacheDir = FrameworkCacheResolver.resolve(
+                        baseFrameworkDir = frameworkDir,
+                        runtimeTag = "morphe",
+                        apkFile = preparation.file,
+                        aaptPath = selectedAaptPath,
+                        logger = logger
+                    )
                     val session = runStep(StepId.ReadAPK, ::onEvent) {
                         MorpheSession(
                             cacheDir = cacheDir,
-                            frameworkDir = frameworkDir,
+                            frameworkDir = frameworkCacheDir,
                             aaptPath = selectedAaptPath,
                             logger = logger,
                             input = preparation.file,
