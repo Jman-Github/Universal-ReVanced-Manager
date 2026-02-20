@@ -4,6 +4,7 @@
 # Features
 
 - Pressing the system back buton on the `Apps` tab now exits the app
+- Made search queries and filters on the custom file picker persist across sessions https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/209
 
 
 # Bug fixes

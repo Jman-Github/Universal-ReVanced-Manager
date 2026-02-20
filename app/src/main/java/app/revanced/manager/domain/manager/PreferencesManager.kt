@@ -135,6 +135,8 @@ class PreferencesManager(
     val patchSelectionShowVersionTags = booleanPreference("patch_selection_show_version_tags", true)
     val pathSelectorFavorites = stringSetPreference("path_selector_favorites", emptySet())
     val pathSelectorLastDirectory = stringPreference("path_selector_last_directory", "")
+    val pathSelectorSortMode = stringPreference("path_selector_sort_mode", "MODIFIED_DESC")
+    val pathSelectorSearchQuery = stringPreference("path_selector_search_query", "")
     val appSelectorFilterInstalledOnly = booleanPreference("app_selector_filter_installed_only", false)
     val appSelectorFilterPatchesAvailable = booleanPreference("app_selector_filter_patches_available", false)
     val useCustomFilePicker = booleanPreference("use_custom_file_picker", true)

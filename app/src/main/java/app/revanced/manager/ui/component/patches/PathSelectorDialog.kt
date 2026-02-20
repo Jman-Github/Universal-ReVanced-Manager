@@ -154,7 +154,10 @@ fun PathSelectorDialog(
     val entries = remember(currentDirectory, permissionGranted, refreshNonce) {
         if (!permissionGranted) emptyList() else listDirectoryEntriesSafe(currentDirectory)
     }
-    var sortMode by rememberSaveable { mutableStateOf(PathSortMode.MODIFIED_DESC) }
+    val persistedSortMode by prefs.pathSelectorSortMode.getAsState()
+    var sortMode by rememberSaveable(persistedSortMode) {
+        mutableStateOf(PathSortMode.fromStorage(persistedSortMode))
+    }
     var showSortMenu by rememberSaveable { mutableStateOf(false) }
     val sortKeys = remember(entries) {
         entries.associateWith(::buildPathSortKey)
@@ -168,7 +171,8 @@ fun PathSelectorDialog(
     val files = remember(entries, fileFilter, sortComparator) {
         entries.filterNot(Path::isDirectory).filter(fileFilter).sortedWith(sortComparator)
     }
-    var searchQuery by rememberSaveable { mutableStateOf("") }
+    val persistedSearchQuery by prefs.pathSelectorSearchQuery.getAsState()
+    var searchQuery by rememberSaveable(persistedSearchQuery) { mutableStateOf(persistedSearchQuery) }
     val normalizedQuery = searchQuery.trim()
     val filteredDirectories = remember(directories, normalizedQuery) {
         if (normalizedQuery.isBlank()) {
@@ -231,6 +235,19 @@ fun PathSelectorDialog(
         val nextValue = currentDirectory.absolutePathString()
         if (nextValue != lastDirectoryValue) {
             prefs.pathSelectorLastDirectory.update(nextValue)
+        }
+    }
+
+    LaunchedEffect(sortMode, persistedSortMode) {
+        val nextValue = sortMode.name
+        if (nextValue != persistedSortMode) {
+            prefs.pathSelectorSortMode.update(nextValue)
+        }
+    }
+
+    LaunchedEffect(searchQuery, persistedSearchQuery) {
+        if (searchQuery != persistedSearchQuery) {
+            prefs.pathSelectorSearchQuery.update(searchQuery)
         }
     }
 
@@ -603,6 +620,11 @@ private enum class PathSortMode(val labelRes: Int) {
     TYPE_DESC(R.string.path_selector_sort_type_desc),
     SIZE_DESC(R.string.path_selector_sort_size_desc),
     SIZE_ASC(R.string.path_selector_sort_size_asc);
+
+    companion object {
+        fun fromStorage(value: String): PathSortMode =
+            entries.firstOrNull { it.name == value } ?: MODIFIED_DESC
+    }
 
     fun comparator(keys: Map<Path, PathSortKey>): Comparator<Path> {
         val nameComparator = compareBy<Path>(
