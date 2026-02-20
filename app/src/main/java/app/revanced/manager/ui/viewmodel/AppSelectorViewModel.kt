@@ -138,28 +138,23 @@ class AppSelectorViewModel(
     }
 
     fun handleStorageResult(uri: Uri) = viewModelScope.launch {
-        val selectedApp = withContext(Dispatchers.IO) {
+        when (val loadResult = withContext(Dispatchers.IO) {
             loadSelectedFile(uri)
+        }) {
+            is StorageApkLoadResult.Success -> handleSelectedStorageApp(loadResult.app)
+            StorageApkLoadResult.InvalidType -> app.toast(app.getString(R.string.selected_file_not_supported_apk))
+            StorageApkLoadResult.Failed -> app.toast(app.getString(R.string.failed_to_load_apk))
         }
-
-        if (selectedApp == null) {
-            app.toast(app.getString(R.string.failed_to_load_apk))
-            return@launch
-        }
-        handleSelectedStorageApp(selectedApp)
     }
 
     fun handleStorageFile(file: File) = viewModelScope.launch {
-        val selectedApp = withContext(Dispatchers.IO) {
+        when (val loadResult = withContext(Dispatchers.IO) {
             loadSelectedFile(file)
+        }) {
+            is StorageApkLoadResult.Success -> handleSelectedStorageApp(loadResult.app)
+            StorageApkLoadResult.InvalidType -> app.toast(app.getString(R.string.selected_file_not_supported_apk))
+            StorageApkLoadResult.Failed -> app.toast(app.getString(R.string.failed_to_load_apk))
         }
-
-        if (selectedApp == null) {
-            app.toast(app.getString(R.string.failed_to_load_apk))
-            return@launch
-        }
-
-        handleSelectedStorageApp(selectedApp)
     }
 
 
@@ -186,10 +181,10 @@ class AppSelectorViewModel(
         }
     }
 
-    private suspend fun loadSelectedFile(uri: Uri) =
+    private suspend fun loadSelectedFile(uri: Uri): StorageApkLoadResult =
         app.contentResolver.openInputStream(uri)?.use { stream ->
             val extension = resolveExtension(uri)
-            if (extension !in APK_FILE_EXTENSIONS) return@use null
+            if (extension !in APK_FILE_EXTENSIONS) return@use StorageApkLoadResult.InvalidType
             val destination = prepareInputFile(extension)
             destination.delete()
             Files.copy(stream, destination.toPath())
@@ -204,13 +199,13 @@ class AppSelectorViewModel(
                     temporary = true,
                     resolved = true
                 )
-            }
-        }
+            }?.let(StorageApkLoadResult::Success) ?: StorageApkLoadResult.Failed
+        } ?: StorageApkLoadResult.Failed
 
-    private suspend fun loadSelectedFile(file: File): SelectedApp.Local? {
-        if (!file.exists()) return null
+    private suspend fun loadSelectedFile(file: File): StorageApkLoadResult {
+        if (!file.exists()) return StorageApkLoadResult.Failed
         val extension = file.extension.lowercase(Locale.ROOT)
-        if (extension !in APK_FILE_EXTENSIONS) return null
+        if (extension !in APK_FILE_EXTENSIONS) return StorageApkLoadResult.InvalidType
 
         val destination = prepareInputFile(extension)
         destination.delete()
@@ -226,7 +221,7 @@ class AppSelectorViewModel(
                 temporary = true,
                 resolved = true
             )
-        }
+        }?.let(StorageApkLoadResult::Success) ?: StorageApkLoadResult.Failed
     }
 
     private fun resolveExtension(uri: Uri): String {
@@ -262,6 +257,12 @@ class AppSelectorViewModel(
         } else {
             pm.getPackageInfo(file)
         }
+}
+
+private sealed interface StorageApkLoadResult {
+    data class Success(val app: SelectedApp.Local) : StorageApkLoadResult
+    data object InvalidType : StorageApkLoadResult
+    data object Failed : StorageApkLoadResult
 }
 
 data class BundleVersionSuggestion(

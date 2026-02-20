@@ -1,4 +1,4 @@
-# v1.8.1-dev.01 (2026-02-18)
+# v1.8.1-dev.01 (2026-02-19)
 
 
 # Features
@@ -22,6 +22,7 @@
 - Fixed the `Patch confirmation` screen's scroll bar being very large https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/186
 - Fixed the Android document provider file picker not resolving intents to local paths https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/202 
 - Fixed an issue where the export filename variables wouldn't be placed at the cursor position https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/187
+- Allow external apps to appear in the Android document provider as options to select files with https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/203
 
 
 # v1.8.0-dev.12 (2026-02-14)

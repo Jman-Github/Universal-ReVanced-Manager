@@ -1,5 +1,7 @@
 package app.revanced.manager.ui.screen
 
+import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -107,6 +109,7 @@ import sh.calvin.reorderable.ReorderableCollectionItemScope
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import java.io.File
+import java.util.Locale
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -212,12 +215,16 @@ fun PatchProfilesScreen(
         }
     }
     val apkDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
+        contract = ActivityResultContracts.GetContent()
     ) { uri ->
         val profile = pendingDocumentApkPickerProfile
         pendingDocumentApkPickerProfile = null
         apkPickerProfile = null
         if (profile == null || uri == null) return@rememberLauncherForActivityResult
+        if (!isAllowedApkUri(context, uri)) {
+            handleApkSelectionResult(profile.name, PatchProfilesViewModel.ApkSelectionResult.INVALID_FILE)
+            return@rememberLauncherForActivityResult
+        }
         apkPickerBusy = true
         scope.launch {
             val tempFile = withContext(Dispatchers.IO) {
@@ -263,7 +270,7 @@ fun PatchProfilesScreen(
         val profile = apkPickerProfile
         if (profile != null && !useCustomFilePicker) {
             pendingDocumentApkPickerProfile = profile
-            apkDocumentLauncher.launch(arrayOf("*/*"))
+            apkDocumentLauncher.launch("application/*")
         }
     }
 
@@ -1460,6 +1467,26 @@ private fun PatchProfileApkIcon(
             }
         }
     }
+}
+
+private fun isAllowedApkUri(context: android.content.Context, uri: Uri): Boolean {
+    val displayName = runCatching {
+        context.contentResolver.query(
+            uri,
+            arrayOf(OpenableColumns.DISPLAY_NAME),
+            null,
+            null,
+            null
+        )?.use { cursor ->
+            val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (index != -1 && cursor.moveToFirst()) cursor.getString(index) else null
+        }
+    }.getOrNull() ?: uri.lastPathSegment.orEmpty()
+
+    val extension = displayName
+        .substringAfterLast('.', missingDelimiterValue = "")
+        .lowercase(Locale.ROOT)
+    return extension in APK_FILE_EXTENSIONS
 }
 
 private data class PatchProfileApkIconInfo(

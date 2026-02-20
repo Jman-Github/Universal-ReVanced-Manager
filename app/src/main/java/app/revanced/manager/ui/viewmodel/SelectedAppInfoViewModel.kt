@@ -762,15 +762,22 @@ class SelectedAppInfoViewModel(
         }
 
         viewModelScope.launch {
-            val local = withContext(Dispatchers.IO) { loadLocalApk(uri) }
-            if (local == null) {
-                app.toast(app.getString(R.string.failed_to_load_apk))
-                if (requiresSourceSelection && selectedApp is SelectedApp.Search) {
-                    showSourceSelector = true
+            when (val loadResult = withContext(Dispatchers.IO) { loadLocalApk(uri) }) {
+                is LocalApkLoadResult.Success -> handleSelectedStorageApk(loadResult.app)
+                LocalApkLoadResult.InvalidType -> {
+                    app.toast(app.getString(R.string.selected_file_not_supported_apk))
+                    if (requiresSourceSelection && selectedApp is SelectedApp.Search) {
+                        showSourceSelector = true
+                    }
                 }
-                return@launch
+
+                LocalApkLoadResult.Failed -> {
+                    app.toast(app.getString(R.string.failed_to_load_apk))
+                    if (requiresSourceSelection && selectedApp is SelectedApp.Search) {
+                        showSourceSelector = true
+                    }
+                }
             }
-            handleSelectedStorageApk(local)
         }
     }
 
@@ -783,15 +790,22 @@ class SelectedAppInfoViewModel(
         }
 
         viewModelScope.launch {
-            val local = withContext(Dispatchers.IO) { loadLocalApk(file) }
-            if (local == null) {
-                app.toast(app.getString(R.string.failed_to_load_apk))
-                if (requiresSourceSelection && selectedApp is SelectedApp.Search) {
-                    showSourceSelector = true
+            when (val loadResult = withContext(Dispatchers.IO) { loadLocalApk(file) }) {
+                is LocalApkLoadResult.Success -> handleSelectedStorageApk(loadResult.app)
+                LocalApkLoadResult.InvalidType -> {
+                    app.toast(app.getString(R.string.selected_file_not_supported_apk))
+                    if (requiresSourceSelection && selectedApp is SelectedApp.Search) {
+                        showSourceSelector = true
+                    }
                 }
-                return@launch
+
+                LocalApkLoadResult.Failed -> {
+                    app.toast(app.getString(R.string.failed_to_load_apk))
+                    if (requiresSourceSelection && selectedApp is SelectedApp.Search) {
+                        showSourceSelector = true
+                    }
+                }
             }
-            handleSelectedStorageApk(local)
         }
     }
 
@@ -821,13 +835,13 @@ class SelectedAppInfoViewModel(
         dismissSourceSelector()
     }
 
-    private suspend fun loadLocalApk(uri: Uri): SelectedApp.Local? =
+    private suspend fun loadLocalApk(uri: Uri): LocalApkLoadResult =
         app.contentResolver.openInputStream(uri)?.use { stream ->
             storageInputDir.listFiles()
                 ?.filter { it.name.startsWith("profile_input.") }
                 ?.forEach(File::delete)
             val extension = resolveExtension(uri)
-            if (extension !in APK_FILE_EXTENSIONS) return@use null
+            if (extension !in APK_FILE_EXTENSIONS) return@use LocalApkLoadResult.InvalidType
             val sanitized = extension.lowercase(Locale.ROOT).takeIf { it.matches(Regex("^[a-z0-9]{1,10}$")) }
                 ?: "apk"
             val storageInputFile = File(storageInputDir, "profile_input.$sanitized").apply { delete() }
@@ -839,16 +853,16 @@ class SelectedAppInfoViewModel(
                     file = storageInputFile,
                     temporary = true
                 )
-            }
-        }
+            }?.let(LocalApkLoadResult::Success) ?: LocalApkLoadResult.Failed
+        } ?: LocalApkLoadResult.Failed
 
-    private suspend fun loadLocalApk(file: File): SelectedApp.Local? {
-        if (!file.exists()) return null
+    private suspend fun loadLocalApk(file: File): LocalApkLoadResult {
+        if (!file.exists()) return LocalApkLoadResult.Failed
         storageInputDir.listFiles()
             ?.filter { it.name.startsWith("profile_input.") }
             ?.forEach(File::delete)
         val extension = file.extension.lowercase(Locale.ROOT)
-        if (extension !in APK_FILE_EXTENSIONS) return null
+        if (extension !in APK_FILE_EXTENSIONS) return LocalApkLoadResult.InvalidType
         val sanitized = extension.lowercase(Locale.ROOT).takeIf { it.matches(Regex("^[a-z0-9]{1,10}$")) }
             ?: "apk"
         val storageInputFile = File(storageInputDir, "profile_input.$sanitized").apply { delete() }
@@ -860,7 +874,7 @@ class SelectedAppInfoViewModel(
                 file = storageInputFile,
                 temporary = true
             )
-        }
+        }?.let(LocalApkLoadResult::Success) ?: LocalApkLoadResult.Failed
     }
 
     private fun resolveExtension(uri: Uri): String {
@@ -901,6 +915,12 @@ class SelectedAppInfoViewModel(
         val labelOverride: String? = null,
         val iconOverride: Drawable? = null
     )
+
+    private sealed interface LocalApkLoadResult {
+        data class Success(val app: SelectedApp.Local) : LocalApkLoadResult
+        data object InvalidType : LocalApkLoadResult
+        data object Failed : LocalApkLoadResult
+    }
 
     fun selectDownloadedApp(downloadedApp: DownloadedApp) {
         cancelPluginAction()

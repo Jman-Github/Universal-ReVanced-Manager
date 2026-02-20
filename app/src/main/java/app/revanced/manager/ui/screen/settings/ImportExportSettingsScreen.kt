@@ -2,6 +2,7 @@ package app.revanced.manager.ui.screen.settings
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.net.Uri
 import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -72,6 +73,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import androidx.documentfile.provider.DocumentFile
 import app.universal.revanced.manager.R
 import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.domain.manager.KeystoreManager
@@ -147,12 +149,16 @@ fun ImportExportSettingsScreen(
         pendingExportPicker = null
     }
     val importDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
+        contract = ActivityResultContracts.GetContent()
     ) { uri ->
         val picker = pendingDocumentImportPicker
         pendingDocumentImportPicker = null
         if (picker == null) return@rememberLauncherForActivityResult
         if (uri == null) {
+            if (picker == ImportPicker.PatchSelection) vm.clearSelectionAction()
+            return@rememberLauncherForActivityResult
+        }
+        if (!isValidImportUri(context, uri, picker)) {
             if (picker == ImportPicker.PatchSelection) vm.clearSelectionAction()
             return@rememberLauncherForActivityResult
         }
@@ -208,15 +214,7 @@ fun ImportExportSettingsScreen(
             }
         } else {
             pendingDocumentImportPicker = target
-            val types = when (target) {
-                ImportPicker.Keystore -> arrayOf("*/*")
-                ImportPicker.PatchBundles,
-                ImportPicker.PatchProfiles,
-                ImportPicker.ManagerSettings,
-                ImportPicker.Everything,
-                ImportPicker.PatchSelection -> arrayOf("application/json", "text/json", "*/*")
-            }
-            importDocumentLauncher.launch(types)
+            importDocumentLauncher.launch(documentMimeForImportPicker(target))
         }
     }
     val openExportPicker = { target: ExportPicker ->
@@ -1604,6 +1602,39 @@ private enum class ImportPicker {
     PatchSelection
 }
 
+private fun documentMimeForImportPicker(picker: ImportPicker): String =
+    when (picker) {
+        ImportPicker.Keystore -> "application/octet-stream"
+        ImportPicker.PatchBundles,
+        ImportPicker.PatchProfiles,
+        ImportPicker.ManagerSettings,
+        ImportPicker.Everything,
+        ImportPicker.PatchSelection -> "application/json"
+    }
+
+private fun isValidImportUri(context: android.content.Context, uri: Uri, picker: ImportPicker): Boolean {
+    val valid = when (picker) {
+        ImportPicker.Keystore -> uriHasAnyExtension(context, uri, "jks", "keystore", "p12", "pfx", "bks")
+        ImportPicker.PatchBundles,
+        ImportPicker.PatchProfiles,
+        ImportPicker.ManagerSettings,
+        ImportPicker.Everything,
+        ImportPicker.PatchSelection -> uriHasAnyExtension(context, uri, "json")
+    }
+    if (!valid) {
+        val message = when (picker) {
+            ImportPicker.Keystore -> context.getString(R.string.selected_file_not_supported_keystore)
+            ImportPicker.PatchBundles,
+            ImportPicker.PatchProfiles,
+            ImportPicker.ManagerSettings,
+            ImportPicker.Everything,
+            ImportPicker.PatchSelection -> context.getString(R.string.selected_file_not_supported_json)
+        }
+        context.toast(message)
+    }
+    return valid
+}
+
 private fun isJsonFile(path: Path): Boolean =
     hasExtension(path, "json")
 
@@ -1613,6 +1644,15 @@ private fun isKeystoreFile(path: Path): Boolean =
 private fun hasExtension(path: Path, vararg extensions: String): Boolean {
     val name = path.fileName?.toString()?.lowercase().orEmpty()
     return extensions.any { name.endsWith(".${it.lowercase()}") }
+}
+
+private fun uriHasAnyExtension(context: android.content.Context, uri: Uri, vararg extensions: String): Boolean {
+    val normalized = extensions.map { it.lowercase() }.toSet()
+    val name = DocumentFile.fromSingleUri(context, uri)?.name
+        ?: uri.lastPathSegment
+        ?: return false
+    val extension = name.substringAfterLast('.', missingDelimiterValue = "").lowercase()
+    return extension in normalized
 }
 
 @Composable

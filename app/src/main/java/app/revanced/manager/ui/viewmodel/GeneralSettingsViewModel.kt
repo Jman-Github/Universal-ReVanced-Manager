@@ -6,10 +6,12 @@ import android.util.Log
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.universal.revanced.manager.R
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.ui.theme.Theme
 import app.revanced.manager.util.applyAppLanguage
 import app.revanced.manager.util.resetListItemColorsCached
+import app.revanced.manager.util.toast
 import app.revanced.manager.util.toHexString
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
@@ -42,6 +44,20 @@ class GeneralSettingsViewModel(
         private const val tag = "GeneralSettingsViewModel"
         private const val backgroundDirectoryName = "custom_background"
         private const val backgroundFileBaseName = "background_image"
+        private val supportedBackgroundExtensions = setOf(
+            "jpg",
+            "jpeg",
+            "png",
+            "gif",
+            "svg",
+            "tif",
+            "tiff",
+            "webp",
+            "bmp",
+            "avif",
+            "heic",
+            "heif"
+        )
     }
 
     private val presetConfigs = mapOf(
@@ -98,7 +114,12 @@ class GeneralSettingsViewModel(
 
     fun importCustomBackgroundImageUri(context: Context, sourceUri: Uri) = viewModelScope.launch(Dispatchers.IO) {
         val appContext = context.applicationContext
-        val sourceName = sourceUri.lastPathSegment
+        val sourceName = runCatching {
+            appContext.contentResolver.query(sourceUri, null, null, null, null)?.use { cursor ->
+                val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (nameIndex != -1 && cursor.moveToFirst()) cursor.getString(nameIndex) else null
+            }
+        }.getOrNull() ?: sourceUri.lastPathSegment
         val mimeType = runCatching { appContext.contentResolver.getType(sourceUri) }.getOrNull()
         runCatching {
             appContext.contentResolver.openInputStream(sourceUri)?.use { input ->
@@ -112,6 +133,13 @@ class GeneralSettingsViewModel(
             } ?: error("Unable to open input stream for selected background image URI")
         }.onFailure {
             Log.w(tag, "Failed to import custom background image from URI", it)
+            withContext(Dispatchers.Main) {
+                if (it is IllegalArgumentException) {
+                    appContext.toast(appContext.getString(R.string.selected_file_not_supported_image))
+                } else {
+                    appContext.toast(appContext.getString(R.string.failed_to_load_file))
+                }
+            }
         }
     }
 
@@ -129,6 +157,13 @@ class GeneralSettingsViewModel(
             prefs.customBackgroundImageUri.update(targetUri.toString())
         }.onFailure {
             Log.w(tag, "Failed to import custom background image from file path", it)
+            withContext(Dispatchers.Main) {
+                if (it is IllegalArgumentException) {
+                    appContext.toast(appContext.getString(R.string.selected_file_not_supported_image))
+                } else {
+                    appContext.toast(appContext.getString(R.string.failed_to_load_file))
+                }
+            }
         }
     }
 
@@ -250,7 +285,16 @@ class GeneralSettingsViewModel(
             }
         }
 
-        return fromName ?: fromMime ?: "img"
+        val resolved = fromName ?: fromMime
+        val normalized = when (resolved) {
+            "jpeg" -> "jpg"
+            "tif" -> "tiff"
+            else -> resolved
+        }
+        if (normalized == null || normalized !in supportedBackgroundExtensions) {
+            throw IllegalArgumentException("Unsupported background image type.")
+        }
+        return normalized
     }
 
     private fun deleteManagedCustomBackgroundFile(appContext: Context, uriString: String) {

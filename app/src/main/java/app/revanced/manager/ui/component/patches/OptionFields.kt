@@ -257,7 +257,7 @@ private object StringOptionEditor : OptionEditor<String> {
             showFileDialog = it
         }
         val openDocumentLauncher = rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.OpenDocument()
+            contract = ActivityResultContracts.GetContent()
         ) { uri ->
             uri?.let { selectedUri ->
                 importDocumentUriToLocalPath(fs, selectedUri)?.let { localPath ->
@@ -333,7 +333,7 @@ private object StringOptionEditor : OptionEditor<String> {
                                             permissionLauncher.launch(permissionName)
                                         }
                                     } else {
-                                        openDocumentLauncher.launch(arrayOf("*/*"))
+                                        openDocumentLauncher.launch("*/*")
                                     }
                                 }
                             )

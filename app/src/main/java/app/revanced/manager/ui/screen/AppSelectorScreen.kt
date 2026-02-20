@@ -133,7 +133,7 @@ fun AppSelectorScreen(
             }
         }
     val openDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
+        contract = ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri != null) {
             vm.handleStorageResult(uri)
@@ -149,7 +149,7 @@ fun AppSelectorScreen(
                 permissionLauncher.launch(permissionName)
             }
         } else {
-            openDocumentLauncher.launch(arrayOf("*/*"))
+            openDocumentLauncher.launch("application/*")
         }
     }
     LaunchedEffect(useCustomFilePicker) {

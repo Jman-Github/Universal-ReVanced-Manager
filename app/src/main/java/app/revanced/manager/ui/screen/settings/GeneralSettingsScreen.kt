@@ -190,7 +190,7 @@ fun GeneralSettingsScreen(
         }
     }
     val backgroundImageDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
+        contract = ActivityResultContracts.GetContent()
     ) { uri ->
         showCustomBackgroundImagePicker = false
         if (uri == null) return@rememberLauncherForActivityResult
@@ -211,17 +211,7 @@ fun GeneralSettingsScreen(
     }
     LaunchedEffect(showCustomBackgroundImagePicker, useCustomFilePicker) {
         if (showCustomBackgroundImagePicker && !useCustomFilePicker) {
-            backgroundImageDocumentLauncher.launch(
-                arrayOf(
-                    "image/jpeg",
-                    "image/jpg",
-                    "image/png",
-                    "image/gif",
-                    "image/svg+xml",
-                    "image/tiff",
-                    "image/webp"
-                )
-            )
+            backgroundImageDocumentLauncher.launch("image/*")
         }
     }
 

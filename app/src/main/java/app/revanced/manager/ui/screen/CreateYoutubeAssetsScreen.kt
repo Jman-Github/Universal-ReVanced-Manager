@@ -178,7 +178,7 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
         return true
     }
 
-    val openImage = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    val openImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         val target = activePicker ?: return@rememberLauncherForActivityResult
         showPicker = false
         activePicker = null
@@ -214,7 +214,7 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
 
     LaunchedEffect(activePicker, useCustomFilePicker) {
         if (activePicker == null) return@LaunchedEffect
-        if (useCustomFilePicker) showPicker = true else openImage.launch(arrayOf("image/*"))
+        if (useCustomFilePicker) showPicker = true else openImage.launch("image/*")
     }
 
     fun generate() {

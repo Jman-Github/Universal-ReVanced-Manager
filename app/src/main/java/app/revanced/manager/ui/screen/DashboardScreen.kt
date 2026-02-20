@@ -169,7 +169,6 @@ import app.revanced.manager.util.BundleDeepLink
 import app.revanced.manager.util.EventEffect
 import app.revanced.manager.util.ExportNameFormatter
 import app.revanced.manager.util.PatchedAppExportData
-import app.revanced.manager.util.SPLIT_ARCHIVE_MIME_TYPES
 import app.revanced.manager.util.isAllowedApkFile
 import app.revanced.manager.util.isAllowedPatchBundleFile
 import app.revanced.manager.util.isAllowedSplitArchiveFile
@@ -180,6 +179,7 @@ import app.revanced.manager.data.room.apps.installed.InstallType
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.Locale
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -266,7 +266,7 @@ fun DashboardScreen(
             }
         }
     val openStorageDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
+        contract = ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri != null) {
             storageVm.handleStorageResult(uri)
@@ -280,7 +280,7 @@ fun DashboardScreen(
                 permissionLauncher.launch(permissionName)
             }
         } else {
-            openStorageDocumentLauncher.launch(arrayOf("*/*"))
+            openStorageDocumentLauncher.launch("application/*")
         }
     }
     val downloaderPluginLauncher = rememberLauncherForActivityResult(
@@ -463,7 +463,7 @@ fun DashboardScreen(
             }
         }
     val bundleDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
+        contract = ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri != null) {
             selectedBundleUri = uri
@@ -490,7 +490,7 @@ fun DashboardScreen(
                 bundlePermissionLauncher.launch(bundlePermissionName)
             }
         } else {
-            bundleDocumentLauncher.launch(arrayOf("*/*"))
+            bundleDocumentLauncher.launch("application/octet-stream")
         }
     }
 
@@ -513,7 +513,7 @@ fun DashboardScreen(
             pendingSplitPermissionRequest = null
         }
     val splitInputDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
+        contract = ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         val displayName = runCatching {
@@ -528,10 +528,15 @@ fun DashboardScreen(
                 if (index != -1 && cursor.moveToFirst()) cursor.getString(index) else null
             }
         }.getOrNull()
+        val resolvedName = displayName ?: uri.lastPathSegment ?: "split.apks"
+        if (!isAllowedSplitArchiveName(resolvedName)) {
+            androidContext.toast(androidContext.getString(R.string.merge_split_apk_input_invalid))
+            return@rememberLauncherForActivityResult
+        }
         vm.clearSplitMergeState()
         vm.startSplitMergeFromUri(
             inputUri = uri,
-            inputDisplayName = displayName ?: uri.lastPathSegment ?: "split.apks"
+            inputDisplayName = resolvedName
         )
         onMergeSplitClick()
     }
@@ -546,7 +551,7 @@ fun DashboardScreen(
                 splitPermissionLauncher.launch(permissionName)
             }
         } else {
-            splitInputDocumentLauncher.launch(SPLIT_ARCHIVE_MIME_TYPES)
+            splitInputDocumentLauncher.launch("application/*")
         }
     }
 
@@ -2637,6 +2642,11 @@ private fun BundleFabHandle(
             modifier = Modifier.size(16.dp)
         )
     }
+}
+
+private fun isAllowedSplitArchiveName(name: String): Boolean {
+    val normalized = name.substringAfterLast('.', missingDelimiterValue = "").lowercase(Locale.ROOT)
+    return normalized == "apks" || normalized == "apkm" || normalized == "xapk" || normalized == "zip"
 }
 
 @Composable
