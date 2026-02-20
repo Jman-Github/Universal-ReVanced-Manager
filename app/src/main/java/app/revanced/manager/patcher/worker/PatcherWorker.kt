@@ -276,11 +276,14 @@ class PatcherWorker(
             val experimentalRuntimeEnabled = prefs.useProcessRuntime.get()
             val requestedLimit = prefs.patcherProcessMemoryLimit.get()
             val aggressiveLimit = prefs.patcherProcessMemoryAggressive.get()
-            val effectiveLimit = if (aggressiveLimit) {
-                MemoryLimitConfig.maxLimitMb(applicationContext)
-            } else {
-                requestedLimit
-            }
+            val effectiveLimit = MemoryLimitConfig.clampLimitMb(
+                applicationContext,
+                if (aggressiveLimit) {
+                    MemoryLimitConfig.maxLimitMb(applicationContext)
+                } else {
+                    requestedLimit
+                }
+            )
 
             args.logger.info(
                 "Patching started at ${System.currentTimeMillis()} " +

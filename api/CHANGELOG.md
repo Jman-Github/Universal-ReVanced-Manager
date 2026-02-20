@@ -23,6 +23,7 @@
 - Fixed the `Patch confirmation` screen's scroll bar being very large https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/186
 - Fixed the Android document provider file picker not resolving intents to local paths https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/202 
 - Fixed an issue where the export filename variables wouldn't be placed at the cursor position https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/187
+- Fixed the `Effective memory limit` listing in the patcher logs using the `Requested memory limit value` (needs testing)
 
 
 # v1.8.0 (2026-02-15)

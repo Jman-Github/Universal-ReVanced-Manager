@@ -802,10 +802,20 @@ fun proceedAfterMissingPatchWarning() {
 
     private val logs by savedStateHandle.saveable<MutableList<Pair<LogLevel, String>>> { mutableListOf() }
     private var droppedLogLineCount by savedStateHandle.saveableVar { 0 }
+    private var runtimeReportedMemoryLimitMb: Int? by savedStateHandle.saveableVar()
     private val dexCompilePattern =
         Regex("(Compiling|Compiled)\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
     private val dexWritePattern =
         Regex("Write\\s+\\[[^\\]]+\\]\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
+    private fun parseMemoryLimitMb(raw: String?): Int? {
+        val value = raw?.trim() ?: return null
+        val match = Regex("""(\d+)\s*(?:m|mb|mib)?""", RegexOption.IGNORE_CASE)
+            .find(value)
+            ?: return null
+
+        return match.groupValues.getOrNull(1)?.toIntOrNull()
+    }
+
     private fun appendBoundedLog(level: LogLevel, message: String) {
         val boundedMessage = if (message.length > PATCHER_LOG_MESSAGE_CHAR_LIMIT) {
             buildString(PATCHER_LOG_MESSAGE_CHAR_LIMIT + 96) {
@@ -833,6 +843,11 @@ fun proceedAfterMissingPatchWarning() {
             level.androidLog(message)
             if (level == LogLevel.TRACE) return
             handleDexCompileLine(message)
+            if (message.startsWith("Memory limit:")) {
+                parseMemoryLimitMb(
+                    message.removePrefix("Memory limit:").trim()
+                )?.let { runtimeReportedMemoryLimitMb = it }
+            }
 
             viewModelScope.launch {
                 appendBoundedLog(level, message)
@@ -986,6 +1001,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private fun startWorker() {
         resetDexCompileState()
         resetFailureLogState()
+        runtimeReportedMemoryLimitMb = null
         logBatteryOptimizationStatus()
         val workId = launchWorker()
         patcherWorkerId = ParcelUuid(workId)
@@ -1280,14 +1296,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             logMessages.firstOrNull { it.startsWith(prefix) }
                 ?.removePrefix(prefix)
                 ?.trim()
-        fun parseMemoryLimitMb(raw: String?): Int? {
-            val value = raw?.trim() ?: return null
-            val match = Regex("""(\d+)\s*(?:m|mb|mib)?""", RegexOption.IGNORE_CASE)
-                .find(value)
-                ?: return null
-
-            return match.groupValues.getOrNull(1)?.toIntOrNull()
-        }
 
         data class LogPrefsSnapshot(
             val requestedLimit: Int,
@@ -1314,7 +1322,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         val stripNativeLibs = prefsSnapshot.stripNativeLibs
         val skipUnusedSplits = prefsSnapshot.skipUnusedSplits
 
-        val runtimeReportedLimit = parseMemoryLimitMb(
+        val runtimeReportedLimit = runtimeReportedMemoryLimitMb ?: parseMemoryLimitMb(
             logMessages.lastOrNull { it.startsWith("Memory limit:") }
                 ?.removePrefix("Memory limit:")
                 ?.trim()
@@ -1322,7 +1330,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         val effectiveLimit = runtimeReportedLimit ?: if (aggressiveLimit) {
             MemoryLimitConfig.maxLimitMb(context)
         } else {
-            requestedLimit
+            MemoryLimitConfig.clampLimitMb(context, requestedLimit)
         }
 
         val isIgnoring = context.getSystemService<PowerManager>()
