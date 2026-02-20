@@ -95,6 +95,7 @@ import app.revanced.manager.ui.viewmodel.ImportExportViewModel
 import app.revanced.manager.ui.viewmodel.ResetDialogState
 import app.revanced.manager.ui.model.navigation.Settings
 import app.revanced.manager.ui.screen.settings.SettingsSearchState
+import app.revanced.manager.util.FilenameUtils
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.uiSafe
 import app.revanced.manager.domain.repository.PatchBundleRepository.BundleImportPhase
@@ -217,7 +218,15 @@ fun ImportExportSettingsScreen(
             importDocumentLauncher.launch(documentMimeForImportPicker(target))
         }
     }
+    val resolveExportFileName = { target: ExportPicker ->
+        defaultExportFileName(
+            picker = target,
+            selectionAction = vm.selectionAction,
+            selectedBundleDisplayTitle = vm.selectedBundle?.displayTitle
+        )
+    }
     val openExportPicker = { target: ExportPicker ->
+        val exportName = resolveExportFileName(target)
         if (useCustomFilePicker) {
             if (fs.hasStoragePermission()) {
                 activeExportPicker = target
@@ -227,7 +236,7 @@ fun ImportExportSettingsScreen(
             }
         } else {
             pendingDocumentExportPicker = target
-            exportDocumentLauncher.launch(target.defaultName)
+            exportDocumentLauncher.launch(exportName)
         }
     }
     val runExport = { picker: ExportPicker, target: Path ->
@@ -495,7 +504,11 @@ fun ImportExportSettingsScreen(
                     fileTypeLabel = fileTypeLabel,
                     confirmButtonText = stringResource(R.string.save),
                     onConfirm = { directory ->
-                        exportFileDialogState = ExportFileDialogState(picker, directory, picker.defaultName)
+                        exportFileDialogState = ExportFileDialogState(
+                            picker = picker,
+                            directory = directory,
+                            fileName = resolveExportFileName(picker)
+                        )
                     }
                 )
             }
@@ -1585,12 +1598,12 @@ private data class PendingExportConfirmation(
 )
 
 private enum class ExportPicker(val defaultName: String) {
-    Keystore("Manager.keystore"),
+    Keystore("urv_keystore.json"),
     Everything("urv_backup_all.json"),
     PatchBundles("urv_patch_bundles.json"),
     PatchProfiles("urv_patch_profiles.json"),
     ManagerSettings("urv_settings.json"),
-    PatchSelection("urv_patch_selection.json")
+    PatchSelection("urv_patch_selection_all.json")
 }
 
 private enum class ImportPicker {
@@ -1610,6 +1623,27 @@ private fun documentMimeForImportPicker(picker: ImportPicker): String =
         ImportPicker.ManagerSettings,
         ImportPicker.Everything,
         ImportPicker.PatchSelection -> "application/json"
+    }
+
+private fun defaultExportFileName(
+    picker: ExportPicker,
+    selectionAction: ImportExportViewModel.SelectionAction?,
+    selectedBundleDisplayTitle: String?
+): String =
+    when (picker) {
+        ExportPicker.PatchSelection -> when (selectionAction) {
+            ImportExportViewModel.SelectionAction.ExportAllBundles -> "urv_patch_selection_all.json"
+            ImportExportViewModel.SelectionAction.ExportBundle -> {
+                val sanitized = FilenameUtils.sanitize(selectedBundleDisplayTitle.orEmpty().trim())
+                if (sanitized.isBlank()) {
+                    "urv_patch_selection.json"
+                } else {
+                    "urv_patch_selection_${sanitized}.json"
+                }
+            }
+            else -> picker.defaultName
+        }
+        else -> picker.defaultName
     }
 
 private fun isValidImportUri(context: android.content.Context, uri: Uri, picker: ImportPicker): Boolean {
