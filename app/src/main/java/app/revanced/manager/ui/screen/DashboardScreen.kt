@@ -1,6 +1,7 @@
 package app.revanced.manager.ui.screen
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -383,9 +384,7 @@ fun DashboardScreen(
                 if (appsSelectionActive) {
                     installedAppsViewModel.clearSelection()
                 } else {
-                    composableScope.launch {
-                        scrollToVisiblePage(previousVisibleTab(currentPage), animated = true)
-                    }
+                    (androidContext as? Activity)?.finish()
                 }
             }
 

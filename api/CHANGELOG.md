@@ -15,6 +15,7 @@
 - Added a versioned per-runtime framework cache keys and updated modern AAPT2 binaries to TechnoIndian builds that are used for SDK 35+ patching
 - Added upstream changes https://github.com/ReVanced/revanced-manager/pull/2916
 - Allow external apps to appear in the Android document provider as options to select files with https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/203
+- Pressing the system back buton on the `Apps` tab now exits the app
 
 
 # Bug fixes

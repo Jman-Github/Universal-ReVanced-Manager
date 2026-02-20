@@ -3,6 +3,8 @@
 
 # Features
 
+- Pressing the system back buton on the `Apps` tab now exits the app
+
 
 # Bug fixes
 
