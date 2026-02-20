@@ -1,3 +1,14 @@
+# v1.8.1-dev.02 (2026-02-20)
+
+
+# Features
+
+
+# Bug fixes
+
+- Fixed issues with loading patches from patch bundles on the discovery
+
+
 # v1.8.1-dev.01 (2026-02-19)
 
 
