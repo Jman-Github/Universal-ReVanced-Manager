@@ -25,6 +25,7 @@
 - Fixed an issue where the export filename variables wouldn't be placed at the cursor position https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/187
 - Fixed the `Effective memory limit` listing in the patcher logs using the `Requested memory limit value` (needs testing)
 - Fixed issues with loading patches from patch bundles on the discovery
+- Fixed an issue where saved app entries would be duplicated when installing a entry marked as `Saved`
 
 
 # v1.8.0 (2026-02-15)

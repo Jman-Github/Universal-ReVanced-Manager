@@ -282,6 +282,8 @@ class InstalledAppInfoViewModel(
         packageNameOverride: String? = null
     ) {
         val app = installedApp ?: return
+        val sourceEntryKey = app.currentPackageName
+        val sourceInstallType = app.installType
         val selection = appliedPatches ?: resolveAppliedSelection(app)
         val selectionPayload = app.selectionPayload
         val targetPackage = packageNameOverride ?: resolveDevicePackageName(app)
@@ -298,7 +300,15 @@ class InstalledAppInfoViewModel(
             selectionPayload = selectionPayload
         )
 
-        val updatedApp = app.copy(
+        // Installing from a saved entry can migrate from a synthetic key
+        // (for example, package__saved_<bundle-hash>) to the real package name.
+        // Remove the old saved row to avoid duplicate saved+installed entries.
+        if (sourceInstallType == InstallType.SAVED && sourceEntryKey != targetPackage) {
+            installedAppRepository.delete(app)
+        }
+
+        val updatedApp = installedAppRepository.get(targetPackage) ?: app.copy(
+            currentPackageName = targetPackage,
             version = resolvedVersion,
             installType = installType
         )
