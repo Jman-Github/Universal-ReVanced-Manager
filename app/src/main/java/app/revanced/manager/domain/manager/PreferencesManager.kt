@@ -143,6 +143,7 @@ class PreferencesManager(
     val patchBundleDiscoveryShowRelease = booleanPreference("patch_bundle_discovery_show_release", true)
     val patchBundleDiscoveryShowPrerelease = booleanPreference("patch_bundle_discovery_show_prerelease", true)
     val patchBundleDiscoveryLatest = booleanPreference("patch_bundle_discovery_latest", false)
+    val patchBundleDiscoverySortMode = stringPreference("patch_bundle_discovery_sort_mode", "UPDATED_DESC")
 
     val acknowledgedDownloaderPlugins = stringSetPreference("acknowledged_downloader_plugins", emptySet())
     val autoSaveDownloaderApks = booleanPreference("auto_save_downloader_apks", true)

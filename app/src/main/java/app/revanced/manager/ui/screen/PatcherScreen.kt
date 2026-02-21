@@ -64,6 +64,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
+import app.revanced.manager.MainActivity
 import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.ui.component.AppScaffold
 import app.revanced.manager.ui.component.AppTopBar
@@ -218,6 +219,14 @@ fun PatcherScreen(
     fun onPageBackToDashboard() = requestLeave(toDashboard = true)
 
     BackHandler(onBack = ::onPageBack)
+
+    val hostActivity = LocalContext.current as? MainActivity
+    DisposableEffect(hostActivity) {
+        hostActivity?.setOnSystemBackLongPress(::onPageBackToDashboard)
+        onDispose {
+            hostActivity?.setOnSystemBackLongPress(null)
+        }
+    }
 
     val steps by remember {
         derivedStateOf {

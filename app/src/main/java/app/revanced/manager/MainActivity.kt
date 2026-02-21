@@ -7,6 +7,7 @@ import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Bundle
 import android.os.Parcelable
+import android.view.KeyEvent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -102,6 +103,16 @@ import java.io.File
 import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
+    private var onSystemBackLongPress: (() -> Unit)? = null
+    private var consumedBackLongPress = false
+
+    fun setOnSystemBackLongPress(handler: (() -> Unit)?) {
+        onSystemBackLongPress = handler
+        if (handler == null) {
+            consumedBackLongPress = false
+        }
+    }
+
     @ExperimentalAnimationApi
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -162,6 +173,35 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         val vm: MainViewModel = getActivityViewModel()
         vm.handleIntent(intent)
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK && onSystemBackLongPress != null && event.repeatCount == 0) {
+            event.startTracking()
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onKeyLongPress(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK && onSystemBackLongPress != null) {
+            consumedBackLongPress = true
+            onSystemBackLongPress?.invoke()
+            return true
+        }
+        return super.onKeyLongPress(keyCode, event)
+    }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK && onSystemBackLongPress != null && event.isTracking) {
+            if (consumedBackLongPress || event.isCanceled) {
+                consumedBackLongPress = false
+                return true
+            }
+            onBackPressedDispatcher.onBackPressed()
+            return true
+        }
+        return super.onKeyUp(keyCode, event)
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {

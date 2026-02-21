@@ -1203,6 +1203,11 @@ Details: %2$s</string>
     <string name="patch_bundle_discovery_release">Release</string>
     <string name="patch_bundle_discovery_prerelease">Prerelease</string>
     <string name="patch_bundle_discovery_latest">Latest</string>
+    <string name="patch_bundle_discovery_sort_title">Sort bundles</string>
+    <string name="patch_bundle_discovery_sort_bundle_name_asc">Bundle name (A to Z)</string>
+    <string name="patch_bundle_discovery_sort_bundle_name_desc">Bundle name (Z to A)</string>
+    <string name="patch_bundle_discovery_sort_updated_desc">Updated (newest first)</string>
+    <string name="patch_bundle_discovery_sort_updated_asc">Updated (oldest first)</string>
     <string name="patch_bundle_discovery_use_latest">Use latest</string>
     <string name="patch_bundle_discovery_use_listed">Use listed</string>
     <string name="patch_bundle_discovery_show_release">Show release</string>
