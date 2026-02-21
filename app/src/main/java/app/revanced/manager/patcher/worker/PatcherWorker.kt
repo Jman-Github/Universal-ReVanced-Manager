@@ -64,6 +64,9 @@ import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.io.File
+import java.util.LinkedHashSet
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import kotlin.math.min
 
 @OptIn(PluginHostApi::class)
@@ -380,9 +383,9 @@ class PatcherWorker(
                 }
 
                 is SelectedApp.Installed -> {
-                    val source = File(pm.getPackageInfo(selectedApp.packageName)!!.applicationInfo!!.sourceDir)
-                    args.setInputFile(source, false, false)
-                    DownloadResult(source, false)
+                    val input = prepareInstalledInput(selectedApp.packageName)
+                    args.setInputFile(input.file, input.needsSplit, false)
+                    input
                 }
             }
             downloadCleanup = downloadResult.cleanup
@@ -697,5 +700,76 @@ class PatcherWorker(
             end -= 1
         }
         return message.take(512) + "\n[truncated]"
+    }
+
+    private suspend fun prepareInstalledInput(packageName: String): DownloadResult = withContext(Dispatchers.IO) {
+        val packageInfo = pm.getPackageInfo(packageName)
+            ?: throw IllegalStateException("Installed package not found: $packageName")
+        val appInfo = packageInfo.applicationInfo
+            ?: throw IllegalStateException("ApplicationInfo missing for package: $packageName")
+        val basePath = appInfo.sourceDir
+            ?: throw IllegalStateException("sourceDir missing for package: $packageName")
+
+        val baseApk = File(basePath)
+        if (!baseApk.exists()) {
+            throw IllegalStateException("Base APK not found for package: $packageName")
+        }
+        val splitApks = appInfo.splitSourceDirs
+            ?.map(::File)
+            ?.filter(File::exists)
+            ?.sortedBy { it.name }
+            .orEmpty()
+
+        if (splitApks.isEmpty()) {
+            return@withContext DownloadResult(baseApk, needsSplit = false)
+        }
+
+        val archiveDir = fs.tempDir.resolve("installed-splits-${System.currentTimeMillis()}").apply { mkdirs() }
+        val archiveFile = archiveDir.resolve("${packageName.replace('.', '_')}.apks")
+
+        buildInstalledSplitArchive(
+            apkFiles = listOf(baseApk) + splitApks,
+            output = archiveFile
+        )
+
+        DownloadResult(
+            file = archiveFile,
+            needsSplit = true,
+            cleanup = { archiveDir.deleteRecursively() }
+        )
+    }
+
+    private fun buildInstalledSplitArchive(apkFiles: List<File>, output: File) {
+        output.parentFile?.mkdirs()
+        val usedNames = LinkedHashSet<String>()
+        var writtenEntries = 0
+        ZipOutputStream(output.outputStream().buffered()).use { zip ->
+            apkFiles.forEachIndexed { index, apk ->
+                if (!apk.exists()) return@forEachIndexed
+                val entryName = uniqueSplitEntryName(apk.name, index, usedNames)
+                zip.putNextEntry(ZipEntry(entryName).apply { time = apk.lastModified() })
+                apk.inputStream().buffered().use { input -> input.copyTo(zip) }
+                zip.closeEntry()
+                writtenEntries++
+            }
+        }
+        if (writtenEntries == 0) {
+            throw IllegalStateException("Failed to build installed split archive: no APK entries written.")
+        }
+    }
+
+    private fun uniqueSplitEntryName(originalName: String, index: Int, usedNames: MutableSet<String>): String {
+        val normalized = if (originalName.endsWith(".apk", ignoreCase = true)) originalName else "$originalName.apk"
+        if (usedNames.add(normalized)) return normalized
+
+        val dot = normalized.lastIndexOf('.')
+        val base = if (dot >= 0) normalized.substring(0, dot) else normalized
+        val ext = if (dot >= 0) normalized.substring(dot) else ".apk"
+        var counter = 1
+        while (true) {
+            val candidate = "${base}_${index}_$counter$ext"
+            if (usedNames.add(candidate)) return candidate
+            counter++
+        }
     }
 }
