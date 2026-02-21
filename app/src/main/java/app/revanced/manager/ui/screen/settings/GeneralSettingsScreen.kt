@@ -449,6 +449,20 @@ fun GeneralSettingsScreen(
                 }
                 ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
+                    targetKey = R.string.disable_patch_selection_tab_swipe,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = prefs.disablePatchSelectionTabSwipe,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.disable_patch_selection_tab_swipe,
+                        description = R.string.disable_patch_selection_tab_swipe_description
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
                     targetKey = R.string.hide_patch_profiles_tab,
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }

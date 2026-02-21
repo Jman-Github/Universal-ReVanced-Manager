@@ -7,6 +7,7 @@
 - Made search queries and filters on the custom file picker persist across sessions https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/209
 - Improved export filenames for patch selections and keystores https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/205
 - Added persistent bundle sorting to the `Patch Bundle Discovery` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/206
+- Added a toggle in Settings > General that disables the swipe guesture on the patch selection screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/212
 
 
 # Bug fixes

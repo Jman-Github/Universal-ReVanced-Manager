@@ -201,8 +201,10 @@
     <string name="theme_reset">Reset all theme settings</string>
     <string name="hide_main_tab_labels">Hide main tab labels</string>
     <string name="hide_main_tab_labels_description">Hide the text labels under the Apps, Patch Bundles, Patch Profiles, and Tools tab icons on the main screen.</string>
-    <string name="disable_main_tab_swipe">Disable tab swipe gesture</string>
-    <string name="disable_main_tab_swipe_description">Disable swiping between main tabs. Use the tab buttons to switch tabs.</string>
+    <string name="disable_main_tab_swipe">Disable main screen tab swipe gesture</string>
+    <string name="disable_main_tab_swipe_description">Disable swiping between tabs on the main screen. Use the tab buttons to switch tabs.</string>
+    <string name="disable_patch_selection_tab_swipe">Disable patch selection tab swipe gesture</string>
+    <string name="disable_patch_selection_tab_swipe_description">Disable swiping between bundle tabs on the patch selection screen. Use the tab buttons to switch bundles.</string>
     <string name="hide_patch_profiles_tab">Hide Patch Profiles tab</string>
     <string name="hide_patch_profiles_tab_description">Hide the Patch Profiles tab on the main screen and disable the Save profile action in patch selection.</string>
     <string name="hide_tools_tab">Hide Tools tab</string>

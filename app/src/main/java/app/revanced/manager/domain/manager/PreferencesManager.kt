@@ -47,6 +47,7 @@ class PreferencesManager(
     val customBackgroundImageOpacity = floatPreference("custom_background_image_opacity", 0.65f)
     val hideMainTabLabels = booleanPreference("hide_main_tab_labels", false)
     val disableMainTabSwipe = booleanPreference("disable_main_tab_swipe", false)
+    val disablePatchSelectionTabSwipe = booleanPreference("disable_patch_selection_tab_swipe", false)
     val showPatchProfilesTab = booleanPreference("show_patch_profiles_tab", true)
     val showToolsTab = booleanPreference("show_tools_tab", true)
     val theme = enumPreference("theme", Theme.SYSTEM)

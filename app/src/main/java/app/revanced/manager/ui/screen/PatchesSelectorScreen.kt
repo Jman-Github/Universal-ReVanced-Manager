@@ -210,6 +210,7 @@ fun PatchesSelectorScreen(
     val sortSettingsModePref by viewModel.prefs.patchSelectionSortSettingsMode.getAsState()
     val searchEngineHost by viewModel.prefs.searchEngineHost.getAsState()
     val showVersionTags by viewModel.prefs.patchSelectionShowVersionTags.getAsState()
+    val disablePatchSelectionTabSwipe by viewModel.prefs.disablePatchSelectionTabSwipe.getAsState()
     val showPatchProfilesTab by viewModel.prefs.showPatchProfilesTab.getAsState()
     val orderedActionKeys = remember(actionOrderPref) {
         val parsed = actionOrderPref
@@ -1568,7 +1569,7 @@ fun PatchesSelectorScreen(
 
                     HorizontalPager(
                         state = pagerState,
-                        userScrollEnabled = true,
+                        userScrollEnabled = !disablePatchSelectionTabSwipe,
                         pageContent = { index ->
                             // Avoid crashing if the lists have not been fully initialized yet.
                             if (index > bundles.lastIndex || bundles.size != patchLazyListStates.size) return@HorizontalPager
