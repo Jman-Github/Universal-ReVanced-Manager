@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.universal.revanced.manager.R
 import app.revanced.manager.data.platform.NetworkInfo
+import app.revanced.manager.domain.manager.BundleUpdateDeliveryMode
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.manager.SearchForUpdatesBackgroundInterval
 import app.revanced.manager.domain.worker.WorkerRepository
@@ -24,7 +25,9 @@ class UpdatesSettingsViewModel(
     val showManagerUpdateDialogOnLaunch = prefs.showManagerUpdateDialogOnLaunch
     val useManagerPrereleases = prefs.useManagerPrereleases
     val allowMeteredUpdates = prefs.allowMeteredUpdates
+    val backgroundManagerUpdateInterval = prefs.searchForManagerUpdatesBackgroundInterval
     val backgroundBundleUpdateInterval = prefs.searchForUpdatesBackgroundInterval
+    val bundleUpdateDeliveryMode = prefs.bundleUpdateDeliveryMode
 
 
     val isConnected: Boolean
@@ -35,6 +38,23 @@ class UpdatesSettingsViewModel(
             uiSafe(app, R.string.failed_to_check_updates, "Failed to update background update schedule") {
                 backgroundBundleUpdateInterval.update(interval)
                 workerRepository.scheduleBundleUpdateNotificationWork(interval)
+            }
+        }
+    }
+
+    fun updateBackgroundManagerUpdateTime(interval: SearchForUpdatesBackgroundInterval) {
+        viewModelScope.launch {
+            uiSafe(app, R.string.failed_to_check_updates, "Failed to update manager background schedule") {
+                backgroundManagerUpdateInterval.update(interval)
+                workerRepository.scheduleManagerUpdateNotificationWork(interval)
+            }
+        }
+    }
+
+    fun updateBundleUpdateDeliveryMode(mode: BundleUpdateDeliveryMode) {
+        viewModelScope.launch {
+            uiSafe(app, R.string.failed_to_check_updates, "Failed to update background delivery mode") {
+                bundleUpdateDeliveryMode.update(mode)
             }
         }
     }

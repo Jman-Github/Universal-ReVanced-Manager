@@ -22,6 +22,9 @@
 - Added a toggle in Settings > General that disables the swipe guesture on the patch selection screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/212
 - Added live patching progress foreground notifications https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/207
 - Set keystores generated with the `Keystore creator` tool to use the maximum possible expiration date
+- Improved the push notification system by using websockets (this avoids having to use FCM) to keep the notifcation worker alive
+- Added push notifications for manager updates https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/214
+- Renamed `Search bundles` on the `Discover patch bundles` screen to `Search by bundle name` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/219
 
 
 # Bug fixes

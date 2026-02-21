@@ -325,6 +325,12 @@ private fun ReVancedManager(
         }
     }
 
+    EventEffect(vm.managerUpdateDeepLinkFlow) {
+        navController.navigate(Update()) {
+            launchSingleTop = true
+        }
+    }
+
     NavHost(
         navController = navController,
         startDestination = Dashboard,

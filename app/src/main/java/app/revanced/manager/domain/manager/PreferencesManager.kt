@@ -25,6 +25,12 @@ enum class SearchForUpdatesBackgroundInterval(val displayName: Int, val value: L
     DAY(R.string.daily, 60 * 24)
 }
 
+enum class BundleUpdateDeliveryMode(val displayName: Int) {
+    AUTO(R.string.bundle_update_delivery_mode_auto),
+    WEBSOCKET_PREFERRED(R.string.bundle_update_delivery_mode_websocket_preferred),
+    POLLING_ONLY(R.string.bundle_update_delivery_mode_polling_only)
+}
+
 class PreferencesManager(
     context: Context
 ) : BasePreferencesManager(context, "settings") {
@@ -108,6 +114,14 @@ class PreferencesManager(
     val searchForUpdatesBackgroundInterval = enumPreference(
         "background_bundle_update_time",
         SearchForUpdatesBackgroundInterval.NEVER
+    )
+    val searchForManagerUpdatesBackgroundInterval = enumPreference(
+        "background_manager_update_time",
+        SearchForUpdatesBackgroundInterval.NEVER
+    )
+    val bundleUpdateDeliveryMode = enumPreference(
+        "bundle_update_delivery_mode",
+        BundleUpdateDeliveryMode.AUTO
     )
     val pendingManagerUpdateVersionCode = intPreference("pending_manager_update_version_code", -1)
 
@@ -200,6 +214,8 @@ class PreferencesManager(
         val showBatteryOptimizationBanner: Boolean? = null,
         val allowPatchProfileBundleOverride: Boolean? = null,
         val searchForUpdatesBackgroundInterval: SearchForUpdatesBackgroundInterval? = null,
+        val searchForManagerUpdatesBackgroundInterval: SearchForUpdatesBackgroundInterval? = null,
+        val bundleUpdateDeliveryMode: BundleUpdateDeliveryMode? = null,
         val disablePatchVersionCompatCheck: Boolean? = null,
         val disableSelectionWarning: Boolean? = null,
         val disableUniversalPatchCheck: Boolean? = null,
@@ -230,86 +246,129 @@ class PreferencesManager(
         val searchEngineHost: String? = null,
     )
 
-    suspend fun exportSettings() = SettingsSnapshot(
-        dynamicColor = dynamicColor.get(),
-        pureBlackTheme = pureBlackTheme.get(),
-        pureBlackOnSystemDark = pureBlackOnSystemDark.get(),
-        customAccentColor = customAccentColor.get(),
-        customThemeColor = customThemeColor.get(),
-        customBackgroundImageUri = customBackgroundImageUri.get(),
-        customBackgroundImageOpacity = customBackgroundImageOpacity.get(),
-        hideMainTabLabels = hideMainTabLabels.get(),
-        disableMainTabSwipe = disableMainTabSwipe.get(),
-        showPatchProfilesTab = showPatchProfilesTab.get(),
-        showToolsTab = showToolsTab.get(),
-        themePresetSelectionName = themePresetSelectionName.get(),
-        themePresetSelectionEnabled = themePresetSelectionEnabled.get(),
-        stripUnusedNativeLibs = stripUnusedNativeLibs.get(),
-        skipUnneededSplitApks = skipUnneededSplitApks.get(),
-        theme = theme.get(),
-        appLanguage = appLanguage.get(),
-        api = api.get(),
-        gitHubPat = gitHubPat.get().takeIf { includeGitHubPatInExports.get() },
-        includeGitHubPatInExports = includeGitHubPatInExports.get(),
-        useProcessRuntime = useProcessRuntime.get(),
-        patcherProcessMemoryLimit = patcherProcessMemoryLimit.get(),
-        patcherProcessMemoryAggressive = patcherProcessMemoryAggressive.get(),
-        autoCollapsePatcherSteps = autoCollapsePatcherSteps.get(),
-        autoExpandRunningSteps = autoExpandRunningSteps.get(),
-        enableSavedApps = enableSavedApps.get(),
-        disableSavedAppOverwrite = disableSavedAppOverwrite.get(),
-        patchedAppExportFormat = patchedAppExportFormat.get(),
-        officialBundleRemoved = officialBundleRemoved.get(),
-        officialBundleCustomDisplayName = officialBundleCustomDisplayName.get(),
-        dashboardBundlesFabCollapsed = dashboardBundlesFabCollapsed.get(),
-        dashboardAppsFabCollapsed = dashboardAppsFabCollapsed.get(),
-        dashboardProgressBannerCollapsed = dashboardProgressBannerCollapsed.get(),
-        allowMeteredUpdates = allowMeteredUpdates.get(),
-        installerPrimary = installerPrimary.get(),
-        installerFallback = installerFallback.get(),
-        installerCustomComponents = installerCustomComponents.get(),
-        installerHiddenComponents = installerHiddenComponents.get(),
-        keystoreAlias = keystoreAlias.get(),
-        keystorePass = keystorePass.get(),
-        keystoreKeyPass = keystoreKeyPass.get(),
-        firstLaunch = firstLaunch.get(),
-        managerAutoUpdates = managerAutoUpdates.get(),
-        showManagerUpdateDialogOnLaunch = showManagerUpdateDialogOnLaunch.get(),
-        useManagerPrereleases = useManagerPrereleases.get(),
-        showBatteryOptimizationBanner = showBatteryOptimizationBanner.get(),
-        allowPatchProfileBundleOverride = allowPatchProfileBundleOverride.get(),
-        searchForUpdatesBackgroundInterval = searchForUpdatesBackgroundInterval.get(),
-        disablePatchVersionCompatCheck = disablePatchVersionCompatCheck.get(),
-        disableSelectionWarning = disableSelectionWarning.get(),
-        disableUniversalPatchCheck = disableUniversalPatchCheck.get(),
-        suggestedVersionSafeguard = suggestedVersionSafeguard.get(),
-        disablePatchSelectionConfirmations = disablePatchSelectionConfirmations.get(),
-        showPatchSelectionSummary = showPatchSelectionSummary.get(),
-        collapsePatchActionsOnSelection = collapsePatchActionsOnSelection.get(),
-        patchSelectionFilterFlags = patchSelectionFilterFlags.get(),
-        patchSelectionSortAlphabetical = patchSelectionSortAlphabetical.get(),
-        patchSelectionSortSettingsMode = patchSelectionSortSettingsMode.get(),
-        patchSelectionActionOrder = patchSelectionActionOrder.get(),
-        patchSelectionHiddenActions = patchSelectionHiddenActions.get(),
-        patchSelectionShowVersionTags = patchSelectionShowVersionTags.get(),
-        patchBundleActionOrder = patchBundleActionOrder.get(),
-        patchBundleHiddenActions = patchBundleHiddenActions.get(),
-        savedAppActionOrder = savedAppActionOrder.get(),
-        savedAppHiddenActions = savedAppHiddenActions.get(),
-        acknowledgedDownloaderPlugins = acknowledgedDownloaderPlugins.get(),
-        autoSaveDownloaderApks = autoSaveDownloaderApks.get(),
-        pathSelectorFavorites = pathSelectorFavorites.get(),
-        pathSelectorLastDirectory = pathSelectorLastDirectory.get().takeIf { it.isNotBlank() },
-        appSelectorFilterInstalledOnly = appSelectorFilterInstalledOnly.get(),
-        appSelectorFilterPatchesAvailable = appSelectorFilterPatchesAvailable.get(),
-        useCustomFilePicker = useCustomFilePicker.get(),
-        patchBundleDiscoveryShowRelease = patchBundleDiscoveryShowRelease.get(),
-        patchBundleDiscoveryShowPrerelease = patchBundleDiscoveryShowPrerelease.get(),
-        patchBundleDiscoveryLatest = patchBundleDiscoveryLatest.get(),
-        searchEngineHost = searchEngineHost.get(),
-    )
+    suspend fun exportSettings(): SettingsSnapshot {
+        var snapshot = SettingsSnapshot()
+        snapshot = exportAppearanceSettings(snapshot)
+        snapshot = exportCoreUpdateSettings(snapshot)
+        snapshot = exportRuntimeAndInstallerSettings(snapshot)
+        snapshot = exportPatchingSettings(snapshot)
+        snapshot = exportDiscoverySettings(snapshot)
+        return snapshot
+    }
 
     suspend fun importSettings(snapshot: SettingsSnapshot) = edit {
+        importAppearanceSettings(snapshot)
+        importCoreUpdateSettings(snapshot)
+        importRuntimeAndInstallerSettings(snapshot)
+        importPatchingSettings(snapshot)
+        importDiscoverySettings(snapshot)
+    }
+
+    private suspend fun exportAppearanceSettings(snapshot: SettingsSnapshot): SettingsSnapshot {
+        return snapshot.copy(
+            dynamicColor = dynamicColor.get(),
+            pureBlackTheme = pureBlackTheme.get(),
+            pureBlackOnSystemDark = pureBlackOnSystemDark.get(),
+            customAccentColor = customAccentColor.get(),
+            customThemeColor = customThemeColor.get(),
+            customBackgroundImageUri = customBackgroundImageUri.get(),
+            customBackgroundImageOpacity = customBackgroundImageOpacity.get(),
+            hideMainTabLabels = hideMainTabLabels.get(),
+            disableMainTabSwipe = disableMainTabSwipe.get(),
+            showPatchProfilesTab = showPatchProfilesTab.get(),
+            showToolsTab = showToolsTab.get(),
+            themePresetSelectionName = themePresetSelectionName.get(),
+            themePresetSelectionEnabled = themePresetSelectionEnabled.get(),
+            theme = theme.get(),
+            appLanguage = appLanguage.get()
+        )
+    }
+
+    private suspend fun exportCoreUpdateSettings(snapshot: SettingsSnapshot): SettingsSnapshot {
+        val exportPat = includeGitHubPatInExports.get()
+        return snapshot.copy(
+            api = api.get(),
+            gitHubPat = gitHubPat.get().takeIf { exportPat },
+            includeGitHubPatInExports = exportPat,
+            firstLaunch = firstLaunch.get(),
+            managerAutoUpdates = managerAutoUpdates.get(),
+            showManagerUpdateDialogOnLaunch = showManagerUpdateDialogOnLaunch.get(),
+            useManagerPrereleases = useManagerPrereleases.get(),
+            showBatteryOptimizationBanner = showBatteryOptimizationBanner.get(),
+            allowPatchProfileBundleOverride = allowPatchProfileBundleOverride.get(),
+            searchForUpdatesBackgroundInterval = searchForUpdatesBackgroundInterval.get(),
+            searchForManagerUpdatesBackgroundInterval = searchForManagerUpdatesBackgroundInterval.get(),
+            bundleUpdateDeliveryMode = bundleUpdateDeliveryMode.get(),
+            allowMeteredUpdates = allowMeteredUpdates.get()
+        )
+    }
+
+    private suspend fun exportRuntimeAndInstallerSettings(snapshot: SettingsSnapshot): SettingsSnapshot {
+        return snapshot.copy(
+            useProcessRuntime = useProcessRuntime.get(),
+            stripUnusedNativeLibs = stripUnusedNativeLibs.get(),
+            skipUnneededSplitApks = skipUnneededSplitApks.get(),
+            patcherProcessMemoryLimit = patcherProcessMemoryLimit.get(),
+            patcherProcessMemoryAggressive = patcherProcessMemoryAggressive.get(),
+            autoCollapsePatcherSteps = autoCollapsePatcherSteps.get(),
+            autoExpandRunningSteps = autoExpandRunningSteps.get(),
+            enableSavedApps = enableSavedApps.get(),
+            disableSavedAppOverwrite = disableSavedAppOverwrite.get(),
+            patchedAppExportFormat = patchedAppExportFormat.get(),
+            installerPrimary = installerPrimary.get(),
+            installerFallback = installerFallback.get(),
+            installerCustomComponents = installerCustomComponents.get(),
+            installerHiddenComponents = installerHiddenComponents.get(),
+            keystoreAlias = keystoreAlias.get(),
+            keystorePass = keystorePass.get(),
+            keystoreKeyPass = keystoreKeyPass.get(),
+            dashboardBundlesFabCollapsed = dashboardBundlesFabCollapsed.get(),
+            dashboardAppsFabCollapsed = dashboardAppsFabCollapsed.get(),
+            dashboardProgressBannerCollapsed = dashboardProgressBannerCollapsed.get()
+        )
+    }
+
+    private suspend fun exportPatchingSettings(snapshot: SettingsSnapshot): SettingsSnapshot {
+        return snapshot.copy(
+            officialBundleRemoved = officialBundleRemoved.get(),
+            officialBundleCustomDisplayName = officialBundleCustomDisplayName.get(),
+            disablePatchVersionCompatCheck = disablePatchVersionCompatCheck.get(),
+            disableSelectionWarning = disableSelectionWarning.get(),
+            disableUniversalPatchCheck = disableUniversalPatchCheck.get(),
+            suggestedVersionSafeguard = suggestedVersionSafeguard.get(),
+            disablePatchSelectionConfirmations = disablePatchSelectionConfirmations.get(),
+            showPatchSelectionSummary = showPatchSelectionSummary.get(),
+            collapsePatchActionsOnSelection = collapsePatchActionsOnSelection.get(),
+            patchSelectionFilterFlags = patchSelectionFilterFlags.get(),
+            patchSelectionSortAlphabetical = patchSelectionSortAlphabetical.get(),
+            patchSelectionSortSettingsMode = patchSelectionSortSettingsMode.get(),
+            patchSelectionActionOrder = patchSelectionActionOrder.get(),
+            patchSelectionHiddenActions = patchSelectionHiddenActions.get(),
+            patchSelectionShowVersionTags = patchSelectionShowVersionTags.get(),
+            patchBundleActionOrder = patchBundleActionOrder.get(),
+            patchBundleHiddenActions = patchBundleHiddenActions.get(),
+            savedAppActionOrder = savedAppActionOrder.get(),
+            savedAppHiddenActions = savedAppHiddenActions.get()
+        )
+    }
+
+    private suspend fun exportDiscoverySettings(snapshot: SettingsSnapshot): SettingsSnapshot {
+        return snapshot.copy(
+            acknowledgedDownloaderPlugins = acknowledgedDownloaderPlugins.get(),
+            autoSaveDownloaderApks = autoSaveDownloaderApks.get(),
+            pathSelectorFavorites = pathSelectorFavorites.get(),
+            pathSelectorLastDirectory = pathSelectorLastDirectory.get().takeIf { it.isNotBlank() },
+            appSelectorFilterInstalledOnly = appSelectorFilterInstalledOnly.get(),
+            appSelectorFilterPatchesAvailable = appSelectorFilterPatchesAvailable.get(),
+            useCustomFilePicker = useCustomFilePicker.get(),
+            patchBundleDiscoveryShowRelease = patchBundleDiscoveryShowRelease.get(),
+            patchBundleDiscoveryShowPrerelease = patchBundleDiscoveryShowPrerelease.get(),
+            patchBundleDiscoveryLatest = patchBundleDiscoveryLatest.get(),
+            searchEngineHost = searchEngineHost.get()
+        )
+    }
+
+    private fun EditorContext.importAppearanceSettings(snapshot: SettingsSnapshot) {
         snapshot.dynamicColor?.let { dynamicColor.value = it }
         snapshot.pureBlackTheme?.let { pureBlackTheme.value = it }
         snapshot.pureBlackOnSystemDark?.let { pureBlackOnSystemDark.value = it }
@@ -323,34 +382,14 @@ class PreferencesManager(
         snapshot.showToolsTab?.let { showToolsTab.value = it }
         snapshot.themePresetSelectionName?.let { themePresetSelectionName.value = it }
         snapshot.themePresetSelectionEnabled?.let { themePresetSelectionEnabled.value = it }
-        snapshot.stripUnusedNativeLibs?.let { stripUnusedNativeLibs.value = it }
-        snapshot.skipUnneededSplitApks?.let { skipUnneededSplitApks.value = it }
         snapshot.theme?.let { theme.value = it }
         snapshot.appLanguage?.let { appLanguage.value = it }
+    }
+
+    private fun EditorContext.importCoreUpdateSettings(snapshot: SettingsSnapshot) {
         snapshot.api?.let { api.value = it }
         snapshot.gitHubPat?.let { gitHubPat.value = it }
         snapshot.includeGitHubPatInExports?.let { includeGitHubPatInExports.value = it }
-        snapshot.useProcessRuntime?.let { useProcessRuntime.value = it }
-        snapshot.patcherProcessMemoryLimit?.let { patcherProcessMemoryLimit.value = it }
-        snapshot.patcherProcessMemoryAggressive?.let { patcherProcessMemoryAggressive.value = it }
-        snapshot.autoCollapsePatcherSteps?.let { autoCollapsePatcherSteps.value = it }
-        snapshot.autoExpandRunningSteps?.let { autoExpandRunningSteps.value = it }
-        snapshot.enableSavedApps?.let { enableSavedApps.value = it }
-        snapshot.disableSavedAppOverwrite?.let { disableSavedAppOverwrite.value = it }
-        snapshot.patchedAppExportFormat?.let { patchedAppExportFormat.value = it }
-        snapshot.officialBundleRemoved?.let { officialBundleRemoved.value = it }
-        snapshot.officialBundleCustomDisplayName?.let { officialBundleCustomDisplayName.value = it }
-        snapshot.dashboardBundlesFabCollapsed?.let { dashboardBundlesFabCollapsed.value = it }
-        snapshot.dashboardAppsFabCollapsed?.let { dashboardAppsFabCollapsed.value = it }
-        snapshot.dashboardProgressBannerCollapsed?.let { dashboardProgressBannerCollapsed.value = it }
-        snapshot.allowMeteredUpdates?.let { allowMeteredUpdates.value = it }
-        snapshot.installerPrimary?.let { installerPrimary.value = it }
-        snapshot.installerFallback?.let { installerFallback.value = it }
-        snapshot.installerCustomComponents?.let { installerCustomComponents.value = it }
-        snapshot.installerHiddenComponents?.let { installerHiddenComponents.value = it }
-        snapshot.keystoreAlias?.let { keystoreAlias.value = it }
-        snapshot.keystorePass?.let { keystorePass.value = it }
-        snapshot.keystoreKeyPass?.let { keystoreKeyPass.value = it }
         snapshot.firstLaunch?.let { firstLaunch.value = it }
         snapshot.managerAutoUpdates?.let { managerAutoUpdates.value = it }
         snapshot.showManagerUpdateDialogOnLaunch?.let {
@@ -362,6 +401,41 @@ class PreferencesManager(
         snapshot.searchForUpdatesBackgroundInterval?.let {
             searchForUpdatesBackgroundInterval.value = it
         }
+        snapshot.searchForManagerUpdatesBackgroundInterval?.let {
+            searchForManagerUpdatesBackgroundInterval.value = it
+        }
+        snapshot.bundleUpdateDeliveryMode?.let {
+            bundleUpdateDeliveryMode.value = it
+        }
+        snapshot.allowMeteredUpdates?.let { allowMeteredUpdates.value = it }
+    }
+
+    private fun EditorContext.importRuntimeAndInstallerSettings(snapshot: SettingsSnapshot) {
+        snapshot.useProcessRuntime?.let { useProcessRuntime.value = it }
+        snapshot.stripUnusedNativeLibs?.let { stripUnusedNativeLibs.value = it }
+        snapshot.skipUnneededSplitApks?.let { skipUnneededSplitApks.value = it }
+        snapshot.patcherProcessMemoryLimit?.let { patcherProcessMemoryLimit.value = it }
+        snapshot.patcherProcessMemoryAggressive?.let { patcherProcessMemoryAggressive.value = it }
+        snapshot.autoCollapsePatcherSteps?.let { autoCollapsePatcherSteps.value = it }
+        snapshot.autoExpandRunningSteps?.let { autoExpandRunningSteps.value = it }
+        snapshot.enableSavedApps?.let { enableSavedApps.value = it }
+        snapshot.disableSavedAppOverwrite?.let { disableSavedAppOverwrite.value = it }
+        snapshot.patchedAppExportFormat?.let { patchedAppExportFormat.value = it }
+        snapshot.installerPrimary?.let { installerPrimary.value = it }
+        snapshot.installerFallback?.let { installerFallback.value = it }
+        snapshot.installerCustomComponents?.let { installerCustomComponents.value = it }
+        snapshot.installerHiddenComponents?.let { installerHiddenComponents.value = it }
+        snapshot.keystoreAlias?.let { keystoreAlias.value = it }
+        snapshot.keystorePass?.let { keystorePass.value = it }
+        snapshot.keystoreKeyPass?.let { keystoreKeyPass.value = it }
+        snapshot.dashboardBundlesFabCollapsed?.let { dashboardBundlesFabCollapsed.value = it }
+        snapshot.dashboardAppsFabCollapsed?.let { dashboardAppsFabCollapsed.value = it }
+        snapshot.dashboardProgressBannerCollapsed?.let { dashboardProgressBannerCollapsed.value = it }
+    }
+
+    private fun EditorContext.importPatchingSettings(snapshot: SettingsSnapshot) {
+        snapshot.officialBundleRemoved?.let { officialBundleRemoved.value = it }
+        snapshot.officialBundleCustomDisplayName?.let { officialBundleCustomDisplayName.value = it }
         snapshot.disablePatchVersionCompatCheck?.let { disablePatchVersionCompatCheck.value = it }
         snapshot.disableSelectionWarning?.let { disableSelectionWarning.value = it }
         snapshot.disableUniversalPatchCheck?.let { disableUniversalPatchCheck.value = it }
@@ -379,6 +453,9 @@ class PreferencesManager(
         snapshot.patchBundleHiddenActions?.let { patchBundleHiddenActions.value = it }
         snapshot.savedAppActionOrder?.let { savedAppActionOrder.value = it }
         snapshot.savedAppHiddenActions?.let { savedAppHiddenActions.value = it }
+    }
+
+    private fun EditorContext.importDiscoverySettings(snapshot: SettingsSnapshot) {
         snapshot.acknowledgedDownloaderPlugins?.let { acknowledgedDownloaderPlugins.value = it }
         snapshot.autoSaveDownloaderApks?.let { autoSaveDownloaderApks.value = it }
         snapshot.pathSelectorFavorites?.let { favorites ->

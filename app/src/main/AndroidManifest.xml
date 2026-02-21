@@ -79,6 +79,15 @@
                 />
         </service>
 
+        <service
+            android:name="app.revanced.manager.service.BundleUpdateWebSocketService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="bundle_update_websocket" />
+        </service>
+
         <provider
             android:name="app.revanced.manager.domain.installer.InstallerFileProvider"
             android:authorities="${applicationId}.installerfileprovider"

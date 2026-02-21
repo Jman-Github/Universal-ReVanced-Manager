@@ -92,9 +92,15 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                     R.string.update_checking_manager,
                     R.string.show_manager_update_dialog_on_launch,
                     R.string.manager_prereleases,
+                    R.string.background_manager_update,
                     R.string.background_bundle_update,
                     R.string.background_radio_menu_title,
-                    R.string.background_bundle_ask_notification
+                    R.string.background_bundle_ask_notification,
+                    R.string.bundle_update_delivery_mode,
+                    R.string.bundle_update_delivery_mode_dialog_title,
+                    R.string.bundle_update_delivery_mode_auto,
+                    R.string.bundle_update_delivery_mode_websocket_preferred,
+                    R.string.bundle_update_delivery_mode_polling_only
                 )
             ),
             Section(
@@ -221,7 +227,9 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.update_checking_manager, R.string.update_checking_manager_description, R.string.updates, Settings.Updates),
             SearchEntry(R.string.show_manager_update_dialog_on_launch, R.string.show_manager_update_dialog_on_launch_description, R.string.updates, Settings.Updates),
             SearchEntry(R.string.manager_prereleases, R.string.manager_prereleases_description, R.string.updates, Settings.Updates),
+            SearchEntry(R.string.background_manager_update, R.string.background_manager_update_description, R.string.updates, Settings.Updates),
             SearchEntry(R.string.background_bundle_update, R.string.background_bundle_update_description, R.string.updates, Settings.Updates),
+            SearchEntry(R.string.bundle_update_delivery_mode, R.string.bundle_update_delivery_mode_description, R.string.updates, Settings.Updates),
             SearchEntry(R.string.downloader_auto_save_title, R.string.downloader_auto_save_description, R.string.downloads, Settings.Downloads),
             SearchEntry(R.string.downloaded_apps_export, null, R.string.downloads, Settings.Downloads),
             SearchEntry(R.string.import_keystore, R.string.import_keystore_description, R.string.import_export, Settings.ImportExport),
