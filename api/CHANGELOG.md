@@ -21,6 +21,7 @@
 - Added persistent bundle sorting to the `Patch Bundle Discovery` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/206
 - Added a toggle in Settings > General that disables the swipe guesture on the patch selection screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/212
 - Added live patching progress foreground notifications https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/207
+- Set keystores generated with the `Keystore creator` tool to use the maximum possible expiration date
 
 
 # Bug fixes
