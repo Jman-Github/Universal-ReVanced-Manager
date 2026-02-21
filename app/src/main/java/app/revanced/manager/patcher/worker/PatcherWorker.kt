@@ -59,10 +59,12 @@ import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.tag
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.io.File
+import kotlin.math.min
 
 @OptIn(PluginHostApi::class)
 class PatcherWorker(
@@ -82,6 +84,16 @@ class PatcherWorker(
     private var activeRuntime: app.revanced.manager.patcher.runtime.Runtime? = null
     private var activeMorpheRuntime: app.revanced.manager.patcher.runtime.morphe.MorpheRuntime? = null
     private var activeAmpleRuntime: app.revanced.manager.patcher.runtime.ample.AmpleRuntime? = null
+    private val notificationManager by lazy {
+        applicationContext.getSystemService(NotificationManager::class.java)
+    }
+    private val patchingServiceType by lazy {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+        } else {
+            0
+        }
+    }
 
     class Args(
         val input: SelectedApp,
@@ -96,14 +108,21 @@ class PatcherWorker(
         val packageName get() = input.packageName
     }
 
-    override suspend fun getForegroundInfo() =
-        ForegroundInfo(
-            1,
-            createNotification(),
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0
-        )
+    override suspend fun getForegroundInfo() = createForegroundInfo(event = null, totalPatchCount = 0)
 
-    private fun createNotification(): Notification {
+    private fun createForegroundInfo(
+        event: ProgressEvent?,
+        totalPatchCount: Int
+    ): ForegroundInfo = ForegroundInfo(
+        NOTIFICATION_ID,
+        createNotification(event, totalPatchCount),
+        patchingServiceType
+    )
+
+    private fun createNotification(
+        event: ProgressEvent?,
+        totalPatchCount: Int
+    ): Notification {
         val notificationIntent = Intent(applicationContext, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
@@ -111,24 +130,122 @@ class PatcherWorker(
             applicationContext, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE
         )
         val channel = NotificationChannel(
-            "revanced-patcher-patching",
+            PATCHING_NOTIFICATION_CHANNEL_ID,
             applicationContext.getString(R.string.notification_channel_patching_name),
             NotificationManager.IMPORTANCE_LOW
         )
         channel.description =
             applicationContext.getString(R.string.notification_channel_patching_description)
-        val notificationManager =
-            applicationContext.getSystemService(NotificationManager::class.java)
         notificationManager.createNotificationChannel(channel)
+        val progress = notificationProgress(event, totalPatchCount)
+        val contentText = notificationContentText(event, totalPatchCount)
         return Notification.Builder(applicationContext, channel.id)
             .setContentTitle(applicationContext.getText(R.string.patcher_notification_title))
-            .setContentText(applicationContext.getText(R.string.patcher_notification_text))
+            .setContentText(contentText)
             .setSmallIcon(Icon.createWithResource(applicationContext, R.drawable.ic_notification))
             .setContentIntent(pendingIntent)
             .setCategory(Notification.CATEGORY_SERVICE)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
+            .apply {
+                if (progress != null) {
+                    setProgress(progress.max, progress.current, progress.indeterminate)
+                } else {
+                    setProgress(0, 0, false)
+                }
+            }
             .build()
+    }
+
+    private fun notificationContentText(
+        event: ProgressEvent?,
+        totalPatchCount: Int
+    ): CharSequence {
+        val stepText = event?.stepId?.let { step ->
+            when (step) {
+                StepId.DownloadAPK -> applicationContext.getString(R.string.download_apk)
+                StepId.LoadPatches -> applicationContext.getString(R.string.patcher_step_load_patches)
+                StepId.PrepareSplitApk -> applicationContext.getString(R.string.patcher_step_prepare_split_apk)
+                StepId.ReadAPK -> applicationContext.getString(R.string.patcher_step_unpack)
+                StepId.ExecutePatches -> applicationContext.getString(R.string.patcher_step_group_patching)
+                is StepId.ExecutePatch -> {
+                    if (totalPatchCount > 0) {
+                        val current = (step.index + 1).coerceIn(1, totalPatchCount)
+                        "${applicationContext.getString(R.string.patcher_step_group_patching)} ($current/$totalPatchCount)"
+                    } else {
+                        applicationContext.getString(R.string.patcher_step_group_patching)
+                    }
+                }
+                StepId.WriteAPK -> applicationContext.getString(R.string.patcher_step_group_saving)
+                StepId.SignAPK -> applicationContext.getString(R.string.patcher_step_sign_apk)
+            }
+        }
+
+        val detail = when (event) {
+            is ProgressEvent.Progress -> event.message?.takeIf { it.isNotBlank() }
+            else -> null
+        }
+
+        return when {
+            stepText != null && detail != null -> "$stepText • $detail"
+            stepText != null -> stepText
+            else -> applicationContext.getText(R.string.patcher_notification_text)
+        }
+    }
+
+    private data class NotificationProgress(
+        val max: Int,
+        val current: Int,
+        val indeterminate: Boolean
+    )
+
+    private fun notificationProgress(
+        event: ProgressEvent?,
+        totalPatchCount: Int
+    ): NotificationProgress? {
+        if (event == null) return NotificationProgress(max = 0, current = 0, indeterminate = true)
+        return when (event) {
+            is ProgressEvent.Started -> NotificationProgress(max = 0, current = 0, indeterminate = true)
+            is ProgressEvent.Progress -> {
+                val total = event.total?.takeIf { it > 0L }
+                val current = event.current
+                if (total != null && current != null) {
+                    val maxInt = min(total, Int.MAX_VALUE.toLong()).toInt()
+                    val curInt = min(current, maxInt.toLong()).toInt()
+                    NotificationProgress(max = maxInt, current = curInt, indeterminate = false)
+                } else {
+                    NotificationProgress(max = 0, current = 0, indeterminate = true)
+                }
+            }
+            is ProgressEvent.Completed -> {
+                when (val step = event.stepId) {
+                    is StepId.ExecutePatch -> {
+                        if (totalPatchCount <= 0) {
+                            NotificationProgress(max = 0, current = 0, indeterminate = true)
+                        } else {
+                            val current = (step.index + 1).coerceIn(0, totalPatchCount)
+                            NotificationProgress(
+                                max = totalPatchCount,
+                                current = current,
+                                indeterminate = false
+                            )
+                        }
+                    }
+                    else -> NotificationProgress(max = 0, current = 0, indeterminate = true)
+                }
+            }
+            is ProgressEvent.Failed -> null
+        }
+    }
+
+    private fun updateForegroundNotification(event: ProgressEvent?, totalPatchCount: Int) {
+        try {
+            runBlocking {
+                setForeground(createForegroundInfo(event, totalPatchCount))
+            }
+        } catch (e: Exception) {
+            Log.d(tag, "Failed to update foreground notification:", e)
+        }
     }
 
     override suspend fun doWork(): Result {
@@ -144,13 +261,6 @@ class PatcherWorker(
             return Result.failure()
         }
 
-        try {
-            // This does not always show up for some reason.
-            setForeground(getForegroundInfo())
-        } catch (e: Exception) {
-            Log.d(tag, "Failed to set foreground info:", e)
-        }
-
         val wakeLock: PowerManager.WakeLock =
             (applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager)
                 .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$tag::Patcher")
@@ -160,9 +270,16 @@ class PatcherWorker(
                 }
 
         val args = workerRepository.claimInput(this)
+        val totalPatchCount = args.selectedPatches.values.sumOf { it.size }
+
+        try {
+            setForeground(createForegroundInfo(event = null, totalPatchCount = totalPatchCount))
+        } catch (e: Exception) {
+            Log.d(tag, "Failed to set foreground info:", e)
+        }
 
         val result = try {
-            runPatcher(args)
+            runPatcher(args, totalPatchCount)
         } finally {
             wakeLock.release()
         }
@@ -174,9 +291,13 @@ class PatcherWorker(
         return result
     }
 
-    private suspend fun runPatcher(args: Args): Result {
+    private suspend fun runPatcher(args: Args, totalPatchCount: Int): Result {
         val patchedApk = fs.tempDir.resolve("patched.apk")
         var downloadCleanup: (() -> Unit)? = null
+        val eventDispatcher: (ProgressEvent) -> Unit = { event ->
+            args.onEvent(event)
+            updateForegroundNotification(event, totalPatchCount)
+        }
 
         return try {
             val startTime = System.currentTimeMillis()
@@ -199,7 +320,7 @@ class PatcherWorker(
                     prefs.suggestedVersionSafeguard.get(),
                     !prefs.disablePatchVersionCompatCheck.get(),
                     onDownload = { progress ->
-                        args.onEvent(
+                        eventDispatcher(
                             ProgressEvent.Progress(
                                 stepId = StepId.DownloadAPK,
                                 current = progress.first,
@@ -213,12 +334,12 @@ class PatcherWorker(
                 }
 
             val downloadResult = when (val selectedApp = args.input) {
-                is SelectedApp.Download -> runStep(StepId.DownloadAPK, args.onEvent) {
+                is SelectedApp.Download -> runStep(StepId.DownloadAPK, eventDispatcher) {
                     val (plugin, data) = downloaderPluginRepository.unwrapParceledData(selectedApp.data)
                     download(plugin, data)
                 }
 
-                is SelectedApp.Search -> runStep(StepId.DownloadAPK, args.onEvent) {
+                is SelectedApp.Search -> runStep(StepId.DownloadAPK, eventDispatcher) {
                     downloaderPluginRepository.loadedPluginsFlow.first()
                         .firstNotNullOfOrNull { plugin ->
                             try {
@@ -272,7 +393,7 @@ class PatcherWorker(
             val stripNativeLibs = prefs.stripUnusedNativeLibs.get()
             val skipUnneededSplits = prefs.skipUnneededSplitApks.get()
             val inputIsSplitArchive = SplitApkPreparer.isSplitArchive(inputFile)
-            val selectedCount = args.selectedPatches.values.sumOf { it.size }
+            val selectedCount = totalPatchCount
             val experimentalRuntimeEnabled = prefs.useProcessRuntime.get()
             val requestedLimit = prefs.patcherProcessMemoryLimit.get()
             val aggressiveLimit = prefs.patcherProcessMemoryAggressive.get()
@@ -312,7 +433,7 @@ class PatcherWorker(
                         args.selectedPatches,
                         args.options,
                         args.logger,
-                        args.onEvent,
+                        eventDispatcher,
                         stripNativeLibs,
                         skipUnneededSplits
                     )
@@ -331,7 +452,7 @@ class PatcherWorker(
                         args.selectedPatches,
                         args.options,
                         args.logger,
-                        args.onEvent,
+                        eventDispatcher,
                         stripNativeLibs,
                         skipUnneededSplits
                     )
@@ -347,7 +468,7 @@ class PatcherWorker(
                             args.selectedPatches,
                             args.options,
                             args.logger,
-                            args.onEvent,
+                            eventDispatcher,
                             stripNativeLibs,
                             skipUnneededSplits
                         )
@@ -363,7 +484,7 @@ class PatcherWorker(
                                 args.selectedPatches,
                                 args.options,
                                 args.logger,
-                                args.onEvent,
+                                eventDispatcher,
                                 stripNativeLibs,
                                 skipUnneededSplits
                             )
@@ -374,7 +495,7 @@ class PatcherWorker(
                 }
             }
 
-            runStep(StepId.SignAPK, args.onEvent) {
+            runStep(StepId.SignAPK, eventDispatcher) {
                 keystoreManager.sign(patchedApk, File(args.output))
             }
 
@@ -400,7 +521,7 @@ class PatcherWorker(
                 R.string.patcher_process_exit_message,
                 e.exitCode
             )
-            args.onEvent(ProgressEvent.Failed(null, Exception(message).toRemoteError()))
+            eventDispatcher(ProgressEvent.Failed(null, Exception(message).toRemoteError()))
             val previousLimit = prefs.patcherProcessMemoryLimit.get()
             Result.failure(
                 workDataOf(
@@ -414,7 +535,7 @@ class PatcherWorker(
                 tag,
                 "An exception occurred in the remote process while patching. ${e.originalStackTrace}".logFmt()
             )
-            args.onEvent(
+            eventDispatcher(
                 ProgressEvent.Failed(
                     null,
                     RemoteError(
@@ -437,7 +558,7 @@ class PatcherWorker(
                 R.string.patcher_process_exit_message,
                 e.exitCode
             )
-            args.onEvent(ProgressEvent.Failed(null, Exception(message).toRemoteError()))
+            eventDispatcher(ProgressEvent.Failed(null, Exception(message).toRemoteError()))
             val previousLimit = prefs.patcherProcessMemoryLimit.get()
             Result.failure(
                 workDataOf(
@@ -451,7 +572,7 @@ class PatcherWorker(
                 tag,
                 "An exception occurred in the Morphe remote process while patching. ${e.originalStackTrace}".logFmt()
             )
-            args.onEvent(
+            eventDispatcher(
                 ProgressEvent.Failed(
                     null,
                     RemoteError(
@@ -469,7 +590,7 @@ class PatcherWorker(
                 tag,
                 "An exception occurred in the Morphe bridge runtime while patching. ${e.originalStackTrace}".logFmt()
             )
-            args.onEvent(
+            eventDispatcher(
                 ProgressEvent.Failed(
                     null,
                     RemoteError(
@@ -492,7 +613,7 @@ class PatcherWorker(
                 R.string.patcher_process_exit_message,
                 e.exitCode
             )
-            args.onEvent(ProgressEvent.Failed(null, Exception(message).toRemoteError()))
+            eventDispatcher(ProgressEvent.Failed(null, Exception(message).toRemoteError()))
             val previousLimit = prefs.patcherProcessMemoryLimit.get()
             Result.failure(
                 workDataOf(
@@ -506,7 +627,7 @@ class PatcherWorker(
                 tag,
                 "An exception occurred in the Ample remote process while patching. ${e.originalStackTrace}".logFmt()
             )
-            args.onEvent(
+            eventDispatcher(
                 ProgressEvent.Failed(
                     null,
                     RemoteError(
@@ -524,7 +645,7 @@ class PatcherWorker(
                 tag,
                 "An exception occurred in the Ample bridge runtime while patching. ${e.originalStackTrace}".logFmt()
             )
-            args.onEvent(
+            eventDispatcher(
                 ProgressEvent.Failed(
                     null,
                     RemoteError(
@@ -539,7 +660,7 @@ class PatcherWorker(
             )
         } catch (e: Exception) {
             Log.e(tag, "An exception occurred while patching".logFmt(), e)
-            args.onEvent(ProgressEvent.Failed(null, e.toRemoteError()))
+            eventDispatcher(ProgressEvent.Failed(null, e.toRemoteError()))
             Result.failure(
                 workDataOf(PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(e.stackTraceToString()))
             )
@@ -555,6 +676,8 @@ class PatcherWorker(
     companion object {
         private const val LOG_PREFIX = "[Worker]"
         private fun String.logFmt() = "$LOG_PREFIX $this"
+        private const val PATCHING_NOTIFICATION_CHANNEL_ID = "revanced-patcher-patching"
+        private const val NOTIFICATION_ID = 1
         const val PROCESS_EXIT_CODE_KEY = "process_exit_code"
         const val PROCESS_PREVIOUS_LIMIT_KEY = "process_previous_limit"
         const val PROCESS_FAILURE_MESSAGE_KEY = "process_failure_message"
