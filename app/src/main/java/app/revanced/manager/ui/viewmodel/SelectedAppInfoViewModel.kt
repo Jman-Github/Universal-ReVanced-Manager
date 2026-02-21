@@ -892,6 +892,9 @@ class SelectedAppInfoViewModel(
 
     private suspend fun resolveLocalPackageInfo(file: File): PackageInfoResolution {
         if (!file.exists()) return PackageInfoResolution(null)
+        if (file.extension.lowercase(Locale.ROOT) == "apk") {
+            return PackageInfoResolution(pm.getPackageInfo(file))
+        }
         if (!SplitApkPreparer.isSplitArchive(file)) {
             return PackageInfoResolution(pm.getPackageInfo(file))
         }

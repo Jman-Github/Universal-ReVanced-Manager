@@ -27,6 +27,9 @@ object SplitApkPreparer {
         if (file == null || !file.exists()) return false
         val extension = file.extension.lowercase(Locale.ROOT)
         if (extension in SUPPORTED_EXTENSIONS) return true
+        // Treat generic .zip as split only when it actually looks like a split container.
+        // Plain APKs can embed runtime APKs under assets/ and must not be treated as split archives.
+        if (extension != "zip") return false
         return hasEmbeddedApkEntries(file)
     }
 
@@ -113,10 +116,24 @@ object SplitApkPreparer {
         runCatching {
             ZipFile(file).use { zip ->
                 zip.entries().asSequence().any { entry ->
-                    !entry.isDirectory && entry.name.endsWith(".apk", ignoreCase = true)
+                    !entry.isDirectory &&
+                        isLikelySplitApkEntry(entry.name)
                 }
             }
         }.getOrDefault(false)
+
+    private fun isLikelySplitApkEntry(entryName: String): Boolean {
+        val normalized = entryName.replace('\\', '/')
+        val fileName = normalized.substringAfterLast('/')
+        if (!fileName.endsWith(".apk", ignoreCase = true)) return false
+        val lowerName = fileName.lowercase(Locale.ROOT)
+
+        if (lowerName == "base.apk") return true
+        if (lowerName.startsWith("split_config.") || lowerName.startsWith("config.")) return true
+
+        // Support zip containers whose APK modules are placed in root.
+        return !normalized.contains('/')
+    }
 
     private data class ExtractedModule(val name: String, val file: File)
 

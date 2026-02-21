@@ -13,6 +13,7 @@
 
 - Fixed issues with loading patches from patch bundles on the discovery
 - Fixed an issue where saved app entries would be duplicated when installing a entry marked as `Saved`
+- Fixed issues with loading metadata for certain APKs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/216
 
 
 # v1.8.1-dev.01 (2026-02-19)
