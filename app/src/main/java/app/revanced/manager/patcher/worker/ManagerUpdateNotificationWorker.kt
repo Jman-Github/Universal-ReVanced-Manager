@@ -78,7 +78,7 @@ class ManagerUpdateNotificationWorker(
             }
 
             val notification = buildNotification(
-                title = applicationContext.getString(R.string.manager_update_banner_title),
+                title = applicationContext.getString(R.string.manager_updates_notification_title),
                 description = applicationContext.getString(
                     R.string.manager_updates_notification_available,
                     update.version
@@ -140,4 +140,3 @@ class ManagerUpdateNotificationWorker(
         private const val WAKE_LOCK_TIMEOUT_MS = 10L * 60L * 1000L
     }
 }
-

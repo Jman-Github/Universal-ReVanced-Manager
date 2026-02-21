@@ -1,3 +1,14 @@
+# v1.8.1-dev.03 (2026-02-22)
+
+
+# Features
+
+- Improved bundle and manager update alerts and websocket status wording
+
+
+# Bug fixes
+
+
 # v1.8.1-dev.02 (2026-02-21)
 
 

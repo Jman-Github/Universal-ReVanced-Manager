@@ -78,6 +78,7 @@ class BundleUpdateWebSocketCoordinator(
 
     private var socketLoopJob: Job? = null
     private var foregroundServiceRunning = false
+    private var foregroundListenState: ForegroundListenState? = null
 
     fun start() {
         if (!started.compareAndSet(false, true)) return
@@ -102,7 +103,7 @@ class BundleUpdateWebSocketCoordinator(
     }
 
     private suspend fun applyDesiredState(state: DesiredState) {
-        ensureForegroundServiceRunning(state.requiresForegroundService)
+        ensureForegroundServiceRunning(state)
 
         if (state.shouldRunSocket) {
             startSocketLoop()
@@ -111,20 +112,39 @@ class BundleUpdateWebSocketCoordinator(
         }
     }
 
-    private suspend fun ensureForegroundServiceRunning(shouldRun: Boolean) {
-        if (shouldRun == foregroundServiceRunning) return
+    private suspend fun ensureForegroundServiceRunning(state: DesiredState) {
+        val shouldRun = state.requiresForegroundService
+        val targetListenState = if (shouldRun) {
+            ForegroundListenState(
+                listenForBundle = state.listenForBundle,
+                listenForManager = state.listenForManager
+            )
+        } else {
+            null
+        }
 
-        val intent = Intent(app, BundleUpdateWebSocketService::class.java)
+        if (shouldRun == foregroundServiceRunning &&
+            (!shouldRun || foregroundListenState == targetListenState)
+        ) {
+            return
+        }
+
+        val intent = Intent(app, BundleUpdateWebSocketService::class.java).apply {
+            putExtra(BundleUpdateWebSocketService.EXTRA_LISTEN_BUNDLE_UPDATES, state.listenForBundle)
+            putExtra(BundleUpdateWebSocketService.EXTRA_LISTEN_MANAGER_UPDATES, state.listenForManager)
+        }
         if (shouldRun) {
             runCatching {
                 ContextCompat.startForegroundService(app, intent)
                 foregroundServiceRunning = true
+                foregroundListenState = targetListenState
             }.onFailure {
                 Log.w(TAG, "Unable to start websocket foreground service", it)
             }
         } else {
             app.stopService(intent)
             foregroundServiceRunning = false
+            foregroundListenState = null
         }
     }
 
@@ -379,9 +399,16 @@ class BundleUpdateWebSocketCoordinator(
     private data class DesiredState(
         val shouldRunSocket: Boolean,
         val requiresForegroundService: Boolean,
+        val listenForBundle: Boolean,
+        val listenForManager: Boolean,
     ) {
         companion object {
-            val NONE = DesiredState(shouldRunSocket = false, requiresForegroundService = false)
+            val NONE = DesiredState(
+                shouldRunSocket = false,
+                requiresForegroundService = false,
+                listenForBundle = false,
+                listenForManager = false
+            )
 
             fun from(
                 managerInterval: SearchForUpdatesBackgroundInterval,
@@ -389,9 +416,9 @@ class BundleUpdateWebSocketCoordinator(
                 mode: BundleUpdateDeliveryMode,
                 isForeground: Boolean
             ): DesiredState {
-                if (managerInterval == SearchForUpdatesBackgroundInterval.NEVER &&
-                    bundleInterval == SearchForUpdatesBackgroundInterval.NEVER
-                ) {
+                val listenForBundle = bundleInterval != SearchForUpdatesBackgroundInterval.NEVER
+                val listenForManager = managerInterval != SearchForUpdatesBackgroundInterval.NEVER
+                if (!listenForBundle && !listenForManager) {
                     return NONE
                 }
 
@@ -399,11 +426,15 @@ class BundleUpdateWebSocketCoordinator(
                     BundleUpdateDeliveryMode.POLLING_ONLY -> NONE
                     BundleUpdateDeliveryMode.AUTO -> DesiredState(
                         shouldRunSocket = isForeground,
-                        requiresForegroundService = false
+                        requiresForegroundService = false,
+                        listenForBundle = listenForBundle,
+                        listenForManager = listenForManager
                     )
                     BundleUpdateDeliveryMode.WEBSOCKET_PREFERRED -> DesiredState(
                         shouldRunSocket = true,
-                        requiresForegroundService = true
+                        requiresForegroundService = true,
+                        listenForBundle = listenForBundle,
+                        listenForManager = listenForManager
                     )
                 }
             }
@@ -436,4 +467,9 @@ class BundleUpdateWebSocketCoordinator(
             }
         """.trimIndent()
     }
+
+    private data class ForegroundListenState(
+        val listenForBundle: Boolean,
+        val listenForManager: Boolean
+    )
 }

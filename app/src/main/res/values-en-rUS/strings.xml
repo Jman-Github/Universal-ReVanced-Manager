@@ -160,8 +160,12 @@
     <string name="notification_channel_manager_updates_description">Notifies you when a new Universal ReVanced Manager version is available.</string>
     <string name="notification_channel_bundle_websocket_name">Bundle update websocket</string>
     <string name="notification_channel_bundle_websocket_description">Keeps websocket delivery active for bundle update notifications.</string>
-    <string name="bundle_update_websocket_notification_title">Bundle update websocket active</string>
-    <string name="bundle_update_websocket_notification_description">Listening for bundle update events.</string>
+    <string name="bundle_update_websocket_notification_title">Push notification websocket active</string>
+    <string name="bundle_update_websocket_notification_description_bundle_and_manager">Listening for bundle and manager update events.</string>
+    <string name="bundle_update_websocket_notification_description_bundle_only">Listening for bundle update events.</string>
+    <string name="bundle_update_websocket_notification_description_manager_only">Listening for manager update events.</string>
+    <string name="bundle_updates_notification_title">Patch bundles update</string>
+    <string name="manager_updates_notification_title">Manager has an update</string>
     <string name="manager_updates_notification_available">New manager update available: %1$s</string>
     <string name="never">Never</string>
     <string name="minutes_15">Every 15 minutes</string>

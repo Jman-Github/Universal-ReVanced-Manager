@@ -25,6 +25,7 @@
 - Improved the push notification system by using websockets (this avoids having to use FCM) to keep the notifcation worker alive
 - Added push notifications for manager updates https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/214
 - Renamed `Search bundles` on the `Discover patch bundles` screen to `Search by bundle name` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/219
+- Improved bundle and manager update alerts and websocket status wording
 
 
 # Bug fixes

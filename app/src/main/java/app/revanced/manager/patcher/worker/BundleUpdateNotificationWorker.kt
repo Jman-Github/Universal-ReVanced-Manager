@@ -106,7 +106,7 @@ class BundleUpdateNotificationWorker(
                         )
                         val notification = buildNotification(
                             channelId = bundleNotificationChannel.id,
-                            title = applicationContext.getString(R.string.bundle_update_banner_title),
+                            title = applicationContext.getString(R.string.bundle_updates_notification_title),
                             description = progressText,
                             pendingIntent = buildPendingIntent(bundle.uid),
                             ongoing = true,
@@ -173,7 +173,7 @@ class BundleUpdateNotificationWorker(
                         }
                         val notification = buildNotification(
                             channelId = bundleNotificationChannel.id,
-                            title = applicationContext.getString(R.string.bundle_update_banner_title),
+                            title = applicationContext.getString(R.string.bundle_updates_notification_title),
                             description = description,
                             pendingIntent = buildPendingIntent(deepLinkUid),
                             ongoing = false,
@@ -184,7 +184,7 @@ class BundleUpdateNotificationWorker(
                     manualUpdates.isNotEmpty() -> {
                         val notification = buildNotification(
                             channelId = bundleNotificationChannel.id,
-                            title = applicationContext.getString(R.string.bundle_update_banner_title),
+                            title = applicationContext.getString(R.string.bundle_updates_notification_title),
                             description = applicationContext.getString(
                                 R.string.bundle_updates_notification_available,
                                 manualUpdates.size
@@ -205,7 +205,7 @@ class BundleUpdateNotificationWorker(
                         }
                         val notification = buildNotification(
                             channelId = bundleNotificationChannel.id,
-                            title = applicationContext.getString(R.string.bundle_update_banner_title),
+                            title = applicationContext.getString(R.string.bundle_updates_notification_title),
                             description = description,
                             pendingIntent = buildPendingIntent(seenUids.firstOrNull()),
                             ongoing = false,
@@ -265,6 +265,8 @@ class BundleUpdateNotificationWorker(
                 val current = min(progress.bytesRead, max.toLong()).toInt()
                 builder.setProgress(max, current, false)
             }
+        } else {
+            builder.setProgress(0, 0, false)
         }
 
         return builder.build()
