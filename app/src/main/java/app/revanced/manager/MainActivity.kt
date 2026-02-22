@@ -57,6 +57,7 @@ import app.revanced.manager.ui.model.navigation.PatchBundleDiscovery
 import app.revanced.manager.ui.model.navigation.PatchBundleDiscoveryPatches
 import app.revanced.manager.ui.model.navigation.SelectedApplicationInfo
 import app.revanced.manager.ui.model.navigation.Settings
+import app.revanced.manager.ui.model.navigation.SplitApkInstaller
 import app.revanced.manager.ui.model.navigation.Update
 import app.revanced.manager.ui.model.SelectedApp
 import app.revanced.manager.ui.screen.AppSelectorScreen
@@ -73,6 +74,7 @@ import app.revanced.manager.ui.screen.PatchesSelectorScreen
 import app.revanced.manager.ui.screen.RequiredOptionsScreen
 import app.revanced.manager.ui.screen.SelectedAppInfoScreen
 import app.revanced.manager.ui.screen.SettingsScreen
+import app.revanced.manager.ui.screen.SplitApkInstallerScreen
 import app.revanced.manager.ui.screen.UpdateScreen
 import app.revanced.manager.ui.screen.settings.AboutSettingsScreen
 import app.revanced.manager.ui.screen.settings.AdvancedSettingsScreen
@@ -304,6 +306,7 @@ private fun ReVancedManager(
     val navController = rememberNavController()
     val dashboardVm: DashboardViewModel = koinViewModel()
     var pendingBundleDeepLink by remember { mutableStateOf<app.revanced.manager.util.BundleDeepLink?>(null) }
+    var pendingSplitArchiveIntent by remember { mutableStateOf<app.revanced.manager.util.SplitArchiveIntent?>(null) }
     val context = LocalContext.current
 
     EventEffect(vm.appSelectFlow) { params ->
@@ -328,6 +331,14 @@ private fun ReVancedManager(
     EventEffect(vm.managerUpdateDeepLinkFlow) {
         navController.navigate(Update()) {
             launchSingleTop = true
+        }
+    }
+
+    EventEffect(vm.splitArchiveIntentFlow) { splitArchiveIntent ->
+        pendingSplitArchiveIntent = splitArchiveIntent
+        navController.navigate(SplitApkInstaller) {
+            launchSingleTop = true
+            popUpTo(Dashboard) { inclusive = false }
         }
     }
 
@@ -371,6 +382,11 @@ private fun ReVancedManager(
                 },
                 onMergeSplitClick = {
                     navController.navigate(MergeSplitApk)
+                },
+                onOpenSplitInstallerClick = {
+                    navController.navigate(SplitApkInstaller) {
+                        launchSingleTop = true
+                    }
                 },
                 onCreateYoutubeAssetsClick = {
                     navController.navigate(CreateYoutubeAssets)
@@ -509,6 +525,14 @@ private fun ReVancedManager(
             MergeSplitApkScreen(
                 onBackClick = navController::popBackStack,
                 vm = dashboardVm
+            )
+        }
+
+        composable<SplitApkInstaller> {
+            SplitApkInstallerScreen(
+                onBackClick = navController::popBackStack,
+                pendingExternalInput = pendingSplitArchiveIntent,
+                onExternalInputConsumed = { pendingSplitArchiveIntent = null }
             )
         }
 

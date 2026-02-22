@@ -210,6 +210,7 @@ fun DashboardScreen(
     onDownloaderPluginClick: () -> Unit,
     onBundleDiscoveryClick: () -> Unit,
     onMergeSplitClick: () -> Unit,
+    onOpenSplitInstallerClick: () -> Unit,
     onCreateYoutubeAssetsClick: () -> Unit,
     onOpenKeystoreCreatorClick: () -> Unit,
     onOpenKeystoreConverterClick: () -> Unit,
@@ -2131,6 +2132,7 @@ fun DashboardScreen(
                         DashboardPage.TOOLS -> {
                             ToolsTabScreen(
                                 onOpenMergeScreen = ::launchSplitMerge,
+                                onOpenSplitInstallerScreen = onOpenSplitInstallerClick,
                                 onOpenYoutubeAssetsScreen = onCreateYoutubeAssetsClick,
                                 onOpenKeystoreCreatorScreen = onOpenKeystoreCreatorClick,
                                 onOpenKeystoreConverterScreen = onOpenKeystoreConverterClick
@@ -2156,6 +2158,7 @@ private enum class SplitPermissionRequest {
 @Composable
 private fun ToolsTabScreen(
     onOpenMergeScreen: () -> Unit,
+    onOpenSplitInstallerScreen: () -> Unit,
     onOpenYoutubeAssetsScreen: () -> Unit,
     onOpenKeystoreCreatorScreen: () -> Unit,
     onOpenKeystoreConverterScreen: () -> Unit
@@ -2253,6 +2256,53 @@ private fun ToolsTabScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = stringResource(R.string.tools_merge_split_idle_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            tonalElevation = 2.dp,
+            shadowElevation = 6.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpenSplitInstallerScreen)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                    modifier = Modifier.size(52.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Download,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .padding(11.dp)
+                            .size(30.dp)
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.tools_split_installer_title),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.tools_split_installer_description),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

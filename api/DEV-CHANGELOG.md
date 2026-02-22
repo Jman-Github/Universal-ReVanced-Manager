@@ -4,6 +4,7 @@
 # Features
 
 - Improved bundle and manager update alerts and websocket status wording
+- Added a `Split APK installer` tool to the `Tools` tab https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/189
 
 
 # Bug fixes

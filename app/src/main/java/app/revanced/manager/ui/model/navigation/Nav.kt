@@ -24,6 +24,9 @@ data class PatchBundleDiscoveryPatches(val bundleId: Int)
 data object MergeSplitApk
 
 @Serializable
+data object SplitApkInstaller
+
+@Serializable
 data object CreateYoutubeAssets
 
 @Serializable
