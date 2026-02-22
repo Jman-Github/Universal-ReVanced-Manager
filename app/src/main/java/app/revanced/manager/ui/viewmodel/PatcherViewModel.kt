@@ -1002,7 +1002,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         resetDexCompileState()
         resetFailureLogState()
         runtimeReportedMemoryLimitMb = null
-        markLoadPatchesRunning()
+        markInitialStepRunning()
         logBatteryOptimizationStatus()
         val workId = launchWorker()
         patcherWorkerId = ParcelUuid(workId)
@@ -2784,7 +2784,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             memoryAdjustmentDialog = null
             handledFailureIds.clear()
             resetStateForRetry()
-            markLoadPatchesRunning()
+            markInitialStepRunning()
             patcherWorkerId?.uuid?.let(workManager::cancelWorkById)
             val newId = launchWorker()
             patcherWorkerId = ParcelUuid(newId)
@@ -2807,13 +2807,14 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         _patcherSucceeded.value = null
     }
 
-    private fun markLoadPatchesRunning() {
-        val index = steps.indexOfFirst { it.id == StepId.LoadPatches }
+    private fun markInitialStepRunning() {
+        val index = steps.indexOfFirst { step ->
+            !step.hide && step.state == State.WAITING
+        }
         if (index == -1) return
         val step = steps[index]
-        if (step.state == State.RUNNING) return
         steps[index] = step.withState(state = State.RUNNING, message = null, progress = null)
-        stepSubSteps.remove(StepId.LoadPatches)
+        stepSubSteps.remove(step.id)
     }
 
     private fun initialSplitRequirement(selectedApp: SelectedApp): Boolean =

@@ -43,6 +43,8 @@
 - Fixed issues with memeory on Android 10 and lower devices (needs testing) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/150
 - Fixed the `Patch confirmation` screen on older Android versions being covered by the three button navigation
 - Fixed issues with the patcher screen being "frozen" and showing no progress or anyting at all for a few seconds on older Android versions
+- Fixed UI lagging/buffering issues on the `Download APK file` step
+- Fixed issues where downloading certain APK files using the downloader plugins would cause an error https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/221
 
 
 # v1.8.0 (2026-02-15)

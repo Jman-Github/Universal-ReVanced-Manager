@@ -322,14 +322,32 @@ class PatcherWorker(
                     args.input.version,
                     prefs.suggestedVersionSafeguard.get(),
                     !prefs.disablePatchVersionCompatCheck.get(),
-                    onDownload = { progress ->
-                        eventDispatcher(
-                            ProgressEvent.Progress(
-                                stepId = StepId.DownloadAPK,
-                                current = progress.first,
-                                total = progress.second
+                    onDownload = run {
+                        var lastProgressAt = 0L
+                        var lastProgressBytes = 0L
+                        progressHandler@{ progress ->
+                            val current = progress.first
+                            val total = progress.second
+                            val now = System.currentTimeMillis()
+                            val isFinal = total != null && total > 0L && current >= total
+                            val shouldDispatch =
+                                isFinal ||
+                                    lastProgressAt == 0L ||
+                                    (now - lastProgressAt) >= DOWNLOAD_PROGRESS_MIN_INTERVAL_MS ||
+                                    (current - lastProgressBytes) >= DOWNLOAD_PROGRESS_MIN_BYTES
+
+                            if (!shouldDispatch) return@progressHandler
+
+                            lastProgressAt = now
+                            lastProgressBytes = current
+                            eventDispatcher(
+                                ProgressEvent.Progress(
+                                    stepId = StepId.DownloadAPK,
+                                    current = current,
+                                    total = total
+                                )
                             )
-                        )
+                        }
                     },
                     persistDownload = autoSaveDownloads
                 ).also { result ->
@@ -679,6 +697,8 @@ class PatcherWorker(
         const val PROCESS_PREVIOUS_LIMIT_KEY = "process_previous_limit"
         const val PROCESS_FAILURE_MESSAGE_KEY = "process_failure_message"
         private const val WORK_DATA_MAX_BYTES = 9000
+        private const val DOWNLOAD_PROGRESS_MIN_INTERVAL_MS = 150L
+        private const val DOWNLOAD_PROGRESS_MIN_BYTES = 256 * 1024L
     }
 
     private fun trimForWorkData(message: String?): String? {

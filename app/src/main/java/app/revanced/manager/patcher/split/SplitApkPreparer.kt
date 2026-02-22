@@ -27,10 +27,11 @@ object SplitApkPreparer {
         if (file == null || !file.exists()) return false
         val extension = file.extension.lowercase(Locale.ROOT)
         if (extension in SUPPORTED_EXTENSIONS) return true
-        // Treat generic .zip as split only when it actually looks like a split container.
-        // Plain APKs can embed runtime APKs under assets/ and must not be treated as split archives.
-        if (extension != "zip") return false
-        return hasEmbeddedApkEntries(file)
+        if (extension == "zip") return hasEmbeddedApkEntries(file)
+        // Some downloader plugins save split containers using a .apk filename.
+        // Consider those split only when they do not look like a normal APK container.
+        if (extension == "apk") return looksLikeMislabeledSplitArchive(file)
+        return false
     }
 
     suspend fun prepareIfNeeded(
@@ -118,6 +119,18 @@ object SplitApkPreparer {
                 zip.entries().asSequence().any { entry ->
                     !entry.isDirectory &&
                         isLikelySplitApkEntry(entry.name)
+                }
+            }
+        }.getOrDefault(false)
+
+    private fun looksLikeMislabeledSplitArchive(file: File): Boolean =
+        runCatching {
+            ZipFile(file).use { zip ->
+                val hasRootManifest = zip.entries().asSequence().any { entry ->
+                    !entry.isDirectory && entry.name == "AndroidManifest.xml"
+                }
+                !hasRootManifest && zip.entries().asSequence().any { entry ->
+                    !entry.isDirectory && isLikelySplitApkEntry(entry.name)
                 }
             }
         }.getOrDefault(false)

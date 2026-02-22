@@ -116,7 +116,7 @@ class DownloadedAppRepository(
                         override fun write(b: ByteArray?, off: Int, len: Int) =
                             out.write(b, off, len).also {
                                 emitProgress(
-                                    (len - off).toLong()
+                                    len.toLong()
                                 )
                             }
                     }
@@ -130,8 +130,15 @@ class DownloadedAppRepository(
             if (downloadedBytes.get() < 1) error("Downloader did not download anything.")
 
             val workingFile = targetFile.toFile()
-            val pkgInfo = resolvePackageInfoForValidation(workingFile, saveDir)
-                ?: error("Downloaded APK file is invalid")
+            val pkgInfo = resolvePackageInfoForValidation(workingFile, saveDir) ?: run {
+                Log.e(
+                    TAG,
+                    "Downloaded APK file is invalid: " +
+                        "plugin=${plugin.packageName}, file=${workingFile.absolutePath}, " +
+                        "size=${workingFile.length()}, split=${SplitApkPreparer.isSplitArchive(workingFile)}"
+                )
+                error("Downloaded APK file is invalid")
+            }
             if (pkgInfo.packageName != expectedPackageName) error("Downloaded APK has the wrong package name. Expected: $expectedPackageName, Actual: ${pkgInfo.packageName}")
             expectedVersion?.let {
                 if (
