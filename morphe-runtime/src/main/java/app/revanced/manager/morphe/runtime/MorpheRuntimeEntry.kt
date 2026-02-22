@@ -21,6 +21,7 @@ import java.io.PrintStream
 import java.security.MessageDigest
 import java.util.ArrayDeque
 import java.util.LinkedHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.logging.Handler
 import java.util.logging.Level
 import java.util.logging.LogRecord
@@ -42,14 +43,39 @@ object MorpheRuntimeEntry {
 
     @JvmStatic
     fun runPatcher(params: Map<String, Any?>, callback: MorpheRuntimeCallback): String? {
-        fun onEvent(event: ProgressEvent) = callback.event(event.toMap())
-
         val dexCompilePattern =
             Regex("(Compiling|Compiled)\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
         val dexWritePattern =
             Regex("Write\\s+\\[[^\\]]+\\]\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
         val seenDexCompiles = mutableSetOf<String>()
+        val writeApkActive = AtomicBoolean(false)
+        fun onEvent(event: ProgressEvent) {
+            when (event) {
+                is ProgressEvent.Started -> {
+                    if (event.stepId == StepId.WriteAPK) {
+                        writeApkActive.set(true)
+                    }
+                }
+
+                is ProgressEvent.Completed -> {
+                    if (event.stepId == StepId.WriteAPK) {
+                        writeApkActive.set(false)
+                    }
+                }
+
+                is ProgressEvent.Failed -> {
+                    if (event.stepId == StepId.WriteAPK) {
+                        writeApkActive.set(false)
+                    }
+                }
+
+                is ProgressEvent.Progress -> Unit
+            }
+            callback.event(event.toMap())
+        }
+
         fun handleDexCompileLine(rawLine: String) {
+            if (!writeApkActive.get()) return
             val line = rawLine.trim()
             if (line.isEmpty()) return
             val match = dexCompilePattern.find(line)

@@ -27,25 +27,34 @@ class CoroutineRuntime(context: Context) : Runtime(context) {
         stripNativeLibs: Boolean,
         skipUnneededSplits: Boolean,
     ) {
-        val selectedBundles = selectedPatches.keys
-        val patchBundlesByUid = bundles()
-        val relatedBundleArchives = patchBundlesByUid
-            .filterKeys { it in selectedBundles }
-            .values
-            .map { File(it.patchesJar) }
-
-        val patchList = runStep(StepId.LoadPatches, onEvent) {
-            val bundles = bundles()
-            val uids = bundles.entries.associate { (key, value) -> value to key }
+        val (patchList, relatedBundleArchives) = runStep(StepId.LoadPatches, onEvent) {
+            val activeSelectedPatches = selectedPatches.filterValues { it.isNotEmpty() }
+            val selectedBundles = activeSelectedPatches.keys
+            val patchBundlesByUid = bundles()
+            val selectedPatchBundlesByUid = patchBundlesByUid
+                .filterKeys { it in selectedBundles }
+            val staleBundleIds = selectedBundles - selectedPatchBundlesByUid.keys
+            if (staleBundleIds.isNotEmpty()) {
+                logger.warn(
+                    "Ignoring missing patch bundle IDs in selection: ${
+                        staleBundleIds.joinToString(",")
+                    }"
+                )
+            }
+            val uids = selectedPatchBundlesByUid.entries.associate { (key, value) -> value to key }
 
             val allPatches =
-                PatchBundle.Loader.patches(bundles.values, packageName)
+                PatchBundle.Loader.patches(selectedPatchBundlesByUid.values, packageName)
                     .mapKeys { (b, _) -> uids[b]!! }
-                    .filterKeys { it in selectedBundles }
 
-            val patchList = selectedPatches.flatMap { (bundle, selected) ->
-                allPatches[bundle]?.filter { it.name in selected }
-                    ?: throw IllegalArgumentException("Patch bundle $bundle does not exist")
+            val patchList = activeSelectedPatches.flatMap { (bundle, selected) ->
+                allPatches[bundle].orEmpty().filter { it.name in selected }
+            }
+
+            if (activeSelectedPatches.isNotEmpty() && patchList.isEmpty()) {
+                throw IllegalArgumentException(
+                    "Selected patches are unavailable. Re-open patch selection and select patches again."
+                )
             }
 
             // Set all patch options.
@@ -59,7 +68,7 @@ class CoroutineRuntime(context: Context) : Runtime(context) {
                 }
             }
 
-            patchList
+            patchList to selectedPatchBundlesByUid.values.map { File(it.patchesJar) }
         }
 
         val input = File(inputFile)

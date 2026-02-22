@@ -497,7 +497,7 @@ Patch profiles are not affected.</string>
     <string name="appearance">Appearance</string>
     <string name="downloaded_apps">Downloaded apps</string>
     <string name="process_runtime">Run Patcher in another process (experimental)</string>
-    <string name="process_runtime_description">This is faster and allows Patcher to use more memory</string>
+    <string name="process_runtime_description">Runs patching in a separate process on Android 11+ to allow higher memory limits. On Android 10 and lower, patching stays in-process.</string>
     <string name="process_runtime_effective_limit_format">Effective limit: %1$d MB</string>
     <string name="process_runtime_effective_limit_disabled">Effective limit: Off</string>
     <string name="strip_unused_libs">Remove unused native libraries</string>
@@ -505,7 +505,7 @@ Patch profiles are not affected.</string>
     <string name="skip_unneeded_split_apks">Skip unneeded split APKs</string>
     <string name="skip_unneeded_split_apks_description">Skip split APK modules that don’t match this device (e.g. language or density)</string>
     <string name="process_runtime_memory_limit">Patcher process memory limit</string>
-    <string name="process_runtime_memory_limit_description">The max amount of memory that the Patcher process can use (in megabytes)</string>
+    <string name="process_runtime_memory_limit_description">The max amount of memory that the separate patcher process can use (in megabytes). This applies on Android 11+ when process runtime is enabled.</string>
     <string name="process_runtime_memory_aggressive">Aggressive patcher memory limit</string>
     <string name="process_runtime_memory_aggressive_description">Use the highest memory limit allowed by your device for the experimental patcher</string>
     <string name="reset_to_recommended">Reset to recommended</string>

@@ -46,7 +46,6 @@ class MorpheSession(
     private val frameworkDirFile = File(frameworkDir).also { it.mkdirs() }
     private val resolvedAaptPath = aaptPath
     private var patcher = createPatcher()
-    private var resourcesDecoded = false
 
     private fun createPatcher() = Patcher(
         PatcherConfig(
@@ -121,7 +120,6 @@ class MorpheSession(
             }
             logger.info("Merging integrations")
             this += LinkedHashSet(orderedPatches)
-            decodeResourcesIfNeeded()
 
             logger.info("Applying patches...")
             applyPatchesVerbose(
@@ -577,32 +575,6 @@ class MorpheSession(
     override fun close() {
         tempDir.deleteRecursively()
         patcher.close()
-    }
-
-    private fun decodeResourcesIfNeeded() {
-        if (resourcesDecoded) return
-        runCatching {
-            val configField = patcher.javaClass.getDeclaredField("config").apply {
-                isAccessible = true
-            }
-            val config = configField.get(patcher) as? PatcherConfig ?: return
-            val resourceMode = config.javaClass
-                .getMethod("getResourceMode\$morphe_patcher")
-                .invoke(config) ?: return
-            if (resourceMode.toString() == "NONE") return
-
-            val resourceContext = patcher.context.javaClass
-                .getMethod("getResourceContext\$morphe_patcher")
-                .invoke(patcher.context)
-            val decodeMethod = resourceContext.javaClass.getMethod(
-                "decodeResources\$morphe_patcher",
-                resourceMode.javaClass
-            )
-            decodeMethod.invoke(resourceContext, resourceMode)
-            resourcesDecoded = true
-        }.onFailure { error ->
-            logger.warn("Failed to decode Morphe resources: ${error.message}")
-        }
     }
 
     companion object {

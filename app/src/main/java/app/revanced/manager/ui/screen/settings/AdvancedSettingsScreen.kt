@@ -750,8 +750,10 @@ fun AdvancedSettingsScreen(
                     val processRuntimeEnabled by viewModel.prefs.useProcessRuntime.getAsState()
                     val processMemoryLimit by viewModel.prefs.patcherProcessMemoryLimit.getAsState()
                     val aggressiveLimitEnabled by viewModel.prefs.patcherProcessMemoryAggressive.getAsState()
-                    val effectiveLimit = remember(processRuntimeEnabled, processMemoryLimit, aggressiveLimitEnabled) {
-                        if (!processRuntimeEnabled) {
+                    val processRuntimeSupported = remember { Build.VERSION.SDK_INT > Build.VERSION_CODES.Q }
+                    val processRuntimeActive = processRuntimeEnabled && processRuntimeSupported
+                    val effectiveLimit = remember(processRuntimeActive, processMemoryLimit, aggressiveLimitEnabled) {
+                        if (!processRuntimeActive) {
                             null
                         } else if (aggressiveLimitEnabled) {
                             MemoryLimitConfig.maxLimitMb(context)
@@ -774,7 +776,7 @@ fun AdvancedSettingsScreen(
                                 )
                                 Surface(
                                     shape = RoundedCornerShape(999.dp),
-                                    color = if (processRuntimeEnabled) {
+                                    color = if (processRuntimeActive) {
                                         MaterialTheme.colorScheme.primaryContainer
                                     } else {
                                         MaterialTheme.colorScheme.surfaceVariant
@@ -788,7 +790,7 @@ fun AdvancedSettingsScreen(
                                         },
                                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                         style = MaterialTheme.typography.labelMedium,
-                                        color = if (processRuntimeEnabled) {
+                                        color = if (processRuntimeActive) {
                                             MaterialTheme.colorScheme.onPrimaryContainer
                                         } else {
                                             MaterialTheme.colorScheme.onSurfaceVariant

@@ -1002,6 +1002,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         resetDexCompileState()
         resetFailureLogState()
         runtimeReportedMemoryLimitMb = null
+        markLoadPatchesRunning()
         logBatteryOptimizationStatus()
         val workId = launchWorker()
         patcherWorkerId = ParcelUuid(workId)
@@ -1293,7 +1294,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         val logSnapshot = logs.toList()
         val logMessages = logSnapshot.map { it.second }
         fun findLogValue(prefix: String): String? =
-            logMessages.firstOrNull { it.startsWith(prefix) }
+            logMessages.lastOrNull { it.startsWith(prefix) }
                 ?.removePrefix(prefix)
                 ?.trim()
 
@@ -1332,6 +1333,15 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         } else {
             MemoryLimitConfig.clampLimitMb(context, requestedLimit)
         }
+        val processRuntimeSupported = Build.VERSION.SDK_INT > Build.VERSION_CODES.Q
+        val runtimeMode = findLogValue("Runtime mode:")
+            ?: if (experimental && processRuntimeSupported) "process" else "in-process"
+        val memoryOverride = findLogValue("Memory override:")
+            ?: if (experimental && processRuntimeSupported && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                "enabled"
+            } else {
+                "disabled"
+            }
 
         val isIgnoring = context.getSystemService<PowerManager>()
             ?.isIgnoringBatteryOptimizations(context.packageName) == true
@@ -1371,6 +1381,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     msg.startsWith("Patching started at ") ||
                     msg.startsWith("Patcher runtime:") ||
                     msg.startsWith("Memory limit:") ||
+                    msg.startsWith("Runtime mode:") ||
+                    msg.startsWith("Memory override:") ||
                     msg.startsWith("AAPT2 sha256:") ||
                     msg.startsWith("AAPT2 version:")
             }
@@ -1385,6 +1397,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             appendLine("Effective memory limit: ${effectiveLimit}MB")
             appendLine("Bundle type: $bundleType")
             appendLine("Experimental: $experimental")
+            appendLine("Runtime mode: $runtimeMode")
+            appendLine("Memory override: $memoryOverride")
             appendLine("Aggressive: $aggressiveLimit")
             appendLine("Strip native libs: ${if (stripNativeLibs) "on" else "off"}")
             appendLine("Skip unused splits: ${if (skipUnusedSplits) "on" else "off"}")
@@ -2239,9 +2253,14 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
                 is ProgressEvent.Progress -> {
                     val nextState = if (state == State.WAITING) State.RUNNING else state
+                    val nextMessage = if (eventStepId == StepId.LoadPatches) {
+                        null
+                    } else {
+                        event.message ?: message
+                    }
                     withState(
                         state = nextState,
-                        message = event.message ?: message,
+                        message = nextMessage,
                         progress = event.current?.let { event.current to event.total } ?: progress
                     )
                 }
@@ -2765,6 +2784,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             memoryAdjustmentDialog = null
             handledFailureIds.clear()
             resetStateForRetry()
+            markLoadPatchesRunning()
             patcherWorkerId?.uuid?.let(workManager::cancelWorkById)
             val newId = launchWorker()
             patcherWorkerId = ParcelUuid(newId)
@@ -2785,6 +2805,15 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         steps.addAll(newSteps)
         stepSubSteps.clear()
         _patcherSucceeded.value = null
+    }
+
+    private fun markLoadPatchesRunning() {
+        val index = steps.indexOfFirst { it.id == StepId.LoadPatches }
+        if (index == -1) return
+        val step = steps[index]
+        if (step.state == State.RUNNING) return
+        steps[index] = step.withState(state = State.RUNNING, message = null, progress = null)
+        stepSubSteps.remove(StepId.LoadPatches)
     }
 
     private fun initialSplitRequirement(selectedApp: SelectedApp): Boolean =

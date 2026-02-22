@@ -40,6 +40,9 @@
 - Fixed an issue where saved app entries would be duplicated when installing a entry marked as `Saved`
 - Fixed issues with loading metadata for certain APKs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/216
 - Fixed missing-split install failures when patching apps that are installed as split APKs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/217
+- Fixed issues with memeory on Android 10 and lower devices (needs testing) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/150
+- Fixed the `Patch confirmation` screen on older Android versions being covered by the three button navigation
+- Fixed issues with the patcher screen being "frozen" and showing no progress or anyting at all for a few seconds on older Android versions
 
 
 # v1.8.0 (2026-02-15)

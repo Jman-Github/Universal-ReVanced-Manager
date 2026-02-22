@@ -9,6 +9,10 @@
 
 # Bug fixes
 
+- Fixed issues with memeory on Android 10 and lower devices (needs testing) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/150
+- Fixed the `Patch confirmation` screen on older Android versions being covered by the three button navigation
+- Fixed issues with the patcher screen being "frozen" and showing no progress or anyting at all for a few seconds on older Android versions
+
 
 # v1.8.1-dev.02 (2026-02-21)
 

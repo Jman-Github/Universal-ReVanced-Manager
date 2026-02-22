@@ -397,7 +397,10 @@ class PatcherWorker(
             val skipUnneededSplits = prefs.skipUnneededSplitApks.get()
             val inputIsSplitArchive = SplitApkPreparer.isSplitArchive(inputFile)
             val selectedCount = totalPatchCount
-            val experimentalRuntimeEnabled = prefs.useProcessRuntime.get()
+            val processRuntimeRequested = prefs.useProcessRuntime.get()
+            val processRuntimeSupported = Build.VERSION.SDK_INT > Build.VERSION_CODES.Q
+            val useProcessRuntime = processRuntimeRequested && processRuntimeSupported
+            val memoryOverrideActive = useProcessRuntime && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
             val requestedLimit = prefs.patcherProcessMemoryLimit.get()
             val aggressiveLimit = prefs.patcherProcessMemoryAggressive.get()
             val effectiveLimit = MemoryLimitConfig.clampLimitMb(
@@ -416,15 +419,23 @@ class PatcherWorker(
                         "split=$inputIsSplitArchive patches=$selectedCount"
             )
             args.logger.info(
-                "Patcher runtime: bundle=$bundleType experimental=$experimentalRuntimeEnabled " +
-                    "memoryLimit=${if (experimentalRuntimeEnabled) "${effectiveLimit}MB" else "disabled"} " +
+                "Patcher runtime: bundle=$bundleType experimental=$processRuntimeRequested " +
+                    "memoryLimit=${if (memoryOverrideActive) "${effectiveLimit}MB" else "disabled"} " +
                     "(requested=${requestedLimit}MB${if (aggressiveLimit) ", aggressive" else ""})"
             )
+            if (processRuntimeRequested && !processRuntimeSupported) {
+                args.logger.warn(
+                    "Process runtime requested but unsupported on Android ${Build.VERSION.SDK_INT}; using in-process runtime"
+                )
+            }
+            args.logger.info("Runtime mode: ${if (useProcessRuntime) "process" else "in-process"}")
+            args.logger.info("Memory override: ${if (memoryOverrideActive) "enabled" else "disabled"}")
+            eventDispatcher(ProgressEvent.Started(StepId.LoadPatches))
 
             when (bundleType) {
                 PatchBundleType.MORPHE -> {
-                    val runtime = if (experimentalRuntimeEnabled) {
-                        MorpheProcessRuntime(applicationContext, useMemoryOverride = true)
+                    val runtime = if (useProcessRuntime) {
+                        MorpheProcessRuntime(applicationContext, useMemoryOverride = memoryOverrideActive)
                     } else {
                         MorpheBridgeRuntime(applicationContext)
                     }
@@ -442,8 +453,8 @@ class PatcherWorker(
                     )
                 }
                 PatchBundleType.AMPLE -> {
-                    val runtime = if (experimentalRuntimeEnabled) {
-                        AmpleProcessRuntime(applicationContext, useMemoryOverride = true)
+                    val runtime = if (useProcessRuntime) {
+                        AmpleProcessRuntime(applicationContext, useMemoryOverride = memoryOverrideActive)
                     } else {
                         AmpleBridgeRuntime(applicationContext)
                     }
@@ -461,40 +472,23 @@ class PatcherWorker(
                     )
                 }
                 PatchBundleType.REVANCED -> {
-                    val runtime = ProcessRuntime(applicationContext)
-                    activeRuntime = runtime
-                    try {
-                        runtime.execute(
-                            inputFile.absolutePath,
-                            patchedApk.absolutePath,
-                            args.packageName,
-                            args.selectedPatches,
-                            args.options,
-                            args.logger,
-                            eventDispatcher,
-                            stripNativeLibs,
-                            skipUnneededSplits
-                        )
-                    } catch (e: ProcessRuntime.ProcessExitException) {
-                        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
-                            Log.w(tag, "app_process exited with code ${e.exitCode}; retrying in-process runtime".logFmt())
-                            val fallback = CoroutineRuntime(applicationContext)
-                            activeRuntime = fallback
-                            fallback.execute(
-                                inputFile.absolutePath,
-                                patchedApk.absolutePath,
-                                args.packageName,
-                                args.selectedPatches,
-                                args.options,
-                                args.logger,
-                                eventDispatcher,
-                                stripNativeLibs,
-                                skipUnneededSplits
-                            )
-                        } else {
-                            throw e
-                        }
+                    val runtime: app.revanced.manager.patcher.runtime.Runtime = if (useProcessRuntime) {
+                        ProcessRuntime(applicationContext)
+                    } else {
+                        CoroutineRuntime(applicationContext)
                     }
+                    activeRuntime = runtime
+                    runtime.execute(
+                        inputFile.absolutePath,
+                        patchedApk.absolutePath,
+                        args.packageName,
+                        args.selectedPatches,
+                        args.options,
+                        args.logger,
+                        eventDispatcher,
+                        stripNativeLibs,
+                        skipUnneededSplits
+                    )
                 }
             }
 

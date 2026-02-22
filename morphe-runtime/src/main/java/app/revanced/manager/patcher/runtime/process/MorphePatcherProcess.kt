@@ -28,6 +28,7 @@ import java.io.FileInputStream
 import java.io.OutputStream
 import java.io.PrintStream
 import java.security.MessageDigest
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.logging.Handler
 import java.util.logging.Level
 import java.util.logging.LogRecord
@@ -58,8 +59,6 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
     override fun exit() = exitProcess(0)
 
     override fun start(parameters: MorpheParameters, events: IPatcherEvents) {
-        fun onEvent(event: ProgressEvent) = events.event(event.toParcel())
-
         eventBinder = events
 
         scope.launch {
@@ -68,7 +67,34 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
             val dexWritePattern =
                 Regex("Write\\s+\\[[^\\]]+\\]\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
             val seenDexCompiles = mutableSetOf<String>()
+            val writeApkActive = AtomicBoolean(false)
+            fun onEvent(event: ProgressEvent) {
+                when (event) {
+                    is ProgressEvent.Started -> {
+                        if (event.stepId == StepId.WriteAPK) {
+                            writeApkActive.set(true)
+                        }
+                    }
+
+                    is ProgressEvent.Completed -> {
+                        if (event.stepId == StepId.WriteAPK) {
+                            writeApkActive.set(false)
+                        }
+                    }
+
+                    is ProgressEvent.Failed -> {
+                        if (event.stepId == StepId.WriteAPK) {
+                            writeApkActive.set(false)
+                        }
+                    }
+
+                    is ProgressEvent.Progress -> Unit
+                }
+                events.event(event.toParcel())
+            }
+
             fun handleDexCompileLine(rawLine: String) {
+                if (!writeApkActive.get()) return
                 val line = rawLine.trim()
                 if (line.isEmpty()) return
                 val match = dexCompilePattern.find(line)
