@@ -56,6 +56,7 @@ fun Steps(
     subStepsById: Map<StepId, List<StepDetail>> = emptyMap(),
     isExpanded: Boolean = false,
     autoExpandRunning: Boolean = true,
+    autoExpandRunningMainOnly: Boolean = false,
     onExpand: () -> Unit,
     onClick: () -> Unit,
     autoCollapseCompleted: Boolean = false
@@ -143,7 +144,7 @@ fun Steps(
                             subSteps = subSteps,
                             progress = progress,
                             progressText = progressText,
-                            autoExpandRunning = autoExpandRunning,
+                            autoExpandSubSteps = !autoExpandRunningMainOnly,
                             autoCollapseCompleted = autoCollapseCompleted,
                             isFirst = index == 0,
                             isLast = index == filteredSteps.lastIndex
@@ -171,7 +172,7 @@ private fun ExpandableSubStep(
     subSteps: List<StepDetail>,
     progress: Float?,
     progressText: String?,
-    autoExpandRunning: Boolean,
+    autoExpandSubSteps: Boolean,
     autoCollapseCompleted: Boolean,
     isFirst: Boolean,
     isLast: Boolean,
@@ -183,7 +184,7 @@ private fun ExpandableSubStep(
         if (step.state != State.COMPLETED) {
             autoCollapsed = false
         }
-        if ((autoExpandRunning && step.state == State.RUNNING) || step.state == State.FAILED) {
+        if (autoExpandSubSteps && (step.state == State.RUNNING || step.state == State.FAILED)) {
             expanded = true
         }
     }

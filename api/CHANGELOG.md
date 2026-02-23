@@ -31,6 +31,8 @@
 - Slight UI corrections and improvements in multiple parts of the app https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/223
 - Added an option to choose an APK from URV downloaded apps for the Patch Profiles preset APK setting https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/224
 - Made the package name of apps always shown on the `App info` screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/225
+- Improved the `Create custom YouTube icons & headers` tool https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/211
+- Added a toggle in Settings > Patcher that disables/enables the expansion of the main categories on the patcher screen that are running https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/201
 
 
 # Bug fixes

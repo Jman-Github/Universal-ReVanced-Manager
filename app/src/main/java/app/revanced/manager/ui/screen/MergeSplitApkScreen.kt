@@ -67,6 +67,8 @@ fun MergeSplitApkScreen(
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val autoCollapsePatcherSteps by prefs.autoCollapsePatcherSteps.getAsState()
     val autoExpandRunningSteps by prefs.autoExpandRunningSteps.getAsState()
+    val autoExpandRunningStepsExclusive by prefs.autoExpandRunningStepsExclusive.getAsState()
+    val useExclusiveAutoExpand = autoExpandRunningSteps && autoExpandRunningStepsExclusive
     val storageRoots = remember { fs.storageRoots() }
     val (permissionContract, permissionName) = remember { fs.permissionContract() }
 
@@ -295,8 +297,14 @@ fun MergeSplitApkScreen(
                     subStepsById = subStepsById,
                     isExpanded = expandedCategories.contains(category),
                     autoExpandRunning = autoExpandRunningSteps,
+                    autoExpandRunningMainOnly = useExclusiveAutoExpand,
                     autoCollapseCompleted = autoCollapsePatcherSteps,
-                    onExpand = { expandedCategories.add(category) },
+                    onExpand = {
+                        if (useExclusiveAutoExpand) {
+                            expandedCategories.clear()
+                        }
+                        expandedCategories.add(category)
+                    },
                     onClick = {
                         if (expandedCategories.contains(category)) {
                             expandedCategories.remove(category)

@@ -88,6 +88,7 @@ class PreferencesManager(
     val dashboardProgressBannerCollapsed = booleanPreference("dashboard_progress_banner_collapsed", false)
     val autoCollapsePatcherSteps = booleanPreference("auto_collapse_patcher_steps", false)
     val autoExpandRunningSteps = booleanPreference("auto_expand_running_steps", true)
+    val autoExpandRunningStepsExclusive = booleanPreference("auto_expand_running_steps_exclusive", false)
     val enableSavedApps = booleanPreference("enable_saved_apps", true)
     val disableSavedAppOverwrite = booleanPreference("disable_saved_app_overwrite", false)
 
@@ -191,6 +192,7 @@ class PreferencesManager(
         val patcherProcessMemoryAggressive: Boolean? = null,
         val autoCollapsePatcherSteps: Boolean? = null,
         val autoExpandRunningSteps: Boolean? = null,
+        val autoExpandRunningStepsExclusive: Boolean? = null,
         val enableSavedApps: Boolean? = null,
         val disableSavedAppOverwrite: Boolean? = null,
         val patchedAppExportFormat: String? = null,
@@ -312,6 +314,7 @@ class PreferencesManager(
             patcherProcessMemoryAggressive = patcherProcessMemoryAggressive.get(),
             autoCollapsePatcherSteps = autoCollapsePatcherSteps.get(),
             autoExpandRunningSteps = autoExpandRunningSteps.get(),
+            autoExpandRunningStepsExclusive = autoExpandRunningStepsExclusive.get(),
             enableSavedApps = enableSavedApps.get(),
             disableSavedAppOverwrite = disableSavedAppOverwrite.get(),
             patchedAppExportFormat = patchedAppExportFormat.get(),
@@ -418,6 +421,7 @@ class PreferencesManager(
         snapshot.patcherProcessMemoryAggressive?.let { patcherProcessMemoryAggressive.value = it }
         snapshot.autoCollapsePatcherSteps?.let { autoCollapsePatcherSteps.value = it }
         snapshot.autoExpandRunningSteps?.let { autoExpandRunningSteps.value = it }
+        snapshot.autoExpandRunningStepsExclusive?.let { autoExpandRunningStepsExclusive.value = it }
         snapshot.enableSavedApps?.let { enableSavedApps.value = it }
         snapshot.disableSavedAppOverwrite?.let { disableSavedAppOverwrite.value = it }
         snapshot.patchedAppExportFormat?.let { patchedAppExportFormat.value = it }

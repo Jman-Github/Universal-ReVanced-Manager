@@ -49,6 +49,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -153,6 +154,7 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
     var showColorPicker by rememberSaveable { mutableStateOf(false) }
     var generationMode by rememberSaveable { mutableStateOf(AssetGenerationMode.BOTH) }
     var showGenerationModeMenu by rememberSaveable { mutableStateOf(false) }
+    var syncHeaderTransforms by rememberSaveable { mutableStateOf(false) }
 
     suspend fun applyImageSelection(target: PickerTarget?, source: String): Boolean {
         val decoded = withContext(Dispatchers.IO) { decodeBitmap(context, source) }
@@ -176,6 +178,18 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
             null -> Unit
         }
         return true
+    }
+
+    fun centered(transform: ImageTransform): ImageTransform = transform.copy(offsetX = 0f, offsetY = 0f)
+
+    fun updateLightTransform(updated: ImageTransform) {
+        lightTransform = updated
+        if (syncHeaderTransforms) darkTransform = updated
+    }
+
+    fun updateDarkTransform(updated: ImageTransform) {
+        darkTransform = updated
+        if (syncHeaderTransforms) lightTransform = updated
     }
 
     val openImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -430,6 +444,7 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
                 AssetEditorCard(
                     title = stringResource(R.string.tools_youtube_assets_adaptive_section),
                     onReset = { adaptiveTransform = ImageTransform() },
+                    onCenter = { adaptiveTransform = centered(adaptiveTransform) },
                     onClear = {
                         adaptiveSource = null
                         adaptiveTransform = ImageTransform()
@@ -497,16 +512,46 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
+                            text = stringResource(R.string.tools_youtube_assets_sync_header_transforms),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Switch(
+                            checked = syncHeaderTransforms,
+                            onCheckedChange = { enabled ->
+                                syncHeaderTransforms = enabled
+                                if (enabled) {
+                                    darkTransform = lightTransform
+                                }
+                            }
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
                             stringResource(R.string.tools_youtube_assets_light_header),
                             style = MaterialTheme.typography.labelLarge,
                             modifier = Modifier.weight(1f)
                         )
-                        TextButton(onClick = { lightTransform = ImageTransform() }) {
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = { updateLightTransform(ImageTransform()) }) {
                             Text(stringResource(R.string.tools_youtube_assets_reset_transform))
+                        }
+                        TextButton(onClick = { updateDarkTransform(lightTransform) }) {
+                            Text(stringResource(R.string.tools_youtube_assets_copy_light_to_dark))
+                        }
+                        TextButton(onClick = { updateLightTransform(centered(lightTransform)) }) {
+                            Text(stringResource(R.string.tools_youtube_assets_center_transform))
                         }
                         TextButton(onClick = {
                             lightSource = null
-                            lightTransform = ImageTransform()
+                            updateLightTransform(ImageTransform())
                         }) {
                             Text(stringResource(R.string.clear))
                         }
@@ -515,7 +560,7 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
                     PreviewHeader(
                         bitmap = lightBitmap,
                         transform = lightTransform,
-                        onTransformChange = { lightTransform = it },
+                        onTransformChange = { updateLightTransform(it) },
                         onSizeChanged = { lightSize = it },
                         backgroundColor = Color.White
                     )
@@ -533,12 +578,23 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
                             style = MaterialTheme.typography.labelLarge,
                             modifier = Modifier.weight(1f)
                         )
-                        TextButton(onClick = { darkTransform = ImageTransform() }) {
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = { updateDarkTransform(ImageTransform()) }) {
                             Text(stringResource(R.string.tools_youtube_assets_reset_transform))
+                        }
+                        TextButton(onClick = { updateLightTransform(darkTransform) }) {
+                            Text(stringResource(R.string.tools_youtube_assets_copy_dark_to_light))
+                        }
+                        TextButton(onClick = { updateDarkTransform(centered(darkTransform)) }) {
+                            Text(stringResource(R.string.tools_youtube_assets_center_transform))
                         }
                         TextButton(onClick = {
                             darkSource = null
-                            darkTransform = ImageTransform()
+                            updateDarkTransform(ImageTransform())
                         }) {
                             Text(stringResource(R.string.clear))
                         }
@@ -547,7 +603,7 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
                     PreviewHeader(
                         bitmap = darkBitmap,
                         transform = darkTransform,
-                        onTransformChange = { darkTransform = it },
+                        onTransformChange = { updateDarkTransform(it) },
                         onSizeChanged = { darkSize = it },
                         backgroundColor = Color(0xFF101216)
                     )
@@ -697,6 +753,7 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
 private fun AssetEditorCard(
     title: String,
     onReset: (() -> Unit)? = null,
+    onCenter: (() -> Unit)? = null,
     onClear: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
@@ -706,6 +763,9 @@ private fun AssetEditorCard(
                 Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 onReset?.let { reset ->
                     TextButton(onClick = reset) { Text(stringResource(R.string.tools_youtube_assets_reset_transform)) }
+                }
+                onCenter?.let { center ->
+                    TextButton(onClick = center) { Text(stringResource(R.string.tools_youtube_assets_center_transform)) }
                 }
                 onClear?.let { clear ->
                     TextButton(onClick = clear) { Text(stringResource(R.string.clear)) }
@@ -1082,6 +1142,24 @@ private fun AdaptiveColorWheelDialog(
     var saturation by remember(initialColor) { mutableStateOf(hsv[1]) }
     var value by remember(initialColor) { mutableStateOf(hsv[2]) }
     val selectedColor = remember(hue, saturation, value) { Color.hsv(hue, saturation, value) }
+    var hexInput by remember(initialColor) { mutableStateOf(colorToHexString(initialColor)) }
+    var redInput by remember(initialColor) { mutableStateOf(AndroidColor.red(initialColor.toArgb()).toString()) }
+    var greenInput by remember(initialColor) { mutableStateOf(AndroidColor.green(initialColor.toArgb()).toString()) }
+    var blueInput by remember(initialColor) { mutableStateOf(AndroidColor.blue(initialColor.toArgb()).toString()) }
+
+    fun setColor(updated: Color) {
+        val updatedHsv = FloatArray(3).apply { AndroidColor.colorToHSV(updated.toArgb(), this) }
+        hue = updatedHsv[0]
+        saturation = updatedHsv[1]
+        value = updatedHsv[2]
+    }
+
+    LaunchedEffect(selectedColor) {
+        hexInput = colorToHexString(selectedColor)
+        redInput = AndroidColor.red(selectedColor.toArgb()).toString()
+        greenInput = AndroidColor.green(selectedColor.toArgb()).toString()
+        blueInput = AndroidColor.blue(selectedColor.toArgb()).toString()
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1117,6 +1195,91 @@ private fun AdaptiveColorWheelDialog(
                     onValueChange = { value = it },
                     valueRange = 0f..1f
                 )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = {
+                        parseColorOrNull(hexInput)?.let { setColor(it) }
+                    }) {
+                        Text(stringResource(R.string.tools_youtube_assets_apply_hex))
+                    }
+                }
+                OutlinedTextField(
+                    value = hexInput,
+                    onValueChange = { incoming ->
+                        hexInput = incoming
+                            .uppercase(Locale.ROOT)
+                            .replace("#", "")
+                            .filter { it in "0123456789ABCDEF" }
+                            .take(8)
+                    },
+                    label = { Text(stringResource(R.string.tools_youtube_assets_background_color_hex)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = {
+                        parseRgbColorOrNull(redInput, greenInput, blueInput)?.let { setColor(it) }
+                    }) {
+                        Text(stringResource(R.string.tools_youtube_assets_apply_rgb))
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = redInput,
+                        onValueChange = { redInput = it.filter(Char::isDigit).take(3) },
+                        label = { Text(stringResource(R.string.color_channel_red)) },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = greenInput,
+                        onValueChange = { greenInput = it.filter(Char::isDigit).take(3) },
+                        label = { Text(stringResource(R.string.color_channel_green)) },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = blueInput,
+                        onValueChange = { blueInput = it.filter(Char::isDigit).take(3) },
+                        label = { Text(stringResource(R.string.color_channel_blue)) },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.tools_youtube_assets_color_presets),
+                    style = MaterialTheme.typography.labelMedium
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    listOf(
+                        Color(0xFFFFFFFF),
+                        Color(0xFF000000),
+                        Color(0xFFFF0000),
+                        Color(0xFF00FF00),
+                        Color(0xFF0000FF),
+                        Color(0xFFB6E3FF)
+                    ).forEach { preset ->
+                        Box(
+                            modifier = Modifier
+                                .size(30.dp)
+                                .clip(CircleShape)
+                                .background(preset)
+                                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f), CircleShape)
+                                .clickable { setColor(preset) }
+                        )
+                    }
+                }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1240,3 +1403,24 @@ private fun parseColor(raw: String, fallback: Color): Color {
         }
     }.getOrElse { fallback }
 }
+
+private fun parseColorOrNull(raw: String): Color? {
+    val cleaned = raw.trim().removePrefix("#")
+    return runCatching {
+        when (cleaned.length) {
+            6 -> Color(AndroidColor.parseColor("#FF$cleaned"))
+            8 -> Color(AndroidColor.parseColor("#$cleaned"))
+            else -> null
+        }
+    }.getOrNull()
+}
+
+private fun parseRgbColorOrNull(red: String, green: String, blue: String): Color? {
+    val r = red.toIntOrNull()?.coerceIn(0, 255) ?: return null
+    val g = green.toIntOrNull()?.coerceIn(0, 255) ?: return null
+    val b = blue.toIntOrNull()?.coerceIn(0, 255) ?: return null
+    return Color(AndroidColor.rgb(r, g, b))
+}
+
+private fun colorToHexString(color: Color): String =
+    String.format(Locale.ROOT, "%08X", color.toArgb())

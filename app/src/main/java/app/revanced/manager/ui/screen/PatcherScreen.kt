@@ -105,6 +105,8 @@ fun PatcherScreen(
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val autoCollapsePatcherSteps by prefs.autoCollapsePatcherSteps.getAsState()
     val autoExpandRunningSteps by prefs.autoExpandRunningSteps.getAsState()
+    val autoExpandRunningStepsExclusive by prefs.autoExpandRunningStepsExclusive.getAsState()
+    val useExclusiveAutoExpand = autoExpandRunningSteps && autoExpandRunningStepsExclusive
     val savedAppsEnabled by prefs.enableSavedApps.getAsState()
     val exportMetadata = viewModel.exportMetadata
     val fallbackExportMetadata = remember(viewModel.packageName, viewModel.version) {
@@ -909,7 +911,11 @@ fun PatcherScreen(
                         subStepsById = viewModel.stepSubSteps,
                         isExpanded = expandedCategories.contains(category),
                         autoExpandRunning = autoExpandRunningSteps,
+                        autoExpandRunningMainOnly = useExclusiveAutoExpand,
                         onExpand = {
+                            if (useExclusiveAutoExpand) {
+                                expandedCategories.clear()
+                            }
                             expandedCategories.add(category)
                         },
                         onClick = {

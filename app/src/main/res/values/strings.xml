@@ -537,6 +537,8 @@ Patch profiles are not affected.</string>
     <string name="patcher_auto_collapse_steps_description">Automatically collapse each patcher progress widget after all of its steps finish</string>
     <string name="patcher_auto_expand_steps">Auto-expand running steps</string>
     <string name="patcher_auto_expand_steps_description">Automatically expand a patcher progress widget when it starts running</string>
+    <string name="patcher_auto_expand_running_steps_exclusive">Only auto-expand active main category</string>
+    <string name="patcher_auto_expand_running_steps_exclusive_description">When auto-expand is enabled, keep only the currently running main patcher category expanded and do not auto-expand sub-steps</string>
     <string name="patcher_saved_apps_title">Save patched apps for later</string>
     <string name="patcher_saved_apps_description">When enabled, the manager saves a patched app entry and APK so it stays in the Apps tab and can be reinstalled later. Turning this off skips saving and deletes all saved patched apps. Any apps installed through the Rooted mount installer remain visible</string>
     <string name="saved_apps_disable_overwrite_title">Always create a new saved app entry</string>
@@ -641,10 +643,16 @@ Patch profiles are not affected.</string>
     <string name="tools_youtube_assets_color_picker_title">Choose adaptive background color</string>
     <string name="tools_youtube_assets_color_picker_desc">Drag in the color wheel to set hue/saturation, then adjust brightness.</string>
     <string name="tools_youtube_assets_color_brightness">Brightness</string>
+    <string name="tools_youtube_assets_apply_hex">Apply HEX</string>
+    <string name="tools_youtube_assets_apply_rgb">Apply RGB</string>
+    <string name="tools_youtube_assets_color_presets">Presets</string>
     <string name="tools_youtube_assets_guide_safe_zone">Inner guide ring: safest centered area.</string>
     <string name="tools_youtube_assets_guide_mask_zone">Outer guide ring: may be clipped on some launchers.</string>
     <string name="tools_youtube_assets_light_header">Light header</string>
     <string name="tools_youtube_assets_dark_header">Dark header</string>
+    <string name="tools_youtube_assets_sync_header_transforms">Sync light/dark size and position</string>
+    <string name="tools_youtube_assets_copy_light_to_dark">Copy light -> dark</string>
+    <string name="tools_youtube_assets_copy_dark_to_light">Copy dark -> light</string>
     <string name="tools_youtube_assets_select_light_header">Select light header image</string>
     <string name="tools_youtube_assets_select_dark_header">Select dark header image</string>
     <string name="tools_youtube_assets_light_header_name">Light header file name</string>
@@ -669,6 +677,7 @@ Patch profiles are not affected.</string>
     <string name="tools_youtube_assets_missing_header_images">Select both light and dark header images first.</string>
     <string name="tools_youtube_assets_no_image_selected">No image selected</string>
     <string name="tools_youtube_assets_reset_transform">Reset position</string>
+    <string name="tools_youtube_assets_center_transform">Center</string>
     <string name="tools_youtube_assets_image_load_failed">Unable to load the selected image. Choose a supported image file.</string>
     <string name="tools_youtube_assets_name_conflict_adaptive">Adaptive foreground and background file names must be different.</string>
     <string name="tools_youtube_assets_name_conflict_headers">Light and dark header file names must be different.</string>
