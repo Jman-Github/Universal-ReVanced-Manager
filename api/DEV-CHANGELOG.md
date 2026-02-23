@@ -1,4 +1,4 @@
-# v1.8.1-dev.03 (2026-02-22)
+# v1.8.1-dev.03 (2026-02-23)
 
 
 # Features
@@ -20,6 +20,11 @@
 - Fixed issues with the patcher screen being "frozen" and showing no progress or anyting at all for a few seconds on older Android versions
 - Fixed UI lagging/buffering issues on the `Download APK file` step
 - Fixed issues where downloading certain APK files using the downloader plugins would cause an error https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/221
+
+
+# CI
+
+- All prereleases/releases are published with a universal (all ABI) APK, and the ABI specific APKs. The in-app updater now automatically picks the APK that matches your ABI
 
 
 # v1.8.1-dev.02 (2026-02-21)

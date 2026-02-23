@@ -53,6 +53,11 @@
 - Fixed issues where downloading certain APK files using the downloader plugins would cause an error https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/221
 
 
+# CI
+
+- All prereleases/releases are published with a universal (all ABI) APK, and the ABI specific APKs. The in-app updater now automatically picks the APK that matches your ABI
+
+
 # v1.8.0 (2026-02-15)
 
 
