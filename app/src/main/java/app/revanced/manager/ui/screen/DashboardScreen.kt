@@ -2667,9 +2667,9 @@ private fun BundleFabHandle(
     val container = MaterialTheme.colorScheme.primaryContainer
     val contentColor = MaterialTheme.colorScheme.onPrimaryContainer
     val icon = if (collapsed) {
-        Icons.Outlined.ChevronRight
-    } else {
         Icons.Outlined.ChevronLeft
+    } else {
+        Icons.Outlined.ChevronRight
     }
 
     Box(

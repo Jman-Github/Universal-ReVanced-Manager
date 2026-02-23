@@ -32,16 +32,18 @@ fun AnnotatedLinkText(
     ),
     context: Context = LocalContext.current
 ) {
-    val annotatedString = remember(text, linkLabel, url) {
+    val (clickableLabel, trailingLabel) = remember(linkLabel) { splitTrailingPunctuation(linkLabel) }
+    val annotatedString = remember(text, clickableLabel, trailingLabel, url, linkStyle) {
         buildAnnotatedString {
             append(text)
             append(" ")
 
             pushStringAnnotation(tag = "URL", annotation = url)
             withStyle(linkStyle) {
-                append(linkLabel)
+                append(clickableLabel)
             }
             pop()
+            append(trailingLabel)
         }
     }
 
@@ -56,4 +58,28 @@ fun AnnotatedLinkText(
                 ?.let { context.openUrl(it.item) }
         }
     )
+}
+
+private fun splitTrailingPunctuation(label: String): Pair<String, String> {
+    if (label.isEmpty()) return label to ""
+
+    val trimmedEnd = label.trimEnd()
+    if (trimmedEnd.isEmpty()) return label to ""
+
+    var splitIndex = trimmedEnd.length
+    while (splitIndex > 0 && trimmedEnd[splitIndex - 1].isTrailingPunctuation()) {
+        splitIndex--
+    }
+
+    if (splitIndex == trimmedEnd.length || splitIndex == 0) return label to ""
+
+    val trailingWhitespace = label.substring(trimmedEnd.length)
+    val clickable = trimmedEnd.substring(0, splitIndex)
+    val trailing = trimmedEnd.substring(splitIndex) + trailingWhitespace
+    return clickable to trailing
+}
+
+private fun Char.isTrailingPunctuation(): Boolean = when (this) {
+    '.', ',', '!', '?', ':', ';', '…', '。', '،', '؛' -> true
+    else -> false
 }
