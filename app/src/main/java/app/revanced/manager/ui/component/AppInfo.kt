@@ -23,6 +23,7 @@ fun AppInfo(
     iconOverride: Drawable? = null,
     placeholderLabel: String? = null,
     placeholderMetaLines: Int = 1,
+    showExtraContentWhenLoading: Boolean = false,
     extraContent: @Composable () -> Unit = {}
 ) {
     Column(
@@ -44,7 +45,12 @@ fun AppInfo(
                     .width(200.dp)
                     .height(22.dp)
             )
-            repeat(placeholderMetaLines.coerceAtLeast(1)) { index ->
+            val placeholderLineCount = if (showExtraContentWhenLoading) {
+                placeholderMetaLines.coerceAtLeast(0)
+            } else {
+                placeholderMetaLines.coerceAtLeast(1)
+            }
+            repeat(placeholderLineCount) { index ->
                 val lineWidth = when (index) {
                     0 -> 150.dp
                     1 -> 130.dp
@@ -56,6 +62,9 @@ fun AppInfo(
                         .width(lineWidth)
                         .height(14.dp)
                 )
+            }
+            if (showExtraContentWhenLoading) {
+                extraContent()
             }
         } else {
             AppIcon(

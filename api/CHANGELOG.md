@@ -30,6 +30,7 @@
 - Redesigned and completely reorganized the settings screens https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/222
 - Slight UI corrections and improvements in multiple parts of the app https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/223
 - Added an option to choose an APK from URV downloaded apps for the Patch Profiles preset APK setting https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/224
+- Made the package name of apps always shown on the `App info` screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/225
 
 
 # Bug fixes
