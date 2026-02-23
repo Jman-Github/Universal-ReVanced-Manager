@@ -79,21 +79,41 @@ jobs:
             -PdevVersionSuffix="${{ steps.changelog.outputs.dev_suffix }}" \
             :app:assembleDev
 
-      - name: Locate dev artifact
+      - name: Locate dev artifacts
         id: artifact
         run: |
-          APK_PATH="$(ls -t app/build/outputs/apk/dev/*.apk 2>/dev/null | head -n 1)"
-          if [ -z "$APK_PATH" ]; then
-            echo "Unable to find dev APK in app/build/outputs/apk/dev"
+          APK_DIR="app/build/outputs/apk/dev"
+          VERSION="${{ steps.changelog.outputs.version }}"
+          EXPECTED=(
+            "universal-revanced-manager-${VERSION}-all.apk"
+            "universal-revanced-manager-${VERSION}-arm64_v8.apk"
+            "universal-revanced-manager-${VERSION}-armeabi_v7a.apk"
+            "universal-revanced-manager-${VERSION}-x86.apk"
+            "universal-revanced-manager-${VERSION}-x86_64.apk"
+          )
+          for name in "${EXPECTED[@]}"; do
+            if [ ! -f "$APK_DIR/$name" ]; then
+              echo "Missing expected dev APK artifact: $APK_DIR/$name"
+              ls -la "$APK_DIR" || true
+              exit 1
+            fi
+            echo "Found $APK_DIR/$name"
+          done
+          mapfile -t ACTUAL < <(find "$APK_DIR" -maxdepth 1 -type f -name 'universal-revanced-manager-*.apk' -printf '%f\n' | sort)
+          if [ "${#ACTUAL[@]}" -ne "${#EXPECTED[@]}" ]; then
+            echo "Unexpected number of manager APK artifacts. Expected ${#EXPECTED[@]}, found ${#ACTUAL[@]}"
+            printf 'Actual manager APKs:\n%s\n' "${ACTUAL[@]}"
+            ls -la "$APK_DIR" || true
             exit 1
           fi
-          BASE_VERSION="${{ steps.changelog.outputs.base_version }}"
-          DEV_SUFFIX="${{ steps.changelog.outputs.dev_suffix }}"
-          TARGET_NAME="universal-revanced-manager-${BASE_VERSION}-${DEV_SUFFIX}.apk"
-          TARGET_PATH="$(dirname "$APK_PATH")/$TARGET_NAME"
-          cp "$APK_PATH" "$TARGET_PATH"
-          echo "apk_path=$TARGET_PATH" >> "$GITHUB_OUTPUT"
-          echo "Found APK at $APK_PATH"
+          for name in "${ACTUAL[@]}"; do
+            if [[ ! " ${EXPECTED[*]} " =~ " ${name} " ]]; then
+              echo "Unexpected manager APK artifact name: $name"
+              ls -la "$APK_DIR" || true
+              exit 1
+            fi
+          done
+          echo "apk_dir=$APK_DIR" >> "$GITHUB_OUTPUT"
 
       - name: Prepare prerelease tag
         id: release
@@ -111,20 +131,21 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.release.outputs.NEW_TAG }}
-          APK_PATH: ${{ steps.artifact.outputs.apk_path }}
+          APK_DIR: ${{ steps.artifact.outputs.apk_dir }}
         run: |
           if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" "$APK_PATH" --title "Universal ReVanced Manager ${TAG}" --notes-file dev_release_notes.md --prerelease
+            gh release create "$TAG" --title "Universal ReVanced Manager ${TAG}" --notes-file dev_release_notes.md --prerelease
           else
             gh release edit "$TAG" --title "Universal ReVanced Manager ${TAG}" --notes-file dev_release_notes.md --prerelease
           fi
+          gh release upload "$TAG" "$APK_DIR"/*.apk --clobber
 
-      - name: Upload APK artifact
+      - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
           name: universal-revanced-manager-dev-${{ github.sha }}
           retention-days: 14
           if-no-files-found: error
           path: |
-            ${{ steps.artifact.outputs.apk_path }}
+            ${{ steps.artifact.outputs.apk_dir }}/*.apk
             app/build/outputs/apk/dev/output-metadata.json

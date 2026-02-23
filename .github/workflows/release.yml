@@ -47,17 +47,6 @@ jobs:
         run: |
           ./gradlew -Dorg.gradle.java.home="${{ steps.setup-java.outputs.path }}" --no-daemon assembleRelease
 
-      - name: Locate release artifact
-        id: artifact
-        run: |
-          APK_PATH="$(ls -t app/build/outputs/apk/release/*.apk 2>/dev/null | head -n 1)"
-          if [ -z "$APK_PATH" ]; then
-            echo "Unable to find release APK in app/build/outputs/apk/release"
-            exit 1
-          fi
-          echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
-          echo "Found APK at $APK_PATH"
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -100,31 +89,66 @@ jobs:
           fi
           echo "NEW_TAG=${VERSION}" >> "$GITHUB_OUTPUT"
 
+      - name: Locate release artifacts
+        id: artifact
+        run: |
+          APK_DIR="app/build/outputs/apk/release"
+          VERSION="${{ steps.changelog.outputs.version }}"
+          EXPECTED=(
+            "universal-revanced-manager-${VERSION}-all.apk"
+            "universal-revanced-manager-${VERSION}-arm64_v8.apk"
+            "universal-revanced-manager-${VERSION}-armeabi_v7a.apk"
+            "universal-revanced-manager-${VERSION}-x86.apk"
+            "universal-revanced-manager-${VERSION}-x86_64.apk"
+          )
+          for name in "${EXPECTED[@]}"; do
+            if [ ! -f "$APK_DIR/$name" ]; then
+              echo "Missing expected release APK artifact: $APK_DIR/$name"
+              ls -la "$APK_DIR" || true
+              exit 1
+            fi
+            echo "Found $APK_DIR/$name"
+          done
+          mapfile -t ACTUAL < <(find "$APK_DIR" -maxdepth 1 -type f -name 'universal-revanced-manager-*.apk' -printf '%f\n' | sort)
+          if [ "${#ACTUAL[@]}" -ne "${#EXPECTED[@]}" ]; then
+            echo "Unexpected number of manager APK artifacts. Expected ${#EXPECTED[@]}, found ${#ACTUAL[@]}"
+            printf 'Actual manager APKs:\n%s\n' "${ACTUAL[@]}"
+            ls -la "$APK_DIR" || true
+            exit 1
+          fi
+          for name in "${ACTUAL[@]}"; do
+            if [[ ! " ${EXPECTED[*]} " =~ " ${name} " ]]; then
+              echo "Unexpected manager APK artifact name: $name"
+              ls -la "$APK_DIR" || true
+              exit 1
+            fi
+          done
+          echo "apk_dir=$APK_DIR" >> "$GITHUB_OUTPUT"
+
       - name: Name GitHub Release
         if: steps.release.outputs.NEW_TAG != ''
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.release.outputs.NEW_TAG }}
-          APK_PATH: ${{ steps.artifact.outputs.apk_path }}
         run: |
           if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" "$APK_PATH" --title "Universal ReVanced Manager $TAG" --notes-file release_notes.md
+            gh release create "$TAG" --title "Universal ReVanced Manager $TAG" --notes-file release_notes.md
           else
             gh release edit "$TAG" --title "Universal ReVanced Manager $TAG" --notes-file release_notes.md
           fi
 
-      - name: Upload APK asset
+      - name: Upload APK assets
         if: steps.release.outputs.NEW_TAG != ''
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.release.outputs.NEW_TAG }}
-          APK_PATH: ${{ steps.artifact.outputs.apk_path }}
+          APK_DIR: ${{ steps.artifact.outputs.apk_dir }}
         run: |
-          gh release upload "$TAG" "$APK_PATH" --clobber
+          gh release upload "$TAG" "$APK_DIR"/*.apk --clobber
 
       - name: Attest
         if: steps.release.outputs.NEW_TAG != ''
         uses: actions/attest-build-provenance@v2
         with:
           subject-name: Universal ReVanced Manager ${{ steps.release.outputs.NEW_TAG }}
-          subject-path: ${{ steps.artifact.outputs.apk_path }}
+          subject-path: ${{ steps.artifact.outputs.apk_dir }}/universal-revanced-manager-${{ steps.changelog.outputs.version }}-all.apk

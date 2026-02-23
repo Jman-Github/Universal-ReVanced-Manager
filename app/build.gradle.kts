@@ -15,7 +15,8 @@ plugins {
     signing
 }
 
-val outputApkFileName = "universal-revanced-manager-$version.apk"
+val resolvedProjectVersion = if (version == "unspecified") "1.8.1" else version.toString()
+val outputApkFileName = "universal-revanced-manager-v$resolvedProjectVersion-all.apk"
 val morpheRuntimeAssetsDir = layout.buildDirectory.dir("generated/morphe-runtime")
 val ampleRuntimeAssetsDir = layout.buildDirectory.dir("generated/ample-runtime")
 val devVersionSuffix = providers.gradleProperty("devVersionSuffix")
@@ -189,7 +190,7 @@ android {
         minSdk = 26
         targetSdk = 35
 
-        val versionStr = if (version == "unspecified") "1.8.0" else version.toString()
+        val versionStr = if (version == "unspecified") "1.8.1" else version.toString()
         versionName = versionStr
         versionCode = with(versionStr.toVersion()) {
             major * 10_000_000 +
@@ -246,11 +247,32 @@ android {
         }
     }
 
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+            isUniversalApk = true
+        }
+    }
+
     applicationVariants.all {
+        val resolvedVersionName = versionName.orEmpty().ifBlank {
+            if (version == "unspecified") "1.8.1" else version.toString()
+        }
         outputs.all {
             this as com.android.build.gradle.internal.api.ApkVariantOutputImpl
 
-            outputFileName = outputApkFileName
+            val abi = getFilter(com.android.build.OutputFile.ABI)
+            val abiSuffix = when (abi) {
+                "arm64-v8a" -> "arm64_v8"
+                "armeabi-v7a" -> "armeabi_v7a"
+                "x86" -> "x86"
+                "x86_64" -> "x86_64"
+                null -> "all"
+                else -> abi.replace('-', '_')
+            }
+            outputFileName = "universal-revanced-manager-v$resolvedVersionName-$abiSuffix.apk"
         }
     }
 
