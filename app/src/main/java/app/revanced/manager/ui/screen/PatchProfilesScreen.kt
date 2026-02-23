@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -31,6 +33,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -87,6 +90,7 @@ import app.revanced.manager.ui.component.haptics.HapticCheckbox
 import app.revanced.manager.ui.component.patches.PathSelectorDialog
 import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.domain.manager.PreferencesManager
+import app.revanced.manager.domain.repository.DownloadedAppRepository
 import app.revanced.manager.patcher.split.SplitArchiveDisplayResolver
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.ui.viewmodel.BundleSourceType
@@ -111,7 +115,7 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 import java.io.File
 import java.util.Locale
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun PatchProfilesScreen(
     onProfileClick: (PatchProfileLaunchData) -> Unit,
@@ -136,6 +140,8 @@ fun PatchProfilesScreen(
         initialValue = prefs.allowPatchProfileBundleOverride.default
     )
     val filesystem = koinInject<Filesystem>()
+    val downloadedAppRepository = koinInject<DownloadedAppRepository>()
+    val downloadedApps by downloadedAppRepository.getAll().collectAsStateWithLifecycle(emptyList())
     val pm = koinInject<PM>()
     val storageRoots = remember { filesystem.storageRoots() }
     var loadingProfileId by remember { mutableStateOf<Int?>(null) }
@@ -148,6 +154,7 @@ fun PatchProfilesScreen(
     var versionDialogSaving by remember { mutableStateOf(false) }
     var settingsDialogProfile by remember { mutableStateOf<PatchProfileListItem?>(null) }
     var apkPickerProfile by remember { mutableStateOf<PatchProfileListItem?>(null) }
+    var downloadedApkPickerProfile by remember { mutableStateOf<PatchProfileListItem?>(null) }
     var pendingDocumentApkPickerProfile by remember { mutableStateOf<PatchProfileListItem?>(null) }
     var apkPickerBusy by remember { mutableStateOf(false) }
     data class ChangeUidTarget(val profileId: Int, val bundleUid: Int, val bundleName: String?)
@@ -272,6 +279,86 @@ fun PatchProfilesScreen(
             pendingDocumentApkPickerProfile = profile
             apkDocumentLauncher.launch("application/*")
         }
+    }
+    downloadedApkPickerProfile?.let { profile ->
+        val matchingDownloadedApps = remember(downloadedApps, profile.packageName) {
+            downloadedApps
+                .asSequence()
+                .filter { it.packageName.equals(profile.packageName, ignoreCase = true) }
+                .sortedByDescending { it.lastUsed }
+                .toList()
+        }
+        AlertDialog(
+            onDismissRequest = {
+                if (apkPickerBusy) return@AlertDialog
+                downloadedApkPickerProfile = null
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { downloadedApkPickerProfile = null },
+                    enabled = !apkPickerBusy
+                ) { Text(stringResource(R.string.close)) }
+            },
+            title = { Text(stringResource(R.string.downloaded_apps)) },
+            text = {
+                if (matchingDownloadedApps.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.patch_profile_apk_not_set),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.heightIn(max = 320.dp)
+                    ) {
+                        items(
+                            items = matchingDownloadedApps,
+                            key = { "${it.packageName}:${it.version}" }
+                        ) { downloadedApp ->
+                            TextButton(
+                                onClick = {
+                                    if (apkPickerBusy) return@TextButton
+                                    apkPickerBusy = true
+                                    scope.launch {
+                                        try {
+                                            val sourceFile = withContext(Dispatchers.IO) {
+                                                downloadedAppRepository.getApkFileForApp(downloadedApp)
+                                            }
+                                            val result = viewModel.updateProfileApk(profile.id, sourceFile)
+                                            handleApkSelectionResult(profile.name, result)
+                                            if (result == PatchProfilesViewModel.ApkSelectionResult.SUCCESS) {
+                                                downloadedApkPickerProfile = null
+                                            }
+                                        } finally {
+                                            apkPickerBusy = false
+                                        }
+                                    }
+                                },
+                                enabled = !apkPickerBusy,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                                    horizontalAlignment = Alignment.Start,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = downloadedApp.version,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Text(
+                                        text = downloadedApp.packageName,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        )
     }
 
     renameProfileId?.let { targetId ->
@@ -949,9 +1036,10 @@ fun PatchProfilesScreen(
                                 .fillMaxWidth()
                                 .horizontalScroll(apkScrollState)
                         )
-                        Row(
+                        FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             TextButton(
                                 onClick = {
@@ -959,7 +1047,21 @@ fun PatchProfilesScreen(
                                     apkPickerProfile = settingsProfile
                                 }
                             ) {
-                                Text(stringResource(R.string.patch_profile_apk_select))
+                                Text(
+                                    text = stringResource(R.string.patch_profile_apk_select),
+                                    maxLines = 1
+                                )
+                            }
+                            TextButton(
+                                onClick = {
+                                    if (apkPickerBusy) return@TextButton
+                                    downloadedApkPickerProfile = settingsProfile
+                                }
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.downloaded_apps),
+                                    maxLines = 1
+                                )
                             }
                             if (apkPath != null) {
                                 TextButton(
@@ -989,7 +1091,10 @@ fun PatchProfilesScreen(
                                         }
                                     }
                                 ) {
-                                    Text(stringResource(R.string.patch_profile_apk_clear))
+                                    Text(
+                                        text = stringResource(R.string.patch_profile_apk_clear),
+                                        maxLines = 1
+                                    )
                                 }
                             }
                         }
