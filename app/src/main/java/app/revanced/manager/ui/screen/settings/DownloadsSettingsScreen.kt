@@ -338,7 +338,7 @@ fun DownloadsSettingsScreen(
                 modifier = Modifier.fillMaxSize()
             ) {
                 item {
-                    GroupHeader(stringResource(R.string.download_settings))
+                    GroupHeader(stringResource(R.string.download_behavior_section))
                 }
                 item {
                     ExpressiveSettingsCard(
@@ -522,7 +522,7 @@ fun DownloadsSettingsScreen(
                         onHighlightComplete = { highlightTarget = null }
                     ) { highlightModifier ->
                         GroupHeader(
-                            stringResource(R.string.downloaded_apps),
+                            stringResource(R.string.download_export_section),
                             modifier = highlightModifier
                         )
                     }

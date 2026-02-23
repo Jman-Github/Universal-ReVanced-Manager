@@ -379,7 +379,7 @@ fun UpdatesSettingsScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            GroupHeader(stringResource(R.string.patches_and_manager))
+            GroupHeader(stringResource(R.string.network_delivery_section))
 
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -396,9 +396,30 @@ fun UpdatesSettingsScreen(
                         description = R.string.update_on_metered_connections_description
                     )
                 }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.bundle_update_delivery_mode,
+                    activeKey = highlightTarget,
+                    extraKeys = setOf(
+                        R.string.bundle_update_delivery_mode_auto,
+                        R.string.bundle_update_delivery_mode_websocket_preferred,
+                        R.string.bundle_update_delivery_mode_polling_only,
+                    ),
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(R.string.bundle_update_delivery_mode),
+                        supportingContent = stringResource(
+                            R.string.bundle_update_delivery_mode_description_with_current,
+                            stringResource(deliveryMode.displayName)
+                        ),
+                        onClick = { showDeliveryModeDialog = true }
+                    )
+                }
             }
 
-            GroupHeader(stringResource(R.string.manager))
+            GroupHeader(stringResource(R.string.update_checks_section))
 
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -420,25 +441,6 @@ fun UpdatesSettingsScreen(
                                 }
                                 if (vm.checkForUpdates()) onUpdateClick()
                             }
-                        }
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.changelog,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    ExpressiveSettingsItem(
-                        modifier = highlightModifier,
-                        headlineContent = stringResource(R.string.changelog),
-                        supportingContent = stringResource(R.string.changelog_description),
-                        onClick = {
-                            if (!vm.isConnected) {
-                                context.toast(context.getString(R.string.no_network_toast))
-                                return@ExpressiveSettingsItem
-                            }
-                            onChangelogClick()
                         }
                     )
                 }
@@ -483,6 +485,31 @@ fun UpdatesSettingsScreen(
                 }
                 ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
+                    targetKey = R.string.changelog,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(R.string.changelog),
+                        supportingContent = stringResource(R.string.changelog_description),
+                        onClick = {
+                            if (!vm.isConnected) {
+                                context.toast(context.getString(R.string.no_network_toast))
+                                return@ExpressiveSettingsItem
+                            }
+                            onChangelogClick()
+                        }
+                    )
+                }
+            }
+
+            GroupHeader(stringResource(R.string.background_updates_section))
+
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                SettingsSearchHighlight(
                     targetKey = R.string.background_manager_update,
                     activeKey = highlightTarget,
                     extraKeys = setOf(
@@ -513,27 +540,6 @@ fun UpdatesSettingsScreen(
                         headlineContent = stringResource(R.string.background_bundle_update),
                         supportingContent = stringResource(R.string.background_bundle_update_description),
                         onClick = { showBackgroundUpdateDialog = true }
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.bundle_update_delivery_mode,
-                    activeKey = highlightTarget,
-                    extraKeys = setOf(
-                        R.string.bundle_update_delivery_mode_auto,
-                        R.string.bundle_update_delivery_mode_websocket_preferred,
-                        R.string.bundle_update_delivery_mode_polling_only,
-                    ),
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    ExpressiveSettingsItem(
-                        modifier = highlightModifier,
-                        headlineContent = stringResource(R.string.bundle_update_delivery_mode),
-                        supportingContent = stringResource(
-                            R.string.bundle_update_delivery_mode_description_with_current,
-                            stringResource(deliveryMode.displayName)
-                        ),
-                        onClick = { showDeliveryModeDialog = true }
                     )
                 }
             }

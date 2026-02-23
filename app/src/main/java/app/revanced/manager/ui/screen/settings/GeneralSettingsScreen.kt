@@ -125,8 +125,6 @@ fun GeneralSettingsScreen(
     val showToolsTab by prefs.showToolsTab.getAsState()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val theme by prefs.theme.getAsState()
-    val appLanguage by prefs.appLanguage.getAsState()
-    var showLanguageDialog by rememberSaveable { mutableStateOf(false) }
     var showCustomBackgroundImagePicker by rememberSaveable { mutableStateOf(false) }
     var showCustomBackgroundImagePreview by rememberSaveable { mutableStateOf(false) }
     // Allow selecting the AMOLED preset regardless of the current theme since selecting it switches to dark mode anyway.
@@ -154,24 +152,6 @@ fun GeneralSettingsScreen(
     val canAdjustAccentColor = selectedThemePreset != ThemePreset.DYNAMIC
     val themeControlsAlpha = if (canAdjustThemeColor) 1f else 0.5f
     val accentControlsAlpha = if (canAdjustAccentColor) 1f else 0.5f
-    val languageOptions = remember {
-        listOf(
-            LanguageOption("system", R.string.language_option_system),
-            LanguageOption("en", R.string.language_option_english),
-            LanguageOption("fr", R.string.language_option_french),
-            LanguageOption("zh-CN", R.string.language_option_chinese_simplified),
-            LanguageOption("in", R.string.language_option_indonesian),
-            LanguageOption("hi", R.string.language_option_hindi),
-            LanguageOption("gu", R.string.language_option_gujarati),
-            LanguageOption("pt-BR", R.string.language_option_portuguese_brazil),
-            LanguageOption("vi", R.string.language_option_vietnamese),
-            LanguageOption("ko", R.string.language_option_korean),
-            LanguageOption("ja", R.string.language_option_japanese),
-            LanguageOption("ru", R.string.language_option_russian),
-            LanguageOption("uk", R.string.language_option_ukrainian)
-        )
-    }
-
     if (!canAdjustThemeColor && showThemeColorPicker) showThemeColorPicker = false
     if (!canAdjustAccentColor && showAccentPicker) showAccentPicker = false
     val context = LocalContext.current
@@ -241,19 +221,6 @@ fun GeneralSettingsScreen(
             onDismiss = { showAccentPicker = false }
         )
     }
-    if (showLanguageDialog) {
-        LanguageDialog(
-            options = languageOptions,
-            selectedCode = appLanguage,
-            onSelect = {
-                viewModel.setAppLanguage(it)
-                // Force activity recreation so every screen picks up the new locale immediately.
-                (context as? android.app.Activity)?.recreate()
-                showLanguageDialog = false
-            },
-            onDismiss = { showLanguageDialog = false }
-        )
-    }
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
 
     Scaffold(
@@ -271,13 +238,7 @@ fun GeneralSettingsScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            GroupHeader(stringResource(R.string.appearance))
-
-            val selectedLanguageLabel = when (appLanguage) {
-                "system" -> R.string.language_option_system
-                else -> languageOptions.firstOrNull { it.code == appLanguage }?.labelRes
-                    ?: R.string.language_option_english
-            }
+            GroupHeader(stringResource(R.string.theme_section))
 
             val baseThemeSwatches = remember(supportsDynamicColor) {
                 buildList {
@@ -419,226 +380,8 @@ fun GeneralSettingsScreen(
                         onClick = { viewModel.setPureBlackOnSystemDark(!pureBlackOnSystemDark) }
                     )
                 }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.hide_main_tab_labels,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        preference = prefs.hideMainTabLabels,
-                        coroutineScope = viewModel.viewModelScope,
-                        headline = R.string.hide_main_tab_labels,
-                        description = R.string.hide_main_tab_labels_description
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.disable_main_tab_swipe,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        preference = prefs.disableMainTabSwipe,
-                        coroutineScope = viewModel.viewModelScope,
-                        headline = R.string.disable_main_tab_swipe,
-                        description = R.string.disable_main_tab_swipe_description
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.disable_patch_selection_tab_swipe,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        preference = prefs.disablePatchSelectionTabSwipe,
-                        coroutineScope = viewModel.viewModelScope,
-                        headline = R.string.disable_patch_selection_tab_swipe,
-                        description = R.string.disable_patch_selection_tab_swipe_description
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.hide_patch_profiles_tab,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        value = !showPatchProfilesTab,
-                        onValueChange = { hide ->
-                            viewModel.viewModelScope.launch {
-                                prefs.showPatchProfilesTab.update(!hide)
-                            }
-                        },
-                        headline = R.string.hide_patch_profiles_tab,
-                        description = R.string.hide_patch_profiles_tab_description,
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.hide_tools_tab,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        value = !showToolsTab,
-                        onValueChange = { hide ->
-                            viewModel.viewModelScope.launch {
-                                prefs.showToolsTab.update(!hide)
-                            }
-                        },
-                        headline = R.string.hide_tools_tab,
-                        description = R.string.hide_tools_tab_description,
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.custom_background_image,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    Column(
-                        modifier = highlightModifier.fillMaxWidth()
-                    ) {
-                        ExpressiveSettingsItem(
-                            headlineContent = stringResource(R.string.custom_background_image),
-                            supportingContent = stringResource(R.string.custom_background_image_description),
-                            onClick = {
-                                showCustomBackgroundImagePicker = true
-                            }
-                        )
-
-                        if (customBackgroundPreviewUri != null) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { showCustomBackgroundImagePreview = !showCustomBackgroundImagePreview }
-                                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.custom_background_image_preview),
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Icon(
-                                    imageVector = if (showCustomBackgroundImagePreview) {
-                                        Icons.Outlined.ExpandLess
-                                    } else {
-                                        Icons.Outlined.ExpandMore
-                                    },
-                                    contentDescription = if (showCustomBackgroundImagePreview) {
-                                        stringResource(R.string.collapse_content)
-                                    } else {
-                                        stringResource(R.string.expand_content)
-                                    },
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-
-                            AnimatedVisibility(visible = showCustomBackgroundImagePreview) {
-                                Surface(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                                    shape = RoundedCornerShape(16.dp),
-                                    color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
-                                ) {
-                                    AsyncImage(
-                                        model = customBackgroundPreviewUri,
-                                        contentDescription = stringResource(R.string.custom_background_image_preview),
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .heightIn(min = 140.dp, max = 220.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.custom_background_image_transparency,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    val hasCustomBackground = customBackgroundImageUri.isNotBlank()
-                    val clampedOpacity = customBackgroundImageOpacity.coerceIn(0f, 1f)
-                    val transparencyPercent = (clampedOpacity * 100f).roundToInt()
-                    Column(
-                        modifier = highlightModifier
-                            .fillMaxWidth()
-                            .alpha(if (hasCustomBackground) 1f else 0.5f)
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = stringResource(R.string.custom_background_image_transparency),
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Surface(
-                                shape = RoundedCornerShape(999.dp),
-                                color = MaterialTheme.colorScheme.secondaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                            ) {
-                                Text(
-                                    text = "$transparencyPercent%",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                )
-                            }
-                        }
-                        Text(
-                            text = stringResource(R.string.custom_background_image_transparency_description),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Slider(
-                            value = clampedOpacity,
-                            onValueChange = { value ->
-                                if (hasCustomBackground) {
-                                    viewModel.setCustomBackgroundImageOpacity(value)
-                                }
-                            },
-                            enabled = hasCustomBackground,
-                            valueRange = 0f..1f
-                        )
-                    }
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.clear_custom_background_image,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    ExpressiveSettingsItem(
-                        modifier = highlightModifier,
-                        headlineContent = stringResource(R.string.clear_custom_background_image),
-                        supportingContent = stringResource(R.string.clear_custom_background_image_description),
-                        enabled = customBackgroundImageUri.isNotBlank(),
-                        onClick = {
-                            if (customBackgroundImageUri.isNotBlank()) {
-                                viewModel.clearCustomBackgroundImageUri(context)
-                            }
-                        }
-                    )
-                }
             }
+
             val accentPresets = remember {
                 listOf(
                     Color(0xFF6750A4),
@@ -783,14 +526,6 @@ fun GeneralSettingsScreen(
                     .padding(horizontal = 16.dp, vertical = 0.dp)
             )
 
-            Spacer(modifier = Modifier.height(20.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .height(1.dp)
-                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-            )
             Spacer(modifier = Modifier.height(16.dp))
 
             SettingsSearchHighlight(
@@ -808,25 +543,246 @@ fun GeneralSettingsScreen(
                 }
             }
 
-            GroupHeader(stringResource(R.string.language_settings))
+            Spacer(modifier = Modifier.height(12.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .height(1.dp)
+                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            GroupHeader(stringResource(R.string.navigation_tabs_section))
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
             ) {
                 SettingsSearchHighlight(
-                    targetKey = R.string.app_language,
+                    targetKey = R.string.hide_main_tab_labels,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = prefs.hideMainTabLabels,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.hide_main_tab_labels,
+                        description = R.string.hide_main_tab_labels_description
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.disable_main_tab_swipe,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = prefs.disableMainTabSwipe,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.disable_main_tab_swipe,
+                        description = R.string.disable_main_tab_swipe_description
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.disable_patch_selection_tab_swipe,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = prefs.disablePatchSelectionTabSwipe,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.disable_patch_selection_tab_swipe,
+                        description = R.string.disable_patch_selection_tab_swipe_description
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.hide_patch_profiles_tab,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        value = !showPatchProfilesTab,
+                        onValueChange = { hide ->
+                            viewModel.viewModelScope.launch {
+                                prefs.showPatchProfilesTab.update(!hide)
+                            }
+                        },
+                        headline = R.string.hide_patch_profiles_tab,
+                        description = R.string.hide_patch_profiles_tab_description,
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.hide_tools_tab,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        value = !showToolsTab,
+                        onValueChange = { hide ->
+                            viewModel.viewModelScope.launch {
+                                prefs.showToolsTab.update(!hide)
+                            }
+                        },
+                        headline = R.string.hide_tools_tab,
+                        description = R.string.hide_tools_tab_description,
+                    )
+                }
+            }
+
+            GroupHeader(stringResource(R.string.background_section))
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+            ) {
+                SettingsSearchHighlight(
+                    targetKey = R.string.custom_background_image,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    Column(
+                        modifier = highlightModifier.fillMaxWidth()
+                    ) {
+                        ExpressiveSettingsItem(
+                            headlineContent = stringResource(R.string.custom_background_image),
+                            supportingContent = stringResource(R.string.custom_background_image_description),
+                            onClick = {
+                                showCustomBackgroundImagePicker = true
+                            }
+                        )
+
+                        if (customBackgroundPreviewUri != null) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { showCustomBackgroundImagePreview = !showCustomBackgroundImagePreview }
+                                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.custom_background_image_preview),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Icon(
+                                    imageVector = if (showCustomBackgroundImagePreview) {
+                                        Icons.Outlined.ExpandLess
+                                    } else {
+                                        Icons.Outlined.ExpandMore
+                                    },
+                                    contentDescription = if (showCustomBackgroundImagePreview) {
+                                        stringResource(R.string.collapse_content)
+                                    } else {
+                                        stringResource(R.string.expand_content)
+                                    },
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+
+                            AnimatedVisibility(visible = showCustomBackgroundImagePreview) {
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
+                                ) {
+                                    AsyncImage(
+                                        model = customBackgroundPreviewUri,
+                                        contentDescription = stringResource(R.string.custom_background_image_preview),
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(min = 140.dp, max = 220.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.custom_background_image_transparency,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    val hasCustomBackground = customBackgroundImageUri.isNotBlank()
+                    val clampedOpacity = customBackgroundImageOpacity.coerceIn(0f, 1f)
+                    val transparencyPercent = (clampedOpacity * 100f).roundToInt()
+                    Column(
+                        modifier = highlightModifier
+                            .fillMaxWidth()
+                            .alpha(if (hasCustomBackground) 1f else 0.5f)
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = stringResource(R.string.custom_background_image_transparency),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(999.dp),
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            ) {
+                                Text(
+                                    text = "$transparencyPercent%",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                        Text(
+                            text = stringResource(R.string.custom_background_image_transparency_description),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Slider(
+                            value = clampedOpacity,
+                            onValueChange = { value ->
+                                if (hasCustomBackground) {
+                                    viewModel.setCustomBackgroundImageOpacity(value)
+                                }
+                            },
+                            enabled = hasCustomBackground,
+                            valueRange = 0f..1f
+                        )
+                    }
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.clear_custom_background_image,
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
                     ExpressiveSettingsItem(
                         modifier = highlightModifier,
-                        headlineContent = stringResource(R.string.app_language),
-                        supportingContent = stringResource(selectedLanguageLabel),
-                        onClick = { showLanguageDialog = true }
+                        headlineContent = stringResource(R.string.clear_custom_background_image),
+                        supportingContent = stringResource(R.string.clear_custom_background_image_description),
+                        enabled = customBackgroundImageUri.isNotBlank(),
+                        onClick = {
+                            if (customBackgroundImageUri.isNotBlank()) {
+                                viewModel.clearCustomBackgroundImageUri(context)
+                            }
+                        }
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
@@ -840,7 +796,6 @@ private fun isSupportedBackgroundImageFile(path: Path, extensions: Set<String>):
 }
 
 private data class ThemePresetSwatch(val preset: ThemePreset, @StringRes val labelRes: Int, val colors: List<Color>)
-private data class LanguageOption(val code: String, @StringRes val labelRes: Int)
 
 @Composable
 private fun ThemeSwatchChip(
@@ -886,64 +841,6 @@ private fun ThemeSwatchChip(
             textAlign = TextAlign.Center
         )
     }
-}
-
-@Composable
-private fun LanguageDialog(
-    options: List<LanguageOption>,
-    selectedCode: String,
-    onSelect: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel))
-            }
-        },
-        title = {
-            Text(
-                text = stringResource(R.string.language_dialog_title),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center
-            )
-        },
-        text = {
-            val scrollState = rememberScrollState()
-            Column(
-                modifier = Modifier
-                    .heightIn(max = 360.dp)
-                    .verticalScroll(scrollState)
-                    .padding(bottom = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                options.forEach { option ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { onSelect(option.code) }
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = option.code == selectedCode,
-                            onClick = { onSelect(option.code) }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = stringResource(option.labelRes),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-            }
-        }
-    )
 }
 
 private fun hexToComposeColor(input: String): Color? {

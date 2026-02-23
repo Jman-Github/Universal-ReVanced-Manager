@@ -27,6 +27,7 @@
 - Renamed `Search bundles` on the `Discover patch bundles` screen to `Search by bundle name` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/219
 - Improved bundle and manager update alerts and websocket status wording
 - Added a `Split APK installer` tool to the `Tools` tab https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/189
+- Redesigned and completely reorganized the settings screens https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/222
 
 
 # Bug fixes

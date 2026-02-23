@@ -104,6 +104,12 @@ object Settings {
     data object Advanced : Destination
 
     @Serializable
+    data object Patcher : Destination
+
+    @Serializable
+    data object AdvancedSystem : Destination
+
+    @Serializable
     data object Updates : Destination
 
     @Serializable

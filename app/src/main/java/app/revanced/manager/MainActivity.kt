@@ -78,6 +78,7 @@ import app.revanced.manager.ui.screen.SplitApkInstallerScreen
 import app.revanced.manager.ui.screen.UpdateScreen
 import app.revanced.manager.ui.screen.settings.AboutSettingsScreen
 import app.revanced.manager.ui.screen.settings.AdvancedSettingsScreen
+import app.revanced.manager.ui.screen.settings.AdvancedSettingsMode
 import app.revanced.manager.ui.screen.settings.ContributorSettingsScreen
 import app.revanced.manager.ui.screen.settings.DeveloperSettingsScreen
 import app.revanced.manager.ui.screen.settings.DownloadsSettingsScreen
@@ -689,7 +690,24 @@ private fun ReVancedManager(
             }
 
             composable<Settings.Advanced> {
-                AdvancedSettingsScreen(onBackClick = navController::popBackStack)
+                AdvancedSettingsScreen(
+                    onBackClick = navController::popBackStack,
+                    mode = AdvancedSettingsMode.ADVANCED_SYSTEM
+                )
+            }
+
+            composable<Settings.Patcher> {
+                AdvancedSettingsScreen(
+                    onBackClick = navController::popBackStack,
+                    mode = AdvancedSettingsMode.PATCHER
+                )
+            }
+
+            composable<Settings.AdvancedSystem> {
+                AdvancedSettingsScreen(
+                    onBackClick = navController::popBackStack,
+                    mode = AdvancedSettingsMode.ADVANCED_SYSTEM
+                )
             }
 
             composable<Settings.Developer> {

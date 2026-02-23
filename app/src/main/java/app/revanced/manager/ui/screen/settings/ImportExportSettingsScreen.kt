@@ -680,7 +680,7 @@ fun ImportExportSettingsScreen(
                 }
             }
 
-            GroupHeader(stringResource(R.string.import_))
+            GroupHeader(stringResource(R.string.settings_selections_bundles_section))
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
@@ -767,12 +767,7 @@ fun ImportExportSettingsScreen(
                         description = R.string.import_manager_settings_description
                     )
                 }
-            }
-
-            GroupHeader(stringResource(R.string.export))
-            ExpressiveSettingsCard(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-            ) {
+                ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
                     targetKey = R.string.export_everything,
                     activeKey = highlightTarget,
