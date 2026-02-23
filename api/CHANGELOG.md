@@ -52,6 +52,7 @@
 - Fixed UI lagging/buffering issues on the `Download APK file` step
 - Fixed issues where downloading certain APK files using the downloader plugins would cause an error https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/221
 - Fixed issues with the swiping to switch tabs guesture on the main screen and patch selection screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/204
+- Fixed an issue where exported keystores would have the `.json` file extension https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/238
 
 
 # CI

@@ -3,6 +3,17 @@
 
 # Features
 
+
+# Bug fixes
+
+- Fixed an issue where exported keystores would have the `.json` file extension https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/238
+
+
+# v1.8.1-dev.03 (2026-02-23)
+
+
+# Features
+
 - Improved bundle and manager update alerts and websocket status wording
 - Added a `Split APK installer` tool to the `Tools` tab https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/189
 - Redesigned and completely reorganized the settings screens https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/222

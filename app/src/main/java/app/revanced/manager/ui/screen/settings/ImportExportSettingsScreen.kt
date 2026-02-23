@@ -176,16 +176,7 @@ fun ImportExportSettingsScreen(
             }
         }
     }
-    val exportDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/json")
-    ) { uri ->
-        val picker = pendingDocumentExportPicker
-        pendingDocumentExportPicker = null
-        if (picker == null) return@rememberLauncherForActivityResult
-        if (uri == null) {
-            if (picker == ExportPicker.PatchSelection) vm.clearSelectionAction()
-            return@rememberLauncherForActivityResult
-        }
+    val runDocumentExport: (ExportPicker, Uri) -> Unit = { picker, uri ->
         exportInProgress = true
         val job = when (picker) {
             ExportPicker.Keystore -> vm.exportKeystore(uri)
@@ -204,6 +195,30 @@ fun ImportExportSettingsScreen(
             exportInProgress = false
             activeExportPicker = null
         }
+    }
+    val exportDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        val picker = pendingDocumentExportPicker
+        pendingDocumentExportPicker = null
+        if (picker == null) return@rememberLauncherForActivityResult
+        if (uri == null) {
+            if (picker == ExportPicker.PatchSelection) vm.clearSelectionAction()
+            return@rememberLauncherForActivityResult
+        }
+        runDocumentExport(picker, uri)
+    }
+    val exportKeystoreDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        val picker = pendingDocumentExportPicker
+        pendingDocumentExportPicker = null
+        if (picker == null) return@rememberLauncherForActivityResult
+        if (uri == null) {
+            if (picker == ExportPicker.PatchSelection) vm.clearSelectionAction()
+            return@rememberLauncherForActivityResult
+        }
+        runDocumentExport(picker, uri)
     }
     val openImportPicker = { target: ImportPicker ->
         if (useCustomFilePicker) {
@@ -236,7 +251,11 @@ fun ImportExportSettingsScreen(
             }
         } else {
             pendingDocumentExportPicker = target
-            exportDocumentLauncher.launch(exportName)
+            if (target == ExportPicker.Keystore) {
+                exportKeystoreDocumentLauncher.launch(exportName)
+            } else {
+                exportDocumentLauncher.launch(exportName)
+            }
         }
     }
     val runExport = { picker: ExportPicker, target: Path ->
@@ -1593,7 +1612,7 @@ private data class PendingExportConfirmation(
 )
 
 private enum class ExportPicker(val defaultName: String) {
-    Keystore("urv_keystore.json"),
+    Keystore("urv_keystore.keystore"),
     Everything("urv_backup_all.json"),
     PatchBundles("urv_patch_bundles.json"),
     PatchProfiles("urv_patch_profiles.json"),
