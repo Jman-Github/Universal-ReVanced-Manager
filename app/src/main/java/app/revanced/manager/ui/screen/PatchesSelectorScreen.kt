@@ -163,6 +163,7 @@ import app.revanced.manager.util.toast
 import kotlinx.coroutines.flow.collectLatest
 import app.revanced.manager.util.transparentListItemColors
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 import kotlin.math.ceil
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -184,6 +185,35 @@ fun PatchesSelectorScreen(
         initialPageOffsetFraction = 0f
     ) {
         bundles.size
+    }
+    val settledPageIndex by remember(bundles.size) {
+        derivedStateOf {
+            pagerState.settledPage.coerceIn(0, bundles.lastIndex.coerceAtLeast(0))
+        }
+    }
+    val swipeSyncedTabIndex by remember(bundles.size) {
+        derivedStateOf {
+            if (bundles.isEmpty()) return@derivedStateOf 0
+            val pageIndex = if (pagerState.isScrollInProgress) {
+                pagerState.targetPage
+            } else {
+                pagerState.currentPage
+            }
+            pageIndex.coerceIn(0, bundles.lastIndex)
+        }
+    }
+    suspend fun scrollToBundlePage(targetIndex: Int, animated: Boolean = true) {
+        if (targetIndex !in bundles.indices) return
+        if (
+            (pagerState.currentPage == targetIndex && !pagerState.isScrollInProgress) ||
+            (pagerState.isScrollInProgress && pagerState.targetPage == targetIndex)
+        ) return
+        val canAnimateDirectly = abs(pagerState.currentPage - targetIndex) <= 1
+        if (animated && canAnimateDirectly) {
+            pagerState.animateScrollToPage(targetIndex)
+        } else {
+            pagerState.scrollToPage(targetIndex)
+        }
     }
     val composableScope = rememberCoroutineScope()
     val textFieldState = rememberTextFieldState()
@@ -300,7 +330,7 @@ fun PatchesSelectorScreen(
     }
     val currentBundleHasSelection by remember {
         derivedStateOf {
-            val bundle = bundles.getOrNull(pagerState.currentPage)
+            val bundle = bundles.getOrNull(settledPageIndex)
             bundle != null && viewModel.bundleHasSelection(bundle.uid)
         }
     }
@@ -346,7 +376,7 @@ fun PatchesSelectorScreen(
             }
     }
     LaunchedEffect(pagerState) {
-        snapshotFlow { pagerState.currentPage }
+        snapshotFlow { pagerState.settledPage }
             .collectLatest {
                 actionsExpanded = false
             }
@@ -387,7 +417,7 @@ fun PatchesSelectorScreen(
         if (bundles.isEmpty() || isSavingProfile) return
         selectedBundleUids.clear()
         val defaultBundleUid =
-            bundles.getOrNull(pagerState.currentPage)?.uid ?: bundles.firstOrNull()?.uid
+            bundles.getOrNull(settledPageIndex)?.uid ?: bundles.firstOrNull()?.uid
         defaultBundleUid?.let { selectedBundleUids.add(it) }
         pendingProfileName = ""
         selectedProfileId = null
@@ -867,11 +897,11 @@ fun PatchesSelectorScreen(
         }
     }
 
-    val currentBundle = bundles.getOrNull(pagerState.currentPage)
+    val currentBundle = bundles.getOrNull(settledPageIndex)
     val currentBundleDisplayName = currentBundle?.let { bundleDisplayNames[it.uid] ?: it.name }
     val warningEnabled = viewModel.selectionWarningEnabled
     val currentBundleUid by remember {
-        derivedStateOf { bundles.getOrNull(pagerState.currentPage)?.uid }
+        derivedStateOf { bundles.getOrNull(settledPageIndex)?.uid }
     }
     val currentBundleSelectionCount by remember {
         derivedStateOf {
@@ -1048,7 +1078,7 @@ fun PatchesSelectorScreen(
             onActiveChange = { searchActive = it },
             placeholder = { Text(stringResource(R.string.search_patches)) }
         ) {
-            val bundle = bundles[pagerState.currentPage]
+            val bundle = bundles[settledPageIndex]
             val suggestedVersion = suggestedVersionsByBundle[bundle.uid]?.get(viewModel.appPackageName)
             val searchQuery = query
 
@@ -1334,7 +1364,7 @@ fun PatchesSelectorScreen(
                         }
                     }
                 ) {
-                    val bundle = bundles[pagerState.currentPage]
+                    val bundle = bundles[settledPageIndex]
                     val suggestedVersion = suggestedVersionsByBundle[bundle.uid]?.get(viewModel.appPackageName)
                     val searchQuery = query
 
@@ -1449,7 +1479,7 @@ fun PatchesSelectorScreen(
                     horizontalAlignment = Alignment.End
                 ) {
                     val saveButtonExpanded =
-                        patchLazyListStates.getOrNull(pagerState.currentPage)?.isScrollingUp ?: true
+                        patchLazyListStates.getOrNull(settledPageIndex)?.isScrollingUp ?: true
                     val saveButtonText = stringResource(
                         R.string.save_with_count,
                         selectedPatchCount
@@ -1492,16 +1522,16 @@ fun PatchesSelectorScreen(
                     if (bundles.isNotEmpty()) {
                         if (bundles.size == 1) {
                             TabRow(
-                                selectedTabIndex = pagerState.currentPage,
+                                selectedTabIndex = swipeSyncedTabIndex,
                                 containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp),
                                 modifier = Modifier.onSizeChanged { tabRowHeightPx = it.height }
                             ) {
                                 bundles.forEachIndexed { index, bundle ->
                                     HapticTab(
-                                        selected = pagerState.currentPage == index,
+                                        selected = swipeSyncedTabIndex == index,
                                         onClick = {
                                             composableScope.launch {
-                                                pagerState.animateScrollToPage(index)
+                                                scrollToBundlePage(index)
                                             }
                                         },
                                         text = {
@@ -1529,16 +1559,16 @@ fun PatchesSelectorScreen(
                             }
                         } else {
                             ScrollableTabRow(
-                                selectedTabIndex = pagerState.currentPage,
+                                selectedTabIndex = swipeSyncedTabIndex,
                                 containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp),
                                 modifier = Modifier.onSizeChanged { tabRowHeightPx = it.height }
                             ) {
                                 bundles.forEachIndexed { index, bundle ->
                                     HapticTab(
-                                        selected = pagerState.currentPage == index,
+                                        selected = swipeSyncedTabIndex == index,
                                         onClick = {
                                             composableScope.launch {
-                                                pagerState.animateScrollToPage(index)
+                                                scrollToBundlePage(index)
                                             }
                                         },
                                         text = {

@@ -321,10 +321,24 @@ fun DashboardScreen(
         visibleTabs.withIndex().associate { (index, page) -> page to index }
     }
     val currentPage = activeDashboardPage
+    val swipeSyncedTabIndex by remember(visibleTabs) {
+        derivedStateOf {
+            if (visibleTabs.isEmpty()) return@derivedStateOf 0
+            val pageIndex = if (pagerState.isScrollInProgress) {
+                pagerState.targetPage
+            } else {
+                pagerState.currentPage
+            }
+            pageIndex.coerceIn(0, visibleTabs.lastIndex)
+        }
+    }
+    val swipeSyncedPage = visibleTabs.getOrElse(swipeSyncedTabIndex) { DashboardPage.DASHBOARD }
     suspend fun scrollToVisiblePage(page: DashboardPage, animated: Boolean) {
         val targetIndex = pageIndexByType[page] ?: return
-        activeDashboardPage = page
-        if (pagerState.currentPage == targetIndex) return
+        if (
+            (pagerState.currentPage == targetIndex && !pagerState.isScrollInProgress) ||
+            (pagerState.isScrollInProgress && pagerState.targetPage == targetIndex)
+        ) return
         val canAnimateDirectly = abs(pagerState.currentPage - targetIndex) <= 1
         if (animated && canAnimateDirectly) {
             pagerState.animateScrollToPage(targetIndex)
@@ -348,18 +362,8 @@ fun DashboardScreen(
     var showQuickUnmountDialog by remember { mutableStateOf(false) }
     var showQuickMixedBundleDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(
-        pagerState.currentPage,
-        pagerState.targetPage,
-        pagerState.isScrollInProgress,
-        visibleTabs
-    ) {
-        val pageIndex = if (pagerState.isScrollInProgress) {
-            pagerState.targetPage
-        } else {
-            pagerState.currentPage
-        }
-        visibleTabs.getOrNull(pageIndex)?.let { page ->
+    LaunchedEffect(pagerState.settledPage, visibleTabs) {
+        visibleTabs.getOrNull(pagerState.settledPage)?.let { page ->
             if (activeDashboardPage != page) {
                 activeDashboardPage = page
             }
@@ -1873,15 +1877,14 @@ fun DashboardScreen(
     ) { paddingValues ->
         Box(Modifier.padding(paddingValues)) {
             Column {
-            val selectedTabIndex = visibleTabs.indexOf(currentPage).coerceAtLeast(0)
             TabRow(
-                selectedTabIndex = selectedTabIndex,
+                selectedTabIndex = swipeSyncedTabIndex,
                 containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp),
                 indicator = {},
                 divider = {}
             ) {
                 visibleTabs.forEach { page ->
-                    val selected = page == currentPage
+                    val selected = page == swipeSyncedPage
                     val tabScale by animateFloatAsState(
                         targetValue = if (selected) 1.02f else 1f,
                         animationSpec = spring(

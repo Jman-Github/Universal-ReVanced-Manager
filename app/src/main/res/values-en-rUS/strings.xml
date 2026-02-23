@@ -614,10 +614,11 @@ Patch profiles are not affected.</string>
     <string name="tools_youtube_assets_adaptive_background_name">Adaptive background file name</string>
     <string name="tools_youtube_assets_background_color_hex">Adaptive background color (hex)</string>
     <string name="tools_youtube_assets_background_color_hint">Use RRGGBB or AARRGGBB.</string>
-    <string name="tools_youtube_assets_pick_color_wheel">Pick color (wheel)</string>
+    <string name="tools_youtube_assets_pick_color_wheel">Pick color</string>
     <string name="tools_youtube_assets_color_picker_title">Choose adaptive background color</string>
-    <string name="tools_youtube_assets_color_picker_desc">Drag in the color wheel to set hue/saturation, then adjust brightness.</string>
+    <string name="tools_youtube_assets_color_picker_desc">Drag in the square to set saturation/brightness, then adjust hue.</string>
     <string name="tools_youtube_assets_color_brightness">Brightness</string>
+    <string name="tools_youtube_assets_color_hue">Hue</string>
     <string name="tools_youtube_assets_apply_hex">Apply HEX</string>
     <string name="tools_youtube_assets_apply_rgb">Apply RGB</string>
     <string name="tools_youtube_assets_color_presets">Presets</string>

@@ -20,6 +20,7 @@
 - Fixed issues with the patcher screen being "frozen" and showing no progress or anyting at all for a few seconds on older Android versions
 - Fixed UI lagging/buffering issues on the `Download APK file` step
 - Fixed issues where downloading certain APK files using the downloader plugins would cause an error https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/221
+- Fixed issues with the swiping to switch tabs guesture on the main screen and patch selection screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/204
 
 
 # CI

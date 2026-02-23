@@ -67,10 +67,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
@@ -103,9 +106,7 @@ import java.util.Locale
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlin.io.path.extension
-import kotlin.math.atan2
 import kotlin.math.max
-import kotlin.math.sqrt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -1171,30 +1172,31 @@ private fun AdaptiveColorWheelDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Text(
+                    text = stringResource(R.string.tools_youtube_assets_color_hue),
+                    style = MaterialTheme.typography.labelMedium
+                )
+                Slider(
+                    value = hue,
+                    onValueChange = { hue = it },
+                    valueRange = 0f..360f
+                )
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(220.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    ColorWheel(
+                    ColorSaturationValueSquare(
                         hue = hue,
                         saturation = saturation,
-                        onHueSaturationChange = { newHue, newSaturation ->
-                            hue = newHue
+                        value = value,
+                        onSaturationValueChange = { newSaturation, newValue ->
                             saturation = newSaturation
+                            value = newValue
                         }
                     )
                 }
-                Text(
-                    text = stringResource(R.string.tools_youtube_assets_color_brightness),
-                    style = MaterialTheme.typography.labelMedium
-                )
-                Slider(
-                    value = value,
-                    onValueChange = { value = it },
-                    valueRange = 0f..1f
-                )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
@@ -1307,77 +1309,95 @@ private fun AdaptiveColorWheelDialog(
 }
 
 @Composable
-private fun ColorWheel(
+private fun ColorSaturationValueSquare(
     hue: Float,
     saturation: Float,
-    onHueSaturationChange: (Float, Float) -> Unit
+    value: Float,
+    onSaturationValueChange: (Float, Float) -> Unit
 ) {
     val outlineColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+    var canvasSize by remember { mutableStateOf(IntSize.Zero) }
+    val hsvSquareBitmap = remember(hue, canvasSize) {
+        val width = canvasSize.width.coerceAtLeast(1)
+        val height = canvasSize.height.coerceAtLeast(1)
+        val maxX = (width - 1).coerceAtLeast(1)
+        val maxY = (height - 1).coerceAtLeast(1)
+        val hueRgb = Color.hsv(hue, 1f, 1f)
+        val hueR = hueRgb.red
+        val hueG = hueRgb.green
+        val hueB = hueRgb.blue
+        val pixels = IntArray(width * height)
+        for (y in 0 until height) {
+            val valueComponent = 1f - (y.toFloat() / maxY.toFloat())
+            for (x in 0 until width) {
+                val saturationComponent = x.toFloat() / maxX.toFloat()
+                // Build the picker with explicit RGB blending to keep transitions linear in the square.
+                val r = (1f + (hueR - 1f) * saturationComponent) * valueComponent
+                val g = (1f + (hueG - 1f) * saturationComponent) * valueComponent
+                val b = (1f + (hueB - 1f) * saturationComponent) * valueComponent
+                pixels[y * width + x] = Color(
+                    red = r.coerceIn(0f, 1f),
+                    green = g.coerceIn(0f, 1f),
+                    blue = b.coerceIn(0f, 1f),
+                    alpha = 1f
+                ).toArgb()
+            }
+        }
+        Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888).asImageBitmap()
+    }
+    val pickerCorner = 14.dp
     Box(
         modifier = Modifier
             .size(210.dp)
+            .onSizeChanged { canvasSize = it }
             .pointerInput(Unit) {
                 fun update(offset: Offset, size: IntSize) {
-                    val centerX = size.width / 2f
-                    val centerY = size.height / 2f
-                    val dx = offset.x - centerX
-                    val dy = offset.y - centerY
-                    val radius = minOf(size.width, size.height) / 2f
-                    val distance = sqrt((dx * dx) + (dy * dy))
-                    val newSaturation = (distance / radius).coerceIn(0f, 1f)
-                    val angle = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble()))
-                    val newHue = ((angle + 360.0) % 360.0).toFloat()
-                    onHueSaturationChange(newHue, newSaturation)
+                    if (size.width <= 0 || size.height <= 0) return
+                    val newSaturation = (offset.x / size.width.toFloat()).coerceIn(0f, 1f)
+                    val newValue = (1f - (offset.y / size.height.toFloat())).coerceIn(0f, 1f)
+                    onSaturationValueChange(newSaturation, newValue)
                 }
 
                 detectTapGestures { update(it, this.size) }
             }
             .pointerInput(Unit) {
                 detectDragGestures { pointerChange, _ ->
-                    val centerX = size.width / 2f
-                    val centerY = size.height / 2f
-                    val dx = pointerChange.position.x - centerX
-                    val dy = pointerChange.position.y - centerY
-                    val radius = minOf(size.width, size.height) / 2f
-                    val distance = sqrt((dx * dx) + (dy * dy))
-                    val newSaturation = (distance / radius).coerceIn(0f, 1f)
-                    val angle = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble()))
-                    val newHue = ((angle + 360.0) % 360.0).toFloat()
-                    onHueSaturationChange(newHue, newSaturation)
+                    if (size.width <= 0 || size.height <= 0) return@detectDragGestures
+                    val newSaturation = (pointerChange.position.x / size.width.toFloat()).coerceIn(0f, 1f)
+                    val newValue = (1f - (pointerChange.position.y / size.height.toFloat())).coerceIn(0f, 1f)
+                    onSaturationValueChange(newSaturation, newValue)
                 }
             }
     ) {
         ComposeCanvas(modifier = Modifier.fillMaxSize()) {
-            val colors = listOf(
-                Color.hsv(0f, 1f, 1f),
-                Color.hsv(60f, 1f, 1f),
-                Color.hsv(120f, 1f, 1f),
-                Color.hsv(180f, 1f, 1f),
-                Color.hsv(240f, 1f, 1f),
-                Color.hsv(300f, 1f, 1f),
-                Color.hsv(360f, 1f, 1f)
-            )
-            drawCircle(
-                brush = Brush.sweepGradient(colors),
-                radius = size.minDimension / 2f
-            )
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(Color.White, Color.Transparent),
-                    radius = size.minDimension / 2f
-                ),
-                radius = size.minDimension / 2f
-            )
-            drawCircle(
+            val cornerRadius = CornerRadius(pickerCorner.toPx(), pickerCorner.toPx())
+            val clipPath = androidx.compose.ui.graphics.Path().apply {
+                addRoundRect(
+                    RoundRect(
+                        left = 0f,
+                        top = 0f,
+                        right = size.width,
+                        bottom = size.height,
+                        cornerRadius = cornerRadius
+                    )
+                )
+            }
+
+            clipPath(clipPath) {
+                drawImage(
+                    image = hsvSquareBitmap
+                )
+            }
+            drawRoundRect(
                 color = outlineColor,
-                radius = size.minDimension / 2f,
+                topLeft = Offset.Zero,
+                size = size,
+                cornerRadius = cornerRadius,
                 style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx())
             )
 
-            val radius = size.minDimension / 2f
-            val angle = Math.toRadians(hue.toDouble())
-            val x = (radius + (radius * saturation * kotlin.math.cos(angle))).toFloat()
-            val y = (radius + (radius * saturation * kotlin.math.sin(angle))).toFloat()
+            val x = (saturation * size.width).coerceIn(0f, size.width)
+            val y = ((1f - value) * size.height).coerceIn(0f, size.height)
             drawCircle(
                 color = Color.Black.copy(alpha = 0.7f),
                 radius = 8.dp.toPx(),
