@@ -1,7 +1,9 @@
-# v1.8.1-dev.03 (2026-02-23)
+# v1.8.1-dev.03 (2026-02-28)
 
 
 # Features
+
+- Corrected a few inconsistencies in Settings https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/240
 
 
 # Bug fixes

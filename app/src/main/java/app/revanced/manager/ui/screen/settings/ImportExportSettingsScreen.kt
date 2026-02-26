@@ -786,7 +786,10 @@ fun ImportExportSettingsScreen(
                         description = R.string.import_manager_settings_description
                     )
                 }
-                ExpressiveSettingsDivider()
+            }
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
                 SettingsSearchHighlight(
                     targetKey = R.string.export_everything,
                     activeKey = highlightTarget,
@@ -802,7 +805,6 @@ fun ImportExportSettingsScreen(
                     )
                 }
                 ExpressiveSettingsDivider()
-
                 SettingsSearchHighlight(
                     targetKey = R.string.export_patch_selection,
                     activeKey = highlightTarget,

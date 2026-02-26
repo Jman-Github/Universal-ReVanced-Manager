@@ -33,6 +33,7 @@
 - Made the package name of apps always shown on the `App info` screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/225
 - Improved the `Create custom YouTube icons & headers` tool https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/211
 - Added a toggle in Settings > Patcher that disables/enables the expansion of the main categories on the patcher screen that are running https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/201
+- Corrected a few inconsistencies in Settings https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/240
 
 
 # Bug fixes
