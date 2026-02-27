@@ -9,6 +9,7 @@
 # Bug fixes
 
 - Fixed an issue where exported keystores would have the `.json` file extension https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/238
+- Fixed several UI issues and visual bugs on the `Create custom YouTube icons & headers` tool screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/243
 
 
 # v1.8.1-dev.03 (2026-02-23)

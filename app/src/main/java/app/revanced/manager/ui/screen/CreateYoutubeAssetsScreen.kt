@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -112,7 +114,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koin.compose.koinInject
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
     val context = LocalContext.current
@@ -155,7 +157,7 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
     var showColorPicker by rememberSaveable { mutableStateOf(false) }
     var generationMode by rememberSaveable { mutableStateOf(AssetGenerationMode.BOTH) }
     var showGenerationModeMenu by rememberSaveable { mutableStateOf(false) }
-    var syncHeaderTransforms by rememberSaveable { mutableStateOf(false) }
+    val syncHeaderTransforms by prefs.youtubeAssetsSyncHeaderTransforms.getAsState()
 
     suspend fun applyImageSelection(target: PickerTarget?, source: String): Boolean {
         val decoded = withContext(Dispatchers.IO) { decodeBitmap(context, source) }
@@ -225,6 +227,10 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
                 errorText = it.message ?: context.getString(R.string.tools_youtube_assets_save_failed)
             }
         }
+    }
+
+    LaunchedEffect(syncHeaderTransforms) {
+        if (syncHeaderTransforms) darkTransform = lightTransform
     }
 
     LaunchedEffect(activePicker, useCustomFilePicker) {
@@ -520,26 +526,23 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
                         Switch(
                             checked = syncHeaderTransforms,
                             onCheckedChange = { enabled ->
-                                syncHeaderTransforms = enabled
                                 if (enabled) {
                                     darkTransform = lightTransform
+                                }
+                                scope.launch {
+                                    prefs.youtubeAssetsSyncHeaderTransforms.update(enabled)
                                 }
                             }
                         )
                     }
-                    Row(
+                    Text(
+                        stringResource(R.string.tools_youtube_assets_light_header),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                    FlowRow(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            stringResource(R.string.tools_youtube_assets_light_header),
-                            style = MaterialTheme.typography.labelLarge,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         TextButton(onClick = { updateLightTransform(ImageTransform()) }) {
                             Text(stringResource(R.string.tools_youtube_assets_reset_transform))
@@ -557,7 +560,7 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
                             Text(stringResource(R.string.clear))
                         }
                     }
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(2.dp))
                     PreviewHeader(
                         bitmap = lightBitmap,
                         transform = lightTransform,
@@ -570,19 +573,14 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
                         Text(stringResource(R.string.tools_youtube_assets_select_light_header))
                     }
                     Spacer(Modifier.height(10.dp))
-                    Row(
+                    Text(
+                        stringResource(R.string.tools_youtube_assets_dark_header),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                    FlowRow(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            stringResource(R.string.tools_youtube_assets_dark_header),
-                            style = MaterialTheme.typography.labelLarge,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         TextButton(onClick = { updateDarkTransform(ImageTransform()) }) {
                             Text(stringResource(R.string.tools_youtube_assets_reset_transform))
@@ -600,7 +598,7 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
                             Text(stringResource(R.string.clear))
                         }
                     }
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(2.dp))
                     PreviewHeader(
                         bitmap = darkBitmap,
                         transform = darkTransform,
@@ -750,6 +748,7 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AssetEditorCard(
     title: String,
@@ -758,18 +757,25 @@ private fun AssetEditorCard(
     onClear: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val hasActions = onReset != null || onCenter != null || onClear != null
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                onReset?.let { reset ->
-                    TextButton(onClick = reset) { Text(stringResource(R.string.tools_youtube_assets_reset_transform)) }
-                }
-                onCenter?.let { center ->
-                    TextButton(onClick = center) { Text(stringResource(R.string.tools_youtube_assets_center_transform)) }
-                }
-                onClear?.let { clear ->
-                    TextButton(onClick = clear) { Text(stringResource(R.string.clear)) }
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            if (hasActions) {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    onReset?.let { reset ->
+                        TextButton(onClick = reset) { Text(stringResource(R.string.tools_youtube_assets_reset_transform)) }
+                    }
+                    onCenter?.let { center ->
+                        TextButton(onClick = center) { Text(stringResource(R.string.tools_youtube_assets_center_transform)) }
+                    }
+                    onClear?.let { clear ->
+                        TextButton(onClick = clear) { Text(stringResource(R.string.clear)) }
+                    }
                 }
             }
             content()

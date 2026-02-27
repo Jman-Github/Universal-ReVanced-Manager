@@ -156,6 +156,7 @@ class PreferencesManager(
     val appSelectorFilterInstalledOnly = booleanPreference("app_selector_filter_installed_only", false)
     val appSelectorFilterPatchesAvailable = booleanPreference("app_selector_filter_patches_available", false)
     val useCustomFilePicker = booleanPreference("use_custom_file_picker", true)
+    val youtubeAssetsSyncHeaderTransforms = booleanPreference("youtube_assets_sync_header_transforms", false)
     val patchBundleDiscoveryShowRelease = booleanPreference("patch_bundle_discovery_show_release", true)
     val patchBundleDiscoveryShowPrerelease = booleanPreference("patch_bundle_discovery_show_prerelease", true)
     val patchBundleDiscoveryLatest = booleanPreference("patch_bundle_discovery_latest", false)
