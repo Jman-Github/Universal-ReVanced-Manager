@@ -55,6 +55,7 @@
 - Fixed issues with the swiping to switch tabs guesture on the main screen and patch selection screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/204
 - Fixed an issue where exported keystores would have the `.json` file extension https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/238
 - Fixed several UI issues and visual bugs on the `Create custom YouTube icons & headers` tool screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/243
+- Fixed an issue where the `Tools` tab wasn't scrollable
 
 
 # CI
