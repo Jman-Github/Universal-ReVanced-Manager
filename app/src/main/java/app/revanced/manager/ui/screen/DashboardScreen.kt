@@ -335,6 +335,7 @@ fun DashboardScreen(
         }
     }
     val swipeSyncedPage = visibleTabs.getOrElse(swipeSyncedTabIndex) { DashboardPage.DASHBOARD }
+    val uiPage = swipeSyncedPage
     suspend fun scrollToVisiblePage(page: DashboardPage, animated: Boolean) {
         val targetIndex = pageIndexByType[page] ?: return
         if (
@@ -1556,7 +1557,7 @@ fun DashboardScreen(
     Scaffold(
         topBar = {
             when {
-                appsSelectionActive && currentPage == DashboardPage.DASHBOARD -> {
+                appsSelectionActive && uiPage == DashboardPage.DASHBOARD -> {
                     BundleTopBar(
                         title = stringResource(R.string.selected_apps_count, selectedAppCount),
                         onBackClick = installedAppsViewModel::clearSelection,
@@ -1671,9 +1672,9 @@ fun DashboardScreen(
                                     }
                                 }
                             }
-                            val isAppsTab = currentPage == DashboardPage.DASHBOARD
-                            val isBundlesTab = currentPage == DashboardPage.BUNDLES
-                            val isProfilesTab = currentPage == DashboardPage.PROFILES && showPatchProfilesTab
+                            val isAppsTab = uiPage == DashboardPage.DASHBOARD
+                            val isBundlesTab = uiPage == DashboardPage.BUNDLES
+                            val isProfilesTab = uiPage == DashboardPage.PROFILES && showPatchProfilesTab
                             val searchActive = when {
                                 isAppsTab -> appsSearchActive
                                 isBundlesTab -> bundlesSearchActive
@@ -1705,7 +1706,7 @@ fun DashboardScreen(
                                     )
                                 }
                             }
-                            if (currentPage == DashboardPage.BUNDLES && !bundlesSelectable) {
+                            if (uiPage == DashboardPage.BUNDLES && !bundlesSelectable) {
                                 IconButton(
                                     onClick = {
                                         installedAppsViewModel.clearSelection()
@@ -1722,7 +1723,7 @@ fun DashboardScreen(
                                     Icon(Icons.Outlined.Sort, stringResource(R.string.bundle_reorder))
                                 }
                             }
-                            if (currentPage == DashboardPage.DASHBOARD && !appsSelectionActive) {
+                            if (uiPage == DashboardPage.DASHBOARD && !appsSelectionActive) {
                                 IconButton(
                                     onClick = {
                                         installedAppsViewModel.clearSelection()
@@ -1738,7 +1739,7 @@ fun DashboardScreen(
                                     Icon(Icons.Outlined.Sort, stringResource(R.string.apps_reorder))
                                 }
                             }
-                            if (currentPage == DashboardPage.PROFILES && showPatchProfilesTab && !profilesSelectable) {
+                            if (uiPage == DashboardPage.PROFILES && showPatchProfilesTab && !profilesSelectable) {
                                 IconButton(
                                     onClick = {
                                         patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
@@ -1764,7 +1765,7 @@ fun DashboardScreen(
             }
         },
         floatingActionButton = {
-            when (currentPage) {
+            when (uiPage) {
                 DashboardPage.BUNDLES -> {
                     val enterExitSpec = tween<IntOffset>(durationMillis = 220, easing = FastOutSlowInEasing)
                     val sizeSpec = tween<IntSize>(durationMillis = 220, easing = FastOutSlowInEasing)
@@ -1970,9 +1971,9 @@ fun DashboardScreen(
                 } else null
             )
 
-            val isAppsTab = currentPage == DashboardPage.DASHBOARD
-            val isBundlesTab = currentPage == DashboardPage.BUNDLES
-            val isProfilesTab = currentPage == DashboardPage.PROFILES && showPatchProfilesTab
+            val isAppsTab = uiPage == DashboardPage.DASHBOARD
+            val isBundlesTab = uiPage == DashboardPage.BUNDLES
+            val isProfilesTab = uiPage == DashboardPage.PROFILES && showPatchProfilesTab
             val searchActive = when {
                 isAppsTab -> appsSearchActive
                 isBundlesTab -> bundlesSearchActive
