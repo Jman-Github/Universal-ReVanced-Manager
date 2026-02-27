@@ -828,7 +828,7 @@ Patch profiles are not affected.</string>
     <string name="patch_profile_apk_section_title">Selected APK</string>
     <string name="patch_profile_apk_select">Select APK</string>
     <string name="patch_profile_apk_clear">Clear</string>
-    <string name="patch_profile_apk_not_set">No APK selected</string>
+    <string name="patch_profile_apk_not_set">No APK for this package</string>
     <string name="patch_profile_apk_saved_toast">Saved APK for "%1$s"</string>
     <string name="patch_profile_apk_cleared_toast">Cleared saved APK for "%1$s"</string>
     <string name="patch_profile_apk_invalid_toast">Invalid APK file</string>
