@@ -4,6 +4,7 @@
 # Features
 
 - Corrected a few inconsistencies in Settings https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/240
+- Aligned patcher step naming in the notification with the steps on the patcher screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/253
 
 
 # Bug fixes
@@ -13,6 +14,8 @@
 - Fixed an issue where the `Tools` tab wasn't scrollable
 - Fixed the wrong UI being shown when switching tabs quickly on the main screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/245
 - Clarified the patch profile APK placeholder text from `No APK selected` to `No APK for this package` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/241
+- Fixed issues with the patching notification not appearing immediately when patching starts https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/256
+- Fixed an issue where the patching notification would disappear before patching was actually finished https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/257
 
 
 # v1.8.1-dev.03 (2026-02-23)

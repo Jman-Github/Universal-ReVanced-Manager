@@ -234,7 +234,7 @@ class Session(
                 onEvent(
                     ProgressEvent.Progress(
                         stepId = StepId.WriteAPK,
-                        message = "Applying patched changes"
+                        message = "Compiling modified resources"
                     )
                 )
                 runInterruptible(Dispatchers.IO) {

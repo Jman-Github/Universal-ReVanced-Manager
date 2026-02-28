@@ -1,6 +1,10 @@
 package app.revanced.manager.ui.viewmodel
 
 import android.app.Application
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -38,6 +42,7 @@ import androidx.lifecycle.viewmodel.compose.saveable
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import app.universal.revanced.manager.R
+import app.revanced.manager.MainActivity
 import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.data.room.apps.installed.InstallType
 import app.revanced.manager.data.room.apps.installed.InstalledApp
@@ -85,6 +90,7 @@ import app.revanced.manager.util.toast
 import app.revanced.manager.util.awaitUserConfirmation
 import app.revanced.manager.util.toastHandle
 import app.revanced.manager.util.uiSafe
+import app.revanced.manager.util.permission.hasNotificationPermission
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
@@ -946,6 +952,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
 
     private val workManager = WorkManager.getInstance(app)
+    private val notificationManager by lazy {
+        app.getSystemService(NotificationManager::class.java)
+    }
     private val _patcherSucceeded = MediatorLiveData<Boolean?>()
     val patcherSucceeded: LiveData<Boolean?> get() = _patcherSucceeded
     private var currentWorkSource: LiveData<WorkInfo?>? = null
@@ -1004,9 +1013,54 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         runtimeReportedMemoryLimitMb = null
         markInitialStepRunning()
         logBatteryOptimizationStatus()
+        showPendingPatchingNotification()
         val workId = launchWorker()
         patcherWorkerId = ParcelUuid(workId)
         observeWorker(workId)
+    }
+
+    private fun showPendingPatchingNotification() {
+        if (!app.hasNotificationPermission()) return
+        runCatching {
+            val channel = NotificationChannel(
+                PatcherWorker.PATCHING_NOTIFICATION_CHANNEL_ID,
+                app.getString(R.string.notification_channel_patching_name),
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = app.getString(R.string.notification_channel_patching_description)
+            }
+            notificationManager.createNotificationChannel(channel)
+            val notificationIntent = Intent(app, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val pendingIntent = PendingIntent.getActivity(
+                app,
+                0,
+                notificationIntent,
+                PendingIntent.FLAG_IMMUTABLE
+            )
+            val notification = Notification.Builder(app, channel.id)
+                .setContentTitle(app.getText(R.string.patcher_notification_title))
+                .setContentText(app.getText(R.string.patcher_notification_text))
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentIntent(pendingIntent)
+                .setCategory(Notification.CATEGORY_SERVICE)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setProgress(0, 0, true)
+                .build()
+            notificationManager.notify(PatcherWorker.NOTIFICATION_ID, notification)
+        }.onFailure { error ->
+            Log.d(TAG, "Failed to post pending patching notification", error)
+        }
+    }
+
+    private fun clearPatchingNotification() {
+        runCatching {
+            notificationManager.cancel(PatcherWorker.NOTIFICATION_ID)
+        }.onFailure { error ->
+            Log.d(TAG, "Failed to clear patching notification", error)
+        }
     }
 
     private suspend fun persistPatchedApp(
@@ -1186,6 +1240,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         super.onCleared()
         app.unregisterReceiver(packageChangeReceiver)
         patcherWorkerId?.uuid?.let(workManager::cancelWorkById)
+        clearPatchingNotification()
         pendingExternalInstall?.let(installerManager::cleanup)
         pendingExternalInstall = null
         externalInstallTimeoutJob?.cancel()
@@ -1216,6 +1271,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         // tempDir cannot be deleted inside onCleared because it gets called on system-initiated process death.
         if (_patcherSucceeded.value == null) {
             patcherWorkerId?.uuid?.let(workManager::cancelWorkById)
+            clearPatchingNotification()
         }
         tempDir.deleteRecursively()
     }
@@ -2705,6 +2761,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         _patcherSucceeded.addSource(source) { workInfo ->
             when (workInfo?.state) {
                 WorkInfo.State.SUCCEEDED -> {
+                    clearPatchingNotification()
                     forceKeepLocalInput = false
                     if (input.selectedApp is SelectedApp.Local && input.selectedApp.temporary) {
                         inputFile?.takeIf { it.exists() }?.delete()
@@ -2720,6 +2777,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 }
 
                 WorkInfo.State.FAILED -> {
+                    clearPatchingNotification()
                     handleWorkerFailure(workInfo)
                     _patcherSucceeded.value = false
                 }
@@ -2727,6 +2785,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 WorkInfo.State.RUNNING,
                 WorkInfo.State.ENQUEUED,
                 WorkInfo.State.BLOCKED -> _patcherSucceeded.value = null
+                WorkInfo.State.CANCELLED -> {
+                    clearPatchingNotification()
+                    _patcherSucceeded.value = null
+                }
                 else -> _patcherSucceeded.value = null
             }
         }

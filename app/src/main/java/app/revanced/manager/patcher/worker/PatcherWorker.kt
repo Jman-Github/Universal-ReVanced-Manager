@@ -87,6 +87,10 @@ class PatcherWorker(
     private var activeRuntime: app.revanced.manager.patcher.runtime.Runtime? = null
     private var activeMorpheRuntime: app.revanced.manager.patcher.runtime.morphe.MorpheRuntime? = null
     private var activeAmpleRuntime: app.revanced.manager.patcher.runtime.ample.AmpleRuntime? = null
+    @Volatile
+    private var patchNotificationSteps: List<String> = emptyList()
+    @Volatile
+    private var foregroundStarted: Boolean = false
     private val notificationManager by lazy {
         applicationContext.getSystemService(NotificationManager::class.java)
     }
@@ -116,9 +120,11 @@ class PatcherWorker(
     private fun createForegroundInfo(
         event: ProgressEvent?,
         totalPatchCount: Int
-    ): ForegroundInfo = ForegroundInfo(
+    ): ForegroundInfo = createForegroundInfo(createNotification(event, totalPatchCount))
+
+    private fun createForegroundInfo(notification: Notification): ForegroundInfo = ForegroundInfo(
         NOTIFICATION_ID,
-        createNotification(event, totalPatchCount),
+        notification,
         patchingServiceType
     )
 
@@ -164,28 +170,10 @@ class PatcherWorker(
         event: ProgressEvent?,
         totalPatchCount: Int
     ): CharSequence {
-        val stepText = event?.stepId?.let { step ->
-            when (step) {
-                StepId.DownloadAPK -> applicationContext.getString(R.string.download_apk)
-                StepId.LoadPatches -> applicationContext.getString(R.string.patcher_step_load_patches)
-                StepId.PrepareSplitApk -> applicationContext.getString(R.string.patcher_step_prepare_split_apk)
-                StepId.ReadAPK -> applicationContext.getString(R.string.patcher_step_unpack)
-                StepId.ExecutePatches -> applicationContext.getString(R.string.patcher_step_group_patching)
-                is StepId.ExecutePatch -> {
-                    if (totalPatchCount > 0) {
-                        val current = (step.index + 1).coerceIn(1, totalPatchCount)
-                        "${applicationContext.getString(R.string.patcher_step_group_patching)} ($current/$totalPatchCount)"
-                    } else {
-                        applicationContext.getString(R.string.patcher_step_group_patching)
-                    }
-                }
-                StepId.WriteAPK -> applicationContext.getString(R.string.patcher_step_group_saving)
-                StepId.SignAPK -> applicationContext.getString(R.string.patcher_step_sign_apk)
-            }
-        }
+        val stepText = event?.stepId?.let { step -> notificationStepTitle(step, totalPatchCount) }
 
         val detail = when (event) {
-            is ProgressEvent.Progress -> event.message?.takeIf { it.isNotBlank() }
+            is ProgressEvent.Progress -> normalizeNotificationDetail(event.stepId, event.message)
             else -> null
         }
 
@@ -194,6 +182,42 @@ class PatcherWorker(
             stepText != null -> stepText
             else -> applicationContext.getText(R.string.patcher_notification_text)
         }
+    }
+
+    private fun normalizeNotificationDetail(stepId: StepId?, message: String?): String? {
+        val detail = message?.takeIf { it.isNotBlank() } ?: return null
+        if (stepId != StepId.WriteAPK) return detail
+        val normalized = detail.trim()
+        return when {
+            normalized.equals("Applying patched changes", ignoreCase = true) ->
+                "Compiling modified resources"
+            normalized.startsWith("Applying patched changes", ignoreCase = true) ->
+                normalized.replaceFirst(
+                    Regex("^Applying\\s+patched\\s+changes", RegexOption.IGNORE_CASE),
+                    "Compiling modified resources"
+                )
+            else -> detail
+        }
+    }
+
+    private fun notificationStepTitle(step: StepId, totalPatchCount: Int): String = when (step) {
+        StepId.DownloadAPK -> applicationContext.getString(R.string.download_apk)
+        StepId.LoadPatches -> applicationContext.getString(R.string.patcher_step_load_patches)
+        StepId.PrepareSplitApk -> applicationContext.getString(R.string.patcher_step_prepare_split_apk)
+        StepId.ReadAPK -> applicationContext.getString(R.string.patcher_step_unpack)
+        StepId.ExecutePatches -> applicationContext.getString(R.string.execute_patches)
+        is StepId.ExecutePatch -> {
+            patchNotificationSteps.getOrNull(step.index)?.takeIf { it.isNotBlank() } ?: run {
+                if (totalPatchCount > 0) {
+                    val current = (step.index + 1).coerceIn(1, totalPatchCount)
+                    "${applicationContext.getString(R.string.execute_patches)} ($current/$totalPatchCount)"
+                } else {
+                    applicationContext.getString(R.string.execute_patches)
+                }
+            }
+        }
+        StepId.WriteAPK -> applicationContext.getString(R.string.patcher_step_write_patched)
+        StepId.SignAPK -> applicationContext.getString(R.string.patcher_step_sign_apk)
     }
 
     private data class NotificationProgress(
@@ -242,12 +266,22 @@ class PatcherWorker(
     }
 
     private fun updateForegroundNotification(event: ProgressEvent?, totalPatchCount: Int) {
+        val notification = createNotification(event, totalPatchCount)
         try {
-            runBlocking {
-                setForeground(createForegroundInfo(event, totalPatchCount))
+            if (!foregroundStarted) {
+                runBlocking {
+                    setForeground(createForegroundInfo(notification))
+                }
+                foregroundStarted = true
             }
         } catch (e: Exception) {
-            Log.d(tag, "Failed to update foreground notification:", e)
+            Log.d(tag, "Failed to set foreground notification:", e)
+        }
+
+        try {
+            notificationManager.notify(NOTIFICATION_ID, notification)
+        } catch (e: Exception) {
+            Log.d(tag, "Failed to refresh foreground notification:", e)
         }
     }
 
@@ -272,13 +306,21 @@ class PatcherWorker(
                     Log.d(tag, "Acquired wakelock.")
                 }
 
+        try {
+            val initialForegroundInfo = createForegroundInfo(event = null, totalPatchCount = 0)
+            setForeground(initialForegroundInfo)
+            foregroundStarted = true
+        } catch (e: Exception) {
+            Log.d(tag, "Failed to set initial foreground info:", e)
+        }
+
         val args = workerRepository.claimInput(this)
         val totalPatchCount = args.selectedPatches.values.sumOf { it.size }
 
         try {
-            setForeground(createForegroundInfo(event = null, totalPatchCount = totalPatchCount))
+            updateForegroundNotification(event = null, totalPatchCount = totalPatchCount)
         } catch (e: Exception) {
-            Log.d(tag, "Failed to set foreground info:", e)
+            Log.d(tag, "Failed to publish initial patching notification:", e)
         }
 
         val result = try {
@@ -297,6 +339,11 @@ class PatcherWorker(
     private suspend fun runPatcher(args: Args, totalPatchCount: Int): Result {
         val patchedApk = fs.tempDir.resolve("patched.apk")
         var downloadCleanup: (() -> Unit)? = null
+        patchNotificationSteps = args.selectedPatches.values
+            .asSequence()
+            .flatten()
+            .sorted()
+            .toList()
         val eventDispatcher: (ProgressEvent) -> Unit = { event ->
             args.onEvent(event)
             updateForegroundNotification(event, totalPatchCount)
@@ -683,6 +730,8 @@ class PatcherWorker(
             activeRuntime = null
             activeMorpheRuntime = null
             activeAmpleRuntime = null
+            patchNotificationSteps = emptyList()
+            foregroundStarted = false
             patchedApk.delete()
             downloadCleanup?.invoke()
         }
@@ -691,8 +740,8 @@ class PatcherWorker(
     companion object {
         private const val LOG_PREFIX = "[Worker]"
         private fun String.logFmt() = "$LOG_PREFIX $this"
-        private const val PATCHING_NOTIFICATION_CHANNEL_ID = "revanced-patcher-patching"
-        private const val NOTIFICATION_ID = 1
+        internal const val PATCHING_NOTIFICATION_CHANNEL_ID = "revanced-patcher-patching"
+        internal const val NOTIFICATION_ID = 1
         const val PROCESS_EXIT_CODE_KEY = "process_exit_code"
         const val PROCESS_PREVIOUS_LIMIT_KEY = "process_previous_limit"
         const val PROCESS_FAILURE_MESSAGE_KEY = "process_failure_message"
