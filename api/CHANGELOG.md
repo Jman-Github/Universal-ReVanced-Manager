@@ -61,6 +61,7 @@
 - Clarified the patch profile APK placeholder text from `No APK selected` to `No APK for this package` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/241
 - Fixed issues with the patching notification not appearing immediately when patching starts https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/256
 - Fixed an issue where the patching notification would disappear before patching was actually finished https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/257
+- Fixed an issue where using the Android Documents Provider to export apps from `Downloads` would cause a crash https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/258
 
 
 # CI

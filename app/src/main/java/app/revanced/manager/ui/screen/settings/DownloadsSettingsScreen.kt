@@ -97,9 +97,9 @@ fun DownloadsSettingsScreen(
     val fs: Filesystem = koinInject()
     val storageRoots = remember { fs.storageRoots() }
     val (permissionContract, permissionName) = remember { fs.permissionContract() }
-    var pendingExportState by rememberSaveable { mutableStateOf<DownloadedAppsExportState?>(null) }
-    var activeExportState by rememberSaveable { mutableStateOf<DownloadedAppsExportState?>(null) }
-    var pendingDocumentExportState by rememberSaveable { mutableStateOf<DownloadedAppsExportState?>(null) }
+    var pendingExportState by remember { mutableStateOf<DownloadedAppsExportState?>(null) }
+    var activeExportState by remember { mutableStateOf<DownloadedAppsExportState?>(null) }
+    var pendingDocumentExportState by remember { mutableStateOf<DownloadedAppsExportState?>(null) }
     var exportFileDialogState by remember { mutableStateOf<DownloadedAppsExportDialogState?>(null) }
     var pendingExportConfirmation by remember { mutableStateOf<PendingDownloadedAppsExportConfirmation?>(null) }
     var exportInProgress by rememberSaveable { mutableStateOf(false) }
