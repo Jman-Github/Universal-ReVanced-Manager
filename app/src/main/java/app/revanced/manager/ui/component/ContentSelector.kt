@@ -34,7 +34,7 @@ fun ContentSelector(mime: String, onSelect: (Uri) -> Unit, content: @Composable 
         pendingPicker = false
     }
     val openDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
+        contract = ActivityResultContracts.GetContent()
     ) { uri ->
         uri?.let(onSelect)
     }
@@ -67,9 +67,7 @@ fun ContentSelector(mime: String, onSelect: (Uri) -> Unit, content: @Composable 
                     permissionLauncher.launch(permissionName)
                 }
             } else {
-                openDocumentLauncher.launch(
-                    if (mime.isBlank()) arrayOf("*/*") else arrayOf(mime)
-                )
+                openDocumentLauncher.launch(if (mime.isBlank() || mime == "*/*") "*/*" else mime)
             }
         }
     ) {

@@ -18,6 +18,7 @@ import androidx.work.WorkManager
 import app.universal.revanced.manager.R
 import app.revanced.manager.domain.manager.SearchForUpdatesBackgroundInterval
 import app.revanced.manager.patcher.worker.BundleUpdateNotificationWorker
+import app.revanced.manager.patcher.worker.ManagerUpdateNotificationWorker
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -109,5 +110,56 @@ class WorkerRepository(app: Application) {
             "WorkManager",
             "Periodic work $workId updated with time ${bundleUpdateTime.value}."
         )
+    }
+
+    fun scheduleManagerUpdateNotificationWork(
+        managerUpdateTime: SearchForUpdatesBackgroundInterval
+    ) {
+        val workId = "ManagerUpdateNotificationWork"
+        if (managerUpdateTime == SearchForUpdatesBackgroundInterval.NEVER) {
+            workManager.cancelUniqueWork(workId)
+            Log.d("WorkManager", "Cancelled job with workId $workId.")
+            return
+        }
+
+        val workRequest =
+            PeriodicWorkRequestBuilder<ManagerUpdateNotificationWorker>(
+                managerUpdateTime.value,
+                TimeUnit.MINUTES
+            ).build()
+
+        workManager.enqueueUniquePeriodicWork(
+            workId,
+            ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE,
+            workRequest
+        )
+        Log.d(
+            "WorkManager",
+            "Periodic work $workId updated with time ${managerUpdateTime.value}."
+        )
+    }
+
+    fun launchBundleUpdateNotificationNow(): UUID {
+        val request = OneTimeWorkRequest.Builder(BundleUpdateNotificationWorker::class.java)
+            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+            .build()
+        workManager.enqueueUniqueWork(
+            "BundleUpdateNotificationWorkImmediate",
+            ExistingWorkPolicy.KEEP,
+            request
+        )
+        return request.id
+    }
+
+    fun launchManagerUpdateNotificationNow(): UUID {
+        val request = OneTimeWorkRequest.Builder(ManagerUpdateNotificationWorker::class.java)
+            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+            .build()
+        workManager.enqueueUniqueWork(
+            "ManagerUpdateNotificationWorkImmediate",
+            ExistingWorkPolicy.KEEP,
+            request
+        )
+        return request.id
     }
 }

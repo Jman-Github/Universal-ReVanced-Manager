@@ -33,7 +33,6 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 import javax.crypto.EncryptedPrivateKeyInfo
-import kotlin.time.Duration.Companion.days
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 
 class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
@@ -44,7 +43,9 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         const val DEFAULT = "ReVanced"
         private const val LEGACY_DEFAULT_PASSWORD = "s3cur3p@ssw0rd"
         private const val LOG_TAG = "KeystoreManager"
-        private val eightYearsFromNow get() = Date(System.currentTimeMillis() + (365.days * 8).inWholeMilliseconds * 24)
+        // 9999-12-31T23:59:59Z. Keep cert validity fixed at the practical max.
+        private const val MAX_CERT_NOT_AFTER_MS = 253402300799000L
+        private val maxCertificateNotAfter = Date(MAX_CERT_NOT_AFTER_MS)
     }
 
     private val keystorePath =
@@ -231,7 +232,7 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
 
             val keyCertPair = RevancedApkSigner.newPrivateKeyCertificatePair(
                 normalizedAlias,
-                eightYearsFromNow
+                maxCertificateNotAfter
             )
             val generated = RevancedApkSigner.newKeyStore(
                 setOf(
@@ -693,7 +694,7 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         Log.i(LOG_TAG, "Regenerating keystore")
         val keyCertPair = RevancedApkSigner.newPrivateKeyCertificatePair(
             prefs.keystoreAlias.get(),
-            eightYearsFromNow
+            maxCertificateNotAfter
         )
         val ks = RevancedApkSigner.newKeyStore(
             setOf(

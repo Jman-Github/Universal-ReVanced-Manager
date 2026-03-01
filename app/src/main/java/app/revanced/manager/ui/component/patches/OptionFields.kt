@@ -1,7 +1,10 @@
 package app.revanced.manager.ui.component.patches
 
 import android.app.Application
+import android.net.Uri
 import android.os.Parcelable
+import android.provider.OpenableColumns
+import android.webkit.MimeTypeMap
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -87,6 +90,7 @@ import org.koin.core.component.get
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import java.io.Serializable
+import java.util.Locale
 import kotlin.random.Random
 import kotlin.reflect.typeOf
 
@@ -244,6 +248,7 @@ private object StringOptionEditor : OptionEditor<String> {
         }
 
         val fs: Filesystem = koinInject()
+        val app: Application = koinInject()
         val prefs: PreferencesManager = koinInject()
         val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
         val storageRoots = remember { fs.storageRoots() }
@@ -252,10 +257,12 @@ private object StringOptionEditor : OptionEditor<String> {
             showFileDialog = it
         }
         val openDocumentLauncher = rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.OpenDocument()
+            contract = ActivityResultContracts.GetContent()
         ) { uri ->
             uri?.let { selectedUri ->
-                fieldValue = selectedUri.toString()
+                importDocumentUriToLocalPath(fs, selectedUri)?.let { localPath ->
+                    fieldValue = localPath
+                } ?: app.toast(app.getString(R.string.failed_to_load_file))
             }
         }
 
@@ -326,7 +333,7 @@ private object StringOptionEditor : OptionEditor<String> {
                                             permissionLauncher.launch(permissionName)
                                         }
                                     } else {
-                                        openDocumentLauncher.launch(arrayOf("*/*"))
+                                        openDocumentLauncher.launch("*/*")
                                     }
                                 }
                             )
@@ -348,6 +355,39 @@ private object StringOptionEditor : OptionEditor<String> {
             },
         )
     }
+}
+
+private fun importDocumentUriToLocalPath(fs: Filesystem, uri: Uri): String? {
+    val resolver = fs.contentResolver
+    val displayName = runCatching {
+        resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { cursor ->
+                if (!cursor.moveToFirst()) return@use null
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (nameIndex < 0) null else cursor.getString(nameIndex)
+            }.orEmpty()
+    }.getOrDefault("")
+    val extension = displayName
+        .substringAfterLast('.', "")
+        .lowercase(Locale.ROOT)
+        .ifBlank {
+            resolver.getType(uri)
+                ?.let { MimeTypeMap.getSingleton().getExtensionFromMimeType(it) }
+                .orEmpty()
+                .lowercase(Locale.ROOT)
+        }
+        .takeIf { it.matches(Regex("^[a-z0-9]{1,10}$")) }
+        ?: "dat"
+    val outDir = fs.tempDir.resolve("patch-option-inputs").apply { mkdirs() }
+    val outFile = outDir.resolve("option_${System.currentTimeMillis()}_${Random.nextInt(1000, 9999)}.$extension")
+    val input = resolver.openInputStream(uri) ?: return null
+
+    return runCatching {
+        input.use { source ->
+            outFile.outputStream().use { output -> source.copyTo(output) }
+        }
+        outFile.absolutePath
+    }.getOrNull()
 }
 
 private abstract class NumberOptionEditor<T : Number> : OptionEditor<T> {

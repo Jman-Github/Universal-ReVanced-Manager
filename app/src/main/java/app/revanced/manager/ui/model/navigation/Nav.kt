@@ -24,6 +24,9 @@ data class PatchBundleDiscoveryPatches(val bundleId: Int)
 data object MergeSplitApk
 
 @Serializable
+data object SplitApkInstaller
+
+@Serializable
 data object CreateYoutubeAssets
 
 @Serializable
@@ -99,6 +102,12 @@ object Settings {
 
     @Serializable
     data object Advanced : Destination
+
+    @Serializable
+    data object Patcher : Destination
+
+    @Serializable
+    data object AdvancedSystem : Destination
 
     @Serializable
     data object Updates : Destination

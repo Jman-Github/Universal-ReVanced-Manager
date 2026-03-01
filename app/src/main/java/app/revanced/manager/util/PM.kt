@@ -109,6 +109,12 @@ class PM(
                 pkg.reqFeatures?.any { it.name == feature } ?: false
             }
 
+    fun getPackagesWithFeatures(features: Set<String>) =
+        getInstalledPackages(PackageManager.GET_CONFIGURATIONS)
+            .filter { pkg ->
+                pkg.reqFeatures?.any { it.name in features } ?: false
+            }
+
     fun getPackageInfo(packageName: String, flags: Int = 0): PackageInfo? =
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)

@@ -1,16 +1,26 @@
 package app.revanced.manager.ui.component
 
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
 
@@ -38,6 +48,7 @@ fun AppScaffold(
 fun AppTopBar(
     title: String,
     onBackClick: (() -> Unit)? = null,
+    onBackLongClick: (() -> Unit)? = null,
     backIcon: @Composable (() -> Unit) = @Composable {
         Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(
@@ -61,9 +72,11 @@ fun AppTopBar(
         scrollBehavior = scrollBehavior,
         navigationIcon = {
             if (onBackClick != null) {
-                IconButton(onClick = onBackClick) {
-                    backIcon()
-                }
+                TopBarBackButton(
+                    onBackClick = onBackClick,
+                    onBackLongClick = onBackLongClick,
+                    backIcon = backIcon
+                )
             }
         },
         actions = {
@@ -89,6 +102,7 @@ fun AppTopBar(
 fun AppTopBar(
     title: @Composable () -> Unit,
     onBackClick: (() -> Unit)? = null,
+    onBackLongClick: (() -> Unit)? = null,
     backIcon: @Composable (() -> Unit) = @Composable {
         Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(
@@ -112,9 +126,11 @@ fun AppTopBar(
         scrollBehavior = scrollBehavior,
         navigationIcon = {
             if (onBackClick != null) {
-                IconButton(onClick = onBackClick) {
-                    backIcon()
-                }
+                TopBarBackButton(
+                    onBackClick = onBackClick,
+                    onBackLongClick = onBackLongClick,
+                    backIcon = backIcon
+                )
             }
         },
         actions = {
@@ -133,4 +149,35 @@ fun AppTopBar(
             containerColor = containerColor
         )
     )
+}
+
+@Composable
+private fun TopBarBackButton(
+    onBackClick: () -> Unit,
+    onBackLongClick: (() -> Unit)?,
+    backIcon: @Composable () -> Unit
+) {
+    if (onBackLongClick == null) {
+        IconButton(onClick = onBackClick) {
+            backIcon()
+        }
+        return
+    }
+
+    val interactionSource = remember { MutableInteractionSource() }
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .combinedClickable(
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
+                role = Role.Button,
+                onClick = onBackClick,
+                onLongClick = onBackLongClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        backIcon()
+    }
 }

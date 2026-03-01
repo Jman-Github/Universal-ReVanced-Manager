@@ -1,6 +1,7 @@
 package app.revanced.manager.ui.component
 
 import android.content.pm.PackageInfo
+import android.graphics.drawable.Drawable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -18,8 +19,11 @@ import app.revanced.manager.ui.component.ShimmerBox
 @Composable
 fun AppInfo(
     appInfo: PackageInfo?,
+    labelOverride: String? = null,
+    iconOverride: Drawable? = null,
     placeholderLabel: String? = null,
     placeholderMetaLines: Int = 1,
+    showExtraContentWhenLoading: Boolean = false,
     extraContent: @Composable () -> Unit = {}
 ) {
     Column(
@@ -41,7 +45,12 @@ fun AppInfo(
                     .width(200.dp)
                     .height(22.dp)
             )
-            repeat(placeholderMetaLines.coerceAtLeast(1)) { index ->
+            val placeholderLineCount = if (showExtraContentWhenLoading) {
+                placeholderMetaLines.coerceAtLeast(0)
+            } else {
+                placeholderMetaLines.coerceAtLeast(1)
+            }
+            repeat(placeholderLineCount) { index ->
                 val lineWidth = when (index) {
                     0 -> 150.dp
                     1 -> 130.dp
@@ -54,9 +63,13 @@ fun AppInfo(
                         .height(14.dp)
                 )
             }
+            if (showExtraContentWhenLoading) {
+                extraContent()
+            }
         } else {
             AppIcon(
                 appInfo,
+                iconOverride = iconOverride,
                 contentDescription = null,
                 modifier = Modifier
                     .size(100.dp)
@@ -65,6 +78,7 @@ fun AppInfo(
 
             AppLabel(
                 appInfo,
+                labelOverride = labelOverride,
                 modifier = Modifier.padding(top = 16.dp),
                 style = MaterialTheme.typography.titleLarge,
                 defaultText = placeholderLabel

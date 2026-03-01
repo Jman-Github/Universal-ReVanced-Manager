@@ -1,6 +1,10 @@
 package app.revanced.manager.ui.viewmodel
 
 import android.app.Application
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -38,6 +42,7 @@ import androidx.lifecycle.viewmodel.compose.saveable
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import app.universal.revanced.manager.R
+import app.revanced.manager.MainActivity
 import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.data.room.apps.installed.InstallType
 import app.revanced.manager.data.room.apps.installed.InstalledApp
@@ -85,6 +90,7 @@ import app.revanced.manager.util.toast
 import app.revanced.manager.util.awaitUserConfirmation
 import app.revanced.manager.util.toastHandle
 import app.revanced.manager.util.uiSafe
+import app.revanced.manager.util.permission.hasNotificationPermission
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
@@ -802,10 +808,20 @@ fun proceedAfterMissingPatchWarning() {
 
     private val logs by savedStateHandle.saveable<MutableList<Pair<LogLevel, String>>> { mutableListOf() }
     private var droppedLogLineCount by savedStateHandle.saveableVar { 0 }
+    private var runtimeReportedMemoryLimitMb: Int? by savedStateHandle.saveableVar()
     private val dexCompilePattern =
         Regex("(Compiling|Compiled)\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
     private val dexWritePattern =
         Regex("Write\\s+\\[[^\\]]+\\]\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
+    private fun parseMemoryLimitMb(raw: String?): Int? {
+        val value = raw?.trim() ?: return null
+        val match = Regex("""(\d+)\s*(?:m|mb|mib)?""", RegexOption.IGNORE_CASE)
+            .find(value)
+            ?: return null
+
+        return match.groupValues.getOrNull(1)?.toIntOrNull()
+    }
+
     private fun appendBoundedLog(level: LogLevel, message: String) {
         val boundedMessage = if (message.length > PATCHER_LOG_MESSAGE_CHAR_LIMIT) {
             buildString(PATCHER_LOG_MESSAGE_CHAR_LIMIT + 96) {
@@ -833,6 +849,11 @@ fun proceedAfterMissingPatchWarning() {
             level.androidLog(message)
             if (level == LogLevel.TRACE) return
             handleDexCompileLine(message)
+            if (message.startsWith("Memory limit:")) {
+                parseMemoryLimitMb(
+                    message.removePrefix("Memory limit:").trim()
+                )?.let { runtimeReportedMemoryLimitMb = it }
+            }
 
             viewModelScope.launch {
                 appendBoundedLog(level, message)
@@ -931,6 +952,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
 
     private val workManager = WorkManager.getInstance(app)
+    private val notificationManager by lazy {
+        app.getSystemService(NotificationManager::class.java)
+    }
     private val _patcherSucceeded = MediatorLiveData<Boolean?>()
     val patcherSucceeded: LiveData<Boolean?> get() = _patcherSucceeded
     private var currentWorkSource: LiveData<WorkInfo?>? = null
@@ -986,10 +1010,57 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private fun startWorker() {
         resetDexCompileState()
         resetFailureLogState()
+        runtimeReportedMemoryLimitMb = null
+        markInitialStepRunning()
         logBatteryOptimizationStatus()
+        showPendingPatchingNotification()
         val workId = launchWorker()
         patcherWorkerId = ParcelUuid(workId)
         observeWorker(workId)
+    }
+
+    private fun showPendingPatchingNotification() {
+        if (!app.hasNotificationPermission()) return
+        runCatching {
+            val channel = NotificationChannel(
+                PatcherWorker.PATCHING_NOTIFICATION_CHANNEL_ID,
+                app.getString(R.string.notification_channel_patching_name),
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = app.getString(R.string.notification_channel_patching_description)
+            }
+            notificationManager.createNotificationChannel(channel)
+            val notificationIntent = Intent(app, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val pendingIntent = PendingIntent.getActivity(
+                app,
+                0,
+                notificationIntent,
+                PendingIntent.FLAG_IMMUTABLE
+            )
+            val notification = Notification.Builder(app, channel.id)
+                .setContentTitle(app.getText(R.string.patcher_notification_title))
+                .setContentText(app.getText(R.string.patcher_notification_text))
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentIntent(pendingIntent)
+                .setCategory(Notification.CATEGORY_SERVICE)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setProgress(0, 0, true)
+                .build()
+            notificationManager.notify(PatcherWorker.NOTIFICATION_ID, notification)
+        }.onFailure { error ->
+            Log.d(TAG, "Failed to post pending patching notification", error)
+        }
+    }
+
+    private fun clearPatchingNotification() {
+        runCatching {
+            notificationManager.cancel(PatcherWorker.NOTIFICATION_ID)
+        }.onFailure { error ->
+            Log.d(TAG, "Failed to clear patching notification", error)
+        }
     }
 
     private suspend fun persistPatchedApp(
@@ -1169,6 +1240,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         super.onCleared()
         app.unregisterReceiver(packageChangeReceiver)
         patcherWorkerId?.uuid?.let(workManager::cancelWorkById)
+        clearPatchingNotification()
         pendingExternalInstall?.let(installerManager::cleanup)
         pendingExternalInstall = null
         externalInstallTimeoutJob?.cancel()
@@ -1199,6 +1271,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         // tempDir cannot be deleted inside onCleared because it gets called on system-initiated process death.
         if (_patcherSucceeded.value == null) {
             patcherWorkerId?.uuid?.let(workManager::cancelWorkById)
+            clearPatchingNotification()
         }
         tempDir.deleteRecursively()
     }
@@ -1277,17 +1350,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         val logSnapshot = logs.toList()
         val logMessages = logSnapshot.map { it.second }
         fun findLogValue(prefix: String): String? =
-            logMessages.firstOrNull { it.startsWith(prefix) }
+            logMessages.lastOrNull { it.startsWith(prefix) }
                 ?.removePrefix(prefix)
                 ?.trim()
-        fun parseMemoryLimitMb(raw: String?): Int? {
-            val value = raw?.trim() ?: return null
-            val match = Regex("""(\d+)\s*(?:m|mb|mib)?""", RegexOption.IGNORE_CASE)
-                .find(value)
-                ?: return null
-
-            return match.groupValues.getOrNull(1)?.toIntOrNull()
-        }
 
         data class LogPrefsSnapshot(
             val requestedLimit: Int,
@@ -1314,7 +1379,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         val stripNativeLibs = prefsSnapshot.stripNativeLibs
         val skipUnusedSplits = prefsSnapshot.skipUnusedSplits
 
-        val runtimeReportedLimit = parseMemoryLimitMb(
+        val runtimeReportedLimit = runtimeReportedMemoryLimitMb ?: parseMemoryLimitMb(
             logMessages.lastOrNull { it.startsWith("Memory limit:") }
                 ?.removePrefix("Memory limit:")
                 ?.trim()
@@ -1322,8 +1387,17 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         val effectiveLimit = runtimeReportedLimit ?: if (aggressiveLimit) {
             MemoryLimitConfig.maxLimitMb(context)
         } else {
-            requestedLimit
+            MemoryLimitConfig.clampLimitMb(context, requestedLimit)
         }
+        val processRuntimeSupported = Build.VERSION.SDK_INT > Build.VERSION_CODES.Q
+        val runtimeMode = findLogValue("Runtime mode:")
+            ?: if (experimental && processRuntimeSupported) "process" else "in-process"
+        val memoryOverride = findLogValue("Memory override:")
+            ?: if (experimental && processRuntimeSupported && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                "enabled"
+            } else {
+                "disabled"
+            }
 
         val isIgnoring = context.getSystemService<PowerManager>()
             ?.isIgnoringBatteryOptimizations(context.packageName) == true
@@ -1363,6 +1437,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     msg.startsWith("Patching started at ") ||
                     msg.startsWith("Patcher runtime:") ||
                     msg.startsWith("Memory limit:") ||
+                    msg.startsWith("Runtime mode:") ||
+                    msg.startsWith("Memory override:") ||
                     msg.startsWith("AAPT2 sha256:") ||
                     msg.startsWith("AAPT2 version:")
             }
@@ -1377,6 +1453,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             appendLine("Effective memory limit: ${effectiveLimit}MB")
             appendLine("Bundle type: $bundleType")
             appendLine("Experimental: $experimental")
+            appendLine("Runtime mode: $runtimeMode")
+            appendLine("Memory override: $memoryOverride")
             appendLine("Aggressive: $aggressiveLimit")
             appendLine("Strip native libs: ${if (stripNativeLibs) "on" else "off"}")
             appendLine("Skip unused splits: ${if (skipUnusedSplits) "on" else "off"}")
@@ -2231,9 +2309,14 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
                 is ProgressEvent.Progress -> {
                     val nextState = if (state == State.WAITING) State.RUNNING else state
+                    val nextMessage = if (eventStepId == StepId.LoadPatches) {
+                        null
+                    } else {
+                        event.message ?: message
+                    }
                     withState(
                         state = nextState,
-                        message = event.message ?: message,
+                        message = nextMessage,
                         progress = event.current?.let { event.current to event.total } ?: progress
                     )
                 }
@@ -2678,6 +2761,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         _patcherSucceeded.addSource(source) { workInfo ->
             when (workInfo?.state) {
                 WorkInfo.State.SUCCEEDED -> {
+                    clearPatchingNotification()
                     forceKeepLocalInput = false
                     if (input.selectedApp is SelectedApp.Local && input.selectedApp.temporary) {
                         inputFile?.takeIf { it.exists() }?.delete()
@@ -2693,6 +2777,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 }
 
                 WorkInfo.State.FAILED -> {
+                    clearPatchingNotification()
                     handleWorkerFailure(workInfo)
                     _patcherSucceeded.value = false
                 }
@@ -2700,6 +2785,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 WorkInfo.State.RUNNING,
                 WorkInfo.State.ENQUEUED,
                 WorkInfo.State.BLOCKED -> _patcherSucceeded.value = null
+                WorkInfo.State.CANCELLED -> {
+                    clearPatchingNotification()
+                    _patcherSucceeded.value = null
+                }
                 else -> _patcherSucceeded.value = null
             }
         }
@@ -2757,6 +2846,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             memoryAdjustmentDialog = null
             handledFailureIds.clear()
             resetStateForRetry()
+            markInitialStepRunning()
             patcherWorkerId?.uuid?.let(workManager::cancelWorkById)
             val newId = launchWorker()
             patcherWorkerId = ParcelUuid(newId)
@@ -2777,6 +2867,16 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         steps.addAll(newSteps)
         stepSubSteps.clear()
         _patcherSucceeded.value = null
+    }
+
+    private fun markInitialStepRunning() {
+        val index = steps.indexOfFirst { step ->
+            !step.hide && step.state == State.WAITING
+        }
+        if (index == -1) return
+        val step = steps[index]
+        steps[index] = step.withState(state = State.RUNNING, message = null, progress = null)
+        stepSubSteps.remove(step.id)
     }
 
     private fun initialSplitRequirement(selectedApp: SelectedApp): Boolean =

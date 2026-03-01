@@ -7,6 +7,7 @@ import android.content.ComponentName
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.view.HapticFeedbackConstants
+import androidx.annotation.StringRes
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Animatable
@@ -150,7 +151,9 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -212,6 +215,7 @@ import kotlin.math.roundToInt
 @Composable
 fun AdvancedSettingsScreen(
     onBackClick: () -> Unit,
+    mode: AdvancedSettingsMode = AdvancedSettingsMode.APP_MANAGER,
     viewModel: AdvancedSettingsViewModel = koinViewModel()
 ) {
     val context = LocalContext.current
@@ -221,6 +225,25 @@ fun AdvancedSettingsScreen(
     val hasOfficialBundle by viewModel.hasOfficialBundle.collectAsStateWithLifecycle(true)
     val searchTarget by SettingsSearchState.target.collectAsStateWithLifecycle()
     var highlightTarget by rememberSaveable { mutableStateOf<Int?>(null) }
+    val appLanguage by viewModel.prefs.appLanguage.getAsState()
+    var showLanguageDialog by rememberSaveable { mutableStateOf(false) }
+    val languageOptions = remember {
+        listOf(
+            LanguageOption("system", R.string.language_option_system),
+            LanguageOption("en", R.string.language_option_english),
+            LanguageOption("fr", R.string.language_option_french),
+            LanguageOption("zh-CN", R.string.language_option_chinese_simplified),
+            LanguageOption("in", R.string.language_option_indonesian),
+            LanguageOption("hi", R.string.language_option_hindi),
+            LanguageOption("gu", R.string.language_option_gujarati),
+            LanguageOption("pt-BR", R.string.language_option_portuguese_brazil),
+            LanguageOption("vi", R.string.language_option_vietnamese),
+            LanguageOption("ko", R.string.language_option_korean),
+            LanguageOption("ja", R.string.language_option_japanese),
+            LanguageOption("ru", R.string.language_option_russian),
+            LanguageOption("uk", R.string.language_option_ukrainian)
+        )
+    }
     val memoryLimit = remember {
         val activityManager = context.getSystemService<ActivityManager>()!!
         context.getString(
@@ -229,20 +252,51 @@ fun AdvancedSettingsScreen(
             activityManager.largeMemoryClass
         )
     }
+    val exportFormat by viewModel.prefs.patchedAppExportFormat.getAsState()
+    var showExportFormatDialog by rememberSaveable { mutableStateOf(false) }
+    if (showExportFormatDialog) {
+        ExportNameFormatDialog(
+            currentValue = exportFormat,
+            onDismiss = { showExportFormatDialog = false },
+            onSave = {
+                viewModel.setPatchedAppExportFormat(it)
+                showExportFormatDialog = false
+            }
+        )
+    }
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
 
-    LaunchedEffect(searchTarget) {
+    LaunchedEffect(searchTarget, mode) {
         val target = searchTarget
-        if (target?.destination == Settings.Advanced) {
+        if (target?.destination == mode.destination) {
             highlightTarget = target.targetId
             SettingsSearchState.clear()
         }
+    }
+    if (showLanguageDialog) {
+        LanguageDialog(
+            options = languageOptions,
+            selectedCode = appLanguage,
+            onSelect = { code ->
+                viewModel.viewModelScope.launch {
+                    viewModel.prefs.appLanguage.update(code)
+                }
+                (context as? android.app.Activity)?.recreate()
+                showLanguageDialog = false
+            },
+            onDismiss = { showLanguageDialog = false }
+        )
+    }
+    val selectedLanguageLabel = when (appLanguage) {
+        "system" -> R.string.language_option_system
+        else -> languageOptions.firstOrNull { it.code == appLanguage }?.labelRes
+            ?: R.string.language_option_english
     }
 
     Scaffold(
         topBar = {
             AppTopBar(
-                title = stringResource(R.string.advanced),
+                title = stringResource(mode.titleRes),
                 scrollBehavior = scrollBehavior,
                 onBackClick = onBackClick
             )
@@ -254,15 +308,68 @@ fun AdvancedSettingsScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            GroupHeader(stringResource(R.string.manager))
+            if (
+                mode == AdvancedSettingsMode.APP_MANAGER ||
+                mode == AdvancedSettingsMode.ADVANCED_SYSTEM
+            ) {
+            val searchEngineHost by viewModel.prefs.searchEngineHost.getAsState()
+            var showSearchEngineDialog by rememberSaveable { mutableStateOf(false) }
+            GroupHeader(stringResource(R.string.app_behavior_section))
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+            ) {
+                SettingsSearchHighlight(
+                    targetKey = R.string.app_language,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(R.string.app_language),
+                        supportingContent = stringResource(selectedLanguageLabel),
+                        onClick = { showLanguageDialog = true }
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.use_custom_file_picker_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.useCustomFilePicker,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.use_custom_file_picker_title,
+                        description = R.string.use_custom_file_picker_description,
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.search_engine_host_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(R.string.search_engine_host_title),
+                        supportingContent = stringResource(
+                            R.string.search_engine_host_description,
+                            searchEngineHost
+                        ),
+                        onClick = { showSearchEngineDialog = true }
+                    )
+                }
+            }
+
+            GroupHeader(stringResource(R.string.network_integrations_section))
 
             val apiUrl by viewModel.prefs.api.getAsState()
             val gitHubPat by viewModel.prefs.gitHubPat.getAsState()
             val includeGitHubPatInExports by viewModel.prefs.includeGitHubPatInExports.getAsState()
-            val searchEngineHost by viewModel.prefs.searchEngineHost.getAsState()
             var showApiUrlDialog by rememberSaveable { mutableStateOf(false) }
             var showGitHubPatDialog by rememberSaveable { mutableStateOf(false) }
-            var showSearchEngineDialog by rememberSaveable { mutableStateOf(false) }
 
             if (showApiUrlDialog) {
                 APIUrlDialog(
@@ -326,8 +433,23 @@ fun AdvancedSettingsScreen(
                         onClick = { showGitHubPatDialog = true }
                     )
                 }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.include_github_pat_in_exports_label,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.includeGitHubPatInExports,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.include_github_pat_in_exports_label,
+                        description = R.string.include_github_pat_in_exports_supporting
+                    )
+                }
             }
 
+            GroupHeader(stringResource(R.string.installer_section))
             val installTarget = InstallerManager.InstallTarget.PATCHER
             val primaryPreference by viewModel.prefs.installerPrimary.getAsState()
             val fallbackPreference by viewModel.prefs.installerFallback.getAsState()
@@ -498,61 +620,12 @@ fun AdvancedSettingsScreen(
                 }
             }
 
-            ExpressiveSettingsCard(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
-            ) {
-                SettingsSearchHighlight(
-                    targetKey = R.string.search_engine_host_title,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    ExpressiveSettingsItem(
-                        modifier = highlightModifier,
-                        headlineContent = stringResource(R.string.search_engine_host_title),
-                        supportingContent = stringResource(
-                            R.string.search_engine_host_description,
-                            searchEngineHost
-                        ),
-                        onClick = { showSearchEngineDialog = true }
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.use_custom_file_picker_title,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        preference = viewModel.prefs.useCustomFilePicker,
-                        coroutineScope = viewModel.viewModelScope,
-                        headline = R.string.use_custom_file_picker_title,
-                        description = R.string.use_custom_file_picker_description,
-                    )
-                }
-            }
-
             if (showCustomInstallerDialog) {
                 CustomInstallerManagerDialog(
                     installerManager = installerManager,
                     viewModel = viewModel,
                     installTarget = installTarget,
                     onDismiss = { showCustomInstallerDialog = false }
-                )
-            }
-
-            val exportFormat by viewModel.prefs.patchedAppExportFormat.getAsState()
-            var showExportFormatDialog by rememberSaveable { mutableStateOf(false) }
-
-            if (showExportFormatDialog) {
-                ExportNameFormatDialog(
-                    currentValue = exportFormat,
-                    onDismiss = { showExportFormatDialog = false },
-                    onSave = {
-                        viewModel.setPatchedAppExportFormat(it)
-                        showExportFormatDialog = false
-                    }
                 )
             }
 
@@ -582,8 +655,10 @@ fun AdvancedSettingsScreen(
                     stripRootNote = true
                 )
             }
+            }
 
-            GroupHeader(stringResource(R.string.safeguards))
+            if (mode == AdvancedSettingsMode.ADVANCED_SYSTEM) {
+            GroupHeader(stringResource(R.string.safeguards_compatibility_section))
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -649,20 +724,6 @@ fun AdvancedSettingsScreen(
                 }
                 ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
-                    targetKey = R.string.show_patch_selection_summary,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        preference = viewModel.prefs.showPatchSelectionSummary,
-                        coroutineScope = viewModel.viewModelScope,
-                        headline = R.string.show_patch_selection_summary,
-                        description = R.string.show_patch_selection_summary_description,
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
                     targetKey = R.string.universal_patches_safeguard,
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }
@@ -675,22 +736,26 @@ fun AdvancedSettingsScreen(
                         description = R.string.universal_patches_safeguard_description,
                     )
                 }
-                ExpressiveSettingsDivider()
-
-                val restoreDescription = if (hasOfficialBundle) {
-                    stringResource(R.string.restore_official_bundle_description_installed)
-                } else {
-                    stringResource(R.string.restore_official_bundle_description_missing)
+            }
+            val restoreDescription = if (hasOfficialBundle) {
+                stringResource(R.string.restore_official_bundle_description_installed)
+            } else {
+                stringResource(R.string.restore_official_bundle_description_missing)
+            }
+            val installedTrailingContent: (@Composable () -> Unit)? = if (hasOfficialBundle) {
+                {
+                    Text(
+                        text = stringResource(R.string.installed),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
-                val installedTrailingContent: (@Composable () -> Unit)? = if (hasOfficialBundle) {
-                    {
-                        Text(
-                            text = stringResource(R.string.installed),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                } else null
+            } else null
+            GroupHeader(stringResource(R.string.bundle_system_recovery_section))
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+            ) {
                 SettingsSearchHighlight(
                     targetKey = R.string.restore_official_bundle,
                     activeKey = highlightTarget,
@@ -706,8 +771,10 @@ fun AdvancedSettingsScreen(
                     )
                 }
             }
+            }
 
-            GroupHeader(stringResource(R.string.patcher))
+            if (mode == AdvancedSettingsMode.PATCHER) {
+            GroupHeader(stringResource(R.string.patching_engine_section))
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -748,8 +815,10 @@ fun AdvancedSettingsScreen(
                     val processRuntimeEnabled by viewModel.prefs.useProcessRuntime.getAsState()
                     val processMemoryLimit by viewModel.prefs.patcherProcessMemoryLimit.getAsState()
                     val aggressiveLimitEnabled by viewModel.prefs.patcherProcessMemoryAggressive.getAsState()
-                    val effectiveLimit = remember(processRuntimeEnabled, processMemoryLimit, aggressiveLimitEnabled) {
-                        if (!processRuntimeEnabled) {
+                    val processRuntimeSupported = remember { Build.VERSION.SDK_INT > Build.VERSION_CODES.Q }
+                    val processRuntimeActive = processRuntimeEnabled && processRuntimeSupported
+                    val effectiveLimit = remember(processRuntimeActive, processMemoryLimit, aggressiveLimitEnabled) {
+                        if (!processRuntimeActive) {
                             null
                         } else if (aggressiveLimitEnabled) {
                             MemoryLimitConfig.maxLimitMb(context)
@@ -772,7 +841,7 @@ fun AdvancedSettingsScreen(
                                 )
                                 Surface(
                                     shape = RoundedCornerShape(999.dp),
-                                    color = if (processRuntimeEnabled) {
+                                    color = if (processRuntimeActive) {
                                         MaterialTheme.colorScheme.primaryContainer
                                     } else {
                                         MaterialTheme.colorScheme.surfaceVariant
@@ -786,7 +855,7 @@ fun AdvancedSettingsScreen(
                                         },
                                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                         style = MaterialTheme.typography.labelMedium,
-                                        color = if (processRuntimeEnabled) {
+                                        color = if (processRuntimeActive) {
                                             MaterialTheme.colorScheme.onPrimaryContainer
                                         } else {
                                             MaterialTheme.colorScheme.onSurfaceVariant
@@ -852,7 +921,13 @@ fun AdvancedSettingsScreen(
                         enabled = aggressiveControlEnabled
                     )
                 }
-                ExpressiveSettingsDivider()
+            }
+
+            GroupHeader(stringResource(R.string.patching_flow_section))
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+            ) {
                 SettingsSearchHighlight(
                     targetKey = R.string.patcher_auto_collapse_steps,
                     activeKey = highlightTarget,
@@ -881,7 +956,55 @@ fun AdvancedSettingsScreen(
                     )
                 }
                 ExpressiveSettingsDivider()
-                val savedAppsEnabled by viewModel.prefs.enableSavedApps.getAsState()
+                SettingsSearchHighlight(
+                    targetKey = R.string.patcher_auto_expand_running_steps_exclusive,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.autoExpandRunningStepsExclusive,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.patcher_auto_expand_running_steps_exclusive,
+                        description = R.string.patcher_auto_expand_running_steps_exclusive_description,
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.show_patch_selection_summary,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.showPatchSelectionSummary,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.show_patch_selection_summary,
+                        description = R.string.show_patch_selection_summary_description,
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.patch_selection_collapse_on_toggle,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.collapsePatchActionsOnSelection,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.patch_selection_collapse_on_toggle,
+                        description = R.string.patch_selection_collapse_on_toggle_description,
+                    )
+                }
+            }
+
+            GroupHeader(stringResource(R.string.saved_apps_section))
+            val savedAppsEnabled by viewModel.prefs.enableSavedApps.getAsState()
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+            ) {
                 SettingsSearchHighlight(
                     targetKey = R.string.patcher_saved_apps_title,
                     activeKey = highlightTarget,
@@ -908,20 +1031,6 @@ fun AdvancedSettingsScreen(
                         headline = R.string.saved_apps_disable_overwrite_title,
                         description = R.string.saved_apps_disable_overwrite_description,
                         enabled = savedAppsEnabled
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.patch_selection_collapse_on_toggle,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        preference = viewModel.prefs.collapsePatchActionsOnSelection,
-                        coroutineScope = viewModel.viewModelScope,
-                        headline = R.string.patch_selection_collapse_on_toggle,
-                        description = R.string.patch_selection_collapse_on_toggle_description,
                     )
                 }
             }
@@ -1033,6 +1142,7 @@ fun AdvancedSettingsScreen(
                     }
             }
 
+            GroupHeader(stringResource(R.string.action_buttons_patch_list_section))
             ExpressiveSettingsCard(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1040,7 +1150,7 @@ fun AdvancedSettingsScreen(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
             ) {
                 Column {
-            SettingsSearchHighlight(
+                    SettingsSearchHighlight(
                 targetKey = R.string.patch_selection_action_order_title,
                 activeKey = highlightTarget,
                 extraKeys = setOf(R.string.patch_selection_action_visibility_title),
@@ -1630,8 +1740,10 @@ fun AdvancedSettingsScreen(
                 }
             }
         }
+        }
 
-        GroupHeader(stringResource(R.string.app_exporting))
+        if (mode == AdvancedSettingsMode.ADVANCED_SYSTEM) {
+        GroupHeader(stringResource(R.string.diagnostics_output_section))
         ExpressiveSettingsCard(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -1669,7 +1781,6 @@ fun AdvancedSettingsScreen(
                 }
             }
 
-            GroupHeader(stringResource(R.string.debugging))
             val exportDebugLogsLauncher =
                 rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) {
                     it?.let(viewModel::exportDebugLogs)
@@ -1722,13 +1833,83 @@ fun AdvancedSettingsScreen(
                 }
             }
         }
+        }
     }
 
+}
+
+enum class AdvancedSettingsMode(
+    @StringRes val titleRes: Int,
+    val destination: Settings.Destination
+) {
+    APP_MANAGER(R.string.advanced, Settings.Advanced),
+    PATCHER(R.string.patcher_category, Settings.Patcher),
+    ADVANCED_SYSTEM(R.string.advanced_system, Settings.AdvancedSystem)
 }
 
 private enum class InstallerDialogTarget {
     Primary,
     Fallback
+}
+
+private data class LanguageOption(val code: String, @StringRes val labelRes: Int)
+
+@Composable
+private fun LanguageDialog(
+    options: List<LanguageOption>,
+    selectedCode: String,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+        title = {
+            Text(
+                text = stringResource(R.string.language_dialog_title),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
+            )
+        },
+        text = {
+            val scrollState = rememberScrollState()
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 360.dp)
+                    .verticalScroll(scrollState)
+                    .padding(bottom = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                options.forEach { option ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onSelect(option.code) }
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = option.code == selectedCode,
+                            onClick = { onSelect(option.code) }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = stringResource(option.labelRes),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        }
+    )
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -2200,10 +2381,12 @@ private fun ExportNameFormatDialog(
     onDismiss: () -> Unit,
     onSave: (String) -> Unit
 ) {
-    var value by rememberSaveable(currentValue) { mutableStateOf(currentValue) }
+    var value by rememberSaveable(currentValue, stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(currentValue, selection = TextRange(currentValue.length)))
+    }
     var showError by rememberSaveable { mutableStateOf(false) }
     val variables = remember { ExportNameFormatter.availableVariables() }
-    val preview = remember(value) { ExportNameFormatter.preview(value) }
+    val preview = remember(value.text) { ExportNameFormatter.preview(value.text) }
 
     val scrollState = rememberScrollState()
 
@@ -2211,10 +2394,10 @@ private fun ExportNameFormatDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(onClick = {
-                if (value.isBlank()) {
+                if (value.text.isBlank()) {
                     showError = true
                 } else {
-                    onSave(value.trim())
+                    onSave(value.text.trim())
                 }
             }) {
                 Text(stringResource(R.string.save))
@@ -2242,12 +2425,12 @@ private fun ExportNameFormatDialog(
                     value = value,
                     onValueChange = {
                         value = it
-                        if (showError) showError = false
+                        if (showError && it.text.isNotBlank()) showError = false
                     },
                     singleLine = true,
                     label = { Text(stringResource(R.string.export_name_format)) },
-                    isError = showError && value.isBlank(),
-                    supportingText = if (showError && value.isBlank()) {
+                    isError = showError && value.text.isBlank(),
+                    supportingText = if (showError && value.text.isBlank()) {
                         { Text(stringResource(R.string.export_name_format_error_blank)) }
                     } else null,
                     modifier = Modifier.fillMaxWidth()
@@ -2300,7 +2483,31 @@ private fun ExportNameFormatDialog(
                                         style = MaterialTheme.typography.titleMedium
                                     )
                                     TextButton(onClick = {
-                                        value += variable.token
+                                        val currentText = value.text
+                                        val selection = value.selection
+                                        val validSelection =
+                                            selection.start in 0..currentText.length &&
+                                                selection.end in 0..currentText.length &&
+                                                selection.start <= selection.end
+
+                                        value = if (validSelection) {
+                                            val updated = currentText.replaceRange(
+                                                selection.start,
+                                                selection.end,
+                                                variable.token
+                                            )
+                                            val cursor = selection.start + variable.token.length
+                                            TextFieldValue(
+                                                text = updated,
+                                                selection = TextRange(cursor)
+                                            )
+                                        } else {
+                                            val updated = currentText + variable.token
+                                            TextFieldValue(
+                                                text = updated,
+                                                selection = TextRange(updated.length)
+                                            )
+                                        }
                                         if (showError) showError = false
                                     }) {
                                         Text(stringResource(R.string.export_name_format_insert))
@@ -2322,7 +2529,11 @@ private fun ExportNameFormatDialog(
                 }
                 TextButton(
                     onClick = {
-                        value = ExportNameFormatter.DEFAULT_TEMPLATE
+                        val defaultTemplate = ExportNameFormatter.DEFAULT_TEMPLATE
+                        value = TextFieldValue(
+                            text = defaultTemplate,
+                            selection = TextRange(defaultTemplate.length)
+                        )
                         showError = false
                     },
                     modifier = Modifier.align(Alignment.Start)

@@ -2,6 +2,7 @@ package app.revanced.manager.ui.screen.settings
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.net.Uri
 import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -72,6 +73,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
+import androidx.documentfile.provider.DocumentFile
 import app.universal.revanced.manager.R
 import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.domain.manager.KeystoreManager
@@ -93,6 +95,7 @@ import app.revanced.manager.ui.viewmodel.ImportExportViewModel
 import app.revanced.manager.ui.viewmodel.ResetDialogState
 import app.revanced.manager.ui.model.navigation.Settings
 import app.revanced.manager.ui.screen.settings.SettingsSearchState
+import app.revanced.manager.util.FilenameUtils
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.uiSafe
 import app.revanced.manager.domain.repository.PatchBundleRepository.BundleImportPhase
@@ -147,12 +150,16 @@ fun ImportExportSettingsScreen(
         pendingExportPicker = null
     }
     val importDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
+        contract = ActivityResultContracts.GetContent()
     ) { uri ->
         val picker = pendingDocumentImportPicker
         pendingDocumentImportPicker = null
         if (picker == null) return@rememberLauncherForActivityResult
         if (uri == null) {
+            if (picker == ImportPicker.PatchSelection) vm.clearSelectionAction()
+            return@rememberLauncherForActivityResult
+        }
+        if (!isValidImportUri(context, uri, picker)) {
             if (picker == ImportPicker.PatchSelection) vm.clearSelectionAction()
             return@rememberLauncherForActivityResult
         }
@@ -169,16 +176,7 @@ fun ImportExportSettingsScreen(
             }
         }
     }
-    val exportDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/json")
-    ) { uri ->
-        val picker = pendingDocumentExportPicker
-        pendingDocumentExportPicker = null
-        if (picker == null) return@rememberLauncherForActivityResult
-        if (uri == null) {
-            if (picker == ExportPicker.PatchSelection) vm.clearSelectionAction()
-            return@rememberLauncherForActivityResult
-        }
+    val runDocumentExport: (ExportPicker, Uri) -> Unit = { picker, uri ->
         exportInProgress = true
         val job = when (picker) {
             ExportPicker.Keystore -> vm.exportKeystore(uri)
@@ -198,6 +196,30 @@ fun ImportExportSettingsScreen(
             activeExportPicker = null
         }
     }
+    val exportDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        val picker = pendingDocumentExportPicker
+        pendingDocumentExportPicker = null
+        if (picker == null) return@rememberLauncherForActivityResult
+        if (uri == null) {
+            if (picker == ExportPicker.PatchSelection) vm.clearSelectionAction()
+            return@rememberLauncherForActivityResult
+        }
+        runDocumentExport(picker, uri)
+    }
+    val exportKeystoreDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        val picker = pendingDocumentExportPicker
+        pendingDocumentExportPicker = null
+        if (picker == null) return@rememberLauncherForActivityResult
+        if (uri == null) {
+            if (picker == ExportPicker.PatchSelection) vm.clearSelectionAction()
+            return@rememberLauncherForActivityResult
+        }
+        runDocumentExport(picker, uri)
+    }
     val openImportPicker = { target: ImportPicker ->
         if (useCustomFilePicker) {
             if (fs.hasStoragePermission()) {
@@ -208,18 +230,18 @@ fun ImportExportSettingsScreen(
             }
         } else {
             pendingDocumentImportPicker = target
-            val types = when (target) {
-                ImportPicker.Keystore -> arrayOf("*/*")
-                ImportPicker.PatchBundles,
-                ImportPicker.PatchProfiles,
-                ImportPicker.ManagerSettings,
-                ImportPicker.Everything,
-                ImportPicker.PatchSelection -> arrayOf("application/json", "text/json", "*/*")
-            }
-            importDocumentLauncher.launch(types)
+            importDocumentLauncher.launch(documentMimeForImportPicker(target))
         }
     }
+    val resolveExportFileName = { target: ExportPicker ->
+        defaultExportFileName(
+            picker = target,
+            selectionAction = vm.selectionAction,
+            selectedBundleDisplayTitle = vm.selectedBundle?.displayTitle
+        )
+    }
     val openExportPicker = { target: ExportPicker ->
+        val exportName = resolveExportFileName(target)
         if (useCustomFilePicker) {
             if (fs.hasStoragePermission()) {
                 activeExportPicker = target
@@ -229,7 +251,11 @@ fun ImportExportSettingsScreen(
             }
         } else {
             pendingDocumentExportPicker = target
-            exportDocumentLauncher.launch(target.defaultName)
+            if (target == ExportPicker.Keystore) {
+                exportKeystoreDocumentLauncher.launch(exportName)
+            } else {
+                exportDocumentLauncher.launch(exportName)
+            }
         }
     }
     val runExport = { picker: ExportPicker, target: Path ->
@@ -497,7 +523,11 @@ fun ImportExportSettingsScreen(
                     fileTypeLabel = fileTypeLabel,
                     confirmButtonText = stringResource(R.string.save),
                     onConfirm = { directory ->
-                        exportFileDialogState = ExportFileDialogState(picker, directory, picker.defaultName)
+                        exportFileDialogState = ExportFileDialogState(
+                            picker = picker,
+                            directory = directory,
+                            fileName = resolveExportFileName(picker)
+                        )
                     }
                 )
             }
@@ -669,7 +699,7 @@ fun ImportExportSettingsScreen(
                 }
             }
 
-            GroupHeader(stringResource(R.string.import_))
+            GroupHeader(stringResource(R.string.settings_selections_bundles_section))
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
@@ -757,8 +787,6 @@ fun ImportExportSettingsScreen(
                     )
                 }
             }
-
-            GroupHeader(stringResource(R.string.export))
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
@@ -777,7 +805,6 @@ fun ImportExportSettingsScreen(
                     )
                 }
                 ExpressiveSettingsDivider()
-
                 SettingsSearchHighlight(
                     targetKey = R.string.export_patch_selection,
                     activeKey = highlightTarget,
@@ -1587,12 +1614,12 @@ private data class PendingExportConfirmation(
 )
 
 private enum class ExportPicker(val defaultName: String) {
-    Keystore("Manager.keystore"),
+    Keystore("urv_keystore.keystore"),
     Everything("urv_backup_all.json"),
     PatchBundles("urv_patch_bundles.json"),
     PatchProfiles("urv_patch_profiles.json"),
     ManagerSettings("urv_settings.json"),
-    PatchSelection("urv_patch_selection.json")
+    PatchSelection("urv_patch_selection_all.json")
 }
 
 private enum class ImportPicker {
@@ -1604,6 +1631,60 @@ private enum class ImportPicker {
     PatchSelection
 }
 
+private fun documentMimeForImportPicker(picker: ImportPicker): String =
+    when (picker) {
+        ImportPicker.Keystore -> "application/octet-stream"
+        ImportPicker.PatchBundles,
+        ImportPicker.PatchProfiles,
+        ImportPicker.ManagerSettings,
+        ImportPicker.Everything,
+        ImportPicker.PatchSelection -> "application/json"
+    }
+
+private fun defaultExportFileName(
+    picker: ExportPicker,
+    selectionAction: ImportExportViewModel.SelectionAction?,
+    selectedBundleDisplayTitle: String?
+): String =
+    when (picker) {
+        ExportPicker.PatchSelection -> when (selectionAction) {
+            ImportExportViewModel.SelectionAction.ExportAllBundles -> "urv_patch_selection_all.json"
+            ImportExportViewModel.SelectionAction.ExportBundle -> {
+                val sanitized = FilenameUtils.sanitize(selectedBundleDisplayTitle.orEmpty().trim())
+                if (sanitized.isBlank()) {
+                    "urv_patch_selection.json"
+                } else {
+                    "urv_patch_selection_${sanitized}.json"
+                }
+            }
+            else -> picker.defaultName
+        }
+        else -> picker.defaultName
+    }
+
+private fun isValidImportUri(context: android.content.Context, uri: Uri, picker: ImportPicker): Boolean {
+    val valid = when (picker) {
+        ImportPicker.Keystore -> uriHasAnyExtension(context, uri, "jks", "keystore", "p12", "pfx", "bks")
+        ImportPicker.PatchBundles,
+        ImportPicker.PatchProfiles,
+        ImportPicker.ManagerSettings,
+        ImportPicker.Everything,
+        ImportPicker.PatchSelection -> uriHasAnyExtension(context, uri, "json")
+    }
+    if (!valid) {
+        val message = when (picker) {
+            ImportPicker.Keystore -> context.getString(R.string.selected_file_not_supported_keystore)
+            ImportPicker.PatchBundles,
+            ImportPicker.PatchProfiles,
+            ImportPicker.ManagerSettings,
+            ImportPicker.Everything,
+            ImportPicker.PatchSelection -> context.getString(R.string.selected_file_not_supported_json)
+        }
+        context.toast(message)
+    }
+    return valid
+}
+
 private fun isJsonFile(path: Path): Boolean =
     hasExtension(path, "json")
 
@@ -1613,6 +1694,15 @@ private fun isKeystoreFile(path: Path): Boolean =
 private fun hasExtension(path: Path, vararg extensions: String): Boolean {
     val name = path.fileName?.toString()?.lowercase().orEmpty()
     return extensions.any { name.endsWith(".${it.lowercase()}") }
+}
+
+private fun uriHasAnyExtension(context: android.content.Context, uri: Uri, vararg extensions: String): Boolean {
+    val normalized = extensions.map { it.lowercase() }.toSet()
+    val name = DocumentFile.fromSingleUri(context, uri)?.name
+        ?: uri.lastPathSegment
+        ?: return false
+    val extension = name.substringAfterLast('.', missingDelimiterValue = "").lowercase()
+    return extension in normalized
 }
 
 @Composable

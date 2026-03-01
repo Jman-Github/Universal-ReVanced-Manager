@@ -114,7 +114,7 @@ class DashboardViewModel(
     private var splitMergePluginJob: Job? = null
     private var splitMergePlugin: LoadedDownloaderPlugin? = null
     private var launchedActivity by mutableStateOf<CompletableDeferred<ActivityResult>?>(null)
-    val activeSplitMergePluginPackageName: String? get() = splitMergePlugin?.packageName
+    val activeSplitMergePluginId: String? get() = splitMergePlugin?.id
 
     init {
         viewModelScope.launch {

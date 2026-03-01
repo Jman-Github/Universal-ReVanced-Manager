@@ -15,6 +15,7 @@ import app.revanced.manager.patcher.logger.LogLevel
 import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.morphe.MorphePatchBundleLoader
 import app.revanced.manager.patcher.morphe.MorpheSession
+import app.revanced.manager.patcher.runtime.FrameworkCacheResolver
 import app.revanced.manager.patcher.runStep
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.patcher.toParcel
@@ -27,6 +28,7 @@ import java.io.FileInputStream
 import java.io.OutputStream
 import java.io.PrintStream
 import java.security.MessageDigest
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.logging.Handler
 import java.util.logging.Level
 import java.util.logging.LogRecord
@@ -57,8 +59,6 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
     override fun exit() = exitProcess(0)
 
     override fun start(parameters: MorpheParameters, events: IPatcherEvents) {
-        fun onEvent(event: ProgressEvent) = events.event(event.toParcel())
-
         eventBinder = events
 
         scope.launch {
@@ -67,7 +67,34 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
             val dexWritePattern =
                 Regex("Write\\s+\\[[^\\]]+\\]\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
             val seenDexCompiles = mutableSetOf<String>()
+            val writeApkActive = AtomicBoolean(false)
+            fun onEvent(event: ProgressEvent) {
+                when (event) {
+                    is ProgressEvent.Started -> {
+                        if (event.stepId == StepId.WriteAPK) {
+                            writeApkActive.set(true)
+                        }
+                    }
+
+                    is ProgressEvent.Completed -> {
+                        if (event.stepId == StepId.WriteAPK) {
+                            writeApkActive.set(false)
+                        }
+                    }
+
+                    is ProgressEvent.Failed -> {
+                        if (event.stepId == StepId.WriteAPK) {
+                            writeApkActive.set(false)
+                        }
+                    }
+
+                    is ProgressEvent.Progress -> Unit
+                }
+                events.event(event.toParcel())
+            }
+
             fun handleDexCompileLine(rawLine: String) {
+                if (!writeApkActive.get()) return
                 val line = rawLine.trim()
                 if (line.isEmpty()) return
                 val match = dexCompilePattern.find(line)
@@ -167,10 +194,17 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
                         additionalArchives = relatedBundleArchives
                     )
                     logAapt2Info(selectedAaptPath, logger)
+                    val frameworkDir = FrameworkCacheResolver.resolve(
+                        baseFrameworkDir = parameters.frameworkDir,
+                        runtimeTag = "morphe",
+                        apkFile = preparation.file,
+                        aaptPath = selectedAaptPath,
+                        logger = logger
+                    )
                     val session = runStep(StepId.ReadAPK, ::onEvent) {
                         MorpheSession(
                             cacheDir = parameters.cacheDir,
-                            frameworkDir = parameters.frameworkDir,
+                            frameworkDir = frameworkDir,
                             aaptPath = selectedAaptPath,
                             logger = logger,
                             input = preparation.file,

@@ -76,6 +76,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SearchBarValue
 import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -162,6 +163,7 @@ import app.revanced.manager.util.toast
 import kotlinx.coroutines.flow.collectLatest
 import app.revanced.manager.util.transparentListItemColors
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 import kotlin.math.ceil
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -183,6 +185,35 @@ fun PatchesSelectorScreen(
         initialPageOffsetFraction = 0f
     ) {
         bundles.size
+    }
+    val settledPageIndex by remember(bundles.size) {
+        derivedStateOf {
+            pagerState.settledPage.coerceIn(0, bundles.lastIndex.coerceAtLeast(0))
+        }
+    }
+    val swipeSyncedTabIndex by remember(bundles.size) {
+        derivedStateOf {
+            if (bundles.isEmpty()) return@derivedStateOf 0
+            val pageIndex = if (pagerState.isScrollInProgress) {
+                pagerState.targetPage
+            } else {
+                pagerState.currentPage
+            }
+            pageIndex.coerceIn(0, bundles.lastIndex)
+        }
+    }
+    suspend fun scrollToBundlePage(targetIndex: Int, animated: Boolean = true) {
+        if (targetIndex !in bundles.indices) return
+        if (
+            (pagerState.currentPage == targetIndex && !pagerState.isScrollInProgress) ||
+            (pagerState.isScrollInProgress && pagerState.targetPage == targetIndex)
+        ) return
+        val canAnimateDirectly = abs(pagerState.currentPage - targetIndex) <= 1
+        if (animated && canAnimateDirectly) {
+            pagerState.animateScrollToPage(targetIndex)
+        } else {
+            pagerState.scrollToPage(targetIndex)
+        }
     }
     val composableScope = rememberCoroutineScope()
     val textFieldState = rememberTextFieldState()
@@ -209,6 +240,7 @@ fun PatchesSelectorScreen(
     val sortSettingsModePref by viewModel.prefs.patchSelectionSortSettingsMode.getAsState()
     val searchEngineHost by viewModel.prefs.searchEngineHost.getAsState()
     val showVersionTags by viewModel.prefs.patchSelectionShowVersionTags.getAsState()
+    val disablePatchSelectionTabSwipe by viewModel.prefs.disablePatchSelectionTabSwipe.getAsState()
     val showPatchProfilesTab by viewModel.prefs.showPatchProfilesTab.getAsState()
     val orderedActionKeys = remember(actionOrderPref) {
         val parsed = actionOrderPref
@@ -298,7 +330,7 @@ fun PatchesSelectorScreen(
     }
     val currentBundleHasSelection by remember {
         derivedStateOf {
-            val bundle = bundles.getOrNull(pagerState.currentPage)
+            val bundle = bundles.getOrNull(settledPageIndex)
             bundle != null && viewModel.bundleHasSelection(bundle.uid)
         }
     }
@@ -344,7 +376,7 @@ fun PatchesSelectorScreen(
             }
     }
     LaunchedEffect(pagerState) {
-        snapshotFlow { pagerState.currentPage }
+        snapshotFlow { pagerState.settledPage }
             .collectLatest {
                 actionsExpanded = false
             }
@@ -385,7 +417,7 @@ fun PatchesSelectorScreen(
         if (bundles.isEmpty() || isSavingProfile) return
         selectedBundleUids.clear()
         val defaultBundleUid =
-            bundles.getOrNull(pagerState.currentPage)?.uid ?: bundles.firstOrNull()?.uid
+            bundles.getOrNull(settledPageIndex)?.uid ?: bundles.firstOrNull()?.uid
         defaultBundleUid?.let { selectedBundleUids.add(it) }
         pendingProfileName = ""
         selectedProfileId = null
@@ -858,17 +890,18 @@ fun PatchesSelectorScreen(
                     },
                     compatible = compatible,
                     packageName = viewModel.appPackageName,
+                    optionValues = viewModel.getOptions(uid, patch),
                     suggestedVersion = suggestedVersion
                 )
             }
         }
     }
 
-    val currentBundle = bundles.getOrNull(pagerState.currentPage)
+    val currentBundle = bundles.getOrNull(settledPageIndex)
     val currentBundleDisplayName = currentBundle?.let { bundleDisplayNames[it.uid] ?: it.name }
     val warningEnabled = viewModel.selectionWarningEnabled
     val currentBundleUid by remember {
-        derivedStateOf { bundles.getOrNull(pagerState.currentPage)?.uid }
+        derivedStateOf { bundles.getOrNull(settledPageIndex)?.uid }
     }
     val currentBundleSelectionCount by remember {
         derivedStateOf {
@@ -1045,7 +1078,7 @@ fun PatchesSelectorScreen(
             onActiveChange = { searchActive = it },
             placeholder = { Text(stringResource(R.string.search_patches)) }
         ) {
-            val bundle = bundles[pagerState.currentPage]
+            val bundle = bundles[settledPageIndex]
             val suggestedVersion = suggestedVersionsByBundle[bundle.uid]?.get(viewModel.appPackageName)
             val searchQuery = query
 
@@ -1331,7 +1364,7 @@ fun PatchesSelectorScreen(
                         }
                     }
                 ) {
-                    val bundle = bundles[pagerState.currentPage]
+                    val bundle = bundles[settledPageIndex]
                     val suggestedVersion = suggestedVersionsByBundle[bundle.uid]?.get(viewModel.appPackageName)
                     val searchQuery = query
 
@@ -1446,7 +1479,7 @@ fun PatchesSelectorScreen(
                     horizontalAlignment = Alignment.End
                 ) {
                     val saveButtonExpanded =
-                        patchLazyListStates.getOrNull(pagerState.currentPage)?.isScrollingUp ?: true
+                        patchLazyListStates.getOrNull(settledPageIndex)?.isScrollingUp ?: true
                     val saveButtonText = stringResource(
                         R.string.save_with_count,
                         selectedPatchCount
@@ -1486,50 +1519,87 @@ fun PatchesSelectorScreen(
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    if (bundles.size > 1) {
-                        ScrollableTabRow(
-                            selectedTabIndex = pagerState.currentPage,
-                            containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp),
-                            modifier = Modifier.onSizeChanged { tabRowHeightPx = it.height }
-                        ) {
-                            bundles.forEachIndexed { index, bundle ->
-                                HapticTab(
-                                    selected = pagerState.currentPage == index,
-                                    onClick = {
-                                        composableScope.launch {
-                                            pagerState.animateScrollToPage(
-                                                index
-                                            )
-                                        }
-                                    },
-                                    text = {
-                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Text(
-                                                text = bundleDisplayNames[bundle.uid] ?: bundle.name,
-                                                style = MaterialTheme.typography.bodyMedium
-                                            )
-                                            Text(
-                                                text = bundle.version.orEmpty(),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                            Text(
-                                                text = stringResource(bundleTypeLabelRes(bundleTypes[bundle.uid])),
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.outline
-                                            )
-                                        }
-                                    },
-                                    selectedContentColor = MaterialTheme.colorScheme.primary,
-                                    unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                    if (bundles.isNotEmpty()) {
+                        if (bundles.size == 1) {
+                            TabRow(
+                                selectedTabIndex = swipeSyncedTabIndex,
+                                containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp),
+                                modifier = Modifier.onSizeChanged { tabRowHeightPx = it.height }
+                            ) {
+                                bundles.forEachIndexed { index, bundle ->
+                                    HapticTab(
+                                        selected = swipeSyncedTabIndex == index,
+                                        onClick = {
+                                            composableScope.launch {
+                                                scrollToBundlePage(index)
+                                            }
+                                        },
+                                        text = {
+                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Text(
+                                                    text = bundleDisplayNames[bundle.uid] ?: bundle.name,
+                                                    style = MaterialTheme.typography.bodyMedium
+                                                )
+                                                Text(
+                                                    text = bundle.version.orEmpty(),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                Text(
+                                                    text = stringResource(bundleTypeLabelRes(bundleTypes[bundle.uid])),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.outline
+                                                )
+                                            }
+                                        },
+                                        selectedContentColor = MaterialTheme.colorScheme.primary,
+                                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        } else {
+                            ScrollableTabRow(
+                                selectedTabIndex = swipeSyncedTabIndex,
+                                containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp),
+                                modifier = Modifier.onSizeChanged { tabRowHeightPx = it.height }
+                            ) {
+                                bundles.forEachIndexed { index, bundle ->
+                                    HapticTab(
+                                        selected = swipeSyncedTabIndex == index,
+                                        onClick = {
+                                            composableScope.launch {
+                                                scrollToBundlePage(index)
+                                            }
+                                        },
+                                        text = {
+                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Text(
+                                                    text = bundleDisplayNames[bundle.uid] ?: bundle.name,
+                                                    style = MaterialTheme.typography.bodyMedium
+                                                )
+                                                Text(
+                                                    text = bundle.version.orEmpty(),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                Text(
+                                                    text = stringResource(bundleTypeLabelRes(bundleTypes[bundle.uid])),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.outline
+                                                )
+                                            }
+                                        },
+                                        selectedContentColor = MaterialTheme.colorScheme.primary,
+                                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }
 
                     HorizontalPager(
                         state = pagerState,
-                        userScrollEnabled = true,
+                        userScrollEnabled = !disablePatchSelectionTabSwipe,
                         pageContent = { index ->
                             // Avoid crashing if the lists have not been fully initialized yet.
                             if (index > bundles.lastIndex || bundles.size != patchLazyListStates.size) return@HorizontalPager
@@ -1668,6 +1738,7 @@ private fun PatchItem(
     onToggle: () -> Unit,
     compatible: Boolean = true,
     packageName: String,
+    optionValues: Map<String, Any?>?,
     suggestedVersion: String?,
     searchEngineHost: String,
     showVersionTags: Boolean
@@ -1713,6 +1784,39 @@ private fun PatchItem(
     }
     val hasChips = suggestedVersionInfo != null || showAllVersionsChip || hasMoreVersions
     var showVersionsDialog by rememberSaveable(patch.name) { mutableStateOf(false) }
+    var showOptionPreview by rememberSaveable(patch.name) { mutableStateOf(false) }
+    val optionValueEnabled = stringResource(R.string.option_value_enabled)
+    val optionValueDisabled = stringResource(R.string.option_value_disabled)
+    val optionValueUnset = stringResource(R.string.field_not_set)
+    val optionSummaries = remember(
+        patch.options,
+        optionValues,
+        optionValueEnabled,
+        optionValueDisabled,
+        optionValueUnset
+    ) {
+        patch.options.orEmpty().map { option ->
+            val resolvedValue = if (optionValues?.contains(option.key) == true) {
+                optionValues[option.key]
+            } else {
+                option.default
+            }
+            val presetLabel = option.presets
+                ?.entries
+                ?.firstOrNull { it.value == resolvedValue }
+                ?.key
+            val displayValue = when {
+                presetLabel != null -> presetLabel
+                resolvedValue == null -> optionValueUnset
+                resolvedValue is Boolean -> if (resolvedValue) optionValueEnabled else optionValueDisabled
+                resolvedValue is List<*> -> resolvedValue.joinToString(", ") { it?.toString().orEmpty() }
+                else -> resolvedValue.toString()
+            }
+            option.title to displayValue
+        }
+    }
+    val hasExpandableOptionPreview = optionSummaries.size > 1
+    val showExpandedOptionPreview = hasExpandableOptionPreview && showOptionPreview
     val dialogVersions = when {
         supportsAllVersions -> listOf(
             PatchVersionChipInfo(
@@ -1818,6 +1922,78 @@ private fun PatchItem(
                             outlined = true,
                             onClick = { showVersionsDialog = true }
                         )
+                    }
+                }
+            }
+            if (patch.options?.isNotEmpty() == true && optionSummaries.isNotEmpty()) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = stringResource(R.string.options),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            if (hasExpandableOptionPreview) {
+                                IconButton(
+                                    onClick = { showOptionPreview = !showOptionPreview },
+                                    modifier = Modifier.size(26.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (showExpandedOptionPreview) {
+                                            Icons.Outlined.UnfoldLess
+                                        } else {
+                                            Icons.Outlined.UnfoldMore
+                                        },
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+                        if (!showExpandedOptionPreview) {
+                            val first = optionSummaries.first()
+                            val moreCount = optionSummaries.size - 1
+                            Text(
+                                text = if (moreCount > 0) {
+                                    "${first.first}: ${first.second}  +$moreCount ${stringResource(R.string.more)}"
+                                } else {
+                                    "${first.first}: ${first.second}"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        } else {
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                optionSummaries.forEach { (title, value) ->
+                                    Text(
+                                        text = "$title: $value",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }

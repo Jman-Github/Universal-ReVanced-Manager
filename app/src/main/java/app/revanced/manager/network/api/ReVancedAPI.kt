@@ -1,5 +1,6 @@
 package app.revanced.manager.network.api
 
+import android.os.Build
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.network.dto.*
 import app.revanced.manager.network.service.HttpService
@@ -84,16 +85,24 @@ class ReVancedAPI(
     private suspend fun fetchReleaseAsset(
         config: RepoConfig,
         includePrerelease: Boolean,
-        matcher: (GitHubAsset) -> Boolean
+        matcher: (GitHubAsset) -> Boolean,
+        pickAsset: (List<GitHubAsset>) -> GitHubAsset? = { assets ->
+            assets.firstOrNull()
+        }
     ): APIResponse<ReVancedAsset> {
         return when (val releasesResponse = githubRequest<List<GitHubRelease>>(config, "releases")) {
             is APIResponse.Success -> {
                 val mapped = runCatching {
-                    val release = releasesResponse.data.firstOrNull { release ->
-                        !release.draft && (includePrerelease || !release.prerelease) && release.assets.any(matcher)
-                    } ?: throw IllegalStateException("No matching release found")
-
-                    val asset = release.assets.first(matcher)
+                    val releaseAndAsset = releasesResponse.data
+                        .asSequence()
+                        .filter { release -> !release.draft && (includePrerelease || !release.prerelease) }
+                        .mapNotNull { release ->
+                            val matchingAssets = release.assets.filter(matcher)
+                            pickAsset(matchingAssets)?.let { asset -> release to asset }
+                        }
+                        .firstOrNull()
+                        ?: throw IllegalStateException("No compatible manager release asset found for this device ABI")
+                    val (release, asset) = releaseAndAsset
                     mapReleaseToAsset(config, release, asset)
                 }
 
@@ -140,15 +149,49 @@ class ReVancedAPI(
         return release.assets.firstOrNull { it.name in candidates }?.downloadUrl
     }
 
-    private fun isManagerAsset(asset: GitHubAsset) =
-        asset.name.endsWith(".apk", ignoreCase = true) ||
-                asset.contentType?.contains("android.package-archive", ignoreCase = true) == true
+    private fun isManagerAsset(asset: GitHubAsset): Boolean {
+        return MANAGER_ASSET_NAME_REGEX.matches(asset.name)
+    }
+
+    private fun deviceAbiSuffixes(): List<String> {
+        return Build.SUPPORTED_ABIS
+            .mapNotNull { abi ->
+                when (abi.lowercase()) {
+                    "arm64-v8a" -> "arm64_v8"
+                    "armeabi-v7a", "armeabi" -> "armeabi_v7a"
+                    "x86" -> "x86"
+                    "x86_64" -> "x86_64"
+                    else -> null
+                }
+            }
+            .distinct()
+    }
+
+    private fun pickManagerAsset(assets: List<GitHubAsset>): GitHubAsset? {
+        if (assets.isEmpty()) return null
+
+        val preferredSuffixes = deviceAbiSuffixes()
+        preferredSuffixes.forEach { suffix ->
+            val suffixCandidates = when (suffix) {
+                "arm64_v8" -> listOf("arm64_v8", "arm64-v8a")
+                "armeabi_v7a" -> listOf("armeabi_v7a", "armeabi-v7a")
+                else -> listOf(suffix)
+            }
+            suffixCandidates.forEach { candidate ->
+                assets.firstOrNull { it.name.endsWith("-$candidate.apk", ignoreCase = true) }?.let { return it }
+            }
+        }
+
+        assets.firstOrNull { it.name.endsWith("-all.apk", ignoreCase = true) }?.let { return it }
+        assets.firstOrNull { it.name.endsWith("-universal.apk", ignoreCase = true) }?.let { return it }
+        return null
+    }
 
 
     suspend fun getLatestAppInfo(): APIResponse<ReVancedAsset> {
         val config = repoConfig()
         val includePrerelease = prefs.useManagerPrereleases.get()
-        return fetchReleaseAsset(config, includePrerelease, ::isManagerAsset)
+        return fetchReleaseAsset(config, includePrerelease, ::isManagerAsset, ::pickManagerAsset)
     }
 
     suspend fun getAppUpdate(): ReVancedAsset? {
@@ -251,3 +294,7 @@ fun <T> APIResponse<T>.successOrThrow(context: String): T {
 }
 
 private const val MANAGER_REPO_URL = "https://github.com/Jman-Github/Universal-ReVanced-Manager"
+private val MANAGER_ASSET_NAME_REGEX = Regex(
+    pattern = "^universal-revanced-manager-v.+-(all|universal|arm64_v8|arm64-v8a|armeabi_v7a|armeabi-v7a|x86|x86_64)\\.apk$",
+    option = RegexOption.IGNORE_CASE
+)

@@ -27,6 +27,7 @@ val viewModelModule = module {
     viewModelOf(::DownloadsViewModel)
     viewModelOf(::InstalledAppsViewModel)
     viewModelOf(::InstalledAppInfoViewModel)
+    viewModelOf(::SplitApkInstallerViewModel)
     viewModelOf(::UpdatesSettingsViewModel)
     viewModelOf(::BundleListViewModel)
     viewModelOf(::BundleDiscoveryViewModel)

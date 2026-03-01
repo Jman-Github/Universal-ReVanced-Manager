@@ -172,13 +172,19 @@ fun PatchBundleDiscoveryPatchesScreen(
                     }
                 }
 
-                !useLocalPatches && (bundle == null || patchesError != null) -> {
+                !useLocalPatches && patchesError != null -> {
                     item {
                         PatchBundlePatchesEmptyState(
                             message = patchesError ?: errorMessage ?: stringResource(
                                 R.string.patch_bundle_discovery_patches_empty
                             )
                         )
+                    }
+                }
+
+                !useLocalPatches && patches == null -> {
+                    items(4) {
+                        PatchBundlePatchPlaceholderItem()
                     }
                 }
 

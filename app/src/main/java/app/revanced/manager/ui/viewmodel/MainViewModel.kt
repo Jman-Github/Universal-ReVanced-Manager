@@ -23,6 +23,9 @@ import app.revanced.manager.ui.theme.Theme
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.BundleDeepLink
 import app.revanced.manager.util.BundleDeepLinkIntent
+import app.revanced.manager.util.ManagerUpdateDeepLinkIntent
+import app.revanced.manager.util.SplitArchiveIntent
+import app.revanced.manager.util.SplitArchiveIntentParser
 import app.revanced.manager.util.tag
 import app.revanced.manager.util.toast
 import kotlinx.coroutines.channels.Channel
@@ -49,6 +52,10 @@ class MainViewModel(
     val legacyImportActivityFlow = legacyImportActivityChannel.receiveAsFlow()
     private val bundleDeepLinkChannel = Channel<BundleDeepLink>(Channel.BUFFERED)
     val bundleDeepLinkFlow = bundleDeepLinkChannel.receiveAsFlow()
+    private val managerUpdateDeepLinkChannel = Channel<Unit>(Channel.BUFFERED)
+    val managerUpdateDeepLinkFlow = managerUpdateDeepLinkChannel.receiveAsFlow()
+    private val splitArchiveIntentChannel = Channel<SplitArchiveIntent>(Channel.BUFFERED)
+    val splitArchiveIntentFlow = splitArchiveIntentChannel.receiveAsFlow()
 
     private suspend fun suggestedVersion(packageName: String) =
         patchBundleRepository.suggestedVersions.first()[packageName]
@@ -110,6 +117,12 @@ class MainViewModel(
     fun selectApp(packageName: String) = selectApp(packageName, null, null, true)
 
     fun handleIntent(intent: Intent?) {
+        if (ManagerUpdateDeepLinkIntent.shouldOpenManagerUpdate(intent)) {
+            managerUpdateDeepLinkChannel.trySend(Unit)
+        }
+        SplitArchiveIntentParser.fromIntent(intent, app.contentResolver)?.let { splitArchiveIntent ->
+            splitArchiveIntentChannel.trySend(splitArchiveIntent)
+        }
         val deepLink = BundleDeepLinkIntent.fromIntent(intent) ?: return
         bundleDeepLinkChannel.trySend(deepLink)
     }

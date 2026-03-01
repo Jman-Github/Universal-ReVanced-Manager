@@ -3,6 +3,7 @@ package app.revanced.manager.di
 import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.data.platform.NetworkInfo
 import app.revanced.manager.domain.repository.*
+import app.revanced.manager.domain.worker.BundleUpdateWebSocketCoordinator
 import app.revanced.manager.domain.worker.WorkerRepository
 import app.revanced.manager.network.api.ExternalBundlesApi
 import app.revanced.manager.network.api.ReVancedAPI
@@ -22,6 +23,9 @@ val repositoryModule = module {
     singleOf(::PatchProfileRepository)
     singleOf(::PatchBundleRepository) {
         // It is best to load patch bundles ASAP
+        createdAtStart()
+    }
+    singleOf(::BundleUpdateWebSocketCoordinator) {
         createdAtStart()
     }
     singleOf(::DownloaderPluginRepository)

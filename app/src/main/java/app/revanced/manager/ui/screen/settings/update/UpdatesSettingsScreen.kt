@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -33,12 +34,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import app.universal.revanced.manager.R
+import app.revanced.manager.domain.manager.BundleUpdateDeliveryMode
 import app.revanced.manager.domain.manager.SearchForUpdatesBackgroundInterval
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.ColumnWithScrollbar
@@ -56,6 +57,7 @@ import app.revanced.manager.util.toast
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -69,12 +71,22 @@ fun UpdatesSettingsScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+    val managerInterval by vm.backgroundManagerUpdateInterval.getAsState()
     val backgroundInterval by vm.backgroundBundleUpdateInterval.getAsState()
+    val deliveryMode by vm.bundleUpdateDeliveryMode.getAsState()
     val searchTarget by SettingsSearchState.target.collectAsStateWithLifecycle()
     var highlightTarget by rememberSaveable { mutableStateOf<Int?>(null) }
     var showBackgroundUpdateDialog by rememberSaveable { mutableStateOf(false) }
+    var showBackgroundManagerUpdateDialog by rememberSaveable { mutableStateOf(false) }
+    var showDeliveryModeDialog by rememberSaveable { mutableStateOf(false) }
     var pendingInterval by rememberSaveable {
         mutableStateOf<SearchForUpdatesBackgroundInterval?>(null)
+    }
+    var pendingManagerInterval by rememberSaveable {
+        mutableStateOf<SearchForUpdatesBackgroundInterval?>(null)
+    }
+    var pendingDeliveryMode by rememberSaveable {
+        mutableStateOf<BundleUpdateDeliveryMode?>(null)
     }
     var showNotificationPermissionDialog by rememberSaveable { mutableStateOf(false) }
     var showBatteryOptimizationDialog by rememberSaveable { mutableStateOf(false) }
@@ -93,7 +105,10 @@ fun UpdatesSettingsScreen(
             val batteryOptimizationDisabled =
                 powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
             if (!batteryOptimizationDisabled) {
-                if (pendingInterval != null) {
+                if (pendingInterval != null ||
+                    pendingManagerInterval != null ||
+                    pendingDeliveryMode != null
+                ) {
                     showBatteryOptimizationDialog = true
                 }
                 return@rememberLauncherForActivityResult
@@ -107,22 +122,47 @@ fun UpdatesSettingsScreen(
                     pendingInterval = null
                 }
             }
+            pendingManagerInterval?.let { interval ->
+                if (!context.hasNotificationPermission()) {
+                    showNotificationPermissionDialog = true
+                } else {
+                    vm.updateBackgroundManagerUpdateTime(interval)
+                    pendingManagerInterval = null
+                }
+            }
+
+            pendingDeliveryMode?.let { mode ->
+                if (!context.hasNotificationPermission()) {
+                    showNotificationPermissionDialog = true
+                } else {
+                    vm.updateBundleUpdateDeliveryMode(mode)
+                    pendingDeliveryMode = null
+                }
+            }
         }
 
-    DisposableEffect(lifecycleOwner, backgroundInterval) {
+    DisposableEffect(lifecycleOwner, backgroundInterval, managerInterval) {
         val observer = LifecycleEventObserver { _, event ->
             if (event != Lifecycle.Event.ON_RESUME) return@LifecycleEventObserver
 
             val powerManager = context.getSystemService(PowerManager::class.java)
             val batteryOptimizationDisabled =
                 powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
-            if (backgroundInterval != SearchForUpdatesBackgroundInterval.NEVER &&
+            if ((backgroundInterval != SearchForUpdatesBackgroundInterval.NEVER ||
+                    managerInterval != SearchForUpdatesBackgroundInterval.NEVER) &&
                 !batteryOptimizationDisabled
             ) {
                 showNotificationPermissionDialog = false
                 showBatteryOptimizationDialog = false
                 pendingInterval = null
-                vm.updateBackgroundBundleUpdateTime(SearchForUpdatesBackgroundInterval.NEVER)
+                pendingManagerInterval = null
+                pendingDeliveryMode = null
+                if (backgroundInterval != SearchForUpdatesBackgroundInterval.NEVER) {
+                    vm.updateBackgroundBundleUpdateTime(SearchForUpdatesBackgroundInterval.NEVER)
+                }
+                if (managerInterval != SearchForUpdatesBackgroundInterval.NEVER) {
+                    vm.updateBackgroundManagerUpdateTime(SearchForUpdatesBackgroundInterval.NEVER)
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -134,9 +174,20 @@ fun UpdatesSettingsScreen(
         if (granted) {
             pendingInterval?.let { interval ->
                 vm.updateBackgroundBundleUpdateTime(interval)
+                pendingInterval = null
+            }
+            pendingManagerInterval?.let { interval ->
+                vm.updateBackgroundManagerUpdateTime(interval)
+                pendingManagerInterval = null
+            }
+            pendingDeliveryMode?.let { mode ->
+                vm.updateBundleUpdateDeliveryMode(mode)
+                pendingDeliveryMode = null
             }
         }
         pendingInterval = null
+        pendingManagerInterval = null
+        pendingDeliveryMode = null
     }
 
     if (showNotificationPermissionDialog) {
@@ -144,6 +195,8 @@ fun UpdatesSettingsScreen(
             onDismissRequest = {
                 showNotificationPermissionDialog = false
                 pendingInterval = null
+                pendingManagerInterval = null
+                pendingDeliveryMode = null
             },
             title = { Text(stringResource(R.string.background_bundle_ask_notification)) },
             text = { Text(stringResource(R.string.background_bundle_ask_notification_description)) },
@@ -162,6 +215,8 @@ fun UpdatesSettingsScreen(
                     onClick = {
                         showNotificationPermissionDialog = false
                         pendingInterval = null
+                        pendingManagerInterval = null
+                        pendingDeliveryMode = null
                     }
                 ) {
                     Text(stringResource(R.string.cancel))
@@ -172,6 +227,7 @@ fun UpdatesSettingsScreen(
 
     if (showBackgroundUpdateDialog) {
         BackgroundBundleUpdateTimeDialog(
+            title = stringResource(R.string.background_bundle_update),
             current = backgroundInterval,
             onDismiss = { showBackgroundUpdateDialog = false },
             onConfirm = { interval ->
@@ -186,12 +242,16 @@ fun UpdatesSettingsScreen(
                     powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
                 if (!batteryOptimizationDisabled) {
                     pendingInterval = interval
+                    pendingManagerInterval = null
+                    pendingDeliveryMode = null
                     showBatteryOptimizationDialog = true
                     return@BackgroundBundleUpdateTimeDialog
                 }
 
                 if (!context.hasNotificationPermission()) {
                     pendingInterval = interval
+                    pendingManagerInterval = null
+                    pendingDeliveryMode = null
                     showNotificationPermissionDialog = true
                     return@BackgroundBundleUpdateTimeDialog
                 }
@@ -201,11 +261,88 @@ fun UpdatesSettingsScreen(
             }
         )
     }
+
+    if (showBackgroundManagerUpdateDialog) {
+        BackgroundBundleUpdateTimeDialog(
+            title = stringResource(R.string.background_manager_update),
+            current = managerInterval,
+            onDismiss = { showBackgroundManagerUpdateDialog = false },
+            onConfirm = { interval ->
+                if (interval == SearchForUpdatesBackgroundInterval.NEVER) {
+                    vm.updateBackgroundManagerUpdateTime(interval)
+                    pendingManagerInterval = null
+                    return@BackgroundBundleUpdateTimeDialog
+                }
+
+                val powerManager = context.getSystemService(PowerManager::class.java)
+                val batteryOptimizationDisabled =
+                    powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
+                if (!batteryOptimizationDisabled) {
+                    pendingInterval = null
+                    pendingManagerInterval = interval
+                    pendingDeliveryMode = null
+                    showBatteryOptimizationDialog = true
+                    return@BackgroundBundleUpdateTimeDialog
+                }
+
+                if (!context.hasNotificationPermission()) {
+                    pendingInterval = null
+                    pendingManagerInterval = interval
+                    pendingDeliveryMode = null
+                    showNotificationPermissionDialog = true
+                    return@BackgroundBundleUpdateTimeDialog
+                }
+
+                vm.updateBackgroundManagerUpdateTime(interval)
+                pendingManagerInterval = null
+            }
+        )
+    }
+
+    if (showDeliveryModeDialog) {
+        BundleUpdateDeliveryModeDialog(
+            current = deliveryMode,
+            onDismiss = { showDeliveryModeDialog = false },
+            onConfirm = { mode ->
+                if (mode == BundleUpdateDeliveryMode.WEBSOCKET_PREFERRED &&
+                    (backgroundInterval != SearchForUpdatesBackgroundInterval.NEVER ||
+                        managerInterval != SearchForUpdatesBackgroundInterval.NEVER)
+                ) {
+                    val powerManager = context.getSystemService(PowerManager::class.java)
+                    val batteryOptimizationDisabled =
+                        powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
+                    if (!batteryOptimizationDisabled) {
+                        pendingInterval = null
+                        pendingManagerInterval = null
+                        pendingDeliveryMode = mode
+                        showBatteryOptimizationDialog = true
+                        return@BundleUpdateDeliveryModeDialog
+                    }
+
+                    if (!context.hasNotificationPermission()) {
+                        pendingInterval = null
+                        pendingManagerInterval = null
+                        pendingDeliveryMode = mode
+                        showNotificationPermissionDialog = true
+                        return@BundleUpdateDeliveryModeDialog
+                    }
+                }
+
+                pendingInterval = null
+                pendingManagerInterval = null
+                pendingDeliveryMode = null
+                vm.updateBundleUpdateDeliveryMode(mode)
+            }
+        )
+    }
+
     if (showBatteryOptimizationDialog) {
         AlertDialog(
             onDismissRequest = {
                 showBatteryOptimizationDialog = false
                 pendingInterval = null
+                pendingManagerInterval = null
+                pendingDeliveryMode = null
             },
             title = { Text(stringResource(R.string.battery_optimization_dialog_title)) },
             text = { Text(stringResource(R.string.battery_optimization_dialog_description)) },
@@ -242,7 +379,7 @@ fun UpdatesSettingsScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            GroupHeader(stringResource(R.string.patches_and_manager))
+            GroupHeader(stringResource(R.string.network_delivery_section))
 
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -259,9 +396,30 @@ fun UpdatesSettingsScreen(
                         description = R.string.update_on_metered_connections_description
                     )
                 }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.bundle_update_delivery_mode,
+                    activeKey = highlightTarget,
+                    extraKeys = setOf(
+                        R.string.bundle_update_delivery_mode_auto,
+                        R.string.bundle_update_delivery_mode_websocket_preferred,
+                        R.string.bundle_update_delivery_mode_polling_only,
+                    ),
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(R.string.bundle_update_delivery_mode),
+                        supportingContent = stringResource(
+                            R.string.bundle_update_delivery_mode_description_with_current,
+                            stringResource(deliveryMode.displayName)
+                        ),
+                        onClick = { showDeliveryModeDialog = true }
+                    )
+                }
             }
 
-            GroupHeader(stringResource(R.string.manager))
+            GroupHeader(stringResource(R.string.update_checks_section))
 
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -283,25 +441,6 @@ fun UpdatesSettingsScreen(
                                 }
                                 if (vm.checkForUpdates()) onUpdateClick()
                             }
-                        }
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.changelog,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    ExpressiveSettingsItem(
-                        modifier = highlightModifier,
-                        headlineContent = stringResource(R.string.changelog),
-                        supportingContent = stringResource(R.string.changelog_description),
-                        onClick = {
-                            if (!vm.isConnected) {
-                                context.toast(context.getString(R.string.no_network_toast))
-                                return@ExpressiveSettingsItem
-                            }
-                            onChangelogClick()
                         }
                     )
                 }
@@ -346,6 +485,48 @@ fun UpdatesSettingsScreen(
                 }
                 ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
+                    targetKey = R.string.changelog,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(R.string.changelog),
+                        supportingContent = stringResource(R.string.changelog_description),
+                        onClick = {
+                            if (!vm.isConnected) {
+                                context.toast(context.getString(R.string.no_network_toast))
+                                return@ExpressiveSettingsItem
+                            }
+                            onChangelogClick()
+                        }
+                    )
+                }
+            }
+
+            GroupHeader(stringResource(R.string.background_updates_section))
+
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                SettingsSearchHighlight(
+                    targetKey = R.string.background_manager_update,
+                    activeKey = highlightTarget,
+                    extraKeys = setOf(
+                        R.string.background_radio_menu_title,
+                        R.string.background_bundle_ask_notification
+                    ),
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(R.string.background_manager_update),
+                        supportingContent = stringResource(R.string.background_manager_update_description),
+                        onClick = { showBackgroundManagerUpdateDialog = true }
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
                     targetKey = R.string.background_bundle_update,
                     activeKey = highlightTarget,
                     extraKeys = setOf(
@@ -368,6 +549,7 @@ fun UpdatesSettingsScreen(
 
 @Composable
 private fun BackgroundBundleUpdateTimeDialog(
+    title: String,
     current: SearchForUpdatesBackgroundInterval,
     onDismiss: () -> Unit,
     onConfirm: (SearchForUpdatesBackgroundInterval) -> Unit
@@ -376,7 +558,7 @@ private fun BackgroundBundleUpdateTimeDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.background_radio_menu_title)) },
+        title = { Text(title) },
         text = {
             Column {
                 SearchForUpdatesBackgroundInterval.entries.forEach { interval ->
@@ -412,3 +594,61 @@ private fun BackgroundBundleUpdateTimeDialog(
         }
     )
 }
+
+@Composable
+private fun BundleUpdateDeliveryModeDialog(
+    current: BundleUpdateDeliveryMode,
+    onDismiss: () -> Unit,
+    onConfirm: (BundleUpdateDeliveryMode) -> Unit
+) {
+    var selected by rememberSaveable(current) { mutableStateOf(current) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.bundle_update_delivery_mode_dialog_title)) },
+        text = {
+            Column {
+                BundleUpdateDeliveryMode.entries.forEach { mode ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { selected = mode }
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        androidx.compose.material3.RadioButton(
+                            selected = selected == mode,
+                            onClick = { selected = mode }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = stringResource(mode.displayName))
+                            Text(
+                                text = stringResource(mode.description),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(selected); onDismiss() }) {
+                Text(stringResource(R.string.apply))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
+}
+
+private val BundleUpdateDeliveryMode.description: Int
+    get() = when (this) {
+        BundleUpdateDeliveryMode.AUTO -> R.string.bundle_update_delivery_mode_auto_description
+        BundleUpdateDeliveryMode.WEBSOCKET_PREFERRED -> R.string.bundle_update_delivery_mode_websocket_preferred_description
+        BundleUpdateDeliveryMode.POLLING_ONLY -> R.string.bundle_update_delivery_mode_polling_only_description
+    }

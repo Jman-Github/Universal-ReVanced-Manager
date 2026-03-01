@@ -126,7 +126,6 @@ fun SelectedAppInfoScreen(
 
     val allowIncompatiblePatches by vm.prefs.disablePatchVersionCompatCheck.getAsState()
     val suggestedVersionSafeguard by vm.prefs.suggestedVersionSafeguard.getAsState()
-    val showPatchSummaryDialogSetting by vm.prefs.showPatchSelectionSummary.getAsState()
     val customBackgroundImageUri by vm.prefs.customBackgroundImageUri.getAsState()
     val useCardStylePageItems = customBackgroundImageUri.isNotBlank()
     val bundleRecommendationsEnabled = allowIncompatiblePatches && !suggestedVersionSafeguard
@@ -187,7 +186,7 @@ fun SelectedAppInfoScreen(
             }
         }
     val openDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
+        contract = ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri != null) {
             vm.handleStorageResult(uri)
@@ -201,7 +200,7 @@ fun SelectedAppInfoScreen(
                 permissionLauncher.launch(permissionName)
             }
         } else {
-            openDocumentLauncher.launch(arrayOf("*/*"))
+            openDocumentLauncher.launch("application/*")
         }
     }
     LaunchedEffect(useCustomFilePicker) {
@@ -277,6 +276,7 @@ fun SelectedAppInfoScreen(
                 return@launch
             }
 
+            val showPatchSummaryDialogSetting = vm.prefs.showPatchSelectionSummary.get()
             if (showPatchSummaryDialogSetting) {
                 showPatchSummaryDialog = true
                 return@launch
@@ -389,8 +389,11 @@ fun SelectedAppInfoScreen(
         ) {
             AppInfo(
                 appInfo = vm.selectedAppInfo,
+                labelOverride = vm.selectedAppInfoLabelOverride,
+                iconOverride = vm.selectedAppInfoIconOverride,
                 placeholderLabel = packageName,
-                placeholderMetaLines = 2
+                placeholderMetaLines = 0,
+                showExtraContentWhenLoading = true
             ) {
                 Text(
                     packageName,
@@ -1114,11 +1117,11 @@ private fun AppSourceSelectorDialog(
                     }
                 }
 
-                items(plugins, key = { "plugin_${it.packageName}" }) { plugin ->
+                items(plugins, key = { "plugin_${it.id}" }) { plugin ->
                     ListItem(
                         modifier = Modifier.clickable(enabled = canSelect) { onSelectPlugin(plugin) },
                         headlineContent = { Text(plugin.name) },
-                        trailingContent = (@Composable { LoadingIndicator() }).takeIf { activeSearchJob == plugin.packageName },
+                        trailingContent = (@Composable { LoadingIndicator() }).takeIf { activeSearchJob == plugin.id },
                         colors = transparentListItemColors
                     )
                 }

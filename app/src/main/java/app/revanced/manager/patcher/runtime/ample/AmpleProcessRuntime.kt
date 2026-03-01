@@ -95,11 +95,10 @@ class AmpleProcessRuntime(
         if (useMemoryOverride) {
             val requestedLimit = prefs.patcherProcessMemoryLimit.get()
             val aggressiveLimit = prefs.patcherProcessMemoryAggressive.get()
-            val runtimeLimit = if (aggressiveLimit) {
-                maxOf(requestedLimit, MemoryLimitConfig.maxLimitMb(context))
-            } else {
-                requestedLimit
-            }
+            val runtimeLimit = MemoryLimitConfig.clampLimitMb(
+                context,
+                if (aggressiveLimit) MemoryLimitConfig.maxLimitMb(context) else requestedLimit
+            )
             val limit = "${runtimeLimit}M"
             propOverridePath = resolvePropOverride(context)?.absolutePath
                 ?: throw Exception("Couldn't find prop override library")

@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Link
@@ -37,11 +38,14 @@ import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Sort
 import androidx.compose.material.icons.outlined.Source
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -107,6 +111,7 @@ import org.koin.compose.koinInject
 import coil.compose.AsyncImage
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -136,10 +141,15 @@ fun PatchBundleDiscoveryScreen(
     val showReleasePref by prefs.patchBundleDiscoveryShowRelease.getAsState()
     val showPrereleasePref by prefs.patchBundleDiscoveryShowPrerelease.getAsState()
     val latestPref by prefs.patchBundleDiscoveryLatest.getAsState()
+    val sortModePref by prefs.patchBundleDiscoverySortMode.getAsState()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     var showRelease by remember { mutableStateOf(showReleasePref) }
     var showPrerelease by remember { mutableStateOf(showPrereleasePref) }
     var latestSelected by remember { mutableStateOf(latestPref) }
+    var discoverySortMode by remember {
+        mutableStateOf(BundleDiscoverySortMode.fromStorage(sortModePref))
+    }
+    var showSortMenu by remember { mutableStateOf(false) }
     var previousRelease by remember { mutableStateOf(showRelease) }
     var previousPrerelease by remember { mutableStateOf(showPrerelease) }
     LaunchedEffect(showRelease, showPrerelease, latestSelected) {
@@ -172,6 +182,12 @@ fun PatchBundleDiscoveryScreen(
             latestSelected = latestPref
         }
     }
+    LaunchedEffect(sortModePref) {
+        val parsed = BundleDiscoverySortMode.fromStorage(sortModePref)
+        if (discoverySortMode != parsed) {
+            discoverySortMode = parsed
+        }
+    }
     LaunchedEffect(showRelease, showReleasePref) {
         if (showRelease != showReleasePref) {
             prefs.patchBundleDiscoveryShowRelease.update(showRelease)
@@ -182,7 +198,20 @@ fun PatchBundleDiscoveryScreen(
             prefs.patchBundleDiscoveryShowPrerelease.update(showPrerelease)
         }
     }
-    val groupedBundles by remember(bundles, query, showRelease, showPrerelease, latestSelected) {
+    LaunchedEffect(discoverySortMode) {
+        val serialized = discoverySortMode.storageValue
+        if (serialized != sortModePref) {
+            prefs.patchBundleDiscoverySortMode.update(serialized)
+        }
+    }
+    val groupedBundles by remember(
+        bundles,
+        query,
+        showRelease,
+        showPrerelease,
+        latestSelected,
+        discoverySortMode
+    ) {
         derivedStateOf {
             if (bundles == null) return@derivedStateOf null
             val trimmedQuery = query.trim().lowercase()
@@ -217,7 +246,7 @@ fun PatchBundleDiscoveryScreen(
                 (allowRelease && hasRelease) || (allowPrerelease && hasPrerelease)
             }
 
-            filteredByType.filter { group ->
+            val filtered = filteredByType.filter { group ->
                 if (trimmedQuery.isEmpty()) return@filter true
                 val haystack = listOfNotNull(group.release, group.prerelease)
                     .flatMap {
@@ -232,6 +261,21 @@ fun PatchBundleDiscoveryScreen(
                     .joinToString(" ")
                     .lowercase()
                 haystack.contains(trimmedQuery)
+            }
+
+            when (discoverySortMode) {
+                BundleDiscoverySortMode.BUNDLE_NAME_ASC -> {
+                    filtered.sortedBy { groupDisplayNameSortKey(it) }
+                }
+                BundleDiscoverySortMode.BUNDLE_NAME_DESC -> {
+                    filtered.sortedByDescending { groupDisplayNameSortKey(it) }
+                }
+                BundleDiscoverySortMode.UPDATED_ASC -> {
+                    filtered.sortedBy { groupUpdatedSortKey(it) }
+                }
+                BundleDiscoverySortMode.UPDATED_DESC -> {
+                    filtered.sortedByDescending { groupUpdatedSortKey(it) }
+                }
             }
         }
     }
@@ -511,6 +555,36 @@ fun PatchBundleDiscoveryScreen(
                 scrollBehavior = scrollBehavior,
                 onBackClick = onBackClick,
                 actions = {
+                    IconButton(onClick = { showSortMenu = true }) {
+                        Icon(
+                            imageVector = Icons.Outlined.Sort,
+                            modifier = Modifier.size(24.dp),
+                            contentDescription = stringResource(R.string.patch_bundle_discovery_sort_title)
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = showSortMenu,
+                        onDismissRequest = { showSortMenu = false }
+                    ) {
+                        BundleDiscoverySortMode.values().forEach { mode ->
+                            DropdownMenuItem(
+                                text = { Text(stringResource(mode.labelRes)) },
+                                onClick = {
+                                    discoverySortMode = mode
+                                    showSortMenu = false
+                                },
+                                leadingIcon = {
+                                    if (discoverySortMode == mode) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            )
+                        }
+                    }
                     IconButton(
                         onClick = { context.openUrl("https://revanced-external-bundles.brosssh.com/") }
                     ) {
@@ -1429,6 +1503,51 @@ private fun pickLatestBundle(
     if (releaseInstant == null) return prerelease
     if (prereleaseInstant == null) return release
     return if (prereleaseInstant > releaseInstant) prerelease else release
+}
+
+private fun groupDisplayNameSortKey(group: BundleGroup): String {
+    val bundle = group.release ?: group.prerelease
+    if (bundle == null) return group.key.lowercase(Locale.ROOT)
+    val owner = bundle.ownerName.trim()
+    val repo = bundle.repoName.trim()
+    return if (owner.isNotBlank() || repo.isNotBlank()) {
+        listOf(owner, repo)
+            .filter { it.isNotBlank() }
+            .joinToString("/")
+            .lowercase(Locale.ROOT)
+    } else {
+        group.key.lowercase(Locale.ROOT)
+    }
+}
+
+private fun groupUpdatedSortKey(group: BundleGroup): Long {
+    val releaseEpoch = parseBundleUpdatedInstant(group.release)?.toEpochMilliseconds() ?: Long.MIN_VALUE
+    val prereleaseEpoch = parseBundleUpdatedInstant(group.prerelease)?.toEpochMilliseconds() ?: Long.MIN_VALUE
+    return maxOf(releaseEpoch, prereleaseEpoch)
+}
+
+private fun parseBundleUpdatedInstant(bundle: ExternalBundleSnapshot?): Instant? {
+    if (bundle == null) return null
+    val candidate = listOf(bundle.repoPushedAt, bundle.lastRefreshedAt, bundle.createdAt)
+        .firstOrNull { !it.isNullOrBlank() }
+        ?.trim()
+        ?: return null
+    return runCatching { Instant.parse(candidate) }.getOrNull()
+}
+
+private enum class BundleDiscoverySortMode(
+    val storageValue: String,
+    val labelRes: Int
+) {
+    BUNDLE_NAME_ASC("BUNDLE_NAME_ASC", R.string.patch_bundle_discovery_sort_bundle_name_asc),
+    BUNDLE_NAME_DESC("BUNDLE_NAME_DESC", R.string.patch_bundle_discovery_sort_bundle_name_desc),
+    UPDATED_DESC("UPDATED_DESC", R.string.patch_bundle_discovery_sort_updated_desc),
+    UPDATED_ASC("UPDATED_ASC", R.string.patch_bundle_discovery_sort_updated_asc);
+
+    companion object {
+        fun fromStorage(value: String?): BundleDiscoverySortMode =
+            values().firstOrNull { it.storageValue == value } ?: UPDATED_DESC
+    }
 }
 
 private data class BundleGroup(

@@ -27,7 +27,11 @@ object SplitApkPreparer {
         if (file == null || !file.exists()) return false
         val extension = file.extension.lowercase(Locale.ROOT)
         if (extension in SUPPORTED_EXTENSIONS) return true
-        return hasEmbeddedApkEntries(file)
+        if (extension == "zip") return hasEmbeddedApkEntries(file)
+        // Some downloader plugins save split containers using a .apk filename.
+        // Consider those split only when they do not look like a normal APK container.
+        if (extension == "apk") return looksLikeMislabeledSplitArchive(file)
+        return false
     }
 
     suspend fun prepareIfNeeded(
@@ -113,10 +117,36 @@ object SplitApkPreparer {
         runCatching {
             ZipFile(file).use { zip ->
                 zip.entries().asSequence().any { entry ->
-                    !entry.isDirectory && entry.name.endsWith(".apk", ignoreCase = true)
+                    !entry.isDirectory &&
+                        isLikelySplitApkEntry(entry.name)
                 }
             }
         }.getOrDefault(false)
+
+    private fun looksLikeMislabeledSplitArchive(file: File): Boolean =
+        runCatching {
+            ZipFile(file).use { zip ->
+                val hasRootManifest = zip.entries().asSequence().any { entry ->
+                    !entry.isDirectory && entry.name == "AndroidManifest.xml"
+                }
+                !hasRootManifest && zip.entries().asSequence().any { entry ->
+                    !entry.isDirectory && isLikelySplitApkEntry(entry.name)
+                }
+            }
+        }.getOrDefault(false)
+
+    private fun isLikelySplitApkEntry(entryName: String): Boolean {
+        val normalized = entryName.replace('\\', '/')
+        val fileName = normalized.substringAfterLast('/')
+        if (!fileName.endsWith(".apk", ignoreCase = true)) return false
+        val lowerName = fileName.lowercase(Locale.ROOT)
+
+        if (lowerName == "base.apk") return true
+        if (lowerName.startsWith("split_config.") || lowerName.startsWith("config.")) return true
+
+        // Support zip containers whose APK modules are placed in root.
+        return !normalized.contains('/')
+    }
 
     private data class ExtractedModule(val name: String, val file: File)
 

@@ -21,6 +21,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Android
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Sort
 import androidx.compose.material.icons.outlined.SdCard
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.Storage
@@ -28,6 +30,8 @@ import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -58,7 +62,7 @@ import androidx.compose.ui.semantics.semantics
 import app.universal.revanced.manager.R
 import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.domain.manager.PreferencesManager
-import app.revanced.manager.patcher.split.SplitApkInspector
+import app.revanced.manager.patcher.split.SplitArchiveDisplayResolver
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.AppIcon
@@ -150,13 +154,25 @@ fun PathSelectorDialog(
     val entries = remember(currentDirectory, permissionGranted, refreshNonce) {
         if (!permissionGranted) emptyList() else listDirectoryEntriesSafe(currentDirectory)
     }
-    val directories = remember(entries) {
-        entries.filter(Path::isDirectory).sortedWith(PathNameComparator)
+    val persistedSortMode by prefs.pathSelectorSortMode.getAsState()
+    var sortMode by rememberSaveable(persistedSortMode) {
+        mutableStateOf(PathSortMode.fromStorage(persistedSortMode))
     }
-    val files = remember(entries, fileFilter) {
-        entries.filterNot(Path::isDirectory).filter(fileFilter).sortedWith(PathNameComparator)
+    var showSortMenu by rememberSaveable { mutableStateOf(false) }
+    val sortKeys = remember(entries) {
+        entries.associateWith(::buildPathSortKey)
     }
-    var searchQuery by rememberSaveable { mutableStateOf("") }
+    val sortComparator = remember(sortMode, sortKeys) {
+        sortMode.comparator(sortKeys)
+    }
+    val directories = remember(entries, sortComparator) {
+        entries.filter(Path::isDirectory).sortedWith(sortComparator)
+    }
+    val files = remember(entries, fileFilter, sortComparator) {
+        entries.filterNot(Path::isDirectory).filter(fileFilter).sortedWith(sortComparator)
+    }
+    val persistedSearchQuery by prefs.pathSelectorSearchQuery.getAsState()
+    var searchQuery by rememberSaveable(persistedSearchQuery) { mutableStateOf(persistedSearchQuery) }
     val normalizedQuery = searchQuery.trim()
     val filteredDirectories = remember(directories, normalizedQuery) {
         if (normalizedQuery.isBlank()) {
@@ -222,6 +238,19 @@ fun PathSelectorDialog(
         }
     }
 
+    LaunchedEffect(sortMode, persistedSortMode) {
+        val nextValue = sortMode.name
+        if (nextValue != persistedSortMode) {
+            prefs.pathSelectorSortMode.update(nextValue)
+        }
+    }
+
+    LaunchedEffect(searchQuery, persistedSearchQuery) {
+        if (searchQuery != persistedSearchQuery) {
+            prefs.pathSelectorSearchQuery.update(searchQuery)
+        }
+    }
+
     FullscreenDialog(
         onDismissRequest = { onSelect(null) },
     ) {
@@ -247,6 +276,41 @@ fun PathSelectorDialog(
                                 Icons.Outlined.Refresh,
                                 contentDescription = stringResource(R.string.refresh)
                             )
+                        }
+                        Box {
+                            IconButton(onClick = { showSortMenu = true }) {
+                                Icon(
+                                    Icons.Outlined.Sort,
+                                    contentDescription = stringResource(R.string.path_selector_sort_title)
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showSortMenu,
+                                onDismissRequest = { showSortMenu = false },
+                                modifier = Modifier.heightIn(max = 420.dp)
+                            ) {
+                                PathSortMode.entries.forEach { mode ->
+                                    val selected = mode == sortMode
+                                    DropdownMenuItem(
+                                        text = { Text(text = stringResource(mode.labelRes)) },
+                                        leadingIcon = {
+                                            if (selected) {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.Check,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.primary
+                                                )
+                                            } else {
+                                                Spacer(modifier = Modifier.size(24.dp))
+                                            }
+                                        },
+                                        onClick = {
+                                            sortMode = mode
+                                            showSortMenu = false
+                                        }
+                                    )
+                                }
+                            }
                         }
                         if (confirmButtonText != null && onConfirm != null) {
                             TextButton(onClick = { onConfirm(currentDirectory) }) {
@@ -527,6 +591,7 @@ fun PathSelectorDialog(
                 }
             )
         }
+
     }
 }
 
@@ -539,8 +604,76 @@ private fun fileIconForPath(path: Path): ImageVector {
     }
 }
 
-private val PathNameComparator = compareBy<Path> { it.name.lowercase(Locale.ROOT) }
-    .thenBy { it.name }
+private data class PathSortKey(
+    val nameLower: String,
+    val extensionLower: String,
+    val modified: Long,
+    val size: Long
+)
+
+private enum class PathSortMode(val labelRes: Int) {
+    NAME_ASC(R.string.path_selector_sort_name_asc),
+    NAME_DESC(R.string.path_selector_sort_name_desc),
+    MODIFIED_DESC(R.string.path_selector_sort_modified_desc),
+    MODIFIED_ASC(R.string.path_selector_sort_modified_asc),
+    TYPE_ASC(R.string.path_selector_sort_type_asc),
+    TYPE_DESC(R.string.path_selector_sort_type_desc),
+    SIZE_DESC(R.string.path_selector_sort_size_desc),
+    SIZE_ASC(R.string.path_selector_sort_size_asc);
+
+    companion object {
+        fun fromStorage(value: String): PathSortMode =
+            entries.firstOrNull { it.name == value } ?: MODIFIED_DESC
+    }
+
+    fun comparator(keys: Map<Path, PathSortKey>): Comparator<Path> {
+        val nameComparator = compareBy<Path>(
+            { keys[it]?.nameLower ?: it.name.lowercase(Locale.ROOT) },
+            { it.name }
+        )
+        val typeComparator = compareBy<Path>(
+            { keys[it]?.extensionLower ?: extensionOf(it) },
+            { keys[it]?.nameLower ?: it.name.lowercase(Locale.ROOT) },
+            { it.name }
+        )
+        val modifiedComparator = compareBy<Path>(
+            { keys[it]?.modified ?: 0L },
+            { keys[it]?.nameLower ?: it.name.lowercase(Locale.ROOT) },
+            { it.name }
+        )
+        val sizeComparator = compareBy<Path>(
+            { keys[it]?.size ?: 0L },
+            { keys[it]?.nameLower ?: it.name.lowercase(Locale.ROOT) },
+            { it.name }
+        )
+
+        return when (this) {
+            NAME_ASC -> nameComparator
+            NAME_DESC -> nameComparator.reversed()
+            MODIFIED_DESC -> modifiedComparator.reversed()
+            MODIFIED_ASC -> modifiedComparator
+            TYPE_ASC -> typeComparator
+            TYPE_DESC -> typeComparator.reversed()
+            SIZE_DESC -> sizeComparator.reversed()
+            SIZE_ASC -> sizeComparator
+        }
+    }
+}
+
+private fun buildPathSortKey(path: Path): PathSortKey {
+    val file = path.toFile()
+    return PathSortKey(
+        nameLower = path.name.lowercase(Locale.ROOT),
+        extensionLower = extensionOf(path),
+        modified = runCatching { file.lastModified() }.getOrDefault(0L),
+        size = runCatching {
+            if (file.isDirectory) 0L else file.length()
+        }.getOrDefault(0L)
+    )
+}
+
+private fun extensionOf(path: Path): String =
+    path.name.substringAfterLast('.', "").lowercase(Locale.ROOT)
 
 private fun listDirectoryEntriesSafe(path: Path): List<Path> {
     val rawEntries = runCatching { path.listDirectoryEntries() }.getOrNull()
@@ -648,6 +781,7 @@ private fun FileLeadingIcon(
     if (packageInfo != null) {
         AppIcon(
             packageInfo = packageInfo,
+            iconOverride = iconInfo?.iconOverride,
             contentDescription = null,
             modifier = Modifier.size(24.dp)
         )
@@ -671,6 +805,7 @@ private fun isImagePreviewablePath(path: Path): Boolean {
 
 private data class ApkIconInfo(
     val packageInfo: android.content.pm.PackageInfo?,
+    val iconOverride: android.graphics.drawable.Drawable? = null,
     val cleanup: (() -> Unit)?
 )
 
@@ -686,12 +821,23 @@ private suspend fun loadApkIconInfo(
     if (extension != "apk" && !isSplitArchive) return@withContext null
 
     if (isSplitArchive) {
-        val extracted = SplitApkInspector.extractRepresentativeApk(file, filesystem.tempDir)
-            ?: return@withContext null
-        val pkgInfo = pm.getPackageInfo(extracted.file)
-        ApkIconInfo(pkgInfo, extracted.cleanup)
+        val resolved = SplitArchiveDisplayResolver.resolve(
+            source = file,
+            workspace = filesystem.tempDir,
+            app = pm.application,
+            pm = pm
+        ) ?: return@withContext null
+        ApkIconInfo(
+            packageInfo = resolved.packageInfo,
+            iconOverride = resolved.icon,
+            cleanup = null
+        )
     } else {
-        ApkIconInfo(pm.getPackageInfo(file), null)
+        ApkIconInfo(
+            packageInfo = pm.getPackageInfo(file),
+            iconOverride = null,
+            cleanup = null
+        )
     }
 }
 

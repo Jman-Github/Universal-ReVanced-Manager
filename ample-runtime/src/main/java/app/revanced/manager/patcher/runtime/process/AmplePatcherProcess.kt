@@ -15,6 +15,7 @@ import app.revanced.manager.patcher.logger.LogLevel
 import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.ample.AmplePatchBundleLoader
 import app.revanced.manager.patcher.ample.AmpleSession
+import app.revanced.manager.patcher.runtime.FrameworkCacheResolver
 import app.revanced.manager.patcher.runStep
 import app.revanced.manager.patcher.split.ApkEditorMergeRuntime
 import app.revanced.manager.patcher.split.SplitApkPreparer
@@ -194,10 +195,17 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
                         additionalArchives = relatedBundleArchives
                     )
                     logAapt2Info(selectedAaptPath, logger)
+                    val frameworkDir = FrameworkCacheResolver.resolve(
+                        baseFrameworkDir = parameters.frameworkDir,
+                        runtimeTag = "ample",
+                        apkFile = preparation.file,
+                        aaptPath = selectedAaptPath,
+                        logger = logger
+                    )
                     val session = runStep(StepId.ReadAPK, ::safeEvent) {
                         AmpleSession(
                             cacheDir = parameters.cacheDir,
-                            frameworkDir = parameters.frameworkDir,
+                            frameworkDir = frameworkDir,
                             aaptPath = selectedAaptPath,
                             logger = logger,
                             input = preparation.file,
