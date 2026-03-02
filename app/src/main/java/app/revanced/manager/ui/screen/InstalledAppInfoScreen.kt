@@ -135,6 +135,7 @@ fun InstalledAppInfoScreen(
     var showAppliedPatchesDialog by rememberSaveable { mutableStateOf(false) }
     var showUniversalBlockedDialog by rememberSaveable { mutableStateOf(false) }
     var showMixedBundleDialog by rememberSaveable { mutableStateOf(false) }
+    var showMixedRevancedPatcherDialog by rememberSaveable { mutableStateOf(false) }
     var showLeaveInstallDialog by rememberSaveable { mutableStateOf(false) }
     var showExportPicker by rememberSaveable { mutableStateOf(false) }
     var exportFileDialogState by remember { mutableStateOf<ExportSavedApkDialogState?>(null) }
@@ -298,6 +299,10 @@ fun InstalledAppInfoScreen(
                 showMixedBundleDialog = true
                 return@launch
             }
+            if (patchBundleRepository.selectionHasMixedRevancedPatcherVersions(selection)) {
+                showMixedRevancedPatcherDialog = true
+                return@launch
+            }
             onPatchClick(targetPackageName, selection, selectionPayload, persistConfiguration)
         }
     }
@@ -375,6 +380,19 @@ fun InstalledAppInfoScreen(
             },
             title = { Text(stringResource(R.string.mixed_patch_bundles_title)) },
             text = { Text(stringResource(R.string.mixed_patch_bundles_description)) }
+        )
+    }
+
+    if (showMixedRevancedPatcherDialog) {
+        AlertDialog(
+            onDismissRequest = { showMixedRevancedPatcherDialog = false },
+            confirmButton = {
+                TextButton(onClick = { showMixedRevancedPatcherDialog = false }) {
+                    Text(stringResource(R.string.close))
+                }
+            },
+            title = { Text(stringResource(R.string.mixed_revanced_patcher_versions_title)) },
+            text = { Text(stringResource(R.string.mixed_revanced_patcher_versions_description)) }
         )
     }
 

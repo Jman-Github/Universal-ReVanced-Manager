@@ -753,6 +753,30 @@ fun PatchesSelectorScreen(
             }
         )
     }
+    if (viewModel.showMixedRevancedPatcherVersionsDialog) {
+        AlertDialogExtended(
+            onDismissRequest = viewModel::dismissMixedRevancedPatcherVersionsDialog,
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissMixedRevancedPatcherVersionsDialog) {
+                    Text(stringResource(R.string.ok))
+                }
+            },
+            title = {
+                Text(
+                    text = stringResource(R.string.mixed_revanced_patcher_versions_title),
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Start
+                )
+            },
+            text = {
+                Text(
+                    text = stringResource(R.string.mixed_revanced_patcher_versions_description),
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Start
+                )
+            }
+        )
+    }
     val disableActionConfirmations by viewModel.prefs.disablePatchSelectionConfirmations.getAsState()
     val collapseActionsOnSelection by viewModel.prefs.collapsePatchActionsOnSelection.getAsState()
 

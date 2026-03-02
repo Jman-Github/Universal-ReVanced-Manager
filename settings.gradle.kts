@@ -81,4 +81,5 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "universal-revanced-manager"
-include(":app", ":api", ":morphe-runtime", ":ample-runtime")
+include(":app", ":api", ":morphe-runtime", ":ample-runtime", ":revanced-runtime-v22")
+

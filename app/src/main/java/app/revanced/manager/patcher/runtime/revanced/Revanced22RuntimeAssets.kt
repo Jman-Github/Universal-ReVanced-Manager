@@ -1,4 +1,4 @@
-package app.revanced.manager.patcher.runtime.morphe
+package app.revanced.manager.patcher.runtime.revanced
 
 import android.content.Context
 import app.universal.revanced.manager.BuildConfig
@@ -8,10 +8,12 @@ import java.io.File
 import java.io.IOException
 import java.util.zip.ZipFile
 
-object MorpheRuntimeAssets {
-    private const val RUNTIME_ASSET_NAME = "morphe-runtime.apk"
-    private const val OUTPUT_PREFIX = "morphe-runtime"
+object Revanced22RuntimeAssets {
+    private const val RUNTIME_ASSET_NAME = "revanced-runtime-v22.apk"
+    private const val OUTPUT_PREFIX = "revanced-runtime-v22"
     private const val DEX_JAR_ENTRY = "assets/main.jar"
+    private const val APKEDITOR_JAR_ENTRY = "assets/apkeditor/APKEditor-1.4.7.jar"
+    private const val APKEDITOR_MERGE_ENTRY = "assets/apkeditor/apkeditor-merge.jar"
 
     fun ensureRuntimeApk(context: Context): File {
         val appContext = context.applicationContext
@@ -38,11 +40,11 @@ object MorpheRuntimeAssets {
         }
         if (temp.length() <= 0L) {
             temp.delete()
-            throw IOException("Failed to extract Morphe runtime APK from assets.")
+            throw IOException("Failed to extract ReVanced runtime APK from assets.")
         }
         if (!temp.renameTo(output)) {
             temp.delete()
-            throw IOException("Failed to finalize Morphe runtime APK.")
+            throw IOException("Failed to finalize ReVanced runtime APK.")
         }
         runCatching {
             output.setLastModified(maxOf(System.currentTimeMillis(), appUpdatedAt))
@@ -77,7 +79,7 @@ object MorpheRuntimeAssets {
         val temp = File(runtimeApk.parentFile, "${jar.name}.tmp")
         ZipFile(runtimeApk).use { zip ->
             val entry = zip.getEntry(DEX_JAR_ENTRY)
-                ?: throw IOException("Missing Morphe runtime dex payload ($DEX_JAR_ENTRY).")
+                ?: throw IOException("Missing ReVanced runtime dex payload ($DEX_JAR_ENTRY).")
             zip.getInputStream(entry).use { input ->
                 temp.outputStream().use { outputStream ->
                     input.copyTo(outputStream)
@@ -87,11 +89,11 @@ object MorpheRuntimeAssets {
 
         if (temp.length() <= 0L) {
             temp.delete()
-            throw IOException("Failed to extract Morphe runtime dex payload.")
+            throw IOException("Failed to extract ReVanced runtime dex payload.")
         }
         if (!temp.renameTo(jar)) {
             temp.delete()
-            throw IOException("Failed to finalize Morphe runtime dex payload.")
+            throw IOException("Failed to finalize ReVanced runtime dex payload.")
         }
         runCatching {
             jar.setLastModified(runtimeApk.lastModified())
@@ -99,6 +101,52 @@ object MorpheRuntimeAssets {
 
         ensureReadOnly(jar)
         return jar
+    }
+
+    fun ensureApkEditorJar(context: Context): File =
+        ensureRuntimeAsset(context, APKEDITOR_JAR_ENTRY, "revanced22-apkeditor.jar")
+
+    fun ensureApkEditorMergeJar(context: Context): File =
+        ensureRuntimeAsset(context, APKEDITOR_MERGE_ENTRY, "revanced22-apkeditor-merge.jar")
+
+    private fun ensureRuntimeAsset(context: Context, entryName: String, outputName: String): File {
+        val runtimeApk = ensureRuntimeApk(context)
+        val outputDir = runtimeApk.parentFile
+        val output = File(outputDir, outputName)
+        if (output.exists() && output.length() > 0L && output.lastModified() >= runtimeApk.lastModified()) {
+            ensureReadOnly(output)
+            return output
+        }
+        if (output.exists()) {
+            output.setWritable(true, true)
+            output.delete()
+        }
+
+        val temp = File(outputDir, "${output.name}.tmp")
+        ZipFile(runtimeApk).use { zip ->
+            val entry = zip.getEntry(entryName)
+                ?: throw IOException("Missing ReVanced runtime asset ($entryName).")
+            zip.getInputStream(entry).use { input ->
+                temp.outputStream().use { outputStream ->
+                    input.copyTo(outputStream)
+                }
+            }
+        }
+
+        if (temp.length() <= 0L) {
+            temp.delete()
+            throw IOException("Failed to extract ReVanced runtime asset ($entryName).")
+        }
+        if (!temp.renameTo(output)) {
+            temp.delete()
+            throw IOException("Failed to finalize ReVanced runtime asset ($entryName).")
+        }
+        runCatching {
+            output.setLastModified(runtimeApk.lastModified())
+        }
+
+        ensureReadOnly(output)
+        return output
     }
 
     private fun appLastUpdateTime(context: Context): Long = runCatching {

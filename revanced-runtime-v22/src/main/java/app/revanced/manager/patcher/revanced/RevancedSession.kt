@@ -1,38 +1,38 @@
-package app.revanced.manager.patcher.ample
+package app.revanced.manager.patcher.revanced
 
-import app.revanced.library.ApkUtils.applyTo
 import app.revanced.manager.patcher.ProgressEvent
 import app.revanced.manager.patcher.StepId
-import app.revanced.manager.patcher.ample.AmpleSession.Companion.component1
-import app.revanced.manager.patcher.ample.AmpleSession.Companion.component2
 import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.runStep
 import app.revanced.manager.patcher.toRemoteError
+import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.patcher.util.NativeLibStripper
 import app.revanced.manager.patcher.util.XmlSurrogateSanitizer
-import app.revanced.patcher.Patcher
-import app.revanced.patcher.PatcherConfig
-import app.revanced.patcher.PatcherResult
+import app.revanced.patcher.PatchesResult
+import app.revanced.patcher.patcher
 import app.revanced.patcher.patch.Patch
 import app.revanced.patcher.patch.PatchResult
-import app.revanced.manager.patcher.split.SplitApkPreparer
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runInterruptible
-import kotlinx.coroutines.withContext
 import java.io.BufferedInputStream
+import java.io.BufferedOutputStream
 import java.io.Closeable
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
-import java.util.zip.ZipFile
-import java.util.zip.ZipInputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.LinkedHashSet
+import java.util.zip.CRC32
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.withContext
 
-internal typealias AmplePatchList = List<Patch<*>>
+internal typealias RevancedPatchList = List<Patch>
 
-class AmpleSession(
+class RevancedSession(
     cacheDir: String,
     frameworkDir: String,
     aaptPath: String,
@@ -42,94 +42,97 @@ class AmpleSession(
 ) : Closeable {
     private val tempDir = File(cacheDir).resolve("patcher").also { it.mkdirs() }
     private val frameworkDirFile = File(frameworkDir).also { it.mkdirs() }
-    private val resolvedAaptPath = aaptPath
-    private var patcher = createPatcher()
-
-    private fun createPatcher() = Patcher(
-        PatcherConfig(
+    private var selectedPatches = emptySet<Patch>()
+    private val patcher =
+        patcher(
             apkFile = input,
             temporaryFilesPath = tempDir,
+            aaptBinaryPath = File(aaptPath),
             frameworkFileDirectory = frameworkDirFile.absolutePath,
-            aaptBinaryPath = resolvedAaptPath
-        )
-    )
+        ) { _, _ ->
+            selectedPatches
+        }
 
-    private suspend fun Patcher.applyPatchesVerbose(
-        selectedPatches: AmplePatchList,
+    private suspend fun applyPatchesVerbose(
+        patches: RevancedPatchList,
         preStarted: Set<Int> = emptySet()
-    ) {
-        if (selectedPatches.isEmpty()) return
-        val indexByPatch = selectedPatches.withIndex().associate { it.value to it.index }
+    ): PatchesResult {
+        selectedPatches = LinkedHashSet(patches)
+        val indexByPatch = patches.withIndex().associate { it.value to it.index }
         val started = mutableSetOf<Int>()
         started.addAll(preStarted)
         var nextIndex = 0
 
+        fun patchNameAt(index: Int): String =
+            patches.getOrNull(index)?.name ?: "Patch #${index + 1}"
+
         fun startPatch(index: Int) {
+            if (index !in patches.indices) return
             if (!started.add(index)) return
             onEvent(ProgressEvent.Started(StepId.ExecutePatch(index)))
         }
 
-        startPatch(0)
-        this().collect { (patch, exception) ->
-            val index = indexByPatch[patch] ?: return@collect
+        if (patches.isNotEmpty()) {
+            startPatch(0)
+        }
+
+        return patcher { result ->
+            val patch = result.patch
+            val exception = result.exception
+            val index = indexByPatch[patch] ?: return@patcher
 
             if (exception != null) {
-                val error = exception as? Exception ?: Exception(exception)
                 if (index < nextIndex) {
-                    onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), error.toRemoteError()))
-                    logger.error("${patch.name} failed:")
+                    onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), exception.toRemoteError()))
+                    logger.error("${patch.name ?: patchNameAt(index)} failed:")
                     logger.error(exception.stackTraceToString())
                     throw exception
                 }
                 while (nextIndex < index) {
                     startPatch(nextIndex)
                     onEvent(ProgressEvent.Completed(StepId.ExecutePatch(nextIndex)))
-                    logger.info("${selectedPatches[nextIndex].name} succeeded")
+                    logger.info("${patchNameAt(nextIndex)} succeeded")
                     nextIndex += 1
                 }
                 startPatch(index)
-                onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), error.toRemoteError()))
-                logger.error("${patch.name} failed:")
+                onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), exception.toRemoteError()))
+                logger.error("${patch.name ?: patchNameAt(index)} failed:")
                 logger.error(exception.stackTraceToString())
                 throw exception
             }
 
-            if (index < nextIndex) return@collect
+            if (index < nextIndex) return@patcher
             while (nextIndex < index) {
                 startPatch(nextIndex)
                 onEvent(ProgressEvent.Completed(StepId.ExecutePatch(nextIndex)))
-                logger.info("${selectedPatches[nextIndex].name} succeeded")
+                logger.info("${patchNameAt(nextIndex)} succeeded")
                 nextIndex += 1
             }
             startPatch(index)
             onEvent(ProgressEvent.Completed(StepId.ExecutePatch(index)))
-            logger.info("${patch.name} succeeded")
+            logger.info("${patch.name ?: patchNameAt(index)} succeeded")
             nextIndex = index + 1
-            if (nextIndex < selectedPatches.size) {
+            if (nextIndex < patches.size) {
                 startPatch(nextIndex)
             }
         }
     }
 
-    private suspend fun executePatchesOnce(orderedPatches: AmplePatchList) {
-        with(patcher) {
-            if (orderedPatches.isNotEmpty()) {
-                onEvent(ProgressEvent.Started(StepId.ExecutePatch(0)))
-            }
-            logger.info("Merging integrations")
-            this += LinkedHashSet(orderedPatches)
-
-            logger.info("Applying patches...")
-            applyPatchesVerbose(
-                orderedPatches,
-                preStarted = if (orderedPatches.isNotEmpty()) setOf(0) else emptySet()
-            )
+    private suspend fun executePatchesOnce(orderedPatches: RevancedPatchList): PatchesResult {
+        if (orderedPatches.isNotEmpty()) {
+            onEvent(ProgressEvent.Started(StepId.ExecutePatch(0)))
         }
+
+        logger.info("Applying patches...")
+        return applyPatchesVerbose(
+            orderedPatches,
+            preStarted = if (orderedPatches.isNotEmpty()) setOf(0) else emptySet()
+        )
     }
 
-    private suspend fun executePatchesWithFrameworkRecovery(orderedPatches: AmplePatchList) {
+    private suspend fun executePatchesWithFrameworkRecovery(orderedPatches: RevancedPatchList): PatchesResult {
         ensureFrameworkCacheIsValid()
-        executePatchesOnce(orderedPatches)
+        return executePatchesOnce(orderedPatches)
     }
 
     private fun ensureFrameworkCacheIsValid() {
@@ -179,19 +182,18 @@ class AmpleSession(
 
     suspend fun run(
         output: File,
-        selectedPatches: AmplePatchList,
+        selectedPatches: RevancedPatchList,
         stripNativeLibs: Boolean,
         inputWasSplit: Boolean
     ) {
         val shouldStripNativeLibs = stripNativeLibs && !inputWasSplit
-        val orderedPatches = selectedPatches.sortedBy { it.name }
-        runStep(StepId.ExecutePatches, onEvent) {
+        val orderedPatches = selectedPatches.sortedBy { it.name.orEmpty() }
+        val patchResult = runStep(StepId.ExecutePatches, onEvent) {
             java.util.logging.Logger.getLogger("").apply {
                 handlers.forEach {
                     it.close()
                     removeHandler(it)
                 }
-
                 addHandler(logger.handler)
             }
             executePatchesWithFrameworkRecovery(orderedPatches)
@@ -224,8 +226,7 @@ class AmpleSession(
                 )
                 logger.info("Writing patched files...")
                 XmlSurrogateSanitizer.sanitize(tempDir.resolve("apk"), logger)
-                val result = patcher.get()
-                val updatedDexNames = mergeDexNames(initialDexNames, result)
+                val updatedDexNames = mergeDexNames(initialDexNames, patchResult)
                 if (updatedDexNames != initialDexNames) {
                     onEvent(
                         ProgressEvent.Progress(
@@ -248,7 +249,9 @@ class AmpleSession(
                         message = "Applying patched changes"
                     )
                 )
-                result.applyTo(patched)
+                runInterruptible(Dispatchers.IO) {
+                    applyResultToApk(patched, patchResult)
+                }
 
                 logger.info("Patched apk saved to $patched")
 
@@ -295,6 +298,162 @@ class AmpleSession(
         writePatchedApkStep()
     }
 
+    private fun applyResultToApk(apkFile: File, result: PatchesResult) {
+        val applyDir = tempDir.resolve("apply").also {
+            it.deleteRecursively()
+            it.mkdirs()
+        }
+        val replacementFiles = linkedMapOf<String, File>()
+        val deleteEntries = linkedSetOf<String>()
+        val doNotCompress = linkedSetOf<String>()
+        var replaceResourceDirectory = false
+
+        result.dexFiles.forEach { dex ->
+            val entryName = sanitizeZipEntryName(dex.name) ?: return@forEach
+            val dexFile = applyDir.resolve("dex").resolve(entryName.toFileSystemPath())
+            dexFile.parentFile?.mkdirs()
+            dex.stream.use { input ->
+                FileOutputStream(dexFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+            replacementFiles[entryName] = dexFile
+        }
+
+        result.resources?.let { resources ->
+            resources.resourcesApk?.let { resourcesApk ->
+                replaceResourceDirectory = true
+                ZipFile(resourcesApk).use { zip ->
+                    val entries = zip.entries().asSequence().toList()
+                    entries.forEach { entry ->
+                        if (entry.isDirectory) return@forEach
+                        val entryName = sanitizeZipEntryName(entry.name) ?: return@forEach
+                        val target = applyDir.resolve("resourcesApk").resolve(entryName.toFileSystemPath())
+                        target.parentFile?.mkdirs()
+                        zip.getInputStream(entry).use { input ->
+                            FileOutputStream(target).use { output ->
+                                input.copyTo(output)
+                            }
+                        }
+                        replacementFiles[entryName] = target
+                    }
+                }
+            }
+
+            resources.otherResources?.let { resourcesDir ->
+                if (resourcesDir.exists()) {
+                    resourcesDir.walkTopDown()
+                        .filter { it.isFile }
+                        .forEach { file ->
+                            val relative = file.relativeTo(resourcesDir).path.replace(File.separatorChar, '/')
+                            val entryName = sanitizeZipEntryName(relative) ?: return@forEach
+                            replacementFiles[entryName] = file
+                        }
+                }
+            }
+
+            resources.deleteResources
+                .mapNotNull(::sanitizeZipEntryName)
+                .forEach(deleteEntries::add)
+
+            resources.doNotCompress
+                .mapNotNull(::sanitizeZipEntryName)
+                .forEach(doNotCompress::add)
+        }
+
+        val tempOutput = File(apkFile.parentFile, "${apkFile.name}.tmp")
+        ZipFile(apkFile).use { original ->
+            ZipOutputStream(BufferedOutputStream(FileOutputStream(tempOutput))).use { output ->
+                val entries = original.entries().asSequence().toList()
+                entries.forEach { entry ->
+                    if (entry.isDirectory) return@forEach
+                    val entryName = sanitizeZipEntryName(entry.name) ?: return@forEach
+                    if (entryName in deleteEntries) return@forEach
+                    if (replaceResourceDirectory && entryName.startsWith("res/")) return@forEach
+
+                    val replacement = replacementFiles.remove(entryName)
+                    if (replacement != null) {
+                        output.writeFileEntry(entryName, replacement, entryName in doNotCompress)
+                    } else {
+                        output.writeInputEntry(entryName, original, entry)
+                    }
+                }
+
+                replacementFiles.forEach { (entryName, file) ->
+                    output.writeFileEntry(entryName, file, entryName in doNotCompress)
+                }
+            }
+        }
+
+        try {
+            Files.move(
+                tempOutput.toPath(),
+                apkFile.toPath(),
+                StandardCopyOption.REPLACE_EXISTING,
+                StandardCopyOption.ATOMIC_MOVE
+            )
+        } catch (_: Exception) {
+            Files.move(
+                tempOutput.toPath(),
+                apkFile.toPath(),
+                StandardCopyOption.REPLACE_EXISTING
+            )
+        }
+    }
+
+    private fun ZipOutputStream.writeInputEntry(
+        entryName: String,
+        sourceZip: ZipFile,
+        sourceEntry: ZipEntry,
+    ) {
+        putNextEntry(ZipEntry(entryName))
+        sourceZip.getInputStream(sourceEntry).use { input ->
+            input.copyTo(this)
+        }
+        closeEntry()
+    }
+
+    private fun ZipOutputStream.writeFileEntry(
+        entryName: String,
+        sourceFile: File,
+        storeUncompressed: Boolean,
+    ) {
+        val outputEntry = ZipEntry(entryName)
+        if (storeUncompressed) {
+            outputEntry.method = ZipEntry.STORED
+            outputEntry.size = sourceFile.length()
+            outputEntry.crc = crc32(sourceFile)
+        }
+        putNextEntry(outputEntry)
+        FileInputStream(sourceFile).use { input ->
+            input.copyTo(this)
+        }
+        closeEntry()
+    }
+
+    private fun crc32(file: File): Long {
+        val crc = CRC32()
+        FileInputStream(file).use { input ->
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            while (true) {
+                val read = input.read(buffer)
+                if (read <= 0) break
+                crc.update(buffer, 0, read)
+            }
+        }
+        return crc.value
+    }
+
+    private fun sanitizeZipEntryName(name: String): String? {
+        val normalized = name.replace('\\', '/').trimStart('/')
+        if (normalized.isBlank()) return null
+        if (normalized.startsWith("../")) return null
+        if (normalized.contains("/../")) return null
+        return normalized
+    }
+
+    private fun String.toFileSystemPath(): String = replace('/', File.separatorChar)
+
     private fun buildWriteApkSubSteps(
         compileSteps: List<String> = emptyList(),
         includeStripNativeLibs: Boolean = false
@@ -339,7 +498,7 @@ class AmpleSession(
 
     private fun mergeDexNames(
         initialDexNames: List<String>,
-        result: PatcherResult
+        result: PatchesResult
     ): List<String> {
         val patchedDexNames = result.dexFiles
             .mapNotNull { it.name }
@@ -394,7 +553,6 @@ class AmpleSession(
 
     override fun close() {
         tempDir.deleteRecursively()
-        patcher.close()
     }
 
     companion object {

@@ -122,6 +122,7 @@ fun SelectedAppInfoScreen(
     val bundleRecommendationDetails by vm.bundleRecommendationDetailsFlow.collectAsStateWithLifecycle(emptyList())
     var showBundleRecommendationDialog by rememberSaveable { mutableStateOf(false) }
     var showMixedBundleDialog by rememberSaveable { mutableStateOf(false) }
+    var showMixedRevancedPatcherDialog by rememberSaveable { mutableStateOf(false) }
     var showPatchSummaryDialog by rememberSaveable { mutableStateOf(false) }
 
     val allowIncompatiblePatches by vm.prefs.disablePatchVersionCompatCheck.getAsState()
@@ -264,6 +265,10 @@ fun SelectedAppInfoScreen(
         composableScope.launch {
             if (patchBundleRepository.selectionHasMixedBundleTypes(patches)) {
                 showMixedBundleDialog = true
+                return@launch
+            }
+            if (patchBundleRepository.selectionHasMixedRevancedPatcherVersions(patches)) {
+                showMixedRevancedPatcherDialog = true
                 return@launch
             }
             if (!vm.hasSetRequiredOptions(patches)) {
@@ -552,6 +557,19 @@ fun SelectedAppInfoScreen(
             },
             title = { Text(stringResource(R.string.mixed_patch_bundles_title)) },
             text = { Text(stringResource(R.string.mixed_patch_bundles_description)) }
+        )
+    }
+
+    if (showMixedRevancedPatcherDialog) {
+        AlertDialogExtended(
+            onDismissRequest = { showMixedRevancedPatcherDialog = false },
+            confirmButton = {
+                TextButton(onClick = { showMixedRevancedPatcherDialog = false }) {
+                    Text(stringResource(R.string.close))
+                }
+            },
+            title = { Text(stringResource(R.string.mixed_revanced_patcher_versions_title)) },
+            text = { Text(stringResource(R.string.mixed_revanced_patcher_versions_description)) }
         )
     }
 

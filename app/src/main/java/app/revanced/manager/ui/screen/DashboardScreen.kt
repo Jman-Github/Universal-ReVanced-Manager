@@ -365,6 +365,7 @@ fun DashboardScreen(
     var showQuickSavedUninstallDialog by remember { mutableStateOf(false) }
     var showQuickUnmountDialog by remember { mutableStateOf(false) }
     var showQuickMixedBundleDialog by remember { mutableStateOf(false) }
+    var showQuickMixedRevancedPatcherDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(pagerState.settledPage, visibleTabs) {
         visibleTabs.getOrNull(pagerState.settledPage)?.let { page ->
@@ -974,6 +975,11 @@ fun DashboardScreen(
                     pendingQuickAction = null
                     return@LaunchedEffect
                 }
+                if (patchBundleRepository.selectionHasMixedRevancedPatcherVersions(selection)) {
+                    showQuickMixedRevancedPatcherDialog = true
+                    pendingQuickAction = null
+                    return@LaunchedEffect
+                }
                 val payload = actionApp.selectionPayload
                 val persistConfiguration = actionApp.installType != InstallType.SAVED
                 mainVm.selectApp(
@@ -1555,6 +1561,19 @@ fun DashboardScreen(
         )
     }
 
+    if (showQuickMixedRevancedPatcherDialog) {
+        AlertDialog(
+            onDismissRequest = { showQuickMixedRevancedPatcherDialog = false },
+            confirmButton = {
+                TextButton(onClick = { showQuickMixedRevancedPatcherDialog = false }) {
+                    Text(stringResource(R.string.close))
+                }
+            },
+            title = { Text(stringResource(R.string.mixed_revanced_patcher_versions_title)) },
+            text = { Text(stringResource(R.string.mixed_revanced_patcher_versions_description)) }
+        )
+    }
+
     Scaffold(
         topBar = {
             when {
@@ -2086,6 +2105,10 @@ fun DashboardScreen(
                                             }
                                             if (patchBundleRepository.selectionHasMixedBundleTypes(selection)) {
                                                 showQuickMixedBundleDialog = true
+                                                return@launch
+                                            }
+                                            if (patchBundleRepository.selectionHasMixedRevancedPatcherVersions(selection)) {
+                                                showQuickMixedRevancedPatcherDialog = true
                                                 return@launch
                                             }
                                             val payload = app.selectionPayload

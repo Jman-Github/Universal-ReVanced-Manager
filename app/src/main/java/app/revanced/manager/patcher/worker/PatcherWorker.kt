@@ -42,10 +42,12 @@ import app.revanced.manager.patcher.runtime.ProcessRuntime
 import app.revanced.manager.patcher.runtime.MemoryLimitConfig
 import app.revanced.manager.patcher.ample.AmpleBridgeFailureException
 import app.revanced.manager.patcher.morphe.MorpheBridgeFailureException
+import app.revanced.manager.patcher.revanced.Revanced22BridgeFailureException
 import app.revanced.manager.patcher.runtime.ample.AmpleBridgeRuntime
 import app.revanced.manager.patcher.runtime.ample.AmpleProcessRuntime
 import app.revanced.manager.patcher.runtime.morphe.MorpheBridgeRuntime
 import app.revanced.manager.patcher.runtime.morphe.MorpheProcessRuntime
+import app.revanced.manager.patcher.runtime.Revanced22BridgeRuntime
 import app.revanced.manager.patcher.runStep
 import app.revanced.manager.patcher.toRemoteError
 import app.revanced.manager.patcher.patch.PatchBundleType
@@ -458,6 +460,15 @@ class PatcherWorker(
 
             val bundleType = patchBundleRepository.selectionBundleType(args.selectedPatches)
                 ?: throw IllegalStateException("Cannot patch with mixed ReVanced, Morphe, or Ample bundles.")
+            if (
+                bundleType == PatchBundleType.REVANCED &&
+                patchBundleRepository.selectionHasMixedRevancedPatcherVersions(args.selectedPatches)
+            ) {
+                throw IllegalStateException(
+                    "Cannot patch with mixed ReVanced patcher versions. " +
+                        "Select either ReVanced v21 or v22 patches."
+                )
+            }
             val stripNativeLibs = prefs.stripUnusedNativeLibs.get()
             val skipUnneededSplits = prefs.skipUnneededSplitApks.get()
             val inputIsSplitArchive = SplitApkPreparer.isSplitArchive(inputFile)
@@ -537,11 +548,26 @@ class PatcherWorker(
                     )
                 }
                 PatchBundleType.REVANCED -> {
-                    val runtime: app.revanced.manager.patcher.runtime.Runtime = if (useProcessRuntime) {
-                        ProcessRuntime(applicationContext)
-                    } else {
-                        CoroutineRuntime(applicationContext)
+                    val useRevancedPatcher22 =
+                        patchBundleRepository.selectionUsesRevancedPatcher22(args.selectedPatches)
+                    args.logger.info(
+                        "ReVanced patcher version: ${
+                            if (useRevancedPatcher22) "22.0.0" else "21.0.0"
+                        }"
+                    )
+                    if (useRevancedPatcher22 && useProcessRuntime) {
+                        args.logger.warn(
+                            "ReVanced v22 runtime currently runs in-process; process runtime is skipped."
+                        )
                     }
+                    val runtime: app.revanced.manager.patcher.runtime.Runtime =
+                        if (useRevancedPatcher22) {
+                            Revanced22BridgeRuntime(applicationContext)
+                        } else if (useProcessRuntime) {
+                            ProcessRuntime(applicationContext)
+                        } else {
+                            CoroutineRuntime(applicationContext)
+                        }
                     activeRuntime = runtime
                     runtime.execute(
                         inputFile.absolutePath,
@@ -706,6 +732,24 @@ class PatcherWorker(
             Log.e(
                 tag,
                 "An exception occurred in the Ample bridge runtime while patching. ${e.originalStackTrace}".logFmt()
+            )
+            eventDispatcher(
+                ProgressEvent.Failed(
+                    null,
+                    RemoteError(
+                        type = e::class.java.name,
+                        message = e.message,
+                        stackTrace = e.originalStackTrace
+                    )
+                )
+            )
+            Result.failure(
+                workDataOf(PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(e.originalStackTrace))
+            )
+        } catch (e: Revanced22BridgeFailureException) {
+            Log.e(
+                tag,
+                "An exception occurred in the ReVanced v22 bridge runtime while patching. ${e.originalStackTrace}".logFmt()
             )
             eventDispatcher(
                 ProgressEvent.Failed(

@@ -15,6 +15,7 @@ import app.revanced.manager.domain.worker.BundleUpdateWebSocketCoordinator
 import app.revanced.manager.domain.worker.WorkerRepository
 import app.revanced.manager.patcher.ample.AmpleRuntimeBridge
 import app.revanced.manager.patcher.morphe.MorpheRuntimeBridge
+import app.revanced.manager.patcher.revanced.Revanced22RuntimeBridge
 import app.revanced.manager.network.service.HttpService
 import app.revanced.manager.util.AppForeground
 import app.revanced.manager.util.tag
@@ -74,6 +75,7 @@ class ManagerApplication : Application() {
         PatchListCatalog.initialize(this)
         MorpheRuntimeBridge.initialize(this)
         AmpleRuntimeBridge.initialize(this)
+        Revanced22RuntimeBridge.initialize(this)
 
         val pixels = 512
         Coil.setImageLoader(

@@ -38,9 +38,11 @@ class AmpleProcessRuntime(
     private val useMemoryOverride: Boolean = true
 ) : AmpleRuntime(context) {
     private val binderRef = AtomicReference<IAmplePatcherProcess?>()
+    private val eventHandlerRef = AtomicReference<IPatcherEvents?>()
 
     override fun cancel() {
         runCatching { binderRef.getAndSet(null)?.exit() }
+        eventHandlerRef.set(null)
     }
 
     private suspend fun awaitBinderConnection(): IAmplePatcherProcess {
@@ -80,6 +82,7 @@ class AmpleProcessRuntime(
     ) = coroutineScope {
         currentCoroutineContext()[Job]?.invokeOnCompletion {
             runCatching { binderRef.get()?.exit() }
+            eventHandlerRef.set(null)
         }
         onEvent(ProgressEvent.Started(app.revanced.manager.patcher.StepId.LoadPatches))
         val runtimeClassPath = AmpleRuntimeAssets.ensureRuntimeClassPath(context).absolutePath
@@ -159,6 +162,7 @@ class AmpleProcessRuntime(
                     patching.complete(Unit)
                 }
             }
+            eventHandlerRef.set(eventHandler)
 
             val parameters = AmpleParameters(
                 aaptPath = aaptPrimaryPath,
@@ -187,7 +191,11 @@ class AmpleProcessRuntime(
             binder.start(parameters, eventHandler)
         }
 
-        patching.await()
+        try {
+            patching.await()
+        } finally {
+            eventHandlerRef.set(null)
+        }
     }
 
     companion object : LibraryResolver() {

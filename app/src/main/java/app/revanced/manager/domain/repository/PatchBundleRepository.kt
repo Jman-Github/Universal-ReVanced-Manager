@@ -36,6 +36,7 @@ import app.revanced.manager.network.dto.ExternalBundleSnapshot
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.patcher.ample.AmpleRuntimeBridge
 import app.revanced.manager.patcher.morphe.MorpheRuntimeBridge
+import app.revanced.manager.patcher.revanced.Revanced22RuntimeBridge
 import app.revanced.manager.patcher.patch.PatchInfo
 import app.revanced.manager.patcher.patch.PatchBundle
 import app.revanced.manager.patcher.patch.PatchBundleInfo
@@ -139,6 +140,35 @@ class PatchBundleRepository(
 
     suspend fun selectionHasMixedBundleTypes(selection: PatchSelection): Boolean =
         selectionBundleTypes(selection).size > 1
+
+    suspend fun selectionHasMixedRevancedPatcherVersions(selection: PatchSelection): Boolean {
+        val activeSelection = selection.filterValues { it.isNotEmpty() }
+        if (activeSelection.isEmpty()) return false
+
+        val info = allBundlesInfoFlow.first()
+        var hasV21 = false
+        var hasV22 = false
+
+        activeSelection.keys.forEach { uid ->
+            if (info[uid]?.bundleType != PatchBundleType.REVANCED) return@forEach
+            when (readRevancedPatcherHint(uid)) {
+                RevancedPatcherVersion.V22 -> hasV22 = true
+                else -> hasV21 = true
+            }
+        }
+
+        return hasV21 && hasV22
+    }
+
+    suspend fun selectionUsesRevancedPatcher22(selection: PatchSelection): Boolean {
+        val selectedBundleIds = selection
+            .filterValues { it.isNotEmpty() }
+            .keys
+        if (selectedBundleIds.isEmpty()) return false
+        return selectedBundleIds.any { uid ->
+            readRevancedPatcherHint(uid) == RevancedPatcherVersion.V22
+        }
+    }
 
     fun scopedBundleInfoFlow(packageName: String, version: String?) = enabledBundlesInfoFlow.map {
         it.map { (_, bundleInfo) ->
@@ -840,7 +870,7 @@ class PatchBundleRepository(
         source: PatchBundleSource? = null
     ): Pair<PatchBundleType, List<PatchInfo>> {
         val bundlePath = bundle.patchesJar
-        val extension = File(bundlePath).extension.lowercase(Locale.US)
+        val extension = resolveBundleExtension(bundle, source)
         if (extension == "mpp") {
             return PatchBundleType.MORPHE to MorpheRuntimeBridge.loadMetadata(bundlePath)
         }
@@ -857,12 +887,12 @@ class PatchBundleRepository(
                     attributes.website
                 )
                     .filterNotNull()
-                    .any { value -> value.contains("ample", ignoreCase = true) }
+                    .any(::looksLikeAmpleMarker)
             } == true
         val ampleEndpointHint = source
             ?.asRemoteOrNull
             ?.endpoint
-            ?.contains("ample", ignoreCase = true) == true
+            ?.let(::looksLikeAmpleMarker) == true
         val localAmpleHint = source
             ?.takeIf { it.asRemoteOrNull == null }
             ?.let { bundleLooksAmple(bundlePath, it.uid) } == true
@@ -875,10 +905,46 @@ class PatchBundleRepository(
             }
         }
 
-        val revancedResult = runCatching { PatchBundle.Loader.metadata(bundle) }
-        if (revancedResult.isSuccess) {
-            return PatchBundleType.REVANCED to revancedResult.getOrThrow()
+        val preferredRevancedVersion = source?.uid
+            ?.let(::readRevancedPatcherHint)
+            ?: RevancedPatcherVersion.V21
+        val revancedVersionsToTry = buildList {
+            add(preferredRevancedVersion)
+            add(
+                when (preferredRevancedVersion) {
+                    RevancedPatcherVersion.V21 -> RevancedPatcherVersion.V22
+                    RevancedPatcherVersion.V22 -> RevancedPatcherVersion.V21
+                }
+            )
+        }.distinct()
+
+        val revancedFailures = linkedMapOf<RevancedPatcherVersion, Throwable>()
+        for ((index, version) in revancedVersionsToTry.withIndex()) {
+            val revancedResult = runCatching { loadRevancedMetadata(bundle, bundlePath, version) }
+            if (revancedResult.isSuccess) {
+                source?.uid?.let { uid ->
+                    persistRevancedPatcherHint(uid, version)
+                }
+                return PatchBundleType.REVANCED to revancedResult.getOrThrow()
+            }
+
+            val throwable = revancedResult.exceptionOrNull()
+            if (throwable != null) {
+                revancedFailures[version] = throwable
+                if (index < revancedVersionsToTry.lastIndex) {
+                    Log.w(
+                        tag,
+                        "Failed to load ReVanced metadata with patcher ${version.versionName}; retrying.",
+                        throwable
+                    )
+                }
+            }
         }
+
+        val revancedResult = Result.failure<List<PatchInfo>>(
+            revancedFailures.values.firstOrNull()
+                ?: IllegalStateException("Failed to load patch bundle metadata")
+        )
 
         if (extension == "rvp") {
             val ampleResult = runCatching { AmpleRuntimeBridge.loadMetadata(bundlePath) }
@@ -887,7 +953,10 @@ class PatchBundleRepository(
             }
 
             val error = IllegalStateException("Failed to load patch bundle metadata")
-            revancedResult.exceptionOrNull()?.let(error::addSuppressed)
+            revancedFailures.values.forEach(error::addSuppressed)
+            if (revancedFailures.isEmpty()) {
+                revancedResult.exceptionOrNull()?.let(error::addSuppressed)
+            }
             ampleResult.exceptionOrNull()?.let(error::addSuppressed)
             throw error
         }
@@ -903,10 +972,29 @@ class PatchBundleRepository(
         }
 
         val error = IllegalStateException("Failed to load patch bundle metadata")
-        revancedResult.exceptionOrNull()?.let(error::addSuppressed)
+        revancedFailures.values.forEach(error::addSuppressed)
+        if (revancedFailures.isEmpty()) {
+            revancedResult.exceptionOrNull()?.let(error::addSuppressed)
+        }
         morpheResult.exceptionOrNull()?.let(error::addSuppressed)
         ampleResult.exceptionOrNull()?.let(error::addSuppressed)
         throw error
+    }
+
+    private fun loadRevancedMetadata(
+        bundle: PatchBundle,
+        bundlePath: String,
+        version: RevancedPatcherVersion
+    ): List<PatchInfo> = when (version) {
+        RevancedPatcherVersion.V21 -> PatchBundle.Loader.metadata(bundle)
+        RevancedPatcherVersion.V22 -> Revanced22RuntimeBridge.loadMetadata(bundlePath)
+    }
+
+    private fun persistRevancedPatcherHint(uid: Int, version: RevancedPatcherVersion) {
+        when (version) {
+            RevancedPatcherVersion.V22 -> writeRevancedPatcherHint(uid, version)
+            RevancedPatcherVersion.V21 -> clearRevancedPatcherHint(uid)
+        }
     }
 
     private val ampleDetectionTokens = listOf(
@@ -914,11 +1002,56 @@ class PatchBundleRepository(
         "ample/revanced",
         "ample.revanced"
     )
+    private val ampleWordRegex = Regex("(^|[^a-z0-9])ample([^a-z0-9]|$)")
+
+    private fun looksLikeAmpleMarker(value: String?): Boolean {
+        val normalized = value
+            ?.trim()
+            ?.lowercase(Locale.US)
+            .orEmpty()
+        if (normalized.isBlank()) return false
+        if (ampleDetectionTokens.any(normalized::contains)) return true
+        return ampleWordRegex.containsMatchIn(normalized)
+    }
+
+    private fun resolveBundleExtension(
+        bundle: PatchBundle,
+        source: PatchBundleSource?
+    ): String? {
+        val sourceHint = source?.uid?.let(::readLocalBundleHint)
+        val candidates = sequenceOf(
+            source?.asRemoteOrNull?.endpoint,
+            sourceHint,
+            source?.name,
+            source?.displayName,
+            bundle.manifestAttributes?.source,
+            bundle.manifestAttributes?.website,
+            bundle.manifestAttributes?.name
+        )
+        return candidates
+            .mapNotNull(::extractBundleExtension)
+            .firstOrNull()
+    }
+
+    private fun extractBundleExtension(value: String?): String? {
+        val normalized = value
+            ?.trim()
+            .orEmpty()
+        if (normalized.isBlank()) return null
+        val candidate = normalized
+            .substringBefore('?')
+            .substringBefore('#')
+            .substringAfterLast('/')
+        val extension = candidate
+            .substringAfterLast('.', "")
+            .lowercase(Locale.US)
+        return extension.takeIf { it in supportedBundleExtensions }
+    }
 
     private fun bundleLooksAmple(bundlePath: String, localUid: Int?): Boolean {
         if (localUid != null) {
             val hint = readLocalBundleHint(localUid)
-            if (!hint.isNullOrBlank() && hint.contains("ample", ignoreCase = true)) {
+            if (looksLikeAmpleMarker(hint)) {
                 return true
             }
         }
@@ -954,6 +1087,24 @@ class PatchBundleRepository(
         val normalized = hint?.trim().takeIf { !it.isNullOrBlank() } ?: return
         val file = directoryOf(uid).resolve(LOCAL_BUNDLE_HINT_FILE)
         runCatching { file.writeText(normalized) }
+    }
+
+    private fun readRevancedPatcherHint(uid: Int): RevancedPatcherVersion? {
+        val file = directoryOf(uid).resolve(REVANCED_PATCHER_HINT_FILE)
+        if (!file.exists()) return null
+        val raw = runCatching { file.readText().trim() }.getOrNull().orEmpty()
+        return RevancedPatcherVersion.fromStorage(raw)
+    }
+
+    private fun writeRevancedPatcherHint(uid: Int, version: RevancedPatcherVersion) {
+        val file = directoryOf(uid).resolve(REVANCED_PATCHER_HINT_FILE)
+        runCatching { file.writeText(version.storageValue) }
+    }
+
+    private fun clearRevancedPatcherHint(uid: Int) {
+        val file = directoryOf(uid).resolve(REVANCED_PATCHER_HINT_FILE)
+        if (!file.exists()) return
+        runCatching { file.delete() }
     }
 
     private suspend fun loadBundleMetadata(
@@ -1707,9 +1858,7 @@ class PatchBundleRepository(
                         uid = uid,
                         displayName = existingProps?.displayName
                     )
-                    if (sourceNameHint?.contains("ample", ignoreCase = true) == true) {
-                        writeLocalBundleHint(uid, sourceNameHint)
-                    }
+                    writeLocalBundleHint(uid, sourceNameHint)
                     val localBundle = entity.load() as LocalPatchBundle
 
                     try {
@@ -2674,6 +2823,20 @@ class PatchBundleRepository(
         val usesUniversalFallback: Boolean
     )
 
+    private enum class RevancedPatcherVersion(
+        val versionName: String,
+        val storageValue: String
+    ) {
+        V21(versionName = "21.0.0", storageValue = "21"),
+        V22(versionName = "22.0.0", storageValue = "22");
+
+        companion object {
+            fun fromStorage(value: String): RevancedPatcherVersion? = entries.firstOrNull {
+                it.storageValue == value
+            }
+        }
+    }
+
     data class State(
         val sources: PersistentMap<Int, PatchBundleSource> = persistentMapOf(),
         val info: PersistentMap<Int, PatchBundleInfo.Global> = persistentMapOf()
@@ -2740,6 +2903,8 @@ class PatchBundleRepository(
         const val DEFAULT_SOURCE_UID = 0
         const val LOCAL_IMPORT_STEPS = 2
         const val LOCAL_BUNDLE_HINT_FILE = "bundle_hint.txt"
+        const val REVANCED_PATCHER_HINT_FILE = "revanced_patcher_hint.txt"
+        val supportedBundleExtensions = setOf("rvp", "mpp", "arp")
         const val REMOTE_BUNDLE_UPDATE_TIMEOUT_MS = 120_000L
         fun defaultSource() = PatchBundleEntity(
             uid = DEFAULT_SOURCE_UID,

@@ -32,12 +32,12 @@ val copyApkEditorAssets by tasks.registering(Copy::class) {
 }
 
 android {
-    namespace = "app.universal.revanced.manager.ample.runtime"
+    namespace = "app.universal.revanced.manager.revanced.runtime"
     compileSdk = 36
     buildToolsVersion = "35.0.1"
 
     defaultConfig {
-        applicationId = "app.universal.revanced.manager.ample.runtime"
+        applicationId = "app.universal.revanced.manager.revanced.runtime"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
@@ -92,20 +92,10 @@ android {
 }
 
 dependencies {
-    implementation(libs.ample.patcher) {
+    implementation(libs.revanced.patcher.v22) {
         exclude(group = "xmlpull", module = "xmlpull")
         exclude(group = "xpp3", module = "xpp3")
     }
-    implementation(libs.ample.library) {
-        exclude(group = "xmlpull", module = "xmlpull")
-        exclude(group = "xpp3", module = "xpp3")
-        exclude(group = "app.revanced", module = "revanced-patcher")
-    }
-    implementation(libs.smali.dexlib2)
-    implementation(libs.smali.util)
-    implementation(libs.smali.core)
-    implementation(libs.smali.baksmali)
-    implementation(libs.xpp3)
     apkEditorLib(files("$rootDir/libs/APKEditor-1.4.7.jar"))
     compileOnly(files("$rootDir/libs/APKEditor-1.4.7.jar"))
     implementation("org.jetbrains.kotlin:kotlin-reflect")
@@ -120,3 +110,4 @@ tasks.matching { it.name.endsWith("Assets") && it.name.startsWith("merge") }.con
 tasks.matching { it.name.contains("lintVital", ignoreCase = true) }.configureEach {
     dependsOn(copyApkEditorAssets)
 }
+

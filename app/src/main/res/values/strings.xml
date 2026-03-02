@@ -124,6 +124,8 @@
     <string name="no_patches_selected">No patches selected</string>
     <string name="mixed_patch_bundles_title">Mixed patch bundles</string>
     <string name="mixed_patch_bundles_description">ReVanced (.rvp), Ample (.rvp), and Morphe (.mpp) patches cannot be combined. Select patches from only one bundle type. If you want to use multiple, you will have to patch a second time using the other patches you want.</string>
+    <string name="mixed_revanced_patcher_versions_title">Mixed ReVanced patcher versions</string>
+    <string name="mixed_revanced_patcher_versions_description">ReVanced patches built for different patcher versions cannot be combined. ReVanced v21 and v22 use different patcher versions, so select patches from only one ReVanced patcher version.</string>
     <string name="network_unavailable_warning">Your device is not connected to the internet. Downloading will fail later.</string>
     <string name="network_metered_warning">You are currently on a metered connection. Data charges from your service provider may apply.</string>
     <string name="apk_source_selector_item">Select APK source</string>

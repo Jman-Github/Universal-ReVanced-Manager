@@ -1,29 +1,40 @@
-package app.revanced.manager.patcher.ample
+package app.revanced.manager.patcher.revanced
 
 import app.revanced.patcher.patch.Patch
-import app.revanced.patcher.patch.loadPatchesFromDex
+import app.revanced.patcher.patch.loadPatches
 import java.io.File
 import java.util.jar.JarFile
 
-object AmplePatchBundleLoader {
-    fun loadBundle(bundlePath: String): Collection<Patch<*>> {
+object RevancedPatchBundleLoader {
+    fun loadBundle(bundlePath: String): Collection<Patch> {
         validateDexEntries(bundlePath)
-        val optimizedDexDirectory = optimizedDexDirectory(bundlePath)
-        val patchFiles = runCatching {
-            loadPatchesFromDex(setOf(File(bundlePath)), optimizedDexDirectory).byPatchesFile
+        val bundleFile = File(bundlePath)
+        val loadFailures = mutableListOf<Throwable>()
+        val loadedPatches = runCatching {
+            loadPatches(
+                patchesFiles = arrayOf(bundleFile),
+                onFailedToLoad = { _, throwable ->
+                    loadFailures += throwable
+                }
+            )
         }.getOrElse { error ->
             throw IllegalStateException("Patch bundle is corrupted or incomplete", error)
         }
-        if (patchFiles.isEmpty()) {
-            throw IllegalStateException("Unexpected patch bundle load result for $bundlePath")
+
+        if (loadFailures.isNotEmpty()) {
+            val primary = loadFailures.first()
+            val wrapped = IllegalStateException("Patch bundle is corrupted or incomplete", primary)
+            loadFailures.drop(1).forEach(wrapped::addSuppressed)
+            throw wrapped
         }
 
-        val patches = patchFiles.values
-            .asSequence()
-            .flatten()
-            .toList()
+        val patchFiles = loadedPatches.patchesByFile
+        val patches = patchFiles[bundleFile]
+            ?: patchFiles.entries.firstOrNull { it.key.absolutePath == bundleFile.absolutePath }?.value
+            ?: loadedPatches
+
         if (patches.isEmpty()) {
-            throw IllegalStateException("Patch bundle contains no patches: $bundlePath")
+            throw IllegalStateException("Unexpected patch bundle load result for $bundlePath")
         }
 
         return patches
@@ -53,8 +64,4 @@ object AmplePatchBundleLoader {
             }
         }
     }
-
-    private fun optimizedDexDirectory(bundlePath: String): File? = runCatching {
-        File(bundlePath).absoluteFile.parentFile?.resolve("oat")?.apply { mkdirs() }
-    }.getOrNull()
 }

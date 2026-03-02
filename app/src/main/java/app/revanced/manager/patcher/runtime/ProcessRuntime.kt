@@ -41,9 +41,11 @@ import org.koin.core.component.inject
 class ProcessRuntime(private val context: Context) : Runtime(context) {
     private val pm: PM by inject()
     private val binderRef = AtomicReference<IPatcherProcess?>()
+    private val eventHandlerRef = AtomicReference<IPatcherEvents?>()
 
     override fun cancel() {
         runCatching { binderRef.getAndSet(null)?.exit() }
+        eventHandlerRef.set(null)
     }
 
     private suspend fun awaitBinderConnection(): IPatcherProcess {
@@ -83,6 +85,7 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
     ) = coroutineScope {
         currentCoroutineContext()[Job]?.invokeOnCompletion {
             runCatching { binderRef.get()?.exit() }
+            eventHandlerRef.set(null)
         }
         // Get the location of our own Apk.
         val managerBaseApk = pm.getPackageInfo(context.packageName)!!.applicationInfo!!.sourceDir
@@ -166,6 +169,7 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
                     patching.complete(Unit)
                 }
             }
+            eventHandlerRef.set(eventHandler)
 
             val parameters = Parameters(
                 aaptPath = aaptPrimaryPath,
@@ -190,7 +194,11 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
         }
 
         // Wait until patching finishes.
-        patching.await()
+        try {
+            patching.await()
+        } finally {
+            eventHandlerRef.set(null)
+        }
     }
 
     companion object : LibraryResolver() {

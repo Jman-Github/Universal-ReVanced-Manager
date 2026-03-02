@@ -101,6 +101,10 @@ dependencies {
         exclude(group = "xpp3", module = "xpp3")
     }
     implementation(libs.xpp3)
+    implementation(libs.smali.dexlib2)
+    implementation(libs.smali.util)
+    implementation(libs.smali.core)
+    implementation(libs.smali.baksmali)
     apkEditorLib(files("$rootDir/libs/APKEditor-1.4.7.jar"))
     implementation(files(strippedApkEditorLib))
     implementation("androidx.documentfile:documentfile:1.0.1")
@@ -391,8 +395,19 @@ tasks {
         rename { "ample-runtime.apk" }
     }
 
+    val copyRevancedRuntimeV22Apk by registering(Copy::class) {
+        val runtimeProject = project(":revanced-runtime-v22")
+        val runtimeApk = runtimeProject.layout.buildDirectory.file(
+            "outputs/apk/release/revanced-runtime-v22-release.apk"
+        )
+        dependsOn("${runtimeProject.path}:assembleRelease")
+        from(runtimeApk)
+        into(ampleRuntimeAssetsDir)
+        rename { "revanced-runtime-v22.apk" }
+    }
+
     named("preBuild") {
-        dependsOn(copyMorpheRuntimeApk, copyAmpleRuntimeApk)
+        dependsOn(copyMorpheRuntimeApk, copyAmpleRuntimeApk, copyRevancedRuntimeV22Apk)
     }
 
 }

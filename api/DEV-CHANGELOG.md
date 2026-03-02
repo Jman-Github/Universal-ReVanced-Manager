@@ -1,4 +1,4 @@
-# v1.8.1-dev.03 (2026-02-28)
+# v1.8.1-dev.03 (2026-03-02)
 
 
 # Features
@@ -6,6 +6,7 @@
 - Corrected a few inconsistencies in Settings https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/240
 - Aligned patcher step naming in the notification with the steps on the patcher screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/253
 - Added a loading screen that appears when selecting an app from storage from the `Select an app` screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/255
+- Added support for the ReVanced Patcher v22 while keeping backwards compatibility with v21 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/252
 
 
 # Bug fixes
@@ -18,6 +19,7 @@
 - Fixed issues with the patching notification not appearing immediately when patching starts https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/256
 - Fixed an issue where the patching notification would disappear before patching was actually finished https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/257
 - Fixed an issue where using the Android Documents Provider to export apps from `Downloads` would cause a crash https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/258
+- Fixed an issue where the patcher process would die for some users https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/267
 
 
 # v1.8.1-dev.03 (2026-02-23)

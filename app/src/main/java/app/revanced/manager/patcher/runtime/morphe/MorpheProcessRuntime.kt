@@ -39,9 +39,11 @@ class MorpheProcessRuntime(
     private val useMemoryOverride: Boolean = true
 ) : MorpheRuntime(context) {
     private val binderRef = AtomicReference<IMorphePatcherProcess?>()
+    private val eventHandlerRef = AtomicReference<IPatcherEvents?>()
 
     override fun cancel() {
         runCatching { binderRef.getAndSet(null)?.exit() }
+        eventHandlerRef.set(null)
     }
 
     private suspend fun awaitBinderConnection(): IMorphePatcherProcess {
@@ -81,6 +83,7 @@ class MorpheProcessRuntime(
     ) = coroutineScope {
         currentCoroutineContext()[Job]?.invokeOnCompletion {
             runCatching { binderRef.get()?.exit() }
+            eventHandlerRef.set(null)
         }
         onEvent(ProgressEvent.Started(app.revanced.manager.patcher.StepId.LoadPatches))
         val runtimeClassPath = MorpheRuntimeAssets.ensureRuntimeClassPath(context).absolutePath
@@ -164,6 +167,7 @@ class MorpheProcessRuntime(
                     patching.complete(Unit)
                 }
             }
+            eventHandlerRef.set(eventHandler)
 
             val parameters = MorpheParameters(
                 aaptPath = aaptPrimaryPath,
@@ -187,7 +191,11 @@ class MorpheProcessRuntime(
             binder.start(parameters, eventHandler)
         }
 
-        patching.await()
+        try {
+            patching.await()
+        } finally {
+            eventHandlerRef.set(null)
+        }
     }
 
     companion object : LibraryResolver() {
