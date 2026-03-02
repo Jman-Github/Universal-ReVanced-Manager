@@ -35,6 +35,7 @@
 - Added a toggle in Settings > Patcher that disables/enables the expansion of the main categories on the patcher screen that are running https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/201
 - Corrected a few inconsistencies in Settings https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/240
 - Aligned patcher step naming in the notification with the steps on the patcher screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/253
+- Added a loading screen that appears when selecting an app from storage from the `Select an app` screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/255
 
 
 # Bug fixes

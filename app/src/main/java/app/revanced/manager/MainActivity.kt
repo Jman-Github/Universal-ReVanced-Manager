@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
+import androidx.navigation.NavOptionsBuilder
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.navigation
@@ -311,14 +312,17 @@ private fun ReVancedManager(
     val context = LocalContext.current
 
     EventEffect(vm.appSelectFlow) { params ->
-        navController.popBackStack(SelectedApplicationInfo.Main, inclusive = true)
-        if (params.returnToDashboard) {
-            navController.popBackStack(Dashboard, inclusive = false)
-        }
         navController.navigateComplex(
             SelectedApplicationInfo,
             params
-        )
+        ) {
+            if (params.returnToDashboard) {
+                popUpTo<Dashboard> { inclusive = false }
+            } else {
+                popUpTo<SelectedApplicationInfo.Main> { inclusive = true }
+            }
+            launchSingleTop = true
+        }
     }
 
     EventEffect(vm.bundleDeepLinkFlow) { deepLink ->
@@ -757,9 +761,10 @@ private fun NavController.navGraphEntry(entry: NavBackStackEntry) =
 // Androidx Navigation does not support storing complex types in route objects, so we have to store them inside the saved state handle of the back stack entry instead.
 private fun <T : Parcelable, R : ComplexParameter<T>> NavController.navigateComplex(
     route: R,
-    data: T
+    data: T,
+    options: NavOptionsBuilder.() -> Unit = {}
 ) {
-    navigate(route)
+    navigate(route, options)
     getBackStackEntry(route).savedStateHandle["args"] = data
 }
 

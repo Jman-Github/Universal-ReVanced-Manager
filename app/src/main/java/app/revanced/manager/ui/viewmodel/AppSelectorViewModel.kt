@@ -49,8 +49,10 @@ class AppSelectorViewModel(
     private val splitWorkspace = fs.tempDir
     val appList = pm.appList
 
-    private val storageSelectionChannel = Channel<SelectedApp.Local>()
+    private val storageSelectionChannel = Channel<SelectedApp.Local>(Channel.BUFFERED)
     val storageSelectionFlow = storageSelectionChannel.receiveAsFlow()
+    var storageSelectionInProgress by mutableStateOf(false)
+        private set
 
     val suggestedAppVersions = patchBundleRepository.suggestedVersions.flowOn(Dispatchers.Default)
     val bundleSuggestionsByApp =
@@ -132,28 +134,66 @@ class AppSelectorViewModel(
 
     fun continueWithUniversalFallback() = viewModelScope.launch {
         val selectedApp = universalFallbackDialogSubject ?: return@launch
+        storageSelectionInProgress = true
         dismissUniversalFallbackDialog()
         dismissNonSuggestedVersionDialog()
-        storageSelectionChannel.send(selectedApp)
+        runCatching {
+            storageSelectionChannel.send(selectedApp)
+        }.onFailure {
+            storageSelectionInProgress = false
+            app.toast(app.getString(R.string.failed_to_load_apk))
+        }
+    }
+
+    fun consumeStorageSelectionResult() {
+        storageSelectionInProgress = false
     }
 
     fun handleStorageResult(uri: Uri) = viewModelScope.launch {
-        when (val loadResult = withContext(Dispatchers.IO) {
-            loadSelectedFile(uri)
-        }) {
+        storageSelectionInProgress = true
+        val loadResult = runCatching {
+            withContext(Dispatchers.IO) {
+                loadSelectedFile(uri)
+            }
+        }.getOrElse {
+            storageSelectionInProgress = false
+            app.toast(app.getString(R.string.failed_to_load_apk))
+            return@launch
+        }
+        when (loadResult) {
             is StorageApkLoadResult.Success -> handleSelectedStorageApp(loadResult.app)
-            StorageApkLoadResult.InvalidType -> app.toast(app.getString(R.string.selected_file_not_supported_apk))
-            StorageApkLoadResult.Failed -> app.toast(app.getString(R.string.failed_to_load_apk))
+            StorageApkLoadResult.InvalidType -> {
+                storageSelectionInProgress = false
+                app.toast(app.getString(R.string.selected_file_not_supported_apk))
+            }
+            StorageApkLoadResult.Failed -> {
+                storageSelectionInProgress = false
+                app.toast(app.getString(R.string.failed_to_load_apk))
+            }
         }
     }
 
     fun handleStorageFile(file: File) = viewModelScope.launch {
-        when (val loadResult = withContext(Dispatchers.IO) {
-            loadSelectedFile(file)
-        }) {
+        storageSelectionInProgress = true
+        val loadResult = runCatching {
+            withContext(Dispatchers.IO) {
+                loadSelectedFile(file)
+            }
+        }.getOrElse {
+            storageSelectionInProgress = false
+            app.toast(app.getString(R.string.failed_to_load_apk))
+            return@launch
+        }
+        when (loadResult) {
             is StorageApkLoadResult.Success -> handleSelectedStorageApp(loadResult.app)
-            StorageApkLoadResult.InvalidType -> app.toast(app.getString(R.string.selected_file_not_supported_apk))
-            StorageApkLoadResult.Failed -> app.toast(app.getString(R.string.failed_to_load_apk))
+            StorageApkLoadResult.InvalidType -> {
+                storageSelectionInProgress = false
+                app.toast(app.getString(R.string.selected_file_not_supported_apk))
+            }
+            StorageApkLoadResult.Failed -> {
+                storageSelectionInProgress = false
+                app.toast(app.getString(R.string.failed_to_load_apk))
+            }
         }
     }
 
@@ -169,10 +209,12 @@ class AppSelectorViewModel(
         }
 
         if (assessment.canContinueWithUniversalFallback) {
+            storageSelectionInProgress = false
             universalFallbackDialogSubject = selectedApp
             universalFallbackDialogSuggestedVersion = assessment.suggestedVersion
             dismissNonSuggestedVersionDialog()
         } else {
+            storageSelectionInProgress = false
             nonSuggestedVersionDialogSubject = selectedApp
             nonSuggestedVersionDialogSuggestedVersion = assessment.suggestedVersion
             nonSuggestedVersionDialogRequiresUniversalEnabled =

@@ -7,6 +7,7 @@ import android.content.pm.PackageInfo
 import android.net.Uri
 import android.os.Build
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -72,6 +73,7 @@ import app.revanced.manager.ui.component.AppLabel
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.CheckedFilterChip
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
+import app.revanced.manager.ui.component.LoadingIndicator
 import app.revanced.manager.ui.component.ShimmerBox
 import app.revanced.manager.ui.component.NonSuggestedVersionDialog
 import app.revanced.manager.ui.component.UniversalFallbackVersionDialog
@@ -116,6 +118,7 @@ fun AppSelectorScreen(
     val coroutineScope = rememberCoroutineScope()
 
     EventEffect(flow = vm.storageSelectionFlow) {
+        vm.consumeStorageSelectionResult()
         onStorageSelect(it)
         if (returnToDashboardOnStorage) {
             onBackClick()
@@ -489,6 +492,22 @@ fun AppSelectorScreen(
                     }
                 }
             }
+        }
+    }
+
+    if (vm.storageSelectionInProgress) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.45f)),
+            contentAlignment = Alignment.Center
+        ) {
+            LoadingIndicator(
+                modifier = Modifier.size(56.dp),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.35f),
+                strokeWidth = 4.dp
+            )
         }
     }
 }

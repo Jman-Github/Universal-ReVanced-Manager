@@ -46,7 +46,7 @@ class MainViewModel(
     val prefs: PreferencesManager,
     private val json: Json
 ) : ViewModel() {
-    private val appSelectChannel = Channel<SelectedApplicationInfo.ViewModelParams>()
+    private val appSelectChannel = Channel<SelectedApplicationInfo.ViewModelParams>(Channel.BUFFERED)
     val appSelectFlow = appSelectChannel.receiveAsFlow()
     private val legacyImportActivityChannel = Channel<Intent>()
     val legacyImportActivityFlow = legacyImportActivityChannel.receiveAsFlow()

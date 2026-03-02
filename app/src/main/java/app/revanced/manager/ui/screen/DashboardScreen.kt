@@ -259,6 +259,7 @@ fun DashboardScreen(
     val downloaderPlugins by vm.loadedDownloaderPlugins.collectAsStateWithLifecycle(emptyList())
     val storageRoots = remember { fs.storageRoots() }
     EventEffect(flow = storageVm.storageSelectionFlow) { selected ->
+        storageVm.consumeStorageSelectionResult()
         onStorageSelect(selected)
     }
     var showStorageDialog by rememberSaveable { mutableStateOf(false) }
