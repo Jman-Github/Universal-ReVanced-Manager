@@ -161,12 +161,13 @@ class PatchBundleRepository(
     }
 
     suspend fun selectionUsesRevancedPatcher22(selection: PatchSelection): Boolean {
-        val selectedBundleIds = selection
-            .filterValues { it.isNotEmpty() }
-            .keys
-        if (selectedBundleIds.isEmpty()) return false
-        return selectedBundleIds.any { uid ->
-            readRevancedPatcherHint(uid) == RevancedPatcherVersion.V22
+        val activeSelection = selection.filterValues { it.isNotEmpty() }
+        if (activeSelection.isEmpty()) return false
+
+        val info = allBundlesInfoFlow.first()
+        return activeSelection.keys.any { uid ->
+            info[uid]?.bundleType == PatchBundleType.REVANCED &&
+                readRevancedPatcherHint(uid) == RevancedPatcherVersion.V22
         }
     }
 

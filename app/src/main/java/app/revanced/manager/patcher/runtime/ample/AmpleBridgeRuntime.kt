@@ -21,10 +21,24 @@ class AmpleBridgeRuntime(context: Context) : AmpleRuntime(context) {
         stripNativeLibs: Boolean,
         skipUnneededSplits: Boolean,
     ) {
-        val configs = bundles().map { (bundleUid, bundle) ->
+        val activeSelectedPatches = selectedPatches.filterValues { it.isNotEmpty() }
+        val selectedBundleIds = activeSelectedPatches.keys
+        val bundlesByUid = bundles()
+        val selectedBundlesByUid = bundlesByUid.filterKeys { it in selectedBundleIds }
+        val staleBundleIds = selectedBundleIds - selectedBundlesByUid.keys
+        if (staleBundleIds.isNotEmpty()) {
+            logger.warn("Ignoring missing patch bundle IDs in selection: ${staleBundleIds.joinToString(",")}")
+        }
+        if (activeSelectedPatches.isNotEmpty() && selectedBundlesByUid.isEmpty()) {
+            throw IllegalArgumentException(
+                "Selected patches are unavailable. Re-open patch selection and select patches again."
+            )
+        }
+
+        val configs = selectedBundlesByUid.map { (bundleUid, bundle) ->
             mapOf(
                 "bundlePath" to bundle.patchesJar,
-                "patches" to selectedPatches[bundleUid].orEmpty().toList(),
+                "patches" to activeSelectedPatches[bundleUid].orEmpty().toList(),
                 "options" to options[bundleUid].orEmpty()
             )
         }

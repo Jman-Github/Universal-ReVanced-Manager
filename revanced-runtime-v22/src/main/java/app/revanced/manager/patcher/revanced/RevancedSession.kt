@@ -7,7 +7,6 @@ import app.revanced.manager.patcher.runStep
 import app.revanced.manager.patcher.toRemoteError
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.patcher.util.NativeLibStripper
-import app.revanced.manager.patcher.util.XmlSurrogateSanitizer
 import app.revanced.patcher.PatchesResult
 import app.revanced.patcher.patcher
 import app.revanced.patcher.patch.Patch
@@ -76,7 +75,7 @@ class RevancedSession(
             startPatch(0)
         }
 
-        return patcher { result ->
+        val patchResult = patcher { result ->
             val patch = result.patch
             val exception = result.exception
             val index = indexByPatch[patch] ?: return@patcher
@@ -116,6 +115,15 @@ class RevancedSession(
                 startPatch(nextIndex)
             }
         }
+
+        while (nextIndex < patches.size) {
+            startPatch(nextIndex)
+            onEvent(ProgressEvent.Completed(StepId.ExecutePatch(nextIndex)))
+            logger.info("${patchNameAt(nextIndex)} succeeded")
+            nextIndex += 1
+        }
+
+        return patchResult
     }
 
     private suspend fun executePatchesOnce(orderedPatches: RevancedPatchList): PatchesResult {
@@ -199,6 +207,11 @@ class RevancedSession(
             executePatchesWithFrameworkRecovery(orderedPatches)
         }
 
+        // Ensure patch rows are finalized before write/sign steps begin.
+        orderedPatches.indices.forEach { index ->
+            onEvent(ProgressEvent.Completed(StepId.ExecutePatch(index)))
+        }
+
         onEvent(
             ProgressEvent.Progress(
                 stepId = StepId.WriteAPK,
@@ -225,7 +238,6 @@ class RevancedSession(
                     )
                 )
                 logger.info("Writing patched files...")
-                XmlSurrogateSanitizer.sanitize(tempDir.resolve("apk"), logger)
                 val updatedDexNames = mergeDexNames(initialDexNames, patchResult)
                 if (updatedDexNames != initialDexNames) {
                     onEvent(

@@ -83,13 +83,34 @@ object SplitApkPreparer {
             }
             onSubSteps?.invoke(buildSplitSubSteps(mergeOrder, skippedModules, stripNativeLibs))
 
-            Merger.merge(
-                apkDir = modulesDir.toPath(),
-                outputApk = mergedApk,
-                skipModules = skippedModules,
-                onProgress = onProgress,
-                sortApkEntries = sortMergedApkEntries
-            )
+            try {
+                Merger.merge(
+                    apkDir = modulesDir.toPath(),
+                    outputApk = mergedApk,
+                    skipModules = skippedModules,
+                    onProgress = onProgress,
+                    sortApkEntries = sortMergedApkEntries
+                )
+            } catch (error: Throwable) {
+                val retrySkippedModules =
+                    buildRetrySkippedModules(mergeOrder, skippedModules, supportedTokens)
+                if (!shouldRetryMergeWithDeviceFiltering(error, skippedModules, retrySkippedModules)) {
+                    throw error
+                }
+                logger.warn(
+                    "Split merge failed (${error.message ?: error::class.java.simpleName}). " +
+                        "Retrying with device-targeted split filtering."
+                )
+                onProgress?.invoke("Retrying split merge with device-targeted split filtering")
+                onSubSteps?.invoke(buildSplitSubSteps(mergeOrder, retrySkippedModules, stripNativeLibs))
+                Merger.merge(
+                    apkDir = modulesDir.toPath(),
+                    outputApk = mergedApk,
+                    skipModules = retrySkippedModules,
+                    onProgress = onProgress,
+                    sortApkEntries = sortMergedApkEntries
+                )
+            }
 
             if (stripNativeLibs) {
                 onProgress?.invoke("Stripping native libraries")
@@ -167,6 +188,49 @@ object SplitApkPreparer {
                 .flatMap { abi -> buildAbiTokens(abi) }
                 .map { it.lowercase(Locale.ROOT) }
                 .toSet()
+
+    private fun buildRetrySkippedModules(
+        moduleNames: List<String>,
+        currentSkipped: Set<String>,
+        supportedTokens: Set<String>
+    ): Set<String> {
+        val localeTokens = deviceLocaleTokens()
+        val densityQualifier = deviceDensityQualifier()
+        return buildSet {
+            addAll(currentSkipped)
+            // Keep only ABI splits relevant to the current device on retry.
+            addAll(moduleNames.filter { shouldSkipModule(it, supportedTokens) })
+            // Keep only locale/density splits relevant to the current device on retry.
+            addAll(
+                moduleNames.filter {
+                    shouldSkipModuleForDevice(
+                        moduleName = it,
+                        localeTokens = localeTokens,
+                        densityQualifier = densityQualifier
+                    )
+                }
+            )
+        }
+    }
+
+    private fun shouldRetryMergeWithDeviceFiltering(
+        error: Throwable,
+        currentSkipped: Set<String>,
+        retrySkipped: Set<String>
+    ): Boolean {
+        if (retrySkipped == currentSkipped) return false
+        val reason = buildString {
+            append(error.message.orEmpty())
+            append(' ')
+            append(error.cause?.message.orEmpty())
+        }.lowercase(Locale.ROOT)
+        return reason.contains("(137)") ||
+            reason.contains("process failed (137)") ||
+            reason.contains("sigkill") ||
+            reason.contains("out of memory") ||
+            reason.contains("oom") ||
+            reason.contains("(134)")
+    }
 
     private fun buildAbiTokens(abi: String): Set<String> {
         val normalized = abi.lowercase(Locale.ROOT)

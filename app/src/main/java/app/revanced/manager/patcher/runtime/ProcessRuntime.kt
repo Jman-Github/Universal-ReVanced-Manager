@@ -171,6 +171,20 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
             }
             eventHandlerRef.set(eventHandler)
 
+            val activeSelectedPatches = selectedPatches.filterValues { it.isNotEmpty() }
+            val selectedBundleIds = activeSelectedPatches.keys
+            val bundlesByUid = bundles()
+            val selectedBundlesByUid = bundlesByUid.filterKeys { it in selectedBundleIds }
+            val staleBundleIds = selectedBundleIds - selectedBundlesByUid.keys
+            if (staleBundleIds.isNotEmpty()) {
+                logger.warn("Ignoring missing patch bundle IDs in selection: ${staleBundleIds.joinToString(",")}")
+            }
+            if (activeSelectedPatches.isNotEmpty() && selectedBundlesByUid.isEmpty()) {
+                throw IllegalArgumentException(
+                    "Selected patches are unavailable. Re-open patch selection and select patches again."
+                )
+            }
+
             val parameters = Parameters(
                 aaptPath = aaptPrimaryPath,
                 aaptFallbackPath = aaptFallbackPath,
@@ -179,10 +193,10 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
                 packageName = packageName,
                 inputFile = inputFile,
                 outputFile = outputFile,
-                configurations = bundles().map { (uid, bundle) ->
+                configurations = selectedBundlesByUid.map { (uid, bundle) ->
                     PatchConfiguration(
                         bundle,
-                        selectedPatches[uid].orEmpty(),
+                        activeSelectedPatches[uid].orEmpty(),
                         options[uid].orEmpty()
                     )
                 },

@@ -12,6 +12,24 @@ plugins {
 val apkEditorLib by configurations.creating
 val apkEditorAssetsDir = layout.buildDirectory.dir("generated/apkeditor-assets")
 
+val strippedApkEditorLib by tasks.registering(Jar::class) {
+    archiveFileName.set("APKEditor-android.jar")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    doFirst {
+        from(apkEditorLib.resolve().map { zipTree(it) })
+    }
+    exclude(
+        "android/**",
+        "org/xmlpull/**",
+        "antlr/**",
+        "org/antlr/**",
+        "com/beust/jcommander/**",
+        "javax/annotation/**",
+        "smali.properties",
+        "baksmali.properties"
+    )
+}
+
 val apkEditorMergeJar by tasks.registering(Jar::class) {
     archiveFileName.set("apkeditor-merge.jar")
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
@@ -97,7 +115,7 @@ dependencies {
         exclude(group = "xpp3", module = "xpp3")
     }
     apkEditorLib(files("$rootDir/libs/APKEditor-1.4.7.jar"))
-    compileOnly(files("$rootDir/libs/APKEditor-1.4.7.jar"))
+    implementation(files(strippedApkEditorLib))
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     compileOnly(libs.hidden.api.stub)

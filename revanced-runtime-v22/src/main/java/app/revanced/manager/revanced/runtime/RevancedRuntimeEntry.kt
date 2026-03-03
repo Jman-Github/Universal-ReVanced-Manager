@@ -21,7 +21,10 @@ import java.io.OutputStream
 import java.io.PrintStream
 import java.security.MessageDigest
 import java.util.ArrayDeque
+import java.util.Collections
 import java.util.LinkedHashMap
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.logging.Handler
 import java.util.logging.Level
 import java.util.logging.LogRecord
@@ -43,14 +46,31 @@ object RevancedRuntimeEntry {
 
     @JvmStatic
     fun runPatcher(params: Map<String, Any?>, callback: RevancedRuntimeCallback): String? {
-        fun onEvent(event: ProgressEvent) = callback.event(event.toMap())
+        val writeApkActive = AtomicBoolean(false)
+        fun onEvent(event: ProgressEvent) {
+            when (event.stepId) {
+                StepId.WriteAPK -> when (event) {
+                    is ProgressEvent.Started,
+                    is ProgressEvent.Progress -> writeApkActive.set(true)
+                    is ProgressEvent.Completed,
+                    is ProgressEvent.Failed -> writeApkActive.set(false)
+                }
+
+                StepId.SignAPK -> if (event is ProgressEvent.Started) {
+                    writeApkActive.set(false)
+                }
+                else -> Unit
+            }
+            callback.event(event.toMap())
+        }
 
         val dexCompilePattern =
             Regex("(Compiling|Compiled)\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
         val dexWritePattern =
             Regex("Write\\s+\\[[^\\]]+\\]\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
-        val seenDexCompiles = mutableSetOf<String>()
+        val seenDexCompiles = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
         fun handleDexCompileLine(rawLine: String) {
+            if (!writeApkActive.get()) return
             val line = rawLine.trim()
             if (line.isEmpty()) return
             val match = dexCompilePattern.find(line)
@@ -84,6 +104,10 @@ object RevancedRuntimeEntry {
             ?: return "Missing packageName parameter."
         val apkEditorJarPath = params["apkEditorJarPath"] as? String
         val apkEditorMergeJarPath = params["apkEditorMergeJarPath"] as? String
+        val runtimeClassPath = params["runtimeClassPath"] as? String
+        val propOverridePath = params["propOverridePath"] as? String
+        val mergeMemoryLimitMb = (params["mergeMemoryLimitMb"] as? Number)?.toInt()
+        val appProcessPath = params["appProcessPath"] as? String
         val inputFile = params["inputFile"] as? String
             ?: return "Missing inputFile parameter."
         val outputFile = params["outputFile"] as? String
@@ -92,11 +116,21 @@ object RevancedRuntimeEntry {
         val skipUnneededSplits = params["skipUnneededSplits"] as? Boolean ?: false
         val configurations = params["configurations"] as? List<*> ?: emptyList<Any>()
 
+        logger.info(
+            "Split merge runtime: appProcess=${appProcessPath ?: "auto"} " +
+                "memoryLimit=${mergeMemoryLimitMb?.let { "${it}MB" } ?: "default"} " +
+                "propOverride=${if (propOverridePath.isNullOrBlank()) "disabled" else "enabled"}"
+        )
+
         val androidDataDir = File(cacheDir, "apkeditor-android-data").absolutePath
         ApkEditorMergeRuntime.configure(
             apkEditorJarPath,
             apkEditorMergeJarPath,
-            androidDataDir = androidDataDir
+            propOverridePath = propOverridePath,
+            memoryLimitMb = mergeMemoryLimitMb,
+            appProcessPath = appProcessPath,
+            androidDataDir = androidDataDir,
+            runtimeClassPath = resolveRuntimeClassPath(runtimeClassPath)
         )
         val aaptLogs = AaptLogCapture(onLine = ::handleDexCompileLine).apply { start() }
         val stdioCapture = StdIoCapture(::handleDexCompileLine).apply { start() }
@@ -113,12 +147,13 @@ object RevancedRuntimeEntry {
 
             runBlocking {
                 val patchList = runStep(StepId.LoadPatches, ::onEvent) {
+                    val activeConfigs = configs.filter { it.patches.isNotEmpty() }
                     val allPatches = RevancedPatchBundleLoader.patches(
-                        configs.map { it.bundlePath },
+                        activeConfigs.map { it.bundlePath },
                         packageName
                     )
 
-                    configs.flatMap { config ->
+                    val selectedPatches = activeConfigs.flatMap { config ->
                         val patches = (allPatches[config.bundlePath] ?: return@flatMap emptyList())
                             .filter { patch ->
                                 val name = patch.name ?: return@filter false
@@ -143,6 +178,14 @@ object RevancedRuntimeEntry {
 
                         patches.values
                     }
+
+                    if (activeConfigs.isNotEmpty() && selectedPatches.isEmpty()) {
+                        throw IllegalArgumentException(
+                            "Selected patches are unavailable. Re-open patch selection and select patches again."
+                        )
+                    }
+
+                    selectedPatches
                 }
 
                 val input = File(inputFile)
@@ -506,5 +549,23 @@ object RevancedRuntimeEntry {
         }
         hex.toString()
     }.getOrNull()
+
+    private fun resolveRuntimeClassPath(explicitPath: String?): String? {
+        val explicit = explicitPath
+            ?.takeIf { it.isNotBlank() }
+            ?.let(::File)
+            ?.takeIf(File::exists)
+            ?.absolutePath
+        if (explicit != null) return explicit
+
+        return runCatching {
+            val location = RevancedRuntimeEntry::class.java.protectionDomain
+                ?.codeSource
+                ?.location
+                ?: return@runCatching null
+            val path = File(location.toURI()).absolutePath
+            path.takeIf { File(it).exists() }
+        }.getOrNull()
+    }
 }
 

@@ -113,12 +113,13 @@ object AmpleRuntimeEntry {
 
             runBlocking {
                 val patchList = runStep(StepId.LoadPatches, ::onEvent) {
+                    val activeConfigs = configs.filter { it.patches.isNotEmpty() }
                     val allPatches = AmplePatchBundleLoader.patches(
-                        configs.map { it.bundlePath },
+                        activeConfigs.map { it.bundlePath },
                         packageName
                     )
 
-                    configs.flatMap { config ->
+                    val selectedPatches = activeConfigs.flatMap { config ->
                         val patches = (allPatches[config.bundlePath] ?: return@flatMap emptyList())
                             .filter { it.name in config.patches }
                             .associateBy { it.name }
@@ -140,6 +141,14 @@ object AmpleRuntimeEntry {
 
                         patches.values
                     }
+
+                    if (activeConfigs.isNotEmpty() && selectedPatches.isEmpty()) {
+                        throw IllegalArgumentException(
+                            "Selected patches are unavailable. Re-open patch selection and select patches again."
+                        )
+                    }
+
+                    selectedPatches
                 }
 
                 val input = File(inputFile)
