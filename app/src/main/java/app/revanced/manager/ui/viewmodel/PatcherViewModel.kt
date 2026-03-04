@@ -810,7 +810,7 @@ fun proceedAfterMissingPatchWarning() {
     private var droppedLogLineCount by savedStateHandle.saveableVar { 0 }
     private var runtimeReportedMemoryLimitMb: Int? by savedStateHandle.saveableVar()
     private val dexCompilePattern =
-        Regex("(Compiling|Compiled)\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
+        Regex("Compiling\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
     private val dexWritePattern =
         Regex("Write\\s+\\[[^\\]]+\\]\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
     private fun parseMemoryLimitMb(raw: String?): Int? {
@@ -943,6 +943,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private var dexSubStepsReady = false
     private val pendingDexCompileLines = mutableListOf<String>()
     private val seenDexCompiles = mutableSetOf<String>()
+    private var writeApkStepStarted = false
 
     val progress by derivedStateOf {
         val current = steps.count { it.state == State.COMPLETED }
@@ -2284,7 +2285,13 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
         if (eventStepId != null && isExpandableStep(eventStepId)) {
             when (event) {
-                is ProgressEvent.Started -> stepSubSteps.remove(eventStepId)
+                is ProgressEvent.Started -> {
+                    if (eventStepId == StepId.WriteAPK) {
+                        resetDexCompileState()
+                        writeApkStepStarted = true
+                    }
+                    stepSubSteps.remove(eventStepId)
+                }
                 is ProgressEvent.Progress -> {
                     val progress = event.current?.let { current -> current to event.total }
                     event.subSteps?.let { prepareSubSteps(eventStepId, it) }
@@ -2292,8 +2299,16 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                         updateSubStep(eventStepId, event.message, progress)
                     }
                 }
-                is ProgressEvent.Completed -> finalizeSubSteps(eventStepId)
+                is ProgressEvent.Completed -> {
+                    if (eventStepId == StepId.WriteAPK) {
+                        writeApkStepStarted = false
+                    }
+                    finalizeSubSteps(eventStepId)
+                }
                 is ProgressEvent.Failed -> {
+                    if (eventStepId == StepId.WriteAPK) {
+                        writeApkStepStarted = false
+                    }
                     finalizeSubSteps(
                         eventStepId,
                         failed = true,
@@ -2588,6 +2603,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         dexSubStepsReady = false
         pendingDexCompileLines.clear()
         seenDexCompiles.clear()
+        writeApkStepStarted = false
     }
 
     private fun markDexSubStepsReady() {
@@ -2665,6 +2681,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private fun handleDexCompileLine(rawLine: String) {
         val line = rawLine.trim()
         if (line.isEmpty()) return
+        if (line.startsWith("[STDIO]:", ignoreCase = true)) return
+        if (!writeApkStepStarted) return
         if (line.contains("Compiling modified resources", ignoreCase = true)) {
             viewModelScope.launch {
                 updateSubStep(StepId.WriteAPK, "Compiling modified resources", null)
@@ -2683,14 +2701,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         val dexName = match.groupValues.lastOrNull()?.takeIf { it.endsWith(".dex") } ?: return
         viewModelScope.launch {
             val title = "Compiling $dexName"
-            seenDexCompiles.add(title)
-            val list = stepSubSteps[StepId.WriteAPK]
-            val hasEntry = list?.any { it.title.equals(title, ignoreCase = true) } == true
-            if (dexSubStepsReady || hasEntry) {
-                updateSubStep(StepId.WriteAPK, title, null)
-            } else {
-                pendingDexCompileLines.add(title)
-            }
+            if (!seenDexCompiles.add(title)) return@launch
+            updateSubStep(StepId.WriteAPK, title, null)
         }
     }
 

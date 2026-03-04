@@ -29,6 +29,7 @@ import java.io.FileInputStream
 import java.io.OutputStream
 import java.io.PrintStream
 import java.security.MessageDigest
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.logging.Handler
 import java.util.logging.Level
 import java.util.logging.LogRecord
@@ -40,15 +41,18 @@ import kotlin.system.exitProcess
  */
 class PatcherProcess : IPatcherProcess.Stub() {
     private var eventBinder: IPatcherEvents? = null
+    private val eventsEnabled = AtomicBoolean(true)
 
     private val scope =
         CoroutineScope(Dispatchers.Default + CoroutineExceptionHandler { _, throwable ->
             // Try to send the exception information to the main app.
-            eventBinder?.let {
+            eventBinder?.let { binder ->
                 try {
-                    it.finished(throwable.stackTraceToString())
+                    if (!eventsEnabled.get()) return@let
+                    binder.finished(throwable.stackTraceToString())
                     return@CoroutineExceptionHandler
                 } catch (_: Exception) {
+                    eventsEnabled.set(false)
                 }
             }
 
@@ -60,7 +64,32 @@ class PatcherProcess : IPatcherProcess.Stub() {
     override fun exit() = exitProcess(0)
 
     override fun start(parameters: Parameters, events: IPatcherEvents) {
-        fun onEvent(event: ProgressEvent) = events.event(event.toParcel())
+        fun safeEvent(event: ProgressEvent) {
+            if (!eventsEnabled.get()) return
+            try {
+                events.event(event.toParcel())
+            } catch (_: Throwable) {
+                eventsEnabled.set(false)
+            }
+        }
+
+        fun safeLog(level: String, message: String) {
+            if (!eventsEnabled.get()) return
+            try {
+                events.log(level, message)
+            } catch (_: Throwable) {
+                eventsEnabled.set(false)
+            }
+        }
+
+        fun safeFinished(exceptionStackTrace: String?) {
+            if (!eventsEnabled.get()) return
+            try {
+                events.finished(exceptionStackTrace)
+            } catch (_: Throwable) {
+                eventsEnabled.set(false)
+            }
+        }
 
         eventBinder = events
 
@@ -78,7 +107,7 @@ class PatcherProcess : IPatcherProcess.Stub() {
                     ?: return
                 val dexName = match.groupValues.lastOrNull()?.takeIf { it.endsWith(".dex") } ?: return
                 if (!seenDexCompiles.add(dexName)) return
-                onEvent(
+                safeEvent(
                     ProgressEvent.Progress(
                         stepId = StepId.WriteAPK,
                         message = "Compiling $dexName"
@@ -89,7 +118,7 @@ class PatcherProcess : IPatcherProcess.Stub() {
             val logger = object : Logger() {
                 override fun log(level: LogLevel, message: String) {
                     handleDexCompileLine(message)
-                    events.log(level.name, message)
+                    safeLog(level.name, message)
                 }
             }
 
@@ -98,8 +127,9 @@ class PatcherProcess : IPatcherProcess.Stub() {
             val aaptLogs = AaptLogCapture(onLine = ::handleDexCompileLine).apply { start() }
             val stdioCapture = StdIoCapture(onLine = ::handleDexCompileLine).apply { start() }
 
+            var exitCode = 0
             try {
-                val patchList = runStep(StepId.LoadPatches, ::onEvent) {
+                val patchList = runStep(StepId.LoadPatches, ::safeEvent) {
                     val allPatches = PatchBundle.Loader.patches(
                         parameters.configurations.map { it.bundle },
                         parameters.packageName
@@ -126,7 +156,7 @@ class PatcherProcess : IPatcherProcess.Stub() {
 
                 val input = File(parameters.inputFile)
                 val preparation = if (SplitApkPreparer.isSplitArchive(input)) {
-                    runStep(StepId.PrepareSplitApk, ::onEvent) {
+                    runStep(StepId.PrepareSplitApk, ::safeEvent) {
                         SplitApkPreparer.prepareIfNeeded(
                             input,
                             File(parameters.cacheDir),
@@ -134,10 +164,10 @@ class PatcherProcess : IPatcherProcess.Stub() {
                             parameters.stripNativeLibs,
                             parameters.skipUnneededSplits,
                             onProgress = { message ->
-                                onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
+                                safeEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
                             },
                             onSubSteps = { subSteps ->
-                                onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
+                                safeEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
                             }
                         )
                     }
@@ -149,10 +179,10 @@ class PatcherProcess : IPatcherProcess.Stub() {
                         parameters.stripNativeLibs,
                         parameters.skipUnneededSplits,
                         onProgress = { message ->
-                            onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
+                            safeEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
                         },
                         onSubSteps = { subSteps ->
-                            onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
+                            safeEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
                         }
                     )
                 }
@@ -178,14 +208,14 @@ class PatcherProcess : IPatcherProcess.Stub() {
                         aaptPath = selectedAaptPath,
                         logger = logger
                     )
-                    val session = runStep(StepId.ReadAPK, ::onEvent) {
+                    val session = runStep(StepId.ReadAPK, ::safeEvent) {
                         Session(
                             cacheDir = parameters.cacheDir,
                             aaptPath = selectedAaptPath,
                             frameworkDir = frameworkDir,
                             logger = logger,
                             input = preparation.file,
-                            onEvent = ::onEvent,
+                            onEvent = ::safeEvent,
                         )
                     }
 
@@ -201,7 +231,8 @@ class PatcherProcess : IPatcherProcess.Stub() {
                     preparation.cleanup()
                 }
 
-                events.finished(null)
+                safeFinished(null)
+                exitCode = 0
             } catch (throwable: Throwable) {
                 val extra = aaptLogs.dump()
                 val stack = throwable.stackTraceToString()
@@ -210,10 +241,15 @@ class PatcherProcess : IPatcherProcess.Stub() {
                 } else {
                     stack
                 }
-                events.finished(report)
+                safeFinished(report)
+                exitCode = 1
             } finally {
                 stdioCapture.close()
                 aaptLogs.stop()
+            }
+
+            if (!eventsEnabled.get()) {
+                exitProcess(exitCode)
             }
         }
     }

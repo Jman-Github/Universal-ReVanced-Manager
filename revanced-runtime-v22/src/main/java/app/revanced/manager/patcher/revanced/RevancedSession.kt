@@ -16,6 +16,7 @@ import java.io.BufferedOutputStream
 import java.io.Closeable
 import java.io.File
 import java.io.FileInputStream
+import java.io.FilterOutputStream
 import java.io.FileOutputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -375,7 +376,9 @@ class RevancedSession(
 
         val tempOutput = File(apkFile.parentFile, "${apkFile.name}.tmp")
         ZipFile(apkFile).use { original ->
-            ZipOutputStream(BufferedOutputStream(FileOutputStream(tempOutput))).use { output ->
+            FileOutputStream(tempOutput).use { fileOutput ->
+                val countingOutput = CountingOutputStream(BufferedOutputStream(fileOutput))
+                ZipOutputStream(countingOutput).use { output ->
                 val entries = original.entries().asSequence().toList()
                 entries.forEach { entry ->
                     if (entry.isDirectory) return@forEach
@@ -385,14 +388,46 @@ class RevancedSession(
 
                     val replacement = replacementFiles.remove(entryName)
                     if (replacement != null) {
-                        output.writeFileEntry(entryName, replacement, entryName in doNotCompress)
+                        if (isDexEntryName(entryName)) {
+                            onEvent(
+                                ProgressEvent.Progress(
+                                    stepId = StepId.WriteAPK,
+                                    message = "Compiling $entryName"
+                                )
+                            )
+                        }
+                        output.writeFileEntry(
+                            entryName = entryName,
+                            sourceFile = replacement,
+                            storeUncompressed = entryName in doNotCompress || isNativeLibEntry(entryName),
+                            currentOffset = countingOutput.bytesWritten
+                        )
                     } else {
-                        output.writeInputEntry(entryName, original, entry)
+                        output.writeInputEntry(
+                            entryName = entryName,
+                            sourceZip = original,
+                            sourceEntry = entry,
+                            currentOffset = countingOutput.bytesWritten
+                        )
                     }
                 }
 
                 replacementFiles.forEach { (entryName, file) ->
-                    output.writeFileEntry(entryName, file, entryName in doNotCompress)
+                    if (isDexEntryName(entryName)) {
+                        onEvent(
+                            ProgressEvent.Progress(
+                                stepId = StepId.WriteAPK,
+                                message = "Compiling $entryName"
+                            )
+                        )
+                    }
+                    output.writeFileEntry(
+                        entryName = entryName,
+                        sourceFile = file,
+                        storeUncompressed = entryName in doNotCompress || isNativeLibEntry(entryName),
+                        currentOffset = countingOutput.bytesWritten
+                    )
+                }
                 }
             }
         }
@@ -417,8 +452,15 @@ class RevancedSession(
         entryName: String,
         sourceZip: ZipFile,
         sourceEntry: ZipEntry,
+        currentOffset: Long,
     ) {
-        putNextEntry(ZipEntry(entryName))
+        putNextEntry(
+            alignStoredNativeLibEntry(
+                cloneInputEntry(entryName, sourceEntry),
+                entryName,
+                currentOffset
+            )
+        )
         sourceZip.getInputStream(sourceEntry).use { input ->
             input.copyTo(this)
         }
@@ -429,6 +471,7 @@ class RevancedSession(
         entryName: String,
         sourceFile: File,
         storeUncompressed: Boolean,
+        currentOffset: Long,
     ) {
         val outputEntry = ZipEntry(entryName)
         if (storeUncompressed) {
@@ -436,7 +479,13 @@ class RevancedSession(
             outputEntry.size = sourceFile.length()
             outputEntry.crc = crc32(sourceFile)
         }
-        putNextEntry(outputEntry)
+        putNextEntry(
+            alignStoredNativeLibEntry(
+                outputEntry,
+                entryName,
+                currentOffset
+            )
+        )
         FileInputStream(sourceFile).use { input ->
             input.copyTo(this)
         }
@@ -456,6 +505,81 @@ class RevancedSession(
         return crc.value
     }
 
+    private fun cloneInputEntry(entryName: String, sourceEntry: ZipEntry): ZipEntry {
+        val outputEntry = ZipEntry(entryName)
+        outputEntry.time = sourceEntry.time
+        outputEntry.comment = sourceEntry.comment
+        sourceEntry.extra?.let { outputEntry.extra = it.copyOf() }
+        sourceEntry.creationTime?.let { outputEntry.creationTime = it }
+        sourceEntry.lastAccessTime?.let { outputEntry.lastAccessTime = it }
+        sourceEntry.lastModifiedTime?.let { outputEntry.lastModifiedTime = it }
+        when (sourceEntry.method) {
+            ZipEntry.STORED -> {
+                outputEntry.method = ZipEntry.STORED
+                outputEntry.size = sourceEntry.size
+                outputEntry.compressedSize = sourceEntry.compressedSize
+                outputEntry.crc = sourceEntry.crc
+            }
+
+            ZipEntry.DEFLATED -> outputEntry.method = ZipEntry.DEFLATED
+        }
+        return outputEntry
+    }
+
+    private fun alignStoredNativeLibEntry(
+        entry: ZipEntry,
+        entryName: String,
+        currentOffset: Long
+    ): ZipEntry {
+        if (entry.method != ZipEntry.STORED || !isNativeLibEntry(entryName)) return entry
+
+        val existingExtra = entry.extra ?: ByteArray(0)
+        val nameSize = entryName.toByteArray(Charsets.UTF_8).size
+        val dataOffsetWithHeader =
+            currentOffset + ZIP_LOCAL_FILE_HEADER_SIZE + nameSize + existingExtra.size + ZIP_EXTRA_HEADER_SIZE
+        val paddingSize = ((NATIVE_LIB_ALIGNMENT - (dataOffsetWithHeader % NATIVE_LIB_ALIGNMENT).toInt()) % NATIVE_LIB_ALIGNMENT)
+        if (paddingSize == 0) return entry
+
+        val newExtraLength = existingExtra.size + ZIP_EXTRA_HEADER_SIZE + paddingSize
+        if (newExtraLength > MAX_ZIP_EXTRA_LENGTH) return entry
+
+        val alignedExtra = ByteArray(newExtraLength)
+        existingExtra.copyInto(alignedExtra, endIndex = existingExtra.size)
+
+        var index = existingExtra.size
+        alignedExtra[index++] = (ZIPALIGN_EXTRA_FIELD_ID and 0xFF).toByte()
+        alignedExtra[index++] = ((ZIPALIGN_EXTRA_FIELD_ID ushr 8) and 0xFF).toByte()
+        alignedExtra[index++] = (paddingSize and 0xFF).toByte()
+        alignedExtra[index] = ((paddingSize ushr 8) and 0xFF).toByte()
+        entry.extra = alignedExtra
+        return entry
+    }
+
+    private fun isNativeLibEntry(entryName: String): Boolean =
+        entryName.startsWith("lib/") && entryName.endsWith(".so", ignoreCase = true)
+
+    private class CountingOutputStream(
+        output: BufferedOutputStream
+    ) : FilterOutputStream(output) {
+        var bytesWritten: Long = 0
+            private set
+
+        override fun write(b: Int) {
+            out.write(b)
+            bytesWritten += 1
+        }
+
+        override fun write(b: ByteArray) {
+            out.write(b)
+            bytesWritten += b.size
+        }
+
+        override fun write(b: ByteArray, off: Int, len: Int) {
+            out.write(b, off, len)
+            bytesWritten += len
+        }
+    }
+
     private fun sanitizeZipEntryName(name: String): String? {
         val normalized = name.replace('\\', '/').trimStart('/')
         if (normalized.isBlank()) return null
@@ -463,6 +587,9 @@ class RevancedSession(
         if (normalized.contains("/../")) return null
         return normalized
     }
+
+    private fun isDexEntryName(name: String): Boolean =
+        name.startsWith("classes") && name.endsWith(".dex", ignoreCase = true)
 
     private fun String.toFileSystemPath(): String = replace('/', File.separatorChar)
 
@@ -570,6 +697,11 @@ class RevancedSession(
     companion object {
         private const val FRAMEWORK_APK_NAME = "1.apk"
         private const val FRAMEWORK_RESOURCES_TABLE = "resources.arsc"
+        private const val ZIP_LOCAL_FILE_HEADER_SIZE = 30L
+        private const val ZIP_EXTRA_HEADER_SIZE = 4
+        private const val ZIPALIGN_EXTRA_FIELD_ID = 0xD935
+        private const val NATIVE_LIB_ALIGNMENT = 4096
+        private const val MAX_ZIP_EXTRA_LENGTH = 0xFFFF
         operator fun PatchResult.component1() = patch
         operator fun PatchResult.component2() = exception
     }

@@ -48,6 +48,7 @@ import app.revanced.manager.patcher.runtime.ample.AmpleProcessRuntime
 import app.revanced.manager.patcher.runtime.morphe.MorpheBridgeRuntime
 import app.revanced.manager.patcher.runtime.morphe.MorpheProcessRuntime
 import app.revanced.manager.patcher.runtime.Revanced22BridgeRuntime
+import app.revanced.manager.patcher.runtime.Revanced22ProcessRuntime
 import app.revanced.manager.patcher.runStep
 import app.revanced.manager.patcher.toRemoteError
 import app.revanced.manager.patcher.patch.PatchBundleType
@@ -555,14 +556,16 @@ class PatcherWorker(
                             if (useRevancedPatcher22) "22.0.0" else "21.0.0"
                         }"
                     )
-                    if (useRevancedPatcher22 && useProcessRuntime) {
-                        args.logger.warn(
-                            "ReVanced v22 runtime currently runs in-process; process runtime is skipped."
-                        )
-                    }
                     val runtime: app.revanced.manager.patcher.runtime.Runtime =
                         if (useRevancedPatcher22) {
-                            Revanced22BridgeRuntime(applicationContext)
+                            if (useProcessRuntime) {
+                                Revanced22ProcessRuntime(
+                                    applicationContext,
+                                    useMemoryOverride = memoryOverrideActive
+                                )
+                            } else {
+                                Revanced22BridgeRuntime(applicationContext)
+                            }
                         } else if (useProcessRuntime) {
                             ProcessRuntime(applicationContext)
                         } else {
@@ -732,6 +735,43 @@ class PatcherWorker(
             Log.e(
                 tag,
                 "An exception occurred in the Ample bridge runtime while patching. ${e.originalStackTrace}".logFmt()
+            )
+            eventDispatcher(
+                ProgressEvent.Failed(
+                    null,
+                    RemoteError(
+                        type = e::class.java.name,
+                        message = e.message,
+                        stackTrace = e.originalStackTrace
+                    )
+                )
+            )
+            Result.failure(
+                workDataOf(PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(e.originalStackTrace))
+            )
+        } catch (e: Revanced22ProcessRuntime.ProcessExitException) {
+            Log.e(
+                tag,
+                "ReVanced v22 patcher process exited with code ${e.exitCode}".logFmt(),
+                e
+            )
+            val message = applicationContext.getString(
+                R.string.patcher_process_exit_message,
+                e.exitCode
+            )
+            eventDispatcher(ProgressEvent.Failed(null, Exception(message).toRemoteError()))
+            val previousLimit = prefs.patcherProcessMemoryLimit.get()
+            Result.failure(
+                workDataOf(
+                    PROCESS_EXIT_CODE_KEY to e.exitCode,
+                    PROCESS_PREVIOUS_LIMIT_KEY to previousLimit,
+                    PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(message)
+                )
+            )
+        } catch (e: Revanced22ProcessRuntime.RemoteFailureException) {
+            Log.e(
+                tag,
+                "An exception occurred in the ReVanced v22 remote process while patching. ${e.originalStackTrace}".logFmt()
             )
             eventDispatcher(
                 ProgressEvent.Failed(

@@ -115,27 +115,35 @@ class AmpleProcessRuntime(
 
         val appProcessBin = resolveAppProcessBin(context)
 
-        launch(Dispatchers.IO) {
-            val result = process(
-                appProcessBin,
-                "-Djava.io.tmpdir=$cacheDir",
-                "/",
-                "--nice-name=${context.packageName}:AmplePatcher",
-                AMPLE_PROCESS_CLASS_NAME,
-                context.packageName,
-                env = env,
-                stdout = Redirect.CAPTURE,
-                stderr = Redirect.CAPTURE,
-            ) { line ->
-                logger.warn("[STDIO]: $line")
-            }
-
-            Log.d(tag, "Ample process finished with exit code ${result.resultCode}")
-
-            if (result.resultCode != 0) throw ProcessExitException(result.resultCode)
-        }
-
         val patching = CompletableDeferred<Unit>()
+
+        launch(Dispatchers.IO) {
+            try {
+                val result = process(
+                    appProcessBin,
+                    "-Djava.io.tmpdir=$cacheDir",
+                    "/",
+                    "--nice-name=${context.packageName}:AmplePatcher",
+                    AMPLE_PROCESS_CLASS_NAME,
+                    context.packageName,
+                    env = env,
+                    stdout = Redirect.CAPTURE,
+                    stderr = Redirect.CAPTURE,
+                ) { line ->
+                    logger.warn("[STDIO]: $line")
+                }
+
+                Log.d(tag, "Ample process finished with exit code ${result.resultCode}")
+
+                if (result.resultCode == 0) {
+                    patching.complete(Unit)
+                } else {
+                    patching.completeExceptionally(ProcessExitException(result.resultCode))
+                }
+            } catch (throwable: Throwable) {
+                patching.completeExceptionally(throwable)
+            }
+        }
 
         launch(Dispatchers.IO) {
             val binder = awaitBinderConnection()

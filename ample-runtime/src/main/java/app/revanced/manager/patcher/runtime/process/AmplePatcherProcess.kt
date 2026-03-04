@@ -45,11 +45,13 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
 
     private val scope =
         CoroutineScope(Dispatchers.Default + CoroutineExceptionHandler { _, throwable ->
-            eventBinder?.let {
+            eventBinder?.let { binder ->
                 try {
-                    it.finished(throwable.stackTraceToString())
+                    if (!eventsEnabled.get()) return@let
+                    binder.finished(throwable.stackTraceToString())
                     return@CoroutineExceptionHandler
                 } catch (_: Exception) {
+                    eventsEnabled.set(false)
                 }
             }
 
@@ -73,6 +75,14 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
             if (!eventsEnabled.get()) return
             try {
                 events.log(level, message)
+            } catch (_: Throwable) {
+                eventsEnabled.set(false)
+            }
+        }
+        fun safeFinished(exceptionStackTrace: String?) {
+            if (!eventsEnabled.get()) return
+            try {
+                events.finished(exceptionStackTrace)
             } catch (_: Throwable) {
                 eventsEnabled.set(false)
             }
@@ -121,6 +131,7 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
             logger.info("Memory limit: ${Runtime.getRuntime().maxMemory() / (1024 * 1024)}MB")
             val aaptLogs = AaptLogCapture(onLine = ::handleDexCompileLine).apply { start() }
             val stdioCapture = StdIoCapture(onLine = ::handleDexCompileLine).apply { start() }
+            var exitCode = 0
 
             try {
                 val patchList = runStep(StepId.LoadPatches, ::safeEvent) {
@@ -225,10 +236,8 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
                     preparation.cleanup()
                 }
 
-                try {
-                    events.finished(null)
-                } catch (_: Throwable) {
-                }
+                safeFinished(null)
+                exitCode = 0
             } catch (throwable: Throwable) {
                 val extra = aaptLogs.dump()
                 val stack = throwable.stackTraceToString()
@@ -237,13 +246,15 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
                 } else {
                     stack
                 }
-                try {
-                    events.finished(report)
-                } catch (_: Throwable) {
-                }
+                safeFinished(report)
+                exitCode = 1
             } finally {
                 stdioCapture.close()
                 aaptLogs.stop()
+            }
+
+            if (!eventsEnabled.get()) {
+                exitProcess(exitCode)
             }
         }
     }

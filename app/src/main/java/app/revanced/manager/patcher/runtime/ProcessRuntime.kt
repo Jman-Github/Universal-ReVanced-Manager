@@ -120,28 +120,36 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
 
         val appProcessBin = resolveAppProcessBin(context)
 
-        launch(Dispatchers.IO) {
-            val result = process(
-                appProcessBin,
-                "-Djava.io.tmpdir=$cacheDir", // The process will use /tmp if this isn't set, which is a problem because that folder is not accessible on Android.
-                "/", // The unused cmd-dir parameter
-                "--nice-name=${context.packageName}:Patcher",
-                PatcherProcess::class.java.name, // The class with the main function.
-                context.packageName,
-                env = env,
-                stdout = Redirect.CAPTURE,
-                stderr = Redirect.CAPTURE,
-            ) { line ->
-                // The process shouldn't generally be writing to stdio. Log any lines we get as warnings.
-                logger.warn("[STDIO]: $line")
-            }
-
-            Log.d(tag, "Process finished with exit code ${result.resultCode}")
-
-            if (result.resultCode != 0) throw ProcessExitException(result.resultCode)
-        }
-
         val patching = CompletableDeferred<Unit>()
+
+        launch(Dispatchers.IO) {
+            try {
+                val result = process(
+                    appProcessBin,
+                    "-Djava.io.tmpdir=$cacheDir", // The process will use /tmp if this isn't set, which is a problem because that folder is not accessible on Android.
+                    "/", // The unused cmd-dir parameter
+                    "--nice-name=${context.packageName}:Patcher",
+                    PatcherProcess::class.java.name, // The class with the main function.
+                    context.packageName,
+                    env = env,
+                    stdout = Redirect.CAPTURE,
+                    stderr = Redirect.CAPTURE,
+                ) { line ->
+                    // The process shouldn't generally be writing to stdio. Log any lines we get as warnings.
+                    logger.warn("[STDIO]: $line")
+                }
+
+                Log.d(tag, "Process finished with exit code ${result.resultCode}")
+
+                if (result.resultCode == 0) {
+                    patching.complete(Unit)
+                } else {
+                    patching.completeExceptionally(ProcessExitException(result.resultCode))
+                }
+            } catch (throwable: Throwable) {
+                patching.completeExceptionally(throwable)
+            }
+        }
 
         launch(Dispatchers.IO) {
             val binder = awaitBinderConnection()

@@ -41,7 +41,7 @@ object AmpleRuntimeBridge {
 
     fun initialize(context: Context) {
         if (appContext != null) return
-        appContext = context.applicationContext
+        appContext = context.applicationContext ?: context
     }
 
     fun loadMetadata(bundlePath: String): List<PatchInfo> {

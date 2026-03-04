@@ -16,7 +16,7 @@ object Revanced22RuntimeAssets {
     private const val APKEDITOR_MERGE_ENTRY = "assets/apkeditor/apkeditor-merge.jar"
 
     fun ensureRuntimeApk(context: Context): File {
-        val appContext = context.applicationContext
+        val appContext = context.applicationContext ?: context
         val outputDir = File(appContext.codeCacheDir, OUTPUT_PREFIX).apply { mkdirs() }
         val output = File(
             outputDir,

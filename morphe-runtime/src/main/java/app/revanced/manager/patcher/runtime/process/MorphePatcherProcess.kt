@@ -40,14 +40,17 @@ import kotlin.system.exitProcess
  */
 class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
     private var eventBinder: IPatcherEvents? = null
+    private val eventsEnabled = AtomicBoolean(true)
 
     private val scope =
         CoroutineScope(Dispatchers.Default + CoroutineExceptionHandler { _, throwable ->
-            eventBinder?.let {
+            eventBinder?.let { binder ->
                 try {
-                    it.finished(throwable.stackTraceToString())
+                    if (!eventsEnabled.get()) return@let
+                    binder.finished(throwable.stackTraceToString())
                     return@CoroutineExceptionHandler
                 } catch (_: Exception) {
+                    eventsEnabled.set(false)
                 }
             }
 
@@ -59,6 +62,33 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
     override fun exit() = exitProcess(0)
 
     override fun start(parameters: MorpheParameters, events: IPatcherEvents) {
+        fun safeEvent(event: ProgressEvent) {
+            if (!eventsEnabled.get()) return
+            try {
+                events.event(event.toParcel())
+            } catch (_: Throwable) {
+                eventsEnabled.set(false)
+            }
+        }
+
+        fun safeLog(level: String, message: String) {
+            if (!eventsEnabled.get()) return
+            try {
+                events.log(level, message)
+            } catch (_: Throwable) {
+                eventsEnabled.set(false)
+            }
+        }
+
+        fun safeFinished(exceptionStackTrace: String?) {
+            if (!eventsEnabled.get()) return
+            try {
+                events.finished(exceptionStackTrace)
+            } catch (_: Throwable) {
+                eventsEnabled.set(false)
+            }
+        }
+
         eventBinder = events
 
         scope.launch {
@@ -90,7 +120,7 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
 
                     is ProgressEvent.Progress -> Unit
                 }
-                events.event(event.toParcel())
+                safeEvent(event)
             }
 
             fun handleDexCompileLine(rawLine: String) {
@@ -113,13 +143,14 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
             val logger = object : Logger() {
                 override fun log(level: LogLevel, message: String) {
                     handleDexCompileLine(message)
-                    events.log(level.name, message)
+                    safeLog(level.name, message)
                 }
             }
 
             logger.info("Memory limit: ${Runtime.getRuntime().maxMemory() / (1024 * 1024)}MB")
             val aaptLogs = AaptLogCapture(onLine = ::handleDexCompileLine).apply { start() }
             val stdioCapture = StdIoCapture(onLine = ::handleDexCompileLine).apply { start() }
+            var exitCode = 0
 
             try {
                 val patchList = runStep(StepId.LoadPatches, ::onEvent) {
@@ -224,7 +255,8 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
                     preparation.cleanup()
                 }
 
-                events.finished(null)
+                safeFinished(null)
+                exitCode = 0
             } catch (throwable: Throwable) {
                 val extra = aaptLogs.dump()
                 val stack = throwable.stackTraceToString()
@@ -233,10 +265,15 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
                 } else {
                     stack
                 }
-                events.finished(report)
+                safeFinished(report)
+                exitCode = 1
             } finally {
                 stdioCapture.close()
                 aaptLogs.stop()
+            }
+
+            if (!eventsEnabled.get()) {
+                exitProcess(exitCode)
             }
         }
     }
