@@ -11,21 +11,21 @@ import app.revanced.patcher.PatchesResult
 import app.revanced.patcher.patcher
 import app.revanced.patcher.patch.Patch
 import app.revanced.patcher.patch.PatchResult
+import com.android.tools.build.apkzlib.zip.AlignmentRules
+import com.android.tools.build.apkzlib.zip.ZFile
+import com.android.tools.build.apkzlib.zip.ZFileOptions
+import com.google.common.base.Predicate
 import java.io.BufferedInputStream
-import java.io.BufferedOutputStream
 import java.io.Closeable
 import java.io.File
 import java.io.FileInputStream
-import java.io.FilterOutputStream
 import java.io.FileOutputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.LinkedHashSet
-import java.util.zip.CRC32
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
-import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
@@ -42,22 +42,22 @@ class RevancedSession(
 ) : Closeable {
     private val tempDir = File(cacheDir).resolve("patcher").also { it.mkdirs() }
     private val frameworkDirFile = File(frameworkDir).also { it.mkdirs() }
-    private var selectedPatches = emptySet<Patch>()
-    private val patcher =
-        patcher(
-            apkFile = input,
-            temporaryFilesPath = tempDir,
-            aaptBinaryPath = File(aaptPath),
-            frameworkFileDirectory = frameworkDirFile.absolutePath,
-        ) { _, _ ->
-            selectedPatches
-        }
+    private val aaptBinaryPath = File(aaptPath)
 
     private suspend fun applyPatchesVerbose(
         patches: RevancedPatchList,
         preStarted: Set<Int> = emptySet()
     ): PatchesResult {
-        selectedPatches = LinkedHashSet(patches)
+        val selectedPatches = LinkedHashSet(patches)
+        val runPatcher =
+            patcher(
+                apkFile = input,
+                temporaryFilesPath = tempDir,
+                aaptBinaryPath = aaptBinaryPath,
+                frameworkFileDirectory = frameworkDirFile.absolutePath,
+            ) { _, _ ->
+                selectedPatches
+            }
         val indexByPatch = patches.withIndex().associate { it.value to it.index }
         val started = mutableSetOf<Int>()
         started.addAll(preStarted)
@@ -76,10 +76,10 @@ class RevancedSession(
             startPatch(0)
         }
 
-        val patchResult = patcher { result ->
+        val patchResult = runPatcher { result ->
             val patch = result.patch
             val exception = result.exception
-            val index = indexByPatch[patch] ?: return@patcher
+            val index = indexByPatch[patch] ?: return@runPatcher
 
             if (exception != null) {
                 if (index < nextIndex) {
@@ -101,7 +101,7 @@ class RevancedSession(
                 throw exception
             }
 
-            if (index < nextIndex) return@patcher
+            if (index < nextIndex) return@runPatcher
             while (nextIndex < index) {
                 startPatch(nextIndex)
                 onEvent(ProgressEvent.Completed(StepId.ExecutePatch(nextIndex)))
@@ -312,271 +312,60 @@ class RevancedSession(
     }
 
     private fun applyResultToApk(apkFile: File, result: PatchesResult) {
-        val applyDir = tempDir.resolve("apply").also {
-            it.deleteRecursively()
-            it.mkdirs()
-        }
-        val replacementFiles = linkedMapOf<String, File>()
-        val deleteEntries = linkedSetOf<String>()
-        val doNotCompress = linkedSetOf<String>()
-        var replaceResourceDirectory = false
-
-        result.dexFiles.forEach { dex ->
-            val entryName = sanitizeZipEntryName(dex.name) ?: return@forEach
-            val dexFile = applyDir.resolve("dex").resolve(entryName.toFileSystemPath())
-            dexFile.parentFile?.mkdirs()
-            dex.stream.use { input ->
-                FileOutputStream(dexFile).use { output ->
-                    input.copyTo(output)
-                }
-            }
-            replacementFiles[entryName] = dexFile
-        }
-
-        result.resources?.let { resources ->
-            resources.resourcesApk?.let { resourcesApk ->
-                replaceResourceDirectory = true
-                ZipFile(resourcesApk).use { zip ->
-                    val entries = zip.entries().asSequence().toList()
-                    entries.forEach { entry ->
-                        if (entry.isDirectory) return@forEach
-                        val entryName = sanitizeZipEntryName(entry.name) ?: return@forEach
-                        val target = applyDir.resolve("resourcesApk").resolve(entryName.toFileSystemPath())
-                        target.parentFile?.mkdirs()
-                        zip.getInputStream(entry).use { input ->
-                            FileOutputStream(target).use { output ->
-                                input.copyTo(output)
-                            }
-                        }
-                        replacementFiles[entryName] = target
-                    }
-                }
-            }
-
-            resources.otherResources?.let { resourcesDir ->
-                if (resourcesDir.exists()) {
-                    resourcesDir.walkTopDown()
-                        .filter { it.isFile }
-                        .forEach { file ->
-                            val relative = file.relativeTo(resourcesDir).path.replace(File.separatorChar, '/')
-                            val entryName = sanitizeZipEntryName(relative) ?: return@forEach
-                            replacementFiles[entryName] = file
-                        }
-                }
-            }
-
-            resources.deleteResources
-                .mapNotNull(::sanitizeZipEntryName)
-                .forEach(deleteEntries::add)
-
-            resources.doNotCompress
-                .mapNotNull(::sanitizeZipEntryName)
-                .forEach(doNotCompress::add)
-        }
-
-        val tempOutput = File(apkFile.parentFile, "${apkFile.name}.tmp")
-        ZipFile(apkFile).use { original ->
-            FileOutputStream(tempOutput).use { fileOutput ->
-                val countingOutput = CountingOutputStream(BufferedOutputStream(fileOutput))
-                ZipOutputStream(countingOutput).use { output ->
-                val entries = original.entries().asSequence().toList()
-                entries.forEach { entry ->
-                    if (entry.isDirectory) return@forEach
-                    val entryName = sanitizeZipEntryName(entry.name) ?: return@forEach
-                    if (entryName in deleteEntries) return@forEach
-                    if (replaceResourceDirectory && entryName.startsWith("res/")) return@forEach
-
-                    val replacement = replacementFiles.remove(entryName)
-                    if (replacement != null) {
-                        if (isDexEntryName(entryName)) {
-                            onEvent(
-                                ProgressEvent.Progress(
-                                    stepId = StepId.WriteAPK,
-                                    message = "Compiling $entryName"
-                                )
-                            )
-                        }
-                        output.writeFileEntry(
-                            entryName = entryName,
-                            sourceFile = replacement,
-                            storeUncompressed = entryName in doNotCompress || isNativeLibEntry(entryName),
-                            currentOffset = countingOutput.bytesWritten
+        ZFile.openReadWrite(apkFile, zFileOptions).use { apk ->
+            result.dexFiles.forEach { dex ->
+                val entryName = dex.name
+                if (isDexEntryName(entryName)) {
+                    onEvent(
+                        ProgressEvent.Progress(
+                            stepId = StepId.WriteAPK,
+                            message = "Compiling $entryName"
                         )
-                    } else {
-                        output.writeInputEntry(
-                            entryName = entryName,
-                            sourceZip = original,
-                            sourceEntry = entry,
-                            currentOffset = countingOutput.bytesWritten
-                        )
-                    }
-                }
-
-                replacementFiles.forEach { (entryName, file) ->
-                    if (isDexEntryName(entryName)) {
-                        onEvent(
-                            ProgressEvent.Progress(
-                                stepId = StepId.WriteAPK,
-                                message = "Compiling $entryName"
-                            )
-                        )
-                    }
-                    output.writeFileEntry(
-                        entryName = entryName,
-                        sourceFile = file,
-                        storeUncompressed = entryName in doNotCompress || isNativeLibEntry(entryName),
-                        currentOffset = countingOutput.bytesWritten
                     )
                 }
+                dex.stream.use { stream ->
+                    apk.add(entryName, stream)
                 }
             }
-        }
 
-        try {
-            Files.move(
-                tempOutput.toPath(),
-                apkFile.toPath(),
-                StandardCopyOption.REPLACE_EXISTING,
-                StandardCopyOption.ATOMIC_MOVE
-            )
-        } catch (_: Exception) {
-            Files.move(
-                tempOutput.toPath(),
-                apkFile.toPath(),
-                StandardCopyOption.REPLACE_EXISTING
-            )
-        }
-    }
+            result.resources?.let { resources ->
+                resources.resourcesApk?.let { resourcesApkFile ->
+                    ZFile.openReadOnly(resourcesApkFile).use { resourcesApk ->
+                        apk.entries()
+                            .filter {
+                                it.centralDirectoryHeader.name.startsWith(
+                                    "res/",
+                                    ignoreCase = false
+                                )
+                            }
+                            .toList()
+                            .forEach { it.delete() }
+                        apk.mergeFrom(resourcesApk, Predicate { false })
+                    }
+                }
 
-    private fun ZipOutputStream.writeInputEntry(
-        entryName: String,
-        sourceZip: ZipFile,
-        sourceEntry: ZipEntry,
-        currentOffset: Long,
-    ) {
-        putNextEntry(
-            alignStoredNativeLibEntry(
-                cloneInputEntry(entryName, sourceEntry),
-                entryName,
-                currentOffset
-            )
-        )
-        sourceZip.getInputStream(sourceEntry).use { input ->
-            input.copyTo(this)
-        }
-        closeEntry()
-    }
+                resources.otherResources?.let { resourcesDir ->
+                    if (resourcesDir.exists()) {
+                        val noCompress = resources.doNotCompress
+                        apk.addAllRecursively(resourcesDir, Predicate { file ->
+                            val relative =
+                                file.relativeTo(resourcesDir).path.replace(File.separatorChar, '/')
+                            relative !in noCompress
+                        })
+                    }
+                }
 
-    private fun ZipOutputStream.writeFileEntry(
-        entryName: String,
-        sourceFile: File,
-        storeUncompressed: Boolean,
-        currentOffset: Long,
-    ) {
-        val outputEntry = ZipEntry(entryName)
-        if (storeUncompressed) {
-            outputEntry.method = ZipEntry.STORED
-            outputEntry.size = sourceFile.length()
-            outputEntry.crc = crc32(sourceFile)
-        }
-        putNextEntry(
-            alignStoredNativeLibEntry(
-                outputEntry,
-                entryName,
-                currentOffset
-            )
-        )
-        FileInputStream(sourceFile).use { input ->
-            input.copyTo(this)
-        }
-        closeEntry()
-    }
-
-    private fun crc32(file: File): Long {
-        val crc = CRC32()
-        FileInputStream(file).use { input ->
-            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-            while (true) {
-                val read = input.read(buffer)
-                if (read <= 0) break
-                crc.update(buffer, 0, read)
-            }
-        }
-        return crc.value
-    }
-
-    private fun cloneInputEntry(entryName: String, sourceEntry: ZipEntry): ZipEntry {
-        val outputEntry = ZipEntry(entryName)
-        outputEntry.time = sourceEntry.time
-        outputEntry.comment = sourceEntry.comment
-        sourceEntry.extra?.let { outputEntry.extra = it.copyOf() }
-        sourceEntry.creationTime?.let { outputEntry.creationTime = it }
-        sourceEntry.lastAccessTime?.let { outputEntry.lastAccessTime = it }
-        sourceEntry.lastModifiedTime?.let { outputEntry.lastModifiedTime = it }
-        when (sourceEntry.method) {
-            ZipEntry.STORED -> {
-                outputEntry.method = ZipEntry.STORED
-                outputEntry.size = sourceEntry.size
-                outputEntry.compressedSize = sourceEntry.compressedSize
-                outputEntry.crc = sourceEntry.crc
+                if (resources.deleteResources.isNotEmpty()) {
+                    val deleteResources = resources.deleteResources
+                    apk.entries()
+                        .filter { it.centralDirectoryHeader.name in deleteResources }
+                        .toList()
+                        .forEach { it.delete() }
+                }
             }
 
-            ZipEntry.DEFLATED -> outputEntry.method = ZipEntry.DEFLATED
-        }
-        return outputEntry
-    }
-
-    private fun alignStoredNativeLibEntry(
-        entry: ZipEntry,
-        entryName: String,
-        currentOffset: Long
-    ): ZipEntry {
-        if (entry.method != ZipEntry.STORED || !isNativeLibEntry(entryName)) return entry
-
-        val existingExtra = entry.extra ?: ByteArray(0)
-        val nameSize = entryName.toByteArray(Charsets.UTF_8).size
-        val dataOffsetWithHeader =
-            currentOffset + ZIP_LOCAL_FILE_HEADER_SIZE + nameSize + existingExtra.size + ZIP_EXTRA_HEADER_SIZE
-        val paddingSize = ((NATIVE_LIB_ALIGNMENT - (dataOffsetWithHeader % NATIVE_LIB_ALIGNMENT).toInt()) % NATIVE_LIB_ALIGNMENT)
-        if (paddingSize == 0) return entry
-
-        val newExtraLength = existingExtra.size + ZIP_EXTRA_HEADER_SIZE + paddingSize
-        if (newExtraLength > MAX_ZIP_EXTRA_LENGTH) return entry
-
-        val alignedExtra = ByteArray(newExtraLength)
-        existingExtra.copyInto(alignedExtra, endIndex = existingExtra.size)
-
-        var index = existingExtra.size
-        alignedExtra[index++] = (ZIPALIGN_EXTRA_FIELD_ID and 0xFF).toByte()
-        alignedExtra[index++] = ((ZIPALIGN_EXTRA_FIELD_ID ushr 8) and 0xFF).toByte()
-        alignedExtra[index++] = (paddingSize and 0xFF).toByte()
-        alignedExtra[index] = ((paddingSize ushr 8) and 0xFF).toByte()
-        entry.extra = alignedExtra
-        return entry
-    }
-
-    private fun isNativeLibEntry(entryName: String): Boolean =
-        entryName.startsWith("lib/") && entryName.endsWith(".so", ignoreCase = true)
-
-    private class CountingOutputStream(
-        output: BufferedOutputStream
-    ) : FilterOutputStream(output) {
-        var bytesWritten: Long = 0
-            private set
-
-        override fun write(b: Int) {
-            out.write(b)
-            bytesWritten += 1
-        }
-
-        override fun write(b: ByteArray) {
-            out.write(b)
-            bytesWritten += b.size
-        }
-
-        override fun write(b: ByteArray, off: Int, len: Int) {
-            out.write(b, off, len)
-            bytesWritten += len
+            logger.info("Aligning APK")
+            apk.realign()
         }
     }
 
@@ -697,11 +486,14 @@ class RevancedSession(
     companion object {
         private const val FRAMEWORK_APK_NAME = "1.apk"
         private const val FRAMEWORK_RESOURCES_TABLE = "resources.arsc"
-        private const val ZIP_LOCAL_FILE_HEADER_SIZE = 30L
-        private const val ZIP_EXTRA_HEADER_SIZE = 4
-        private const val ZIPALIGN_EXTRA_FIELD_ID = 0xD935
-        private const val NATIVE_LIB_ALIGNMENT = 4096
-        private const val MAX_ZIP_EXTRA_LENGTH = 0xFFFF
+        private val zFileOptions = ZFileOptions().apply {
+            setAlignmentRule(
+                AlignmentRules.compose(
+                    AlignmentRules.constantForSuffix(".so", 4096),
+                    AlignmentRules.constant(4)
+                )
+            )
+        }
         operator fun PatchResult.component1() = patch
         operator fun PatchResult.component2() = exception
     }

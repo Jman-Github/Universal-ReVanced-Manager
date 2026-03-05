@@ -1,15 +1,18 @@
-# v1.8.1-dev.05 (2026-03-04)
+# v1.8.1-dev.05 (2026-03-05)
 
 
 # Features
 
 - Overall improved the stability to all patcher runtimes
+- Added device architecture, Android version, device model, and patcher version to the patcher logs
 
 
 # Bug fixes
 
 - Fixed an issue where the ReVanced v22 patcher runtime wouldn't follow the experimental patcher setting
 - Fixed an issue where the patching process would die (needs testing) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/267
+- Fixed issues where the patcher screen would not show the progress of patching accurately
+- Fixed issues where the ReVanced v22 runtime would patch incorrectly resulting in broken patched apps
 
 
 # v1.8.1-dev.04 (2026-03-02)

@@ -114,6 +114,8 @@ dependencies {
         exclude(group = "xmlpull", module = "xmlpull")
         exclude(group = "xpp3", module = "xpp3")
     }
+    implementation("com.android.tools.build:apkzlib:8.5.2")
+    compileOnly("com.google.guava:guava:33.3.1-jre")
     apkEditorLib(files("$rootDir/libs/APKEditor-1.4.7.jar"))
     implementation(files(strippedApkEditorLib))
     implementation("org.jetbrains.kotlin:kotlin-reflect")

@@ -551,11 +551,6 @@ class PatcherWorker(
                 PatchBundleType.REVANCED -> {
                     val useRevancedPatcher22 =
                         patchBundleRepository.selectionUsesRevancedPatcher22(args.selectedPatches)
-                    args.logger.info(
-                        "ReVanced patcher version: ${
-                            if (useRevancedPatcher22) "22.0.0" else "21.0.0"
-                        }"
-                    )
                     val runtime: app.revanced.manager.patcher.runtime.Runtime =
                         if (useRevancedPatcher22) {
                             if (useProcessRuntime) {

@@ -21,7 +21,10 @@ import java.io.OutputStream
 import java.io.PrintStream
 import java.security.MessageDigest
 import java.util.ArrayDeque
+import java.util.Collections
 import java.util.LinkedHashMap
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.logging.Handler
 import java.util.logging.Level
 import java.util.logging.LogRecord
@@ -43,16 +46,52 @@ object AmpleRuntimeEntry {
 
     @JvmStatic
     fun runPatcher(params: Map<String, Any?>, callback: AmpleRuntimeCallback): String? {
-        fun onEvent(event: ProgressEvent) = callback.event(event.toMap())
+        val writeApkActive = AtomicBoolean(false)
+        val seenDexCompiles = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
+        val seenResourceCompile = AtomicBoolean(false)
+        fun onEvent(event: ProgressEvent) {
+            when (event.stepId) {
+                StepId.WriteAPK -> when (event) {
+                    is ProgressEvent.Started -> {
+                        writeApkActive.set(true)
+                        seenDexCompiles.clear()
+                        seenResourceCompile.set(false)
+                    }
+
+                    is ProgressEvent.Progress -> writeApkActive.set(true)
+                    is ProgressEvent.Completed,
+                    is ProgressEvent.Failed -> writeApkActive.set(false)
+                }
+
+                StepId.SignAPK -> if (event is ProgressEvent.Started) {
+                    writeApkActive.set(false)
+                }
+                else -> Unit
+            }
+            callback.event(event.toMap())
+        }
 
         val dexCompilePattern =
             Regex("(Compiling|Compiled)\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
         val dexWritePattern =
             Regex("Write\\s+\\[[^\\]]+\\]\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
-        val seenDexCompiles = mutableSetOf<String>()
-        fun handleDexCompileLine(rawLine: String) {
+        fun handleWriteProgressLine(rawLine: String) {
+            if (!writeApkActive.get()) return
             val line = rawLine.trim()
             if (line.isEmpty()) return
+            if (line.contains("Compiling modified resources", ignoreCase = true) ||
+                line.contains("Compiling patched resources", ignoreCase = true)
+            ) {
+                if (seenResourceCompile.compareAndSet(false, true)) {
+                    onEvent(
+                        ProgressEvent.Progress(
+                            stepId = StepId.WriteAPK,
+                            message = "Compiling modified resources"
+                        )
+                    )
+                }
+                return
+            }
             val match = dexCompilePattern.find(line)
                 ?: dexWritePattern.find(line)
                 ?: return
@@ -68,7 +107,7 @@ object AmpleRuntimeEntry {
 
         val logger = object : Logger() {
             override fun log(level: LogLevel, message: String) {
-                handleDexCompileLine(message)
+                handleWriteProgressLine(message)
                 callback.log(level.name, message)
             }
         }
@@ -98,8 +137,8 @@ object AmpleRuntimeEntry {
             apkEditorMergeJarPath,
             androidDataDir = androidDataDir
         )
-        val aaptLogs = AaptLogCapture(onLine = ::handleDexCompileLine).apply { start() }
-        val stdioCapture = StdIoCapture(::handleDexCompileLine).apply { start() }
+        val aaptLogs = AaptLogCapture(onLine = ::handleWriteProgressLine).apply { start() }
+        val stdioCapture = StdIoCapture(::handleWriteProgressLine).apply { start() }
 
         return try {
             val configs = configurations.mapNotNull { raw ->

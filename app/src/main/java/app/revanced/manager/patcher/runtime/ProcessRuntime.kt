@@ -27,10 +27,12 @@ import com.github.pgreze.process.process
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.atomic.AtomicReference
 import java.io.File
 import org.koin.core.component.inject
@@ -86,6 +88,18 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
         currentCoroutineContext()[Job]?.invokeOnCompletion {
             runCatching { binderRef.get()?.exit() }
             eventHandlerRef.set(null)
+        }
+        val logQueue = Channel<Pair<String, String>>(Channel.UNLIMITED)
+        val eventQueue = Channel<ProgressEvent>(Channel.UNLIMITED)
+        val logDrainJob = launch(Dispatchers.Default) {
+            for ((level, msg) in logQueue) {
+                runCatching { logger.log(enumValueOf(level), msg) }
+            }
+        }
+        val eventDrainJob = launch(Dispatchers.Default) {
+            for (event in eventQueue) {
+                runCatching { onEvent(event) }
+            }
         }
         // Get the location of our own Apk.
         val managerBaseApk = pm.getPackageInfo(context.packageName)!!.applicationInfo!!.sourceDir
@@ -161,10 +175,12 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
             if (binder.buildId() != BuildConfig.BUILD_ID) throw Exception("app_process is running outdated code. Clear the app cache or disable disable Android 11 deployment optimizations in your IDE")
 
             val eventHandler = object : IPatcherEvents.Stub() {
-                override fun log(level: String, msg: String) = logger.log(enumValueOf(level), msg)
+                override fun log(level: String, msg: String) {
+                    logQueue.trySend(level to msg)
+                }
 
                 override fun event(event: ProgressEventParcel?) {
-                    event?.let { onEvent(it.toEvent()) }
+                    event?.let { eventQueue.trySend(it.toEvent()) }
                 }
 
                 override fun finished(exceptionStackTrace: String?) {
@@ -220,6 +236,15 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
             patching.await()
         } finally {
             eventHandlerRef.set(null)
+            logQueue.close()
+            eventQueue.close()
+            withTimeoutOrNull(2_000L) {
+                logDrainJob.join()
+                eventDrainJob.join()
+            } ?: run {
+                logDrainJob.cancel()
+                eventDrainJob.cancel()
+            }
         }
     }
 

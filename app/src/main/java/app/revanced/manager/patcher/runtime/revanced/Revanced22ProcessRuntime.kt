@@ -34,6 +34,7 @@ import java.util.zip.ZipInputStream
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -97,6 +98,18 @@ class Revanced22ProcessRuntime(
             runCatching { binderRef.get()?.exit() }
             eventHandlerRef.set(null)
         }
+        val logQueue = Channel<Pair<String, String>>(Channel.UNLIMITED)
+        val eventQueue = Channel<ProgressEvent>(Channel.UNLIMITED)
+        val logDrainJob = launch(Dispatchers.Default) {
+            for ((level, msg) in logQueue) {
+                runCatching { logger.log(enumValueOf(level), msg) }
+            }
+        }
+        val eventDrainJob = launch(Dispatchers.Default) {
+            for (event in eventQueue) {
+                runCatching { onEvent(event) }
+            }
+        }
 
         val managerBaseApk = pm.getPackageInfo(context.packageName)!!.applicationInfo!!.sourceDir
         val appProcessBin = resolveAppProcessBin(context)
@@ -150,7 +163,7 @@ class Revanced22ProcessRuntime(
                     is ProgressEvent.Started -> {
                         if (fallbackWriteSubStepsEmitted.compareAndSet(false, true)) {
                             fallbackWriteSubSteps?.let { subSteps ->
-                                onEvent(
+                                eventQueue.trySend(
                                     ProgressEvent.Progress(
                                         stepId = StepId.WriteAPK,
                                         subSteps = subSteps
@@ -242,14 +255,14 @@ class Revanced22ProcessRuntime(
 
             val eventHandler = object : IPatcherEvents.Stub() {
                 override fun log(level: String, msg: String) {
-                    logger.log(enumValueOf(level), msg)
+                    logQueue.trySend(level to msg)
                 }
 
                 override fun event(event: ProgressEventParcel?) {
                     event?.let {
                         val progressEvent = it.toEvent()
+                        eventQueue.trySend(progressEvent)
                         handleProgressEvent(progressEvent)
-                        onEvent(progressEvent)
                     }
                 }
 
@@ -306,6 +319,15 @@ class Revanced22ProcessRuntime(
             patching.await()
         } finally {
             eventHandlerRef.set(null)
+            logQueue.close()
+            eventQueue.close()
+            withTimeoutOrNull(2_000L) {
+                logDrainJob.join()
+                eventDrainJob.join()
+            } ?: run {
+                logDrainJob.cancel()
+                eventDrainJob.cancel()
+            }
         }
     }
 

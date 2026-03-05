@@ -47,10 +47,16 @@ object RevancedRuntimeEntry {
     @JvmStatic
     fun runPatcher(params: Map<String, Any?>, callback: RevancedRuntimeCallback): String? {
         val writeApkActive = AtomicBoolean(false)
+        val seenDexCompiles = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
+        val seenResourceCompile = AtomicBoolean(false)
         fun onEvent(event: ProgressEvent) {
             when (event.stepId) {
                 StepId.WriteAPK -> when (event) {
-                    is ProgressEvent.Started,
+                    is ProgressEvent.Started -> {
+                        writeApkActive.set(true)
+                        seenDexCompiles.clear()
+                        seenResourceCompile.set(false)
+                    }
                     is ProgressEvent.Progress -> writeApkActive.set(true)
                     is ProgressEvent.Completed,
                     is ProgressEvent.Failed -> writeApkActive.set(false)
@@ -68,11 +74,23 @@ object RevancedRuntimeEntry {
             Regex("(Compiling|Compiled)\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
         val dexWritePattern =
             Regex("Write\\s+\\[[^\\]]+\\]\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
-        val seenDexCompiles = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
-        fun handleDexCompileLine(rawLine: String) {
+        fun handleWriteProgressLine(rawLine: String) {
             if (!writeApkActive.get()) return
             val line = rawLine.trim()
             if (line.isEmpty()) return
+            if (line.contains("Compiling modified resources", ignoreCase = true) ||
+                line.contains("Compiling patched resources", ignoreCase = true)
+            ) {
+                if (seenResourceCompile.compareAndSet(false, true)) {
+                    onEvent(
+                        ProgressEvent.Progress(
+                            stepId = StepId.WriteAPK,
+                            message = "Compiling modified resources"
+                        )
+                    )
+                }
+                return
+            }
             val match = dexCompilePattern.find(line)
                 ?: dexWritePattern.find(line)
                 ?: return
@@ -88,7 +106,7 @@ object RevancedRuntimeEntry {
 
         val logger = object : Logger() {
             override fun log(level: LogLevel, message: String) {
-                handleDexCompileLine(message)
+                handleWriteProgressLine(message)
                 callback.log(level.name, message)
             }
         }
@@ -132,8 +150,8 @@ object RevancedRuntimeEntry {
             androidDataDir = androidDataDir,
             runtimeClassPath = resolveRuntimeClassPath(runtimeClassPath)
         )
-        val aaptLogs = AaptLogCapture(onLine = ::handleDexCompileLine).apply { start() }
-        val stdioCapture = StdIoCapture(::handleDexCompileLine).apply { start() }
+        val aaptLogs = AaptLogCapture(onLine = ::handleWriteProgressLine).apply { start() }
+        val stdioCapture = StdIoCapture(::handleWriteProgressLine).apply { start() }
 
         return try {
             val configs = configurations.mapNotNull { raw ->
