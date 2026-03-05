@@ -71,6 +71,9 @@
 - Fixed an issue where the patching process would die (needs testing) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/267
 - Fixed issues where the patcher screen would not show the progress of patching accurately
 - Fixed issues where the ReVanced v22 runtime would patch incorrectly resulting in broken patched apps
+- Fixed an issue where if you patched an app with multiple patch bundles they sometimes would not be listed on the `App info` and `Applied patches` screens https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/262
+- Fixed an issue where the hold tap guesture would not work for some apps in the `Apps` tab
+- Fixed an issue where you couldn't select certain apps in the `Apps` tab on multiselection mode
 
 
 # CI

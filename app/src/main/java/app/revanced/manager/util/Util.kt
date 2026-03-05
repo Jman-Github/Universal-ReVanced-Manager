@@ -59,6 +59,29 @@ import kotlin.reflect.KProperty
 typealias PatchSelection = Map<Int, Set<String>>
 typealias Options = Map<Int, Map<String, Map<String, Any?>>>
 
+fun PatchSelection.mergeWith(other: PatchSelection): PatchSelection {
+    if (isEmpty()) {
+        return other.mapValues { (_, patches) ->
+            patches.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+        }.filterValues { it.isNotEmpty() }
+    }
+    if (other.isEmpty()) {
+        return mapValues { (_, patches) ->
+            patches.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+        }.filterValues { it.isNotEmpty() }
+    }
+
+    return buildMap {
+        (keys + other.keys).forEach { bundleUid ->
+            val merged = this@mergeWith[bundleUid].orEmpty() + other[bundleUid].orEmpty()
+            val normalized = merged.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+            if (normalized.isNotEmpty()) {
+                put(bundleUid, normalized)
+            }
+        }
+    }
+}
+
 val Context.isDebuggable get() = 0 != applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE
 
 fun Context.openUrl(url: String) {

@@ -175,8 +175,8 @@ fun InstalledAppInfoScreen(
         }
     }
     val selectionPayload = installedAppState?.selectionPayload
-    val savedBundleVersions = remember(selectionPayload) {
-        selectionPayload?.bundles.orEmpty().associate { it.bundleUid to it.version }
+    val savedBundlesByUid = remember(selectionPayload) {
+        selectionPayload?.bundles.orEmpty().associateBy { it.bundleUid }
     }
     data class SavedBundleTarget(
         val bundleUid: Int,
@@ -201,7 +201,7 @@ fun InstalledAppInfoScreen(
     var missingBundleSaving by remember { mutableStateOf(false) }
     var missingBundleIncompatibleTarget by remember { mutableStateOf<SavedBundleOverrideTarget?>(null) }
 
-    val appliedBundles = remember(appliedSelection, bundleInfo, bundleSources, context, savedBundleVersions) {
+    val appliedBundles = remember(appliedSelection, bundleInfo, bundleSources, context, savedBundlesByUid) {
         if (appliedSelection.isNullOrEmpty()) return@remember emptyList<AppliedPatchBundleUi>()
 
         runCatching {
@@ -210,12 +210,15 @@ fun InstalledAppInfoScreen(
                 val patchNames = patches.toList().sorted()
                 val info = bundleInfo[bundleUid]
                 val source = bundleSources.firstOrNull { it.uid == bundleUid }
+                val savedBundle = savedBundlesByUid[bundleUid]
                 val fallbackName = if (bundleUid == 0)
                     context.getString(R.string.patches_name_default)
                 else
                     context.getString(R.string.patches_name_fallback)
 
                 val title = source?.displayTitle
+                    ?: savedBundle?.displayName?.takeIf { it.isNotBlank() }
+                    ?: savedBundle?.sourceName?.takeIf { it.isNotBlank() }
                     ?: info?.name
                     ?: "$fallbackName (#$bundleUid)"
 
@@ -232,7 +235,7 @@ fun InstalledAppInfoScreen(
                 AppliedPatchBundleUi(
                     uid = bundleUid,
                     title = title,
-                    version = savedBundleVersions[bundleUid]?.takeUnless { it.isNullOrBlank() } ?: info?.version,
+                    version = savedBundle?.version?.takeUnless { it.isNullOrBlank() } ?: info?.version,
                     patchInfos = patchInfos,
                     fallbackNames = missingNames,
                     bundleAvailable = info != null

@@ -198,7 +198,7 @@ fun InstalledAppsScreen(
                         val isBundleMetaLoaded = !isSaved || packageName in viewModel.bundleSummaryLoaded
                         val showPlaceholder = !hasPackageInfo || !isBundleMetaLoaded
                         val isMissingInstall = packageName in viewModel.missingPackages
-                        val isSelectable = isSaved || isMissingInstall
+                        val isSelectable = true
                         val isSelected = packageName in viewModel.selectedApps
                         val isInstalledOnDevice = viewModel.installedOnDeviceMap[packageName] == true
                         val hasSavedCopy = viewModel.savedCopyMap[packageName] == true
@@ -228,24 +228,19 @@ fun InstalledAppsScreen(
                                 savedActionKeys = visibleSavedActionKeys,
                                 onClick = {
                                     when {
-                                    selectionActive && isSelectable -> viewModel.toggleSelection(installedApp)
-                                    selectionActive -> {}
-                                    else -> onAppClick(installedApp)
-                                }
-                            },
-                            onLongClick = {
-                                if (isSelectable) {
+                                        selectionActive -> viewModel.toggleSelection(installedApp)
+                                        else -> onAppClick(installedApp)
+                                    }
+                                },
+                                onLongClick = {
                                     viewModel.toggleSelection(installedApp)
-                                } else {
-                                    onAppClick(installedApp)
-                                }
-                            },
-                            onSelectionChange = { checked ->
-                                viewModel.setSelection(installedApp, checked)
-                            },
-                            onAppAction = onAppAction
-                        )
-                    }
+                                },
+                                onSelectionChange = { checked ->
+                                    viewModel.setSelection(installedApp, checked)
+                                },
+                                onAppAction = onAppAction
+                            )
+                        }
                 }
             }
         }
