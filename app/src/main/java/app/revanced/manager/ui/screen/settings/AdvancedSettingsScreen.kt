@@ -2397,13 +2397,14 @@ private fun ExportNameFormatDialog(
     onSave: (String) -> Unit
 ) {
     var value by rememberSaveable(currentValue, stateSaver = TextFieldValue.Saver) {
-        mutableStateOf(TextFieldValue(currentValue, selection = TextRange(currentValue.length)))
+        mutableStateOf(TextFieldValue(currentValue, selection = TextRange.Zero))
     }
+    var useAppendInsertionFallback by rememberSaveable(currentValue) { mutableStateOf(true) }
     var showError by rememberSaveable { mutableStateOf(false) }
     val variables = remember { ExportNameFormatter.availableVariables() }
     val preview = remember(value.text) { ExportNameFormatter.preview(value.text) }
 
-    val scrollState = rememberScrollState()
+    val helperScrollState = rememberScrollState()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -2426,9 +2427,7 @@ private fun ExportNameFormatDialog(
         title = { Text(stringResource(R.string.export_name_format_dialog_title)) },
         text = {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(scrollState),
+                modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
                 Text(
@@ -2440,6 +2439,7 @@ private fun ExportNameFormatDialog(
                     value = value,
                     onValueChange = {
                         value = it
+                        useAppendInsertionFallback = false
                         if (showError && it.text.isNotBlank()) showError = false
                     },
                     singleLine = true,
@@ -2471,89 +2471,107 @@ private fun ExportNameFormatDialog(
                         )
                     }
                 }
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        text = stringResource(R.string.export_name_format_variables),
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    variables.forEach { variable ->
-                        Surface(
-                            tonalElevation = 1.dp,
-                            shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 240.dp)
+                        .verticalScroll(helperScrollState),
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            text = stringResource(R.string.export_name_format_variables),
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        variables.forEach { variable ->
+                            Surface(
+                                tonalElevation = 1.dp,
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    modifier = Modifier.fillMaxWidth()
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Text(
-                                        text = stringResource(variable.label),
-                                        style = MaterialTheme.typography.titleMedium
-                                    )
-                                    TextButton(onClick = {
-                                        val currentText = value.text
-                                        val selection = value.selection
-                                        val validSelection =
-                                            selection.start in 0..currentText.length &&
-                                                selection.end in 0..currentText.length &&
-                                                selection.start <= selection.end
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = stringResource(variable.label),
+                                            style = MaterialTheme.typography.titleMedium
+                                        )
+                                        TextButton(onClick = {
+                                            val currentText = value.text
+                                            val selection = if (
+                                                useAppendInsertionFallback &&
+                                                value.selection.collapsed &&
+                                                value.selection.start == 0
+                                            ) {
+                                                TextRange(currentText.length)
+                                            } else {
+                                                value.selection
+                                            }
+                                            val validSelection =
+                                                selection.start in 0..currentText.length &&
+                                                    selection.end in 0..currentText.length &&
+                                                    selection.start <= selection.end
 
-                                        value = if (validSelection) {
-                                            val updated = currentText.replaceRange(
-                                                selection.start,
-                                                selection.end,
-                                                variable.token
-                                            )
-                                            val cursor = selection.start + variable.token.length
-                                            TextFieldValue(
-                                                text = updated,
-                                                selection = TextRange(cursor)
-                                            )
-                                        } else {
-                                            val updated = currentText + variable.token
-                                            TextFieldValue(
-                                                text = updated,
-                                                selection = TextRange(updated.length)
-                                            )
+                                            value = if (validSelection) {
+                                                val updated = currentText.replaceRange(
+                                                    selection.start,
+                                                    selection.end,
+                                                    variable.token
+                                                )
+                                                val cursor = selection.start + variable.token.length
+                                                TextFieldValue(
+                                                    text = updated,
+                                                    selection = TextRange(cursor)
+                                                )
+                                            } else {
+                                                val updated = currentText + variable.token
+                                                TextFieldValue(
+                                                    text = updated,
+                                                    selection = TextRange(updated.length)
+                                                )
+                                            }
+                                            useAppendInsertionFallback = false
+                                            if (showError) showError = false
+                                        }) {
+                                            Text(stringResource(R.string.export_name_format_insert))
                                         }
-                                        if (showError) showError = false
-                                    }) {
-                                        Text(stringResource(R.string.export_name_format_insert))
                                     }
+                                    Text(
+                                        text = variable.token,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        text = stringResource(variable.description),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
-                                Text(
-                                    text = variable.token,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Text(
-                                    text = stringResource(variable.description),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
                             }
                         }
                     }
-                }
-                TextButton(
-                    onClick = {
-                        val defaultTemplate = ExportNameFormatter.DEFAULT_TEMPLATE
-                        value = TextFieldValue(
-                            text = defaultTemplate,
-                            selection = TextRange(defaultTemplate.length)
-                        )
-                        showError = false
-                    },
-                    modifier = Modifier.align(Alignment.Start)
-                ) {
-                    Text(stringResource(R.string.export_name_format_reset))
+                    TextButton(
+                        onClick = {
+                            val defaultTemplate = ExportNameFormatter.DEFAULT_TEMPLATE
+                            value = TextFieldValue(
+                                text = defaultTemplate,
+                                selection = TextRange.Zero
+                            )
+                            useAppendInsertionFallback = true
+                            showError = false
+                        },
+                        modifier = Modifier.align(Alignment.Start)
+                    ) {
+                        Text(stringResource(R.string.export_name_format_reset))
+                    }
                 }
             }
         }

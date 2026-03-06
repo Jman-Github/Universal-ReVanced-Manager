@@ -18,6 +18,7 @@
 - Fixed an issue where the hold tap guesture would not work for some apps in the `Apps` tab
 - Fixed an issue where you couldn't select certain apps in the `Apps` tab on multiselection mode
 - Fixed dependent patching flow settings so they are disabled when inactive and automatically reset when their parent toggle is turned off
+- Fixed the `Export filename format` editor so tapping the text field no longer jumps the view to the end, and its helper content now scrolls separately without disrupting cursor placement https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/269
 
 
 # v1.8.1-dev.04 (2026-03-02)
