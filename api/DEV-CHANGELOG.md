@@ -5,6 +5,7 @@
 
 - Overall improved the stability to all patcher runtimes
 - Added device architecture, Android version, device model, and patcher version to the patcher logs
+- Removed the duplicate export button from the App info screen top bar, keeping the existing export action in the main action row https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/260
 
 
 # Bug fixes
