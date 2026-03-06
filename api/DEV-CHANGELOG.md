@@ -16,6 +16,7 @@
 - Fixed an issue where if you patched an app with multiple patch bundles they sometimes would not be listed on the `App info` and `Applied patches` screens https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/262
 - Fixed an issue where the hold tap guesture would not work for some apps in the `Apps` tab
 - Fixed an issue where you couldn't select certain apps in the `Apps` tab on multiselection mode
+- Fixed dependent patching flow settings so they are disabled when inactive and automatically reset when their parent toggle is turned off
 
 
 # v1.8.1-dev.04 (2026-03-02)

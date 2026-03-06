@@ -923,6 +923,20 @@ fun AdvancedSettingsScreen(
                 }
             }
 
+            val autoExpandRunningStepsEnabled by viewModel.prefs.autoExpandRunningSteps.getAsState()
+            val autoExpandRunningStepsExclusiveEnabled by viewModel.prefs.autoExpandRunningStepsExclusive.getAsState()
+            val autoExpandExclusiveEnabled = autoExpandRunningStepsEnabled
+            val autoExpandExclusiveAlpha = if (autoExpandExclusiveEnabled) 1f else 0.5f
+
+            LaunchedEffect(
+                autoExpandRunningStepsEnabled,
+                autoExpandRunningStepsExclusiveEnabled
+            ) {
+                if (!autoExpandRunningStepsEnabled && autoExpandRunningStepsExclusiveEnabled) {
+                    viewModel.prefs.autoExpandRunningStepsExclusive.update(false)
+                }
+            }
+
             GroupHeader(stringResource(R.string.patching_flow_section))
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -962,11 +976,12 @@ fun AdvancedSettingsScreen(
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
                     BooleanItem(
-                        modifier = highlightModifier,
+                        modifier = highlightModifier.alpha(autoExpandExclusiveAlpha),
                         preference = viewModel.prefs.autoExpandRunningStepsExclusive,
                         coroutineScope = viewModel.viewModelScope,
                         headline = R.string.patcher_auto_expand_running_steps_exclusive,
                         description = R.string.patcher_auto_expand_running_steps_exclusive_description,
+                        enabled = autoExpandExclusiveEnabled
                     )
                 }
                 ExpressiveSettingsDivider()
