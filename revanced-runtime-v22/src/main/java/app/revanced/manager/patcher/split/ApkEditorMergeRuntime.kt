@@ -189,10 +189,9 @@ internal object ApkEditorMergeRuntime {
         }
         val args = ArrayList<String>().apply {
             add(appProcess)
-            heapLimitMb?.takeIf { it > 0 }?.let { limit ->
-                // Apply heap sizing directly for app_process even when prop override is unavailable.
-                add("-Xms16m")
+            heapLimitMb?.takeIf { it > 0 && propOverridePath.isNullOrBlank() }?.let { limit ->
                 add("-Xmx${limit}m")
+                add("-XX:HeapGrowthLimit=${limit}m")
             }
             add("-Djava.io.tmpdir=${apkDir.parentFile?.absolutePath ?: apkDir.absolutePath}")
             add("/")

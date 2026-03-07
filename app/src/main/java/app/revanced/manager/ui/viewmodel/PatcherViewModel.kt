@@ -2306,6 +2306,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private fun handleProgressEvent(event: ProgressEvent) = viewModelScope.launch {
         val eventStepId = event.stepId
+        if (shouldResetProgressStateForAutomaticRetry(event)) {
+            resetProgressStateForAutomaticRetry()
+        }
         val stepIndex = steps.indexOfFirst { step ->
             eventStepId?.let { id -> id == step.id }
                 ?: (step.state == State.RUNNING || step.state == State.WAITING)
@@ -2351,33 +2354,57 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             }
         }
 
-        if (stepIndex != -1) steps[stepIndex] = steps[stepIndex].run {
-            when (event) {
-                is ProgressEvent.Started -> withState(State.RUNNING)
-
-                is ProgressEvent.Progress -> {
-                    val nextState = if (state == State.WAITING) State.RUNNING else state
-                    val nextMessage = if (eventStepId == StepId.LoadPatches) {
+        if (stepIndex != -1) {
+            val step = steps[stepIndex]
+            val updatedStep = when (event) {
+                is ProgressEvent.Started -> {
+                    if (step.state == State.COMPLETED || step.state == State.FAILED) {
                         null
                     } else {
-                        event.message ?: message
+                        step.withState(State.RUNNING)
                     }
-                    withState(
-                        state = nextState,
-                        message = nextMessage,
-                        progress = event.current?.let { event.current to event.total } ?: progress
-                    )
                 }
 
-                is ProgressEvent.Completed -> withState(State.COMPLETED, progress = null)
+                is ProgressEvent.Progress -> {
+                    if (step.state == State.COMPLETED || step.state == State.FAILED) {
+                        null
+                    } else {
+                        val nextState = if (step.state == State.WAITING) State.RUNNING else step.state
+                        val nextMessage = if (eventStepId == StepId.LoadPatches) {
+                            null
+                        } else {
+                            event.message ?: step.message
+                        }
+                        step.withState(
+                            state = nextState,
+                            message = nextMessage,
+                            progress = event.current?.let { event.current to event.total } ?: step.progress
+                        )
+                    }
+                }
+
+                is ProgressEvent.Completed -> {
+                    if (step.state == State.FAILED) {
+                        null
+                    } else {
+                        step.withState(State.COMPLETED, progress = null)
+                    }
+                }
 
                 is ProgressEvent.Failed -> {
                     if (event.stepId == null && steps.any { it.state == State.FAILED }) return@launch
-                    withState(
+                    step.withState(
                         State.FAILED,
                         message = event.error.stackTrace,
                         progress = null
                     )
+                }
+            }
+
+            if (updatedStep != null) {
+                steps[stepIndex] = updatedStep
+                if (event is ProgressEvent.Completed && updatedStep.state == State.COMPLETED) {
+                    promoteNextSectionStepIfNeeded(stepIndex)
                 }
             }
         }
@@ -2535,7 +2562,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             title
         }
         val normalized = normalizeWriteApkTitle(stepId, splitNormalized)
-        if (stepId == StepId.WriteAPK && isDexCompileTitle(normalized)) {
+        val explicitCompletion = isExplicitSubStepCompletion(stepId, title)
+        if (stepId == StepId.WriteAPK && isDexCompileTitle(normalized) && !explicitCompletion) {
             seenDexCompiles.add(normalized)
         }
         var existingIndex = list.indexOfFirst { it.title == normalized }
@@ -2634,6 +2662,24 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         if (stepId == StepId.WriteAPK && isDexCompileTitle(normalized)) {
             completeWriteApkApplyChanges(list)
         }
+        if (explicitCompletion) {
+            if (existingIndex == -1 && list.isNotEmpty()) {
+                existingIndex = findBestSubStepIndex(list, normalized)
+            }
+            if (existingIndex != -1) {
+                val existing = list[existingIndex]
+                if (!existing.skipped && existing.state != State.COMPLETED) {
+                    if (stepId == StepId.WriteAPK && existingIndex > 0) {
+                        completeWriteApkPriorSteps(list, existingIndex)
+                    }
+                    list[existingIndex] = existing.copy(state = State.COMPLETED, progress = null)
+                    if (stepId == StepId.WriteAPK) {
+                        promoteNextWriteApkSubStep(list, existingIndex)
+                    }
+                }
+                return
+            }
+        }
         if (existingIndex != -1) {
             if (list[existingIndex].skipped) return
             if (stepId == StepId.WriteAPK &&
@@ -2674,6 +2720,12 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
 
         list.add(StepDetail(title = title, state = State.RUNNING, progress = progress))
+    }
+
+    private fun isExplicitSubStepCompletion(stepId: StepId, rawTitle: String): Boolean {
+        if (stepId != StepId.WriteAPK) return false
+        val title = rawTitle.trim()
+        return title.startsWith("Compiled ", ignoreCase = true)
     }
 
     private fun normalizeWriteApkTitle(stepId: StepId, title: String): String {
@@ -2776,6 +2828,24 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
     }
 
+    private fun promoteNextWriteApkSubStep(
+        list: SnapshotStateList<StepDetail>,
+        completedIndex: Int
+    ) {
+        val runningIndex = list.indexOfFirst { !it.skipped && it.state == State.RUNNING }
+        if (runningIndex != -1) return
+
+        val nextIndex = ((completedIndex + 1) until list.size)
+            .firstOrNull { index ->
+                val detail = list[index]
+                !detail.skipped && detail.state == State.WAITING
+            }
+            ?: return
+
+        val next = list[nextIndex]
+        list[nextIndex] = next.copy(state = State.RUNNING, progress = null)
+    }
+
     private fun activateResourceCompileStep(
         list: SnapshotStateList<StepDetail>,
         progress: Pair<Long, Long?>?
@@ -2818,10 +2888,12 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
         if (!writeApkStepStarted) return
         if (line.contains("Compiling modified resources", ignoreCase = true) ||
-            line.contains("Compiling patched resources", ignoreCase = true)
+            line.contains("Compiling patched resources", ignoreCase = true) ||
+            line.contains("Compiled modified resources", ignoreCase = true) ||
+            line.contains("Compiled patched resources", ignoreCase = true)
         ) {
             viewModelScope.launch {
-                updateSubStep(StepId.WriteAPK, "Compiling modified resources", null)
+                updateSubStep(StepId.WriteAPK, line, null)
                 markDexSubStepsReady()
             }
             return
@@ -2834,10 +2906,12 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             return
         }
         val match = dexCompilePattern.find(line) ?: dexWritePattern.find(line) ?: return
+        val completionKeyword = match.groupValues.getOrNull(1)
         val dexName = match.groupValues.lastOrNull()?.takeIf { it.endsWith(".dex") } ?: return
         viewModelScope.launch {
-            val title = "Compiling $dexName"
-            if (!seenDexCompiles.add(title)) return@launch
+            val isCompletion = completionKeyword.equals("Compiled", ignoreCase = true)
+            val title = if (isCompletion) "Compiled $dexName" else "Compiling $dexName"
+            if (!isCompletion && !seenDexCompiles.add("Compiling $dexName")) return@launch
             updateSubStep(StepId.WriteAPK, title, null)
         }
     }
@@ -2846,6 +2920,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         if (line.contains("Writing patched files", ignoreCase = true)) return true
         if (line.contains("Compiling patched dex files", ignoreCase = true)) return true
         if (line.contains("Applying patched changes", ignoreCase = true)) return true
+        if (line.contains("Compiled modified resources", ignoreCase = true)) return true
+        if (line.contains("Compiled patched resources", ignoreCase = true)) return true
         if (line.contains("Writing output APK", ignoreCase = true)) return true
         if (line.contains("Finalizing output", ignoreCase = true)) return true
         if (line.contains("Patched apk saved to", ignoreCase = true)) return true
@@ -2873,6 +2949,37 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
         // Drive the seeded list with the same log line that triggered fallback start.
         updateSubStep(StepId.WriteAPK, line, null)
+    }
+
+    private fun promoteNextSectionStepIfNeeded(completedIndex: Int) {
+        val completedStep = steps.getOrNull(completedIndex) ?: return
+        if (completedStep.hide) return
+        if (!isLastVisibleStepInSection(completedIndex)) return
+
+        val nextVisibleIndex = ((completedIndex + 1) until steps.size)
+            .firstOrNull { !steps[it].hide }
+            ?: return
+        val nextStep = steps[nextVisibleIndex]
+        if (nextStep.category == completedStep.category) return
+        if (nextStep.state != State.WAITING) return
+
+        val anotherVisibleRunning = steps.indices.any { index ->
+            index != nextVisibleIndex && !steps[index].hide && steps[index].state == State.RUNNING
+        }
+        if (anotherVisibleRunning) return
+
+        steps[nextVisibleIndex] = nextStep.withState(
+            state = State.RUNNING,
+            message = null,
+            progress = null
+        )
+    }
+
+    private fun isLastVisibleStepInSection(stepIndex: Int): Boolean {
+        val step = steps.getOrNull(stepIndex) ?: return false
+        return ((stepIndex + 1) until steps.size).none { index ->
+            !steps[index].hide && steps[index].category == step.category
+        }
     }
 
     private fun ensureWriteApkFallbackSubSteps() {
@@ -3136,6 +3243,57 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         steps.addAll(newSteps)
         stepSubSteps.clear()
         _patcherSucceeded.value = null
+    }
+
+    private fun shouldResetProgressStateForAutomaticRetry(event: ProgressEvent): Boolean {
+        if (event !is ProgressEvent.Started || event.stepId != StepId.LoadPatches) return false
+
+        val loadIndex = steps.indexOfFirst { it.id == StepId.LoadPatches }
+        if (loadIndex == -1) return false
+
+        val loadStep = steps[loadIndex]
+        if (loadStep.state == State.COMPLETED || loadStep.state == State.FAILED) {
+            return true
+        }
+
+        val resettableIds = steps.drop(loadIndex).map { it.id }.toSet()
+        return steps.drop(loadIndex + 1).any { it.state != State.WAITING } ||
+            stepSubSteps.keys.any { it in resettableIds } ||
+            writeApkStepStarted ||
+            dexSubStepsReady ||
+            pendingDexCompileLines.isNotEmpty() ||
+            seenDexCompiles.isNotEmpty()
+    }
+
+    private fun resetProgressStateForAutomaticRetry() {
+        val loadIndex = steps.indexOfFirst { it.id == StepId.LoadPatches }
+        if (loadIndex == -1) return
+
+        val resettableIds = steps.drop(loadIndex).map { it.id }.toSet()
+        resetDexCompileState()
+        resetFailureLogState()
+        runtimeReportedMemoryLimitMb = null
+
+        steps.forEachIndexed { index, step ->
+            if (index < loadIndex) {
+                steps[index] = step.withState(
+                    state = if (step.state == State.FAILED) State.COMPLETED else step.state,
+                    progress = null
+                )
+                return@forEachIndexed
+            }
+
+            steps[index] = step.withState(
+                state = State.WAITING,
+                message = null,
+                progress = null
+            )
+        }
+
+        stepSubSteps.keys
+            .filter { it in resettableIds }
+            .toList()
+            .forEach(stepSubSteps::remove)
     }
 
     private fun markInitialStepRunning() {

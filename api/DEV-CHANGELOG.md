@@ -1,3 +1,17 @@
+# v1.8.1-dev.06 (2026-03-07)
+
+
+# Features
+
+- Updated the Morphe runtimes aapt2 binaries to the ones used by the official ReVanced Manager https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/272
+
+
+# Bug fixes
+
+- Fixed issues where there would be a pause between the patchers main categories/steps
+- Fixed more issues with patching on certain runtimes
+
+
 # v1.8.1-dev.05 (2026-03-05)
 
 

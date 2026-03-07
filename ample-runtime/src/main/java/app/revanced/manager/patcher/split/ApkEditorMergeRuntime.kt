@@ -66,7 +66,17 @@ internal object ApkEditorMergeRuntime {
 
     fun listMergeOrder(apkDir: File): List<String> {
         val lines = ArrayList<String>()
-        try {
+        if (!canRunInProcess()) {
+            runProcess(
+                action = ACTION_LIST,
+                apkDir = apkDir,
+                outputApk = null,
+                skipModules = emptySet(),
+                sortApkEntries = false
+            ) { line ->
+                lines.add(line)
+            }
+        } else try {
             runInProcess(
                 action = ACTION_LIST,
                 apkDir = apkDir,
@@ -100,6 +110,19 @@ internal object ApkEditorMergeRuntime {
         sortApkEntries: Boolean,
         onLine: ((String) -> Unit)? = null
     ) = withContext(Dispatchers.IO) {
+        if (!canRunInProcess()) {
+            onLine?.invoke("APKEditor: in-process merge unavailable, using app_process.")
+            runProcess(
+                action = ACTION_MERGE,
+                apkDir = apkDir,
+                outputApk = outputApk,
+                skipModules = skipModules,
+                sortApkEntries = sortApkEntries,
+                onLine = onLine
+            )
+            return@withContext
+        }
+
         try {
             runInProcess(
                 action = ACTION_MERGE,
@@ -132,6 +155,15 @@ internal object ApkEditorMergeRuntime {
         }
     }
 
+    private fun canRunInProcess(): Boolean = hasDirectApkEditorClasses()
+
+    private fun hasDirectApkEditorClasses(): Boolean = runCatching {
+        val loader = ApkEditorMergeProcess::class.java.classLoader
+            ?: return@runCatching false
+        loader.loadClass("com.reandroid.apk.ApkBundle")
+        true
+    }.getOrDefault(false)
+
     private fun runProcess(
         action: String,
         apkDir: File,
@@ -151,6 +183,10 @@ internal object ApkEditorMergeRuntime {
         }
         val args = ArrayList<String>().apply {
             add(appProcess)
+            memoryLimitMb?.takeIf { it > 0 && propOverridePath.isNullOrBlank() }?.let { limit ->
+                add("-Xmx${limit}m")
+                add("-XX:HeapGrowthLimit=${limit}m")
+            }
             add("-Djava.io.tmpdir=${apkDir.parentFile?.absolutePath ?: apkDir.absolutePath}")
             add("/")
             add("--nice-name=${MERGE_CLASS}")

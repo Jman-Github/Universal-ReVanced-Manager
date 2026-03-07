@@ -24,7 +24,6 @@ ample-patcher = "21.0.0"
 ample-library = "3.0.2"
 morphe-patcher = "1.1.1"
 morphe-library = "1.2.0"
-smali = "3.0.9"
 koin = "3.5.3"
 ktor = "2.3.9"
 markdown-renderer = "0.30.0"
@@ -131,10 +130,6 @@ kotlin-process = { group = "com.github.pgreze", name = "kotlin-process", version
 # XMLPull
 xmlpull = { group = "xmlpull", name = "xmlpull", version.ref = "xmlpull" }
 xpp3 = { group = "xpp3", name = "xpp3", version.ref = "xpp3" }
-smali-dexlib2 = { group = "com.android.tools.smali", name = "smali-dexlib2", version.ref = "smali" }
-smali-util = { group = "com.android.tools.smali", name = "smali-util", version.ref = "smali" }
-smali-core = { group = "com.android.tools.smali", name = "smali", version.ref = "smali" }
-smali-baksmali = { group = "com.android.tools.smali", name = "smali-baksmali", version.ref = "smali" }
 
 # HiddenAPI
 hidden-api-stub = { group = "dev.rikka.hidden", name = "stub", version.ref = "hidden-api-stub" }

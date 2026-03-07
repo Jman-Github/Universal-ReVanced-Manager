@@ -40,6 +40,7 @@
 - Overall improved the stability to all patcher runtimes
 - Added device architecture, Android version, device model, and patcher version to the patcher logs
 - Removed the duplicate export button from the App info screen top bar, keeping the existing export action in the main action row https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/260
+- Updated the Morphe runtimes aapt2 binaries to the ones used by the official ReVanced Manager https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/272
 
 
 # Bug fixes
@@ -77,6 +78,8 @@
 - Fixed an issue where you couldn't select certain apps in the `Apps` tab on multiselection mode
 - Fixed dependent patching flow settings so they are disabled when inactive and automatically reset when their parent toggle is turned off
 - Fixed the `Export filename format` editor so tapping the text field no longer jumps the view to the end, and its helper content now scrolls separately without disrupting cursor placement https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/269
+- Fixed issues where there would be a pause between the patchers main categories/steps
+- Fixed more issues with patching on certain runtimes
 
 
 # CI
