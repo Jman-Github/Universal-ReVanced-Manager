@@ -28,7 +28,8 @@ class UpdatesSettingsViewModel(
     val backgroundManagerUpdateInterval = prefs.searchForManagerUpdatesBackgroundInterval
     val backgroundBundleUpdateInterval = prefs.searchForUpdatesBackgroundInterval
     val bundleUpdateDeliveryMode = prefs.bundleUpdateDeliveryMode
-
+    val bundleChangelogFetchLimit = prefs.bundleChangelogFetchLimit
+    val bundleChangelogStorageLimit = prefs.bundleChangelogStorageLimit
 
     val isConnected: Boolean
         get() = network.isConnected()

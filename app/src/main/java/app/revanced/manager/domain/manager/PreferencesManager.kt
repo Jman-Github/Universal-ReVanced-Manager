@@ -41,6 +41,9 @@ class PreferencesManager(
             PatchBundleActionKey.DefaultOrder.joinToString(",") { it.storageId }
         private val SAVED_APP_ACTION_ORDER_DEFAULT =
             SavedAppActionKey.DefaultOrder.joinToString(",") { it.storageId }
+        const val MIN_BUNDLE_CHANGELOG_HISTORY_LIMIT = 1
+        const val DEFAULT_BUNDLE_CHANGELOG_FETCH_LIMIT = 20
+        const val DEFAULT_BUNDLE_CHANGELOG_STORAGE_LIMIT = 40
     }
     val dynamicColor = booleanPreference("dynamic_color", false)
     val pureBlackTheme = booleanPreference("pure_black_theme", false)
@@ -123,6 +126,14 @@ class PreferencesManager(
     val bundleUpdateDeliveryMode = enumPreference(
         "bundle_update_delivery_mode",
         BundleUpdateDeliveryMode.AUTO
+    )
+    val bundleChangelogFetchLimit = intPreference(
+        "bundle_changelog_fetch_limit",
+        DEFAULT_BUNDLE_CHANGELOG_FETCH_LIMIT
+    )
+    val bundleChangelogStorageLimit = intPreference(
+        "bundle_changelog_storage_limit",
+        DEFAULT_BUNDLE_CHANGELOG_STORAGE_LIMIT
     )
     val pendingManagerUpdateVersionCode = intPreference("pending_manager_update_version_code", -1)
 
@@ -219,6 +230,8 @@ class PreferencesManager(
         val searchForUpdatesBackgroundInterval: SearchForUpdatesBackgroundInterval? = null,
         val searchForManagerUpdatesBackgroundInterval: SearchForUpdatesBackgroundInterval? = null,
         val bundleUpdateDeliveryMode: BundleUpdateDeliveryMode? = null,
+        val bundleChangelogFetchLimit: Int? = null,
+        val bundleChangelogStorageLimit: Int? = null,
         val disablePatchVersionCompatCheck: Boolean? = null,
         val disableSelectionWarning: Boolean? = null,
         val disableUniversalPatchCheck: Boolean? = null,
@@ -302,6 +315,8 @@ class PreferencesManager(
             searchForUpdatesBackgroundInterval = searchForUpdatesBackgroundInterval.get(),
             searchForManagerUpdatesBackgroundInterval = searchForManagerUpdatesBackgroundInterval.get(),
             bundleUpdateDeliveryMode = bundleUpdateDeliveryMode.get(),
+            bundleChangelogFetchLimit = bundleChangelogFetchLimit.get(),
+            bundleChangelogStorageLimit = bundleChangelogStorageLimit.get(),
             allowMeteredUpdates = allowMeteredUpdates.get()
         )
     }
@@ -410,6 +425,12 @@ class PreferencesManager(
         }
         snapshot.bundleUpdateDeliveryMode?.let {
             bundleUpdateDeliveryMode.value = it
+        }
+        snapshot.bundleChangelogFetchLimit?.let {
+            bundleChangelogFetchLimit.value = it.coerceAtLeast(MIN_BUNDLE_CHANGELOG_HISTORY_LIMIT)
+        }
+        snapshot.bundleChangelogStorageLimit?.let {
+            bundleChangelogStorageLimit.value = it.coerceAtLeast(MIN_BUNDLE_CHANGELOG_HISTORY_LIMIT)
         }
         snapshot.allowMeteredUpdates?.let { allowMeteredUpdates.value = it }
     }

@@ -40,12 +40,14 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import app.universal.revanced.manager.R
 import app.revanced.manager.domain.manager.BundleUpdateDeliveryMode
+import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.manager.SearchForUpdatesBackgroundInterval
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.ColumnWithScrollbar
 import app.revanced.manager.ui.component.GroupHeader
 import app.revanced.manager.ui.component.settings.BooleanItem
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsCard
+import app.revanced.manager.ui.component.settings.IntegerItem
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsDivider
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsItem
 import app.revanced.manager.ui.component.settings.SettingsSearchHighlight
@@ -74,6 +76,8 @@ fun UpdatesSettingsScreen(
     val managerInterval by vm.backgroundManagerUpdateInterval.getAsState()
     val backgroundInterval by vm.backgroundBundleUpdateInterval.getAsState()
     val deliveryMode by vm.bundleUpdateDeliveryMode.getAsState()
+    val changelogFetchLimit by vm.bundleChangelogFetchLimit.getAsState()
+    val changelogStorageLimit by vm.bundleChangelogStorageLimit.getAsState()
     val searchTarget by SettingsSearchState.target.collectAsStateWithLifecycle()
     var highlightTarget by rememberSaveable { mutableStateOf<Int?>(null) }
     var showBackgroundUpdateDialog by rememberSaveable { mutableStateOf(false) }
@@ -499,6 +503,62 @@ fun UpdatesSettingsScreen(
                                 return@ExpressiveSettingsItem
                             }
                             onChangelogClick()
+                        }
+                    )
+                }
+            }
+
+            GroupHeader(stringResource(R.string.bundle_changelog_history_section))
+
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                SettingsSearchHighlight(
+                    targetKey = R.string.bundle_changelog_fetch_limit,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    IntegerItem(
+                        modifier = highlightModifier,
+                        preference = vm.bundleChangelogFetchLimit,
+                        coroutineScope = coroutineScope,
+                        headline = R.string.bundle_changelog_fetch_limit,
+                        description = R.string.bundle_changelog_fetch_limit_description,
+                        supportingText = stringResource(
+                            R.string.bundle_changelog_fetch_limit_supporting,
+                            changelogFetchLimit
+                        ),
+                        neutralButtonLabel = stringResource(R.string.reset_to_default),
+                        neutralValueProvider = {
+                            PreferencesManager.DEFAULT_BUNDLE_CHANGELOG_FETCH_LIMIT
+                        },
+                        validator = {
+                            it >= PreferencesManager.MIN_BUNDLE_CHANGELOG_HISTORY_LIMIT
+                        }
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.bundle_changelog_storage_limit,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    IntegerItem(
+                        modifier = highlightModifier,
+                        preference = vm.bundleChangelogStorageLimit,
+                        coroutineScope = coroutineScope,
+                        headline = R.string.bundle_changelog_storage_limit,
+                        description = R.string.bundle_changelog_storage_limit_description,
+                        supportingText = stringResource(
+                            R.string.bundle_changelog_storage_limit_supporting,
+                            changelogStorageLimit
+                        ),
+                        neutralButtonLabel = stringResource(R.string.reset_to_default),
+                        neutralValueProvider = {
+                            PreferencesManager.DEFAULT_BUNDLE_CHANGELOG_STORAGE_LIMIT
+                        },
+                        validator = {
+                            it >= PreferencesManager.MIN_BUNDLE_CHANGELOG_HISTORY_LIMIT
                         }
                     )
                 }

@@ -41,6 +41,7 @@
 - Added device architecture, Android version, device model, and patcher version to the patcher logs
 - Removed the duplicate export button from the App info screen top bar, keeping the existing export action in the main action row https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/260
 - Updated the Morphe runtimes aapt2 binaries to the ones used by the official ReVanced Manager https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/272
+- Improved the existing `Previous changelog` system to backfill to a user set limit through settings
 
 
 # Bug fixes

@@ -113,6 +113,9 @@ fun BundleItem(
     var showBundleChangelog by rememberSaveable { mutableStateOf(false) }
     var showBundleChangelogHistory by rememberSaveable { mutableStateOf(false) }
     var changelogHistory by remember { mutableStateOf<List<PatchBundleChangelogEntry>>(emptyList()) }
+    var changelogHistoryLoading by remember { mutableStateOf(false) }
+    var changelogHistoryError by remember { mutableStateOf<Throwable?>(null) }
+    val remoteSource = src.asRemoteOrNull
 
     if (viewBundleDialogPage) {
         BundleInformationDialog(
@@ -151,6 +154,26 @@ fun BundleItem(
     if (showBundleChangelogHistory) {
         BundleChangelogHistoryDialog(
             entries = changelogHistory.drop(1),
+            isRefreshing = changelogHistoryLoading,
+            error = changelogHistoryError,
+            onRetry = {
+                changelogHistoryError = null
+                coroutineScope.launch {
+                    changelogHistoryLoading = true
+                    changelogHistory = bundleRepo.getChangelogHistory(src.uid)
+                    try {
+                        changelogHistory = if (remoteSource != null) {
+                            bundleRepo.synchronizeChangelogHistory(remoteSource)
+                        } else {
+                            bundleRepo.getChangelogHistory(src.uid)
+                        }
+                    } catch (t: Throwable) {
+                        changelogHistoryError = t
+                    } finally {
+                        changelogHistoryLoading = false
+                    }
+                }
+            },
             onDismissRequest = { showBundleChangelogHistory = false }
         )
     }
@@ -250,7 +273,6 @@ fun BundleItem(
     }
 
     val displayVersion = src.version
-    val remoteSource = src.asRemoteOrNull
     val installedSignature = remoteSource?.installedVersionSignature
     val manualUpdateBadge = manualUpdateInfo?.takeIf { info ->
         val latest = info.latestVersion
@@ -258,9 +280,28 @@ fun BundleItem(
         !latest.isNullOrBlank() && baseline != null && latest != baseline
     }
 
-    LaunchedEffect(showBundleChangelogHistory, src.uid, src.updatedAt) {
-        if (showBundleChangelogHistory && remoteSource != null) {
+    fun refreshChangelogHistory() {
+        changelogHistoryError = null
+        coroutineScope.launch {
+            changelogHistoryLoading = true
             changelogHistory = bundleRepo.getChangelogHistory(src.uid)
+            try {
+                changelogHistory = if (remoteSource != null) {
+                    bundleRepo.synchronizeChangelogHistory(remoteSource)
+                } else {
+                    bundleRepo.getChangelogHistory(src.uid)
+                }
+            } catch (t: Throwable) {
+                changelogHistoryError = t
+            } finally {
+                changelogHistoryLoading = false
+            }
+        }
+    }
+
+    LaunchedEffect(showBundleChangelogHistory, src.uid, src.updatedAt) {
+        if (showBundleChangelogHistory) {
+            refreshChangelogHistory()
         }
     }
 

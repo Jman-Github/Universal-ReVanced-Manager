@@ -151,7 +151,10 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                     R.string.bundle_update_delivery_mode_dialog_title,
                     R.string.bundle_update_delivery_mode_auto,
                     R.string.bundle_update_delivery_mode_websocket_preferred,
-                    R.string.bundle_update_delivery_mode_polling_only
+                    R.string.bundle_update_delivery_mode_polling_only,
+                    R.string.bundle_changelog_history_section,
+                    R.string.bundle_changelog_fetch_limit,
+                    R.string.bundle_changelog_storage_limit
                 )
             ),
             Section(
@@ -241,6 +244,8 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.background_manager_update, R.string.background_manager_update_description, R.string.updates, Settings.Updates),
             SearchEntry(R.string.background_bundle_update, R.string.background_bundle_update_description, R.string.updates, Settings.Updates),
             SearchEntry(R.string.bundle_update_delivery_mode, R.string.bundle_update_delivery_mode_description, R.string.updates, Settings.Updates),
+            SearchEntry(R.string.bundle_changelog_fetch_limit, R.string.bundle_changelog_fetch_limit_description, R.string.updates, Settings.Updates),
+            SearchEntry(R.string.bundle_changelog_storage_limit, R.string.bundle_changelog_storage_limit_description, R.string.updates, Settings.Updates),
             SearchEntry(R.string.downloader_auto_save_title, R.string.downloader_auto_save_description, R.string.downloads, Settings.Downloads),
             SearchEntry(R.string.downloader_plugins, null, R.string.downloads, Settings.Downloads),
             SearchEntry(R.string.downloaded_apps, null, R.string.downloads, Settings.Downloads),

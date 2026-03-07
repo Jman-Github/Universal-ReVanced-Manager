@@ -206,6 +206,38 @@ class ReVancedAPI(
     suspend fun getPatchesUpdate(): APIResponse<ReVancedAsset> =
         getPatchesUpdate(prefs.usePatchesPrereleases.get())
 
+    suspend fun getRepositoryReleaseHistory(
+        repoUrl: String,
+        prerelease: Boolean? = null,
+        limit: Int = 20
+    ): APIResponse<List<GitHubRelease>> {
+        val config = runCatching { parseRepoUrl(repoUrl) }
+            .getOrElse { return APIResponse.Failure(APIFailure(it, null)) }
+        val targetLimit = limit.coerceAtLeast(1)
+        val releases = mutableListOf<GitHubRelease>()
+        var page = 1
+
+        while (releases.size < targetLimit) {
+            val perPage = (targetLimit - releases.size)
+                .coerceAtLeast(20)
+                .coerceAtMost(100)
+            when (val response = githubRequest<List<GitHubRelease>>(config, "releases?per_page=$perPage&page=$page")) {
+                is APIResponse.Success -> {
+                    val batch = response.data
+                    releases += batch.filter { release ->
+                        !release.draft && (prerelease == null || release.prerelease == prerelease)
+                    }
+                    if (batch.size < perPage) break
+                    page += 1
+                }
+                is APIResponse.Error -> return APIResponse.Error(response.error)
+                is APIResponse.Failure -> return APIResponse.Failure(response.error)
+            }
+        }
+
+        return APIResponse.Success(releases.take(targetLimit))
+    }
+
     suspend fun getContributors(): APIResponse<List<ReVancedGitRepository>> {
         val config = repoConfig()
         return when (val response = githubRequest<List<GitHubContributor>>(config, "contributors")) {

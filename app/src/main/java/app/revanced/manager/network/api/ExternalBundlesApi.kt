@@ -184,6 +184,62 @@ class ExternalBundlesApi(
         }
     }
 
+    suspend fun getBundleHistory(
+        owner: String,
+        repo: String,
+        prerelease: Boolean? = null,
+        limit: Int = DEFAULT_PAGE_SIZE
+    ): APIResponse<List<ExternalBundleSnapshot>> {
+        val trimmedOwner = owner.trim()
+        val trimmedRepo = repo.trim()
+        if (trimmedOwner.isBlank() || trimmedRepo.isBlank()) {
+            return APIResponse.Success(emptyList())
+        }
+
+        val targetLimit = limit.coerceAtLeast(1)
+        val history = mutableListOf<ExternalBundleSnapshot>()
+        var offset = 0
+
+        while (history.size < targetLimit) {
+            val pageLimit = minOf(DEFAULT_PAGE_SIZE, targetLimit - history.size)
+            val variables = buildBundleHistoryVariables(
+                owner = trimmedOwner,
+                repo = trimmedRepo,
+                limit = pageLimit,
+                offset = offset,
+                prerelease = prerelease
+            )
+            val stableResponse = graphql<BundlesQueryData>(STABLE_GRAPHQL_URL, BUNDLES_QUERY, variables)
+            if (stableResponse is APIResponse.Success) {
+                val batch = stableResponse.data.bundle.map { it.toSnapshot(STABLE_BUNDLES_HOST) }
+                if (batch.isNotEmpty()) {
+                    history += batch
+                    if (batch.size < pageLimit) break
+                    offset += batch.size
+                    continue
+                }
+                if (history.isNotEmpty()) break
+            }
+
+            val devResponse = graphql<BundlesQueryData>(DEV_GRAPHQL_URL, BUNDLES_QUERY, variables)
+            if (devResponse is APIResponse.Success) {
+                val batch = devResponse.data.bundle.map { it.toSnapshot(DEV_BUNDLES_HOST) }
+                history += batch
+                if (batch.size < pageLimit) break
+                offset += batch.size
+                continue
+            }
+
+            return when (devResponse) {
+                is APIResponse.Error -> APIResponse.Error(devResponse.error)
+                is APIResponse.Failure -> APIResponse.Failure(devResponse.error)
+                is APIResponse.Success -> APIResponse.Success(history)
+            }
+        }
+
+        return APIResponse.Success(history.take(targetLimit))
+    }
+
     suspend fun getBundlePatches(bundleId: Int): APIResponse<List<ExternalBundlePatch>> {
         val variables = buildJsonObject {
             put("id", JsonPrimitive(bundleId))
@@ -361,6 +417,28 @@ class ExternalBundlesApi(
                 put("offset", JsonPrimitive(offset))
             }
         }
+    }
+
+    private fun buildBundleHistoryVariables(
+        owner: String,
+        repo: String,
+        limit: Int,
+        offset: Int,
+        prerelease: Boolean?
+    ): JsonObject = buildJsonObject {
+        put("where", buildJsonObject {
+            put("source", buildJsonObject {
+                put("source_metadatum", buildJsonObject {
+                    put("owner_name", buildJsonObject { put("_eq", JsonPrimitive(owner)) })
+                    put("repo_name", buildJsonObject { put("_eq", JsonPrimitive(repo)) })
+                })
+            })
+            prerelease?.let {
+                put("is_prerelease", buildJsonObject { put("_eq", JsonPrimitive(it)) })
+            }
+        })
+        put("limit", JsonPrimitive(limit))
+        put("offset", JsonPrimitive(offset))
     }
 
     companion object {

@@ -155,6 +155,13 @@
     <string name="bundle_update_delivery_mode_websocket_preferred_description">Keeps a live connection for faster background alerts. Uses more battery.</string>
     <string name="bundle_update_delivery_mode_polling_only">Polling only</string>
     <string name="bundle_update_delivery_mode_polling_only_description">Checks for updates on a schedule only. Alerts may arrive later.</string>
+    <string name="bundle_changelog_history_section">Bundle changelog history</string>
+    <string name="bundle_changelog_fetch_limit">Changelog fetch limit</string>
+    <string name="bundle_changelog_fetch_limit_description">Set how many older bundle changelogs are fetched when backfilling history.</string>
+    <string name="bundle_changelog_fetch_limit_supporting">Currently backfills up to %1$d changelogs per bundle. Higher values may use more data and take longer.</string>
+    <string name="bundle_changelog_storage_limit">Stored changelog limit</string>
+    <string name="bundle_changelog_storage_limit_description">Set how many bundle changelogs are stored locally.</string>
+    <string name="bundle_changelog_storage_limit_supporting">Currently keeps up to %1$d changelogs per bundle. When the limit is reached, the oldest changelog is removed first. Higher values use more storage.</string>
     <string name="background_bundle_ask_notification">Allow notifications?</string>
     <string name="background_bundle_ask_notification_description">Enable notifications so the manager can alert you when patch bundle updates are available.</string>
     <string name="notification_channel_bundle_updates_name">Background bundle updates</string>
@@ -535,6 +542,7 @@ Patch profiles are not affected.</string>
     <string name="process_runtime_memory_aggressive">Aggressive patcher memory limit</string>
     <string name="process_runtime_memory_aggressive_description">Use the highest memory limit allowed by your device for the experimental patcher</string>
     <string name="reset_to_recommended">Reset to recommended</string>
+    <string name="reset_to_default">Reset to default</string>
     <string name="patcher_auto_collapse_steps">Auto-collapse completed patcher steps</string>
     <string name="patcher_auto_collapse_steps_description">Automatically collapse each patcher progress widget after all of its steps finish</string>
     <string name="patcher_auto_expand_steps">Auto-expand running steps</string>

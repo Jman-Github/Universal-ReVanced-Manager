@@ -4,6 +4,7 @@ import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.network.api.ExternalBundlesApi
 import app.revanced.manager.network.api.ReVancedAPI
 import app.revanced.manager.network.dto.ExternalBundleSnapshot
+import app.revanced.manager.network.dto.GitHubRelease
 import app.revanced.manager.network.dto.ReVancedAsset
 import app.revanced.manager.network.service.HttpService
 import app.revanced.manager.network.utils.getOrNull
@@ -158,13 +159,93 @@ sealed class RemotePatchBundle(
         return asset
     }
 
+    suspend fun fetchHistoricalChangelogEntries(
+        limit: Int = DEFAULT_CHANGELOG_HISTORY_LIMIT
+    ): List<PatchBundleChangelogEntry> {
+        val key = "$uid|$limit|${historicalInfoCacheIdentity()}"
+        val now = System.currentTimeMillis()
+        val cached = changelogHistoryCacheMutex.withLock {
+            changelogHistoryCache[key]?.takeIf { now - it.timestamp <= CHANGELOG_CACHE_TTL }
+        }
+        if (cached != null) return cached.entries
+
+        val entries = getHistoricalChangelogEntries(limit)
+        changelogHistoryCacheMutex.withLock {
+            changelogHistoryCache[key] = CachedChangelogHistory(entries, now)
+        }
+        return entries
+    }
+
     protected open suspend fun latestInfoCacheIdentity(): String = endpoint
+
+    protected open suspend fun historicalInfoCacheIdentity(): String = latestInfoCacheIdentity()
+
+    protected open suspend fun getHistoricalChangelogEntries(limit: Int): List<PatchBundleChangelogEntry> =
+        emptyList()
+
+    protected suspend fun fetchGitHubChangelogHistory(
+        limit: Int,
+        prerelease: Boolean? = null,
+        vararg candidates: String?
+    ): List<PatchBundleChangelogEntry> {
+        val repoUrl = inferGitHubRepoUrl(*candidates) ?: return emptyList()
+        val api: ReVancedAPI by inject()
+        return api.getRepositoryReleaseHistory(repoUrl, prerelease = prerelease, limit = limit)
+            .getOrThrow()
+            .map { release -> release.toChangelogEntry(repoUrl) }
+    }
+
+    protected fun inferGitHubRepoUrl(vararg candidates: String?): String? =
+        candidates.asSequence()
+            .mapNotNull(::parseGitHubRepoUrl)
+            .firstOrNull()
+
+    private fun parseGitHubRepoUrl(raw: String?): String? {
+        val trimmed = raw?.trim().orEmpty()
+        if (trimmed.isEmpty()) return null
+        val parsed = runCatching { Url(trimmed) }.getOrNull() ?: return null
+        val host = parsed.host.lowercase()
+        val segments = parsed.encodedPath.trim('/').split('/').filter { it.isNotBlank() }
+        if (segments.size < 2) return null
+
+        val ownerRepo = when {
+            host == "github.com" -> segments[0] to segments[1]
+            host == "raw.githubusercontent.com" -> segments[0] to segments[1]
+            host == "api.github.com" -> {
+                val reposIndex = segments.indexOf("repos")
+                if (reposIndex < 0 || segments.size <= reposIndex + 2) return null
+                segments[reposIndex + 1] to segments[reposIndex + 2]
+            }
+            else -> return null
+        }
+
+        val owner = ownerRepo.first.removeSuffix(".git")
+        val repo = ownerRepo.second.removeSuffix(".git")
+        if (owner.isBlank() || repo.isBlank()) return null
+        return "https://github.com/$owner/$repo"
+    }
+
+    private fun GitHubRelease.toChangelogEntry(repoUrl: String): PatchBundleChangelogEntry {
+        val publishedAtMillis = (publishedAt ?: createdAt)
+            ?.let { timestamp -> runCatching { Instant.parse(timestamp).toEpochMilliseconds() }.getOrNull() }
+        val description = body?.ifBlank { name.orEmpty() } ?: name.orEmpty()
+        return PatchBundleChangelogEntry(
+            version = tagName,
+            description = description,
+            publishedAtMillis = publishedAtMillis,
+            pageUrl = "${repoUrl.removeSuffix("/")}/releases/tag/$tagName"
+        )
+    }
 
     companion object {
         const val updateFailMsg = "Failed to update patches"
         private const val CHANGELOG_CACHE_TTL = 10 * 60 * 1000L
+        private const val DEFAULT_CHANGELOG_HISTORY_LIMIT =
+            PreferencesManager.DEFAULT_BUNDLE_CHANGELOG_FETCH_LIMIT
         private val changelogCacheMutex = Mutex()
         private val changelogCache = mutableMapOf<String, CachedChangelog>()
+        private val changelogHistoryCacheMutex = Mutex()
+        private val changelogHistoryCache = mutableMapOf<String, CachedChangelogHistory>()
     }
 
     val installedVersionSignature: String? get() = installedVersionSignatureInternal
@@ -211,6 +292,11 @@ class JsonPatchBundle(
         http.request<ReVancedAsset> {
             url(endpoint)
         }.getOrThrow()
+    }
+
+    override suspend fun getHistoricalChangelogEntries(limit: Int) = withContext(Dispatchers.IO) {
+        val latest = runCatching { fetchLatestReleaseInfo() }.getOrNull()
+        fetchGitHubChangelogHistory(limit, null, latest?.pageUrl, latest?.downloadUrl, endpoint)
     }
 
     override fun copy(
@@ -277,10 +363,28 @@ class APIPatchBundle(
         api.getPatchesUpdate(prerelease = includePrerelease).getOrThrow()
     }
 
+    override suspend fun getHistoricalChangelogEntries(limit: Int) = withContext(Dispatchers.IO) {
+        val includePrerelease = prefs.usePatchesPrereleases.get()
+        val latest = runCatching { fetchLatestReleaseInfo() }.getOrNull()
+        fetchGitHubChangelogHistory(
+            limit,
+            includePrerelease,
+            latest?.pageUrl,
+            latest?.downloadUrl,
+            endpoint
+        )
+    }
+
     override suspend fun latestInfoCacheIdentity(): String {
         val includePrerelease = prefs.usePatchesPrereleases.get()
         return "$endpoint|prerelease=$includePrerelease"
     }
+
+    override suspend fun historicalInfoCacheIdentity(): String {
+        val includePrerelease = prefs.usePatchesPrereleases.get()
+        return "$endpoint|history|prerelease=$includePrerelease"
+    }
+
     override fun copy(
         error: Throwable?,
         name: String,
@@ -500,6 +604,12 @@ class ExternalGraphqlPatchBundle(
         val hasExplicitChannel: Boolean,
         val isV2LatestEndpoint: Boolean
     )
+    private data class HistorySource(
+        val owner: String,
+        val repo: String,
+        val repoUrl: String?,
+        val sourceUrl: String?
+    )
 
     override suspend fun getLatestInfo(): ReVancedAsset = withContext(Dispatchers.IO) {
         val endpointMetadata = parseEndpointMetadata()
@@ -579,6 +689,89 @@ class ExternalGraphqlPatchBundle(
         snapshotToAsset(latest)
     }
 
+    override suspend fun getHistoricalChangelogEntries(limit: Int) = withContext(Dispatchers.IO) {
+        val endpointMetadata = parseEndpointMetadata()
+        val historySource = resolveHistorySource(endpointMetadata)
+        val prerelease = if (endpointMetadata.hasExplicitChannel) {
+            endpointMetadata.prerelease
+        } else {
+            metadata.isPrerelease ?: endpointMetadata.prerelease
+        }
+        var history = fetchExternalHistory(
+            source = historySource,
+            prerelease = prerelease,
+            limit = limit
+        )
+        if (history.size < limit && prerelease != null) {
+            history = mergeHistoryEntries(
+                history,
+                fetchExternalHistory(
+                    source = historySource,
+                    prerelease = null,
+                    limit = limit
+                ),
+                limit
+            )
+        }
+        if (history.size < limit && !historySource.repoUrl.isNullOrBlank()) {
+            history = mergeHistoryEntries(
+                history,
+                fetchGitHubChangelogHistory(
+                    limit,
+                    prerelease,
+                    historySource.repoUrl,
+                    historySource.sourceUrl,
+                    endpoint,
+                    metadata.downloadUrl
+                ),
+                limit
+            )
+        }
+        if (history.size < limit && prerelease != null && !historySource.repoUrl.isNullOrBlank()) {
+            history = mergeHistoryEntries(
+                history,
+                fetchGitHubChangelogHistory(
+                    limit,
+                    null,
+                    historySource.repoUrl,
+                    historySource.sourceUrl,
+                    endpoint,
+                    metadata.downloadUrl
+                ),
+                limit
+            )
+        }
+        if (history.isNotEmpty()) {
+            return@withContext history
+        }
+        val latest = runCatching { fetchLatestReleaseInfo() }.getOrNull()
+        fetchGitHubChangelogHistory(
+            limit,
+            prerelease,
+            historySource.repoUrl,
+            historySource.sourceUrl,
+            latest?.pageUrl,
+            latest?.downloadUrl,
+            endpoint
+        )
+    }
+
+    override suspend fun historicalInfoCacheIdentity(): String {
+        val endpointMetadata = parseEndpointMetadata()
+        val owner = endpointMetadata.owner?.trim().takeIf { !it.isNullOrBlank() }
+            ?: metadata.ownerName?.trim().takeIf { !it.isNullOrBlank() }
+            ?: ""
+        val repo = endpointMetadata.repo?.trim().takeIf { !it.isNullOrBlank() }
+            ?: metadata.repoName?.trim().takeIf { !it.isNullOrBlank() }
+            ?: ""
+        val prerelease = if (endpointMetadata.hasExplicitChannel) {
+            endpointMetadata.prerelease
+        } else {
+            metadata.isPrerelease ?: endpointMetadata.prerelease
+        }
+        return "$endpoint|history|owner=$owner|repo=$repo|prerelease=$prerelease"
+    }
+
     override fun copy(
         error: Throwable?,
         name: String,
@@ -639,6 +832,88 @@ class ExternalGraphqlPatchBundle(
             description = description,
             version = version
         )
+    }
+
+    private fun ExternalBundleSnapshot.toChangelogEntry(): PatchBundleChangelogEntry {
+        val repoUrl = when {
+            ownerName.isNotBlank() && repoName.isNotBlank() ->
+                "https://github.com/$ownerName/$repoName"
+            else -> inferGitHubRepoUrl(sourceUrl)
+        }
+        val pageUrl = when {
+            !repoUrl.isNullOrBlank() && version.isNotBlank() ->
+                "${repoUrl.removeSuffix("/")}/releases/tag/$version"
+            sourceUrl.isNotBlank() -> sourceUrl
+            else -> null
+        }
+        return PatchBundleChangelogEntry(
+            version = version,
+            description = description?.takeIf { it.isNotBlank() } ?: version,
+            publishedAtMillis = parseInstant(createdAt)?.toEpochMilliseconds(),
+            pageUrl = pageUrl
+        )
+    }
+
+    private suspend fun resolveHistorySource(endpointMetadata: EndpointMetadata): HistorySource {
+        val endpointOwner = endpointMetadata.owner?.trim().takeIf { !it.isNullOrBlank() }
+        val endpointRepo = endpointMetadata.repo?.trim().takeIf { !it.isNullOrBlank() }
+        val metadataOwner = metadata.ownerName?.trim().takeIf { !it.isNullOrBlank() }
+        val metadataRepo = metadata.repoName?.trim().takeIf { !it.isNullOrBlank() }
+        val snapshot = metadata.bundleId.takeIf { it > 0 }?.let { bundleId ->
+            api.getBundleById(bundleId).getOrNull()
+        }
+        val snapshotOwner = snapshot?.ownerName?.trim().takeIf { !it.isNullOrBlank() }
+        val snapshotRepo = snapshot?.repoName?.trim().takeIf { !it.isNullOrBlank() }
+        val owner = endpointOwner ?: metadataOwner ?: snapshotOwner ?: ""
+        val repo = endpointRepo ?: metadataRepo ?: snapshotRepo ?: ""
+        val sourceUrl = snapshot?.sourceUrl?.trim()?.takeIf { it.isNotBlank() }
+        val repoUrl = when {
+            owner.isNotBlank() && repo.isNotBlank() -> "https://github.com/$owner/$repo"
+            else -> inferGitHubRepoUrl(sourceUrl, endpoint, metadata.downloadUrl)
+        }
+
+        if (snapshot != null && (metadata.ownerName.isNullOrBlank() || metadata.repoName.isNullOrBlank())) {
+            metadata = metadata.copy(
+                ownerName = snapshotOwner ?: metadata.ownerName,
+                repoName = snapshotRepo ?: metadata.repoName
+            )
+            ExternalBundleMetadataStore.write(directory, metadata)
+        }
+
+        return HistorySource(
+            owner = owner,
+            repo = repo,
+            repoUrl = repoUrl,
+            sourceUrl = sourceUrl
+        )
+    }
+
+    private suspend fun fetchExternalHistory(
+        source: HistorySource,
+        prerelease: Boolean?,
+        limit: Int
+    ): List<PatchBundleChangelogEntry> {
+        if (source.owner.isBlank() || source.repo.isBlank()) return emptyList()
+        return api.getBundleHistory(source.owner, source.repo, prerelease = prerelease, limit = limit)
+            .getOrNull()
+            .orEmpty()
+            .map { snapshot -> snapshot.toChangelogEntry() }
+    }
+
+    private fun mergeHistoryEntries(
+        current: List<PatchBundleChangelogEntry>,
+        incoming: List<PatchBundleChangelogEntry>,
+        limit: Int
+    ): List<PatchBundleChangelogEntry> {
+        val targetLimit = limit.coerceAtLeast(1)
+        if (incoming.isEmpty()) return current.take(targetLimit)
+        return (current + incoming)
+            .sortedWith(compareByDescending<PatchBundleChangelogEntry> { it.publishedAtMillis ?: Long.MIN_VALUE })
+            .distinctBy { entry ->
+                entry.version.trim().lowercase().takeIf { it.isNotBlank() }
+                    ?: "${entry.publishedAtMillis ?: Long.MIN_VALUE}|${entry.description.trim()}"
+            }
+            .take(targetLimit)
     }
 
     private fun parseEndpointMetadata(): EndpointMetadata {
@@ -750,3 +1025,7 @@ class ExternalGraphqlPatchBundle(
 }
 
 private data class CachedChangelog(val asset: ReVancedAsset, val timestamp: Long)
+private data class CachedChangelogHistory(
+    val entries: List<PatchBundleChangelogEntry>,
+    val timestamp: Long
+)

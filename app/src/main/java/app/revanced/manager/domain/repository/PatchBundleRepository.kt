@@ -399,28 +399,57 @@ class PatchBundleRepository(
 
     suspend fun getChangelogHistory(uid: Int): List<PatchBundleChangelogEntry> =
         withContext(Dispatchers.IO) {
+            val storageLimit = normalizedChangelogStorageLimit()
             changelogHistoryMutex.withLock {
-                readChangelogHistoryInternal(uid)
+                val current = trimChangelogHistoryEntries(readChangelogHistoryInternal(uid), storageLimit)
+                writeChangelogHistoryInternal(uid, current)
+                current
             }
         }
 
     suspend fun setChangelogHistory(uid: Int, entries: List<PatchBundleChangelogEntry>) {
         withContext(Dispatchers.IO) {
+            val storageLimit = normalizedChangelogStorageLimit()
             changelogHistoryMutex.withLock {
-                writeChangelogHistoryInternal(uid, entries)
+                writeChangelogHistoryInternal(uid, trimChangelogHistoryEntries(entries, storageLimit))
             }
+        }
+    }
+
+    suspend fun mergeChangelogHistory(
+        uid: Int,
+        entries: List<PatchBundleChangelogEntry>
+    ): List<PatchBundleChangelogEntry> = withContext(Dispatchers.IO) {
+        val storageLimit = normalizedChangelogStorageLimit()
+        changelogHistoryMutex.withLock {
+            val current = trimChangelogHistoryEntries(readChangelogHistoryInternal(uid), storageLimit)
+            val updated = mergeChangelogHistoryEntries(current, entries, storageLimit)
+            writeChangelogHistoryInternal(uid, updated)
+            updated
+        }
+    }
+
+    suspend fun synchronizeChangelogHistory(source: RemotePatchBundle): List<PatchBundleChangelogEntry> {
+        runCatching { source.fetchLatestReleaseInfo() }
+            .getOrNull()
+            ?.let { latestAsset ->
+                recordChangelog(source.uid, latestAsset)
+            }
+        val historyEntries = source.fetchHistoricalChangelogEntries(normalizedChangelogFetchLimit())
+        return if (historyEntries.isEmpty()) {
+            getChangelogHistory(source.uid)
+        } else {
+            mergeChangelogHistory(source.uid, historyEntries)
         }
     }
 
     suspend fun recordChangelog(uid: Int, asset: app.revanced.manager.network.dto.ReVancedAsset) {
         val entry = PatchBundleChangelogEntry.fromAsset(asset)
         withContext(Dispatchers.IO) {
+            val storageLimit = normalizedChangelogStorageLimit()
             changelogHistoryMutex.withLock {
-                val current = readChangelogHistoryInternal(uid)
-                val updated = current
-                    .filterNot { isSameChangelogEntry(it, entry) }
-                    .toMutableList()
-                updated.add(0, entry)
+                val current = trimChangelogHistoryEntries(readChangelogHistoryInternal(uid), storageLimit)
+                val updated = mergeChangelogHistoryEntries(current, listOf(entry), storageLimit)
                 writeChangelogHistoryInternal(uid, updated)
             }
         }
@@ -441,6 +470,36 @@ class PatchBundleRepository(
             existing.publishedAtMillis == published &&
             existing.description.trim() == candidate.description.trim()
     }
+
+    private fun mergeChangelogHistoryEntries(
+        current: List<PatchBundleChangelogEntry>,
+        incoming: List<PatchBundleChangelogEntry>,
+        maxEntries: Int
+    ): List<PatchBundleChangelogEntry> {
+        if (incoming.isEmpty()) return trimChangelogHistoryEntries(current, maxEntries)
+        val merged = current.toMutableList()
+        incoming.forEach { candidate ->
+            merged.removeAll { existing -> isSameChangelogEntry(existing, candidate) }
+            merged.add(candidate)
+        }
+        return trimChangelogHistoryEntries(merged, maxEntries)
+    }
+
+    private fun trimChangelogHistoryEntries(
+        entries: List<PatchBundleChangelogEntry>,
+        maxEntries: Int
+    ): List<PatchBundleChangelogEntry> =
+        entries.sortedWith(
+            compareByDescending<PatchBundleChangelogEntry> { it.publishedAtMillis ?: Long.MIN_VALUE }
+        ).take(maxEntries.coerceAtLeast(PreferencesManager.MIN_BUNDLE_CHANGELOG_HISTORY_LIMIT))
+
+    private suspend fun normalizedChangelogFetchLimit(): Int =
+        prefs.bundleChangelogFetchLimit.get()
+            .coerceAtLeast(PreferencesManager.MIN_BUNDLE_CHANGELOG_HISTORY_LIMIT)
+
+    private suspend fun normalizedChangelogStorageLimit(): Int =
+        prefs.bundleChangelogStorageLimit.get()
+            .coerceAtLeast(PreferencesManager.MIN_BUNDLE_CHANGELOG_HISTORY_LIMIT)
 
     private fun readChangelogHistoryInternal(uid: Int): List<PatchBundleChangelogEntry> {
         val file = changelogHistoryFile(uid)
