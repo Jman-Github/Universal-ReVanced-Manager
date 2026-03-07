@@ -81,6 +81,8 @@
 - Fixed the `Export filename format` editor so tapping the text field no longer jumps the view to the end, and its helper content now scrolls separately without disrupting cursor placement https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/269
 - Fixed issues where there would be a pause between the patchers main categories/steps
 - Fixed more issues with patching on certain runtimes
+- Fixed issues with resuming manager updates with the in-app manager updater https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/277
+- Fixed manager update asset selection so the updater correctly resolves both ABI-specific APKs
 
 
 # CI

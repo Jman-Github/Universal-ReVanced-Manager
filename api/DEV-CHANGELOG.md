@@ -11,6 +11,8 @@
 
 - Fixed issues where there would be a pause between the patchers main categories/steps
 - Fixed more issues with patching on certain runtimes
+- Fixed issues with resuming manager updates with the in-app manager updater https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/277
+- Fixed manager update asset selection so the updater correctly resolves both ABI-specific APKs
 
 
 # v1.8.1-dev.05 (2026-03-05)
