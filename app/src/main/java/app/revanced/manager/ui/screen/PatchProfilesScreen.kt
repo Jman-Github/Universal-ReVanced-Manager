@@ -2,7 +2,6 @@ package app.revanced.manager.ui.screen
 
 import android.net.Uri
 import android.provider.OpenableColumns
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -83,6 +82,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.revanced.manager.ui.component.AppIcon
+import app.revanced.manager.ui.component.InterceptBackHandler
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
 import app.revanced.manager.ui.component.Scrollbar
 import app.revanced.manager.ui.component.TextInputDialog
@@ -201,7 +201,9 @@ fun PatchProfilesScreen(
         }
     }
 
-    BackHandler(enabled = selectionActive) { viewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL) }
+    InterceptBackHandler(enabled = selectionActive) {
+        viewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
+    }
 
     fun handleApkSelectionResult(profileName: String, result: PatchProfilesViewModel.ApkSelectionResult) {
         when (result) {

@@ -66,7 +66,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.activity.compose.BackHandler
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.revanced.manager.R
 import app.revanced.manager.data.platform.Filesystem
@@ -80,6 +79,7 @@ import app.revanced.manager.ui.component.AppliedPatchBundleUi
 import app.revanced.manager.ui.component.AppliedPatchesDialog
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.ColumnWithScrollbar
+import app.revanced.manager.ui.component.InterceptBackHandler
 import app.revanced.manager.ui.component.SegmentedButton
 import app.revanced.manager.ui.component.ConfirmDialog
 import app.revanced.manager.ui.component.ExportSavedApkFileNameDialog
@@ -719,8 +719,8 @@ fun InstalledAppInfoScreen(
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
     ) { paddingValues ->
-        BackHandler {
-            if (viewModel.isInstalling) showLeaveInstallDialog = true else onBackClick()
+        InterceptBackHandler(enabled = viewModel.isInstalling) {
+            showLeaveInstallDialog = true
         }
         ColumnWithScrollbar(
             modifier = Modifier

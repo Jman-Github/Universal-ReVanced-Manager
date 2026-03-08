@@ -91,6 +91,7 @@
 - Fixed the patcher screens pause between `Load patches` and `Read APK file` sub-steps
 - Fixed issues with progress being reordered live during split APK merging for the AmpleReVanced runtime
 - Fixed the `Export filename format` dialog so the single-line text field slides with the cursor https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/276
+- Fixed issues with the fullscreen back gesture causing UI glitches and showing the wrong screens https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/280
 
 
 # CI

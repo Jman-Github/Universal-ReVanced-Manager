@@ -6,7 +6,6 @@ import android.content.ContentResolver
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -67,6 +66,7 @@ import app.revanced.manager.ui.component.AppScaffold
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.ConfirmDialog
 import app.revanced.manager.ui.component.ExportSavedApkFileNameDialog
+import app.revanced.manager.ui.component.InterceptBackHandler
 import app.revanced.manager.ui.component.ShimmerBox
 import app.revanced.manager.ui.component.patches.PathSelectorDialog
 import app.revanced.manager.ui.viewmodel.SplitApkInstallerViewModel
@@ -202,7 +202,7 @@ fun SplitApkInstallerScreen(
         }
     }
 
-    BackHandler(onBack = ::onPageBack)
+    InterceptBackHandler(onBack = ::onPageBack)
 
     if (showDismissConfirmationDialog) {
         ConfirmDialog(

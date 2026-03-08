@@ -7,7 +7,6 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import android.provider.Settings
 import android.text.format.Formatter
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -138,6 +137,7 @@ import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.AutoUpdatesDialog
 import app.revanced.manager.ui.component.AvailableUpdateDialog
 import app.revanced.manager.ui.component.DownloadProgressBanner
+import app.revanced.manager.ui.component.InterceptBackHandler
 import app.revanced.manager.ui.component.NotificationCard
 import app.revanced.manager.ui.component.ConfirmDialog
 import app.revanced.manager.ui.component.ExportSavedApkFileNameDialog
@@ -388,7 +388,9 @@ fun DashboardScreen(
         return visibleTabs[previousIndex]
     }
 
-    BackHandler(enabled = visibleTabs.size > 1 || appsSelectionActive || bundlesSelectable || profilesSelectable) {
+    InterceptBackHandler(
+        enabled = visibleTabs.size > 1 || appsSelectionActive || bundlesSelectable || profilesSelectable
+    ) {
         when (currentPage) {
             DashboardPage.DASHBOARD -> {
                 if (appsSelectionActive) {

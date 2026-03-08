@@ -4,7 +4,6 @@ import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.view.WindowManager
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -69,6 +68,7 @@ import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.ui.component.AppScaffold
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.ConfirmDialog
+import app.revanced.manager.ui.component.InterceptBackHandler
 import app.revanced.manager.ui.component.InstallerStatusDialog
 import app.revanced.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.revanced.manager.ui.component.patches.PathSelectorDialog
@@ -220,7 +220,7 @@ fun PatcherScreen(
     fun onPageBack() = requestLeave(toDashboard = false)
     fun onPageBackToDashboard() = requestLeave(toDashboard = true)
 
-    BackHandler(onBack = ::onPageBack)
+    InterceptBackHandler(onBack = ::onPageBack)
 
     val hostActivity = LocalContext.current as? MainActivity
     DisposableEffect(hostActivity) {

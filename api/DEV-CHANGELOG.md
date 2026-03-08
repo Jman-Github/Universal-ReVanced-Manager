@@ -1,3 +1,14 @@
+# v1.8.1-dev.09 (2026-03-07)
+
+
+# Features
+
+
+# Bug fixes
+
+- Fixed issues with the fullscreen back gesture causing UI glitches and showing the wrong screens https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/280
+
+
 # v1.8.1-dev.06 (2026-03-07)
 
 

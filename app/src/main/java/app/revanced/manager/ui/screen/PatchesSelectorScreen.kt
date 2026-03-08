@@ -1,6 +1,5 @@
 package app.revanced.manager.ui.screen
 
-import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.EaseInOut
@@ -139,6 +138,7 @@ import app.revanced.manager.domain.repository.PatchProfile
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.CheckedFilterChip
 import app.revanced.manager.ui.component.FullscreenDialog
+import app.revanced.manager.ui.component.InterceptBackHandler
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
 import app.revanced.manager.ui.component.SearchBar
 import app.revanced.manager.ui.component.SearchView
@@ -381,7 +381,7 @@ fun PatchesSelectorScreen(
                 actionsExpanded = false
             }
     }
-    BackHandler(enabled = !dialogsOpen && (if (useFallbackSearch) searchActive else searchExpanded)) {
+    InterceptBackHandler(enabled = !dialogsOpen && (if (useFallbackSearch) searchActive else searchExpanded)) {
         if (useFallbackSearch) {
             searchActive = false
         } else {

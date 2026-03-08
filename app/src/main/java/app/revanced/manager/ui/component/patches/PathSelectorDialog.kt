@@ -1,6 +1,5 @@
 package app.revanced.manager.ui.component.patches
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -69,6 +68,7 @@ import app.revanced.manager.ui.component.AppIcon
 import app.revanced.manager.ui.component.ConfirmDialog
 import app.revanced.manager.ui.component.FullscreenDialog
 import app.revanced.manager.ui.component.GroupHeader
+import app.revanced.manager.ui.component.InterceptBackHandler
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
 import app.revanced.manager.ui.component.ShimmerBox
 import app.revanced.manager.util.toast
@@ -321,7 +321,7 @@ fun PathSelectorDialog(
                 )
             },
         ) { paddingValues ->
-            BackHandler(enabled = notAtRootDir) {
+            InterceptBackHandler(enabled = notAtRootDir) {
                 currentDirectory = currentDirectory.parent
             }
 
@@ -870,3 +870,4 @@ private fun PathItem(
         }
     )
 }
+

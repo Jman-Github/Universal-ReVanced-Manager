@@ -1,7 +1,6 @@
 package app.revanced.manager.ui.screen
 
 import android.net.Uri
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -37,6 +36,7 @@ import app.revanced.manager.ui.component.AppScaffold
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.ConfirmDialog
 import app.revanced.manager.ui.component.ExportSavedApkFileNameDialog
+import app.revanced.manager.ui.component.InterceptBackHandler
 import app.revanced.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.revanced.manager.ui.component.patcher.Steps
 import app.revanced.manager.ui.component.patches.PathSelectorDialog
@@ -131,7 +131,7 @@ fun MergeSplitApkScreen(
         }
     }
 
-    BackHandler(onBack = ::onPageBack)
+    InterceptBackHandler(enabled = state.inProgress, onBack = ::onPageBack)
 
     if (showDismissConfirmationDialog) {
         ConfirmDialog(
