@@ -179,36 +179,24 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
                 }
 
                 val input = File(parameters.inputFile)
-                val preparation = if (SplitApkPreparer.isSplitArchive(input)) {
-                    runStep(StepId.PrepareSplitApk, ::onEvent) {
-                        SplitApkPreparer.prepareIfNeeded(
-                            input,
-                            File(parameters.cacheDir),
-                            logger,
-                            parameters.stripNativeLibs,
-                            parameters.skipUnneededSplits,
-                            onProgress = { message ->
-                                onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
-                            },
-                            onSubSteps = { subSteps ->
-                                onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
-                            }
-                        )
+                suspend fun prepareInput() = SplitApkPreparer.prepareIfNeeded(
+                    input,
+                    File(parameters.cacheDir),
+                    logger,
+                    parameters.stripNativeLibs,
+                    parameters.skipUnneededSplits,
+                    onProgress = { message ->
+                        onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
+                    },
+                    onSubSteps = { subSteps ->
+                        onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
                     }
-                } else {
-                    SplitApkPreparer.prepareIfNeeded(
-                        input,
-                        File(parameters.cacheDir),
-                        logger,
-                        parameters.stripNativeLibs,
-                        parameters.skipUnneededSplits,
-                        onProgress = { message ->
-                            onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
-                        },
-                        onSubSteps = { subSteps ->
-                            onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
-                        }
-                    )
+                )
+                var preparation: SplitApkPreparer.PreparationResult? = null
+                if (SplitApkPreparer.isSplitArchive(input)) {
+                    preparation = runStep(StepId.PrepareSplitApk, ::onEvent) {
+                        prepareInput()
+                    }
                 }
 
                 try {
@@ -217,30 +205,34 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
                         .filter { it.patches.isNotEmpty() }
                         .map { File(it.bundlePath) }
                         .toList()
-                    val selectedAaptPath = AaptSelector.select(
-                        parameters.aaptPath,
-                        parameters.aaptFallbackPath,
-                        preparation.file,
-                        logger,
-                        additionalArchives = relatedBundleArchives
-                    )
-                    logAapt2Info(selectedAaptPath, logger)
-                    val frameworkDir = FrameworkCacheResolver.resolve(
-                        baseFrameworkDir = parameters.frameworkDir,
-                        runtimeTag = "morphe",
-                        apkFile = preparation.file,
-                        aaptPath = selectedAaptPath,
-                        logger = logger
-                    )
                     val session = runStep(StepId.ReadAPK, ::onEvent) {
+                        val preparedInput = preparation ?: prepareInput().also { preparation = it }
+                        val selectedAaptPath = AaptSelector.select(
+                            parameters.aaptPath,
+                            parameters.aaptFallbackPath,
+                            preparedInput.file,
+                            logger,
+                            additionalArchives = relatedBundleArchives
+                        )
+                        logAapt2Info(selectedAaptPath, logger)
+                        val frameworkDir = FrameworkCacheResolver.resolve(
+                            baseFrameworkDir = parameters.frameworkDir,
+                            runtimeTag = "morphe",
+                            apkFile = preparedInput.file,
+                            aaptPath = selectedAaptPath,
+                            logger = logger
+                        )
                         MorpheSession(
                             cacheDir = parameters.cacheDir,
                             frameworkDir = frameworkDir,
                             aaptPath = selectedAaptPath,
                             logger = logger,
-                            input = preparation.file,
+                            input = preparedInput.file,
                             onEvent = ::onEvent,
                         )
+                    }
+                    val preparedInput = requireNotNull(preparation) {
+                        "APK preparation did not produce an input file."
                     }
 
                     session.use {
@@ -248,11 +240,11 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
                             File(parameters.outputFile),
                             patchList,
                             parameters.stripNativeLibs,
-                            preparation.merged
+                            preparedInput.merged
                         )
                     }
                 } finally {
-                    preparation.cleanup()
+                    preparation?.cleanup()
                 }
 
                 safeFinished(null)

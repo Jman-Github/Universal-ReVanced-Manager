@@ -72,56 +72,48 @@ class CoroutineRuntime(context: Context) : Runtime(context) {
         }
 
         val input = File(inputFile)
-        val preparation = if (SplitApkPreparer.isSplitArchive(input)) {
-            runStep(StepId.PrepareSplitApk, onEvent) {
-                SplitApkPreparer.prepareIfNeeded(
-                    input,
-                    File(cacheDir),
-                    logger,
-                    stripNativeLibs,
-                    skipUnneededSplits,
-                    onProgress = { message ->
-                        onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
-                    },
-                    onSubSteps = { subSteps ->
-                        onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
-                    }
-                )
+        suspend fun prepareInput() = SplitApkPreparer.prepareIfNeeded(
+            input,
+            File(cacheDir),
+            logger,
+            stripNativeLibs,
+            skipUnneededSplits,
+            onProgress = { message ->
+                onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
+            },
+            onSubSteps = { subSteps ->
+                onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
             }
-        } else {
-            SplitApkPreparer.prepareIfNeeded(
-                input,
-                File(cacheDir),
-                logger,
-                stripNativeLibs,
-                skipUnneededSplits,
-                onProgress = { message ->
-                    onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
-                },
-                onSubSteps = { subSteps ->
-                    onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
-                }
-            )
+        )
+        var preparation: SplitApkPreparer.PreparationResult? = null
+        if (SplitApkPreparer.isSplitArchive(input)) {
+            preparation = runStep(StepId.PrepareSplitApk, onEvent) {
+                prepareInput()
+            }
         }
 
         try {
-            val selectedAaptPath = resolveAaptPath(preparation.file, logger, relatedBundleArchives)
-            val frameworkDir = FrameworkCacheResolver.resolve(
-                baseFrameworkDir = frameworkPath,
-                runtimeTag = "revanced",
-                apkFile = preparation.file,
-                aaptPath = selectedAaptPath,
-                logger = logger
-            )
             val session = runStep(StepId.ReadAPK, onEvent) {
+                val preparedInput = preparation ?: prepareInput().also { preparation = it }
+                val selectedAaptPath = resolveAaptPath(preparedInput.file, logger, relatedBundleArchives)
+                val frameworkDir = FrameworkCacheResolver.resolve(
+                    baseFrameworkDir = frameworkPath,
+                    runtimeTag = "revanced",
+                    apkFile = preparedInput.file,
+                    aaptPath = selectedAaptPath,
+                    logger = logger
+                )
                 Session(
                     cacheDir,
                     frameworkDir,
                     selectedAaptPath,
                     logger,
-                    preparation.file,
+                    preparedInput.file,
                     onEvent
                 )
+            }
+            val preparedInput = requireNotNull(preparation) {
+                "APK preparation did not produce an input file."
             }
 
             session.use { s ->
@@ -129,11 +121,11 @@ class CoroutineRuntime(context: Context) : Runtime(context) {
                     File(outputFile),
                     patchList,
                     stripNativeLibs,
-                    preparation.merged
+                    preparedInput.merged
                 )
             }
         } finally {
-            preparation.cleanup()
+            preparation?.cleanup()
         }
     }
 }

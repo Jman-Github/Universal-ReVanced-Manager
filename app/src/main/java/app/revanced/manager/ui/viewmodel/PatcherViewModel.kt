@@ -904,6 +904,53 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         return versions.distinct() to names.distinct()
     }
 
+    private suspend fun collectSelectedPatchDescriptions(): List<String> {
+        val globalBundles = patchBundleRepository.bundleInfoFlow.first()
+        val scopedBundles = gatherScopedBundles()
+        val sanitizedSelection = sanitizeSelection(appliedSelection, scopedBundles)
+        val displayNames = patchBundleRepository.sources.first().associate { it.uid to it.displayTitle }
+        return sanitizedSelection.entries.flatMap { (uid, patchNames) ->
+            val bundleName = displayNames[uid]
+                ?: scopedBundles[uid]?.name
+                ?: globalBundles[uid]?.name
+                ?: "Unknown bundle"
+            patchNames.sorted().map { patchName -> "$patchName - $bundleName" }
+        }
+    }
+
+    private fun resolveDeviceName(): String {
+        val marketName = sequenceOf(
+            "ro.product.marketname",
+            "ro.product.odm.marketname",
+            "ro.product.vendor.marketname",
+            "ro.config.marketing_name",
+            "ro.vendor.product.display"
+        ).mapNotNull(::readSystemProperty)
+            .firstOrNull()
+        return marketName ?: formatDeviceName(Build.MANUFACTURER, Build.MODEL)
+    }
+
+    private fun readSystemProperty(key: String): String? = runCatching {
+        val systemPropertiesClass = Class.forName("android.os.SystemProperties")
+        val getMethod = systemPropertiesClass.getMethod("get", String::class.java)
+        (getMethod.invoke(null, key) as? String)
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+    }.getOrNull()
+
+    private fun formatDeviceName(manufacturer: String?, model: String?): String {
+        val manufacturerValue = manufacturer?.trim().orEmpty()
+        val modelValue = model?.trim().orEmpty()
+        if (manufacturerValue.isEmpty() && modelValue.isEmpty()) return "unknown"
+        if (manufacturerValue.isEmpty()) return modelValue
+        if (modelValue.isEmpty()) return manufacturerValue
+        return if (modelValue.startsWith(manufacturerValue, ignoreCase = true)) {
+            modelValue
+        } else {
+            "${manufacturerValue.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }} $modelValue"
+        }
+    }
+
     private suspend fun buildExportMetadata(packageInfo: PackageInfo?): PatchedAppExportData? {
         val info = packageInfo ?: pm.getPackageInfo(outputFile) ?: return null
         val (bundleVersions, bundleNames) = collectSelectedBundleMetadata()
@@ -1142,35 +1189,62 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             }
 
             val effectiveShouldSaveForLater = shouldSaveForLater || preserveSavedEntry
-            val savedCopyPackageName = if (persistedInstallType == InstallType.SAVED) {
-                persistedPackageName
+            val separateSavedEntryPackageName = if (
+                persistedInstallType != InstallType.SAVED &&
+                effectiveShouldSaveForLater &&
+                disableSavedAppOverwrite
+            ) {
+                buildUniqueSavedAppEntryKey(finalPackageName, newBundleUids)
             } else {
-                finalPackageName
+                null
+            }
+            val savedCopyPackageName = when {
+                separateSavedEntryPackageName != null -> separateSavedEntryPackageName
+                persistedInstallType == InstallType.SAVED -> persistedPackageName
+                else -> finalPackageName
             }
             val savedCopy = fs.getPatchedAppFile(savedCopyPackageName, finalVersion)
-            if (effectiveShouldSaveForLater) {
+            val savedCopyWritten = if (effectiveShouldSaveForLater) {
                 try {
                     savedCopy.parentFile?.mkdirs()
                     outputFile.copyTo(savedCopy, overwrite = true)
+                    true
                 } catch (error: IOException) {
                     if (installType == InstallType.SAVED) {
                         Log.e(TAG, "Failed to copy patched APK for later", error)
                         return@withContext false
                     } else {
                         Log.w(TAG, "Failed to update saved copy for $savedCopyPackageName", error)
+                        false
                     }
                 }
+            } else {
+                false
             }
 
-            if (effectiveShouldSaveForLater || persistedInstallType != InstallType.SAVED) {
+            if (persistedInstallType != InstallType.SAVED) {
                 installedAppRepository.addOrUpdate(
                     persistedPackageName,
                     packageName,
                     finalVersion,
                     persistedInstallType,
                     sanitizedSelectionFinal,
+                    selectionPayload
+                )
+            }
+            if (
+                effectiveShouldSaveForLater &&
+                savedCopyWritten &&
+                (persistedInstallType == InstallType.SAVED || separateSavedEntryPackageName != null)
+            ) {
+                installedAppRepository.addOrUpdate(
+                    separateSavedEntryPackageName ?: persistedPackageName,
+                    packageName,
+                    finalVersion,
+                    InstallType.SAVED,
+                    sanitizedSelectionFinal,
                     selectionPayload,
-                    resetCreatedAt = effectiveShouldSaveForLater && persistedInstallType == InstallType.SAVED
+                    resetCreatedAt = true
                 )
             }
 
@@ -1184,7 +1258,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             appliedOptions = sanitizedOptionsOriginal
 
             savedPatchedApp = savedPatchedApp ||
-                (effectiveShouldSaveForLater && (installType == InstallType.SAVED || savedCopy.exists()))
+                (effectiveShouldSaveForLater && (savedCopyWritten || savedCopy.exists()))
             true
         }
     }
@@ -1365,7 +1439,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             val bundleType: String,
             val revancedPatcherVersion: String?,
             val stripNativeLibs: Boolean,
-            val skipUnusedSplits: Boolean
+            val skipUnusedSplits: Boolean,
+            val environment: String,
+            val selectedPatchLines: List<String>
         )
         val prefsSnapshot = runBlocking {
             val requested = prefs.patcherProcessMemoryLimit.get()
@@ -1384,6 +1460,14 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             }
             val stripNative = prefs.stripUnusedNativeLibs.get()
             val skipSplits = prefs.skipUnneededSplitApks.get()
+            val environment = withContext(Dispatchers.IO) {
+                when (rootInstaller.peekRootAccess()) {
+                    true -> "root"
+                    false -> "unrooted"
+                    null -> if (rootInstaller.isDeviceRooted()) "rooted" else "unrooted"
+                }
+            }
+            val selectedPatchLines = collectSelectedPatchDescriptions()
             LogPrefsSnapshot(
                 requested,
                 aggressive,
@@ -1391,7 +1475,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 bundle,
                 revancedPatcherVersion,
                 stripNative,
-                skipSplits
+                skipSplits,
+                environment,
+                selectedPatchLines
             )
         }
         val requestedLimit = prefsSnapshot.requestedLimit
@@ -1401,6 +1487,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         val revancedPatcherVersion = prefsSnapshot.revancedPatcherVersion
         val stripNativeLibs = prefsSnapshot.stripNativeLibs
         val skipUnusedSplits = prefsSnapshot.skipUnusedSplits
+        val environment = prefsSnapshot.environment
+        val selectedPatchLines = prefsSnapshot.selectedPatchLines
 
         val runtimeReportedLimit = runtimeReportedMemoryLimitMb ?: parseMemoryLimitMb(
             logMessages.lastOrNull { it.startsWith("Memory limit:") }
@@ -1425,8 +1513,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         val isIgnoring = context.getSystemService<PowerManager>()
             ?.isIgnoringBatteryOptimizations(context.packageName) == true
         val batteryOptimization = if (isIgnoring) "disabled" else "enabled"
+        val deviceName = resolveDeviceName()
 
-        val inputPath = inputFile?.absolutePath
         val sizeBytes = inputFile?.length() ?: 0L
         val sizeMb = if (sizeBytes > 0L) {
             "${(sizeBytes / 1_000_000.0).roundToInt()}MB"
@@ -1445,13 +1533,12 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 }.getOrNull()
             }
 
-        val aapt2Sha = findLogValue("AAPT2 sha256:") ?: "unknown"
-        val aapt2Version = findLogValue("AAPT2 version:") ?: "unknown"
+        val aapt2Selected = findLogValue("AAPT2 selected:") ?: "unknown"
 
         val appVersion = input.selectedApp.version
             ?.takeUnless { it.isBlank() }
             ?: "unspecified"
-        val patchCount = input.selectedPatches.values.sumOf { it.size }
+        val patchCount = selectedPatchLines.size
         val droppedLines = droppedLogLineCount
 
         val logLines = logSnapshot
@@ -1462,6 +1549,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     msg.startsWith("Memory limit:") ||
                     msg.startsWith("Runtime mode:") ||
                     msg.startsWith("Memory override:") ||
+                    msg.startsWith("AAPT2 selected:") ||
                     msg.startsWith("AAPT2 sha256:") ||
                     msg.startsWith("AAPT2 version:")
             }
@@ -1473,8 +1561,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             appendLine("------------")
             appendLine("URV version: ${BuildConfig.VERSION_NAME}")
             appendLine("Device architecture: ${Build.SUPPORTED_ABIS.joinToString(", ")}")
+            appendLine("Device name: $deviceName")
             appendLine("Device model: ${Build.MODEL}")
             appendLine("Android version: ${Build.VERSION.RELEASE} (${Build.VERSION.SDK_INT})")
+            appendLine("Environment: $environment")
             appendLine("Requested memory limit: ${requestedLimit}MB")
             appendLine("Effective memory limit: ${effectiveLimit}MB")
             appendLine("Bundle type: $bundleType")
@@ -1488,14 +1578,18 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             appendLine("Strip native libs: ${if (stripNativeLibs) "on" else "off"}")
             appendLine("Skip unused splits: ${if (skipUnusedSplits) "on" else "off"}")
             appendLine("Battery optimization: $batteryOptimization")
-            appendLine("AAPT2 sha256: $aapt2Sha")
-            appendLine("AAPT2 version: $aapt2Version")
+            appendLine("AAPT2 selected: $aapt2Selected")
             appendLine("App package: ${input.selectedApp.packageName}")
             appendLine("App version: $appVersion")
-            appendLine("App input path: ${inputPath ?: "unknown"}")
             appendLine("App size: $sizeMb")
             splitCount?.let { appendLine("Split: $it") }
             appendLine("Patches: $patchCount")
+            appendLine("Selected patches:")
+            if (selectedPatchLines.isEmpty()) {
+                appendLine("None")
+            } else {
+                selectedPatchLines.forEach { appendLine(it) }
+            }
             appendLine()
             appendLine("------------")
             appendLine("Patcher Log:")
