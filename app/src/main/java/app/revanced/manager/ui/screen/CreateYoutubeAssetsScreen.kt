@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -50,6 +51,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Surface
@@ -81,8 +83,11 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -1153,6 +1158,15 @@ private fun AdaptiveColorWheelDialog(
     var redInput by remember(initialColor) { mutableStateOf(AndroidColor.red(initialColor.toArgb()).toString()) }
     var greenInput by remember(initialColor) { mutableStateOf(AndroidColor.green(initialColor.toArgb()).toString()) }
     var blueInput by remember(initialColor) { mutableStateOf(AndroidColor.blue(initialColor.toArgb()).toString()) }
+    val rgbTextStyle = LocalTextStyle.current.copy(color = MaterialTheme.colorScheme.onSurface)
+    val rgbFieldColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+        cursorColor = MaterialTheme.colorScheme.primary,
+        focusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+    )
 
     fun setColor(updated: Color) {
         val updatedHsv = FloatArray(3).apply { AndroidColor.colorToHSV(updated.toArgb(), this) }
@@ -1245,21 +1259,36 @@ private fun AdaptiveColorWheelDialog(
                         onValueChange = { redInput = it.filter(Char::isDigit).take(3) },
                         label = { Text(stringResource(R.string.color_channel_red)) },
                         singleLine = true,
-                        modifier = Modifier.weight(1f)
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        textStyle = rgbTextStyle,
+                        colors = rgbFieldColors,
+                        modifier = Modifier
+                            .weight(1f)
+                            .widthIn(min = 84.dp)
                     )
                     OutlinedTextField(
                         value = greenInput,
                         onValueChange = { greenInput = it.filter(Char::isDigit).take(3) },
                         label = { Text(stringResource(R.string.color_channel_green)) },
                         singleLine = true,
-                        modifier = Modifier.weight(1f)
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        textStyle = rgbTextStyle,
+                        colors = rgbFieldColors,
+                        modifier = Modifier
+                            .weight(1f)
+                            .widthIn(min = 84.dp)
                     )
                     OutlinedTextField(
                         value = blueInput,
                         onValueChange = { blueInput = it.filter(Char::isDigit).take(3) },
                         label = { Text(stringResource(R.string.color_channel_blue)) },
                         singleLine = true,
-                        modifier = Modifier.weight(1f)
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        textStyle = rgbTextStyle,
+                        colors = rgbFieldColors,
+                        modifier = Modifier
+                            .weight(1f)
+                            .widthIn(min = 84.dp)
                     )
                 }
                 Text(

@@ -558,6 +558,8 @@ Patch profiles are not affected.</string>
     <string name="patch_bundle_rename">Rename patch bundle</string>
     <string name="patch_profile_view_options">View options</string>
     <string name="patch_profile_patch_options_title">Options for %1$s</string>
+    <string name="patch_option_preview_action">View full preview</string>
+    <string name="patch_option_preview_title">Selected options for %1$s</string>
     <string name="restore_official_bundle">Restore pre-installed Official ReVanced patch bundle</string>
     <string name="restore_official_bundle_description_missing">Reinstall the pre-installed Official ReVanced patches bundle</string>
     <string name="restore_official_bundle_description_installed">The pre-installed Official ReVanced patches bundle is currently installed</string>
@@ -839,6 +841,8 @@ Patch profiles are not affected.</string>
     <string name="patch_profile_apk_select">Select APK</string>
     <string name="patch_profile_apk_clear">Clear</string>
     <string name="patch_profile_apk_not_set">No APK for this package</string>
+    <string name="patch_profile_apk_missing">Selected APK missing</string>
+    <string name="patch_profile_apk_detected_version">Detected APK version: %1$s</string>
     <string name="patch_profile_apk_saved_toast">Saved APK for "%1$s"</string>
     <string name="patch_profile_apk_cleared_toast">Cleared saved APK for "%1$s"</string>
     <string name="patch_profile_apk_invalid_toast">Invalid APK file</string>

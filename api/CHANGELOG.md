@@ -47,6 +47,10 @@
 - Improved the `Patching in progress` notification https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/278
 - Renamed the manager keystore file to `urv_keystore.keystore` and added migration/restore support for legacy `manager.keystore` backups https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/268 
 - Updated the ReVanced `libaapt2.so` binaries to the ones used by the official ReVanced Manager
+- Added live substep counts to patcher progress group https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/261
+- Improved app and patch search so closing search keeps filtered results visible, and both system back and top-bar back clear the search before leaving https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/261
+- Improved patch option previews with a larger inline preview and a full preview dialog for long values like file paths https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/261
+- Improved patch profile APK handling by preserving split archive extensions, loading split APK icons correctly and using detected APK versions for compatibilit https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/261
 
 
 # Bug fixes
@@ -94,6 +98,7 @@
 - Fixed the `Export filename format` dialog so the single-line text field slides with the cursor https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/276
 - Fixed issues with the fullscreen back gesture causing UI glitches and showing the wrong screens https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/280
 - Fixed an issue where the `AAPT2 selected` line in patcher logs would always be listed as `Unknown`
+- Fixed RGB inputs in the custom YouTube color picker so typed values are visible and use numeric keyboard input https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/261
 
 
 # CI

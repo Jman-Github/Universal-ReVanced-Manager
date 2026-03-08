@@ -179,6 +179,7 @@ private fun ExpandableSubStep(
 ) {
     var expanded by rememberSaveable(step.id.toString()) { mutableStateOf(false) }
     var autoCollapsed by rememberSaveable("${step.id}-auto") { mutableStateOf(false) }
+    val completedSubSteps = subSteps.count { it.state == State.COMPLETED || it.skipped }
 
     LaunchedEffect(step.state) {
         if (step.state != State.COMPLETED) {
@@ -218,6 +219,12 @@ private fun ExpandableSubStep(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, true),
+            )
+
+            Text(
+                text = "$completedSubSteps/${subSteps.size}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             if (progressText != null) {

@@ -72,6 +72,7 @@ import app.revanced.manager.ui.component.AppIcon
 import app.revanced.manager.ui.component.AppLabel
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.CheckedFilterChip
+import app.revanced.manager.ui.component.InterceptBackHandler
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
 import app.revanced.manager.ui.component.LoadingIndicator
 import app.revanced.manager.ui.component.ShimmerBox
@@ -187,6 +188,13 @@ fun AppSelectorScreen(
     var filterText by rememberSaveable { mutableStateOf("") }
     var search by rememberSaveable { mutableStateOf(false) }
 
+    InterceptBackHandler(enabled = search || filterText.isNotBlank()) {
+        when {
+            search -> search = false
+            filterText.isNotBlank() -> filterText = ""
+        }
+    }
+
     val appList by vm.appList.collectAsStateWithLifecycle(initialValue = emptyList())
     val filteredAppList = remember(
         appList,
@@ -294,7 +302,13 @@ fun AppSelectorScreen(
             AppTopBar(
                 title = stringResource(R.string.select_app),
                 scrollBehavior = scrollBehavior,
-                onBackClick = onBackClick,
+                onBackClick = {
+                    when {
+                        search -> search = false
+                        filterText.isNotBlank() -> filterText = ""
+                        else -> onBackClick()
+                    }
+                },
                 actions = {
                     IconButton(onClick = { search = true }) {
                         Icon(Icons.Outlined.Search, stringResource(R.string.search))

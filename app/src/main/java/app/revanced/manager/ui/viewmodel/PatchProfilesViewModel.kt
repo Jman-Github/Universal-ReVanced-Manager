@@ -100,6 +100,15 @@ private fun Map<Int, Map<String, Map<String, Any?>>>.toStringMap(): Map<Int, Map
 private fun Map<String, Map<String, app.revanced.manager.data.room.options.Option.SerializedValue>>.toSerializedStringMap(): Map<String, Map<String, String>> =
     mapValues { (_, options) -> options.mapValues { (_, value) -> value.toJsonString() } }
 
+private fun PatchProfile.effectiveAppVersion(): String? {
+    val hasAvailableApk = apkPath?.let(::File)?.exists() == true
+    return if (hasAvailableApk) {
+        apkVersion?.takeIf { it.isNotBlank() } ?: appVersion
+    } else {
+        appVersion
+    }
+}
+
 class PatchProfilesViewModel(
     private val app: Application,
     private val pm: PM,
@@ -181,8 +190,9 @@ class PatchProfilesViewModel(
                 remappedPayload
             }
             val workingProfile = profile.copy(payload = workingPayload)
+            val effectiveAppVersion = workingProfile.effectiveAppVersion()
             val scopedBundles = bundleInfoMap.mapValues { (_, info) ->
-                info.forPackage(profile.packageName, profile.appVersion)
+                info.forPackage(profile.packageName, effectiveAppVersion)
             }
             val configuration = workingProfile.toConfiguration(scopedBundles, sourceMap)
             val optionsByBundle = configuration.options.toStringMap()
@@ -320,8 +330,9 @@ class PatchProfilesViewModel(
         }
         val remappedPayload = profile.payload.remapLocalBundles(sourcesList, signatureMap)
         val workingProfile = if (remappedPayload === profile.payload) profile else profile.copy(payload = remappedPayload)
+        val effectiveAppVersion = workingProfile.effectiveAppVersion()
         val scopedBundles = patchBundleRepository
-            .scopedBundleInfoFlow(workingProfile.packageName, workingProfile.appVersion)
+            .scopedBundleInfoFlow(workingProfile.packageName, effectiveAppVersion)
             .first()
             .associateBy { it.uid }
         val sources = sourcesList.associateBy { it.uid }

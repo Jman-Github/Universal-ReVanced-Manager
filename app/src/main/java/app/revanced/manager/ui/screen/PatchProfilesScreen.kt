@@ -84,6 +84,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.revanced.manager.ui.component.AppIcon
 import app.revanced.manager.ui.component.InterceptBackHandler
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
+import app.revanced.manager.ui.component.LoadingIndicator
 import app.revanced.manager.ui.component.Scrollbar
 import app.revanced.manager.ui.component.TextInputDialog
 import app.revanced.manager.ui.component.haptics.HapticCheckbox
@@ -192,6 +193,10 @@ fun PatchProfilesScreen(
                     append(' ')
                     append(version)
                 }
+                profile.apkVersion?.let { version ->
+                    append(' ')
+                    append(version)
+                }
                 profile.bundleNames.forEach { name ->
                     append(' ')
                     append(name)
@@ -237,7 +242,11 @@ fun PatchProfilesScreen(
         apkPickerBusy = true
         scope.launch {
             val tempFile = withContext(Dispatchers.IO) {
-                val file = File.createTempFile("patch-profile-apk", ".apk", context.cacheDir)
+                val displayName = resolveApkUriDisplayName(context, uri)
+                val extension = resolveApkDisplayExtension(displayName)
+                    .takeIf { it in APK_FILE_EXTENSIONS }
+                    ?: "apk"
+                val file = File.createTempFile("patch-profile-apk", ".${extension}", context.cacheDir)
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     file.outputStream().use { output -> input.copyTo(output) }
                 }
@@ -470,14 +479,24 @@ fun PatchProfilesScreen(
                 profile.bundleCount,
                 profile.bundleCount
             )
-            val versionLabel = when (val version = profile.appVersion) {
-                null -> stringResource(R.string.bundle_version_all_versions)
-                else -> if (version.startsWith("v", ignoreCase = true)) version else "v$version"
+            val storedApkPath = profile.apkPath?.takeIf { it.isNotBlank() }
+            val hasAvailableApk = remember(storedApkPath) {
+                storedApkPath?.let { File(it).exists() } == true
             }
+            val hasMissingApk = storedApkPath != null && !hasAvailableApk
+            val apkPath = storedApkPath?.takeIf { hasAvailableApk }
+            val displayedVersion = if (hasAvailableApk) {
+                profile.apkVersion?.takeIf { it.isNotBlank() } ?: profile.appVersion
+            } else {
+                profile.appVersion
+            }
+            val versionLabel = formatProfileVersionLabel(
+                version = displayedVersion,
+                allVersionsLabel = stringResource(R.string.bundle_version_all_versions)
+            )
             val creationText = profile.createdAt.takeIf { it > 0 }?.relativeTime(context)?.let {
                 stringResource(R.string.patch_profile_created_at, it)
             }
-            val apkPath = profile.apkPath?.takeIf { it.isNotBlank() }
             val expanded = expandedProfiles[profile.id] == true
             val isSelected = profile.id in viewModel.selectedProfiles
             val cardShape = RoundedCornerShape(16.dp)
@@ -602,6 +621,9 @@ fun PatchProfilesScreen(
                             ProfileMetaPill(text = patchCountText)
                             ProfileMetaPill(text = bundleCountText)
                             ProfileMetaPill(text = versionLabel)
+                            if (hasMissingApk) {
+                                ProfileMetaPill(text = stringResource(R.string.patch_profile_apk_missing))
+                            }
                         }
                         creationText?.let { created ->
                             Text(
@@ -998,11 +1020,18 @@ fun PatchProfilesScreen(
 
     settingsDialogProfile?.let { profile ->
         val settingsProfile = profiles.firstOrNull { it.id == profile.id } ?: profile
-        val apkPath = settingsProfile.apkPath?.takeIf { it.isNotBlank() }
-        val apkDisplayPath = settingsProfile.apkSourcePath?.takeIf { it.isNotBlank() } ?: apkPath
-        val versionSummary = settingsProfile.appVersion?.takeIf { it.isNotBlank() }?.let { version ->
-            if (version.startsWith("v", ignoreCase = true)) version else "v$version"
-        } ?: stringResource(R.string.bundle_version_all_versions)
+        val storedApkPath = settingsProfile.apkPath?.takeIf { it.isNotBlank() }
+        val hasAvailableApk = remember(storedApkPath) {
+            storedApkPath?.let { File(it).exists() } == true
+        }
+        val hasMissingApk = storedApkPath != null && !hasAvailableApk
+        val apkPath = storedApkPath?.takeIf { hasAvailableApk }
+        val apkDisplayPath = settingsProfile.apkSourcePath?.takeIf { it.isNotBlank() } ?: storedApkPath
+        val detectedApkVersion = settingsProfile.apkVersion?.takeIf { hasAvailableApk && it.isNotBlank() }
+        val versionSummary = formatProfileVersionLabel(
+            version = settingsProfile.appVersion,
+            allVersionsLabel = stringResource(R.string.bundle_version_all_versions)
+        )
         var autoPatchUpdating by remember(settingsProfile.id) { mutableStateOf(false) }
         AlertDialog(
             onDismissRequest = {
@@ -1038,6 +1067,26 @@ fun PatchProfilesScreen(
                                 .fillMaxWidth()
                                 .horizontalScroll(apkScrollState)
                         )
+                        if (hasMissingApk) {
+                            Text(
+                                text = stringResource(R.string.patch_profile_apk_missing),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                        detectedApkVersion?.let { version ->
+                            Text(
+                                text = stringResource(
+                                    R.string.patch_profile_apk_detected_version,
+                                    formatProfileVersionLabel(
+                                        version = version,
+                                        allVersionsLabel = stringResource(R.string.bundle_version_all_versions)
+                                    )
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1046,6 +1095,7 @@ fun PatchProfilesScreen(
                             TextButton(
                                 onClick = {
                                     if (apkPickerBusy) return@TextButton
+                                    settingsDialogProfile = null
                                     apkPickerProfile = settingsProfile
                                 }
                             ) {
@@ -1057,6 +1107,7 @@ fun PatchProfilesScreen(
                             TextButton(
                                 onClick = {
                                     if (apkPickerBusy) return@TextButton
+                                    settingsDialogProfile = null
                                     downloadedApkPickerProfile = settingsProfile
                                 }
                             ) {
@@ -1339,6 +1390,22 @@ fun PatchProfilesScreen(
             }
         )
     }
+
+    if (apkPickerBusy) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.45f)),
+            contentAlignment = Alignment.Center
+        ) {
+            LoadingIndicator(
+                modifier = Modifier.size(56.dp),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.35f),
+                strokeWidth = 4.dp
+            )
+        }
+    }
 }
 
 @Composable
@@ -1576,8 +1643,8 @@ private fun PatchProfileApkIcon(
     }
 }
 
-private fun isAllowedApkUri(context: android.content.Context, uri: Uri): Boolean {
-    val displayName = runCatching {
+private fun resolveApkUriDisplayName(context: android.content.Context, uri: Uri): String =
+    runCatching {
         context.contentResolver.query(
             uri,
             arrayOf(OpenableColumns.DISPLAY_NAME),
@@ -1590,11 +1657,21 @@ private fun isAllowedApkUri(context: android.content.Context, uri: Uri): Boolean
         }
     }.getOrNull() ?: uri.lastPathSegment.orEmpty()
 
-    val extension = displayName
+private fun resolveApkDisplayExtension(displayName: String): String =
+    displayName
         .substringAfterLast('.', missingDelimiterValue = "")
         .lowercase(Locale.ROOT)
+
+private fun isAllowedApkUri(context: android.content.Context, uri: Uri): Boolean {
+    val extension = resolveApkDisplayExtension(resolveApkUriDisplayName(context, uri))
     return extension in APK_FILE_EXTENSIONS
 }
+
+private fun formatProfileVersionLabel(version: String?, allVersionsLabel: String): String =
+    version
+        ?.takeIf { it.isNotBlank() }
+        ?.let { if (it.startsWith("v", ignoreCase = true)) it else "v$it" }
+        ?: allVersionsLabel
 
 private data class PatchProfileApkIconInfo(
     val packageInfo: android.content.pm.PackageInfo?,
@@ -1609,27 +1686,30 @@ private suspend fun loadPatchProfileApkIconInfo(
 ): PatchProfileApkIconInfo? = withContext(Dispatchers.IO) {
     if (!file.exists()) return@withContext null
     val extension = file.extension.lowercase()
-    if (extension !in APK_FILE_EXTENSIONS) return@withContext null
-    val isSplitArchive = extension != "apk" && SplitApkPreparer.isSplitArchive(file)
-    if (extension != "apk" && !isSplitArchive) return@withContext null
+    val isSplitArchive = SplitApkPreparer.isSplitArchive(file)
+    if (extension !in APK_FILE_EXTENSIONS && !isSplitArchive) return@withContext null
 
     if (isSplitArchive) {
-        val resolved = SplitArchiveDisplayResolver.resolve(
-            source = file,
-            workspace = filesystem.tempDir,
-            app = pm.application,
-            pm = pm
-        ) ?: return@withContext null
-        PatchProfileApkIconInfo(
-            packageInfo = resolved.packageInfo,
-            iconOverride = resolved.icon,
-            cleanup = null
-        )
-    } else {
-        PatchProfileApkIconInfo(
-            packageInfo = pm.getPackageInfo(file),
-            iconOverride = null,
-            cleanup = null
-        )
+        val resolved = runCatching {
+            SplitArchiveDisplayResolver.resolve(
+                source = file,
+                workspace = filesystem.tempDir,
+                app = pm.application,
+                pm = pm
+            )
+        }.getOrNull()
+        if (resolved != null) {
+            return@withContext PatchProfileApkIconInfo(
+                packageInfo = resolved.packageInfo,
+                iconOverride = resolved.icon,
+                cleanup = null
+            )
+        }
     }
+
+    PatchProfileApkIconInfo(
+        packageInfo = pm.getPackageInfo(file),
+        iconOverride = null,
+        cleanup = null
+    )
 }
