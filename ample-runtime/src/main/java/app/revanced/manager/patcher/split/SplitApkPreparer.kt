@@ -27,7 +27,11 @@ object SplitApkPreparer {
         if (file == null || !file.exists()) return false
         val extension = file.extension.lowercase(Locale.ROOT)
         if (extension in SUPPORTED_EXTENSIONS) return true
-        return hasEmbeddedApkEntries(file)
+        if (extension == "zip") return hasEmbeddedApkEntries(file)
+        // Some downloader plugins save split containers using a .apk filename.
+        // Consider those split only when they do not look like a normal APK container.
+        if (extension == "apk") return looksLikeMislabeledSplitArchive(file)
+        return false
     }
 
     suspend fun prepareIfNeeded(
@@ -83,13 +87,34 @@ object SplitApkPreparer {
             }
             onSubSteps?.invoke(buildSplitSubSteps(mergeOrder, skippedModules, stripNativeLibs))
 
-            Merger.merge(
-                apkDir = modulesDir.toPath(),
-                outputApk = mergedApk,
-                skipModules = skippedModules,
-                onProgress = onProgress,
-                sortApkEntries = sortMergedApkEntries
-            )
+            try {
+                Merger.merge(
+                    apkDir = modulesDir.toPath(),
+                    outputApk = mergedApk,
+                    skipModules = skippedModules,
+                    onProgress = onProgress,
+                    sortApkEntries = sortMergedApkEntries
+                )
+            } catch (error: Throwable) {
+                val retrySkippedModules =
+                    buildRetrySkippedModules(mergeOrder, skippedModules, supportedTokens)
+                if (!shouldRetryMergeWithDeviceFiltering(error, skippedModules, retrySkippedModules)) {
+                    throw error
+                }
+                logger.warn(
+                    "Split merge failed (${error.message ?: error::class.java.simpleName}). " +
+                        "Retrying with device-targeted split filtering."
+                )
+                onProgress?.invoke("Retrying split merge with device-targeted split filtering")
+                onSubSteps?.invoke(buildSplitSubSteps(mergeOrder, retrySkippedModules, stripNativeLibs))
+                Merger.merge(
+                    apkDir = modulesDir.toPath(),
+                    outputApk = mergedApk,
+                    skipModules = retrySkippedModules,
+                    onProgress = onProgress,
+                    sortApkEntries = sortMergedApkEntries
+                )
+            }
 
             if (stripNativeLibs) {
                 onProgress?.invoke("Stripping native libraries")
@@ -119,10 +144,36 @@ object SplitApkPreparer {
         runCatching {
             ZipFile(file).use { zip ->
                 zip.entries().asSequence().any { entry ->
-                    !entry.isDirectory && entry.name.endsWith(".apk", ignoreCase = true)
+                    !entry.isDirectory &&
+                        isLikelySplitApkEntry(entry.name)
                 }
             }
         }.getOrDefault(false)
+
+    private fun looksLikeMislabeledSplitArchive(file: File): Boolean =
+        runCatching {
+            ZipFile(file).use { zip ->
+                val hasRootManifest = zip.entries().asSequence().any { entry ->
+                    !entry.isDirectory && entry.name == "AndroidManifest.xml"
+                }
+                !hasRootManifest && zip.entries().asSequence().any { entry ->
+                    !entry.isDirectory && isLikelySplitApkEntry(entry.name)
+                }
+            }
+        }.getOrDefault(false)
+
+    private fun isLikelySplitApkEntry(entryName: String): Boolean {
+        val normalized = entryName.replace('\\', '/')
+        val fileName = normalized.substringAfterLast('/')
+        if (!fileName.endsWith(".apk", ignoreCase = true)) return false
+        val lowerName = fileName.lowercase(Locale.ROOT)
+
+        if (lowerName == "base.apk") return true
+        if (lowerName.startsWith("split_config.") || lowerName.startsWith("config.")) return true
+
+        // Support zip containers whose APK modules are placed in root.
+        return !normalized.contains('/')
+    }
 
     private data class ExtractedModule(val name: String, val file: File)
 
@@ -136,10 +187,7 @@ object SplitApkPreparer {
         val skippedLookup = skippedModules
             .map { it.lowercase(Locale.ROOT) }
             .toSet()
-        val (skipped, remaining) = moduleNames.partition {
-            skippedLookup.contains(it.lowercase(Locale.ROOT))
-        }
-        (skipped + remaining).forEach { name ->
+        moduleNames.forEach { name ->
             val label = "Merging $name"
             val entry = if (skippedLookup.contains(name.lowercase(Locale.ROOT))) {
                 "$SKIPPED_STEP_PREFIX$label"
@@ -167,6 +215,49 @@ object SplitApkPreparer {
                 .flatMap { abi -> buildAbiTokens(abi) }
                 .map { it.lowercase(Locale.ROOT) }
                 .toSet()
+
+    private fun buildRetrySkippedModules(
+        moduleNames: List<String>,
+        currentSkipped: Set<String>,
+        supportedTokens: Set<String>
+    ): Set<String> {
+        val localeTokens = deviceLocaleTokens()
+        val densityQualifier = deviceDensityQualifier()
+        return buildSet {
+            addAll(currentSkipped)
+            // Keep only ABI splits relevant to the current device on retry.
+            addAll(moduleNames.filter { shouldSkipModule(it, supportedTokens) })
+            // Keep only locale/density splits relevant to the current device on retry.
+            addAll(
+                moduleNames.filter {
+                    shouldSkipModuleForDevice(
+                        moduleName = it,
+                        localeTokens = localeTokens,
+                        densityQualifier = densityQualifier
+                    )
+                }
+            )
+        }
+    }
+
+    private fun shouldRetryMergeWithDeviceFiltering(
+        error: Throwable,
+        currentSkipped: Set<String>,
+        retrySkipped: Set<String>
+    ): Boolean {
+        if (retrySkipped == currentSkipped) return false
+        val reason = buildString {
+            append(error.message.orEmpty())
+            append(' ')
+            append(error.cause?.message.orEmpty())
+        }.lowercase(Locale.ROOT)
+        return reason.contains("(137)") ||
+            reason.contains("process failed (137)") ||
+            reason.contains("sigkill") ||
+            reason.contains("out of memory") ||
+            reason.contains("oom") ||
+            reason.contains("(134)")
+    }
 
     private fun buildAbiTokens(abi: String): Set<String> {
         val normalized = abi.lowercase(Locale.ROOT)

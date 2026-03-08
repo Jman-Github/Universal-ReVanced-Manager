@@ -1,8 +1,8 @@
 package app.revanced.manager.patcher.morphe
 
-import app.morphe.library.ApkUtils.applyTo
 import app.morphe.patcher.Patcher
 import app.morphe.patcher.PatcherConfig
+import app.morphe.patcher.apk.ApkUtils.applyTo
 import app.morphe.patcher.patch.Patch
 import app.morphe.patcher.patch.PatchResult
 import app.revanced.manager.patcher.ProgressEvent

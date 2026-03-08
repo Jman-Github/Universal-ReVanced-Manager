@@ -71,6 +71,7 @@ import java.util.LinkedHashSet
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 @OptIn(PluginHostApi::class)
 class PatcherWorker(
@@ -229,43 +230,114 @@ class PatcherWorker(
         val indeterminate: Boolean
     )
 
+
     private fun notificationProgress(
         event: ProgressEvent?,
         totalPatchCount: Int
     ): NotificationProgress? {
         if (event == null) return NotificationProgress(max = 0, current = 0, indeterminate = true)
         return when (event) {
-            is ProgressEvent.Started -> NotificationProgress(max = 0, current = 0, indeterminate = true)
+            is ProgressEvent.Started -> if (event.stepId == StepId.DownloadAPK) {
+                NotificationProgress(max = 0, current = 0, indeterminate = true)
+            } else {
+                notificationStageProgress(event.stepId, totalPatchCount, 0f)
+            }
             is ProgressEvent.Progress -> {
                 val total = event.total?.takeIf { it > 0L }
                 val current = event.current
-                if (total != null && current != null) {
-                    val maxInt = min(total, Int.MAX_VALUE.toLong()).toInt()
-                    val curInt = min(current, maxInt.toLong()).toInt()
-                    NotificationProgress(max = maxInt, current = curInt, indeterminate = false)
+                if (event.stepId == StepId.DownloadAPK) {
+                    if (total != null && current != null) {
+                        val maxInt = min(total, Int.MAX_VALUE.toLong()).toInt()
+                        val curInt = min(current, maxInt.toLong()).toInt()
+                        NotificationProgress(max = maxInt, current = curInt, indeterminate = false)
+                    } else {
+                        NotificationProgress(max = 0, current = 0, indeterminate = true)
+                    }
                 } else {
-                    NotificationProgress(max = 0, current = 0, indeterminate = true)
+                    notificationStageProgress(
+                        stepId = event.stepId,
+                        totalPatchCount = totalPatchCount,
+                        fraction = when {
+                            total != null && current != null ->
+                                (current.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+                            event.stepId == StepId.WriteAPK -> notificationWriteApkFraction(event)
+                            else -> 0.5f
+                        }
+                    )
                 }
             }
-            is ProgressEvent.Completed -> {
-                when (val step = event.stepId) {
-                    is StepId.ExecutePatch -> {
-                        if (totalPatchCount <= 0) {
-                            NotificationProgress(max = 0, current = 0, indeterminate = true)
-                        } else {
-                            val current = (step.index + 1).coerceIn(0, totalPatchCount)
-                            NotificationProgress(
-                                max = totalPatchCount,
-                                current = current,
-                                indeterminate = false
-                            )
-                        }
-                    }
-                    else -> NotificationProgress(max = 0, current = 0, indeterminate = true)
-                }
+            is ProgressEvent.Completed -> if (event.stepId == StepId.DownloadAPK) {
+                NotificationProgress(max = 0, current = 0, indeterminate = true)
+            } else {
+                notificationStageProgress(event.stepId, totalPatchCount, 1f)
             }
             is ProgressEvent.Failed -> null
         }
+    }
+
+    private fun notificationStageProgress(
+        stepId: StepId,
+        totalPatchCount: Int,
+        fraction: Float
+    ): NotificationProgress {
+        val normalized = fraction.coerceIn(0f, 1f)
+        val current = when (stepId) {
+            StepId.DownloadAPK -> 0
+            StepId.LoadPatches -> progressInRange(LOAD_PATCHES_START, LOAD_PATCHES_END, normalized)
+            StepId.PrepareSplitApk ->
+                progressInRange(PREPARE_SPLIT_START, PREPARE_SPLIT_END, normalized)
+            StepId.ReadAPK -> progressInRange(READ_APK_START, READ_APK_END, normalized)
+            StepId.ExecutePatches -> progressInRange(
+                EXECUTE_PATCHES_START,
+                EXECUTE_PATCHES_END,
+                normalized
+            )
+            is StepId.ExecutePatch -> notificationExecutePatchProgress(stepId, totalPatchCount, normalized)
+            StepId.WriteAPK -> progressInRange(WRITE_APK_START, WRITE_APK_END, normalized)
+            StepId.SignAPK -> progressInRange(SIGN_APK_START, SIGN_APK_END, normalized)
+        }
+        return NotificationProgress(
+            max = NOTIFICATION_PROGRESS_MAX,
+            current = current,
+            indeterminate = false
+        )
+    }
+
+    private fun notificationExecutePatchProgress(
+        stepId: StepId.ExecutePatch,
+        totalPatchCount: Int,
+        fraction: Float
+    ): Int {
+        if (totalPatchCount <= 0) {
+            return progressInRange(EXECUTE_PATCHES_START, EXECUTE_PATCHES_END, fraction)
+        }
+        val currentPatch = stepId.index.coerceAtLeast(0).coerceAtMost(totalPatchCount)
+        val overallFraction =
+            ((currentPatch.toFloat() + fraction.coerceIn(0f, 1f)) / totalPatchCount.toFloat())
+                .coerceIn(0f, 1f)
+        return progressInRange(EXECUTE_PATCHES_START, EXECUTE_PATCHES_END, overallFraction)
+    }
+
+    private fun notificationWriteApkFraction(event: ProgressEvent.Progress): Float {
+        val detail = normalizeNotificationDetail(event.stepId, event.message)?.trim()
+        return when {
+            !event.subSteps.isNullOrEmpty() -> 0.25f
+            detail == null -> 0.5f
+            detail.equals("Preparing output APK", ignoreCase = true) -> 0.05f
+            detail.equals("Copying base APK", ignoreCase = true) -> 0.15f
+            detail.startsWith("Compiling ", ignoreCase = true) -> 0.4f
+            detail.equals("Compiling modified resources", ignoreCase = true) -> 0.65f
+            detail.equals("Writing output APK", ignoreCase = true) -> 0.82f
+            detail.equals("Finalizing output", ignoreCase = true) -> 0.92f
+            detail.equals("Stripping native libraries", ignoreCase = true) -> 0.97f
+            else -> 0.5f
+        }
+    }
+
+    private fun progressInRange(start: Int, end: Int, fraction: Float): Int {
+        val normalized = fraction.coerceIn(0f, 1f)
+        return (start + ((end - start) * normalized)).roundToInt()
+            .coerceIn(start, end)
     }
 
     private fun updateForegroundNotification(event: ProgressEvent?, totalPatchCount: Int) {
@@ -827,6 +899,19 @@ class PatcherWorker(
         private const val WORK_DATA_MAX_BYTES = 9000
         private const val DOWNLOAD_PROGRESS_MIN_INTERVAL_MS = 150L
         private const val DOWNLOAD_PROGRESS_MIN_BYTES = 256 * 1024L
+        private const val NOTIFICATION_PROGRESS_MAX = 1000
+        private const val LOAD_PATCHES_START = 0
+        private const val LOAD_PATCHES_END = 120
+        private const val PREPARE_SPLIT_START = LOAD_PATCHES_END
+        private const val PREPARE_SPLIT_END = 220
+        private const val READ_APK_START = PREPARE_SPLIT_END
+        private const val READ_APK_END = 320
+        private const val EXECUTE_PATCHES_START = READ_APK_END
+        private const val EXECUTE_PATCHES_END = 820
+        private const val WRITE_APK_START = EXECUTE_PATCHES_END
+        private const val WRITE_APK_END = 970
+        private const val SIGN_APK_START = WRITE_APK_END
+        private const val SIGN_APK_END = NOTIFICATION_PROGRESS_MAX
     }
 
     private fun trimForWorkData(message: String?): String? {

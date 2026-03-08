@@ -123,6 +123,10 @@ object AmpleRuntimeEntry {
             ?: return "Missing packageName parameter."
         val apkEditorJarPath = params["apkEditorJarPath"] as? String
         val apkEditorMergeJarPath = params["apkEditorMergeJarPath"] as? String
+        val runtimeClassPath = params["runtimeClassPath"] as? String
+        val propOverridePath = params["propOverridePath"] as? String
+        val mergeMemoryLimitMb = (params["mergeMemoryLimitMb"] as? Number)?.toInt()
+        val appProcessPath = params["appProcessPath"] as? String
         val inputFile = params["inputFile"] as? String
             ?: return "Missing inputFile parameter."
         val outputFile = params["outputFile"] as? String
@@ -131,11 +135,21 @@ object AmpleRuntimeEntry {
         val skipUnneededSplits = params["skipUnneededSplits"] as? Boolean ?: false
         val configurations = params["configurations"] as? List<*> ?: emptyList<Any>()
 
+        logger.info(
+            "Split merge runtime: appProcess=${appProcessPath ?: "auto"} " +
+                "memoryLimit=${mergeMemoryLimitMb?.let { "${it}MB" } ?: "default"} " +
+                "propOverride=${if (propOverridePath.isNullOrBlank()) "disabled" else "enabled"}"
+        )
+
         val androidDataDir = File(cacheDir, "apkeditor-android-data").absolutePath
         ApkEditorMergeRuntime.configure(
             apkEditorJarPath,
             apkEditorMergeJarPath,
-            androidDataDir = androidDataDir
+            propOverridePath = propOverridePath,
+            memoryLimitMb = mergeMemoryLimitMb,
+            appProcessPath = appProcessPath,
+            androidDataDir = androidDataDir,
+            runtimeClassPath = resolveRuntimeClassPath(runtimeClassPath)
         )
         val aaptLogs = AaptLogCapture(onLine = ::handleWriteProgressLine).apply { start() }
         val stdioCapture = StdIoCapture(::handleWriteProgressLine).apply { start() }
@@ -531,4 +545,21 @@ object AmpleRuntimeEntry {
         }
         hex.toString()
     }.getOrNull()
+    private fun resolveRuntimeClassPath(explicitPath: String?): String? {
+        val explicit = explicitPath
+            ?.takeIf { it.isNotBlank() }
+            ?.let(::File)
+            ?.takeIf(File::exists)
+            ?.absolutePath
+        if (explicit != null) return explicit
+
+        return runCatching {
+            val location = AmpleRuntimeEntry::class.java.protectionDomain
+                ?.codeSource
+                ?.location
+                ?: return@runCatching null
+            val path = File(location.toURI()).absolutePath
+            path.takeIf { File(it).exists() }
+        }.getOrNull()
+    }
 }

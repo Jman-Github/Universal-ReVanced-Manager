@@ -2670,31 +2670,14 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                         return
                     }
                 }
-                val nextExpectedIndex = if (runningIndex != -1) {
-                    var index = runningIndex + 1
-                    while (index < list.size && list[index].skipped) {
-                        index++
+                if (runningIndex != -1 && existingIndex < runningIndex) {
+                    val stale = list[existingIndex]
+                    if (!stale.skipped && stale.state != State.COMPLETED) {
+                        list[existingIndex] = stale.copy(state = State.COMPLETED, progress = null)
                     }
-                    if (index < list.size) index else -1
-                } else {
-                    list.indexOfFirst { !it.skipped && it.state == State.WAITING }
+                    return
                 }
-                when {
-                    runningIndex != -1 && existingIndex == runningIndex -> Unit
-                    nextExpectedIndex != -1 && existingIndex == nextExpectedIndex -> Unit
-                    nextExpectedIndex != -1 && existingIndex < nextExpectedIndex -> {
-                        val stale = list[existingIndex]
-                        if (!stale.skipped && stale.state != State.COMPLETED) {
-                            list[existingIndex] = stale.copy(state = State.COMPLETED, progress = null)
-                        }
-                        return
-                    }
-                    nextExpectedIndex != -1 && existingIndex > nextExpectedIndex -> {
-                        val moved = list.removeAt(existingIndex)
-                        list.add(nextExpectedIndex, moved)
-                        existingIndex = nextExpectedIndex
-                    }
-                }
+                completePrepareSplitApkPriorSteps(list, existingIndex)
             }
         }
         if (stepId == StepId.WriteAPK && isDexCompilePhaseTitle(normalized)) {
@@ -2910,6 +2893,19 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
 
     private fun completeWriteApkPriorSteps(
+        list: SnapshotStateList<StepDetail>,
+        untilExclusive: Int
+    ) {
+        if (untilExclusive <= 0) return
+        val limit = untilExclusive.coerceAtMost(list.size)
+        for (index in 0 until limit) {
+            val detail = list[index]
+            if (detail.skipped || detail.state == State.COMPLETED) continue
+            list[index] = detail.copy(state = State.COMPLETED, progress = null)
+        }
+    }
+
+    private fun completePrepareSplitApkPriorSteps(
         list: SnapshotStateList<StepDetail>,
         untilExclusive: Int
     ) {

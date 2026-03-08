@@ -3,7 +3,6 @@ package app.revanced.manager.patcher.split
 import com.reandroid.apk.APKLogger
 import java.io.File
 import java.io.IOException
-import java.util.Locale
 import java.util.ArrayDeque
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.Dispatchers
@@ -33,13 +32,17 @@ internal object ApkEditorMergeRuntime {
     @Volatile
     private var androidDataDir: String? = null
 
+    @Volatile
+    private var runtimeClassPath: String? = null
+
     fun configure(
         apkEditorJar: String?,
         mergeJar: String?,
         propOverridePath: String? = null,
         memoryLimitMb: Int? = null,
         appProcessPath: String? = null,
-        androidDataDir: String? = null
+        androidDataDir: String? = null,
+        runtimeClassPath: String? = null
     ) {
         apkEditorJarPath = apkEditorJar
         mergeJarPath = mergeJar
@@ -47,6 +50,7 @@ internal object ApkEditorMergeRuntime {
         this.memoryLimitMb = memoryLimitMb
         this.appProcessPath = appProcessPath
         this.androidDataDir = androidDataDir
+        this.runtimeClassPath = runtimeClassPath
     }
 
     private fun resolveClasspath(): String {
@@ -60,23 +64,22 @@ internal object ApkEditorMergeRuntime {
         if (!apkFile.exists() || !mergeFile.exists()) {
             throw IllegalStateException("ApkEditor merge runtime assets missing")
         }
-        return listOf(mergeFile.absolutePath, apkFile.absolutePath)
+        val runtimePath = runtimeClassPath
+            ?.takeIf { it.isNotBlank() }
+            ?.let(::File)
+            ?.takeIf(File::exists)
+            ?.absolutePath
+        return buildList {
+            if (!runtimePath.isNullOrBlank()) add(runtimePath)
+            add(mergeFile.absolutePath)
+            add(apkFile.absolutePath)
+        }
             .joinToString(File.pathSeparator)
     }
 
     fun listMergeOrder(apkDir: File): List<String> {
         val lines = ArrayList<String>()
-        if (!canRunInProcess()) {
-            runProcess(
-                action = ACTION_LIST,
-                apkDir = apkDir,
-                outputApk = null,
-                skipModules = emptySet(),
-                sortApkEntries = false
-            ) { line ->
-                lines.add(line)
-            }
-        } else try {
+        try {
             runInProcess(
                 action = ACTION_LIST,
                 apkDir = apkDir,
@@ -92,10 +95,11 @@ internal object ApkEditorMergeRuntime {
                 apkDir = apkDir,
                 outputApk = null,
                 skipModules = emptySet(),
-                sortApkEntries = false
-            ) { line ->
-                lines.add(line)
-            }
+                sortApkEntries = false,
+                onLine = { line ->
+                    lines.add(line)
+                }
+            )
         }
         return lines
             .filter { it.startsWith(ORDER_PREFIX) }
@@ -110,7 +114,8 @@ internal object ApkEditorMergeRuntime {
         sortApkEntries: Boolean,
         onLine: ((String) -> Unit)? = null
     ) = withContext(Dispatchers.IO) {
-        if (!canRunInProcess()) {
+        val inProcessAvailable = canRunInProcess()
+        if (!inProcessAvailable) {
             onLine?.invoke("APKEditor: in-process merge unavailable, using app_process.")
             runProcess(
                 action = ACTION_MERGE,
@@ -170,7 +175,9 @@ internal object ApkEditorMergeRuntime {
         outputApk: File?,
         skipModules: Set<String>,
         sortApkEntries: Boolean,
-        onLine: ((String) -> Unit)? = null
+        onLine: ((String) -> Unit)? = null,
+        heapLimitMb: Int? = memoryLimitMb,
+        allowHeapFallback: Boolean = true
     ) {
         val classpath = resolveClasspath()
         val appProcess = appProcessPath?.takeIf { it.isNotBlank() } ?: resolveAppProcessBin()
@@ -183,7 +190,7 @@ internal object ApkEditorMergeRuntime {
         }
         val args = ArrayList<String>().apply {
             add(appProcess)
-            memoryLimitMb?.takeIf { it > 0 && propOverridePath.isNullOrBlank() }?.let { limit ->
+            heapLimitMb?.takeIf { it > 0 && propOverridePath.isNullOrBlank() }?.let { limit ->
                 add("-Xmx${limit}m")
                 add("-XX:HeapGrowthLimit=${limit}m")
             }
@@ -210,7 +217,7 @@ internal object ApkEditorMergeRuntime {
                     env["ANDROID_CACHE"] = File(androidData, "cache").absolutePath
                 }
                 val overridePath = propOverridePath
-                val limitMb = memoryLimitMb
+                val limitMb = heapLimitMb
                 if (!overridePath.isNullOrBlank() && limitMb != null) {
                     val limit = "${limitMb}M"
                     env["LD_PRELOAD"] = overridePath
@@ -240,6 +247,25 @@ internal object ApkEditorMergeRuntime {
 
         val exitCode = process.waitFor()
         if (exitCode != 0) {
+            if (allowHeapFallback && exitCode == 137) {
+                val configured = heapLimitMb ?: memoryLimitMb ?: 0
+                if (configured > SAFE_RETRY_HEAP_MB) {
+                    onLine?.invoke(
+                        "APKEditor: merge process killed (137), retrying with ${SAFE_RETRY_HEAP_MB}MB heap."
+                    )
+                    runProcess(
+                        action = action,
+                        apkDir = apkDir,
+                        outputApk = outputApk,
+                        skipModules = skipModules,
+                        sortApkEntries = sortApkEntries,
+                        onLine = onLine,
+                        heapLimitMb = SAFE_RETRY_HEAP_MB,
+                        allowHeapFallback = false
+                    )
+                    return
+                }
+            }
             val output = outputRef.get().joinToString("\n").trim()
             throw IOException("APKEditor merge process failed ($exitCode). ${output.takeIf { it.isNotBlank() } ?: ""}")
         }
@@ -275,6 +301,22 @@ internal object ApkEditorMergeRuntime {
                 onLine?.invoke(normalized)
             }
         }
+
+        try {
+            runInProcessDirect(args, ::recordLine)
+        } catch (error: Throwable) {
+            error.stackTraceToString().lineSequence().forEach { recordLine(it.trim()) }
+            val output = outputLines.joinToString("\n").trim()
+            val message = if (output.isNotBlank()) {
+                "APKEditor merge in-process failed. $output"
+            } else {
+                "APKEditor merge in-process failed."
+            }
+            throw IOException(message, error)
+        }
+    }
+
+    private fun runInProcessDirect(args: Array<String>, recordLine: (String) -> Unit) {
         val logger = object : APKLogger {
             override fun logMessage(msg: String?) {
                 val line = msg?.trim().orEmpty()
@@ -295,15 +337,6 @@ internal object ApkEditorMergeRuntime {
         try {
             ApkEditorMergeProcess.setLogger(logger)
             ApkEditorMergeProcess.main(args)
-        } catch (error: Throwable) {
-            error.stackTraceToString().lineSequence().forEach { recordLine(it.trim()) }
-            val output = outputLines.joinToString("\n").trim()
-            val message = if (output.isNotBlank()) {
-                "APKEditor merge in-process failed. $output"
-            } else {
-                "APKEditor merge in-process failed."
-            }
-            throw IOException(message, error)
         } finally {
             ApkEditorMergeProcess.clearLogger()
         }
@@ -316,6 +349,7 @@ internal object ApkEditorMergeRuntime {
 
     private const val MAX_OUTPUT_LINES = 400
     private const val MAX_EVENT_LINE_LENGTH = 2000
+    private const val SAFE_RETRY_HEAP_MB = 320
 
     private fun shouldEmit(line: String): Boolean {
         val trimmed = line.trim()

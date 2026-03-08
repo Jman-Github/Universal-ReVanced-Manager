@@ -43,6 +43,8 @@
 - Updated the Morphe runtimes aapt2 binaries to the ones used by the official ReVanced Manager https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/272
 - Improved the existing `Previous changelog` system to backfill to a user set limit through settings
 - Remove `AAPT2 version` and `AAPT sha256` from the patcher logs and added `AAPT2 selected`, `Environment`, `Device name` and `Selected patches` lines
+- Bumped Morphe dependencies
+- Improved the `Patching in progress` notification https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/278
 
 
 # Bug fixes
@@ -86,6 +88,7 @@
 - Fixed manager update asset selection so the updater correctly resolves both ABI-specific APKs
 - Fixed issues with the `Always create a new saved app entry` setting https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
 - Fixed the patcher screens pause between `Load patches` and `Read APK file` sub-steps
+- Fixed issues with progress being reordered live during split APK merging for the AmpleReVanced runtime
 
 
 # CI

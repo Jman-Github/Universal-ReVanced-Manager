@@ -89,6 +89,7 @@ dependencies {
     implementation(libs.morphe.patcher) {
         exclude(group = "xmlpull", module = "xmlpull")
         exclude(group = "xpp3", module = "xpp3")
+        exclude(group = "com.github.REAndroid", module = "arsclib")
     }
     implementation(libs.morphe.library) {
         exclude(group = "xmlpull", module = "xmlpull")

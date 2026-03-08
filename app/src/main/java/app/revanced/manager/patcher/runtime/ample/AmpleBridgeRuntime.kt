@@ -1,15 +1,20 @@
 package app.revanced.manager.patcher.runtime.ample
 
 import android.content.Context
+import android.os.Build
+import app.revanced.manager.patcher.LibraryResolver
 import app.revanced.manager.patcher.ProgressEvent
 import app.revanced.manager.patcher.logger.Logger
+import app.revanced.manager.patcher.runtime.MemoryLimitConfig
 import app.revanced.manager.patcher.ample.AmpleBridgeFailureException
 import app.revanced.manager.patcher.ample.AmpleRuntimeBridge
 import app.revanced.manager.util.Options
 import app.revanced.manager.util.PatchSelection
+import java.io.File
 
 class AmpleBridgeRuntime(context: Context) : AmpleRuntime(context) {
     private val appContext = context.applicationContext
+
     override suspend fun execute(
         inputFile: String,
         outputFile: String,
@@ -45,6 +50,25 @@ class AmpleBridgeRuntime(context: Context) : AmpleRuntime(context) {
 
         val apkEditorJarPath = AmpleRuntimeAssets.ensureApkEditorJar(appContext).absolutePath
         val apkEditorMergeJarPath = AmpleRuntimeAssets.ensureApkEditorMergeJar(appContext).absolutePath
+        val runtimeClassPath = AmpleRuntimeAssets.ensureRuntimeClassPath(appContext).absolutePath
+        val appProcessPath = resolveAppProcessBin(appContext)
+
+        val requestedLimit = prefs.patcherProcessMemoryLimit.get()
+        val aggressiveLimit = prefs.patcherProcessMemoryAggressive.get()
+        val mergeMemoryLimitMb = MemoryLimitConfig.clampLimitMb(
+            appContext,
+            if (aggressiveLimit) {
+                MemoryLimitConfig.maxLimitMb(appContext)
+            } else {
+                requestedLimit
+            }
+        )
+
+        val propOverridePath = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            resolvePropOverride(appContext)?.absolutePath
+        } else {
+            null
+        }
 
         val params = mapOf(
             "aaptPath" to aaptPrimaryPath,
@@ -53,6 +77,10 @@ class AmpleBridgeRuntime(context: Context) : AmpleRuntime(context) {
             "cacheDir" to cacheDir,
             "apkEditorJarPath" to apkEditorJarPath,
             "apkEditorMergeJarPath" to apkEditorMergeJarPath,
+            "runtimeClassPath" to runtimeClassPath,
+            "propOverridePath" to propOverridePath,
+            "mergeMemoryLimitMb" to mergeMemoryLimitMb,
+            "appProcessPath" to appProcessPath,
             "packageName" to packageName,
             "inputFile" to inputFile,
             "outputFile" to outputFile,
@@ -64,6 +92,20 @@ class AmpleBridgeRuntime(context: Context) : AmpleRuntime(context) {
         val error = AmpleRuntimeBridge.runPatcher(params, logger, onEvent)
         if (!error.isNullOrBlank()) {
             throw AmpleBridgeFailureException(error)
+        }
+    }
+
+    companion object : LibraryResolver() {
+        private const val APP_PROCESS_BIN_PATH = "/system/bin/app_process"
+        private const val APP_PROCESS_BIN_PATH_64 = "/system/bin/app_process64"
+        private const val APP_PROCESS_BIN_PATH_32 = "/system/bin/app_process32"
+
+        private fun resolvePropOverride(context: Context) = findLibrary(context, "prop_override")
+
+        private fun resolveAppProcessBin(context: Context): String {
+            val is64Bit = context.applicationInfo.nativeLibraryDir.contains("64")
+            val preferred = if (is64Bit) APP_PROCESS_BIN_PATH_64 else APP_PROCESS_BIN_PATH_32
+            return if (File(preferred).exists()) preferred else APP_PROCESS_BIN_PATH
         }
     }
 }
