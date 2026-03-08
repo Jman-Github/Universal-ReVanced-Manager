@@ -50,6 +50,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.ClickableText
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -153,7 +155,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.OffsetMapping
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -2396,24 +2397,38 @@ private fun ExportNameFormatDialog(
     onDismiss: () -> Unit,
     onSave: (String) -> Unit
 ) {
-    var value by rememberSaveable(currentValue, stateSaver = TextFieldValue.Saver) {
-        mutableStateOf(TextFieldValue(currentValue, selection = TextRange.Zero))
-    }
+    val textFieldState = rememberTextFieldState(
+        initialText = currentValue,
+        initialSelection = TextRange.Zero
+    )
     var useAppendInsertionFallback by rememberSaveable(currentValue) { mutableStateOf(true) }
     var showError by rememberSaveable { mutableStateOf(false) }
     val variables = remember { ExportNameFormatter.availableVariables() }
-    val preview = remember(value.text) { ExportNameFormatter.preview(value.text) }
+    val preview = remember(textFieldState.text) {
+        ExportNameFormatter.preview(textFieldState.text.toString())
+    }
 
     val helperScrollState = rememberScrollState()
+    val formatFieldScrollState = rememberScrollState()
+
+    LaunchedEffect(textFieldState) {
+        snapshotFlow { textFieldState.text.toString() }
+            .collectLatest { text ->
+                if (showError && text.isNotBlank()) {
+                    showError = false
+                }
+            }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(onClick = {
-                if (value.text.isBlank()) {
+                val currentText = textFieldState.text.toString()
+                if (currentText.isBlank()) {
                     showError = true
                 } else {
-                    onSave(value.text.trim())
+                    onSave(currentText.trim())
                 }
             }) {
                 Text(stringResource(R.string.save))
@@ -2436,16 +2451,12 @@ private fun ExportNameFormatDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 OutlinedTextField(
-                    value = value,
-                    onValueChange = {
-                        value = it
-                        useAppendInsertionFallback = false
-                        if (showError && it.text.isNotBlank()) showError = false
-                    },
-                    singleLine = true,
+                    state = textFieldState,
+                    lineLimits = TextFieldLineLimits.SingleLine,
+                    scrollState = formatFieldScrollState,
                     label = { Text(stringResource(R.string.export_name_format)) },
-                    isError = showError && value.text.isBlank(),
-                    supportingText = if (showError && value.text.isBlank()) {
+                    isError = showError && textFieldState.text.isBlank(),
+                    supportingText = if (showError && textFieldState.text.isBlank()) {
                         { Text(stringResource(R.string.export_name_format_error_blank)) }
                     } else null,
                     modifier = Modifier.fillMaxWidth()
@@ -2505,38 +2516,34 @@ private fun ExportNameFormatDialog(
                                             style = MaterialTheme.typography.titleMedium
                                         )
                                         TextButton(onClick = {
-                                            val currentText = value.text
-                                            val selection = if (
+                                            val currentText = textFieldState.text.toString()
+                                            val currentSelection = if (
                                                 useAppendInsertionFallback &&
-                                                value.selection.collapsed &&
-                                                value.selection.start == 0
+                                                textFieldState.selection.collapsed &&
+                                                textFieldState.selection.start == 0
                                             ) {
                                                 TextRange(currentText.length)
                                             } else {
-                                                value.selection
+                                                textFieldState.selection
                                             }
                                             val validSelection =
-                                                selection.start in 0..currentText.length &&
-                                                    selection.end in 0..currentText.length &&
-                                                    selection.start <= selection.end
+                                                currentSelection.start in 0..currentText.length &&
+                                                    currentSelection.end in 0..currentText.length &&
+                                                    currentSelection.start <= currentSelection.end
 
-                                            value = if (validSelection) {
-                                                val updated = currentText.replaceRange(
-                                                    selection.start,
-                                                    selection.end,
-                                                    variable.token
-                                                )
-                                                val cursor = selection.start + variable.token.length
-                                                TextFieldValue(
-                                                    text = updated,
-                                                    selection = TextRange(cursor)
-                                                )
-                                            } else {
-                                                val updated = currentText + variable.token
-                                                TextFieldValue(
-                                                    text = updated,
-                                                    selection = TextRange(updated.length)
-                                                )
+                                            textFieldState.edit {
+                                                val insertionStart = if (validSelection) {
+                                                    currentSelection.start
+                                                } else {
+                                                    currentText.length
+                                                }
+                                                val insertionEnd = if (validSelection) {
+                                                    currentSelection.end
+                                                } else {
+                                                    currentText.length
+                                                }
+                                                replace(insertionStart, insertionEnd, variable.token)
+                                                this.selection = TextRange(insertionStart + variable.token.length)
                                             }
                                             useAppendInsertionFallback = false
                                             if (showError) showError = false
@@ -2561,10 +2568,10 @@ private fun ExportNameFormatDialog(
                     TextButton(
                         onClick = {
                             val defaultTemplate = ExportNameFormatter.DEFAULT_TEMPLATE
-                            value = TextFieldValue(
-                                text = defaultTemplate,
+                            textFieldState.edit {
+                                replace(0, length, defaultTemplate)
                                 selection = TextRange.Zero
-                            )
+                            }
                             useAppendInsertionFallback = true
                             showError = false
                         },

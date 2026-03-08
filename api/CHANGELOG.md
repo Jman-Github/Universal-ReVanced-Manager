@@ -45,6 +45,7 @@
 - Remove `AAPT2 version` and `AAPT sha256` from the patcher logs and added `AAPT2 selected`, `Environment`, `Device name` and `Selected patches` lines
 - Bumped Morphe dependencies
 - Improved the `Patching in progress` notification https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/278
+- Renamed the manager keystore file to `urv_keystore.keystore` and added migration/restore support for legacy `manager.keystore` backups https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/268 
 
 
 # Bug fixes
@@ -89,6 +90,7 @@
 - Fixed issues with the `Always create a new saved app entry` setting https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
 - Fixed the patcher screens pause between `Load patches` and `Read APK file` sub-steps
 - Fixed issues with progress being reordered live during split APK merging for the AmpleReVanced runtime
+- Fixed the `Export filename format` dialog so the single-line text field slides with the cursor https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/276
 
 
 # CI
