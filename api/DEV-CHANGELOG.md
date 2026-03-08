@@ -3,10 +3,13 @@
 
 # Features
 
+- Updated the ReVanced `libaapt2.so` binaries to the ones used by the official ReVanced Manager
+
 
 # Bug fixes
 
 - Fixed issues with the fullscreen back gesture causing UI glitches and showing the wrong screens https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/280
+- Fixed an issue where the `AAPT2 selected` line in patcher logs would always be listed as `Unknown`
 
 
 # v1.8.1-dev.06 (2026-03-07)

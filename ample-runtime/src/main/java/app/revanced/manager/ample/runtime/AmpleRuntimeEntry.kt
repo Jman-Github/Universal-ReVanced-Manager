@@ -512,6 +512,7 @@ object AmpleRuntimeEntry {
             logger.warn("AAPT2 binary missing at $aaptPath")
             return
         }
+        logger.info("AAPT2 selected: ${aaptFile.name}")
         val digest = sha256(aaptFile)
         if (digest != null) {
             logger.info("AAPT2 sha256: $digest")

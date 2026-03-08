@@ -46,6 +46,7 @@
 - Bumped Morphe dependencies
 - Improved the `Patching in progress` notification https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/278
 - Renamed the manager keystore file to `urv_keystore.keystore` and added migration/restore support for legacy `manager.keystore` backups https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/268 
+- Updated the ReVanced `libaapt2.so` binaries to the ones used by the official ReVanced Manager
 
 
 # Bug fixes
@@ -92,6 +93,7 @@
 - Fixed issues with progress being reordered live during split APK merging for the AmpleReVanced runtime
 - Fixed the `Export filename format` dialog so the single-line text field slides with the cursor https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/276
 - Fixed issues with the fullscreen back gesture causing UI glitches and showing the wrong screens https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/280
+- Fixed an issue where the `AAPT2 selected` line in patcher logs would always be listed as `Unknown`
 
 
 # CI
