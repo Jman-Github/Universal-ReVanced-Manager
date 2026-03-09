@@ -16,6 +16,7 @@ import app.revanced.manager.domain.repository.DuplicatePatchProfileNameException
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.domain.repository.PatchProfile
 import app.revanced.manager.domain.repository.PatchProfileRepository
+import app.revanced.manager.domain.repository.resolvePatchProfileAppVersion
 import app.revanced.manager.domain.repository.remapLocalBundles
 import app.revanced.manager.domain.repository.toConfiguration
 import app.revanced.manager.patcher.split.SplitApkInspector
@@ -44,6 +45,7 @@ data class PatchProfileListItem(
     val apkPath: String?,
     val apkSourcePath: String?,
     val apkVersion: String?,
+    val useSelectedApkVersion: Boolean,
     val autoPatch: Boolean,
     val bundleCount: Int,
     val bundleNames: List<String>,
@@ -100,14 +102,8 @@ private fun Map<Int, Map<String, Map<String, Any?>>>.toStringMap(): Map<Int, Map
 private fun Map<String, Map<String, app.revanced.manager.data.room.options.Option.SerializedValue>>.toSerializedStringMap(): Map<String, Map<String, String>> =
     mapValues { (_, options) -> options.mapValues { (_, value) -> value.toJsonString() } }
 
-private fun PatchProfile.effectiveAppVersion(): String? {
-    val hasAvailableApk = apkPath?.let(::File)?.exists() == true
-    return if (hasAvailableApk) {
-        apkVersion?.takeIf { it.isNotBlank() } ?: appVersion
-    } else {
-        appVersion
-    }
-}
+private fun PatchProfile.effectiveAppVersion(): String? =
+    resolvePatchProfileAppVersion(appVersion, apkPath, apkVersion, useSelectedApkVersion)
 
 class PatchProfilesViewModel(
     private val app: Application,
@@ -294,6 +290,7 @@ class PatchProfilesViewModel(
                 apkPath = profile.apkPath,
                 apkSourcePath = profile.apkSourcePath,
                 apkVersion = profile.apkVersion,
+                useSelectedApkVersion = profile.useSelectedApkVersion,
                 autoPatch = profile.autoPatch,
                 bundleCount = workingPayload.bundles.size,
                 bundleNames = bundleNames,
@@ -395,7 +392,11 @@ class PatchProfilesViewModel(
         }
     }
 
-    suspend fun updateProfileVersion(profileId: Int, version: String?): VersionUpdateResult =
+    suspend fun updateProfileVersion(
+        profileId: Int,
+        version: String?,
+        useSelectedApkVersion: Boolean = false
+    ): VersionUpdateResult =
         withContext(Dispatchers.Default) {
             val profile = patchProfileRepository.getProfile(profileId)
                 ?: return@withContext VersionUpdateResult.PROFILE_NOT_FOUND
@@ -406,7 +407,8 @@ class PatchProfilesViewModel(
                     packageName = profile.packageName,
                     appVersion = sanitized,
                     name = profile.name,
-                    payload = profile.payload
+                    payload = profile.payload,
+                    useSelectedApkVersion = useSelectedApkVersion
                 )
                 if (updated != null) VersionUpdateResult.SUCCESS else VersionUpdateResult.FAILED
             } catch (t: Exception) {
@@ -421,7 +423,14 @@ class PatchProfilesViewModel(
                 ?: return@withContext ApkSelectionResult.PROFILE_NOT_FOUND
             if (file == null) {
                 profile.apkPath?.let { File(it).delete() }
-                patchProfileRepository.updateProfileApk(profileId, null, null, null)
+                patchProfileRepository.updateProfileApk(
+                    profileId,
+                    null,
+                    null,
+                    null,
+                    appVersion = if (profile.useSelectedApkVersion) null else profile.appVersion,
+                    useSelectedApkVersion = false
+                )
                 return@withContext ApkSelectionResult.CLEARED
             }
             if (!file.exists()) return@withContext ApkSelectionResult.INVALID_FILE
@@ -454,7 +463,9 @@ class PatchProfilesViewModel(
                 profileId,
                 destination.absolutePath,
                 version,
-                file.absolutePath
+                file.absolutePath,
+                appVersion = profile.appVersion,
+                useSelectedApkVersion = true
             )
             if (updated == null) {
                 destination.delete()

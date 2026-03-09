@@ -116,6 +116,8 @@ fun BundleItem(
     var changelogHistoryLoading by remember { mutableStateOf(false) }
     var changelogHistoryError by remember { mutableStateOf<Throwable?>(null) }
     val remoteSource = src.asRemoteOrNull
+    val historicalChangelogSource = remoteSource?.takeIf { it.supportsHistoricalChangelog }
+    val supportsHistoricalChangelog = historicalChangelogSource != null
 
     if (viewBundleDialogPage) {
         BundleInformationDialog(
@@ -151,7 +153,13 @@ fun BundleItem(
         }
     }
 
-    if (showBundleChangelogHistory) {
+    LaunchedEffect(supportsHistoricalChangelog) {
+        if (!supportsHistoricalChangelog) {
+            showBundleChangelogHistory = false
+        }
+    }
+
+    if (showBundleChangelogHistory && supportsHistoricalChangelog) {
         BundleChangelogHistoryDialog(
             entries = changelogHistory.drop(1),
             isRefreshing = changelogHistoryLoading,
@@ -160,13 +168,9 @@ fun BundleItem(
                 changelogHistoryError = null
                 coroutineScope.launch {
                     changelogHistoryLoading = true
-                    changelogHistory = bundleRepo.getChangelogHistory(src.uid)
+                    changelogHistory = bundleRepo.getChangelogHistory(src)
                     try {
-                        changelogHistory = if (remoteSource != null) {
-                            bundleRepo.synchronizeChangelogHistory(remoteSource)
-                        } else {
-                            bundleRepo.getChangelogHistory(src.uid)
-                        }
+                        changelogHistory = bundleRepo.synchronizeChangelogHistory(historicalChangelogSource!!)
                     } catch (t: Throwable) {
                         changelogHistoryError = t
                     } finally {
@@ -284,12 +288,12 @@ fun BundleItem(
         changelogHistoryError = null
         coroutineScope.launch {
             changelogHistoryLoading = true
-            changelogHistory = bundleRepo.getChangelogHistory(src.uid)
+            changelogHistory = bundleRepo.getChangelogHistory(src)
             try {
-                changelogHistory = if (remoteSource != null) {
-                    bundleRepo.synchronizeChangelogHistory(remoteSource)
+                changelogHistory = if (historicalChangelogSource != null) {
+                    bundleRepo.synchronizeChangelogHistory(historicalChangelogSource)
                 } else {
-                    bundleRepo.getChangelogHistory(src.uid)
+                    bundleRepo.getChangelogHistory(src)
                 }
             } catch (t: Throwable) {
                 changelogHistoryError = t
@@ -299,8 +303,8 @@ fun BundleItem(
         }
     }
 
-    LaunchedEffect(showBundleChangelogHistory, src.uid, src.updatedAt) {
-        if (showBundleChangelogHistory) {
+    LaunchedEffect(showBundleChangelogHistory, supportsHistoricalChangelog, src.uid, src.updatedAt) {
+        if (showBundleChangelogHistory && supportsHistoricalChangelog) {
             refreshChangelogHistory()
         }
     }
@@ -503,7 +507,7 @@ fun BundleItem(
                             onClick = { showBundleChangelog = true }
                         )
                     }
-                    PatchBundleActionKey.CHANGELOG_HISTORY -> if (remoteSource != null) {
+                    PatchBundleActionKey.CHANGELOG_HISTORY -> if (supportsHistoricalChangelog) {
                         BundleActionPill(
                             text = stringResource(R.string.bundle_previous_changelogs),
                             icon = Icons.Outlined.History,

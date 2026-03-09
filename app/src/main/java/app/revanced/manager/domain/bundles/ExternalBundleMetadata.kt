@@ -35,4 +35,8 @@ object ExternalBundleMetadataStore {
         val file = directory.resolve(FILE_NAME)
         file.writeText(json.encodeToString(metadata))
     }
+
+    fun clear(directory: File) {
+        runCatching { directory.resolve(FILE_NAME).delete() }
+    }
 }

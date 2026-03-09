@@ -37,6 +37,7 @@ import app.revanced.manager.domain.repository.PatchOptionsRepository
 import app.revanced.manager.domain.repository.PatchProfile
 import app.revanced.manager.domain.repository.PatchProfileRepository
 import app.revanced.manager.domain.repository.PatchSelectionRepository
+import app.revanced.manager.domain.repository.resolvePatchProfileAppVersion
 import app.revanced.manager.domain.repository.PatchOptionsRepository.ResetEvent as OptionsResetEvent
 import app.revanced.manager.domain.repository.PatchSelectionRepository.ResetEvent as SelectionResetEvent
 import app.revanced.manager.domain.repository.remapLocalBundles
@@ -520,7 +521,15 @@ class SelectedAppInfoViewModel(
             val workingProfile = if (remappedPayload === profile.payload) profile else profile.copy(payload = remappedPayload)
 
             val scopedBundles = bundleRepository
-                .scopedBundleInfoFlow(profile.packageName, profile.appVersion)
+                .scopedBundleInfoFlow(
+                    profile.packageName,
+                    resolvePatchProfileAppVersion(
+                        appVersion = profile.appVersion,
+                        apkPath = profile.apkPath,
+                        apkVersion = profile.apkVersion,
+                        useSelectedApkVersion = profile.useSelectedApkVersion
+                    )
+                )
                 .first()
                 .associateBy { it.uid }
             val allowUniversal = prefs.disableUniversalPatchCheck.get()
@@ -610,6 +619,7 @@ class SelectedAppInfoViewModel(
                 apkPath = null,
                 apkSourcePath = null,
                 apkVersion = null,
+                useSelectedApkVersion = false,
                 autoPatch = false,
                 createdAt = 0L,
                 payload = remappedPayload

@@ -700,10 +700,10 @@ class ImportExportViewModel(
                                     }
                                     if (snapshot.changelogHistory.isNotEmpty()) {
                                         val existingHistory =
-                                            patchBundleRepository.getChangelogHistory(current.uid)
+                                            patchBundleRepository.getChangelogHistory(current)
                                         if (existingHistory != snapshot.changelogHistory) {
                                             patchBundleRepository.setChangelogHistory(
-                                                current.uid,
+                                                current,
                                                 snapshot.changelogHistory
                                             )
                                             changed = true
@@ -814,10 +814,10 @@ class ImportExportViewModel(
                                             }
                                             if (snapshot.changelogHistory.isNotEmpty()) {
                                                 val existingHistory =
-                                                    patchBundleRepository.getChangelogHistory(source.uid)
+                                                    patchBundleRepository.getChangelogHistory(source)
                                                 if (existingHistory != snapshot.changelogHistory) {
                                                     patchBundleRepository.setChangelogHistory(
-                                                        source.uid,
+                                                        source,
                                                         snapshot.changelogHistory
                                                     )
                                                     officialUpdated = true
@@ -1005,7 +1005,7 @@ class ImportExportViewModel(
 
         val bundles = buildList {
             remoteSources.mapTo(this) {
-                val changelogHistory = patchBundleRepository.getChangelogHistory(it.uid)
+                val changelogHistory = patchBundleRepository.getChangelogHistory(it)
                 PatchBundleSnapshot(
                     endpoint = it.endpoint,
                     name = it.name,
@@ -1034,7 +1034,7 @@ class ImportExportViewModel(
                     createdAt = officialSource?.createdAt,
                     updatedAt = officialSource?.updatedAt,
                     changelogHistory = officialSource?.let {
-                        patchBundleRepository.getChangelogHistory(it.uid)
+                        patchBundleRepository.getChangelogHistory(it)
                     }.orEmpty()
                 )
             )

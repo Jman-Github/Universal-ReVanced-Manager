@@ -397,20 +397,46 @@ class PatchBundleRepository(
     private fun changelogHistoryFile(uid: Int): File =
         directoryOf(uid).resolve("changelog_history.json")
 
+    private fun changelogHistoryIdentityFile(uid: Int): File =
+        directoryOf(uid).resolve("changelog_history_identity.txt")
+
+    suspend fun getChangelogHistory(source: PatchBundleSource): List<PatchBundleChangelogEntry> =
+        getChangelogHistory(source.uid, resolveChangelogHistoryIdentity(source))
+
     suspend fun getChangelogHistory(uid: Int): List<PatchBundleChangelogEntry> =
+        getChangelogHistory(uid, expectedIdentity = null)
+
+    private suspend fun getChangelogHistory(
+        uid: Int,
+        expectedIdentity: String?
+    ): List<PatchBundleChangelogEntry> =
         withContext(Dispatchers.IO) {
             val storageLimit = normalizedChangelogStorageLimit()
             changelogHistoryMutex.withLock {
+                reconcileChangelogHistoryIdentityInternal(uid, expectedIdentity)
                 val current = trimChangelogHistoryEntries(readChangelogHistoryInternal(uid), storageLimit)
                 writeChangelogHistoryInternal(uid, current)
                 current
             }
         }
 
+    suspend fun setChangelogHistory(source: PatchBundleSource, entries: List<PatchBundleChangelogEntry>) {
+        setChangelogHistory(source.uid, entries, resolveChangelogHistoryIdentity(source))
+    }
+
     suspend fun setChangelogHistory(uid: Int, entries: List<PatchBundleChangelogEntry>) {
+        setChangelogHistory(uid, entries, expectedIdentity = null)
+    }
+
+    private suspend fun setChangelogHistory(
+        uid: Int,
+        entries: List<PatchBundleChangelogEntry>,
+        expectedIdentity: String?
+    ) {
         withContext(Dispatchers.IO) {
             val storageLimit = normalizedChangelogStorageLimit()
             changelogHistoryMutex.withLock {
+                reconcileChangelogHistoryIdentityInternal(uid, expectedIdentity)
                 writeChangelogHistoryInternal(uid, trimChangelogHistoryEntries(entries, storageLimit))
             }
         }
@@ -419,9 +445,16 @@ class PatchBundleRepository(
     suspend fun mergeChangelogHistory(
         uid: Int,
         entries: List<PatchBundleChangelogEntry>
+    ): List<PatchBundleChangelogEntry> = mergeChangelogHistory(uid, entries, expectedIdentity = null)
+
+    private suspend fun mergeChangelogHistory(
+        uid: Int,
+        entries: List<PatchBundleChangelogEntry>,
+        expectedIdentity: String?
     ): List<PatchBundleChangelogEntry> = withContext(Dispatchers.IO) {
         val storageLimit = normalizedChangelogStorageLimit()
         changelogHistoryMutex.withLock {
+            reconcileChangelogHistoryIdentityInternal(uid, expectedIdentity)
             val current = trimChangelogHistoryEntries(readChangelogHistoryInternal(uid), storageLimit)
             val updated = mergeChangelogHistoryEntries(current, entries, storageLimit)
             writeChangelogHistoryInternal(uid, updated)
@@ -430,24 +463,41 @@ class PatchBundleRepository(
     }
 
     suspend fun synchronizeChangelogHistory(source: RemotePatchBundle): List<PatchBundleChangelogEntry> {
+        val expectedIdentity = source.changelogHistoryIdentity()
         runCatching { source.fetchLatestReleaseInfo() }
             .getOrNull()
             ?.let { latestAsset ->
-                recordChangelog(source.uid, latestAsset)
+                recordChangelog(source, latestAsset)
             }
-        val historyEntries = source.fetchHistoricalChangelogEntries(normalizedChangelogFetchLimit())
+        val historyFetchLimit = normalizedChangelogFetchLimit().let { limit ->
+            if (limit == Int.MAX_VALUE) limit else limit + 1
+        }
+        val historyEntries = source.fetchHistoricalChangelogEntries(historyFetchLimit)
         return if (historyEntries.isEmpty()) {
-            getChangelogHistory(source.uid)
+            getChangelogHistory(source)
         } else {
-            mergeChangelogHistory(source.uid, historyEntries)
+            mergeChangelogHistory(source.uid, historyEntries, expectedIdentity)
         }
     }
 
+    suspend fun recordChangelog(source: RemotePatchBundle, asset: app.revanced.manager.network.dto.ReVancedAsset) {
+        recordChangelog(source.uid, asset, source.changelogHistoryIdentity())
+    }
+
     suspend fun recordChangelog(uid: Int, asset: app.revanced.manager.network.dto.ReVancedAsset) {
+        recordChangelog(uid, asset, expectedIdentity = null)
+    }
+
+    private suspend fun recordChangelog(
+        uid: Int,
+        asset: app.revanced.manager.network.dto.ReVancedAsset,
+        expectedIdentity: String?
+    ) {
         val entry = PatchBundleChangelogEntry.fromAsset(asset)
         withContext(Dispatchers.IO) {
             val storageLimit = normalizedChangelogStorageLimit()
             changelogHistoryMutex.withLock {
+                reconcileChangelogHistoryIdentityInternal(uid, expectedIdentity)
                 val current = trimChangelogHistoryEntries(readChangelogHistoryInternal(uid), storageLimit)
                 val updated = mergeChangelogHistoryEntries(current, listOf(entry), storageLimit)
                 writeChangelogHistoryInternal(uid, updated)
@@ -522,6 +572,46 @@ class PatchBundleRepository(
             file.writeText(changelogHistoryJson.encodeToString(entries))
         }
     }
+
+    private fun readChangelogHistoryIdentityInternal(uid: Int): String? {
+        val file = changelogHistoryIdentityFile(uid)
+        if (!file.exists()) return null
+        return runCatching { file.readText().trim() }
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
+    }
+
+    private fun writeChangelogHistoryIdentityInternal(uid: Int, identity: String?) {
+        val file = changelogHistoryIdentityFile(uid)
+        val normalized = identity?.trim()?.takeIf { it.isNotEmpty() }
+        if (normalized == null) {
+            runCatching { file.delete() }
+            return
+        }
+        file.parentFile?.mkdirs()
+        runCatching { file.writeText(normalized) }
+    }
+
+    private fun reconcileChangelogHistoryIdentityInternal(uid: Int, expectedIdentity: String?) {
+        val normalized = expectedIdentity?.trim()?.takeIf { it.isNotEmpty() }
+        val current = readChangelogHistoryIdentityInternal(uid)
+        if (normalized == null) {
+            if (current != null) writeChangelogHistoryIdentityInternal(uid, null)
+            return
+        }
+        if (current != null && current != normalized) {
+            writeChangelogHistoryInternal(uid, emptyList())
+        }
+        if (current != normalized) {
+            writeChangelogHistoryIdentityInternal(uid, normalized)
+        }
+    }
+
+    private suspend fun resolveChangelogHistoryIdentity(source: PatchBundleSource): String? =
+        source.asRemoteOrNull
+            ?.changelogHistoryIdentity()
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
 
     private fun setLocalImportProgress(
         baseProcessed: Int,
@@ -1756,6 +1846,11 @@ class PatchBundleRepository(
         dispatchAction("Update bundle url (${src.uid})") { state ->
             val props = dao.getProps(src.uid) ?: return@dispatchAction state
             val now = System.currentTimeMillis()
+            changelogHistoryMutex.withLock {
+                writeChangelogHistoryInternal(src.uid, emptyList())
+                writeChangelogHistoryIdentityInternal(src.uid, null)
+            }
+            ExternalBundleMetadataStore.clear(directoryOf(src.uid))
             updateDb(src.uid) {
                 it.copy(
                     source = SourceInfo.from(normalizedUrl),
@@ -2687,7 +2782,7 @@ class PatchBundleRepository(
 
                     if (result != null) {
                         results[bundle] = result
-                        runCatching { recordChangelog(bundle.uid, bundle.fetchLatestReleaseInfo()) }
+                        runCatching { recordChangelog(bundle, bundle.fetchLatestReleaseInfo()) }
                         onBundleUpdated?.invoke(bundle, downloadedName)
                     }
                 }

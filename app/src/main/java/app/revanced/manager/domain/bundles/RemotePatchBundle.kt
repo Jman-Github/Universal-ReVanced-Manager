@@ -58,6 +58,7 @@ sealed class RemotePatchBundle(
     enabled: Boolean,
 ) : PatchBundleSource(name, uid, displayName, createdAt, updatedAt, error, directory, enabled), KoinComponent {
     protected val http: HttpService by inject()
+    open val supportsHistoricalChangelog: Boolean = false
 
     protected abstract suspend fun getLatestInfo(): ReVancedAsset
     abstract fun copy(
@@ -183,6 +184,8 @@ sealed class RemotePatchBundle(
     protected open suspend fun getHistoricalChangelogEntries(limit: Int): List<PatchBundleChangelogEntry> =
         emptyList()
 
+    suspend fun changelogHistoryIdentity(): String = historicalInfoCacheIdentity()
+
     protected suspend fun fetchGitHubChangelogHistory(
         limit: Int,
         prerelease: Boolean? = null,
@@ -288,6 +291,8 @@ class JsonPatchBundle(
     lastNotifiedVersion,
     enabled
 ) {
+    override val supportsHistoricalChangelog: Boolean = true
+
     override suspend fun getLatestInfo() = withContext(Dispatchers.IO) {
         http.request<ReVancedAsset> {
             url(endpoint)
@@ -357,6 +362,7 @@ class APIPatchBundle(
 ) {
     private val api: ReVancedAPI by inject()
     private val prefs: PreferencesManager by inject()
+    override val supportsHistoricalChangelog: Boolean = true
 
     override suspend fun getLatestInfo() = withContext(Dispatchers.IO) {
         val includePrerelease = prefs.usePatchesPrereleases.get()
@@ -597,6 +603,7 @@ class ExternalGraphqlPatchBundle(
 ) {
     private val api: ExternalBundlesApi by inject()
     private val officialApi: ReVancedAPI by inject()
+    override val supportsHistoricalChangelog: Boolean = true
     private data class EndpointMetadata(
         val owner: String?,
         val repo: String?,

@@ -6,6 +6,7 @@ import app.revanced.manager.data.room.profile.PatchProfilePayload
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
+import java.io.File
 
 class PatchProfileRepository(
     db: AppDatabase
@@ -36,6 +37,7 @@ class PatchProfileRepository(
             apkPath = null,
             apkSourcePath = null,
             apkVersion = null,
+            useSelectedApkVersion = false,
             autoPatch = false,
             name = name,
             payload = payload,
@@ -58,7 +60,8 @@ class PatchProfileRepository(
         packageName: String,
         appVersion: String?,
         name: String,
-        payload: PatchProfilePayload
+        payload: PatchProfilePayload,
+        useSelectedApkVersion: Boolean? = null
     ): PatchProfile? {
         val existing = dao.get(uid) ?: return null
         val conflicting = dao.findByPackageAndName(packageName, name)
@@ -70,6 +73,7 @@ class PatchProfileRepository(
             appVersion = appVersion,
             name = name,
             payload = payload,
+            useSelectedApkVersion = useSelectedApkVersion ?: existing.useSelectedApkVersion,
             autoPatch = existing.autoPatch,
             sortOrder = existing.sortOrder
         )
@@ -81,13 +85,17 @@ class PatchProfileRepository(
         uid: Int,
         apkPath: String?,
         apkVersion: String?,
-        apkSourcePath: String?
+        apkSourcePath: String?,
+        appVersion: String?,
+        useSelectedApkVersion: Boolean? = null
     ): PatchProfile? {
         val existing = dao.get(uid) ?: return null
         val entity = existing.copy(
+            appVersion = appVersion,
             apkPath = apkPath,
             apkSourcePath = apkSourcePath,
-            apkVersion = apkVersion
+            apkVersion = apkVersion,
+            useSelectedApkVersion = useSelectedApkVersion ?: existing.useSelectedApkVersion
         )
         dao.upsert(entity)
         return entity.toDomain()
@@ -123,6 +131,7 @@ class PatchProfileRepository(
                 apkPath = null,
                 apkSourcePath = null,
                 apkVersion = null,
+                useSelectedApkVersion = entry.useSelectedApkVersion,
                 autoPatch = entry.autoPatch,
                 name = entry.name,
                 payload = entry.payload,
@@ -150,6 +159,7 @@ data class PatchProfile(
     val apkPath: String?,
     val apkSourcePath: String?,
     val apkVersion: String?,
+    val useSelectedApkVersion: Boolean,
     val autoPatch: Boolean,
     val name: String,
     val createdAt: Long,
@@ -161,6 +171,7 @@ data class PatchProfileExportEntry(
     val name: String,
     val packageName: String,
     val appVersion: String?,
+    val useSelectedApkVersion: Boolean = false,
     val autoPatch: Boolean = false,
     val createdAt: Long?,
     val payload: PatchProfilePayload
@@ -171,6 +182,21 @@ data class ImportProfilesResult(
     val skipped: Int
 )
 
+fun resolvePatchProfileAppVersion(
+    appVersion: String?,
+    apkPath: String?,
+    apkVersion: String?,
+    useSelectedApkVersion: Boolean
+): String? {
+    val hasAvailableApk = apkPath?.let(::File)?.exists() == true
+    return when {
+        useSelectedApkVersion && hasAvailableApk ->
+            apkVersion?.takeIf { it.isNotBlank() } ?: appVersion?.takeIf { it.isNotBlank() }
+        appVersion?.isNotBlank() == true -> appVersion
+        else -> null
+    }
+}
+
 private fun PatchProfileEntity.toDomain() = PatchProfile(
     uid = uid,
     packageName = packageName,
@@ -178,6 +204,7 @@ private fun PatchProfileEntity.toDomain() = PatchProfile(
     apkPath = apkPath,
     apkSourcePath = apkSourcePath,
     apkVersion = apkVersion,
+    useSelectedApkVersion = useSelectedApkVersion,
     autoPatch = autoPatch,
     name = name,
     createdAt = createdAt,
@@ -195,6 +222,7 @@ private fun PatchProfileEntity.toExportEntry() = PatchProfileExportEntry(
     name = name,
     packageName = packageName,
     appVersion = appVersion,
+    useSelectedApkVersion = useSelectedApkVersion,
     autoPatch = autoPatch,
     createdAt = createdAt,
     payload = payload

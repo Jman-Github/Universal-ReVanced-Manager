@@ -54,7 +54,7 @@ fun BundleChangelogDialog(
         state = BundleChangelogState.Loading
         state = try {
             val asset = src.fetchLatestReleaseInfo()
-            runCatching { bundleRepo.recordChangelog(src.uid, asset) }
+            runCatching { bundleRepo.recordChangelog(src, asset) }
             BundleChangelogState.Success(asset)
         } catch (t: Throwable) {
             BundleChangelogState.Error(t)

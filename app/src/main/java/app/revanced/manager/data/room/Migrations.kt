@@ -164,3 +164,16 @@ val MIGRATION_12_13 = object : Migration(12, 13) {
         db.execSQL("ALTER TABLE installed_app_new RENAME TO installed_app")
     }
 }
+
+val MIGRATION_13_14 = object : Migration(13, 14) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE patch_profiles ADD COLUMN use_selected_apk_version INTEGER NOT NULL DEFAULT 0")
+        db.execSQL(
+            """
+            UPDATE patch_profiles
+            SET use_selected_apk_version = 1
+            WHERE apk_path IS NOT NULL AND TRIM(apk_path) <> ''
+            """.trimIndent()
+        )
+    }
+}

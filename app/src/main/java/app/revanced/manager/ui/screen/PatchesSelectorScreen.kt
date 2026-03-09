@@ -135,6 +135,7 @@ import app.revanced.manager.patcher.patch.Option
 import app.revanced.manager.patcher.patch.PatchBundleInfo
 import app.revanced.manager.patcher.patch.PatchInfo
 import app.revanced.manager.domain.repository.PatchProfile
+import app.revanced.manager.domain.repository.resolvePatchProfileAppVersion
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.CheckedFilterChip
 import app.revanced.manager.ui.component.FullscreenDialog
@@ -622,11 +623,17 @@ fun PatchesSelectorScreen(
                     val targetProfile = selectedId?.let { id -> profiles.firstOrNull { it.uid == id } }
                     if (selectedId != null && targetProfile != null) {
                         val resolvedVersion = viewModel.previewResolvedAppVersion(selectedBundleUids.toSet())
-                        if (resolvedVersion != targetProfile.appVersion) {
+                        val existingVersion = resolvePatchProfileAppVersion(
+                            appVersion = targetProfile.appVersion,
+                            apkPath = targetProfile.apkPath,
+                            apkVersion = targetProfile.apkVersion,
+                            useSelectedApkVersion = targetProfile.useSelectedApkVersion
+                        )
+                        if (resolvedVersion != existingVersion) {
                             versionConflict = ProfileVersionConflict(
                                 profileId = selectedId,
                                 profileName = targetProfile.name,
-                                existingVersion = targetProfile.appVersion,
+                                existingVersion = existingVersion,
                                 newVersion = resolvedVersion
                             )
                             return@launch
@@ -638,7 +645,14 @@ fun PatchesSelectorScreen(
                         existingProfileId = selectedId,
                         appVersionOverride = null,
                         keepExistingVersion = selectedId != null,
-                        existingProfileVersion = targetProfile?.appVersion
+                        existingProfileVersion = targetProfile?.let { profile ->
+                            resolvePatchProfileAppVersion(
+                                appVersion = profile.appVersion,
+                                apkPath = profile.apkPath,
+                                apkVersion = profile.apkVersion,
+                                useSelectedApkVersion = profile.useSelectedApkVersion
+                            )
+                        }
                     )
                 }
             }
@@ -2522,7 +2536,12 @@ private fun PatchProfileNameDialog(
                                     }
                                     .padding(horizontal = 4.dp),
                                 headlineContent = { Text(profile.name) },
-                                supportingContent = profile.appVersion?.let { version ->
+                                supportingContent = resolvePatchProfileAppVersion(
+                                    appVersion = profile.appVersion,
+                                    apkPath = profile.apkPath,
+                                    apkVersion = profile.apkVersion,
+                                    useSelectedApkVersion = profile.useSelectedApkVersion
+                                )?.let { version ->
                                     {
                                         Text(
                                             text = version.ifBlank { stringResource(R.string.any_version) },

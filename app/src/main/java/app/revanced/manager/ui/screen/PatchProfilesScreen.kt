@@ -1,5 +1,6 @@
 package app.revanced.manager.ui.screen
 
+import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -62,6 +63,7 @@ import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -75,11 +77,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.revanced.manager.ui.component.AppIcon
 import app.revanced.manager.ui.component.InterceptBackHandler
@@ -92,6 +98,7 @@ import app.revanced.manager.ui.component.patches.PathSelectorDialog
 import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.repository.DownloadedAppRepository
+import app.revanced.manager.domain.repository.resolvePatchProfileAppVersion
 import app.revanced.manager.patcher.split.SplitArchiveDisplayResolver
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.ui.viewmodel.BundleSourceType
@@ -152,6 +159,7 @@ fun PatchProfilesScreen(
     var versionDialogProfile by remember { mutableStateOf<PatchProfileListItem?>(null) }
     var versionDialogValue by rememberSaveable { mutableStateOf("") }
     var versionDialogAllVersions by rememberSaveable { mutableStateOf(false) }
+    var versionDialogUseSelectedApkVersion by remember { mutableStateOf(false) }
     var versionDialogSaving by remember { mutableStateOf(false) }
     var settingsDialogProfile by remember { mutableStateOf<PatchProfileListItem?>(null) }
     var apkPickerProfile by remember { mutableStateOf<PatchProfileListItem?>(null) }
@@ -485,11 +493,12 @@ fun PatchProfilesScreen(
             }
             val hasMissingApk = storedApkPath != null && !hasAvailableApk
             val apkPath = storedApkPath?.takeIf { hasAvailableApk }
-            val displayedVersion = if (hasAvailableApk) {
-                profile.apkVersion?.takeIf { it.isNotBlank() } ?: profile.appVersion
-            } else {
-                profile.appVersion
-            }
+            val displayedVersion = resolvePatchProfileAppVersion(
+                appVersion = profile.appVersion,
+                apkPath = storedApkPath,
+                apkVersion = profile.apkVersion,
+                useSelectedApkVersion = profile.useSelectedApkVersion
+            )
             val versionLabel = formatProfileVersionLabel(
                 version = displayedVersion,
                 allVersionsLabel = stringResource(R.string.bundle_version_all_versions)
@@ -1027,9 +1036,14 @@ fun PatchProfilesScreen(
         val hasMissingApk = storedApkPath != null && !hasAvailableApk
         val apkPath = storedApkPath?.takeIf { hasAvailableApk }
         val apkDisplayPath = settingsProfile.apkSourcePath?.takeIf { it.isNotBlank() } ?: storedApkPath
-        val detectedApkVersion = settingsProfile.apkVersion?.takeIf { hasAvailableApk && it.isNotBlank() }
+        val effectiveVersion = resolvePatchProfileAppVersion(
+            appVersion = settingsProfile.appVersion,
+            apkPath = storedApkPath,
+            apkVersion = settingsProfile.apkVersion,
+            useSelectedApkVersion = settingsProfile.useSelectedApkVersion
+        )
         val versionSummary = formatProfileVersionLabel(
-            version = settingsProfile.appVersion,
+            version = effectiveVersion,
             allVersionsLabel = stringResource(R.string.bundle_version_all_versions)
         )
         var autoPatchUpdating by remember(settingsProfile.id) { mutableStateOf(false) }
@@ -1074,19 +1088,6 @@ fun PatchProfilesScreen(
                                 color = MaterialTheme.colorScheme.error
                             )
                         }
-                        detectedApkVersion?.let { version ->
-                            Text(
-                                text = stringResource(
-                                    R.string.patch_profile_apk_detected_version,
-                                    formatProfileVersionLabel(
-                                        version = version,
-                                        allVersionsLabel = stringResource(R.string.bundle_version_all_versions)
-                                    )
-                                ),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1095,7 +1096,6 @@ fun PatchProfilesScreen(
                             TextButton(
                                 onClick = {
                                     if (apkPickerBusy) return@TextButton
-                                    settingsDialogProfile = null
                                     apkPickerProfile = settingsProfile
                                 }
                             ) {
@@ -1107,7 +1107,6 @@ fun PatchProfilesScreen(
                             TextButton(
                                 onClick = {
                                     if (apkPickerBusy) return@TextButton
-                                    settingsDialogProfile = null
                                     downloadedApkPickerProfile = settingsProfile
                                 }
                             ) {
@@ -1167,8 +1166,11 @@ fun PatchProfilesScreen(
                             onClick = {
                                 if (apkPickerBusy) return@TextButton
                                 versionDialogProfile = settingsProfile
-                                versionDialogValue = settingsProfile.appVersion.orEmpty()
-                                versionDialogAllVersions = settingsProfile.appVersion.isNullOrBlank()
+                                versionDialogValue = effectiveVersion.orEmpty()
+                                versionDialogUseSelectedApkVersion =
+                                    settingsProfile.useSelectedApkVersion && hasAvailableApk
+                                versionDialogAllVersions =
+                                    !versionDialogUseSelectedApkVersion && effectiveVersion.isNullOrBlank()
                                 settingsDialogProfile = null
                             }
                         ) {
@@ -1212,6 +1214,11 @@ fun PatchProfilesScreen(
     }
 
     versionDialogProfile?.let { profile ->
+        val versionDialogHasSelectedApk = remember(profile.apkPath, profile.apkVersion) {
+            profile.apkVersion?.isNotBlank() == true &&
+                profile.apkPath?.let(::File)?.exists() == true
+        }
+        val currentApkVersion = profile.apkVersion?.takeIf { version -> version.isNotBlank() }
         AlertDialog(
             onDismissRequest = {
                 if (versionDialogSaving) return@AlertDialog
@@ -1230,7 +1237,13 @@ fun PatchProfilesScreen(
                                 context.toast(context.getString(R.string.patch_profile_version_override_set_to_all, quoted))
                             }
                             try {
-                                when (viewModel.updateProfileVersion(profile.id, versionToSave)) {
+                                when (
+                                    viewModel.updateProfileVersion(
+                                        profile.id,
+                                        versionToSave,
+                                        useSelectedApkVersion = versionDialogUseSelectedApkVersion && !versionDialogAllVersions
+                                    )
+                                ) {
                                     PatchProfilesViewModel.VersionUpdateResult.SUCCESS -> context.toast(
                                         context.getString(R.string.patch_profile_version_override_saved_toast)
                                     )
@@ -1278,19 +1291,54 @@ fun PatchProfilesScreen(
                             if (versionDialogAllVersions && it.isNotBlank()) {
                                 versionDialogAllVersions = false
                             }
+                            if (
+                                versionDialogUseSelectedApkVersion &&
+                                currentApkVersion != null &&
+                                it != currentApkVersion
+                            ) {
+                                versionDialogUseSelectedApkVersion = false
+                            }
                         },
                         label = { Text(stringResource(R.string.patch_profile_version_override_label)) },
                         placeholder = { Text(stringResource(R.string.patch_profile_version_override_hint)) },
                         singleLine = true,
                         enabled = !versionDialogAllVersions
                     )
+                    if (versionDialogHasSelectedApk && currentApkVersion != null) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            HapticCheckbox(
+                                checked = versionDialogUseSelectedApkVersion,
+                                onCheckedChange = {
+                                    versionDialogUseSelectedApkVersion = it
+                                    if (it) {
+                                        versionDialogAllVersions = false
+                                        versionDialogValue = currentApkVersion
+                                    }
+                                }
+                            )
+                            Text(
+                                text = stringResource(
+                                    R.string.patch_profile_version_override_use_selected_apk,
+                                    currentApkVersion
+                                )
+                            )
+                        }
+                    }
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         HapticCheckbox(
                             checked = versionDialogAllVersions,
-                            onCheckedChange = { versionDialogAllVersions = it }
+                            onCheckedChange = {
+                                versionDialogAllVersions = it
+                                if (it) {
+                                    versionDialogUseSelectedApkVersion = false
+                                }
+                            }
                         )
                         Text(text = stringResource(R.string.patch_profile_version_override_all_versions))
                     }
@@ -1392,18 +1440,34 @@ fun PatchProfilesScreen(
     }
 
     if (apkPickerBusy) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.45f)),
-            contentAlignment = Alignment.Center
-        ) {
-            LoadingIndicator(
-                modifier = Modifier.size(56.dp),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.35f),
-                strokeWidth = 4.dp
+        Dialog(
+            onDismissRequest = {},
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false
             )
+        ) {
+            val view = LocalView.current
+            SideEffect {
+                val window = (view.parent as DialogWindowProvider).window
+                window.setDimAmount(0f)
+                window.setBackgroundDrawable(ColorDrawable(android.graphics.Color.TRANSPARENT))
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.45f)),
+                contentAlignment = Alignment.Center
+            ) {
+                LoadingIndicator(
+                    modifier = Modifier.size(56.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.35f),
+                    strokeWidth = 4.dp
+                )
+            }
         }
     }
 }

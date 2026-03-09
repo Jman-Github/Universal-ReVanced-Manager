@@ -45,6 +45,7 @@ import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import androidx.appcompat.app.AppCompatActivity
+import app.revanced.manager.domain.repository.resolvePatchProfileAppVersion
 import app.revanced.manager.ui.model.navigation.AppSelector
 import app.revanced.manager.ui.model.navigation.ComplexParameter
 import app.revanced.manager.ui.model.navigation.CreateYoutubeAssets
@@ -408,9 +409,12 @@ private fun ReVancedManager(
                     val apkFile = launchData.profile.apkPath
                         ?.let(::File)
                         ?.takeIf { it.exists() }
-                    val resolvedVersion = launchData.profile.apkVersion
-                        ?: launchData.profile.appVersion
-                        ?: context.getString(R.string.app_version_unspecified)
+                    val resolvedVersion = resolvePatchProfileAppVersion(
+                        appVersion = launchData.profile.appVersion,
+                        apkPath = launchData.profile.apkPath,
+                        apkVersion = launchData.profile.apkVersion,
+                        useSelectedApkVersion = launchData.profile.useSelectedApkVersion
+                    ) ?: context.getString(R.string.app_version_unspecified)
                     val selectedApp = if (apkFile != null) {
                         SelectedApp.Local(
                             packageName = launchData.profile.packageName,
@@ -422,7 +426,12 @@ private fun ReVancedManager(
                     } else {
                         SelectedApp.Search(
                             launchData.profile.packageName,
-                            launchData.profile.appVersion
+                            resolvePatchProfileAppVersion(
+                                appVersion = launchData.profile.appVersion,
+                                apkPath = launchData.profile.apkPath,
+                                apkVersion = launchData.profile.apkVersion,
+                                useSelectedApkVersion = launchData.profile.useSelectedApkVersion
+                            )
                         )
                     }
                     navController.navigateComplex(

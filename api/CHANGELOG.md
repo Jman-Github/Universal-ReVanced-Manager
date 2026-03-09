@@ -51,6 +51,7 @@
 - Improved app and patch search so closing search keeps filtered results visible, and both system back and top-bar back clear the search before leaving https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/261
 - Improved patch option previews with a larger inline preview and a full preview dialog for long values like file paths https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/261
 - Improved patch profile APK handling by preserving split archive extensions, loading split APK icons correctly and using detected APK versions for compatibilit https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/261
+- Patch profiles can now use the version detected from a selected APK
 
 
 # Bug fixes
@@ -99,6 +100,7 @@
 - Fixed issues with the fullscreen back gesture causing UI glitches and showing the wrong screens https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/280
 - Fixed an issue where the `AAPT2 selected` line in patcher logs would always be listed as `Unknown`
 - Fixed RGB inputs in the custom YouTube color picker so typed values are visible and use numeric keyboard input https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/261
+- Fixed previous patch bundle changelog history so it resets when a bundle source changes, fetches the correct number of older entries, and only shows historical changelog actions for bundle sources that actually supports them
 
 
 # CI
