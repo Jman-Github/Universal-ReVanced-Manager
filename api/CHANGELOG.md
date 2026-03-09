@@ -56,6 +56,7 @@
 - Added a delete confirmation for selected downloaded apps in `Downloads`
 - Updated the manager update notification and update banner text to use clearer URV-specific wording, including `URV Manager update found` and `A new manager update is available` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/274
 - Increased the size of the status bar icon https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/230
+- Improved patch bundle update notifications to use clearer "update found" wording and correct singular/plural grammar for available bundle updates https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/235
 
 
 # Bug fixes

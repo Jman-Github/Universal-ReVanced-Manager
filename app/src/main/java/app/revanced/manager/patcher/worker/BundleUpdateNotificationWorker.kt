@@ -106,7 +106,7 @@ class BundleUpdateNotificationWorker(
                         )
                         val notification = buildNotification(
                             channelId = bundleNotificationChannel.id,
-                            title = applicationContext.getString(R.string.bundle_updates_notification_title),
+                            title = bundleNotificationTitle(totalAutoUpdates.coerceAtLeast(1)),
                             description = progressText,
                             pendingIntent = buildPendingIntent(bundle.uid),
                             ongoing = true,
@@ -153,8 +153,7 @@ class BundleUpdateNotificationWorker(
                         val updatedNames = formatUpdatedBundleNames(updatedBundleNames)
                         val description = when {
                             updatedNames != null && manualUpdates.isNotEmpty() ->
-                                applicationContext.getString(
-                                    R.string.bundle_updates_notification_completed_named_with_available,
+                                bundleNotificationCompletedNamedWithAvailable(
                                     updatedNames,
                                     manualUpdates.size
                                 )
@@ -164,16 +163,15 @@ class BundleUpdateNotificationWorker(
                                     updatedNames
                                 )
                             manualUpdates.isNotEmpty() ->
-                                applicationContext.getString(
-                                    R.string.bundle_updates_notification_completed_with_available,
-                                    manualUpdates.size
-                                )
+                                bundleNotificationCompletedWithAvailable(manualUpdates.size)
                             else ->
                                 applicationContext.getString(R.string.bundle_updates_notification_completed)
                         }
                         val notification = buildNotification(
                             channelId = bundleNotificationChannel.id,
-                            title = applicationContext.getString(R.string.bundle_updates_notification_title),
+                            title = bundleNotificationTitle(
+                                (updatedBundleUids.size + manualUpdates.size).coerceAtLeast(1)
+                            ),
                             description = description,
                             pendingIntent = buildPendingIntent(deepLinkUid),
                             ongoing = false,
@@ -184,11 +182,8 @@ class BundleUpdateNotificationWorker(
                     manualUpdates.isNotEmpty() -> {
                         val notification = buildNotification(
                             channelId = bundleNotificationChannel.id,
-                            title = applicationContext.getString(R.string.bundle_updates_notification_title),
-                            description = applicationContext.getString(
-                                R.string.bundle_updates_notification_available,
-                                manualUpdates.size
-                            ),
+                            title = bundleNotificationTitle(manualUpdates.size),
+                            description = bundleNotificationAvailable(manualUpdates.size),
                             pendingIntent = buildPendingIntent(
                                 if (manualUpdates.size == 1) manualUpdates.first().uid else null
                             ),
@@ -205,7 +200,7 @@ class BundleUpdateNotificationWorker(
                         }
                         val notification = buildNotification(
                             channelId = bundleNotificationChannel.id,
-                            title = applicationContext.getString(R.string.bundle_updates_notification_title),
+                            title = bundleNotificationTitle(seenUids.size.coerceAtLeast(1)),
                             description = description,
                             pendingIntent = buildPendingIntent(seenUids.firstOrNull()),
                             ongoing = false,
@@ -270,6 +265,37 @@ class BundleUpdateNotificationWorker(
 
         return builder.build()
     }
+
+    private fun bundleNotificationTitle(count: Int): String =
+        applicationContext.resources.getQuantityString(
+            R.plurals.bundle_updates_notification_title_found_quantity,
+            count,
+            count
+        )
+
+    private fun bundleNotificationAvailable(count: Int): String =
+        applicationContext.resources.getQuantityString(
+            R.plurals.bundle_updates_notification_available_quantity,
+            count,
+            count
+        )
+
+    private fun bundleNotificationCompletedWithAvailable(count: Int): String =
+        applicationContext.resources.getQuantityString(
+            R.plurals.bundle_updates_notification_completed_with_available_quantity,
+            count,
+            count
+        )
+
+    private fun bundleNotificationCompletedNamedWithAvailable(
+        updatedNames: String,
+        count: Int
+    ): String = applicationContext.resources.getQuantityString(
+        R.plurals.bundle_updates_notification_completed_named_with_available_quantity,
+        count,
+        updatedNames,
+        count
+    )
 
     private fun formatUpdatedBundleNames(names: Collection<String>): String? {
         val cleaned = names.map { it.trim() }.filter { it.isNotBlank() }.distinct()

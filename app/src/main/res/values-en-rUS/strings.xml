@@ -69,10 +69,19 @@
     <string name="bundle_update_banner_collapsed">Updating patch bundles • %1$d out of %2$d</string>
     <string name="bundle_updates_notification_progress">Updating %1$d of %2$d: %3$s</string>
     <string name="bundle_updates_notification_completed">Update completed</string>
-    <string name="bundle_updates_notification_completed_with_available">Update completed. %1$d updates available.</string>
+    <plurals name="bundle_updates_notification_completed_with_available_quantity">
+        <item quantity="one">Update completed. %1$d new patch bundles update is available.</item>
+        <item quantity="other">Update completed. %1$d new patch bundles updates are available.</item>
+    </plurals>
     <string name="bundle_updates_notification_completed_named">Updated: %1$s</string>
-    <string name="bundle_updates_notification_completed_named_with_available">Updated: %1$s. %2$d updates available.</string>
-    <string name="bundle_updates_notification_available">%1$d updates available.</string>
+    <plurals name="bundle_updates_notification_completed_named_with_available_quantity">
+        <item quantity="one">Updated: %1$s. %2$d new patch bundles update is available.</item>
+        <item quantity="other">Updated: %1$s. %2$d new patch bundles updates are available.</item>
+    </plurals>
+    <plurals name="bundle_updates_notification_available_quantity">
+        <item quantity="one">%1$d new patch bundles update is available.</item>
+        <item quantity="other">%1$d new patch bundles updates are available.</item>
+    </plurals>
     <string name="bundle_updates_notification_failed">Update failed</string>
     <string name="bundle_search_update">Search for updates</string>
     <string name="bundle_search_update_description">Check this bundle for updates in the background</string>
@@ -164,7 +173,10 @@
     <string name="bundle_update_websocket_notification_description_bundle_and_manager">Listening for bundle and manager update events.</string>
     <string name="bundle_update_websocket_notification_description_bundle_only">Listening for bundle update events.</string>
     <string name="bundle_update_websocket_notification_description_manager_only">Listening for manager update events.</string>
-    <string name="bundle_updates_notification_title">Patch bundles update</string>
+    <plurals name="bundle_updates_notification_title_found_quantity">
+        <item quantity="one">Patch bundles update found</item>
+        <item quantity="other">Patch bundles updates found</item>
+    </plurals>
     <string name="manager_updates_notification_title">URV Manager update found</string>
     <string name="manager_updates_notification_available">A new manager update is available: %1$s</string>
     <string name="never">Never</string>
