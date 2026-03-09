@@ -20,6 +20,7 @@ import app.revanced.manager.domain.manager.SearchForUpdatesBackgroundInterval
 import app.revanced.manager.patcher.worker.BundleUpdateNotificationWorker
 import app.revanced.manager.patcher.worker.ManagerUpdateNotificationWorker
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 class WorkerRepository(app: Application) {
@@ -30,6 +31,8 @@ class WorkerRepository(app: Application) {
      * We can get around those limits by passing inputs using global variables instead.
      */
     val workerInputs = mutableMapOf<UUID, Any>()
+    @PublishedApi
+    internal val activeUniqueWorkIds = ConcurrentHashMap<String, UUID>()
 
     @Suppress("UNCHECKED_CAST")
     fun <A : Any, W : Worker<A>> claimInput(worker: W): A {
@@ -45,8 +48,15 @@ class WorkerRepository(app: Application) {
                 .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                 .build()
         workerInputs[request.id] = input
+        activeUniqueWorkIds[name] = request.id
         workManager.enqueueUniqueWork(name, ExistingWorkPolicy.REPLACE, request)
         return request.id
+    }
+
+    fun isActiveUniqueWork(name: String, id: UUID) = activeUniqueWorkIds[name] == id
+
+    fun clearActiveUniqueWork(name: String, id: UUID) {
+        activeUniqueWorkIds.remove(name, id)
     }
 
     inline fun <reified T> createNotification(

@@ -360,6 +360,20 @@ class PatcherWorker(
         }
     }
 
+    private fun clearForegroundNotification() {
+        try {
+            notificationManager.cancel(NOTIFICATION_ID)
+        } catch (e: Exception) {
+            Log.d(tag, "Failed to clear foreground notification:", e)
+        }
+    }
+
+    private fun clearForegroundNotificationIfOwned() {
+        if (!workerRepository.isActiveUniqueWork(UNIQUE_WORK_NAME, id)) return
+        clearForegroundNotification()
+        workerRepository.clearActiveUniqueWork(UNIQUE_WORK_NAME, id)
+    }
+
     override suspend fun doWork(): Result {
         kotlinx.coroutines.currentCoroutineContext()[kotlinx.coroutines.Job]?.invokeOnCompletion { cause ->
             if (cause != null) {
@@ -389,26 +403,31 @@ class PatcherWorker(
             Log.d(tag, "Failed to set initial foreground info:", e)
         }
 
-        val args = workerRepository.claimInput(this)
-        val totalPatchCount = args.selectedPatches.values.sumOf { it.size }
+        return try {
+            val args = workerRepository.claimInput(this)
+            val totalPatchCount = args.selectedPatches.values.sumOf { it.size }
 
-        try {
-            updateForegroundNotification(event = null, totalPatchCount = totalPatchCount)
-        } catch (e: Exception) {
-            Log.d(tag, "Failed to publish initial patching notification:", e)
-        }
+            try {
+                updateForegroundNotification(event = null, totalPatchCount = totalPatchCount)
+            } catch (e: Exception) {
+                Log.d(tag, "Failed to publish initial patching notification:", e)
+            }
 
-        val result = try {
-            runPatcher(args, totalPatchCount)
+            val result = runPatcher(args, totalPatchCount)
+
+            if (result is Result.Success && args.input is SelectedApp.Local && args.input.temporary) {
+                args.input.file.delete()
+            }
+
+            result
         } finally {
-            wakeLock.release()
+            if (wakeLock.isHeld) {
+                wakeLock.release()
+            }
+            patchNotificationSteps = emptyList()
+            foregroundStarted = false
+            clearForegroundNotificationIfOwned()
         }
-
-        if (result is Result.Success && args.input is SelectedApp.Local && args.input.temporary) {
-            args.input.file.delete()
-        }
-
-        return result
     }
 
     private suspend fun runPatcher(args: Args, totalPatchCount: Int): Result {
@@ -891,6 +910,7 @@ class PatcherWorker(
     companion object {
         private const val LOG_PREFIX = "[Worker]"
         private fun String.logFmt() = "$LOG_PREFIX $this"
+        const val UNIQUE_WORK_NAME = "patching"
         internal const val PATCHING_NOTIFICATION_CHANNEL_ID = "revanced-patcher-patching"
         internal const val NOTIFICATION_ID = 1
         const val PROCESS_EXIT_CODE_KEY = "process_exit_code"

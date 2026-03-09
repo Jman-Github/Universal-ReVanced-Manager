@@ -101,6 +101,8 @@
 - Fixed an issue where the `AAPT2 selected` line in patcher logs would always be listed as `Unknown`
 - Fixed RGB inputs in the custom YouTube color picker so typed values are visible and use numeric keyboard input https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/261
 - Fixed previous patch bundle changelog history so it resets when a bundle source changes, fetches the correct number of older entries, and only shows historical changelog actions for bundle sources that actually supports them
+- Fixed an issue where the `Patching in progress` notification would clear early https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/257
+- Fixed an issue where the `Patchng in progress` notification would appear late https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/285
 
 
 # CI

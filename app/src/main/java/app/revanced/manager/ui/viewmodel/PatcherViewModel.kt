@@ -1,10 +1,7 @@
 package app.revanced.manager.ui.viewmodel
 
 import android.app.Application
-import android.app.Notification
-import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -34,6 +31,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MediatorLiveData
+import androidx.lifecycle.Observer
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -42,7 +40,6 @@ import androidx.lifecycle.viewmodel.compose.saveable
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import app.universal.revanced.manager.R
-import app.revanced.manager.MainActivity
 import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.data.room.apps.installed.InstallType
 import app.revanced.manager.data.room.apps.installed.InstalledApp
@@ -91,8 +88,8 @@ import app.revanced.manager.util.toast
 import app.revanced.manager.util.awaitUserConfirmation
 import app.revanced.manager.util.toastHandle
 import app.revanced.manager.util.uiSafe
-import app.revanced.manager.util.permission.hasNotificationPermission
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -104,10 +101,12 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.time.withTimeout
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 import java.util.zip.ZipFile
+import kotlin.coroutines.resume
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
 import org.koin.core.component.inject
@@ -1064,46 +1063,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         runtimeReportedMemoryLimitMb = null
         markInitialStepRunning()
         logBatteryOptimizationStatus()
-        showPendingPatchingNotification()
         val workId = launchWorker()
         patcherWorkerId = ParcelUuid(workId)
         observeWorker(workId)
-    }
-
-    private fun showPendingPatchingNotification() {
-        if (!app.hasNotificationPermission()) return
-        runCatching {
-            val channel = NotificationChannel(
-                PatcherWorker.PATCHING_NOTIFICATION_CHANNEL_ID,
-                app.getString(R.string.notification_channel_patching_name),
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = app.getString(R.string.notification_channel_patching_description)
-            }
-            notificationManager.createNotificationChannel(channel)
-            val notificationIntent = Intent(app, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            }
-            val pendingIntent = PendingIntent.getActivity(
-                app,
-                0,
-                notificationIntent,
-                PendingIntent.FLAG_IMMUTABLE
-            )
-            val notification = Notification.Builder(app, channel.id)
-                .setContentTitle(app.getText(R.string.patcher_notification_title))
-                .setContentText(app.getText(R.string.patcher_notification_text))
-                .setSmallIcon(R.drawable.ic_notification)
-                .setContentIntent(pendingIntent)
-                .setCategory(Notification.CATEGORY_SERVICE)
-                .setOngoing(true)
-                .setOnlyAlertOnce(true)
-                .setProgress(0, 0, true)
-                .build()
-            notificationManager.notify(PatcherWorker.NOTIFICATION_ID, notification)
-        }.onFailure { error ->
-            Log.d(TAG, "Failed to post pending patching notification", error)
-        }
     }
 
     private fun clearPatchingNotification() {
@@ -1111,6 +1073,53 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             notificationManager.cancel(PatcherWorker.NOTIFICATION_ID)
         }.onFailure { error ->
             Log.d(TAG, "Failed to clear patching notification", error)
+        }
+    }
+
+    private fun hasTemporaryLocalInput() =
+        input.selectedApp is SelectedApp.Local && input.selectedApp.temporary
+
+    private fun clearTemporaryLocalInputState() {
+        inputFile = null
+    }
+
+    private fun deleteTemporaryLocalInput(file: File?) {
+        file?.takeIf { it.exists() }?.delete()
+    }
+
+    private fun cleanupTemporaryLocalInput() {
+        if (!hasTemporaryLocalInput()) return
+        val fileToDelete = inputFile
+        clearTemporaryLocalInputState()
+        deleteTemporaryLocalInput(fileToDelete)
+    }
+
+    private suspend fun awaitWorkToFinish(workId: UUID) = suspendCancellableCoroutine<Unit> { continuation ->
+        val source = workManager.getWorkInfoByIdLiveData(workId)
+        val observer = object : Observer<WorkInfo?> {
+            override fun onChanged(workInfo: WorkInfo?) {
+                if (workInfo != null && !workInfo.state.isFinished) return
+                source.removeObserver(this)
+                if (continuation.isActive) {
+                    continuation.resume(Unit)
+                }
+            }
+        }
+        source.observeForever(observer)
+        continuation.invokeOnCancellation { source.removeObserver(observer) }
+    }
+
+    private fun cleanupTemporaryLocalInputAfterWorkStops(workId: UUID?) {
+        if (!hasTemporaryLocalInput()) return
+        val fileToDelete = inputFile ?: return
+        clearTemporaryLocalInputState()
+        CoroutineScope(Dispatchers.IO).launch {
+            workId?.let { activeWorkId ->
+                withContext(Dispatchers.Main.immediate) {
+                    awaitWorkToFinish(activeWorkId)
+                }
+            }
+            deleteTemporaryLocalInput(fileToDelete)
         }
     }
 
@@ -1317,8 +1326,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     override fun onCleared() {
         super.onCleared()
         app.unregisterReceiver(packageChangeReceiver)
-        patcherWorkerId?.uuid?.let(workManager::cancelWorkById)
-        clearPatchingNotification()
         pendingExternalInstall?.let(installerManager::cleanup)
         pendingExternalInstall = null
         externalInstallTimeoutJob?.cancel()
@@ -1338,18 +1345,18 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             }
         }
 
-        if (input.selectedApp is SelectedApp.Local && input.selectedApp.temporary) {
-            inputFile?.takeIf { it.exists() }?.delete()
-            inputFile = null
-            updateSplitStepRequirement(null)
+        if (_patcherSucceeded.value != null) {
+            cleanupTemporaryLocalInput()
         }
     }
 
     fun onBack() {
         // tempDir cannot be deleted inside onCleared because it gets called on system-initiated process death.
         if (_patcherSucceeded.value == null) {
-            patcherWorkerId?.uuid?.let(workManager::cancelWorkById)
+            val workId = patcherWorkerId?.uuid
+            workId?.let(workManager::cancelWorkById)
             clearPatchingNotification()
+            cleanupTemporaryLocalInputAfterWorkStops(workId)
         }
         tempDir.deleteRecursively()
     }
@@ -2329,7 +2336,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private fun launchWorker(): UUID =
         workerRepository.launchExpedited<PatcherWorker, PatcherWorker.Args>(
-            "patching",
+            PatcherWorker.UNIQUE_WORK_NAME,
             buildWorkerArgs()
         )
 
@@ -3229,9 +3236,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 WorkInfo.State.SUCCEEDED -> {
                     clearPatchingNotification()
                     forceKeepLocalInput = false
-                    if (input.selectedApp is SelectedApp.Local && input.selectedApp.temporary) {
-                        inputFile?.takeIf { it.exists() }?.delete()
-                        inputFile = null
+                    cleanupTemporaryLocalInput()
+                    if (requiresSplitPreparation) {
                         updateSplitStepRequirement(
                             file = null,
                             needsSplitOverride = requiresSplitPreparation,
