@@ -428,8 +428,8 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         if (keystorePath.exists() && keystorePath.length() > 0L) return
         Log.d(LOG_TAG, "Keystore missing at ${keystorePath.absolutePath}; attempting restore")
         if (tryRestoreKeystore()) return
-        Log.w(LOG_TAG, "Keystore still missing; user action required")
-        throw IllegalStateException("Keystore missing. Regenerate or import it in settings.")
+        Log.i(LOG_TAG, "Keystore restore unavailable; generating a new keystore")
+        regenerateLocked()
     }
 
     private fun keyStoreTypes(preferred: String?): List<String> {
