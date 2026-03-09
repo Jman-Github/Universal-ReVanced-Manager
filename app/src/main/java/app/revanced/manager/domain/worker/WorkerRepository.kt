@@ -82,8 +82,7 @@ class WorkerRepository(app: Application) {
         val builder = Notification.Builder(context, notificationChannel.id)
             .setContentTitle(title)
             .setContentText(description)
-            .setLargeIcon(Icon.createWithResource(context, R.drawable.ic_notification))
-            .setSmallIcon(Icon.createWithResource(context, R.drawable.ic_notification))
+            .setSmallIcon(Icon.createWithResource(context, R.drawable.ic_notification_status))
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
         if (groupKey != null) {

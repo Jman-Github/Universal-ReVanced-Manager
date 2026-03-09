@@ -155,7 +155,7 @@ class PatcherWorker(
         return Notification.Builder(applicationContext, channel.id)
             .setContentTitle(applicationContext.getText(R.string.patcher_notification_title))
             .setContentText(contentText)
-            .setSmallIcon(Icon.createWithResource(applicationContext, R.drawable.ic_notification))
+            .setSmallIcon(Icon.createWithResource(applicationContext, R.drawable.ic_notification_status))
             .setContentIntent(pendingIntent)
             .setCategory(Notification.CATEGORY_SERVICE)
             .setOngoing(true)
