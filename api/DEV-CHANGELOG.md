@@ -1,4 +1,4 @@
-# v1.8.1-dev.09 (2026-03-07)
+# v1.8.1-dev.07 (2026-03-07)
 
 
 # Features
@@ -11,6 +11,7 @@
 - Patch profiles can now use the version detected from a selected APK
 - Added an option to only keep the latest plugin-downloaded APK per app
 - Added a delete confirmation for selected downloaded apps in `Downloads`
+- Updated the manager update notification and update banner text to use clearer URV-specific wording, including `URV Manager update found` and `A new manager update is available` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/274
 
 
 # Bug fixes

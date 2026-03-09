@@ -165,8 +165,8 @@
     <string name="bundle_update_websocket_notification_description_bundle_only">Listening for bundle update events.</string>
     <string name="bundle_update_websocket_notification_description_manager_only">Listening for manager update events.</string>
     <string name="bundle_updates_notification_title">Patch bundles update</string>
-    <string name="manager_updates_notification_title">Manager has an update</string>
-    <string name="manager_updates_notification_available">New manager update available: %1$s</string>
+    <string name="manager_updates_notification_title">URV Manager update found</string>
+    <string name="manager_updates_notification_available">A new manager update is available: %1$s</string>
     <string name="never">Never</string>
     <string name="minutes_15">Every 15 minutes</string>
     <string name="hourly">Hourly</string>
@@ -1200,7 +1200,7 @@ Details: %2$s</string>
     <string name="battery_optimization_banner_disable_confirm">Hide banner</string>
     <string name="installing_manager_update">Installing update…</string>
     <string name="downloading_manager_update">Downloading update…</string>
-    <string name="manager_update_banner_title">Downloading manager update</string>
+    <string name="manager_update_banner_title">URV Manager update found</string>
     <string name="manager_update_progress_detail">%1$.1f MB / %2$.1f MB (%3$d%%)</string>
     <string name="download_manager_failed">Failed to download update: %s</string>
     <string name="cancel">Cancel</string>
