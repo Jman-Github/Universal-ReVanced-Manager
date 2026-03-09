@@ -8,6 +8,7 @@ import android.util.Log
 import app.revanced.manager.data.room.AppDatabase
 import app.revanced.manager.data.room.AppDatabase.Companion.generateUid
 import app.revanced.manager.data.room.apps.downloaded.DownloadedApp
+import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.network.downloader.LoadedDownloaderPlugin
 import app.revanced.manager.plugin.downloader.OutputDownloadScope
 import app.revanced.manager.util.PM
@@ -34,7 +35,8 @@ data class DownloadResult(
 class DownloadedAppRepository(
     private val app: Application,
     db: AppDatabase,
-    private val pm: PM
+    private val pm: PM,
+    private val prefs: PreferencesManager
 ) {
     private val dir = app.getDir("downloaded-apps", Context.MODE_PRIVATE)
     private val tempDir = app.cacheDir.resolve("temp-downloaded-apps").apply { mkdirs() }
@@ -148,14 +150,21 @@ class DownloadedAppRepository(
             }
 
             if (persistDownload) {
-                // Delete the previous copy (if present).
-                dao.get(pkgInfo.packageName, pkgInfo.versionName!!)?.directory?.let {
-                    if (!dir.resolve(it).deleteRecursively()) throw Exception("Failed to delete existing directory")
+                val versionName = pkgInfo.versionName!!
+                val shouldKeepLatestOnly = prefs.autoSaveDownloaderLatestOnly.get()
+                val downloadsToReplace = dao.getByPackageName(pkgInfo.packageName).filter {
+                    shouldKeepLatestOnly || it.version == versionName
                 }
+
+                if (downloadsToReplace.isNotEmpty()) {
+                    deleteStoredApps(downloadsToReplace, requireSuccess = true)
+                    dao.delete(downloadsToReplace)
+                }
+
                 dao.upsert(
                     DownloadedApp(
                         packageName = pkgInfo.packageName,
-                        version = pkgInfo.versionName!!,
+                        version = versionName,
                         directory = relativePath,
                     )
                 )
@@ -192,11 +201,18 @@ class DownloadedAppRepository(
     suspend fun getLatest(packageName: String) = dao.getLatest(packageName)
 
     suspend fun delete(downloadedApps: Collection<DownloadedApp>) {
-        downloadedApps.forEach {
-            dir.resolve(it.directory).deleteRecursively()
-        }
-
+        deleteStoredApps(downloadedApps)
         dao.delete(downloadedApps)
+    }
+
+    private fun deleteStoredApps(downloadedApps: Collection<DownloadedApp>, requireSuccess: Boolean = false) {
+        downloadedApps.forEach {
+            val targetDir = dir.resolve(it.directory)
+            val deleted = targetDir.deleteRecursively()
+            if (requireSuccess && !deleted) {
+                throw IllegalStateException("Failed to delete existing directory: ${targetDir.absolutePath}")
+            }
+        }
     }
 
     private suspend fun resolvePackageInfo(file: File): PackageInfo? =

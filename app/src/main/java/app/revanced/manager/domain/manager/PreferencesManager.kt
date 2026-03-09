@@ -175,6 +175,8 @@ class PreferencesManager(
 
     val acknowledgedDownloaderPlugins = stringSetPreference("acknowledged_downloader_plugins", emptySet())
     val autoSaveDownloaderApks = booleanPreference("auto_save_downloader_apks", true)
+    val autoSaveDownloaderLatestOnly =
+        booleanPreference("auto_save_downloader_latest_only", false)
     val searchEngineHost = stringPreference("search_engine_host", "google.com")
 
     @Serializable
@@ -251,6 +253,7 @@ class PreferencesManager(
         val savedAppHiddenActions: Set<String>? = null,
         val acknowledgedDownloaderPlugins: Set<String>? = null,
         val autoSaveDownloaderApks: Boolean? = null,
+        val autoSaveDownloaderLatestOnly: Boolean? = null,
         val pathSelectorFavorites: Set<String>? = null,
         val pathSelectorLastDirectory: String? = null,
         val appSelectorFilterInstalledOnly: Boolean? = null,
@@ -375,6 +378,7 @@ class PreferencesManager(
         return snapshot.copy(
             acknowledgedDownloaderPlugins = acknowledgedDownloaderPlugins.get(),
             autoSaveDownloaderApks = autoSaveDownloaderApks.get(),
+            autoSaveDownloaderLatestOnly = autoSaveDownloaderLatestOnly.get(),
             pathSelectorFavorites = pathSelectorFavorites.get(),
             pathSelectorLastDirectory = pathSelectorLastDirectory.get().takeIf { it.isNotBlank() },
             appSelectorFilterInstalledOnly = appSelectorFilterInstalledOnly.get(),
@@ -484,6 +488,7 @@ class PreferencesManager(
     private fun EditorContext.importDiscoverySettings(snapshot: SettingsSnapshot) {
         snapshot.acknowledgedDownloaderPlugins?.let { acknowledgedDownloaderPlugins.value = it }
         snapshot.autoSaveDownloaderApks?.let { autoSaveDownloaderApks.value = it }
+        snapshot.autoSaveDownloaderLatestOnly?.let { autoSaveDownloaderLatestOnly.value = it }
         snapshot.pathSelectorFavorites?.let { favorites ->
             val sanitized = favorites.filter { path ->
                 runCatching { Paths.get(path).isReadable() }.getOrDefault(false)

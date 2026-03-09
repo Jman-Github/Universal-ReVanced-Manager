@@ -165,6 +165,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                 keywords = listOf(
                     R.string.download_settings,
                     R.string.downloader_auto_save_title,
+                    R.string.downloader_auto_save_latest_only_title,
                     R.string.downloader_plugins,
                     R.string.downloaded_apps,
                     R.string.downloaded_apps_export
@@ -247,6 +248,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.bundle_changelog_fetch_limit, R.string.bundle_changelog_fetch_limit_description, R.string.updates, Settings.Updates),
             SearchEntry(R.string.bundle_changelog_storage_limit, R.string.bundle_changelog_storage_limit_description, R.string.updates, Settings.Updates),
             SearchEntry(R.string.downloader_auto_save_title, R.string.downloader_auto_save_description, R.string.downloads, Settings.Downloads),
+            SearchEntry(R.string.downloader_auto_save_latest_only_title, R.string.downloader_auto_save_latest_only_description, R.string.downloads, Settings.Downloads),
             SearchEntry(R.string.downloader_plugins, null, R.string.downloads, Settings.Downloads),
             SearchEntry(R.string.downloaded_apps, null, R.string.downloads, Settings.Downloads),
             SearchEntry(R.string.downloaded_apps_export, null, R.string.downloads, Settings.Downloads),

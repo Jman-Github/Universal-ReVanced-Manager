@@ -52,6 +52,8 @@
 - Improved patch option previews with a larger inline preview and a full preview dialog for long values like file paths https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/261
 - Improved patch profile APK handling by preserving split archive extensions, loading split APK icons correctly and using detected APK versions for compatibilit https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/261
 - Patch profiles can now use the version detected from a selected APK
+- Added an option to only keep the latest plugin-downloaded APK per app
+- Added a delete confirmation for selected downloaded apps in `Downloads`
 
 
 # Bug fixes

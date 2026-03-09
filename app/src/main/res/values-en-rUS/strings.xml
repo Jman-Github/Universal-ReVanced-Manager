@@ -454,6 +454,8 @@ Patch profiles are not affected.</string>
     <string name="download_settings">Download settings</string>
     <string name="downloader_auto_save_title">Automatically save downloaded APKs</string>
     <string name="downloader_auto_save_description">Keep APKs downloaded through plugins for reuse. Disable to delete them after patching.</string>
+    <string name="downloader_auto_save_latest_only_title">Only keep the most recent plugin download</string>
+    <string name="downloader_auto_save_latest_only_description">When a plugin downloads another version of the same app, remove older saved downloads and keep only the latest one.</string>
     <string name="downloader_plugins">Plugins</string>
     <string name="downloader_plugin_state_trusted">Trusted</string>
     <string name="downloader_plugin_state_failed">Failed to load. Click for more details</string>
@@ -950,6 +952,8 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="downloaded_apps_export">Export selected apps</string>
     <string name="downloaded_apps_export_success">Exported %1$d app(s)</string>
     <string name="downloaded_apps_export_failed">Failed to export downloaded apps</string>
+    <string name="downloaded_apps_delete_title">Delete downloaded apps</string>
+    <string name="downloaded_apps_delete_description">Remove the selected downloaded apps and their stored APK files from the manager?</string>
     <string name="already_patched">Already patched</string>
     <string name="patch_selector_sheet_filter_title">Filter</string>
     <string name="patch_selector_sheet_filter_compat_title">Compatibility</string>
