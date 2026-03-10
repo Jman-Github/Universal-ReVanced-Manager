@@ -240,6 +240,7 @@ fun DashboardScreen(
     val fs = koinInject<Filesystem>()
     val prefs: PreferencesManager = koinInject()
     val savedAppsEnabled by prefs.enableSavedApps.getAsState()
+    val viewedManagerUpdateVersion by prefs.viewedManagerUpdateVersion.getAsState()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val hideMainTabLabels by prefs.hideMainTabLabels.getAsState()
     val disableMainTabSwipe by prefs.disableMainTabSwipe.getAsState()
@@ -1678,6 +1679,9 @@ fun DashboardScreen(
                 }
 
                 else -> {
+                    val managerUpdateViewed =
+                        !vm.updatedManagerVersion.isNullOrEmpty() &&
+                            vm.updatedManagerVersion == viewedManagerUpdateVersion
                     AppTopBar(
                         title = { Text(stringResource(R.string.main_top_title)) },
                         actions = {
@@ -1685,12 +1689,19 @@ fun DashboardScreen(
                                 IconButton(
                                     onClick = onUpdateClick,
                                 ) {
-                                    BadgedBox(
-                                        badge = {
-                                            Badge(modifier = Modifier.size(6.dp))
-                                        }
-                                    ) {
+                                    if (managerUpdateViewed) {
                                         Icon(Icons.Outlined.Update, stringResource(R.string.update))
+                                    } else {
+                                        BadgedBox(
+                                            badge = {
+                                                Badge(modifier = Modifier.size(6.dp))
+                                            }
+                                        ) {
+                                            Icon(
+                                                Icons.Outlined.Update,
+                                                stringResource(R.string.update)
+                                            )
+                                        }
                                     }
                                 }
                             }

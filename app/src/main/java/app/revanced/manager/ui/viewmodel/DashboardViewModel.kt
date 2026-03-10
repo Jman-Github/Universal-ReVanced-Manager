@@ -137,7 +137,11 @@ class DashboardViewModel(
         if (!prefs.managerAutoUpdates.get() || !networkInfo.isConnected()) return
 
         uiSafe(app, R.string.failed_to_check_updates, "Failed to check for updates") {
-            updatedManagerVersion = reVancedAPI.getAppUpdate()?.version
+            val update = reVancedAPI.getAppUpdate()
+            updatedManagerVersion = update?.version
+            if (update == null && prefs.viewedManagerUpdateVersion.get().isNotEmpty()) {
+                prefs.viewedManagerUpdateVersion.update("")
+            }
         }
     }
 

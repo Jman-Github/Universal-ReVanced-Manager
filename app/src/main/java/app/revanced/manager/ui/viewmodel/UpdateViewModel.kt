@@ -89,7 +89,9 @@ class UpdateViewModel(
     private val versionMarkerLocation = fs.tempDir.resolve("updater.version")
     private val job = viewModelScope.launch {
         uiSafe(app, R.string.download_manager_failed, "Failed to download Universal ReVanced Manager") {
-            releaseInfo = reVancedAPI.getAppUpdate() ?: throw Exception("No update available")
+            val update = reVancedAPI.getAppUpdate() ?: throw Exception("No update available")
+            releaseInfo = update
+            prefs.viewedManagerUpdateVersion.update(update.version)
 
             if (downloadOnScreenEntry) {
                 downloadUpdate()

@@ -14,6 +14,7 @@
 - Updated the manager update notification and update banner text to use clearer URV-specific wording, including `URV Manager update found` and `A new manager update is available` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/274
 - Increased the size of the status bar icon https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/230
 - Improved patch bundle update notifications to use clearer "update found" wording and correct singular/plural grammar for available bundle updates https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/235
+- Added persistent tracking for the currently viewed manager update version so the icon state stays correct across app restarts https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/232
 
 
 # Bug fixes
