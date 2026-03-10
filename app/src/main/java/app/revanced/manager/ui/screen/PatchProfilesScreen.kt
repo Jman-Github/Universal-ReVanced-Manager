@@ -47,6 +47,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -55,6 +56,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -93,6 +95,7 @@ import app.revanced.manager.ui.component.LazyColumnWithScrollbar
 import app.revanced.manager.ui.component.LoadingIndicator
 import app.revanced.manager.ui.component.Scrollbar
 import app.revanced.manager.ui.component.TextInputDialog
+import app.revanced.manager.ui.component.haptics.HapticTab
 import app.revanced.manager.ui.component.haptics.HapticCheckbox
 import app.revanced.manager.ui.component.patches.PathSelectorDialog
 import app.revanced.manager.data.platform.Filesystem
@@ -185,6 +188,7 @@ fun PatchProfilesScreen(
     )
     var remoteBundleIncompatibleTarget by remember { mutableStateOf<RemoteBundleOverrideTarget?>(null) }
     val expandedProfiles = remember { mutableStateMapOf<Int, Boolean>() }
+    val selectedBundleTabs = remember { mutableStateMapOf<Int, Int>() }
     val selectionActive = viewModel.selectedProfiles.isNotEmpty()
     data class OptionDialogData(val patchName: String, val entries: List<BundleOptionDisplay>)
     var optionDialogData by remember { mutableStateOf<OptionDialogData?>(null) }
@@ -685,86 +689,142 @@ fun PatchProfilesScreen(
                         enter = fadeIn(),
                         exit = fadeOut()
                     ) {
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            profile.bundleDetails.forEach { detail ->
-                                val baseName = detail.displayName
-                                    ?: stringResource(R.string.patches_name_fallback)
-                                val displayName = if (detail.isAvailable) {
-                                    baseName
-                                } else {
-                                    stringResource(
-                                        R.string.patch_profile_bundle_unavailable_suffix,
-                                        baseName
-                                    )
-                                }
-                                val typeLabel = stringResource(
-                                    when (detail.type) {
-                                        BundleSourceType.Preinstalled -> R.string.bundle_type_preinstalled
-                                        BundleSourceType.Remote -> R.string.bundle_type_remote
-                                        else -> R.string.bundle_type_local
-                                    }
+                        val bundleDetails = profile.bundleDetails
+                        if (bundleDetails.isNotEmpty()) {
+                            val selectedBundleIndex = (selectedBundleTabs[profile.id] ?: 0)
+                                .coerceIn(0, bundleDetails.lastIndex)
+                            val detail = bundleDetails[selectedBundleIndex]
+                            val selectedBundleBaseName = detail.displayName
+                                ?: stringResource(R.string.patches_name_fallback)
+                            val selectedBundleDisplayName = if (detail.isAvailable) {
+                                selectedBundleBaseName
+                            } else {
+                                stringResource(
+                                    R.string.patch_profile_bundle_unavailable_suffix,
+                                    selectedBundleBaseName
                                 )
-                                Column(
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Text(
-                                        text = displayName,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = typeLabel,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.outline
-                                    )
-                                    if (!detail.isAvailable && detail.type == BundleSourceType.Remote && !selectionActive) {
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        ProfileActionText(
-                                            text = stringResource(R.string.patch_profile_bundle_select_remote)
-                                        ) {
-                                            remoteBundleTarget = RemoteBundleTarget(
-                                                profileId = profile.id,
-                                                bundleUid = detail.uid,
-                                                bundleName = detail.displayName ?: detail.uid.toString(),
-                                                requiredPatchesLowercase = detail.patches
-                                                    .mapTo(mutableSetOf()) { it.trim().lowercase() }
+                            }
+                            val selectedBundleTypeLabel = stringResource(
+                                when (detail.type) {
+                                    BundleSourceType.Preinstalled -> R.string.bundle_type_preinstalled
+                                    BundleSourceType.Remote -> R.string.bundle_type_remote
+                                    else -> R.string.bundle_type_local
+                                }
+                            )
+                            val showRemoteReplacementAction =
+                                !detail.isAvailable && detail.type == BundleSourceType.Remote && !selectionActive
+                            val showLocalUidRow = detail.type == BundleSourceType.Local
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                if (bundleDetails.size > 1) {
+                                    ScrollableTabRow(
+                                        selectedTabIndex = selectedBundleIndex,
+                                        containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+                                        edgePadding = 0.dp,
+                                        divider = {}
+                                    ) {
+                                        bundleDetails.forEachIndexed { index, bundleDetail ->
+                                            val tabTitle = bundleDetail.displayName
+                                                ?: context.getString(R.string.patches_name_fallback)
+                                            val tabTypeLabel = context.getString(
+                                                when (bundleDetail.type) {
+                                                    BundleSourceType.Preinstalled -> R.string.bundle_type_preinstalled
+                                                    BundleSourceType.Remote -> R.string.bundle_type_remote
+                                                    else -> R.string.bundle_type_local
+                                                }
                                             )
-                                            remoteBundleSelectionUid = null
+                                            HapticTab(
+                                                selected = index == selectedBundleIndex,
+                                                onClick = { selectedBundleTabs[profile.id] = index },
+                                                text = {
+                                                    Column(
+                                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                                                    ) {
+                                                        Text(
+                                                            text = tabTitle,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                        Text(
+                                                            text = tabTypeLabel,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis,
+                                                            style = MaterialTheme.typography.labelSmall
+                                                        )
+                                                    }
+                                                },
+                                                selectedContentColor = MaterialTheme.colorScheme.primary,
+                                                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
                                         }
                                     }
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Divider(color = MaterialTheme.colorScheme.outlineVariant)
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    if (detail.type == BundleSourceType.Local) {
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Row(
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                text = stringResource(
-                                                    R.string.patch_profile_bundle_uid_label,
-                                                    detail.uid
-                                                ),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                            if (!selectionActive) {
-                                                ProfileActionText(
-                                                    text = stringResource(R.string.patch_profile_bundle_change_uid)
-                                                ) {
-                                                    changeUidTarget = ChangeUidTarget(
-                                                        profileId = profile.id,
-                                                        bundleUid = detail.uid,
-                                                        bundleName = detail.displayName
-                                                            ?: detail.uid.toString()
-                                                    )
+                                } else {
+                                    Column(
+                                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                                    ) {
+                                        Text(
+                                            text = selectedBundleDisplayName,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = selectedBundleTypeLabel,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.outline
+                                        )
+                                    }
+                                }
+                                if (showRemoteReplacementAction || showLocalUidRow) {
+                                    Column(
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        if (showRemoteReplacementAction) {
+                                            ProfileActionText(
+                                                text = stringResource(R.string.patch_profile_bundle_select_remote)
+                                            ) {
+                                                remoteBundleTarget = RemoteBundleTarget(
+                                                    profileId = profile.id,
+                                                    bundleUid = detail.uid,
+                                                    bundleName = detail.displayName ?: detail.uid.toString(),
+                                                    requiredPatchesLowercase = detail.patches
+                                                        .mapTo(mutableSetOf()) { it.trim().lowercase() }
+                                                )
+                                                remoteBundleSelectionUid = null
+                                            }
+                                        }
+                                        if (showLocalUidRow) {
+                                            Row(
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = stringResource(
+                                                        R.string.patch_profile_bundle_uid_label,
+                                                        detail.uid
+                                                    ),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                if (!selectionActive) {
+                                                    ProfileActionText(
+                                                        text = stringResource(R.string.patch_profile_bundle_change_uid)
+                                                    ) {
+                                                        changeUidTarget = ChangeUidTarget(
+                                                            profileId = profile.id,
+                                                            bundleUid = detail.uid,
+                                                            bundleName = detail.displayName
+                                                                ?: detail.uid.toString()
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Divider(color = MaterialTheme.colorScheme.outlineVariant)
                                     }
+                                }
                                 Surface(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(12.dp),
@@ -793,29 +853,34 @@ fun PatchProfilesScreen(
                                                     }?.value
                                                     ?: emptyList()
                                                 val hasOptions = optionList.isNotEmpty()
-                                                Column(
-                                                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                                                    modifier = Modifier
-                                                        .then(
-                                                            if (hasOptions) Modifier.clickable {
-                                                                optionDialogData = OptionDialogData(
-                                                                    patchName = patchName,
-                                                                    entries = optionList
-                                                                )
-                                                            } else Modifier
-                                                        )
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                                 ) {
                                                     Text(
                                                         text = patchName,
                                                         style = MaterialTheme.typography.bodySmall,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        modifier = Modifier.weight(1f)
                                                     )
                                                     if (hasOptions) {
-                                                        Text(
-                                                            text = stringResource(R.string.patch_profile_view_options),
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                            color = MaterialTheme.colorScheme.primary
-                                                        )
+                                                        IconButton(
+                                                            onClick = {
+                                                                optionDialogData = OptionDialogData(
+                                                                    patchName = patchName,
+                                                                    entries = optionList
+                                                                )
+                                                            },
+                                                            modifier = Modifier.size(24.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Outlined.MoreVert,
+                                                                contentDescription = stringResource(R.string.patch_profile_view_options),
+                                                                tint = MaterialTheme.colorScheme.primary,
+                                                                modifier = Modifier.size(18.dp)
+                                                            )
+                                                        }
                                                     }
                                                 }
                                                 if (index != detail.patches.lastIndex) {
@@ -834,7 +899,6 @@ fun PatchProfilesScreen(
                         }
                     }
                 }
-            }
             }
         }
     }

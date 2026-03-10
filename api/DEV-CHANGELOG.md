@@ -18,6 +18,8 @@
 - Reordered the `General` settings screen so Navigation & Tabs appears before Themes, while Themes and Background remain grouped together https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/234
 - Renamed the screen shown after selecting an app to patch from App info to `Preparing to patch` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/264
 - Updated the `Apps` and `Patch Profiles` tab search hints to use consistent wording of `Search by app name` and `Search by profile name` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/237
+- Improved the Patch Profiles bundle selector with tabbed bundle switching and cleaner bundle source labeling https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/242
+- Improved patch option viewing in Patch Profiles with a three-dots menu for patches with options
 
 
 # Bug fixes
