@@ -238,6 +238,90 @@ fun GeneralSettingsScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
+            GroupHeader(stringResource(R.string.navigation_tabs_section))
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+            ) {
+                SettingsSearchHighlight(
+                    targetKey = R.string.hide_main_tab_labels,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = prefs.hideMainTabLabels,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.hide_main_tab_labels,
+                        description = R.string.hide_main_tab_labels_description
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.disable_main_tab_swipe,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = prefs.disableMainTabSwipe,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.disable_main_tab_swipe,
+                        description = R.string.disable_main_tab_swipe_description
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.disable_patch_selection_tab_swipe,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = prefs.disablePatchSelectionTabSwipe,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.disable_patch_selection_tab_swipe,
+                        description = R.string.disable_patch_selection_tab_swipe_description
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.hide_patch_profiles_tab,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        value = !showPatchProfilesTab,
+                        onValueChange = { hide ->
+                            viewModel.viewModelScope.launch {
+                                prefs.showPatchProfilesTab.update(!hide)
+                            }
+                        },
+                        headline = R.string.hide_patch_profiles_tab,
+                        description = R.string.hide_patch_profiles_tab_description,
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.hide_tools_tab,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        value = !showToolsTab,
+                        onValueChange = { hide ->
+                            viewModel.viewModelScope.launch {
+                                prefs.showToolsTab.update(!hide)
+                            }
+                        },
+                        headline = R.string.hide_tools_tab,
+                        description = R.string.hide_tools_tab_description,
+                    )
+                }
+            }
+
             GroupHeader(stringResource(R.string.theme_section))
 
             val baseThemeSwatches = remember(supportsDynamicColor) {
@@ -552,90 +636,6 @@ fun GeneralSettingsScreen(
                     .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
             )
             Spacer(modifier = Modifier.height(16.dp))
-
-            GroupHeader(stringResource(R.string.navigation_tabs_section))
-            ExpressiveSettingsCard(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
-            ) {
-                SettingsSearchHighlight(
-                    targetKey = R.string.hide_main_tab_labels,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        preference = prefs.hideMainTabLabels,
-                        coroutineScope = viewModel.viewModelScope,
-                        headline = R.string.hide_main_tab_labels,
-                        description = R.string.hide_main_tab_labels_description
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.disable_main_tab_swipe,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        preference = prefs.disableMainTabSwipe,
-                        coroutineScope = viewModel.viewModelScope,
-                        headline = R.string.disable_main_tab_swipe,
-                        description = R.string.disable_main_tab_swipe_description
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.disable_patch_selection_tab_swipe,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        preference = prefs.disablePatchSelectionTabSwipe,
-                        coroutineScope = viewModel.viewModelScope,
-                        headline = R.string.disable_patch_selection_tab_swipe,
-                        description = R.string.disable_patch_selection_tab_swipe_description
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.hide_patch_profiles_tab,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        value = !showPatchProfilesTab,
-                        onValueChange = { hide ->
-                            viewModel.viewModelScope.launch {
-                                prefs.showPatchProfilesTab.update(!hide)
-                            }
-                        },
-                        headline = R.string.hide_patch_profiles_tab,
-                        description = R.string.hide_patch_profiles_tab_description,
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.hide_tools_tab,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        value = !showToolsTab,
-                        onValueChange = { hide ->
-                            viewModel.viewModelScope.launch {
-                                prefs.showToolsTab.update(!hide)
-                            }
-                        },
-                        headline = R.string.hide_tools_tab,
-                        description = R.string.hide_tools_tab_description,
-                    )
-                }
-            }
 
             GroupHeader(stringResource(R.string.background_section))
             ExpressiveSettingsCard(
