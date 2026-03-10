@@ -31,6 +31,7 @@
 - Fixed websocket-triggered update checks so newer refreshes are not dropped behind older queued work
 - Fixed stale bundle update notifications not clearing when no updates remain
 - Fixed manager update notifications being suppressed after notification permission is turned off and back on
+- Clarified package selection text to use generic app package wording instead of APK-only wording for local files and patch profiles https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/264
 
 
 # v1.8.1-dev.06 (2026-03-07)
