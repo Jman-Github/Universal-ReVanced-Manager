@@ -9,7 +9,6 @@ import androidx.lifecycle.viewModelScope
 import app.universal.revanced.manager.R
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.ui.theme.Theme
-import app.revanced.manager.util.applyAppLanguage
 import app.revanced.manager.util.resetListItemColorsCached
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.toHexString
@@ -183,9 +182,6 @@ class GeneralSettingsViewModel(
 
     fun setAppLanguage(languageCode: String) = viewModelScope.launch {
         prefs.appLanguage.update(languageCode)
-        withContext(Dispatchers.Main) {
-            applyAppLanguage(languageCode)
-        }
     }
 
     fun toggleThemePreset(preset: ThemePreset) = viewModelScope.launch {

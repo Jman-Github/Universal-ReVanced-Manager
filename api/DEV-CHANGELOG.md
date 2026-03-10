@@ -4,6 +4,7 @@
 # Features
 
 - Added a scrollable changelog preview directly to the manager update popup, so release notes can be read without opening the full updater screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/229
+- Added a restart prompt after changing the in-app language https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/244
 
 
 # v1.8.1-dev.07 (2026-03-10)

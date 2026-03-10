@@ -184,6 +184,7 @@ import app.revanced.manager.ui.component.settings.SettingsSearchHighlight
 import app.revanced.manager.domain.installer.InstallerManager
 import app.revanced.manager.ui.viewmodel.AdvancedSettingsViewModel
 import app.revanced.manager.util.ExportNameFormatter
+import app.revanced.manager.util.applyAppLanguage
 import app.revanced.manager.util.consumeHorizontalScroll
 import app.revanced.manager.util.openUrl
 import app.revanced.manager.util.toast
@@ -228,6 +229,7 @@ fun AdvancedSettingsScreen(
     var highlightTarget by rememberSaveable { mutableStateOf<Int?>(null) }
     val appLanguage by viewModel.prefs.appLanguage.getAsState()
     var showLanguageDialog by rememberSaveable { mutableStateOf(false) }
+    var pendingLanguageRestart by rememberSaveable { mutableStateOf<String?>(null) }
     val languageOptions = remember {
         listOf(
             LanguageOption("system", R.string.language_option_system),
@@ -274,18 +276,46 @@ fun AdvancedSettingsScreen(
             SettingsSearchState.clear()
         }
     }
+    val commitLanguageChange: (String, Boolean) -> Unit = { code, recreate ->
+        viewModel.viewModelScope.launch {
+            viewModel.prefs.appLanguage.update(code)
+        }
+        applyAppLanguage(code)
+        if (recreate) {
+            (context as? android.app.Activity)?.recreate()
+        }
+        pendingLanguageRestart = null
+    }
     if (showLanguageDialog) {
         LanguageDialog(
             options = languageOptions,
             selectedCode = appLanguage,
             onSelect = { code ->
-                viewModel.viewModelScope.launch {
-                    viewModel.prefs.appLanguage.update(code)
+                if (code == appLanguage) {
+                    showLanguageDialog = false
+                } else {
+                    pendingLanguageRestart = code
+                    showLanguageDialog = false
                 }
-                (context as? android.app.Activity)?.recreate()
-                showLanguageDialog = false
             },
             onDismiss = { showLanguageDialog = false }
+        )
+    }
+    pendingLanguageRestart?.let { languageCode ->
+        AlertDialog(
+            onDismissRequest = { commitLanguageChange(languageCode, false) },
+            confirmButton = {
+                TextButton(onClick = { commitLanguageChange(languageCode, true) }) {
+                    Text(stringResource(R.string.language_restart_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { commitLanguageChange(languageCode, false) }) {
+                    Text(stringResource(R.string.language_restart_later))
+                }
+            },
+            title = { Text(stringResource(R.string.language_restart_title)) },
+            text = { Text(stringResource(R.string.language_restart_message)) }
         )
     }
     val selectedLanguageLabel = when (appLanguage) {

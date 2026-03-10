@@ -632,6 +632,10 @@ Patch profiles are not affected.</string>
     <string name="language_settings">Language</string>
     <string name="app_language">App language</string>
     <string name="language_dialog_title">Choose app language</string>
+    <string name="language_restart_title">Restart required</string>
+    <string name="language_restart_message">Restart the app now to apply the new language. If you choose later, the change will apply the next time the app is opened.</string>
+    <string name="language_restart_confirm">Restart now</string>
+    <string name="language_restart_later">Later</string>
     <string name="language_option_system">Use device language</string>
     <string name="language_option_english">English</string>
     <string name="language_option_french">French</string>
