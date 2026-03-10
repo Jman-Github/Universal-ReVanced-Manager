@@ -627,16 +627,6 @@ fun GeneralSettingsScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .height(1.dp)
-                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-
             GroupHeader(stringResource(R.string.background_section))
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),

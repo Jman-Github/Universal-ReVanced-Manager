@@ -66,6 +66,7 @@
 - Clarified changelog link wording by changing the external action to `View changelogs on GitHub` on the manager update and changelog settings screens https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/233
 - Added a scrollable changelog preview directly to the manager update popup, so release notes can be read without opening the full updater screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/229
 - Added a restart prompt after changing the in-app language https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/244
+- Removed an extra UI separator from the `General` settings screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/287
 
 
 # Bug fixes
