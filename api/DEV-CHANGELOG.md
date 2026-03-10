@@ -8,6 +8,11 @@
 - Removed an extra UI separator from the `General` settings screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/287
 
 
+# Bug fixes
+
+- Fixed (hopefully) the fullscreen back gesture showing the wrong screen preview so the back animation now matches the actual destination screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/280
+
+
 # v1.8.1-dev.07 (2026-03-10)
 
 
