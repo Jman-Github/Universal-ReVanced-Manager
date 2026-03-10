@@ -79,7 +79,7 @@ fun ChangelogsSettingsScreen(
                         info.pageUrl?.let { url ->
                             ExpressiveSettingsDivider()
                             ExpressiveSettingsItem(
-                                headlineContent = stringResource(R.string.changelog),
+                                headlineContent = stringResource(R.string.changelog_open_github),
                                 supportingContent = url,
                                 trailingContent = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, contentDescription = null) },
                                 onClick = { uriHandler.openUri(url) }

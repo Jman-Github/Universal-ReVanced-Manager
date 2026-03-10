@@ -207,6 +207,7 @@
     <string name="import_export">Import &amp; Export</string>
     <string name="import_export_description">Backup, restore, keystore, and reset tools</string>
     <string name="changelog">View changelogs</string>
+    <string name="changelog_open_github">View changelogs on GitHub</string>
     <string name="changelog_loading">Loading changelog</string>
     <string name="changelog_download_fail">Failed to download changelog: %s</string>
     <string name="changelog_description">Check out the latest changes in this update</string>

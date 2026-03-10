@@ -36,6 +36,7 @@
 - Fixed stale bundle update notifications not clearing when no updates remain
 - Fixed manager update notifications being suppressed after notification permission is turned off and back on
 - Clarified package selection text to use generic app package wording instead of APK-only wording for local files and patch profiles https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/264
+- Clarified changelog link wording by changing the external action to `View changelogs on GitHub` on the manager update and changelog settings screens https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/233
 
 
 # v1.8.1-dev.06 (2026-03-07)
