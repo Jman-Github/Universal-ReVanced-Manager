@@ -41,6 +41,7 @@ class MorpheSession(
     private val logger: Logger,
     private val input: File,
     private val onEvent: (ProgressEvent) -> Unit,
+    private val checkCancelled: () -> Unit = {},
 ) : Closeable {
     private val tempDir = File(cacheDir).resolve("patcher").also { it.mkdirs() }
     private val frameworkDirFile = File(frameworkDir).also { it.mkdirs() }
@@ -67,12 +68,14 @@ class MorpheSession(
         var nextIndex = 0
 
         fun startPatch(index: Int) {
+            checkCancelled()
             if (!started.add(index)) return
             onEvent(ProgressEvent.Started(StepId.ExecutePatch(index)))
         }
 
         startPatch(0)
         this().collect { (patch, exception) ->
+            checkCancelled()
             val index = indexByPatch[patch] ?: return@collect
 
             if (exception != null) {
@@ -114,6 +117,7 @@ class MorpheSession(
     }
 
     private suspend fun executePatchesOnce(orderedPatches: MorphePatchList) {
+        checkCancelled()
         with(patcher) {
             if (orderedPatches.isNotEmpty()) {
                 onEvent(ProgressEvent.Started(StepId.ExecutePatch(0)))
@@ -185,9 +189,10 @@ class MorpheSession(
         stripNativeLibs: Boolean,
         inputWasSplit: Boolean
     ) {
+        checkCancelled()
         val shouldStripNativeLibs = stripNativeLibs && !inputWasSplit
         val orderedPatches = selectedPatches.sortedBy { it.name }
-        runStep(StepId.ExecutePatches, onEvent) {
+        runStep(StepId.ExecutePatches, onEvent, checkCancelled) {
             java.util.logging.Logger.getLogger("").apply {
                 handlers.forEach {
                     it.close()
@@ -199,6 +204,7 @@ class MorpheSession(
             executePatchesWithFrameworkRecovery(orderedPatches)
         }
 
+        checkCancelled()
         onEvent(
             ProgressEvent.Progress(
                 stepId = StepId.WriteAPK,
@@ -207,7 +213,8 @@ class MorpheSession(
         )
 
         suspend fun writePatchedApkStep() {
-            runStep(StepId.WriteAPK, onEvent) {
+            runStep(StepId.WriteAPK, onEvent, checkCancelled) {
+                checkCancelled()
                 onEvent(
                     ProgressEvent.Progress(
                         stepId = StepId.WriteAPK,
@@ -228,23 +235,29 @@ class MorpheSession(
                 XmlSurrogateSanitizer.sanitize(tempDir.resolve("apk"), logger)
                 ensureMissingDrawables()
                 validateMissingResourceReferences()
+                checkCancelled()
                 val result = patcher.get()
 
                 val patched = tempDir.resolve("result.apk")
                 runInterruptible(Dispatchers.IO) {
                     fastCopy(input, patched)
                 }
+                checkCancelled()
                 onEvent(
                     ProgressEvent.Progress(
                         stepId = StepId.WriteAPK,
                         message = "Applying patched changes"
                     )
                 )
-                result.applyTo(patched)
+                runInterruptible(Dispatchers.IO) {
+                    result.applyTo(patched)
+                }
+                checkCancelled()
 
                 logger.info("Patched apk saved to $patched")
 
                 withContext(Dispatchers.IO) {
+                    checkCancelled()
                     onEvent(
                         ProgressEvent.Progress(
                             stepId = StepId.WriteAPK,
@@ -273,6 +286,7 @@ class MorpheSession(
                     )
                 )
                 if (shouldStripNativeLibs) {
+                    checkCancelled()
                     onEvent(
                         ProgressEvent.Progress(
                             stepId = StepId.WriteAPK,
@@ -280,6 +294,7 @@ class MorpheSession(
                         )
                     )
                     NativeLibStripper.strip(output)
+                    checkCancelled()
                 }
             }
         }

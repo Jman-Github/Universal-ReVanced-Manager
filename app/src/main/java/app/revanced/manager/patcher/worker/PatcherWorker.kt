@@ -60,14 +60,21 @@ import app.revanced.manager.util.Options
 import app.revanced.manager.util.PM
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.tag
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.io.File
 import java.util.LinkedHashSet
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlin.math.min
@@ -340,10 +347,14 @@ class PatcherWorker(
             .coerceIn(start, end)
     }
 
-    private fun stopForegroundUpdates() {
+    private fun cancelActiveRuntimes() {
         activeRuntime?.cancel()
         activeMorpheRuntime?.cancel()
         activeAmpleRuntime?.cancel()
+    }
+
+    private fun stopForegroundUpdates() {
+        cancelActiveRuntimes()
         patchNotificationSteps = emptyList()
         foregroundStarted = false
         clearForegroundNotificationIfOwned()
@@ -390,12 +401,22 @@ class PatcherWorker(
         workerRepository.clearActiveUniqueWork(UNIQUE_WORK_NAME, id)
     }
 
+    private suspend fun updateActivePatchingState(active: Boolean) {
+        runCatching {
+            setProgress(workDataOf(PATCHING_ACTIVE_KEY to active))
+        }.onFailure { error ->
+            Log.d(tag, "Failed to update active patching state", error)
+        }
+    }
+
     override suspend fun doWork(): Result {
-        kotlinx.coroutines.currentCoroutineContext()[kotlinx.coroutines.Job]?.invokeOnCompletion { cause ->
-            if (cause != null) {
-                activeRuntime?.cancel()
-                activeMorpheRuntime?.cancel()
-                activeAmpleRuntime?.cancel()
+        val workerFinished = AtomicBoolean(false)
+        val stopMonitor = CoroutineScope(Dispatchers.Default + SupervisorJob()).launch {
+            while (!workerFinished.get()) {
+                if (isStopped) {
+                    cancelActiveRuntimes()
+                }
+                delay(50)
             }
         }
         if (runAttemptCount > 0) {
@@ -429,6 +450,7 @@ class PatcherWorker(
                 Log.d(tag, "Failed to publish initial patching notification:", e)
             }
 
+            updateActivePatchingState(true)
             val result = runPatcher(args, totalPatchCount)
 
             if (result is Result.Success && args.input is SelectedApp.Local && args.input.temporary) {
@@ -437,6 +459,11 @@ class PatcherWorker(
 
             result
         } finally {
+            workerFinished.set(true)
+            stopMonitor.cancel()
+            withContext(NonCancellable) {
+                updateActivePatchingState(false)
+            }
             if (wakeLock.isHeld) {
                 wakeLock.release()
             }
@@ -703,6 +730,9 @@ class PatcherWorker(
 
             Log.i(tag, "Patching succeeded".logFmt())
             Result.success()
+        } catch (e: CancellationException) {
+            Log.i(tag, "Patching cancelled".logFmt())
+            throw e
         } catch (e: ProcessRuntime.ProcessExitException) {
             Log.e(
                 tag,
@@ -931,6 +961,7 @@ class PatcherWorker(
         const val PROCESS_EXIT_CODE_KEY = "process_exit_code"
         const val PROCESS_PREVIOUS_LIMIT_KEY = "process_previous_limit"
         const val PROCESS_FAILURE_MESSAGE_KEY = "process_failure_message"
+        const val PATCHING_ACTIVE_KEY = "patching_active"
         private const val WORK_DATA_MAX_BYTES = 9000
         private const val DOWNLOAD_PROGRESS_MIN_INTERVAL_MS = 150L
         private const val DOWNLOAD_PROGRESS_MIN_BYTES = 256 * 1024L

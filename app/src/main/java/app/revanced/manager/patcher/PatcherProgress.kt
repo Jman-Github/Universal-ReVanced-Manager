@@ -1,6 +1,7 @@
 package app.revanced.manager.patcher
 
 import android.os.Parcelable
+import kotlinx.coroutines.CancellationException
 import kotlinx.parcelize.Parcelize
 
 @Parcelize
@@ -67,11 +68,14 @@ fun Throwable.toRemoteError() = RemoteError(
 inline fun <T> runStep(
     stepId: StepId,
     onEvent: (ProgressEvent) -> Unit,
+    checkCancelled: () -> Unit = {},
     block: () -> T,
 ): T = try {
     val startTimeNs = System.nanoTime()
     val startMemMb = usedMemoryMb()
+    checkCancelled()
     onEvent(ProgressEvent.Started(stepId))
+    checkCancelled()
     val value = block()
     val elapsedMs = (System.nanoTime() - startTimeNs) / 1_000_000
     val endMemMb = usedMemoryMb()
@@ -80,9 +84,11 @@ inline fun <T> runStep(
         "PatcherProgress",
         "step=${stepId::class.java.simpleName} duration=${elapsedMs}ms mem=${endMemMb}MB delta=${deltaMemMb}MB"
     )
+    checkCancelled()
     onEvent(ProgressEvent.Completed(stepId))
     value
 } catch (error: Throwable) {
+    if (error is CancellationException) throw error
     onEvent(ProgressEvent.Failed(stepId, error.toRemoteError()))
     throw error
 }

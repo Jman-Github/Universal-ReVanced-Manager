@@ -26,11 +26,15 @@ import com.github.pgreze.process.process
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.AtomicBoolean
 import java.io.File
 
 class AmpleProcessRuntime(
@@ -84,6 +88,18 @@ class AmpleProcessRuntime(
             runCatching { binderRef.get()?.exit() }
             eventHandlerRef.set(null)
         }
+        val logQueue = Channel<Pair<String, String>>(Channel.UNLIMITED)
+        val eventQueue = Channel<ProgressEvent>(Channel.UNLIMITED)
+        val logDrainJob = launch(Dispatchers.Default) {
+            for ((level, msg) in logQueue) {
+                runCatching { logger.log(enumValueOf(level), msg) }
+            }
+        }
+        val eventDrainJob = launch(Dispatchers.Default) {
+            for (event in eventQueue) {
+                runCatching { onEvent(event) }
+            }
+        }
         onEvent(ProgressEvent.Started(app.revanced.manager.patcher.StepId.LoadPatches))
         val runtimeClassPath = AmpleRuntimeAssets.ensureRuntimeClassPath(context).absolutePath
         val apkEditorJarPath = AmpleRuntimeAssets.ensureApkEditorJar(context).absolutePath
@@ -116,6 +132,19 @@ class AmpleProcessRuntime(
         val appProcessBin = resolveAppProcessBin(context)
 
         val patching = CompletableDeferred<Unit>()
+        val finishedReported = AtomicBoolean(false)
+
+        fun completeSuccess() {
+            if (!patching.isCompleted) {
+                patching.complete(Unit)
+            }
+        }
+
+        fun completeFailure(throwable: Throwable) {
+            if (!patching.isCompleted) {
+                patching.completeExceptionally(throwable)
+            }
+        }
 
         launch(Dispatchers.IO) {
             try {
@@ -136,12 +165,26 @@ class AmpleProcessRuntime(
                 Log.d(tag, "Ample process finished with exit code ${result.resultCode}")
 
                 if (result.resultCode == 0) {
-                    patching.complete(Unit)
+                    if (finishedReported.get()) {
+                        completeSuccess()
+                    } else {
+                        withTimeoutOrNull(FINISHED_CALLBACK_GRACE_PERIOD_MS) {
+                            while (!finishedReported.get() && !patching.isCompleted) {
+                                delay(25)
+                            }
+                        }
+                        if (!patching.isCompleted) {
+                            logger.warn(
+                                "Ample process exited without finished callback; using process exit fallback."
+                            )
+                            completeSuccess()
+                        }
+                    }
                 } else {
-                    patching.completeExceptionally(ProcessExitException(result.resultCode))
+                    completeFailure(ProcessExitException(result.resultCode))
                 }
             } catch (throwable: Throwable) {
-                patching.completeExceptionally(throwable)
+                completeFailure(throwable)
             }
         }
 
@@ -154,20 +197,23 @@ class AmpleProcessRuntime(
             }
 
             val eventHandler = object : IPatcherEvents.Stub() {
-                override fun log(level: String, msg: String) = logger.log(enumValueOf(level), msg)
+                override fun log(level: String, msg: String) {
+                    logQueue.trySend(level to msg)
+                }
 
                 override fun event(event: ProgressEventParcel?) {
-                    event?.let { onEvent(it.toEvent()) }
+                    event?.let { eventQueue.trySend(it.toEvent()) }
                 }
 
                 override fun finished(exceptionStackTrace: String?) {
+                    finishedReported.set(true)
                     runCatching { binder.exit() }
 
                     exceptionStackTrace?.let {
-                        patching.completeExceptionally(RemoteFailureException(it))
+                        completeFailure(RemoteFailureException(it))
                         return
                     }
-                    patching.complete(Unit)
+                    completeSuccess()
                 }
             }
             eventHandlerRef.set(eventHandler)
@@ -217,6 +263,15 @@ class AmpleProcessRuntime(
             patching.await()
         } finally {
             eventHandlerRef.set(null)
+            logQueue.close()
+            eventQueue.close()
+            withTimeoutOrNull(2_000L) {
+                logDrainJob.join()
+                eventDrainJob.join()
+            } ?: run {
+                logDrainJob.cancel()
+                eventDrainJob.cancel()
+            }
         }
     }
 
@@ -231,6 +286,7 @@ class AmpleProcessRuntime(
         const val CONNECT_TO_APP_ACTION = "CONNECT_TO_AMPLE_APP_ACTION"
         const val INTENT_BUNDLE_KEY = "BUNDLE"
         const val BUNDLE_BINDER_KEY = "BINDER"
+        private const val FINISHED_CALLBACK_GRACE_PERIOD_MS = 1_500L
 
         private fun resolvePropOverride(context: Context) = findLibrary(context, "prop_override")
         private fun resolveAppProcessBin(context: Context): String {

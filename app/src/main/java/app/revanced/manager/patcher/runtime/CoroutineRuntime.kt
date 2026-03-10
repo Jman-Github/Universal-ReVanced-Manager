@@ -11,11 +11,25 @@ import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.util.Options
 import app.revanced.manager.util.PatchSelection
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.CancellationException
 
 /**
  * Simple [Runtime] implementation that runs the patcher using coroutines.
  */
 class CoroutineRuntime(context: Context) : Runtime(context) {
+    private val cancelRequested = AtomicBoolean(false)
+
+    override fun cancel() {
+        cancelRequested.set(true)
+    }
+
+    private fun ensureNotCancelled() {
+        if (cancelRequested.get()) {
+            throw CancellationException("Patching cancelled")
+        }
+    }
+
     override suspend fun execute(
         inputFile: String,
         outputFile: String,
@@ -27,7 +41,11 @@ class CoroutineRuntime(context: Context) : Runtime(context) {
         stripNativeLibs: Boolean,
         skipUnneededSplits: Boolean,
     ) {
-        val (patchList, relatedBundleArchives) = runStep(StepId.LoadPatches, onEvent) {
+        val (patchList, relatedBundleArchives) = runStep(
+            StepId.LoadPatches,
+            onEvent,
+            ::ensureNotCancelled
+        ) {
             val activeSelectedPatches = selectedPatches.filterValues { it.isNotEmpty() }
             val selectedBundles = activeSelectedPatches.keys
             val patchBundlesByUid = bundles()
@@ -79,21 +97,23 @@ class CoroutineRuntime(context: Context) : Runtime(context) {
             stripNativeLibs,
             skipUnneededSplits,
             onProgress = { message ->
+                ensureNotCancelled()
                 onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
             },
             onSubSteps = { subSteps ->
+                ensureNotCancelled()
                 onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
             }
         )
         var preparation: SplitApkPreparer.PreparationResult? = null
         if (SplitApkPreparer.isSplitArchive(input)) {
-            preparation = runStep(StepId.PrepareSplitApk, onEvent) {
+            preparation = runStep(StepId.PrepareSplitApk, onEvent, ::ensureNotCancelled) {
                 prepareInput()
             }
         }
 
         try {
-            val session = runStep(StepId.ReadAPK, onEvent) {
+            val session = runStep(StepId.ReadAPK, onEvent, ::ensureNotCancelled) {
                 val preparedInput = preparation ?: prepareInput().also { preparation = it }
                 val selectedAaptPath = resolveAaptPath(preparedInput.file, logger, relatedBundleArchives)
                 val frameworkDir = FrameworkCacheResolver.resolve(
@@ -109,13 +129,15 @@ class CoroutineRuntime(context: Context) : Runtime(context) {
                     selectedAaptPath,
                     logger,
                     preparedInput.file,
-                    onEvent
+                    onEvent,
+                    ::ensureNotCancelled
                 )
             }
             val preparedInput = requireNotNull(preparation) {
                 "APK preparation did not produce an input file."
             }
 
+            ensureNotCancelled()
             session.use { s ->
                 s.run(
                     File(outputFile),

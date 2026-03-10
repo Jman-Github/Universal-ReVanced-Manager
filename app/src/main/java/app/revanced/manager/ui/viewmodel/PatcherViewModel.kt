@@ -1007,6 +1007,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
     private val _patcherSucceeded = MediatorLiveData<Boolean?>()
     val patcherSucceeded: LiveData<Boolean?> get() = _patcherSucceeded
+    private val _isPatchingActive = MediatorLiveData<Boolean>().apply { value = patcherWorkerId?.uuid != null }
+    val isPatchingActive: LiveData<Boolean> get() = _isPatchingActive
     private var currentWorkSource: LiveData<WorkInfo?>? = null
     private val handledFailureIds = mutableSetOf<UUID>()
     private var forceKeepLocalInput = false
@@ -1062,6 +1064,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         resetFailureLogState()
         runtimeReportedMemoryLimitMb = null
         markInitialStepRunning()
+        _isPatchingActive.value = true
         logBatteryOptimizationStatus()
         val workId = launchWorker()
         patcherWorkerId = ParcelUuid(workId)
@@ -1352,7 +1355,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     fun onBack() {
         // tempDir cannot be deleted inside onCleared because it gets called on system-initiated process death.
-        if (_patcherSucceeded.value == null) {
+        if (_isPatchingActive.value == true) {
             val workId = patcherWorkerId?.uuid
             workId?.let(workManager::cancelWorkById)
             cleanupTemporaryLocalInputAfterWorkStops(workId)
@@ -2858,6 +2861,27 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         writeApkStepStarted = false
     }
 
+    private fun reconcileProgressStateAfterSuccess() {
+        resetDexCompileState()
+        resetFailureLogState()
+        steps.forEachIndexed { index, step ->
+            steps[index] = step.withState(
+                state = State.COMPLETED,
+                message = null,
+                progress = null
+            )
+        }
+        stepSubSteps.forEach { (_, list) ->
+            list.forEachIndexed { index, detail ->
+                list[index] = detail.copy(
+                    state = State.COMPLETED,
+                    message = null,
+                    progress = null
+                )
+            }
+        }
+    }
+
     private fun markDexSubStepsReady() {
         if (dexSubStepsReady) return
         dexSubStepsReady = true
@@ -3228,9 +3252,20 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private fun observeWorker(id: UUID) {
         val source = workManager.getWorkInfoByIdLiveData(id)
-        currentWorkSource?.let { _patcherSucceeded.removeSource(it) }
+        currentWorkSource?.let {
+            _patcherSucceeded.removeSource(it)
+            _isPatchingActive.removeSource(it)
+        }
         currentWorkSource = source
         _patcherSucceeded.addSource(source) { workInfo ->
+            val progressActive =
+                workInfo?.progress?.getBoolean(PatcherWorker.PATCHING_ACTIVE_KEY, false) == true
+            _isPatchingActive.value = progressActive || when (workInfo?.state) {
+                WorkInfo.State.RUNNING,
+                WorkInfo.State.ENQUEUED,
+                WorkInfo.State.BLOCKED -> true
+                else -> false
+            }
             when (workInfo?.state) {
                 WorkInfo.State.SUCCEEDED -> {
                     clearPatchingNotification()
@@ -3243,6 +3278,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                             merged = true
                         )
                     }
+                    reconcileProgressStateAfterSuccess()
                     refreshExportMetadata()
                     _patcherSucceeded.value = true
                 }
@@ -3318,6 +3354,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             handledFailureIds.clear()
             resetStateForRetry()
             markInitialStepRunning()
+            _isPatchingActive.value = true
             patcherWorkerId?.uuid?.let(workManager::cancelWorkById)
             val newId = launchWorker()
             patcherWorkerId = ParcelUuid(newId)

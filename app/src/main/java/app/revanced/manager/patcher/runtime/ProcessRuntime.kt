@@ -30,10 +30,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.AtomicBoolean
 import java.io.File
 import org.koin.core.component.inject
 
@@ -135,6 +137,19 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
         val appProcessBin = resolveAppProcessBin(context)
 
         val patching = CompletableDeferred<Unit>()
+        val finishedReported = AtomicBoolean(false)
+
+        fun completeSuccess() {
+            if (!patching.isCompleted) {
+                patching.complete(Unit)
+            }
+        }
+
+        fun completeFailure(throwable: Throwable) {
+            if (!patching.isCompleted) {
+                patching.completeExceptionally(throwable)
+            }
+        }
 
         launch(Dispatchers.IO) {
             try {
@@ -156,12 +171,26 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
                 Log.d(tag, "Process finished with exit code ${result.resultCode}")
 
                 if (result.resultCode == 0) {
-                    patching.complete(Unit)
+                    if (finishedReported.get()) {
+                        completeSuccess()
+                    } else {
+                        withTimeoutOrNull(FINISHED_CALLBACK_GRACE_PERIOD_MS) {
+                            while (!finishedReported.get() && !patching.isCompleted) {
+                                delay(25)
+                            }
+                        }
+                        if (!patching.isCompleted) {
+                            logger.warn(
+                                "Patcher process exited without finished callback; using process exit fallback."
+                            )
+                            completeSuccess()
+                        }
+                    }
                 } else {
-                    patching.completeExceptionally(ProcessExitException(result.resultCode))
+                    completeFailure(ProcessExitException(result.resultCode))
                 }
             } catch (throwable: Throwable) {
-                patching.completeExceptionally(throwable)
+                completeFailure(throwable)
             }
         }
 
@@ -184,13 +213,14 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
                 }
 
                 override fun finished(exceptionStackTrace: String?) {
+                    finishedReported.set(true)
                     runCatching { binder.exit() }
 
                     exceptionStackTrace?.let {
-                        patching.completeExceptionally(RemoteFailureException(it))
+                        completeFailure(RemoteFailureException(it))
                         return
                     }
-                    patching.complete(Unit)
+                    completeSuccess()
                 }
             }
             eventHandlerRef.set(eventHandler)
@@ -257,6 +287,7 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
         const val CONNECT_TO_APP_ACTION = "CONNECT_TO_APP_ACTION"
         const val INTENT_BUNDLE_KEY = "BUNDLE"
         const val BUNDLE_BINDER_KEY = "BINDER"
+        private const val FINISHED_CALLBACK_GRACE_PERIOD_MS = 1_500L
 
         private fun resolvePropOverride(context: Context) = findLibrary(context, "prop_override")
         private fun resolveAppProcessBin(context: Context): String {

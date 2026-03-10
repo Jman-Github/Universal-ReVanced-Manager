@@ -37,6 +37,7 @@ class Session(
     private val logger: Logger,
     private val input: File,
     private val onEvent: (ProgressEvent) -> Unit,
+    private val checkCancelled: () -> Unit = {},
 ) : Closeable {
     private val tempDir = File(cacheDir).resolve("patcher").also { it.mkdirs() }
     private val frameworkDirFile = File(frameworkDir).also { it.mkdirs() }
@@ -59,12 +60,14 @@ class Session(
         var nextIndex = 0
 
         fun startPatch(index: Int) {
+            checkCancelled()
             if (!started.add(index)) return
             onEvent(ProgressEvent.Started(StepId.ExecutePatch(index)))
         }
 
         startPatch(0)
         this().collect { (patch, exception) ->
+            checkCancelled()
             val index = indexByPatch[patch] ?: return@collect
             if (exception != null) {
                 val error = exception as? Exception ?: Exception(exception)
@@ -105,6 +108,7 @@ class Session(
     }
 
     private suspend fun executePatchesOnce(orderedPatches: PatchList) {
+        checkCancelled()
         with(patcher) {
             logger.info("Merging integrations")
             this += LinkedHashSet(orderedPatches)
@@ -170,9 +174,10 @@ class Session(
         stripNativeLibs: Boolean,
         inputWasSplit: Boolean
     ) {
+        checkCancelled()
         val shouldStripNativeLibs = stripNativeLibs && !inputWasSplit
         val orderedPatches = selectedPatches.sortedBy { it.name }
-        runStep(StepId.ExecutePatches, onEvent) {
+        runStep(StepId.ExecutePatches, onEvent, checkCancelled) {
             java.util.logging.Logger.getLogger("").apply {
                 handlers.forEach {
                     it.close()
@@ -184,6 +189,7 @@ class Session(
             executePatchesWithFrameworkRecovery(orderedPatches)
         }
 
+        checkCancelled()
         onEvent(
             ProgressEvent.Progress(
                 stepId = StepId.WriteAPK,
@@ -192,7 +198,8 @@ class Session(
         )
 
         suspend fun writePatchedApkStep() {
-            runStep(StepId.WriteAPK, onEvent) {
+            runStep(StepId.WriteAPK, onEvent, checkCancelled) {
+                checkCancelled()
                 onEvent(
                     ProgressEvent.Progress(
                         stepId = StepId.WriteAPK,
@@ -213,6 +220,7 @@ class Session(
                 XmlSurrogateSanitizer.sanitize(tempDir.resolve("apk"), logger)
                 validateMissingResourceReferences()
                 validateInvalidNumericCharacterReferences()
+                checkCancelled()
                 val result = patcher.get()
                 val updatedDexNames = mergeDexNames(initialDexNames, result)
                 if (updatedDexNames != initialDexNames) {
@@ -231,6 +239,7 @@ class Session(
                 runInterruptible(Dispatchers.IO) {
                     fastCopy(input, patched)
                 }
+                checkCancelled()
                 onEvent(
                     ProgressEvent.Progress(
                         stepId = StepId.WriteAPK,
@@ -240,10 +249,12 @@ class Session(
                 runInterruptible(Dispatchers.IO) {
                     result.applyTo(patched)
                 }
+                checkCancelled()
 
                 logger.info("Patched apk saved to $patched")
 
                 withContext(Dispatchers.IO) {
+                    checkCancelled()
                     onEvent(
                         ProgressEvent.Progress(
                             stepId = StepId.WriteAPK,
@@ -272,6 +283,7 @@ class Session(
                     )
                 )
                 if (shouldStripNativeLibs) {
+                    checkCancelled()
                     onEvent(
                         ProgressEvent.Progress(
                             stepId = StepId.WriteAPK,
@@ -279,6 +291,7 @@ class Session(
                         )
                     )
                     NativeLibStripper.strip(output)
+                    checkCancelled()
                 }
             }
         }

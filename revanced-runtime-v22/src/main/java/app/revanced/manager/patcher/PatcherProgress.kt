@@ -1,6 +1,7 @@
 package app.revanced.manager.patcher
 
 import android.os.Parcelable
+import kotlinx.coroutines.CancellationException
 import kotlinx.parcelize.Parcelize
 
 @Parcelize
@@ -61,12 +62,18 @@ fun Exception.toRemoteError() = RemoteError(
 inline fun <T> runStep(
     stepId: StepId,
     onEvent: (ProgressEvent) -> Unit,
+    checkCancelled: () -> Unit = {},
     block: () -> T,
 ): T = try {
+    checkCancelled()
     onEvent(ProgressEvent.Started(stepId))
+    checkCancelled()
     val value = block()
+    checkCancelled()
     onEvent(ProgressEvent.Completed(stepId))
     value
+} catch (error: CancellationException) {
+    throw error
 } catch (error: Exception) {
     onEvent(ProgressEvent.Failed(stepId, error.toRemoteError()))
     throw error

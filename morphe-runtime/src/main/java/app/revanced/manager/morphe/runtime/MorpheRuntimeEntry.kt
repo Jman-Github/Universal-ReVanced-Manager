@@ -27,9 +27,16 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.logging.Handler
 import java.util.logging.Level
 import java.util.logging.LogRecord
+import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 object MorpheRuntimeEntry {
+    private const val CANCELLATION_SENTINEL = "__PATCHING_CANCELLED__"
     @JvmStatic
     fun loadMetadata(bundlePaths: List<String>): Map<String, List<Map<String, Any?>>> {
         val result = LinkedHashMap<String, List<Map<String, Any?>>>()
@@ -52,7 +59,13 @@ object MorpheRuntimeEntry {
         val seenDexCompiles = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
         val seenResourceCompile = AtomicBoolean(false)
         val writeApkActive = AtomicBoolean(false)
+        fun throwIfCancelled() {
+            if (callback.isCancelled()) {
+                throw CancellationException("Patching cancelled")
+            }
+        }
         fun onEvent(event: ProgressEvent) {
+            throwIfCancelled()
             when (event.stepId) {
                 StepId.WriteAPK -> when (event) {
                     is ProgressEvent.Started -> {
@@ -106,6 +119,7 @@ object MorpheRuntimeEntry {
 
         val logger = object : Logger() {
             override fun log(level: LogLevel, message: String) {
+                throwIfCancelled()
                 handleWriteProgressLine(message)
                 callback.log(level.name, message)
             }
@@ -142,7 +156,18 @@ object MorpheRuntimeEntry {
             }
 
             runBlocking {
-                val patchList = runStep(StepId.LoadPatches, ::onEvent) {
+                val runtimeJob = coroutineContext[Job]
+                val cancellationWatcher = launch {
+                    while (isActive) {
+                        if (callback.isCancelled()) {
+                            runtimeJob?.cancel(CancellationException("Patching cancelled"))
+                            return@launch
+                        }
+                        delay(50)
+                    }
+                }
+                try {
+                    val patchList = runStep(StepId.LoadPatches, ::onEvent, ::throwIfCancelled) {
                     val activeConfigs = configs.filter { it.patches.isNotEmpty() }
                     val allPatches = MorphePatchBundleLoader.patches(
                         activeConfigs.map { it.bundlePath },
@@ -189,6 +214,7 @@ object MorpheRuntimeEntry {
                     stripNativeLibs,
                     skipUnneededSplits,
                     onProgress = { message ->
+                        throwIfCancelled()
                         onEvent(
                             ProgressEvent.Progress(
                                 stepId = StepId.PrepareSplitApk,
@@ -197,6 +223,7 @@ object MorpheRuntimeEntry {
                         )
                     },
                     onSubSteps = { subSteps ->
+                        throwIfCancelled()
                         onEvent(
                             ProgressEvent.Progress(
                                 stepId = StepId.PrepareSplitApk,
@@ -207,7 +234,7 @@ object MorpheRuntimeEntry {
                 )
                 var preparation: SplitApkPreparer.PreparationResult? = null
                 if (SplitApkPreparer.isSplitArchive(input)) {
-                    preparation = runStep(StepId.PrepareSplitApk, ::onEvent) {
+                    preparation = runStep(StepId.PrepareSplitApk, ::onEvent, ::throwIfCancelled) {
                         prepareInput()
                     }
                 }
@@ -218,7 +245,7 @@ object MorpheRuntimeEntry {
                         .filter { it.patches.isNotEmpty() }
                         .map { File(it.bundlePath) }
                         .toList()
-                    val session = runStep(StepId.ReadAPK, ::onEvent) {
+                    val session = runStep(StepId.ReadAPK, ::onEvent, ::throwIfCancelled) {
                         val preparedInput = preparation ?: prepareInput().also { preparation = it }
                         val selectedAaptPath = AaptSelector.select(
                             aaptPath,
@@ -242,12 +269,14 @@ object MorpheRuntimeEntry {
                             logger = logger,
                             input = preparedInput.file,
                             onEvent = ::onEvent,
+                            checkCancelled = ::throwIfCancelled,
                         )
                     }
                     val preparedInput = requireNotNull(preparation) {
                         "APK preparation did not produce an input file."
                     }
 
+                    throwIfCancelled()
                     session.use {
                         it.run(
                             File(outputFile),
@@ -259,9 +288,14 @@ object MorpheRuntimeEntry {
                 } finally {
                     preparation?.cleanup()
                 }
+                } finally {
+                    cancellationWatcher.cancel()
+                }
             }
 
             null
+        } catch (cancelled: CancellationException) {
+            CANCELLATION_SENTINEL
         } catch (throwable: Throwable) {
             val extra = aaptLogs.dump()
             val stack = throwable.stackTraceToString()

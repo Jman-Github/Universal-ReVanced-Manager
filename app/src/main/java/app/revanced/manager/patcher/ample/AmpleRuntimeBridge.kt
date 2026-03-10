@@ -12,6 +12,7 @@ import dalvik.system.DexClassLoader
 import java.io.File
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
+import kotlinx.coroutines.CancellationException
 
 object AmpleRuntimeBridge {
     private const val ENTRY_CLASS_NAME = "app.revanced.manager.ample.runtime.AmpleRuntimeEntry"
@@ -19,6 +20,7 @@ object AmpleRuntimeBridge {
     private const val LOAD_METADATA_METHOD = "loadMetadata"
     private const val LOAD_METADATA_FOR_BUNDLE_METHOD = "loadMetadataForBundle"
     private const val RUN_PATCHER_METHOD = "runPatcher"
+    private const val CANCELLATION_SENTINEL = "__PATCHING_CANCELLED__"
 
     @Volatile
     private var appContext: Context? = null
@@ -70,7 +72,8 @@ object AmpleRuntimeBridge {
     fun runPatcher(
         params: Map<String, Any?>,
         logger: Logger,
-        onEvent: (ProgressEvent) -> Unit
+        onEvent: (ProgressEvent) -> Unit,
+        isCancelled: () -> Boolean = { false }
     ): String? {
         val entry = ensureEntryClass()
         val callback = ensureCallbackClass()
@@ -92,11 +95,16 @@ object AmpleRuntimeBridge {
                     onEvent(mapToProgressEvent(raw))
                     null
                 }
+                "isCancelled" -> isCancelled()
                 else -> null
             }
         }
         val method = ensureRunPatcherMethod()
-        return method.invoke(null, params, proxy) as? String
+        val result = method.invoke(null, params, proxy) as? String
+        if (result == CANCELLATION_SENTINEL) {
+            throw CancellationException("Patching cancelled")
+        }
+        return result
     }
 
     private fun ensureLoadMetadataMethod(): Method = synchronized(lock) {

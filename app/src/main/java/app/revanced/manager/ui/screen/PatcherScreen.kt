@@ -121,6 +121,7 @@ fun PatcherScreen(
     }
 
     val patcherSucceeded by viewModel.patcherSucceeded.observeAsState(null)
+    val isPatchingActive by viewModel.isPatchingActive.observeAsState(false)
     val isMounting = viewModel.activeInstallType == InstallType.MOUNT
     val canInstall by remember { derivedStateOf { patcherSucceeded == true && (viewModel.installedPackageName != null || !viewModel.isInstalling) } }
     var showDismissConfirmationDialog by rememberSaveable { mutableStateOf(false) }
@@ -196,7 +197,7 @@ fun PatcherScreen(
     }
 
     fun requestLeave(toDashboard: Boolean) = when {
-        patcherSucceeded == null -> {
+        isPatchingActive -> {
             leaveToDashboardRequested = toDashboard
             showDismissConfirmationDialog = true
         }
@@ -236,7 +237,7 @@ fun PatcherScreen(
         }
     }
 
-    if (patcherSucceeded == null) {
+    if (isPatchingActive) {
         DisposableEffect(Unit) {
             val window = (context as Activity).window
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)

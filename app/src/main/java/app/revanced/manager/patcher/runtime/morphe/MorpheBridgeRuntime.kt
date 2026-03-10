@@ -7,8 +7,22 @@ import app.revanced.manager.patcher.morphe.MorpheBridgeFailureException
 import app.revanced.manager.patcher.morphe.MorpheRuntimeBridge
 import app.revanced.manager.util.Options
 import app.revanced.manager.util.PatchSelection
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.CancellationException
 
 class MorpheBridgeRuntime(context: Context) : MorpheRuntime(context) {
+    private val cancelRequested = AtomicBoolean(false)
+
+    override fun cancel() {
+        cancelRequested.set(true)
+    }
+
+    private fun ensureNotCancelled() {
+        if (cancelRequested.get()) {
+            throw CancellationException("Patching cancelled")
+        }
+    }
+
     override suspend fun execute(
         inputFile: String,
         outputFile: String,
@@ -20,6 +34,7 @@ class MorpheBridgeRuntime(context: Context) : MorpheRuntime(context) {
         stripNativeLibs: Boolean,
         skipUnneededSplits: Boolean,
     ) {
+        ensureNotCancelled()
         val activeSelectedPatches = selectedPatches.filterValues { it.isNotEmpty() }
         val selectedBundleIds = activeSelectedPatches.keys
         val bundlesByUid = bundles()
@@ -55,7 +70,8 @@ class MorpheBridgeRuntime(context: Context) : MorpheRuntime(context) {
             "configurations" to configs
         )
 
-        val error = MorpheRuntimeBridge.runPatcher(params, logger, onEvent)
+        ensureNotCancelled()
+        val error = MorpheRuntimeBridge.runPatcher(params, logger, onEvent, cancelRequested::get)
         if (!error.isNullOrBlank()) {
             throw MorpheBridgeFailureException(error)
         }

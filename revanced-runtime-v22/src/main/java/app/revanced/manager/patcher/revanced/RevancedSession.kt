@@ -39,6 +39,7 @@ class RevancedSession(
     private val logger: Logger,
     private val input: File,
     private val onEvent: (ProgressEvent) -> Unit,
+    private val checkCancelled: () -> Unit = {},
 ) : Closeable {
     private val tempDir = File(cacheDir).resolve("patcher").also { it.mkdirs() }
     private val frameworkDirFile = File(frameworkDir).also { it.mkdirs() }
@@ -67,6 +68,7 @@ class RevancedSession(
             patches.getOrNull(index)?.name ?: "Patch #${index + 1}"
 
         fun startPatch(index: Int) {
+            checkCancelled()
             if (index !in patches.indices) return
             if (!started.add(index)) return
             onEvent(ProgressEvent.Started(StepId.ExecutePatch(index)))
@@ -77,6 +79,7 @@ class RevancedSession(
         }
 
         val patchResult = runPatcher { result ->
+            checkCancelled()
             val patch = result.patch
             val exception = result.exception
             val index = indexByPatch[patch] ?: return@runPatcher
@@ -128,6 +131,7 @@ class RevancedSession(
     }
 
     private suspend fun executePatchesOnce(orderedPatches: RevancedPatchList): PatchesResult {
+        checkCancelled()
         if (orderedPatches.isNotEmpty()) {
             onEvent(ProgressEvent.Started(StepId.ExecutePatch(0)))
         }
@@ -195,9 +199,10 @@ class RevancedSession(
         stripNativeLibs: Boolean,
         inputWasSplit: Boolean
     ) {
+        checkCancelled()
         val shouldStripNativeLibs = stripNativeLibs && !inputWasSplit
         val orderedPatches = selectedPatches.sortedBy { it.name.orEmpty() }
-        val patchResult = runStep(StepId.ExecutePatches, onEvent) {
+        val patchResult = runStep(StepId.ExecutePatches, onEvent, checkCancelled) {
             java.util.logging.Logger.getLogger("").apply {
                 handlers.forEach {
                     it.close()
@@ -210,9 +215,11 @@ class RevancedSession(
 
         // Ensure patch rows are finalized before write/sign steps begin.
         orderedPatches.indices.forEach { index ->
+            checkCancelled()
             onEvent(ProgressEvent.Completed(StepId.ExecutePatch(index)))
         }
 
+        checkCancelled()
         onEvent(
             ProgressEvent.Progress(
                 stepId = StepId.WriteAPK,
@@ -221,7 +228,8 @@ class RevancedSession(
         )
 
         suspend fun writePatchedApkStep() {
-            runStep(StepId.WriteAPK, onEvent) {
+            runStep(StepId.WriteAPK, onEvent, checkCancelled) {
+                checkCancelled()
                 onEvent(
                     ProgressEvent.Progress(
                         stepId = StepId.WriteAPK,
@@ -256,6 +264,7 @@ class RevancedSession(
                 runInterruptible(Dispatchers.IO) {
                     fastCopy(input, patched)
                 }
+                checkCancelled()
                 onEvent(
                     ProgressEvent.Progress(
                         stepId = StepId.WriteAPK,
@@ -265,10 +274,12 @@ class RevancedSession(
                 runInterruptible(Dispatchers.IO) {
                     applyResultToApk(patched, patchResult)
                 }
+                checkCancelled()
 
                 logger.info("Patched apk saved to $patched")
 
                 withContext(Dispatchers.IO) {
+                    checkCancelled()
                     onEvent(
                         ProgressEvent.Progress(
                             stepId = StepId.WriteAPK,
@@ -297,6 +308,7 @@ class RevancedSession(
                     )
                 )
                 if (shouldStripNativeLibs) {
+                    checkCancelled()
                     onEvent(
                         ProgressEvent.Progress(
                             stepId = StepId.WriteAPK,
@@ -304,6 +316,7 @@ class RevancedSession(
                         )
                     )
                     NativeLibStripper.strip(output)
+                    checkCancelled()
                 }
             }
         }
@@ -314,6 +327,7 @@ class RevancedSession(
     private fun applyResultToApk(apkFile: File, result: PatchesResult) {
         ZFile.openReadWrite(apkFile, zFileOptions).use { apk ->
             result.dexFiles.forEach { dex ->
+                checkCancelled()
                 val entryName = dex.name
                 if (isDexEntryName(entryName)) {
                     onEvent(
