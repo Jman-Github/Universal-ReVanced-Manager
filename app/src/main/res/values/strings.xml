@@ -961,6 +961,7 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="not_installed">Not installed</string>
     <string name="installed">Installed</string>
     <string name="app_info">App info</string>
+    <string name="preparing_to_patch">Preparing to patch</string>
     <string name="uninstall">Uninstall</string>
     <string name="repatch">Repatch</string>
     <string name="install_type">Installation type</string>

@@ -59,6 +59,7 @@
 - Improved patch bundle update notifications to use clearer "update found" wording and correct singular/plural grammar for available bundle updates https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/235
 - Added persistent tracking for the currently viewed manager update version so the icon state stays correct across app restarts https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/232
 - Reordered the General settings screen so Navigation & Tabs appears before Themes, while Themes and Background remain grouped together https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/234
+- Renamed the screen shown after selecting an app to patch from App info to `Preparing to patch` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/264
 
 
 # Bug fixes

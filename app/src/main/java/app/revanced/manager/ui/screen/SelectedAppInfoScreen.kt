@@ -330,7 +330,7 @@ fun SelectedAppInfoScreen(
     Scaffold(
         topBar = {
             AppTopBar(
-                title = stringResource(R.string.app_info),
+                title = stringResource(R.string.preparing_to_patch),
                 scrollBehavior = scrollBehavior,
                 onBackClick = onBackClick
             )
