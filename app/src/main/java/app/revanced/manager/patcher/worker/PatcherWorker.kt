@@ -340,7 +340,23 @@ class PatcherWorker(
             .coerceIn(start, end)
     }
 
+    private fun stopForegroundUpdates() {
+        activeRuntime?.cancel()
+        activeMorpheRuntime?.cancel()
+        activeAmpleRuntime?.cancel()
+        patchNotificationSteps = emptyList()
+        foregroundStarted = false
+        clearForegroundNotificationIfOwned()
+    }
+
+    private fun shouldSkipForegroundUpdates(): Boolean {
+        if (!isStopped) return false
+        stopForegroundUpdates()
+        return true
+    }
+
     private fun updateForegroundNotification(event: ProgressEvent?, totalPatchCount: Int) {
+        if (shouldSkipForegroundUpdates()) return
         val notification = createNotification(event, totalPatchCount)
         try {
             if (!foregroundStarted) {
@@ -424,9 +440,7 @@ class PatcherWorker(
             if (wakeLock.isHeld) {
                 wakeLock.release()
             }
-            patchNotificationSteps = emptyList()
-            foregroundStarted = false
-            clearForegroundNotificationIfOwned()
+            stopForegroundUpdates()
         }
     }
 
@@ -438,7 +452,8 @@ class PatcherWorker(
             .flatten()
             .sorted()
             .toList()
-        val eventDispatcher: (ProgressEvent) -> Unit = { event ->
+        val eventDispatcher: (ProgressEvent) -> Unit = eventDispatcher@{ event ->
+            if (shouldSkipForegroundUpdates()) return@eventDispatcher
             args.onEvent(event)
             updateForegroundNotification(event, totalPatchCount)
         }

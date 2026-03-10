@@ -1355,7 +1355,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         if (_patcherSucceeded.value == null) {
             val workId = patcherWorkerId?.uuid
             workId?.let(workManager::cancelWorkById)
-            clearPatchingNotification()
             cleanupTemporaryLocalInputAfterWorkStops(workId)
         }
         tempDir.deleteRecursively()

@@ -125,6 +125,7 @@
 - Fixed manager update notifications being suppressed after notification permission is turned off and back on
 - Clarified package selection text to use generic app package wording instead of APK-only wording for local files and patch profiles https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/264
 - Fixed (hopefully) the fullscreen back gesture showing the wrong screen preview so the back animation now matches the actual destination screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/280
+- Fixed an issue where the `Patching in progress` notification could remain visible after canceling patching https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/285`
 
 
 # CI
