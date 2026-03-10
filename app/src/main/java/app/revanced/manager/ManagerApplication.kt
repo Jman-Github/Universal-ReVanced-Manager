@@ -100,10 +100,10 @@ class ManagerApplication : Application() {
 
         scope.launch {
             prefs.preload()
-            workerRepository.scheduleBundleUpdateNotificationWork(
+            workerRepository.ensureBundleUpdateNotificationWork(
                 prefs.searchForUpdatesBackgroundInterval.get()
             )
-            workerRepository.scheduleManagerUpdateNotificationWork(
+            workerRepository.ensureManagerUpdateNotificationWork(
                 prefs.searchForManagerUpdatesBackgroundInterval.get()
             )
             val currentApi = prefs.api.get()

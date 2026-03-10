@@ -69,6 +69,7 @@ class ManagerUpdateNotificationWorker(
             }
 
             if (!applicationContext.hasNotificationPermission()) {
+                clearPendingState(notificationManager)
                 return Result.success()
             }
 

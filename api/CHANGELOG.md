@@ -110,6 +110,10 @@
 - Fixed an issue where the `Patching in progress` notification would clear early https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/257
 - Fixed an issue where the `Patchng in progress` notification would appear late https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/285
 - Fixed an issue where on fresh installs the user would be required to regenerate the keystore manually
+- Fixed background bundle and manager update checks being rescheduled on every app launch
+- Fixed websocket-triggered update checks so newer refreshes are not dropped behind older queued work
+- Fixed stale bundle update notifications not clearing when no updates remain
+- Fixed manager update notifications being suppressed after notification permission is turned off and back on
 
 
 # CI

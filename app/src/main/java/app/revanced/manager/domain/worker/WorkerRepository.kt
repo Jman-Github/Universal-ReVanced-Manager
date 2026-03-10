@@ -26,6 +26,13 @@ import java.util.concurrent.TimeUnit
 class WorkerRepository(app: Application) {
     val workManager = WorkManager.getInstance(app)
 
+    private companion object {
+        private const val BUNDLE_UPDATE_WORK_ID = "BundleUpdateNotificationWork"
+        private const val MANAGER_UPDATE_WORK_ID = "ManagerUpdateNotificationWork"
+        private const val BUNDLE_UPDATE_IMMEDIATE_WORK_ID = "BundleUpdateNotificationWorkImmediate"
+        private const val MANAGER_UPDATE_IMMEDIATE_WORK_ID = "ManagerUpdateNotificationWorkImmediate"
+    }
+
     /**
      * The standard WorkManager communication APIs use [androidx.work.Data], which has too many limitations.
      * We can get around those limits by passing inputs using global variables instead.
@@ -97,7 +104,7 @@ class WorkerRepository(app: Application) {
     fun scheduleBundleUpdateNotificationWork(
         bundleUpdateTime: SearchForUpdatesBackgroundInterval
     ) {
-        val workId = "BundleUpdateNotificationWork"
+        val workId = BUNDLE_UPDATE_WORK_ID
         if (bundleUpdateTime == SearchForUpdatesBackgroundInterval.NEVER) {
             workManager.cancelUniqueWork(workId)
             Log.d("WorkManager", "Cancelled job with workId $workId.")
@@ -121,10 +128,37 @@ class WorkerRepository(app: Application) {
         )
     }
 
+    fun ensureBundleUpdateNotificationWork(
+        bundleUpdateTime: SearchForUpdatesBackgroundInterval
+    ) {
+        val workId = BUNDLE_UPDATE_WORK_ID
+        if (bundleUpdateTime == SearchForUpdatesBackgroundInterval.NEVER) {
+            workManager.cancelUniqueWork(workId)
+            Log.d("WorkManager", "Cancelled job with workId $workId.")
+            return
+        }
+
+        val workRequest =
+            PeriodicWorkRequestBuilder<BundleUpdateNotificationWorker>(
+                bundleUpdateTime.value,
+                TimeUnit.MINUTES
+            ).build()
+
+        workManager.enqueueUniquePeriodicWork(
+            workId,
+            ExistingPeriodicWorkPolicy.UPDATE,
+            workRequest
+        )
+        Log.d(
+            "WorkManager",
+            "Periodic work $workId reconciled with time ${bundleUpdateTime.value}."
+        )
+    }
+
     fun scheduleManagerUpdateNotificationWork(
         managerUpdateTime: SearchForUpdatesBackgroundInterval
     ) {
-        val workId = "ManagerUpdateNotificationWork"
+        val workId = MANAGER_UPDATE_WORK_ID
         if (managerUpdateTime == SearchForUpdatesBackgroundInterval.NEVER) {
             workManager.cancelUniqueWork(workId)
             Log.d("WorkManager", "Cancelled job with workId $workId.")
@@ -148,13 +182,40 @@ class WorkerRepository(app: Application) {
         )
     }
 
+    fun ensureManagerUpdateNotificationWork(
+        managerUpdateTime: SearchForUpdatesBackgroundInterval
+    ) {
+        val workId = MANAGER_UPDATE_WORK_ID
+        if (managerUpdateTime == SearchForUpdatesBackgroundInterval.NEVER) {
+            workManager.cancelUniqueWork(workId)
+            Log.d("WorkManager", "Cancelled job with workId $workId.")
+            return
+        }
+
+        val workRequest =
+            PeriodicWorkRequestBuilder<ManagerUpdateNotificationWorker>(
+                managerUpdateTime.value,
+                TimeUnit.MINUTES
+            ).build()
+
+        workManager.enqueueUniquePeriodicWork(
+            workId,
+            ExistingPeriodicWorkPolicy.UPDATE,
+            workRequest
+        )
+        Log.d(
+            "WorkManager",
+            "Periodic work $workId reconciled with time ${managerUpdateTime.value}."
+        )
+    }
+
     fun launchBundleUpdateNotificationNow(): UUID {
         val request = OneTimeWorkRequest.Builder(BundleUpdateNotificationWorker::class.java)
             .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .build()
         workManager.enqueueUniqueWork(
-            "BundleUpdateNotificationWorkImmediate",
-            ExistingWorkPolicy.KEEP,
+            BUNDLE_UPDATE_IMMEDIATE_WORK_ID,
+            ExistingWorkPolicy.REPLACE,
             request
         )
         return request.id
@@ -165,8 +226,8 @@ class WorkerRepository(app: Application) {
             .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .build()
         workManager.enqueueUniqueWork(
-            "ManagerUpdateNotificationWorkImmediate",
-            ExistingWorkPolicy.KEEP,
+            MANAGER_UPDATE_IMMEDIATE_WORK_ID,
+            ExistingWorkPolicy.REPLACE,
             request
         )
         return request.id

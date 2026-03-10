@@ -208,7 +208,10 @@ class BundleUpdateNotificationWorker(
                         )
                         notificationManager.notify(BUNDLE_NOTIFICATION_ID, notification)
                     }
+                    else -> notificationManager.cancel(BUNDLE_NOTIFICATION_ID)
                 }
+            } else {
+                notificationManager.cancel(BUNDLE_NOTIFICATION_ID)
             }
 
             Result.success()
