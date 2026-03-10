@@ -27,6 +27,7 @@ import app.revanced.manager.domain.repository.DownloaderPluginRepository
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.network.downloader.LoadedDownloaderPlugin
 import app.revanced.manager.network.api.ReVancedAPI
+import app.revanced.manager.network.dto.ReVancedAsset
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.patcher.split.SplitMergeProcessRuntime
 import app.revanced.manager.util.PM
@@ -94,8 +95,10 @@ class DashboardViewModel(
      */
     val android11BugActive get() = Build.VERSION.SDK_INT == Build.VERSION_CODES.R && !pm.canInstallPackages()
 
-    var updatedManagerVersion: String? by mutableStateOf(null)
+    var updatedManagerRelease: ReVancedAsset? by mutableStateOf(null)
         private set
+    val updatedManagerVersion: String?
+        get() = updatedManagerRelease?.version
     var showBatteryOptimizationsWarning by mutableStateOf(false)
         private set
 
@@ -138,7 +141,7 @@ class DashboardViewModel(
 
         uiSafe(app, R.string.failed_to_check_updates, "Failed to check for updates") {
             val update = reVancedAPI.getAppUpdate()
-            updatedManagerVersion = update?.version
+            updatedManagerRelease = update
             if (update == null && prefs.viewedManagerUpdateVersion.get().isNotEmpty()) {
                 prefs.viewedManagerUpdateVersion.update("")
             }

@@ -1207,15 +1207,15 @@ fun DashboardScreen(
 
     var showUpdateDialog by rememberSaveable { mutableStateOf(vm.prefs.showManagerUpdateDialogOnLaunch.getBlocking()) }
     val availableUpdate by remember {
-        derivedStateOf { vm.updatedManagerVersion.takeIf { showUpdateDialog } }
+        derivedStateOf { vm.updatedManagerRelease.takeIf { showUpdateDialog } }
     }
 
-    availableUpdate?.let { version ->
+    availableUpdate?.let { releaseInfo ->
         AvailableUpdateDialog(
             onDismiss = { showUpdateDialog = false },
             setShowManagerUpdateDialogOnLaunch = vm::setShowManagerUpdateDialogOnLaunch,
             onConfirm = onUpdateClick,
-            newVersion = version
+            releaseInfo = releaseInfo
         )
     }
 

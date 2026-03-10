@@ -64,6 +64,7 @@
 - Improved the Patch Profiles bundle selector with tabbed bundle switching and cleaner bundle source labeling https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/242
 - Improved patch option viewing in Patch Profiles with a three-dots menu for patches with options
 - Clarified changelog link wording by changing the external action to `View changelogs on GitHub` on the manager update and changelog settings screens https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/233
+- Added a scrollable changelog preview directly to the manager update popup, so release notes can be read without opening the full updater screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/229
 
 
 # Bug fixes

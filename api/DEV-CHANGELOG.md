@@ -1,3 +1,11 @@
+# v1.8.1-dev.08 (2026-03-12)
+
+
+# Features
+
+- Added a scrollable changelog preview directly to the manager update popup, so release notes can be read without opening the full updater screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/229
+
+
 # v1.8.1-dev.07 (2026-03-10)
 
 
@@ -7,7 +15,7 @@
 - Added live substep counts to patcher progress group https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/261
 - Improved app and patch search so closing search keeps filtered results visible, and both system back and top-bar back clear the search before leaving https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/261
 - Improved patch option previews with a larger inline preview and a full preview dialog for long values like file paths https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/261
-- Improved patch profile APK handling by preserving split archive extensions, loading split APK icons correctly and using detected APK versions for compatibilit https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/261
+- Improved patch profile APK handling by preserving split archive extensions, loading split APK icons correctly and using detected APK versions for compatibilitu https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/261
 - Patch profiles can now use the version detected from a selected APK
 - Added an option to only keep the latest plugin-downloaded APK per app
 - Added a delete confirmation for selected downloaded apps in `Downloads`
