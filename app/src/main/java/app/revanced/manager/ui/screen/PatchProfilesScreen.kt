@@ -825,6 +825,17 @@ fun PatchProfilesScreen(
                                         Divider(color = MaterialTheme.colorScheme.outlineVariant)
                                     }
                                 }
+                                val patchCountText = pluralStringResource(
+                                    R.plurals.patch_profile_bundle_patch_count,
+                                    detail.patches.size,
+                                    detail.patches.size
+                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    ProfileMetaPill(text = patchCountText)
+                                }
                                 Surface(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(12.dp),

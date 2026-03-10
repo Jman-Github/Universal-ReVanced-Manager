@@ -696,15 +696,14 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
                 keepExistingVersion = keepExistingProfileVersion,
                 existingProfileVersion = existingProfileVersion
             )
-        val selection = (customPatchSelection ?: currentDefaultSelection).toPatchSelection()
-        val options = getOptions()
+        val snapshot = snapshotPatchProfileState(selectedBundles)
         val displayNames = bundleDisplayNames.first()
         val endpoints = bundleEndpoints.first()
         val identifiers = bundleIdentifiers.first()
 
-        val bundles = selectedBundles.map { bundleUid ->
-            val patches = selection[bundleUid]?.toList().orEmpty()
-            val serializedOptions = serializeOptions(bundleUid, patches.toSet(), options)
+        val bundles = snapshot.bundleOrder.map { bundleUid ->
+            val patches = snapshot.selection[bundleUid]?.toList().orEmpty()
+            val serializedOptions = serializeOptions(bundleUid, patches.toSet(), snapshot.options)
             PatchProfilePayload.Bundle(
                 bundleUid = bundleUid,
                 patches = patches,
@@ -771,6 +770,38 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
 
     suspend fun previewResolvedAppVersion(selectedBundles: Set<Int>): String? =
         resolveAppVersion(selectedBundles)
+
+    private data class PatchProfileStateSnapshot(
+        val bundleOrder: List<Int>,
+        val selection: PatchSelection,
+        val options: Options
+    )
+
+    private fun snapshotPatchProfileState(selectedBundles: Set<Int>): PatchProfileStateSnapshot {
+        val liveSelection = (customPatchSelection ?: currentDefaultSelection).toPatchSelection()
+        val knownBundleOrder = currentBundles.map(PatchBundleInfo.Scoped::uid).filter { it in selectedBundles }
+        val remainingBundles = selectedBundles.filterNot { it in knownBundleOrder }
+        val bundleOrder = knownBundleOrder + remainingBundles
+        val selection = bundleOrder.associateWith { bundleUid -> liveSelection[bundleUid].orEmpty() }
+        val liveOptions = getOptions()
+        val options = bundleOrder.mapNotNull { bundleUid ->
+            val selectedPatches = selection[bundleUid].orEmpty()
+            val filteredBundleOptions = liveOptions[bundleUid]
+                ?.let { bundleOptions ->
+                    if (selectedPatches.isEmpty()) bundleOptions
+                    else bundleOptions.filterKeys { it in selectedPatches }
+                }
+                ?.takeUnless { it.isEmpty() }
+                ?: return@mapNotNull null
+            bundleUid to filteredBundleOptions
+        }.toMap()
+
+        return PatchProfileStateSnapshot(
+            bundleOrder = bundleOrder,
+            selection = selection,
+            options = options
+        )
+    }
 
     private data class SerializedOptions(
         val values: Map<String, Map<String, StoredOption.SerializedValue>>,
