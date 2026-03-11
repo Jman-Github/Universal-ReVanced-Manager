@@ -310,7 +310,11 @@ class SelectedAppInfoViewModel(
     private var selectionState: SelectionState by mutableStateOf(
         if (input.patches != null) SelectionState.Customized(input.patches) else SelectionState.Default
     )
-    private val shouldLoadPersistedSelection = input.patches == null
+    private val shouldLoadPersistedSelection =
+        persistConfiguration &&
+            input.profileId == null &&
+            input.patches == null &&
+            input.selectionPayloadJson == null
 
     init {
         if (shouldLoadPersistedSelection) {

@@ -13,6 +13,7 @@
 
 - Fixed (hopefully) the fullscreen back gesture showing the wrong screen preview so the back animation now matches the actual destination screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/280
 - Fixed an issue where the `Patching in progress` notification could remain visible after canceling patching https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/285`
+- Fixed patch profiles and last used patch selections/options from overriding each other
 
 
 # v1.8.1-dev.07 (2026-03-10)

@@ -440,6 +440,7 @@ private fun ReVancedManager(
                         SelectedApplicationInfo.ViewModelParams(
                             app = selectedApp,
                             patches = null,
+                            persistConfiguration = false,
                             profileId = launchData.profile.uid,
                             requiresSourceSelection = apkFile == null
                         )
