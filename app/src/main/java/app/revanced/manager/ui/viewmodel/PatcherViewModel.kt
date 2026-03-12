@@ -79,6 +79,7 @@ import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.patcher.patch.PatchBundleInfo
 import app.revanced.manager.patcher.patch.PatchBundleType
 import app.revanced.manager.util.buildSavedAppEntryKey
+import app.revanced.manager.util.buildSavedAppVariantIdentity
 import app.revanced.manager.util.isSavedAppEntryForPackage
 import app.revanced.manager.util.saveableVar
 import app.revanced.manager.util.saver.snapshotStateListSaver
@@ -1166,16 +1167,24 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 sanitizedOptionsFinal
             )
 
-            val newBundleUids = sanitizedSelectionFinal.keys.toSet()
+            val newVariantIdentity = buildSavedAppVariantIdentity(
+                appVersion = finalVersion,
+                selectionPayload = selectionPayload,
+                patchSelection = sanitizedSelectionFinal
+            )
             val savedEntriesForPackage = installedAppRepository.getByInstallType(InstallType.SAVED)
                 .filter { savedApp ->
                     isSavedAppEntryForPackage(savedApp.currentPackageName, finalPackageName)
                 }
+            val savedEntryIdentities = mutableMapOf<String, String>()
+            savedEntriesForPackage.forEach { savedApp ->
+                savedEntryIdentities[savedApp.currentPackageName] = savedEntryIdentity(savedApp)
+            }
             val matchingSavedEntry = if (disableSavedAppOverwrite) {
                 null
             } else {
                 savedEntriesForPackage.firstOrNull { savedApp ->
-                    savedEntryBundleUids(savedApp) == newBundleUids
+                    savedEntryIdentities[savedApp.currentPackageName] == newVariantIdentity
                 }
             }
             val preserveSavedEntry =
@@ -1185,28 +1194,46 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     )
             val persistedInstallType = if (preserveSavedEntry) InstallType.SAVED else installType
             val existingFinalPackageEntry = installedAppRepository.get(finalPackageName)
+            val existingInstalledEntry = existingFinalPackageEntry?.takeIf {
+                it.installType != InstallType.SAVED
+            }
+            val effectiveShouldSaveForLater = shouldSaveForLater || preserveSavedEntry
+            val existingInstalledIdentity = existingInstalledEntry?.let { savedEntryIdentity(it) }
+            if (
+                disableSavedAppOverwrite &&
+                effectiveShouldSaveForLater &&
+                persistedInstallType != InstallType.SAVED &&
+                existingInstalledEntry != null &&
+                existingInstalledIdentity != null &&
+                existingInstalledIdentity != newVariantIdentity &&
+                existingInstalledIdentity !in savedEntryIdentities.values
+            ) {
+                preserveHistoricalInstalledEntry(
+                    sourceApp = existingInstalledEntry,
+                    targetPackageName = buildSavedAppEntryKey(finalPackageName, existingInstalledIdentity)
+                )
+            }
             val persistedPackageName = if (persistedInstallType == InstallType.SAVED) {
                 if (disableSavedAppOverwrite) {
-                    buildUniqueSavedAppEntryKey(finalPackageName, newBundleUids)
+                    buildUniqueSavedAppEntryKey(finalPackageName, newVariantIdentity)
                 } else {
                     matchingSavedEntry?.currentPackageName ?: run {
                         val canUseBaseKey = savedEntriesForPackage.isEmpty() &&
                             (existingFinalPackageEntry == null || existingFinalPackageEntry.installType == InstallType.SAVED)
                         if (canUseBaseKey) finalPackageName
-                        else buildSavedAppEntryKey(finalPackageName, newBundleUids)
+                        else buildSavedAppEntryKey(finalPackageName, newVariantIdentity)
                     }
                 }
             } else {
                 finalPackageName
             }
 
-            val effectiveShouldSaveForLater = shouldSaveForLater || preserveSavedEntry
             val separateSavedEntryPackageName = if (
                 persistedInstallType != InstallType.SAVED &&
                 effectiveShouldSaveForLater &&
                 disableSavedAppOverwrite
             ) {
-                buildUniqueSavedAppEntryKey(finalPackageName, newBundleUids)
+                buildUniqueSavedAppEntryKey(finalPackageName, newVariantIdentity)
             } else {
                 null
             }
@@ -1241,7 +1268,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     finalVersion,
                     persistedInstallType,
                     sanitizedSelectionFinal,
-                    selectionPayload
+                    selectionPayload,
+                    resetCreatedAt = true
                 )
             }
             if (
@@ -3534,18 +3562,54 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
     }
 
-    private suspend fun savedEntryBundleUids(installedApp: InstalledApp): Set<Int> {
-        val payloadBundles = installedApp.selectionPayload
-            ?.bundles
-            ?.map { it.bundleUid }
-            ?.toSet()
-            .orEmpty()
-        if (payloadBundles.isNotEmpty()) return payloadBundles
-        return installedAppRepository.getAppliedPatches(installedApp.currentPackageName).keys
+    private suspend fun savedEntryIdentity(installedApp: InstalledApp): String {
+        val patchSelection = installedAppRepository.getAppliedPatches(installedApp.currentPackageName)
+        return buildSavedAppVariantIdentity(
+            appVersion = installedApp.version,
+            selectionPayload = installedApp.selectionPayload,
+            patchSelection = patchSelection
+        )
     }
 
-    private fun buildUniqueSavedAppEntryKey(packageName: String, bundleUids: Set<Int>): String {
-        val keyBase = buildSavedAppEntryKey(packageName, bundleUids)
+    private fun savedApkFile(installedApp: InstalledApp): File? {
+        val candidates = listOf(
+            fs.getPatchedAppFile(installedApp.currentPackageName, installedApp.version),
+            fs.getPatchedAppFile(installedApp.originalPackageName, installedApp.version)
+        ).distinct()
+        candidates.firstOrNull { it.exists() }?.let { return it }
+        return fs.findPatchedAppFile(installedApp.currentPackageName)
+            ?: fs.findPatchedAppFile(installedApp.originalPackageName)
+    }
+
+    private suspend fun preserveHistoricalInstalledEntry(
+        sourceApp: InstalledApp,
+        targetPackageName: String
+    ) {
+        val sourceApk = savedApkFile(sourceApp) ?: return
+        val targetApk = fs.getPatchedAppFile(targetPackageName, sourceApp.version)
+        if (!sourceApk.absolutePath.equals(targetApk.absolutePath, ignoreCase = true)) {
+            try {
+                targetApk.parentFile?.mkdirs()
+                sourceApk.copyTo(targetApk, overwrite = true)
+            } catch (error: IOException) {
+                Log.w(TAG, "Failed to archive previous patched app for ${sourceApp.currentPackageName}", error)
+                return
+            }
+        }
+        val sourceSelection = installedAppRepository.getAppliedPatches(sourceApp.currentPackageName)
+        installedAppRepository.addOrUpdate(
+            currentPackageName = targetPackageName,
+            originalPackageName = sourceApp.originalPackageName,
+            version = sourceApp.version,
+            installType = InstallType.SAVED,
+            patchSelection = sourceSelection,
+            selectionPayload = sourceApp.selectionPayload,
+            createdAtOverride = sourceApp.createdAt
+        )
+    }
+
+    private fun buildUniqueSavedAppEntryKey(packageName: String, variantIdentity: String): String {
+        val keyBase = buildSavedAppEntryKey(packageName, variantIdentity)
         val nonce = UUID.randomUUID().toString().replace("-", "").take(8)
         return "${keyBase}__${nonce}"
     }

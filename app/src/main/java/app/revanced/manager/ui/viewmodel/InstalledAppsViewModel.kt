@@ -420,13 +420,39 @@ class InstalledAppsViewModel(
 
             when (installedApp.installType) {
                 InstallType.SAVED -> {
-                    val savedFile = filesystem.getPatchedAppFile(packageName, installedApp.version)
-                    val resolvedFile = if (savedFile.exists()) {
-                        savedFile
+                    val expectedSavedFile = filesystem.getPatchedAppFile(packageName, installedApp.version)
+                    val resolvedFile = if (expectedSavedFile.exists()) {
+                        expectedSavedFile
                     } else {
                         filesystem.findPatchedAppFile(packageName)
+                            ?: filesystem.findPatchedAppFile(installedApp.originalPackageName)
                     }
-                    val archivePackageInfo = resolvedFile?.let(pm::getPackageInfo)
+                    if (resolvedFile == null) {
+                        return@withContext null
+                    }
+                    val resolvedName = resolvedFile.name.removeSuffix(".apk")
+                    val recoveredVersion = listOf(packageName, installedApp.originalPackageName)
+                        .map(FilenameUtils::sanitize)
+                        .firstNotNullOfOrNull { safePackage ->
+                            resolvedName.takeIf { it.startsWith("${safePackage}_") }
+                                ?.removePrefix("${safePackage}_")
+                                ?.takeIf { it.isNotBlank() }
+                        }
+                        ?: installedApp.version
+                    val canonicalSavedFile = filesystem.getPatchedAppFile(packageName, recoveredVersion)
+                    if (resolvedFile != canonicalSavedFile) {
+                        if (!canonicalSavedFile.exists()) {
+                            runCatching {
+                                canonicalSavedFile.parentFile?.mkdirs()
+                                resolvedFile.copyTo(canonicalSavedFile, overwrite = false)
+                            }
+                        }
+                        if (canonicalSavedFile.exists()) {
+                            resolvedFile.delete()
+                        }
+                    }
+                    val packageInfoSource = canonicalSavedFile.takeIf { it.exists() } ?: resolvedFile
+                    val archivePackageInfo = pm.getPackageInfo(packageInfoSource)
                     val devicePackageName = archivePackageInfo?.packageName
                         ?.takeIf { it.isNotBlank() }
                         ?: installedApp.originalPackageName.takeIf { it.isNotBlank() }
@@ -438,15 +464,7 @@ class InstalledAppsViewModel(
                     if (installedInfo != null) {
                         return@withContext installedInfo
                     }
-                    if (resolvedFile == null) {
-                        return@withContext null
-                    }
-                    if (resolvedFile != savedFile) {
-                        val safePackage = FilenameUtils.sanitize(packageName)
-                        val recoveredVersion = resolvedFile.name
-                            .removePrefix("${safePackage}_")
-                            .removeSuffix(".apk")
-                            .ifBlank { installedApp.version }
+                    if (recoveredVersion != installedApp.version) {
                         val selection = installedAppsRepository.getAppliedPatches(packageName)
                         installedAppsRepository.addOrUpdate(
                             currentPackageName = installedApp.currentPackageName,
@@ -454,10 +472,11 @@ class InstalledAppsViewModel(
                             version = recoveredVersion,
                             installType = installedApp.installType,
                             patchSelection = selection,
-                            selectionPayload = installedApp.selectionPayload
+                            selectionPayload = installedApp.selectionPayload,
+                            createdAtOverride = installedApp.createdAt
                         )
                     }
-                    archivePackageInfo ?: pm.getPackageInfo(resolvedFile)
+                    archivePackageInfo ?: pm.getPackageInfo(packageInfoSource)
                 }
 
                 else -> {
