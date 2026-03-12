@@ -112,6 +112,7 @@ import app.revanced.manager.ui.viewmodel.PatchProfilesViewModel
 import app.revanced.manager.ui.viewmodel.PatchProfilesViewModel.RenameResult
 import app.revanced.manager.util.APK_FILE_EXTENSIONS
 import app.revanced.manager.util.PM
+import app.revanced.manager.util.consumeHorizontalScroll
 import app.revanced.manager.util.relativeTime
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.isAllowedApkFile
@@ -629,7 +630,7 @@ fun PatchProfilesScreen(
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.horizontalScroll(rememberScrollState())
+                            modifier = Modifier.consumeHorizontalScroll(rememberScrollState())
                         ) {
                             ProfileMetaPill(text = patchCountText)
                             ProfileMetaPill(text = bundleCountText)
@@ -656,7 +657,7 @@ fun PatchProfilesScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier
                                         .widthIn(min = maxWidth)
-                                        .horizontalScroll(actionScrollState)
+                                        .consumeHorizontalScroll(actionScrollState)
                                 ) {
                                     ProfileActionPill(
                                         text = stringResource(R.string.patch_profile_rename),
@@ -1154,7 +1155,7 @@ fun PatchProfilesScreen(
                             overflow = TextOverflow.Visible,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .horizontalScroll(apkScrollState)
+                                .consumeHorizontalScroll(apkScrollState)
                         )
                         if (hasMissingApk) {
                             Text(
@@ -1852,3 +1853,4 @@ private suspend fun loadPatchProfileApkIconInfo(
         cleanup = null
     )
 }
+

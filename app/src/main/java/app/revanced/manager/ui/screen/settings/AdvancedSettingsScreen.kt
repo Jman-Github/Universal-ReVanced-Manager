@@ -2856,7 +2856,6 @@ private fun CustomInstallerContent(
                                                 overflow = TextOverflow.Ellipsis,
                                                 modifier = Modifier
                                                     .consumeHorizontalScroll(labelScrollState)
-                                                    .horizontalScroll(labelScrollState)
                                             )
                                         }
                                         badgeText?.let {
@@ -2931,7 +2930,6 @@ private fun CustomInstallerContent(
                                                 overflow = TextOverflow.Ellipsis,
                                                 modifier = Modifier
                                                     .consumeHorizontalScroll(labelScrollState)
-                                                    .horizontalScroll(labelScrollState)
                                             )
                                         }
                                         StatusBadge(stringResource(R.string.installer_custom_builtin_indicator))
@@ -3023,7 +3021,6 @@ private fun CustomInstallerContent(
                                             overflow = TextOverflow.Ellipsis,
                                             modifier = Modifier
                                                 .consumeHorizontalScroll(labelScrollState)
-                                                .horizontalScroll(labelScrollState)
                                         )
                                     }
                                 },

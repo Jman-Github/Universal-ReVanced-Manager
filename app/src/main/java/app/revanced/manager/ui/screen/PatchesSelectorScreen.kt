@@ -39,6 +39,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerDefaults
+import androidx.compose.foundation.pager.PagerSnapDistance
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -157,6 +159,7 @@ import app.revanced.manager.ui.viewmodel.PatchesSelectorViewModel.Companion.SHOW
 import app.revanced.manager.ui.viewmodel.PatchesSelectorViewModel.Companion.SHOW_TYPE_FILTER
 import app.revanced.manager.ui.viewmodel.PatchesSelectorViewModel.Companion.SHOW_UNIVERSAL
 import app.revanced.manager.util.Options
+import app.revanced.manager.util.consumeHorizontalScroll
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.isScrollingUp
 import app.revanced.manager.util.openUrl
@@ -244,6 +247,7 @@ fun PatchesSelectorScreen(
     val searchEngineHost by viewModel.prefs.searchEngineHost.getAsState()
     val showVersionTags by viewModel.prefs.patchSelectionShowVersionTags.getAsState()
     val disablePatchSelectionTabSwipe by viewModel.prefs.disablePatchSelectionTabSwipe.getAsState()
+    val preventAccidentalTouching by viewModel.prefs.preventAccidentalTouching.getAsState()
     val showPatchProfilesTab by viewModel.prefs.showPatchProfilesTab.getAsState()
     val orderedActionKeys = remember(actionOrderPref) {
         val parsed = actionOrderPref
@@ -1641,8 +1645,19 @@ fun PatchesSelectorScreen(
                         }
                     }
 
+                    val pagerFlingBehavior = if (preventAccidentalTouching) {
+                        PagerDefaults.flingBehavior(state = pagerState)
+                    } else {
+                        PagerDefaults.flingBehavior(
+                            state = pagerState,
+                            pagerSnapDistance = PagerSnapDistance.atMost(1),
+                            snapPositionalThreshold = 0.2f
+                        )
+                    }
+
                     HorizontalPager(
                         state = pagerState,
+                        flingBehavior = pagerFlingBehavior,
                         userScrollEnabled = !disablePatchSelectionTabSwipe,
                         pageContent = { index ->
                             // Avoid crashing if the lists have not been fully initialized yet.
@@ -2748,7 +2763,7 @@ private fun ActionChipRow(
 
         val rowPlaceable = subcompose("row") {
             val rowModifier = if (scrollNeeded) {
-                Modifier.horizontalScroll(scrollState)
+                Modifier.consumeHorizontalScroll(scrollState)
             } else {
                 Modifier
             }
@@ -3021,3 +3036,5 @@ private fun OptionsDialog(
         }
     }
 }
+
+

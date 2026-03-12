@@ -57,6 +57,7 @@ class PreferencesManager(
     val hideMainTabLabels = booleanPreference("hide_main_tab_labels", false)
     val disableMainTabSwipe = booleanPreference("disable_main_tab_swipe", false)
     val disablePatchSelectionTabSwipe = booleanPreference("disable_patch_selection_tab_swipe", false)
+    val preventAccidentalTouching = booleanPreference("prevent_accidental_touching", true)
     val showPatchProfilesTab = booleanPreference("show_patch_profiles_tab", true)
     val showToolsTab = booleanPreference("show_tools_tab", true)
     val theme = enumPreference("theme", Theme.SYSTEM)
@@ -191,6 +192,7 @@ class PreferencesManager(
         val customBackgroundImageOpacity: Float? = null,
         val hideMainTabLabels: Boolean? = null,
         val disableMainTabSwipe: Boolean? = null,
+        val preventAccidentalTouching: Boolean? = null,
         val showPatchProfilesTab: Boolean? = null,
         val showToolsTab: Boolean? = null,
         val themePresetSelectionName: String? = null,
@@ -295,6 +297,7 @@ class PreferencesManager(
             customBackgroundImageOpacity = customBackgroundImageOpacity.get(),
             hideMainTabLabels = hideMainTabLabels.get(),
             disableMainTabSwipe = disableMainTabSwipe.get(),
+            preventAccidentalTouching = preventAccidentalTouching.get(),
             showPatchProfilesTab = showPatchProfilesTab.get(),
             showToolsTab = showToolsTab.get(),
             themePresetSelectionName = themePresetSelectionName.get(),
@@ -402,6 +405,7 @@ class PreferencesManager(
         snapshot.customBackgroundImageOpacity?.let { customBackgroundImageOpacity.value = it.coerceIn(0f, 1f) }
         snapshot.hideMainTabLabels?.let { hideMainTabLabels.value = it }
         snapshot.disableMainTabSwipe?.let { disableMainTabSwipe.value = it }
+        snapshot.preventAccidentalTouching?.let { preventAccidentalTouching.value = it }
         snapshot.showPatchProfilesTab?.let { showPatchProfilesTab.value = it }
         snapshot.showToolsTab?.let { showToolsTab.value = it }
         snapshot.themePresetSelectionName?.let { themePresetSelectionName.value = it }

@@ -891,7 +891,6 @@ private fun BundleSuggestionCard(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
                     .consumeHorizontalScroll(nameScrollState)
-                    .horizontalScroll(nameScrollState)
             )
             val versionLabel = suggestion.recommendedVersion
                 ?.let { stringResource(R.string.version_label, it) }

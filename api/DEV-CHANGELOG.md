@@ -7,6 +7,7 @@
 - Added a restart prompt after changing the in-app language https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/244
 - Removed an extra UI separator from the `General` settings screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/287
 - Improved patcher state handling across all patcher runtimes
+- Added a `Prevent accidental touching` setting that protects against accidental page/tab swipes when enabled, and makes page/tab swipes easier with shorter drags when disabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/286
 
 
 # Bug fixes

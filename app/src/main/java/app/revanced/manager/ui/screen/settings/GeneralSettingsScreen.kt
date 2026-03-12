@@ -286,6 +286,20 @@ fun GeneralSettingsScreen(
                 }
                 ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
+                    targetKey = R.string.prevent_accidental_touching,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = prefs.preventAccidentalTouching,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.prevent_accidental_touching,
+                        description = R.string.prevent_accidental_touching_description
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
                     targetKey = R.string.hide_patch_profiles_tab,
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }

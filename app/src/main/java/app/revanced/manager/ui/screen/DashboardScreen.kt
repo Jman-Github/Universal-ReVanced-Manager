@@ -31,6 +31,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerDefaults
+import androidx.compose.foundation.pager.PagerSnapDistance
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.animation.AnimatedVisibility
@@ -244,6 +246,7 @@ fun DashboardScreen(
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val hideMainTabLabels by prefs.hideMainTabLabels.getAsState()
     val disableMainTabSwipe by prefs.disableMainTabSwipe.getAsState()
+    val preventAccidentalTouching by prefs.preventAccidentalTouching.getAsState()
     val showPatchProfilesTab by prefs.showPatchProfilesTab.getAsState()
     val showToolsTab by prefs.showToolsTab.getAsState()
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
@@ -2067,8 +2070,19 @@ fun DashboardScreen(
                 modifier = Modifier.padding(top = 8.dp)
             )
 
+            val pagerFlingBehavior = if (preventAccidentalTouching) {
+                PagerDefaults.flingBehavior(state = pagerState)
+            } else {
+                PagerDefaults.flingBehavior(
+                    state = pagerState,
+                    pagerSnapDistance = PagerSnapDistance.atMost(1),
+                    snapPositionalThreshold = 0.2f
+                )
+            }
+
             HorizontalPager(
                 state = pagerState,
+                flingBehavior = pagerFlingBehavior,
                 userScrollEnabled = !disableMainTabSwipe,
                 modifier = Modifier.fillMaxSize(),
                 pageContent = { index ->
@@ -2812,3 +2826,4 @@ fun Android11Dialog(onDismissRequest: () -> Unit, onContinue: () -> Unit) {
         }
     )
 }
+

@@ -349,7 +349,6 @@ private fun InstalledAppCard(
                         modifier = Modifier
                             .weight(1f, fill = false)
                             .consumeHorizontalScroll(titleScrollState)
-                            .horizontalScroll(titleScrollState)
                     )
                 }
                 Column(
@@ -431,7 +430,7 @@ private fun InstalledAppCard(
                         Row(
                             modifier = Modifier
                                 .widthIn(min = maxWidth)
-                                .horizontalScroll(actionScrollState),
+                                .consumeHorizontalScroll(actionScrollState),
                             horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -731,3 +730,4 @@ private fun ReorderableCollectionItemScope.AppsOrderRow(
         }
     }
 }
+

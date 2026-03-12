@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -46,6 +47,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import androidx.appcompat.app.AppCompatActivity
 import app.revanced.manager.domain.repository.resolvePatchProfileAppVersion
+import app.revanced.manager.util.LocalPreventAccidentalTouching
 import app.revanced.manager.ui.model.navigation.AppSelector
 import app.revanced.manager.ui.model.navigation.ComplexParameter
 import app.revanced.manager.ui.model.navigation.CreateYoutubeAssets
@@ -142,6 +144,7 @@ class MainActivity : AppCompatActivity() {
             val customThemeColor by vm.prefs.customThemeColor.getAsState()
             val customBackgroundImageUri by vm.prefs.customBackgroundImageUri.getAsState()
             val customBackgroundImageOpacity by vm.prefs.customBackgroundImageOpacity.getAsState()
+            val preventAccidentalTouching by vm.prefs.preventAccidentalTouching.getAsState()
             val systemDark = isSystemInDarkTheme()
             val darkThemeEnabled = theme == Theme.SYSTEM && systemDark || theme == Theme.DARK
             val pureBlackEnabled = pureBlackTheme || (pureBlackOnSystemDark && theme == Theme.SYSTEM && systemDark)
@@ -153,22 +156,26 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            ReVancedManagerTheme(
-                darkTheme = darkThemeEnabled,
-                dynamicColor = dynamicColor,
-                pureBlackTheme = pureBlackEnabled,
-                accentColorHex = customAccentColor.takeUnless { it.isBlank() },
-                themeColorHex = customThemeColor.takeUnless { it.isBlank() },
-                hasCustomBackground = !customBackgroundImageUri.isNullOrBlank()
+            CompositionLocalProvider(
+                LocalPreventAccidentalTouching provides preventAccidentalTouching
             ) {
-                ReVancedManagerBackground(
-                    customBackgroundImageUri = customBackgroundImageUri.takeUnless { it.isBlank() },
-                    imageOverlayAlpha = customBackgroundImageOpacity
+                ReVancedManagerTheme(
+                    darkTheme = darkThemeEnabled,
+                    dynamicColor = dynamicColor,
+                    pureBlackTheme = pureBlackEnabled,
+                    accentColorHex = customAccentColor.takeUnless { it.isBlank() },
+                    themeColorHex = customThemeColor.takeUnless { it.isBlank() },
+                    hasCustomBackground = !customBackgroundImageUri.isNullOrBlank()
                 ) {
-                    ReVancedManager(
-                        vm = vm,
-                        disableScreenSlideTransitions = !customBackgroundImageUri.isNullOrBlank()
-                    )
+                    ReVancedManagerBackground(
+                        customBackgroundImageUri = customBackgroundImageUri.takeUnless { it.isBlank() },
+                        imageOverlayAlpha = customBackgroundImageOpacity
+                    ) {
+                        ReVancedManager(
+                            vm = vm,
+                            disableScreenSlideTransitions = !customBackgroundImageUri.isNullOrBlank()
+                        )
+                    }
                 }
             }
         }

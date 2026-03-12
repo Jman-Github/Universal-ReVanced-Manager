@@ -277,6 +277,8 @@
     <string name="disable_main_tab_swipe_description">Disable swiping between tabs on the main screen. Use the tab buttons to switch tabs.</string>
     <string name="disable_patch_selection_tab_swipe">Disable patch selection tab swipe gesture</string>
     <string name="disable_patch_selection_tab_swipe_description">Disable swiping between bundle tabs on the patch selection screen. Use the tab buttons to switch bundles.</string>
+    <string name="prevent_accidental_touching">Prevent accidental touching</string>
+    <string name="prevent_accidental_touching_description">When on, long horizontal rows protect against accidental page and tab swipes. When off, page and tab swipes trigger more easily with shorter drags, and those rows stop blocking them.</string>
     <string name="hide_patch_profiles_tab">Hide Patch Profiles tab</string>
     <string name="hide_patch_profiles_tab_description">Hide the Patch Profiles tab on the main screen and disable the Save profile action in patch selection.</string>
     <string name="hide_tools_tab">Hide Tools tab</string>
@@ -1418,6 +1420,7 @@ Details: %2$s</string>
     <string name="export">Export</string>
     <string name="confirm">Confirm</string>
     </resources>
+
 
 
 

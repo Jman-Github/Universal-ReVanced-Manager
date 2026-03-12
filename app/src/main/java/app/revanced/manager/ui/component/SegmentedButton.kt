@@ -81,7 +81,6 @@ fun RowScope.SegmentedButton(
                 maxLines = 1,
                 modifier = Modifier
                     .consumeHorizontalScroll(labelScrollState)
-                    .horizontalScroll(labelScrollState)
             )
         }
     }

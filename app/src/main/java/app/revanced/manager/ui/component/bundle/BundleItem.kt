@@ -377,7 +377,6 @@ fun BundleItem(
                         modifier = Modifier
                             .weight(1f, fill = false)
                             .consumeHorizontalScroll(titleScrollState)
-                            .horizontalScroll(titleScrollState)
                     )
                     statusIcon?.let { (icon, description) ->
                         Icon(
@@ -471,8 +470,7 @@ fun BundleItem(
         Row(
             modifier = Modifier
                 .widthIn(min = maxWidth)
-                .consumeHorizontalScroll(actionScrollState)
-                .horizontalScroll(actionScrollState),
+                .consumeHorizontalScroll(actionScrollState),
             horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically
         ) {

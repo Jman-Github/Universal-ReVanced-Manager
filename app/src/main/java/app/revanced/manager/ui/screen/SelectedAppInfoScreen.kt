@@ -728,7 +728,6 @@ private fun BundleRecommendationCard(
                     modifier = Modifier
                         .weight(1f)
                         .consumeHorizontalScroll(nameScrollState)
-                        .horizontalScroll(nameScrollState)
                 )
                 if (isActive && selectedOverride == null) {
                     SelectionBadge(
