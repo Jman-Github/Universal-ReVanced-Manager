@@ -323,6 +323,14 @@ class InstalledAppInfoViewModel(
         isInstalling = false
     }
 
+    private fun markUninstallFailure(message: String) {
+        stopInstallProgressToasts()
+        stopUninstallProgressToasts()
+        internalInstallTimeoutJob?.cancel()
+        installResult = InstallResult.UninstallError(message)
+        isInstalling = false
+    }
+
     private fun showSignatureMismatchPrompt(packageName: String) {
         stopInstallProgressToasts()
         installResult = null
@@ -1299,7 +1307,7 @@ class InstalledAppInfoViewModel(
                         result.failure.message.orEmpty()
                     )
                     context.toast(failureMessage)
-                    markInstallFailure(failureMessage)
+                    markUninstallFailure(failureMessage)
                 }
 
                 Session.State.Succeeded -> {
@@ -1338,4 +1346,5 @@ data class MountWarningState(
 sealed class InstallResult {
     data class Success(val message: String) : InstallResult()
     data class Failure(val message: String) : InstallResult()
+    data class UninstallError(val message: String) : InstallResult()
 }

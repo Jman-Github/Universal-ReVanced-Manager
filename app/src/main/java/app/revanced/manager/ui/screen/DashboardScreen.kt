@@ -1474,6 +1474,7 @@ fun DashboardScreen(
         val (titleRes, message) = when (result) {
             is InstallResult.Success -> R.string.install_app_success to result.message
             is InstallResult.Failure -> R.string.install_app_fail_title to result.message
+            is InstallResult.UninstallError -> R.string.uninstall_app_fail_title to result.message
         }
         AlertDialog(
             onDismissRequest = quickActionViewModel::clearInstallResult,

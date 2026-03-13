@@ -625,6 +625,7 @@ fun InstalledAppInfoScreen(
         val (titleRes, message) = when (installResult) {
             is InstallResult.Success -> R.string.install_app_success to installResult.message
             is InstallResult.Failure -> R.string.install_app_fail_title to installResult.message
+            is InstallResult.UninstallError -> R.string.uninstall_app_fail_title to installResult.message
         }
         AlertDialog(
             onDismissRequest = viewModel::clearInstallResult,

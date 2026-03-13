@@ -135,6 +135,8 @@
  - Fixed saved patched app entries being overwritten, duplicated, or showing incorrect version/date metadata when repatching installed apps https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
 - Fixed stale merged APK output being offered after a later merge failure
 - Fixed installed split archive creation to fail cleanly when APK parts are missing
+- Fixed uninstall failures sometimes showing as Installation failed instead of Uninstall failed
+- Fixed the uninstall service error messaging
 
 
 # CI
