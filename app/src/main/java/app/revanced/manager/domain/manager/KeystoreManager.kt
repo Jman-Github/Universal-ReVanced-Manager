@@ -7,6 +7,7 @@ import android.widget.Toast
 import app.revanced.library.ApkSigner as RevancedApkSigner
 import com.android.apksig.ApkSigner as AndroidApkSigner
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -624,15 +625,17 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
             keyMaterial.certificates
         ).build()
 
-        AndroidApkSigner.Builder(listOf(signerConfig))
-            .setInputApk(input)
-            .setOutputApk(output)
-            .setV1SigningEnabled(true)
-            .setV2SigningEnabled(true)
-            .setV3SigningEnabled(true)
-            .setV4SigningEnabled(false)
-            .build()
-            .sign()
+        runInterruptible(Dispatchers.IO) {
+            AndroidApkSigner.Builder(listOf(signerConfig))
+                .setInputApk(input)
+                .setOutputApk(output)
+                .setV1SigningEnabled(true)
+                .setV2SigningEnabled(true)
+                .setV3SigningEnabled(true)
+                .setV4SigningEnabled(false)
+                .build()
+                .sign()
+        }
     }
 
     private data class StrictLoadResult(

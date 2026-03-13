@@ -12,7 +12,9 @@ import java.io.IOException
 import java.nio.file.Files
 import java.util.Locale
 import java.util.zip.ZipFile
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 
@@ -20,8 +22,16 @@ object SplitApkPreparer {
     private val SUPPORTED_EXTENSIONS = setOf("apks", "apkm", "xapk")
     private const val SKIPPED_STEP_PREFIX = "[skipped]"
     private val KNOWN_ABIS = setOf("armeabi", "armeabi-v7a", "arm64-v8a", "x86", "x86_64")
-    private val DENSITY_QUALIFIERS =
-        setOf("ldpi", "mdpi", "tvdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi")
+    private val DENSITY_DPI_VALUES = linkedMapOf(
+        "ldpi" to DisplayMetrics.DENSITY_LOW,
+        "mdpi" to DisplayMetrics.DENSITY_MEDIUM,
+        "tvdpi" to DisplayMetrics.DENSITY_TV,
+        "hdpi" to DisplayMetrics.DENSITY_HIGH,
+        "xhdpi" to DisplayMetrics.DENSITY_XHIGH,
+        "xxhdpi" to DisplayMetrics.DENSITY_XXHIGH,
+        "xxxhdpi" to DisplayMetrics.DENSITY_XXXHIGH
+    )
+    private val DENSITY_QUALIFIERS = DENSITY_DPI_VALUES.keys
 
     fun isSplitArchive(file: File?): Boolean {
         if (file == null || !file.exists()) return false
@@ -40,6 +50,7 @@ object SplitApkPreparer {
         logger: Logger = defaultLogger,
         stripNativeLibs: Boolean = false,
         skipUnneededSplits: Boolean = false,
+        includedModules: Set<String>? = null,
         onProgress: ((String) -> Unit)? = null,
         onSubSteps: ((List<String>) -> Unit)? = null,
         sortMergedApkEntries: Boolean = false
@@ -54,32 +65,35 @@ object SplitApkPreparer {
         val mergedApk = workingDir.resolve("${source.nameWithoutExtension}-merged.apk")
 
         return try {
+            coroutineContext.ensureActive()
             val sourceSize = source.length()
             logger.info("Preparing split APK bundle from ${source.name} (size=${sourceSize} bytes)")
             val entries = extractSplitEntries(source, modulesDir, onProgress)
+            coroutineContext.ensureActive()
             logger.info("Found ${entries.size} split modules: ${entries.joinToString { it.name }}")
             logger.info("Module sizes: ${entries.joinToString { "${it.name}=${it.file.length()} bytes" }}")
             val mergeOrder = Merger.listMergeOrder(modulesDir.toPath())
-            val supportedTokens = supportedAbiTokens()
-            val skippedModules = buildSet {
-                if (stripNativeLibs) {
-                    addAll(mergeOrder.filter { shouldSkipModule(it, supportedTokens) })
+            coroutineContext.ensureActive()
+            val inspection = inspectMergeOrder(mergeOrder)
+            val skippedModules = includedModules
+                ?.map(::normalizeModuleSelectionName)
+                ?.toSet()
+                ?.let { selectedLookup ->
+                    mergeOrder.filterNot {
+                        selectedLookup.contains(normalizeModuleSelectionName(it))
+                    }.toSet()
                 }
-                if (skipUnneededSplits) {
-                    val localeTokens = deviceLocaleTokens()
-                    val densityQualifier = deviceDensityQualifier()
-                    addAll(
-                        mergeOrder.filter {
-                            shouldSkipModuleForDevice(
-                                moduleName = it,
-                                localeTokens = localeTokens,
-                                densityQualifier = densityQualifier
-                            )
-                        }
-                    )
+                ?: buildSet {
+                    if (stripNativeLibs) {
+                        addAll(inspection.unusedAbiModules)
+                    }
+                    if (skipUnneededSplits) {
+                        addAll(inspection.unusedLanguageModules)
+                        addAll(inspection.unusedDensityModules)
+                    }
                 }
-            }
             onSubSteps?.invoke(buildSplitSubSteps(mergeOrder, skippedModules, stripNativeLibs))
+            coroutineContext.ensureActive()
 
             Merger.merge(
                 apkDir = modulesDir.toPath(),
@@ -88,14 +102,16 @@ object SplitApkPreparer {
                 onProgress = onProgress,
                 sortApkEntries = sortMergedApkEntries
             )
+            coroutineContext.ensureActive()
 
             if (stripNativeLibs) {
                 onProgress?.invoke("Stripping native libraries")
                 NativeLibStripper.strip(mergedApk)
+                coroutineContext.ensureActive()
             }
 
             onProgress?.invoke("Finalizing merged APK")
-            persistMergedIfDownloaded(source, mergedApk, logger)
+            coroutineContext.ensureActive()
 
             logger.info(
                 "Split APK merged to ${mergedApk.absolutePath} " +
@@ -112,6 +128,82 @@ object SplitApkPreparer {
             throw error
         }
     }
+
+    suspend fun inspect(source: File): SplitArchiveInspection {
+        require(isSplitArchive(source)) { "Source is not a supported split archive." }
+
+        val workingDir = withContext(Dispatchers.IO) {
+            Files.createTempDirectory("split-inspect-").toFile()
+        }
+        val modulesDir = workingDir.resolve("modules").also { it.mkdirs() }
+
+        return try {
+            extractSplitEntries(source, modulesDir)
+            coroutineContext.ensureActive()
+
+            val mergeOrder = withContext(Dispatchers.IO) {
+                Merger.listMergeOrder(modulesDir.toPath())
+            }
+            val inspection = inspectMergeOrder(mergeOrder)
+            val modules = mergeOrder.map { moduleName ->
+                SplitArchiveModule(
+                    name = moduleName,
+                    kind = classifyModule(moduleName),
+                    detail = moduleDetail(moduleName)
+                )
+            }
+            SplitArchiveInspection(
+                modules = modules,
+                baseModuleName = mergeOrder.firstOrNull(),
+                recommendedModules = buildRecommendedModules(modules, inspection),
+                languageTrimmedModules = mergeOrder.toSet() - inspection.unusedLanguageModules,
+                densityTrimmedModules = mergeOrder.toSet() - inspection.unusedDensityModules,
+                abiTrimmedModules = mergeOrder.toSet() - inspection.unusedAbiModules,
+                hasUnusedAbiModules = inspection.unusedAbiModules.isNotEmpty()
+            )
+        } finally {
+            workingDir.deleteRecursively()
+        }
+    }
+
+    private data class MergeOrderInspection(
+        val unusedAbiModules: Set<String>,
+        val unusedLanguageModules: Set<String>,
+        val unusedDensityModules: Set<String>
+    )
+
+    private fun inspectMergeOrder(mergeOrder: List<String>): MergeOrderInspection {
+        val supportedTokens = supportedAbiTokens()
+        val localeTokens = deviceLocaleTokens()
+        val allowedDensityQualifiers = supportedDensityQualifiers(
+            mergeOrder = mergeOrder,
+            densityQualifier = deviceDensityQualifier()
+        )
+        return MergeOrderInspection(
+            unusedAbiModules = mergeOrder.filter { shouldSkipModule(it, supportedTokens) }.toSet(),
+            unusedLanguageModules = mergeOrder.filter { shouldSkipLanguageModule(it, localeTokens) }.toSet(),
+            unusedDensityModules = mergeOrder.filter {
+                shouldSkipDensityModule(it, allowedDensityQualifiers)
+            }.toSet()
+        )
+    }
+
+    private fun buildRecommendedModules(
+        modules: List<SplitArchiveModule>,
+        inspection: MergeOrderInspection
+    ): Set<String> = modules.asSequence()
+        .filter { module ->
+            when (module.kind) {
+                SplitArchiveModuleKind.BASE -> true
+                SplitArchiveModuleKind.ABI -> module.name !in inspection.unusedAbiModules
+                SplitArchiveModuleKind.DENSITY -> module.name !in inspection.unusedDensityModules
+                SplitArchiveModuleKind.LANGUAGE -> module.name !in inspection.unusedLanguageModules
+                SplitArchiveModuleKind.FEATURE,
+                SplitArchiveModuleKind.OTHER -> true
+            }
+        }
+        .map { module -> module.name }
+        .toSet()
 
     private fun hasEmbeddedApkEntries(file: File): Boolean =
         runCatching {
@@ -158,11 +250,11 @@ object SplitApkPreparer {
         val steps = mutableListOf<String>()
         steps.add("Extracting split APKs")
         val skippedLookup = skippedModules
-            .map { it.lowercase(Locale.ROOT) }
+            .map(::normalizeModuleSelectionName)
             .toSet()
         mergeOrder.forEach { name ->
             val label = "Merging $name"
-            val entry = if (skippedLookup.contains(name.lowercase(Locale.ROOT))) {
+            val entry = if (skippedLookup.contains(normalizeModuleSelectionName(name))) {
                 "$SKIPPED_STEP_PREFIX$label"
             } else {
                 label
@@ -178,16 +270,12 @@ object SplitApkPreparer {
     }
 
     private fun supportedAbiTokens(): Set<String> =
-        selectPrimaryAbi(Build.SUPPORTED_ABIS.toList())
-            ?.let { primary ->
-                buildAbiTokens(primary)
-                    .map { it.lowercase(Locale.ROOT) }
-                    .toSet()
-            }
-            ?: Build.SUPPORTED_ABIS
-                .flatMap { abi -> buildAbiTokens(abi) }
-                .map { it.lowercase(Locale.ROOT) }
-                .toSet()
+        Build.SUPPORTED_ABIS
+            .asSequence()
+            .filter { it.isNotBlank() }
+            .flatMap { abi -> buildAbiTokens(abi).asSequence() }
+            .map { it.lowercase(Locale.ROOT) }
+            .toSet()
 
     private fun buildAbiTokens(abi: String): Set<String> {
         val normalized = abi.lowercase(Locale.ROOT)
@@ -198,13 +286,14 @@ object SplitApkPreparer {
         )
     }
 
-    private fun selectPrimaryAbi(supportedAbis: List<String>): String? =
-        supportedAbis.firstOrNull { it.isNotBlank() }
+    private fun normalizeModuleSelectionName(name: String): String =
+        name.lowercase(Locale.ROOT).removeSuffix(".apk")
 
     private fun shouldSkipModule(
         moduleName: String,
         supportedTokens: Set<String>
     ): Boolean {
+        if (supportedTokens.isEmpty()) return false
         val lower = moduleName.lowercase(Locale.ROOT)
         val knownTokens = KNOWN_ABIS.flatMap { buildAbiTokens(it) }.toSet()
         if (knownTokens.none { lower.contains(it) }) return false
@@ -214,24 +303,64 @@ object SplitApkPreparer {
     private fun shouldSkipModuleForDevice(
         moduleName: String,
         localeTokens: Set<String>,
-        densityQualifier: String?
+        allowedDensityQualifiers: Set<String>
+    ): Boolean =
+        shouldSkipLanguageModule(moduleName, localeTokens) ||
+            shouldSkipDensityModule(moduleName, allowedDensityQualifiers)
+
+    private fun shouldSkipLanguageModule(
+        moduleName: String,
+        localeTokens: Set<String>
     ): Boolean {
         val qualifiers = splitConfigQualifiers(moduleName)
-        if (qualifiers.isEmpty()) return false
-        if (isAbiSplit(moduleName)) return false
+        if (qualifiers.isEmpty() || isAbiSplit(moduleName)) return false
+        return qualifiers.any { qualifier ->
+            parseLocaleQualifier(qualifier)?.let { localeQualifier ->
+                !matchesLocaleQualifier(localeQualifier, localeTokens)
+            } ?: false
+        }
+    }
 
-        for (qualifier in qualifiers) {
-            if (isDensityQualifier(qualifier)) {
-                val deviceDensity = densityQualifier ?: continue
-                if (qualifier != deviceDensity) return true
-                continue
-            }
-            val localeQualifier = parseLocaleQualifier(qualifier) ?: continue
-            if (!matchesLocaleQualifier(localeQualifier, localeTokens)) {
-                return true
+    private fun shouldSkipDensityModule(
+        moduleName: String,
+        allowedDensityQualifiers: Set<String>
+    ): Boolean {
+        val qualifiers = splitConfigQualifiers(moduleName)
+        if (qualifiers.isEmpty() || isAbiSplit(moduleName)) return false
+        if (allowedDensityQualifiers.isEmpty()) return false
+        return qualifiers.any { qualifier ->
+            isDensityQualifier(qualifier) && qualifier !in allowedDensityQualifiers
+        }
+    }
+
+    private fun supportedDensityQualifiers(
+        mergeOrder: List<String>,
+        densityQualifier: String?
+    ): Set<String> {
+        if (densityQualifier == null) return emptySet()
+        val availableQualifiers = mergeOrder
+            .flatMap(::splitConfigQualifiers)
+            .filter(::isDensityQualifier)
+            .toSet()
+        if (availableQualifiers.isEmpty()) return emptySet()
+        if (densityQualifier in availableQualifiers) return setOf(densityQualifier)
+
+        val targetDensity = DENSITY_DPI_VALUES[densityQualifier] ?: return availableQualifiers
+        val availableDensityValues = availableQualifiers.mapNotNull { qualifier ->
+            DENSITY_DPI_VALUES[qualifier]?.let { densityValue ->
+                qualifier to densityValue
             }
         }
-        return false
+        if (availableDensityValues.isEmpty()) return availableQualifiers
+
+        val closestDistance = availableDensityValues.minOf { (_, densityValue) ->
+            kotlin.math.abs(densityValue - targetDensity)
+        }
+        return availableDensityValues
+            .filter { (_, densityValue) ->
+                kotlin.math.abs(densityValue - targetDensity) == closestDistance
+            }
+            .mapTo(linkedSetOf()) { (qualifier, _) -> qualifier }
     }
 
     private fun isAbiSplit(moduleName: String): Boolean {
@@ -255,18 +384,38 @@ object SplitApkPreparer {
 
     private fun isDensityQualifier(token: String): Boolean = token in DENSITY_QUALIFIERS
 
-    private data class LocaleQualifier(val language: String, val region: String?)
+    private data class LocaleQualifier(
+        val language: String,
+        val script: String? = null,
+        val region: String? = null
+    )
 
     private fun parseLocaleQualifier(rawToken: String): LocaleQualifier? {
-        val token = rawToken.replace('-', '_')
-        val parts = token.split('_').filter { it.isNotBlank() }
+        val parts = when {
+            rawToken.startsWith("b+", ignoreCase = true) ->
+                rawToken.removePrefix("b+").removePrefix("B+").split('+')
+            else -> rawToken.replace('-', '_').split('_')
+        }.filter { it.isNotBlank() }
         if (parts.isEmpty()) return null
-        val language = parts[0]
+        val language = parts.first().lowercase(Locale.ROOT)
         if (language.length !in 2..3 || !language.all { it.isLetter() }) return null
-        val region = parts.getOrNull(1)
-            ?.removePrefix("r")
-            ?.takeIf { it.length in 2..3 && it.all { ch -> ch.isLetterOrDigit() } }
-        return LocaleQualifier(language.lowercase(Locale.ROOT), region?.lowercase(Locale.ROOT))
+
+        var script: String? = null
+        var region: String? = null
+        parts.drop(1).forEach { rawPart ->
+            val part = rawPart.lowercase(Locale.ROOT)
+            val normalizedRegion = part.removePrefix("r")
+            when {
+                script == null && part.length == 4 && part.all { it.isLetter() } -> script = part
+                region == null &&
+                    normalizedRegion.length in 2..3 &&
+                    normalizedRegion.all { it.isLetterOrDigit() } -> {
+                    region = normalizedRegion
+                }
+            }
+        }
+
+        return LocaleQualifier(language = language, script = script, region = region)
     }
 
     private fun matchesLocaleQualifier(
@@ -274,13 +423,26 @@ object SplitApkPreparer {
         localeTokens: Set<String>
     ): Boolean {
         val language = qualifier.language
+        val script = qualifier.script
         val region = qualifier.region
-        return if (region == null) {
-            localeTokens.contains(language)
-        } else {
-            localeTokens.contains("${language}_r$region") ||
-                localeTokens.contains("${language}_$region") ||
-                localeTokens.contains("${language}-$region")
+        return when {
+            script == null && region == null -> {
+                localeTokens.contains(language)
+            }
+            script != null && region == null -> {
+                localeTokens.contains("${language}_$script") ||
+                    localeTokens.contains("${language}-$script")
+            }
+            script == null && region != null -> {
+                localeTokens.contains("${language}_r$region") ||
+                    localeTokens.contains("${language}_$region") ||
+                    localeTokens.contains("${language}-$region")
+            }
+            else -> {
+                localeTokens.contains("${language}_${script}_$region") ||
+                    localeTokens.contains("${language}_${script}-r$region") ||
+                    localeTokens.contains("${language}-${script}-$region")
+            }
         }
     }
 
@@ -312,6 +474,11 @@ object SplitApkPreparer {
         if (script.isNotBlank()) {
             tokens.add("${language}_$script")
             tokens.add("${language}-$script")
+            if (region.isNotBlank()) {
+                tokens.add("${language}_${script}_$region")
+                tokens.add("${language}_${script}-r$region")
+                tokens.add("${language}-${script}-$region")
+            }
         }
         return tokens
     }
@@ -327,6 +494,41 @@ object SplitApkPreparer {
             density <= DisplayMetrics.DENSITY_XXHIGH -> "xxhdpi"
             else -> "xxxhdpi"
         }
+    }
+
+    private fun classifyModule(moduleName: String): SplitArchiveModuleKind {
+        val lower = moduleName.lowercase(Locale.ROOT)
+        if (isBaseModuleName(moduleName)) return SplitArchiveModuleKind.BASE
+        if (isAbiSplit(moduleName)) return SplitArchiveModuleKind.ABI
+        val qualifiers = splitConfigQualifiers(moduleName)
+        return when {
+            qualifiers.any(::isDensityQualifier) -> SplitArchiveModuleKind.DENSITY
+            qualifiers.any { parseLocaleQualifier(it) != null } -> SplitArchiveModuleKind.LANGUAGE
+            lower.contains("feature") -> SplitArchiveModuleKind.FEATURE
+            qualifiers.isNotEmpty() -> SplitArchiveModuleKind.FEATURE
+            else -> SplitArchiveModuleKind.OTHER
+        }
+    }
+
+    private fun moduleDetail(moduleName: String): String? {
+        if (isAbiSplit(moduleName)) {
+            return KNOWN_ABIS.firstOrNull { abi ->
+                buildAbiTokens(abi).any { token -> moduleName.lowercase(Locale.ROOT).contains(token) }
+            }
+        }
+        val qualifiers = splitConfigQualifiers(moduleName)
+        return qualifiers.firstOrNull(::isDensityQualifier)
+            ?: qualifiers.firstNotNullOfOrNull { qualifier ->
+                parseLocaleQualifier(qualifier)?.let { locale ->
+                    locale.region?.let { region -> "${locale.language.uppercase(Locale.ROOT)}-$region" }
+                        ?: locale.language.uppercase(Locale.ROOT)
+                }
+            }
+    }
+
+    private fun isBaseModuleName(moduleName: String): Boolean {
+        val lower = moduleName.lowercase(Locale.ROOT)
+        return lower == "base.apk" || lower.startsWith("base-")
     }
 
     private suspend fun extractSplitEntries(
@@ -368,18 +570,29 @@ object SplitApkPreparer {
         val cleanup: () -> Unit = {}
     )
 
-    private fun persistMergedIfDownloaded(source: File, merged: File, logger: Logger) {
-        // Only persist back to the downloads cache when the original input lives in our downloaded-apps dir.
-        val downloadsRoot = source.parentFile?.parentFile
-        val isDownloadedApp = downloadsRoot?.name?.startsWith("app_downloaded-apps") == true
-        if (!isDownloadedApp) return
+    data class SplitArchiveInspection(
+        val modules: List<SplitArchiveModule>,
+        val baseModuleName: String?,
+        val recommendedModules: Set<String>,
+        val languageTrimmedModules: Set<String>,
+        val densityTrimmedModules: Set<String>,
+        val abiTrimmedModules: Set<String>,
+        val hasUnusedAbiModules: Boolean
+    )
 
-        runCatching {
-            merged.copyTo(source, overwrite = true)
-            logger.info("Persisted merged split APK back to downloads cache: ${source.absolutePath}")
-        }.onFailure { error ->
-            logger.warn("Failed to persist merged split APK to downloads cache: ${error.message}")
-        }
+    data class SplitArchiveModule(
+        val name: String,
+        val kind: SplitArchiveModuleKind,
+        val detail: String? = null
+    )
+
+    enum class SplitArchiveModuleKind {
+        BASE,
+        LANGUAGE,
+        DENSITY,
+        ABI,
+        FEATURE,
+        OTHER
     }
 
     private object defaultLogger : Logger() {

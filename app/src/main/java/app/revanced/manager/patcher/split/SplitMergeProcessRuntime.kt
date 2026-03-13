@@ -6,19 +6,33 @@ import android.util.Log
 import app.revanced.manager.patcher.LibraryResolver
 import app.revanced.manager.patcher.runtime.MemoryLimitConfig
 import app.revanced.manager.util.tag
-import com.github.pgreze.process.Redirect
-import com.github.pgreze.process.process
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.withContext
 
 class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver() {
+    private val activeProcessLock = Any()
+    private var activeProcess: Process? = null
+
+    fun cancelActiveExecution() {
+        val process = synchronized(activeProcessLock) { activeProcess } ?: return
+        destroyProcess(process)
+    }
+
     suspend fun execute(
         inputFile: File,
         workspace: File,
         stripNativeLibs: Boolean,
         skipUnneededSplits: Boolean,
+        includedModules: Set<String>? = null,
         onProgress: (String) -> Unit,
         onSubSteps: (List<String>) -> Unit
     ): File = coroutineScope {
@@ -45,8 +59,26 @@ class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver()
             }
         }
         val subSteps = mutableListOf<String>()
+        val selectedModulesFile = workspace.resolve("selected-modules.txt").apply {
+            if (exists()) {
+                runCatching { delete() }
+            }
+        }
+        try {
+            if (includedModules != null) {
+                selectedModulesFile.parentFile?.mkdirs()
+                selectedModulesFile.writeText(
+                    includedModules
+                        .sorted()
+                        .joinToString(separator = "\n")
+                )
+            }
+        } catch (error: Throwable) {
+            runCatching { selectedModulesFile.delete() }
+            throw error
+        }
 
-        val result = process(
+        val command = listOf(
             resolveAppProcessBin(),
             "-Djava.io.tmpdir=${context.cacheDir.absolutePath}",
             "/",
@@ -57,31 +89,85 @@ class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver()
             output.absolutePath,
             stripNativeLibs.toString(),
             skipUnneededSplits.toString(),
-            stdout = Redirect.CAPTURE,
-            stderr = Redirect.CAPTURE,
-            env = env
-        ) { line ->
-            when {
-                line.startsWith(PROGRESS_PREFIX) -> {
-                    onProgress(line.removePrefix(PROGRESS_PREFIX))
-                }
+            selectedModulesFile.absolutePath
+        )
+        val process = try {
+            withContext(Dispatchers.IO) {
+                ProcessBuilder(command)
+                    .directory(workspace)
+                    .apply { environment().putAll(env) }
+                    .start()
+            }
+        } catch (error: Throwable) {
+            runCatching { selectedModulesFile.delete() }
+            throw error
+        }
+        synchronized(activeProcessLock) {
+            activeProcess = process
+        }
+        val stdoutJob = launch(Dispatchers.IO) {
+            process.inputStream.bufferedReader().useLines { lines ->
+                lines.forEach { line ->
+                    when {
+                        line.startsWith(PROGRESS_PREFIX) -> onProgress(line.removePrefix(PROGRESS_PREFIX))
+                        line.startsWith(SUBSTEP_PREFIX) -> {
+                            subSteps += line.removePrefix(SUBSTEP_PREFIX)
+                            onSubSteps(subSteps.toList())
+                        }
 
-                line.startsWith(SUBSTEP_PREFIX) -> {
-                    subSteps += line.removePrefix(SUBSTEP_PREFIX)
-                    onSubSteps(subSteps.toList())
+                        line.isNotBlank() -> Log.d(tag, "[split-merge process] $line")
+                    }
                 }
-
-                line.isNotBlank() -> Log.d(tag, "[split-merge process] $line")
+            }
+        }
+        val stderrJob = launch(Dispatchers.IO) {
+            process.errorStream.bufferedReader().useLines { lines ->
+                lines.forEach { line ->
+                    if (line.isNotBlank()) {
+                        Log.w(tag, "[split-merge process] $line")
+                    }
+                }
             }
         }
 
-        if (result.resultCode != 0) {
-            throw ProcessExitException(result.resultCode)
+        try {
+            val exitCode = try {
+                runInterruptible(Dispatchers.IO) { process.waitFor() }
+            } catch (error: CancellationException) {
+                destroyProcess(process)
+                throw error
+            }
+
+            withContext(NonCancellable) {
+                runCatching { stdoutJob.join() }
+                runCatching { stderrJob.join() }
+            }
+
+            if (exitCode != 0) {
+                throw ProcessExitException(exitCode)
+            }
+            if (!output.exists() || output.length() <= 0L) {
+                throw IOException("Split merge process completed without output APK.")
+            }
+            output
+        } finally {
+            synchronized(activeProcessLock) {
+                if (activeProcess === process) {
+                    activeProcess = null
+                }
+            }
+            withContext(NonCancellable) {
+                destroyProcess(process)
+                runCatching { process.outputStream.close() }
+                runCatching { process.inputStream.close() }
+                runCatching { process.errorStream.close() }
+                stdoutJob.cancel()
+                stderrJob.cancel()
+                runCatching { stdoutJob.join() }
+                runCatching { stderrJob.join() }
+            }
+            runCatching { selectedModulesFile.delete() }
         }
-        if (!output.exists() || output.length() <= 0L) {
-            throw IOException("Split merge process completed without output APK.")
-        }
-        output
     }
 
     class ProcessExitException(val exitCode: Int) :
@@ -92,6 +178,17 @@ class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver()
         val is64Bit = nativeDir.contains("64")
         val preferred = if (is64Bit) APP_PROCESS_BIN_PATH_64 else APP_PROCESS_BIN_PATH_32
         return if (File(preferred).exists()) preferred else APP_PROCESS_BIN_PATH
+    }
+
+    private fun destroyProcess(process: Process) {
+        runCatching { process.destroy() }
+        runCatching {
+            if (!process.waitFor(150, TimeUnit.MILLISECONDS)) {
+                process.destroyForcibly()
+                process.waitFor(1500, TimeUnit.MILLISECONDS)
+            }
+        }
+        runCatching { process.destroyForcibly() }
     }
 
     companion object {
@@ -107,7 +204,7 @@ object SplitMergeProcess {
     @JvmStatic
     fun main(args: Array<String>) {
         require(args.size >= 5) {
-            "Expected args: <input> <workspace> <output> <stripNativeLibs> <skipUnneededSplits>"
+            "Expected args: <input> <workspace> <output> <stripNativeLibs> <skipUnneededSplits> [selectedModulesFile]"
         }
 
         val input = File(args[0])
@@ -115,6 +212,14 @@ object SplitMergeProcess {
         val output = File(args[2])
         val stripNativeLibs = args[3].toBooleanStrictOrNull() ?: false
         val skipUnneededSplits = args[4].toBooleanStrictOrNull() ?: false
+        val selectedModules = args.getOrNull(5)
+            ?.takeIf { it.isNotBlank() }
+            ?.let(::File)
+            ?.takeIf(File::exists)
+            ?.readLines()
+            ?.map(String::trim)
+            ?.filter(String::isNotBlank)
+            ?.toSet()
 
         runBlocking {
             val preparation = SplitApkPreparer.prepareIfNeeded(
@@ -122,6 +227,7 @@ object SplitMergeProcess {
                 workspace = workspace,
                 stripNativeLibs = stripNativeLibs,
                 skipUnneededSplits = skipUnneededSplits,
+                includedModules = selectedModules,
                 onProgress = { msg ->
                     println("${SplitMergeProcessRuntime.PROGRESS_PREFIX}$msg")
                 },

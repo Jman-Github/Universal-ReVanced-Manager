@@ -3,6 +3,7 @@ package app.revanced.manager.ui.screen
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageInfo
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.provider.Settings
@@ -12,9 +13,11 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -88,6 +91,7 @@ import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -112,8 +116,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
@@ -135,15 +141,20 @@ import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.patcher.aapt.Aapt
 import app.revanced.manager.ui.component.AlertDialogExtended
+import app.revanced.manager.ui.component.AppIcon
+import app.revanced.manager.ui.component.AppLabel
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.AutoUpdatesDialog
 import app.revanced.manager.ui.component.AvailableUpdateDialog
+import app.revanced.manager.ui.component.CheckedFilterChip
 import app.revanced.manager.ui.component.DownloadProgressBanner
+import app.revanced.manager.ui.component.FullscreenDialog
 import app.revanced.manager.ui.component.InterceptBackHandler
 import app.revanced.manager.ui.component.NotificationCard
 import app.revanced.manager.ui.component.ConfirmDialog
 import app.revanced.manager.ui.component.ExportSavedApkFileNameDialog
 import app.revanced.manager.ui.component.NonSuggestedVersionDialog
+import app.revanced.manager.ui.component.TransparentLoadingDialog
 import app.revanced.manager.ui.component.UniversalFallbackVersionDialog
 import app.revanced.manager.ui.component.bundle.BundleTopBar
 import app.revanced.manager.ui.component.bundle.ImportPatchBundleDialog
@@ -170,6 +181,7 @@ import app.revanced.manager.ui.viewmodel.MountWarningReason
 import app.revanced.manager.ui.viewmodel.SplitMergeState
 import app.revanced.manager.ui.viewmodel.SplitMergeStepStatus
 import app.revanced.manager.util.RequestInstallAppsContract
+import app.revanced.manager.util.AppInfo
 import app.revanced.manager.util.BundleDeepLink
 import app.revanced.manager.util.EventEffect
 import app.revanced.manager.util.ExportNameFormatter
@@ -185,6 +197,8 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Locale
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -257,6 +271,7 @@ fun DashboardScreen(
     val selectedProfileCount by remember { derivedStateOf { patchProfilesViewModel.selectedProfiles.size } }
     val profilesSelectable = showPatchProfilesTab && selectedProfileCount > 0
     val availablePatches by vm.availablePatches.collectAsStateWithLifecycle(0)
+    val splitMergeState by vm.splitMergeState.collectAsStateWithLifecycle()
     val showNewDownloaderPluginsNotification by vm.newDownloaderPluginsAvailable.collectAsStateWithLifecycle(
         false
     )
@@ -512,6 +527,19 @@ fun DashboardScreen(
     var showSplitInputPicker by rememberSaveable { mutableStateOf(false) }
     var showSplitSourceDialog by rememberSaveable { mutableStateOf(false) }
     var showSplitPluginDialog by rememberSaveable { mutableStateOf(false) }
+    var showSplitInstalledAppsDialog by rememberSaveable { mutableStateOf(false) }
+    var pendingSplitInstalledPackage by rememberSaveable { mutableStateOf<String?>(null) }
+    val splitInstalledAppsFlow = remember(showSplitInstalledAppsDialog, pm) {
+        if (showSplitInstalledAppsDialog) {
+            pm.installedAppList.map { apps -> apps as List<AppInfo>? }
+        } else {
+            flowOf<List<AppInfo>?>(null)
+        }
+    }
+    val splitInstalledApps by splitInstalledAppsFlow.collectAsStateWithLifecycle(initialValue = null)
+    val showSplitMergeLoading = pendingSplitInstalledPackage != null ||
+        splitMergeState.preparingSelection ||
+        (showSplitInstalledAppsDialog && splitInstalledApps == null)
     var splitPluginPackageName by rememberSaveable { mutableStateOf("") }
     var splitPluginVersion by rememberSaveable { mutableStateOf("") }
     var pendingSplitPermissionRequest by rememberSaveable {
@@ -553,7 +581,6 @@ fun DashboardScreen(
             inputUri = uri,
             inputDisplayName = resolvedName
         )
-        onMergeSplitClick()
     }
 
     fun launchSplitMergeFromStorage() {
@@ -572,6 +599,14 @@ fun DashboardScreen(
 
     fun launchSplitMerge() {
         showSplitSourceDialog = true
+    }
+
+    LaunchedEffect(pendingSplitInstalledPackage) {
+        val packageName = pendingSplitInstalledPackage ?: return@LaunchedEffect
+        withFrameNanos { }
+        vm.clearSplitMergeState()
+        vm.startSplitMergeFromInstalledPackage(packageName)
+        pendingSplitInstalledPackage = null
     }
 
     var showSavedAppsExportPicker by rememberSaveable { mutableStateOf(false) }
@@ -1049,6 +1084,10 @@ fun DashboardScreen(
                 showSplitSourceDialog = false
                 launchSplitMergeFromStorage()
             },
+            onSelectInstalled = {
+                showSplitSourceDialog = false
+                showSplitInstalledAppsDialog = true
+            },
             onSelectDownloader = {
                 showSplitSourceDialog = false
                 if (downloaderPlugins.isEmpty()) {
@@ -1062,6 +1101,19 @@ fun DashboardScreen(
                 showSplitPluginDialog = true
             }
         )
+    }
+    if (showSplitInstalledAppsDialog) {
+        splitInstalledApps?.let { apps ->
+            MergeSplitInstalledAppsDialog(
+                apps = apps,
+                pm = pm,
+                onDismissRequest = { showSplitInstalledAppsDialog = false },
+                onSelectApp = { packageName ->
+                    showSplitInstalledAppsDialog = false
+                    pendingSplitInstalledPackage = packageName
+                }
+            )
+        }
     }
     if (showSplitPluginDialog) {
         MergeSplitPluginDialog(
@@ -1091,11 +1143,13 @@ fun DashboardScreen(
                 if (path == null) return@PathSelectorDialog
                 vm.clearSplitMergeState()
                 vm.startSplitMergeFromPath(path.toString())
-                onMergeSplitClick()
             },
             fileFilter = ::isAllowedSplitArchiveFile,
             allowDirectorySelection = false
         )
+    }
+    if (showSplitMergeLoading) {
+        TransparentLoadingDialog()
     }
     if (showSavedAppsExportPicker && useCustomFilePicker) {
         PathSelectorDialog(
@@ -2475,6 +2529,7 @@ private fun MergeSplitSourceDialog(
     hasDownloaderPlugins: Boolean,
     onDismissRequest: () -> Unit,
     onSelectStorage: () -> Unit,
+    onSelectInstalled: () -> Unit,
     onSelectDownloader: () -> Unit
 ) {
     AlertDialogExtended(
@@ -2493,6 +2548,12 @@ private fun MergeSplitSourceDialog(
                     description = stringResource(R.string.tools_merge_split_source_storage_description),
                     enabled = true,
                     onClick = onSelectStorage
+                )
+                MergeSplitSourceOption(
+                    title = stringResource(R.string.tools_merge_split_source_installed_title),
+                    description = stringResource(R.string.tools_merge_split_source_installed_description),
+                    enabled = true,
+                    onClick = onSelectInstalled
                 )
                 MergeSplitSourceOption(
                     title = stringResource(R.string.tools_merge_split_source_plugin_title),
@@ -2541,6 +2602,255 @@ private fun MergeSplitSourceOption(
                 )
             }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MergeSplitInstalledAppsDialog(
+    apps: List<AppInfo>,
+    pm: PM,
+    onDismissRequest: () -> Unit,
+    onSelectApp: (String) -> Unit
+) {
+    var filterText by rememberSaveable { mutableStateOf("") }
+    var showUserApps by rememberSaveable { mutableStateOf(false) }
+    var showSystemApps by rememberSaveable { mutableStateOf(false) }
+    var showSplitApks by rememberSaveable { mutableStateOf(false) }
+    var showSingleApks by rememberSaveable { mutableStateOf(false) }
+    val filterScrollState = rememberScrollState()
+    val chipColors = FilterChipDefaults.filterChipColors(
+        containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp),
+        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
+    )
+    val filteredApps = remember(
+        apps,
+        filterText,
+        showUserApps,
+        showSystemApps,
+        showSplitApks,
+        showSingleApks
+    ) {
+        apps.filter { app ->
+            val packageInfo = app.packageInfo ?: return@filter false
+            val isSystemApp = pm.isSystemApp(packageInfo)
+            val hasSplitApks = pm.hasSplitApks(packageInfo)
+            val typeMatches = when {
+                showUserApps && !showSystemApps -> !isSystemApp
+                !showUserApps && showSystemApps -> isSystemApp
+                else -> true
+            }
+            val splitTypeMatches = when {
+                showSplitApks && !showSingleApks -> hasSplitApks
+                !showSplitApks && showSingleApks -> !hasSplitApks
+                else -> true
+            }
+            val label = pm.run { packageInfo.label() }
+            typeMatches && splitTypeMatches && (
+                filterText.isBlank() ||
+                    label.contains(filterText, ignoreCase = true) ||
+                    app.packageName.contains(filterText, ignoreCase = true)
+            )
+        }
+    }
+
+    FullscreenDialog(onDismissRequest = onDismissRequest) {
+        Scaffold(
+            topBar = {
+                AppTopBar(
+                    title = stringResource(R.string.tools_merge_split_source_installed_title),
+                    onBackClick = onDismissRequest
+                )
+            }
+        ) { paddingValues ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item(key = "merge-installed-search") {
+                    TextField(
+                        value = filterText,
+                        onValueChange = { filterText = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(stringResource(R.string.search_apps)) },
+                        singleLine = true
+                    )
+                }
+                item(key = "merge-installed-filters") {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(filterScrollState),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        CheckedFilterChip(
+                            selected = showUserApps,
+                            onClick = { showUserApps = !showUserApps },
+                            colors = chipColors,
+                            label = { Text(stringResource(R.string.merge_split_installed_filter_user_apps)) }
+                        )
+                        CheckedFilterChip(
+                            selected = showSystemApps,
+                            onClick = { showSystemApps = !showSystemApps },
+                            colors = chipColors,
+                            label = { Text(stringResource(R.string.merge_split_installed_filter_system_apps)) }
+                        )
+                        CheckedFilterChip(
+                            selected = showSplitApks,
+                            onClick = { showSplitApks = !showSplitApks },
+                            colors = chipColors,
+                            label = { Text(stringResource(R.string.merge_split_installed_filter_split_apks)) }
+                        )
+                        CheckedFilterChip(
+                            selected = showSingleApks,
+                            onClick = { showSingleApks = !showSingleApks },
+                            colors = chipColors,
+                            label = { Text(stringResource(R.string.merge_split_installed_filter_single_apks)) }
+                        )
+                    }
+                }
+                item(key = "merge-installed-description") {
+                    Text(
+                        text = stringResource(R.string.merge_split_installed_picker_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (filteredApps.isEmpty()) {
+                    item(key = "merge-installed-empty") {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.merge_split_installed_no_results),
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Text(
+                                text = stringResource(R.string.merge_split_installed_no_results_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                } else {
+                    items(
+                        items = filteredApps,
+                        key = { it.packageName }
+                    ) { app ->
+                        val packageInfo = app.packageInfo ?: return@items
+                        MergeSplitInstalledAppCard(
+                            packageInfo = packageInfo,
+                            isSystemApp = pm.isSystemApp(packageInfo),
+                            hasSplitApks = pm.hasSplitApks(packageInfo),
+                            onClick = { onSelectApp(app.packageName) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MergeSplitInstalledAppCard(
+    packageInfo: PackageInfo,
+    isSystemApp: Boolean,
+    hasSplitApks: Boolean,
+    onClick: () -> Unit
+) {
+    val cardAlpha = if (hasSplitApks) 1f else 0.56f
+    Surface(
+        modifier = Modifier
+            .alpha(cardAlpha)
+            .then(
+                if (hasSplitApks) Modifier.clickable(onClick = onClick)
+                else Modifier
+            ),
+        shape = RoundedCornerShape(20.dp),
+        tonalElevation = 2.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AppIcon(
+                    packageInfo = packageInfo,
+                    contentDescription = null,
+                    modifier = Modifier.size(44.dp)
+                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    AppLabel(
+                        packageInfo = packageInfo,
+                        defaultText = packageInfo.packageName,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        text = packageInfo.packageName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    packageInfo.versionName?.takeIf { it.isNotBlank() }?.let { versionName ->
+                        Text(
+                            text = versionName,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                MergeSplitInstalledStatusChip(
+                    label = stringResource(
+                        if (hasSplitApks) R.string.merge_split_installed_status_split
+                        else R.string.merge_split_installed_status_single
+                    )
+                )
+                if (isSystemApp) {
+                    MergeSplitInstalledStatusChip(
+                        label = stringResource(R.string.merge_split_installed_status_system)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MergeSplitInstalledStatusChip(label: String) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        shape = RoundedCornerShape(999.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+        )
     }
 }
 

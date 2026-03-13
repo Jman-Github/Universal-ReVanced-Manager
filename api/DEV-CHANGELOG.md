@@ -8,6 +8,9 @@
 - Removed an extra UI separator from the `General` settings screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/287
 - Improved patcher state handling across all patcher runtimes
 - Added a `Prevent accidental touching` setting that protects against accidental page/tab swipes when enabled, and makes page/tab swipes easier with shorter drags when disabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/286
+- Added installed apps as a source for the Split APK merge tool https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/197
+- Added a split selection step before merging so specific modules can be included or excluded https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/197
+- mproved split merge loading, cancellation, and progress handling
 
 
 # Bug fixes
@@ -16,6 +19,8 @@
 - Fixed an issue where the `Patching in progress` notification could remain visible after canceling patching https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/285`
 - Fixed patch profiles and last used patch selections/options from overriding each other
  - Fixed saved patched app entries being overwritten, duplicated, or showing incorrect version/date metadata when repatching installed apps https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
+- Fixed stale merged APK output being offered after a later merge failure
+- Fixed installed split archive creation to fail cleanly when APK parts are missing
 
 
 # v1.8.1-dev.07 (2026-03-10)
