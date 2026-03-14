@@ -31,6 +31,7 @@ fun IntegerItem(
     trailingContent: (@Composable () -> Unit)? = null,
     neutralButtonLabel: String? = null,
     neutralValueProvider: (() -> Int?)? = null,
+    validator: (Int) -> Boolean = { true },
     enabled: Boolean = true
 ) {
     val value by preference.getAsState()
@@ -45,6 +46,7 @@ fun IntegerItem(
         trailingContent = trailingContent,
         neutralButtonLabel = neutralButtonLabel,
         neutralValueProvider = neutralValueProvider,
+        validator = validator,
         enabled = enabled
     )
 }
@@ -60,6 +62,7 @@ fun IntegerItem(
     trailingContent: (@Composable () -> Unit)? = null,
     neutralButtonLabel: String? = null,
     neutralValueProvider: (() -> Int?)? = null,
+    validator: (Int) -> Boolean = { true },
     enabled: Boolean = true
 ) {
     var dialogOpen by rememberSaveable {
@@ -70,6 +73,7 @@ fun IntegerItem(
         IntInputDialog(
             current = value,
             name = stringResource(headline),
+            validator = validator,
             onSubmit = { new ->
             dialogOpen = false
             new?.let(onValueChange)

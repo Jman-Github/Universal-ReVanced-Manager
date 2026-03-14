@@ -7,6 +7,7 @@ import android.content.pm.PackageInfo
 import android.net.Uri
 import android.os.Build
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,6 +52,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -70,7 +72,9 @@ import app.revanced.manager.ui.component.AppIcon
 import app.revanced.manager.ui.component.AppLabel
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.CheckedFilterChip
+import app.revanced.manager.ui.component.InterceptBackHandler
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
+import app.revanced.manager.ui.component.LoadingIndicator
 import app.revanced.manager.ui.component.ShimmerBox
 import app.revanced.manager.ui.component.NonSuggestedVersionDialog
 import app.revanced.manager.ui.component.UniversalFallbackVersionDialog
@@ -86,6 +90,7 @@ import app.revanced.manager.util.isAllowedApkFile
 import app.revanced.manager.util.consumeHorizontalScroll
 import app.revanced.manager.util.openUrl
 import java.io.File
+import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 
@@ -109,8 +114,12 @@ fun AppSelectorScreen(
     val allowUniversalPatches by prefs.disableUniversalPatchCheck.getAsState()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val searchEngineHost by prefs.searchEngineHost.getAsState()
+    val filterInstalledOnly by prefs.appSelectorFilterInstalledOnly.getAsState()
+    val filterPatchesAvailable by prefs.appSelectorFilterPatchesAvailable.getAsState()
+    val coroutineScope = rememberCoroutineScope()
 
     EventEffect(flow = vm.storageSelectionFlow) {
+        vm.consumeStorageSelectionResult()
         onStorageSelect(it)
         if (returnToDashboardOnStorage) {
             onBackClick()
@@ -128,7 +137,7 @@ fun AppSelectorScreen(
             }
         }
     val openDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
+        contract = ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri != null) {
             vm.handleStorageResult(uri)
@@ -144,7 +153,7 @@ fun AppSelectorScreen(
                 permissionLauncher.launch(permissionName)
             }
         } else {
-            openDocumentLauncher.launch(arrayOf("*/*"))
+            openDocumentLauncher.launch("application/*")
         }
     }
     LaunchedEffect(useCustomFilePicker) {
@@ -178,8 +187,13 @@ fun AppSelectorScreen(
 
     var filterText by rememberSaveable { mutableStateOf("") }
     var search by rememberSaveable { mutableStateOf(false) }
-    var filterInstalledOnly by rememberSaveable { mutableStateOf(false) }
-    var filterPatchesAvailable by rememberSaveable { mutableStateOf(false) }
+
+    InterceptBackHandler(enabled = search || filterText.isNotBlank()) {
+        when {
+            search -> search = false
+            filterText.isNotBlank() -> filterText = ""
+        }
+    }
 
     val appList by vm.appList.collectAsStateWithLifecycle(initialValue = emptyList())
     val filteredAppList = remember(
@@ -288,7 +302,13 @@ fun AppSelectorScreen(
             AppTopBar(
                 title = stringResource(R.string.select_app),
                 scrollBehavior = scrollBehavior,
-                onBackClick = onBackClick,
+                onBackClick = {
+                    when {
+                        search -> search = false
+                        filterText.isNotBlank() -> filterText = ""
+                        else -> onBackClick()
+                    }
+                },
                 actions = {
                     IconButton(onClick = { search = true }) {
                         Icon(Icons.Outlined.Search, stringResource(R.string.search))
@@ -321,13 +341,21 @@ fun AppSelectorScreen(
                         )
                         CheckedFilterChip(
                             selected = filterInstalledOnly,
-                            onClick = { filterInstalledOnly = !filterInstalledOnly },
+                            onClick = {
+                                coroutineScope.launch {
+                                    prefs.appSelectorFilterInstalledOnly.update(!filterInstalledOnly)
+                                }
+                            },
                             colors = appFilterChipColors,
                             label = { Text(stringResource(R.string.app_filter_installed_only)) }
                         )
                         CheckedFilterChip(
                             selected = filterPatchesAvailable,
-                            onClick = { filterPatchesAvailable = !filterPatchesAvailable },
+                            onClick = {
+                                coroutineScope.launch {
+                                    prefs.appSelectorFilterPatchesAvailable.update(!filterPatchesAvailable)
+                                }
+                            },
                             colors = appFilterChipColors,
                             label = { Text(stringResource(R.string.app_filter_patches_available)) }
                         )
@@ -478,6 +506,22 @@ fun AppSelectorScreen(
                     }
                 }
             }
+        }
+    }
+
+    if (vm.storageSelectionInProgress) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.45f)),
+            contentAlignment = Alignment.Center
+        ) {
+            LoadingIndicator(
+                modifier = Modifier.size(56.dp),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.35f),
+                strokeWidth = 4.dp
+            )
         }
     }
 }
@@ -847,7 +891,6 @@ private fun BundleSuggestionCard(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
                     .consumeHorizontalScroll(nameScrollState)
-                    .horizontalScroll(nameScrollState)
             )
             val versionLabel = suggestion.recommendedVersion
                 ?.let { stringResource(R.string.version_label, it) }

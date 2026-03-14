@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -27,12 +29,16 @@ import app.revanced.manager.ui.component.ColumnWithScrollbar
 import app.revanced.manager.ui.component.FullscreenDialog
 import app.revanced.manager.ui.component.settings.Changelog
 import app.revanced.manager.util.relativeTime
+import app.revanced.manager.util.simpleMessage
 import app.universal.revanced.manager.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BundleChangelogHistoryDialog(
     entries: List<PatchBundleChangelogEntry>,
+    isRefreshing: Boolean,
+    error: Throwable?,
+    onRetry: (() -> Unit)? = null,
     onDismissRequest: () -> Unit,
 ) {
     FullscreenDialog(
@@ -54,13 +60,68 @@ fun BundleChangelogHistoryDialog(
                 )
             }
         ) { paddingValues ->
-            if (entries.isEmpty()) {
-                BundleChangelogHistoryEmpty(paddingValues)
-            } else {
-                BundleChangelogHistoryContent(
+            when {
+                entries.isNotEmpty() -> BundleChangelogHistoryContent(
                     paddingValues = paddingValues,
                     entries = entries
                 )
+                isRefreshing -> BundleChangelogHistoryLoading(paddingValues)
+                error != null -> BundleChangelogHistoryError(
+                    paddingValues = paddingValues,
+                    error = error,
+                    onRetry = onRetry
+                )
+                else -> BundleChangelogHistoryEmpty(paddingValues)
+            }
+        }
+    }
+}
+
+@Composable
+private fun BundleChangelogHistoryLoading(paddingValues: PaddingValues) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(paddingValues),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        CircularProgressIndicator()
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = stringResource(R.string.changelog_loading),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.outline
+        )
+    }
+}
+
+@Composable
+private fun BundleChangelogHistoryError(
+    paddingValues: PaddingValues,
+    error: Throwable,
+    onRetry: (() -> Unit)?
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(paddingValues)
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = stringResource(
+                R.string.bundle_changelog_error,
+                error.simpleMessage().orEmpty()
+            ),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        if (onRetry != null) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Button(onClick = onRetry) {
+                Text(stringResource(R.string.bundle_changelog_retry))
             }
         }
     }

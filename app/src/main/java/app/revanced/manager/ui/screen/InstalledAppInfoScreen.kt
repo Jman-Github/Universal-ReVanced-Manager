@@ -37,7 +37,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -67,7 +66,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.activity.compose.BackHandler
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.revanced.manager.R
 import app.revanced.manager.data.platform.Filesystem
@@ -81,6 +79,7 @@ import app.revanced.manager.ui.component.AppliedPatchBundleUi
 import app.revanced.manager.ui.component.AppliedPatchesDialog
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.ColumnWithScrollbar
+import app.revanced.manager.ui.component.InterceptBackHandler
 import app.revanced.manager.ui.component.SegmentedButton
 import app.revanced.manager.ui.component.ConfirmDialog
 import app.revanced.manager.ui.component.ExportSavedApkFileNameDialog
@@ -135,6 +134,7 @@ fun InstalledAppInfoScreen(
     var showAppliedPatchesDialog by rememberSaveable { mutableStateOf(false) }
     var showUniversalBlockedDialog by rememberSaveable { mutableStateOf(false) }
     var showMixedBundleDialog by rememberSaveable { mutableStateOf(false) }
+    var showMixedRevancedPatcherDialog by rememberSaveable { mutableStateOf(false) }
     var showLeaveInstallDialog by rememberSaveable { mutableStateOf(false) }
     var showExportPicker by rememberSaveable { mutableStateOf(false) }
     var exportFileDialogState by remember { mutableStateOf<ExportSavedApkDialogState?>(null) }
@@ -174,8 +174,8 @@ fun InstalledAppInfoScreen(
         }
     }
     val selectionPayload = installedAppState?.selectionPayload
-    val savedBundleVersions = remember(selectionPayload) {
-        selectionPayload?.bundles.orEmpty().associate { it.bundleUid to it.version }
+    val savedBundlesByUid = remember(selectionPayload) {
+        selectionPayload?.bundles.orEmpty().associateBy { it.bundleUid }
     }
     data class SavedBundleTarget(
         val bundleUid: Int,
@@ -200,7 +200,7 @@ fun InstalledAppInfoScreen(
     var missingBundleSaving by remember { mutableStateOf(false) }
     var missingBundleIncompatibleTarget by remember { mutableStateOf<SavedBundleOverrideTarget?>(null) }
 
-    val appliedBundles = remember(appliedSelection, bundleInfo, bundleSources, context, savedBundleVersions) {
+    val appliedBundles = remember(appliedSelection, bundleInfo, bundleSources, context, savedBundlesByUid) {
         if (appliedSelection.isNullOrEmpty()) return@remember emptyList<AppliedPatchBundleUi>()
 
         runCatching {
@@ -209,12 +209,15 @@ fun InstalledAppInfoScreen(
                 val patchNames = patches.toList().sorted()
                 val info = bundleInfo[bundleUid]
                 val source = bundleSources.firstOrNull { it.uid == bundleUid }
+                val savedBundle = savedBundlesByUid[bundleUid]
                 val fallbackName = if (bundleUid == 0)
                     context.getString(R.string.patches_name_default)
                 else
                     context.getString(R.string.patches_name_fallback)
 
                 val title = source?.displayTitle
+                    ?: savedBundle?.displayName?.takeIf { it.isNotBlank() }
+                    ?: savedBundle?.sourceName?.takeIf { it.isNotBlank() }
                     ?: info?.name
                     ?: "$fallbackName (#$bundleUid)"
 
@@ -231,7 +234,7 @@ fun InstalledAppInfoScreen(
                 AppliedPatchBundleUi(
                     uid = bundleUid,
                     title = title,
-                    version = savedBundleVersions[bundleUid]?.takeUnless { it.isNullOrBlank() } ?: info?.version,
+                    version = savedBundle?.version?.takeUnless { it.isNullOrBlank() } ?: info?.version,
                     patchInfos = patchInfos,
                     fallbackNames = missingNames,
                     bundleAvailable = info != null
@@ -296,6 +299,10 @@ fun InstalledAppInfoScreen(
         scope.launch {
             if (patchBundleRepository.selectionHasMixedBundleTypes(selection)) {
                 showMixedBundleDialog = true
+                return@launch
+            }
+            if (patchBundleRepository.selectionHasMixedRevancedPatcherVersions(selection)) {
+                showMixedRevancedPatcherDialog = true
                 return@launch
             }
             onPatchClick(targetPackageName, selection, selectionPayload, persistConfiguration)
@@ -375,6 +382,19 @@ fun InstalledAppInfoScreen(
             },
             title = { Text(stringResource(R.string.mixed_patch_bundles_title)) },
             text = { Text(stringResource(R.string.mixed_patch_bundles_description)) }
+        )
+    }
+
+    if (showMixedRevancedPatcherDialog) {
+        AlertDialog(
+            onDismissRequest = { showMixedRevancedPatcherDialog = false },
+            confirmButton = {
+                TextButton(onClick = { showMixedRevancedPatcherDialog = false }) {
+                    Text(stringResource(R.string.close))
+                }
+            },
+            title = { Text(stringResource(R.string.mixed_revanced_patcher_versions_title)) },
+            text = { Text(stringResource(R.string.mixed_revanced_patcher_versions_description)) }
         )
     }
 
@@ -605,6 +625,7 @@ fun InstalledAppInfoScreen(
         val (titleRes, message) = when (installResult) {
             is InstallResult.Success -> R.string.install_app_success to installResult.message
             is InstallResult.Failure -> R.string.install_app_fail_title to installResult.message
+            is InstallResult.UninstallError -> R.string.uninstall_app_fail_title to installResult.message
         }
         AlertDialog(
             onDismissRequest = viewModel::clearInstallResult,
@@ -694,25 +715,13 @@ fun InstalledAppInfoScreen(
                 scrollBehavior = scrollBehavior,
                 onBackClick = {
                     if (viewModel.isInstalling) showLeaveInstallDialog = true else onBackClick()
-                },
-                actions = {
-                    if (viewModel.hasSavedCopy) {
-                        IconButton(
-                            onClick = { openExportPicker() }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Save,
-                                contentDescription = stringResource(R.string.export)
-                            )
-                        }
-                    }
                 }
             )
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
     ) { paddingValues ->
-        BackHandler {
-            if (viewModel.isInstalling) showLeaveInstallDialog = true else onBackClick()
+        InterceptBackHandler(enabled = viewModel.isInstalling) {
+            showLeaveInstallDialog = true
         }
         ColumnWithScrollbar(
             modifier = Modifier

@@ -1,6 +1,7 @@
 package app.revanced.manager.ui.viewmodel
 
 import android.app.Application
+import android.app.NotificationManager
 import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -30,6 +31,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MediatorLiveData
+import androidx.lifecycle.Observer
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -75,7 +77,9 @@ import app.revanced.manager.util.PatchedAppExportData
 import app.revanced.manager.util.Options
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.patcher.patch.PatchBundleInfo
+import app.revanced.manager.patcher.patch.PatchBundleType
 import app.revanced.manager.util.buildSavedAppEntryKey
+import app.revanced.manager.util.buildSavedAppVariantIdentity
 import app.revanced.manager.util.isSavedAppEntryForPackage
 import app.revanced.manager.util.saveableVar
 import app.revanced.manager.util.saver.snapshotStateListSaver
@@ -86,6 +90,7 @@ import app.revanced.manager.util.awaitUserConfirmation
 import app.revanced.manager.util.toastHandle
 import app.revanced.manager.util.uiSafe
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -97,10 +102,12 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.time.withTimeout
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 import java.util.zip.ZipFile
+import kotlin.coroutines.resume
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
 import org.koin.core.component.inject
@@ -115,6 +122,7 @@ import ru.solrudev.ackpine.uninstaller.UninstallFailure
 import ru.solrudev.ackpine.uninstaller.createSession
 import java.io.File
 import java.io.IOException
+import java.io.BufferedInputStream
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -122,6 +130,7 @@ import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.time.Duration
 import java.util.UUID
+import java.util.zip.ZipInputStream
 
 @OptIn(SavedStateHandleSaveableApi::class, PluginHostApi::class)
 class PatcherViewModel(
@@ -802,10 +811,20 @@ fun proceedAfterMissingPatchWarning() {
 
     private val logs by savedStateHandle.saveable<MutableList<Pair<LogLevel, String>>> { mutableListOf() }
     private var droppedLogLineCount by savedStateHandle.saveableVar { 0 }
+    private var runtimeReportedMemoryLimitMb: Int? by savedStateHandle.saveableVar()
     private val dexCompilePattern =
         Regex("(Compiling|Compiled)\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
     private val dexWritePattern =
         Regex("Write\\s+\\[[^\\]]+\\]\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
+    private fun parseMemoryLimitMb(raw: String?): Int? {
+        val value = raw?.trim() ?: return null
+        val match = Regex("""(\d+)\s*(?:m|mb|mib)?""", RegexOption.IGNORE_CASE)
+            .find(value)
+            ?: return null
+
+        return match.groupValues.getOrNull(1)?.toIntOrNull()
+    }
+
     private fun appendBoundedLog(level: LogLevel, message: String) {
         val boundedMessage = if (message.length > PATCHER_LOG_MESSAGE_CHAR_LIMIT) {
             buildString(PATCHER_LOG_MESSAGE_CHAR_LIMIT + 96) {
@@ -833,6 +852,11 @@ fun proceedAfterMissingPatchWarning() {
             level.androidLog(message)
             if (level == LogLevel.TRACE) return
             handleDexCompileLine(message)
+            if (message.startsWith("Memory limit:")) {
+                parseMemoryLimitMb(
+                    message.removePrefix("Memory limit:").trim()
+                )?.let { runtimeReportedMemoryLimitMb = it }
+            }
 
             viewModelScope.launch {
                 appendBoundedLog(level, message)
@@ -880,6 +904,53 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         return versions.distinct() to names.distinct()
     }
 
+    private suspend fun collectSelectedPatchDescriptions(): List<String> {
+        val globalBundles = patchBundleRepository.bundleInfoFlow.first()
+        val scopedBundles = gatherScopedBundles()
+        val sanitizedSelection = sanitizeSelection(appliedSelection, scopedBundles)
+        val displayNames = patchBundleRepository.sources.first().associate { it.uid to it.displayTitle }
+        return sanitizedSelection.entries.flatMap { (uid, patchNames) ->
+            val bundleName = displayNames[uid]
+                ?: scopedBundles[uid]?.name
+                ?: globalBundles[uid]?.name
+                ?: "Unknown bundle"
+            patchNames.sorted().map { patchName -> "$patchName - $bundleName" }
+        }
+    }
+
+    private fun resolveDeviceName(): String {
+        val marketName = sequenceOf(
+            "ro.product.marketname",
+            "ro.product.odm.marketname",
+            "ro.product.vendor.marketname",
+            "ro.config.marketing_name",
+            "ro.vendor.product.display"
+        ).mapNotNull(::readSystemProperty)
+            .firstOrNull()
+        return marketName ?: formatDeviceName(Build.MANUFACTURER, Build.MODEL)
+    }
+
+    private fun readSystemProperty(key: String): String? = runCatching {
+        val systemPropertiesClass = Class.forName("android.os.SystemProperties")
+        val getMethod = systemPropertiesClass.getMethod("get", String::class.java)
+        (getMethod.invoke(null, key) as? String)
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+    }.getOrNull()
+
+    private fun formatDeviceName(manufacturer: String?, model: String?): String {
+        val manufacturerValue = manufacturer?.trim().orEmpty()
+        val modelValue = model?.trim().orEmpty()
+        if (manufacturerValue.isEmpty() && modelValue.isEmpty()) return "unknown"
+        if (manufacturerValue.isEmpty()) return modelValue
+        if (modelValue.isEmpty()) return manufacturerValue
+        return if (modelValue.startsWith(manufacturerValue, ignoreCase = true)) {
+            modelValue
+        } else {
+            "${manufacturerValue.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }} $modelValue"
+        }
+    }
+
     private suspend fun buildExportMetadata(packageInfo: PackageInfo?): PatchedAppExportData? {
         val info = packageInfo ?: pm.getPackageInfo(outputFile) ?: return null
         val (bundleVersions, bundleNames) = collectSelectedBundleMetadata()
@@ -922,6 +993,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private var dexSubStepsReady = false
     private val pendingDexCompileLines = mutableListOf<String>()
     private val seenDexCompiles = mutableSetOf<String>()
+    private var writeApkStepStarted = false
 
     val progress by derivedStateOf {
         val current = steps.count { it.state == State.COMPLETED }
@@ -931,8 +1003,13 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
 
     private val workManager = WorkManager.getInstance(app)
+    private val notificationManager by lazy {
+        app.getSystemService(NotificationManager::class.java)
+    }
     private val _patcherSucceeded = MediatorLiveData<Boolean?>()
     val patcherSucceeded: LiveData<Boolean?> get() = _patcherSucceeded
+    private val _isPatchingActive = MediatorLiveData<Boolean>().apply { value = patcherWorkerId?.uuid != null }
+    val isPatchingActive: LiveData<Boolean> get() = _isPatchingActive
     private var currentWorkSource: LiveData<WorkInfo?>? = null
     private val handledFailureIds = mutableSetOf<UUID>()
     private var forceKeepLocalInput = false
@@ -986,10 +1063,68 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private fun startWorker() {
         resetDexCompileState()
         resetFailureLogState()
+        runtimeReportedMemoryLimitMb = null
+        markInitialStepRunning()
+        _isPatchingActive.value = true
         logBatteryOptimizationStatus()
         val workId = launchWorker()
         patcherWorkerId = ParcelUuid(workId)
         observeWorker(workId)
+    }
+
+    private fun clearPatchingNotification() {
+        runCatching {
+            notificationManager.cancel(PatcherWorker.NOTIFICATION_ID)
+        }.onFailure { error ->
+            Log.d(TAG, "Failed to clear patching notification", error)
+        }
+    }
+
+    private fun hasTemporaryLocalInput() =
+        input.selectedApp is SelectedApp.Local && input.selectedApp.temporary
+
+    private fun clearTemporaryLocalInputState() {
+        inputFile = null
+    }
+
+    private fun deleteTemporaryLocalInput(file: File?) {
+        file?.takeIf { it.exists() }?.delete()
+    }
+
+    private fun cleanupTemporaryLocalInput() {
+        if (!hasTemporaryLocalInput()) return
+        val fileToDelete = inputFile
+        clearTemporaryLocalInputState()
+        deleteTemporaryLocalInput(fileToDelete)
+    }
+
+    private suspend fun awaitWorkToFinish(workId: UUID) = suspendCancellableCoroutine<Unit> { continuation ->
+        val source = workManager.getWorkInfoByIdLiveData(workId)
+        val observer = object : Observer<WorkInfo?> {
+            override fun onChanged(workInfo: WorkInfo?) {
+                if (workInfo != null && !workInfo.state.isFinished) return
+                source.removeObserver(this)
+                if (continuation.isActive) {
+                    continuation.resume(Unit)
+                }
+            }
+        }
+        source.observeForever(observer)
+        continuation.invokeOnCancellation { source.removeObserver(observer) }
+    }
+
+    private fun cleanupTemporaryLocalInputAfterWorkStops(workId: UUID?) {
+        if (!hasTemporaryLocalInput()) return
+        val fileToDelete = inputFile ?: return
+        clearTemporaryLocalInputState()
+        CoroutineScope(Dispatchers.IO).launch {
+            workId?.let { activeWorkId ->
+                withContext(Dispatchers.Main.immediate) {
+                    awaitWorkToFinish(activeWorkId)
+                }
+            }
+            deleteTemporaryLocalInput(fileToDelete)
+        }
     }
 
     private suspend fun persistPatchedApp(
@@ -1032,16 +1167,24 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 sanitizedOptionsFinal
             )
 
-            val newBundleUids = sanitizedSelectionFinal.keys.toSet()
+            val newVariantIdentity = buildSavedAppVariantIdentity(
+                appVersion = finalVersion,
+                selectionPayload = selectionPayload,
+                patchSelection = sanitizedSelectionFinal
+            )
             val savedEntriesForPackage = installedAppRepository.getByInstallType(InstallType.SAVED)
                 .filter { savedApp ->
                     isSavedAppEntryForPackage(savedApp.currentPackageName, finalPackageName)
                 }
+            val savedEntryIdentities = mutableMapOf<String, String>()
+            savedEntriesForPackage.forEach { savedApp ->
+                savedEntryIdentities[savedApp.currentPackageName] = savedEntryIdentity(savedApp)
+            }
             val matchingSavedEntry = if (disableSavedAppOverwrite) {
                 null
             } else {
                 savedEntriesForPackage.firstOrNull { savedApp ->
-                    savedEntryBundleUids(savedApp) == newBundleUids
+                    savedEntryIdentities[savedApp.currentPackageName] == newVariantIdentity
                 }
             }
             val preserveSavedEntry =
@@ -1051,43 +1194,74 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     )
             val persistedInstallType = if (preserveSavedEntry) InstallType.SAVED else installType
             val existingFinalPackageEntry = installedAppRepository.get(finalPackageName)
+            val existingInstalledEntry = existingFinalPackageEntry?.takeIf {
+                it.installType != InstallType.SAVED
+            }
+            val effectiveShouldSaveForLater = shouldSaveForLater || preserveSavedEntry
+            val existingInstalledIdentity = existingInstalledEntry?.let { savedEntryIdentity(it) }
+            if (
+                disableSavedAppOverwrite &&
+                effectiveShouldSaveForLater &&
+                persistedInstallType != InstallType.SAVED &&
+                existingInstalledEntry != null &&
+                existingInstalledIdentity != null &&
+                existingInstalledIdentity != newVariantIdentity &&
+                existingInstalledIdentity !in savedEntryIdentities.values
+            ) {
+                preserveHistoricalInstalledEntry(
+                    sourceApp = existingInstalledEntry,
+                    targetPackageName = buildSavedAppEntryKey(finalPackageName, existingInstalledIdentity)
+                )
+            }
             val persistedPackageName = if (persistedInstallType == InstallType.SAVED) {
                 if (disableSavedAppOverwrite) {
-                    buildUniqueSavedAppEntryKey(finalPackageName, newBundleUids)
+                    buildUniqueSavedAppEntryKey(finalPackageName, newVariantIdentity)
                 } else {
                     matchingSavedEntry?.currentPackageName ?: run {
                         val canUseBaseKey = savedEntriesForPackage.isEmpty() &&
                             (existingFinalPackageEntry == null || existingFinalPackageEntry.installType == InstallType.SAVED)
                         if (canUseBaseKey) finalPackageName
-                        else buildSavedAppEntryKey(finalPackageName, newBundleUids)
+                        else buildSavedAppEntryKey(finalPackageName, newVariantIdentity)
                     }
                 }
             } else {
                 finalPackageName
             }
 
-            val effectiveShouldSaveForLater = shouldSaveForLater || preserveSavedEntry
-            val savedCopyPackageName = if (persistedInstallType == InstallType.SAVED) {
-                persistedPackageName
+            val separateSavedEntryPackageName = if (
+                persistedInstallType != InstallType.SAVED &&
+                effectiveShouldSaveForLater &&
+                disableSavedAppOverwrite
+            ) {
+                buildUniqueSavedAppEntryKey(finalPackageName, newVariantIdentity)
             } else {
-                finalPackageName
+                null
+            }
+            val savedCopyPackageName = when {
+                separateSavedEntryPackageName != null -> separateSavedEntryPackageName
+                persistedInstallType == InstallType.SAVED -> persistedPackageName
+                else -> finalPackageName
             }
             val savedCopy = fs.getPatchedAppFile(savedCopyPackageName, finalVersion)
-            if (effectiveShouldSaveForLater) {
+            val savedCopyWritten = if (effectiveShouldSaveForLater) {
                 try {
                     savedCopy.parentFile?.mkdirs()
                     outputFile.copyTo(savedCopy, overwrite = true)
+                    true
                 } catch (error: IOException) {
                     if (installType == InstallType.SAVED) {
                         Log.e(TAG, "Failed to copy patched APK for later", error)
                         return@withContext false
                     } else {
                         Log.w(TAG, "Failed to update saved copy for $savedCopyPackageName", error)
+                        false
                     }
                 }
+            } else {
+                false
             }
 
-            if (effectiveShouldSaveForLater || persistedInstallType != InstallType.SAVED) {
+            if (persistedInstallType != InstallType.SAVED) {
                 installedAppRepository.addOrUpdate(
                     persistedPackageName,
                     packageName,
@@ -1095,7 +1269,22 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     persistedInstallType,
                     sanitizedSelectionFinal,
                     selectionPayload,
-                    resetCreatedAt = effectiveShouldSaveForLater && persistedInstallType == InstallType.SAVED
+                    resetCreatedAt = true
+                )
+            }
+            if (
+                effectiveShouldSaveForLater &&
+                savedCopyWritten &&
+                (persistedInstallType == InstallType.SAVED || separateSavedEntryPackageName != null)
+            ) {
+                installedAppRepository.addOrUpdate(
+                    separateSavedEntryPackageName ?: persistedPackageName,
+                    packageName,
+                    finalVersion,
+                    InstallType.SAVED,
+                    sanitizedSelectionFinal,
+                    selectionPayload,
+                    resetCreatedAt = true
                 )
             }
 
@@ -1109,7 +1298,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             appliedOptions = sanitizedOptionsOriginal
 
             savedPatchedApp = savedPatchedApp ||
-                (effectiveShouldSaveForLater && (installType == InstallType.SAVED || savedCopy.exists()))
+                (effectiveShouldSaveForLater && (savedCopyWritten || savedCopy.exists()))
             true
         }
     }
@@ -1168,7 +1357,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     override fun onCleared() {
         super.onCleared()
         app.unregisterReceiver(packageChangeReceiver)
-        patcherWorkerId?.uuid?.let(workManager::cancelWorkById)
         pendingExternalInstall?.let(installerManager::cleanup)
         pendingExternalInstall = null
         externalInstallTimeoutJob?.cancel()
@@ -1188,17 +1376,17 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             }
         }
 
-        if (input.selectedApp is SelectedApp.Local && input.selectedApp.temporary) {
-            inputFile?.takeIf { it.exists() }?.delete()
-            inputFile = null
-            updateSplitStepRequirement(null)
+        if (_patcherSucceeded.value != null) {
+            cleanupTemporaryLocalInput()
         }
     }
 
     fun onBack() {
         // tempDir cannot be deleted inside onCleared because it gets called on system-initiated process death.
-        if (_patcherSucceeded.value == null) {
-            patcherWorkerId?.uuid?.let(workManager::cancelWorkById)
+        if (_isPatchingActive.value == true) {
+            val workId = patcherWorkerId?.uuid
+            workId?.let(workManager::cancelWorkById)
+            cleanupTemporaryLocalInputAfterWorkStops(workId)
         }
         tempDir.deleteRecursively()
     }
@@ -1277,44 +1465,69 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         val logSnapshot = logs.toList()
         val logMessages = logSnapshot.map { it.second }
         fun findLogValue(prefix: String): String? =
-            logMessages.firstOrNull { it.startsWith(prefix) }
+            logMessages.lastOrNull { it.startsWith(prefix) }
                 ?.removePrefix(prefix)
                 ?.trim()
-        fun parseMemoryLimitMb(raw: String?): Int? {
-            val value = raw?.trim() ?: return null
-            val match = Regex("""(\d+)\s*(?:m|mb|mib)?""", RegexOption.IGNORE_CASE)
-                .find(value)
-                ?: return null
-
-            return match.groupValues.getOrNull(1)?.toIntOrNull()
-        }
 
         data class LogPrefsSnapshot(
             val requestedLimit: Int,
             val aggressiveLimit: Boolean,
             val experimental: Boolean,
             val bundleType: String,
+            val revancedPatcherVersion: String?,
             val stripNativeLibs: Boolean,
-            val skipUnusedSplits: Boolean
+            val skipUnusedSplits: Boolean,
+            val environment: String,
+            val selectedPatchLines: List<String>
         )
         val prefsSnapshot = runBlocking {
             val requested = prefs.patcherProcessMemoryLimit.get()
             val aggressive = prefs.patcherProcessMemoryAggressive.get()
             val experimentalEnabled = prefs.useProcessRuntime.get()
-            val bundle = patchBundleRepository.selectionBundleType(input.selectedPatches)?.name
-                ?: "UNKNOWN"
+            val bundleType = patchBundleRepository.selectionBundleType(input.selectedPatches)
+            val bundle = bundleType?.name ?: "UNKNOWN"
+            val revancedPatcherVersion = when (bundleType) {
+                PatchBundleType.REVANCED ->
+                    if (patchBundleRepository.selectionUsesRevancedPatcher22(input.selectedPatches)) {
+                        "22.0.0"
+                    } else {
+                        "21.0.0"
+                    }
+                else -> null
+            }
             val stripNative = prefs.stripUnusedNativeLibs.get()
             val skipSplits = prefs.skipUnneededSplitApks.get()
-            LogPrefsSnapshot(requested, aggressive, experimentalEnabled, bundle, stripNative, skipSplits)
+            val environment = withContext(Dispatchers.IO) {
+                when (rootInstaller.peekRootAccess()) {
+                    true -> "root"
+                    false -> "unrooted"
+                    null -> if (rootInstaller.isDeviceRooted()) "rooted" else "unrooted"
+                }
+            }
+            val selectedPatchLines = collectSelectedPatchDescriptions()
+            LogPrefsSnapshot(
+                requested,
+                aggressive,
+                experimentalEnabled,
+                bundle,
+                revancedPatcherVersion,
+                stripNative,
+                skipSplits,
+                environment,
+                selectedPatchLines
+            )
         }
         val requestedLimit = prefsSnapshot.requestedLimit
         val aggressiveLimit = prefsSnapshot.aggressiveLimit
         val experimental = prefsSnapshot.experimental
         val bundleType = prefsSnapshot.bundleType
+        val revancedPatcherVersion = prefsSnapshot.revancedPatcherVersion
         val stripNativeLibs = prefsSnapshot.stripNativeLibs
         val skipUnusedSplits = prefsSnapshot.skipUnusedSplits
+        val environment = prefsSnapshot.environment
+        val selectedPatchLines = prefsSnapshot.selectedPatchLines
 
-        val runtimeReportedLimit = parseMemoryLimitMb(
+        val runtimeReportedLimit = runtimeReportedMemoryLimitMb ?: parseMemoryLimitMb(
             logMessages.lastOrNull { it.startsWith("Memory limit:") }
                 ?.removePrefix("Memory limit:")
                 ?.trim()
@@ -1322,14 +1535,23 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         val effectiveLimit = runtimeReportedLimit ?: if (aggressiveLimit) {
             MemoryLimitConfig.maxLimitMb(context)
         } else {
-            requestedLimit
+            MemoryLimitConfig.clampLimitMb(context, requestedLimit)
         }
+        val processRuntimeSupported = Build.VERSION.SDK_INT > Build.VERSION_CODES.Q
+        val runtimeMode = findLogValue("Runtime mode:")
+            ?: if (experimental && processRuntimeSupported) "process" else "in-process"
+        val memoryOverride = findLogValue("Memory override:")
+            ?: if (experimental && processRuntimeSupported && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                "enabled"
+            } else {
+                "disabled"
+            }
 
         val isIgnoring = context.getSystemService<PowerManager>()
             ?.isIgnoringBatteryOptimizations(context.packageName) == true
         val batteryOptimization = if (isIgnoring) "disabled" else "enabled"
+        val deviceName = resolveDeviceName()
 
-        val inputPath = inputFile?.absolutePath
         val sizeBytes = inputFile?.length() ?: 0L
         val sizeMb = if (sizeBytes > 0L) {
             "${(sizeBytes / 1_000_000.0).roundToInt()}MB"
@@ -1348,13 +1570,12 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 }.getOrNull()
             }
 
-        val aapt2Sha = findLogValue("AAPT2 sha256:") ?: "unknown"
-        val aapt2Version = findLogValue("AAPT2 version:") ?: "unknown"
+        val aapt2Selected = findLogValue("AAPT2 selected:") ?: "unknown"
 
         val appVersion = input.selectedApp.version
             ?.takeUnless { it.isBlank() }
             ?: "unspecified"
-        val patchCount = input.selectedPatches.values.sumOf { it.size }
+        val patchCount = selectedPatchLines.size
         val droppedLines = droppedLogLineCount
 
         val logLines = logSnapshot
@@ -1363,6 +1584,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     msg.startsWith("Patching started at ") ||
                     msg.startsWith("Patcher runtime:") ||
                     msg.startsWith("Memory limit:") ||
+                    msg.startsWith("Runtime mode:") ||
+                    msg.startsWith("Memory override:") ||
+                    msg.startsWith("AAPT2 selected:") ||
                     msg.startsWith("AAPT2 sha256:") ||
                     msg.startsWith("AAPT2 version:")
             }
@@ -1373,22 +1597,36 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             appendLine("Information:")
             appendLine("------------")
             appendLine("URV version: ${BuildConfig.VERSION_NAME}")
+            appendLine("Device architecture: ${Build.SUPPORTED_ABIS.joinToString(", ")}")
+            appendLine("Device name: $deviceName")
+            appendLine("Device model: ${Build.MODEL}")
+            appendLine("Android version: ${Build.VERSION.RELEASE} (${Build.VERSION.SDK_INT})")
+            appendLine("Environment: $environment")
             appendLine("Requested memory limit: ${requestedLimit}MB")
             appendLine("Effective memory limit: ${effectiveLimit}MB")
             appendLine("Bundle type: $bundleType")
+            revancedPatcherVersion?.let {
+                appendLine("ReVanced Patcher version: $it")
+            }
             appendLine("Experimental: $experimental")
+            appendLine("Runtime mode: $runtimeMode")
+            appendLine("Memory override: $memoryOverride")
             appendLine("Aggressive: $aggressiveLimit")
             appendLine("Strip native libs: ${if (stripNativeLibs) "on" else "off"}")
             appendLine("Skip unused splits: ${if (skipUnusedSplits) "on" else "off"}")
             appendLine("Battery optimization: $batteryOptimization")
-            appendLine("AAPT2 sha256: $aapt2Sha")
-            appendLine("AAPT2 version: $aapt2Version")
+            appendLine("AAPT2 selected: $aapt2Selected")
             appendLine("App package: ${input.selectedApp.packageName}")
             appendLine("App version: $appVersion")
-            appendLine("App input path: ${inputPath ?: "unknown"}")
             appendLine("App size: $sizeMb")
             splitCount?.let { appendLine("Split: $it") }
             appendLine("Patches: $patchCount")
+            appendLine("Selected patches:")
+            if (selectedPatchLines.isEmpty()) {
+                appendLine("None")
+            } else {
+                selectedPatchLines.forEach { appendLine(it) }
+            }
             appendLine()
             appendLine("------------")
             appendLine("Patcher Log:")
@@ -2128,7 +2366,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private fun launchWorker(): UUID =
         workerRepository.launchExpedited<PatcherWorker, PatcherWorker.Args>(
-            "patching",
+            PatcherWorker.UNIQUE_WORK_NAME,
             buildWorkerArgs()
         )
 
@@ -2199,6 +2437,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private fun handleProgressEvent(event: ProgressEvent) = viewModelScope.launch {
         val eventStepId = event.stepId
+        if (shouldResetProgressStateForAutomaticRetry(event)) {
+            resetProgressStateForAutomaticRetry()
+        }
         val stepIndex = steps.indexOfFirst { step ->
             eventStepId?.let { id -> id == step.id }
                 ?: (step.state == State.RUNNING || step.state == State.WAITING)
@@ -2206,7 +2447,18 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
         if (eventStepId != null && isExpandableStep(eventStepId)) {
             when (event) {
-                is ProgressEvent.Started -> stepSubSteps.remove(eventStepId)
+                is ProgressEvent.Started -> {
+                    if (eventStepId == StepId.WriteAPK) {
+                        resetDexCompileState()
+                        writeApkStepStarted = true
+                        if (stepSubSteps[eventStepId].isNullOrEmpty()) {
+                            stepSubSteps.remove(eventStepId)
+                        }
+                        ensureWriteApkFallbackSubSteps()
+                    } else {
+                        stepSubSteps.remove(eventStepId)
+                    }
+                }
                 is ProgressEvent.Progress -> {
                     val progress = event.current?.let { current -> current to event.total }
                     event.subSteps?.let { prepareSubSteps(eventStepId, it) }
@@ -2214,8 +2466,16 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                         updateSubStep(eventStepId, event.message, progress)
                     }
                 }
-                is ProgressEvent.Completed -> finalizeSubSteps(eventStepId)
+                is ProgressEvent.Completed -> {
+                    if (eventStepId == StepId.WriteAPK) {
+                        writeApkStepStarted = false
+                    }
+                    finalizeSubSteps(eventStepId)
+                }
                 is ProgressEvent.Failed -> {
+                    if (eventStepId == StepId.WriteAPK) {
+                        writeApkStepStarted = false
+                    }
                     finalizeSubSteps(
                         eventStepId,
                         failed = true,
@@ -2225,28 +2485,57 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             }
         }
 
-        if (stepIndex != -1) steps[stepIndex] = steps[stepIndex].run {
-            when (event) {
-                is ProgressEvent.Started -> withState(State.RUNNING)
-
-                is ProgressEvent.Progress -> {
-                    val nextState = if (state == State.WAITING) State.RUNNING else state
-                    withState(
-                        state = nextState,
-                        message = event.message ?: message,
-                        progress = event.current?.let { event.current to event.total } ?: progress
-                    )
+        if (stepIndex != -1) {
+            val step = steps[stepIndex]
+            val updatedStep = when (event) {
+                is ProgressEvent.Started -> {
+                    if (step.state == State.COMPLETED || step.state == State.FAILED) {
+                        null
+                    } else {
+                        step.withState(State.RUNNING)
+                    }
                 }
 
-                is ProgressEvent.Completed -> withState(State.COMPLETED, progress = null)
+                is ProgressEvent.Progress -> {
+                    if (step.state == State.COMPLETED || step.state == State.FAILED) {
+                        null
+                    } else {
+                        val nextState = if (step.state == State.WAITING) State.RUNNING else step.state
+                        val nextMessage = if (eventStepId == StepId.LoadPatches) {
+                            null
+                        } else {
+                            event.message ?: step.message
+                        }
+                        step.withState(
+                            state = nextState,
+                            message = nextMessage,
+                            progress = event.current?.let { event.current to event.total } ?: step.progress
+                        )
+                    }
+                }
+
+                is ProgressEvent.Completed -> {
+                    if (step.state == State.FAILED) {
+                        null
+                    } else {
+                        step.withState(State.COMPLETED, progress = null)
+                    }
+                }
 
                 is ProgressEvent.Failed -> {
                     if (event.stepId == null && steps.any { it.state == State.FAILED }) return@launch
-                    withState(
+                    step.withState(
                         State.FAILED,
                         message = event.error.stackTrace,
                         progress = null
                     )
+                }
+            }
+
+            if (updatedStep != null) {
+                steps[stepIndex] = updatedStep
+                if (event is ProgressEvent.Completed && updatedStep.state == State.COMPLETED) {
+                    promoteNextSectionStepIfNeeded(stepIndex)
                 }
             }
         }
@@ -2292,10 +2581,26 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private fun prepareSubSteps(stepId: StepId, titles: List<String>) {
         val normalized = titles.filter { it.isNotBlank() }.map { it.trim() }
         val existing = stepSubSteps[stepId]
+        val effectiveTitles = if (stepId == StepId.WriteAPK) {
+            mergeWriteApkSubStepTitles(normalized, existing)
+        } else {
+            normalized
+        }
+        val list = buildSubStepList(effectiveTitles, existing)
+        stepSubSteps[stepId] = list
+        if (stepId == StepId.WriteAPK) {
+            markDexSubStepsReady()
+        }
+    }
+
+    private fun buildSubStepList(
+        titles: List<String>,
+        existing: List<StepDetail>?
+    ): SnapshotStateList<StepDetail> {
         val list = mutableStateListOf<StepDetail>()
-        normalized.forEach { rawTitle ->
+        titles.forEach { rawTitle ->
             val (title, skipped) = parseSubStepTitle(rawTitle)
-            val previous = existing?.firstOrNull { it.title == title }
+            val previous = existing?.firstOrNull { it.title.equals(title, ignoreCase = true) }
             val effectiveSkipped = skipped || previous?.skipped == true
             val state = when {
                 effectiveSkipped -> if (previous?.state == State.FAILED) State.FAILED else State.COMPLETED
@@ -2307,10 +2612,62 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     ?: StepDetail(title = title, state = state, skipped = effectiveSkipped)
             )
         }
-        stepSubSteps[stepId] = list
-        if (stepId == StepId.WriteAPK) {
-            markDexSubStepsReady()
+        return list
+    }
+
+    private fun mergeWriteApkSubStepTitles(
+        incomingTitles: List<String>,
+        existing: List<StepDetail>?
+    ): List<String> {
+        val incoming = incomingTitles
+            .map { normalizeWriteApkTitle(StepId.WriteAPK, it) }
+            .filter { it.isNotBlank() }
+
+        val existingDexTitles = existing.orEmpty()
+            .map { it.title }
+            .filter(::isDexCompileTitle)
+            .distinctBy { it.lowercase() }
+        val incomingDexTitles = incoming
+            .filter(::isDexCompileTitle)
+            .distinctBy { it.lowercase() }
+        val seededDexTitles = when {
+            incomingDexTitles.isNotEmpty() -> incomingDexTitles
+            existingDexTitles.isNotEmpty() -> existingDexTitles
+            else -> buildFallbackDexTitles()
+        }.distinctBy { it.lowercase() }
+
+        val merged = mutableListOf<String>()
+        val phaseIndex = incoming.indexOfFirst(::isDexCompilePhaseTitle)
+        if (phaseIndex != -1 && incomingDexTitles.isEmpty() && seededDexTitles.isNotEmpty()) {
+            merged.addAll(incoming.take(phaseIndex))
+            merged.addAll(seededDexTitles)
+            merged.addAll(incoming.drop(phaseIndex + 1))
+        } else {
+            merged.addAll(incoming)
+            if (incomingDexTitles.isEmpty() && seededDexTitles.isNotEmpty()) {
+                merged.addAll(writeApkDexInsertIndex(merged), seededDexTitles)
+            }
         }
+
+        if (existingDexTitles.isNotEmpty()) {
+            val missingExisting = existingDexTitles.filter { existingTitle ->
+                merged.none { it.equals(existingTitle, ignoreCase = true) }
+            }
+            if (missingExisting.isNotEmpty()) {
+                merged.addAll(writeApkDexInsertIndex(merged), missingExisting)
+            }
+        }
+
+        return merged.distinctBy { it.lowercase() }
+    }
+
+    private fun writeApkDexInsertIndex(titles: List<String>): Int {
+        return titles.indexOfFirst(::isResourceCompileTitle).takeIf { it != -1 }
+            ?: titles.indexOfFirst { it.equals("Writing output APK", ignoreCase = true) }
+                .takeIf { it != -1 }
+            ?: titles.indexOfFirst { it.equals("Finalizing output", ignoreCase = true) }
+                .takeIf { it != -1 }
+            ?: titles.size
     }
 
     private fun updateSubStep(
@@ -2336,7 +2693,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             title
         }
         val normalized = normalizeWriteApkTitle(stepId, splitNormalized)
-        if (stepId == StepId.WriteAPK && isDexCompileTitle(normalized)) {
+        val explicitCompletion = isExplicitSubStepCompletion(stepId, title)
+        if (stepId == StepId.WriteAPK && isDexCompileTitle(normalized) && !explicitCompletion) {
             seenDexCompiles.add(normalized)
         }
         var existingIndex = list.indexOfFirst { it.title == normalized }
@@ -2349,37 +2707,21 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                         return
                     }
                 }
-                val nextExpectedIndex = if (runningIndex != -1) {
-                    var index = runningIndex + 1
-                    while (index < list.size && list[index].skipped) {
-                        index++
+                if (runningIndex != -1 && existingIndex < runningIndex) {
+                    val stale = list[existingIndex]
+                    if (!stale.skipped && stale.state != State.COMPLETED) {
+                        list[existingIndex] = stale.copy(state = State.COMPLETED, progress = null)
                     }
-                    if (index < list.size) index else -1
-                } else {
-                    list.indexOfFirst { !it.skipped && it.state == State.WAITING }
+                    return
                 }
-                when {
-                    runningIndex != -1 && existingIndex == runningIndex -> Unit
-                    nextExpectedIndex != -1 && existingIndex == nextExpectedIndex -> Unit
-                    nextExpectedIndex != -1 && existingIndex < nextExpectedIndex -> {
-                        val stale = list[existingIndex]
-                        if (!stale.skipped && stale.state != State.COMPLETED) {
-                            list[existingIndex] = stale.copy(state = State.COMPLETED, progress = null)
-                        }
-                        return
-                    }
-                    nextExpectedIndex != -1 && existingIndex > nextExpectedIndex -> {
-                        val moved = list.removeAt(existingIndex)
-                        list.add(nextExpectedIndex, moved)
-                        existingIndex = nextExpectedIndex
-                    }
-                }
+                completePrepareSplitApkPriorSteps(list, existingIndex)
             }
         }
         if (stepId == StepId.WriteAPK && isDexCompilePhaseTitle(normalized)) {
             completeWriteApkApplyChanges(list)
             val firstCompile = list.indexOfFirst { isDexCompileTitle(it.title) }
             if (firstCompile != -1) {
+                completeWriteApkPriorSteps(list, firstCompile)
                 if (runningIndex != -1 && runningIndex < firstCompile) {
                     val running = list[runningIndex]
                     list[runningIndex] = running.copy(state = State.COMPLETED, progress = null)
@@ -2434,8 +2776,35 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         if (stepId == StepId.WriteAPK && isDexCompileTitle(normalized)) {
             completeWriteApkApplyChanges(list)
         }
+        if (explicitCompletion) {
+            if (existingIndex == -1 && list.isNotEmpty()) {
+                existingIndex = findBestSubStepIndex(list, normalized)
+            }
+            if (existingIndex != -1) {
+                val existing = list[existingIndex]
+                if (!existing.skipped && existing.state != State.COMPLETED) {
+                    if (stepId == StepId.WriteAPK && existingIndex > 0) {
+                        completeWriteApkPriorSteps(list, existingIndex)
+                    }
+                    list[existingIndex] = existing.copy(state = State.COMPLETED, progress = null)
+                    if (stepId == StepId.WriteAPK) {
+                        promoteNextWriteApkSubStep(list, existingIndex)
+                    }
+                }
+                return
+            }
+        }
         if (existingIndex != -1) {
             if (list[existingIndex].skipped) return
+            if (stepId == StepId.WriteAPK &&
+                isDexCompileTitle(normalized) &&
+                list[existingIndex].state == State.COMPLETED
+            ) {
+                return
+            }
+            if (stepId == StepId.WriteAPK && existingIndex > 0 && (runningIndex == -1 || existingIndex >= runningIndex)) {
+                completeWriteApkPriorSteps(list, existingIndex)
+            }
             if (stepId == StepId.PrepareSplitApk && runningIndex != -1 && existingIndex < runningIndex) {
                 val existing = list[existingIndex]
                 if (existing.state != State.COMPLETED) {
@@ -2467,8 +2836,19 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         list.add(StepDetail(title = title, state = State.RUNNING, progress = progress))
     }
 
+    private fun isExplicitSubStepCompletion(stepId: StepId, rawTitle: String): Boolean {
+        if (stepId != StepId.WriteAPK) return false
+        val title = rawTitle.trim()
+        return title.startsWith("Compiled ", ignoreCase = true)
+    }
+
     private fun normalizeWriteApkTitle(stepId: StepId, title: String): String {
         if (stepId != StepId.WriteAPK) return title
+        if (title.equals("Compiling patched resources", ignoreCase = true) ||
+            title.equals("Compiled patched resources", ignoreCase = true)
+        ) {
+            return "Compiling modified resources"
+        }
         return if (title.startsWith("Compiled ", ignoreCase = true)) {
             "Compiling " + title.removePrefix("Compiled ").trim()
         } else {
@@ -2499,12 +2879,35 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private fun isDexCompilePhaseTitle(title: String): Boolean =
         title.equals("Compiling patched dex files", ignoreCase = true)
     private fun isResourceCompileTitle(title: String): Boolean =
-        title.equals("Compiling modified resources", ignoreCase = true)
+        title.equals("Compiling modified resources", ignoreCase = true) ||
+            title.equals("Compiling patched resources", ignoreCase = true)
 
     private fun resetDexCompileState() {
         dexSubStepsReady = false
         pendingDexCompileLines.clear()
         seenDexCompiles.clear()
+        writeApkStepStarted = false
+    }
+
+    private fun reconcileProgressStateAfterSuccess() {
+        resetDexCompileState()
+        resetFailureLogState()
+        steps.forEachIndexed { index, step ->
+            steps[index] = step.withState(
+                state = State.COMPLETED,
+                message = null,
+                progress = null
+            )
+        }
+        stepSubSteps.forEach { (_, list) ->
+            list.forEachIndexed { index, detail ->
+                list[index] = detail.copy(
+                    state = State.COMPLETED,
+                    message = null,
+                    progress = null
+                )
+            }
+        }
     }
 
     private fun markDexSubStepsReady() {
@@ -2539,7 +2942,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private fun completeResourceCompileIfPending(list: SnapshotStateList<StepDetail>) {
         val index = list.indexOfFirst {
-            it.title.equals("Compiling modified resources", ignoreCase = true)
+            isResourceCompileTitle(it.title)
         }
         if (index == -1) return
         val detail = list[index]
@@ -2547,12 +2950,56 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         list[index] = detail.copy(state = State.COMPLETED, progress = null)
     }
 
+    private fun completeWriteApkPriorSteps(
+        list: SnapshotStateList<StepDetail>,
+        untilExclusive: Int
+    ) {
+        if (untilExclusive <= 0) return
+        val limit = untilExclusive.coerceAtMost(list.size)
+        for (index in 0 until limit) {
+            val detail = list[index]
+            if (detail.skipped || detail.state == State.COMPLETED) continue
+            list[index] = detail.copy(state = State.COMPLETED, progress = null)
+        }
+    }
+
+    private fun completePrepareSplitApkPriorSteps(
+        list: SnapshotStateList<StepDetail>,
+        untilExclusive: Int
+    ) {
+        if (untilExclusive <= 0) return
+        val limit = untilExclusive.coerceAtMost(list.size)
+        for (index in 0 until limit) {
+            val detail = list[index]
+            if (detail.skipped || detail.state == State.COMPLETED) continue
+            list[index] = detail.copy(state = State.COMPLETED, progress = null)
+        }
+    }
+
+    private fun promoteNextWriteApkSubStep(
+        list: SnapshotStateList<StepDetail>,
+        completedIndex: Int
+    ) {
+        val runningIndex = list.indexOfFirst { !it.skipped && it.state == State.RUNNING }
+        if (runningIndex != -1) return
+
+        val nextIndex = ((completedIndex + 1) until list.size)
+            .firstOrNull { index ->
+                val detail = list[index]
+                !detail.skipped && detail.state == State.WAITING
+            }
+            ?: return
+
+        val next = list[nextIndex]
+        list[nextIndex] = next.copy(state = State.RUNNING, progress = null)
+    }
+
     private fun activateResourceCompileStep(
         list: SnapshotStateList<StepDetail>,
         progress: Pair<Long, Long?>?
     ) {
         val resourceIndex = list.indexOfFirst {
-            it.title.equals("Compiling modified resources", ignoreCase = true)
+            isResourceCompileTitle(it.title)
         }.takeIf { it != -1 } ?: run {
             val insertIndex = list.indexOfFirst {
                 it.title.equals("Writing output APK", ignoreCase = true)
@@ -2560,6 +3007,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             list.add(insertIndex, StepDetail(title = "Compiling modified resources", state = State.WAITING))
             insertIndex
         }
+        completeWriteApkPriorSteps(list, resourceIndex)
 
         list.forEachIndexed { index, detail ->
             if (detail.title.startsWith("Compiling ", ignoreCase = true) &&
@@ -2582,9 +3030,18 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private fun handleDexCompileLine(rawLine: String) {
         val line = rawLine.trim()
         if (line.isEmpty()) return
-        if (line.contains("Compiling modified resources", ignoreCase = true)) {
+        if (line.startsWith("[STDIO]:", ignoreCase = true)) return
+        if (!writeApkStepStarted && shouldStartWriteApkFromLog(line)) {
+            startWriteApkFromLogFallback(line)
+        }
+        if (!writeApkStepStarted) return
+        if (line.contains("Compiling modified resources", ignoreCase = true) ||
+            line.contains("Compiling patched resources", ignoreCase = true) ||
+            line.contains("Compiled modified resources", ignoreCase = true) ||
+            line.contains("Compiled patched resources", ignoreCase = true)
+        ) {
             viewModelScope.launch {
-                updateSubStep(StepId.WriteAPK, "Compiling modified resources", null)
+                updateSubStep(StepId.WriteAPK, line, null)
                 markDexSubStepsReady()
             }
             return
@@ -2597,18 +3054,168 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             return
         }
         val match = dexCompilePattern.find(line) ?: dexWritePattern.find(line) ?: return
+        val completionKeyword = match.groupValues.getOrNull(1)
         val dexName = match.groupValues.lastOrNull()?.takeIf { it.endsWith(".dex") } ?: return
         viewModelScope.launch {
-            val title = "Compiling $dexName"
-            seenDexCompiles.add(title)
-            val list = stepSubSteps[StepId.WriteAPK]
-            val hasEntry = list?.any { it.title.equals(title, ignoreCase = true) } == true
-            if (dexSubStepsReady || hasEntry) {
-                updateSubStep(StepId.WriteAPK, title, null)
+            val isCompletion = completionKeyword.equals("Compiled", ignoreCase = true)
+            val title = if (isCompletion) "Compiled $dexName" else "Compiling $dexName"
+            if (!isCompletion && !seenDexCompiles.add("Compiling $dexName")) return@launch
+            updateSubStep(StepId.WriteAPK, title, null)
+        }
+    }
+
+    private fun shouldStartWriteApkFromLog(line: String): Boolean {
+        if (line.contains("Writing patched files", ignoreCase = true)) return true
+        if (line.contains("Compiling patched dex files", ignoreCase = true)) return true
+        if (line.contains("Applying patched changes", ignoreCase = true)) return true
+        if (line.contains("Compiled modified resources", ignoreCase = true)) return true
+        if (line.contains("Compiled patched resources", ignoreCase = true)) return true
+        if (line.contains("Writing output APK", ignoreCase = true)) return true
+        if (line.contains("Finalizing output", ignoreCase = true)) return true
+        if (line.contains("Patched apk saved to", ignoreCase = true)) return true
+        if (dexCompilePattern.containsMatchIn(line)) return true
+        if (dexWritePattern.containsMatchIn(line)) return true
+        return false
+    }
+
+    private fun startWriteApkFromLogFallback(line: String) {
+        writeApkStepStarted = true
+        ensureWriteApkFallbackSubSteps()
+        val writeIndex = steps.indexOfFirst { it.id == StepId.WriteAPK }
+        if (writeIndex == -1) return
+
+        val runningIndex = steps.indexOfFirst { it.state == State.RUNNING }
+        if (runningIndex != -1 && runningIndex != writeIndex && runningIndex < writeIndex) {
+            val running = steps[runningIndex]
+            steps[runningIndex] = running.withState(State.COMPLETED, progress = null)
+        }
+
+        val writeStep = steps[writeIndex]
+        if (writeStep.state == State.WAITING) {
+            steps[writeIndex] = writeStep.withState(State.RUNNING)
+        }
+
+        // Drive the seeded list with the same log line that triggered fallback start.
+        updateSubStep(StepId.WriteAPK, line, null)
+    }
+
+    private fun promoteNextSectionStepIfNeeded(completedIndex: Int) {
+        val completedStep = steps.getOrNull(completedIndex) ?: return
+        if (completedStep.hide) return
+        if (!isLastVisibleStepInSection(completedIndex)) return
+
+        val nextVisibleIndex = ((completedIndex + 1) until steps.size)
+            .firstOrNull { !steps[it].hide }
+            ?: return
+        val nextStep = steps[nextVisibleIndex]
+        if (nextStep.category == completedStep.category) return
+        if (nextStep.state != State.WAITING) return
+
+        val anotherVisibleRunning = steps.indices.any { index ->
+            index != nextVisibleIndex && !steps[index].hide && steps[index].state == State.RUNNING
+        }
+        if (anotherVisibleRunning) return
+
+        steps[nextVisibleIndex] = nextStep.withState(
+            state = State.RUNNING,
+            message = null,
+            progress = null
+        )
+    }
+
+    private fun isLastVisibleStepInSection(stepIndex: Int): Boolean {
+        val step = steps.getOrNull(stepIndex) ?: return false
+        return ((stepIndex + 1) until steps.size).none { index ->
+            !steps[index].hide && steps[index].category == step.category
+        }
+    }
+
+    private fun ensureWriteApkFallbackSubSteps() {
+        val existing = stepSubSteps[StepId.WriteAPK]
+        if (!existing.isNullOrEmpty()) {
+            val mergedTitles = mergeWriteApkSubStepTitles(existing.map { it.title }, existing)
+            val identical = mergedTitles.size == existing.size &&
+                mergedTitles.zip(existing).all { (title, detail) ->
+                    title.equals(detail.title, ignoreCase = true)
+                }
+            if (identical) return
+            stepSubSteps[StepId.WriteAPK] = buildSubStepList(mergedTitles, existing)
+            return
+        }
+
+        val dexSteps = buildFallbackDexTitles()
+        val fallback = mutableStateListOf<StepDetail>().apply {
+            add(StepDetail(title = "Copying base APK"))
+            add(StepDetail(title = "Applying patched changes"))
+            if (dexSteps.isNotEmpty()) {
+                addAll(dexSteps.map { StepDetail(title = it) })
             } else {
-                pendingDexCompileLines.add(title)
+                add(StepDetail(title = "Compiling patched dex files"))
+            }
+            add(StepDetail(title = "Compiling modified resources"))
+            add(StepDetail(title = "Writing output APK"))
+            add(StepDetail(title = "Finalizing output"))
+        }
+        stepSubSteps[StepId.WriteAPK] = fallback
+    }
+
+    private fun buildFallbackDexTitles(): List<String> {
+        val file = inputFile ?: return emptyList()
+        return runCatching {
+            val names = if (SplitApkPreparer.isSplitArchive(file)) {
+                listDexNamesFromSplitArchive(file)
+            } else {
+                listDexNamesFromApk(file)
+            }
+            names.map { "Compiling $it" }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun listDexNamesFromApk(file: File): List<String> {
+        if (!file.exists()) return emptyList()
+        return ZipFile(file).use { zip ->
+            zip.entries().asSequence()
+                .filterNot { it.isDirectory }
+                .map { it.name }
+                .filter { it.startsWith("classes") && it.endsWith(".dex", ignoreCase = true) }
+                .distinct()
+                .sortedWith(compareBy { dexSortKey(it) })
+                .toList()
+        }
+    }
+
+    private fun listDexNamesFromSplitArchive(file: File): List<String> {
+        if (!file.exists()) return emptyList()
+        val dexNames = LinkedHashSet<String>()
+        ZipFile(file).use { outer ->
+            val entries = outer.entries().asSequence()
+                .filterNot { it.isDirectory }
+                .filter { it.name.endsWith(".apk", ignoreCase = true) }
+                .toList()
+            entries.forEach { entry ->
+                outer.getInputStream(entry).use { raw ->
+                    ZipInputStream(BufferedInputStream(raw)).use { inner ->
+                        while (true) {
+                            val innerEntry = inner.nextEntry ?: break
+                            if (!innerEntry.isDirectory &&
+                                innerEntry.name.startsWith("classes") &&
+                                innerEntry.name.endsWith(".dex", ignoreCase = true)
+                            ) {
+                                dexNames.add(innerEntry.name)
+                            }
+                        }
+                    }
+                }
             }
         }
+        return dexNames.sortedWith(compareBy { dexSortKey(it) })
+    }
+
+    private fun dexSortKey(name: String): Int {
+        val base = name.removeSuffix(".dex")
+        if (base == "classes") return 1
+        val suffix = base.removePrefix("classes")
+        return suffix.toIntOrNull() ?: Int.MAX_VALUE
     }
 
     private fun findBestSubStepIndex(
@@ -2673,26 +3280,39 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private fun observeWorker(id: UUID) {
         val source = workManager.getWorkInfoByIdLiveData(id)
-        currentWorkSource?.let { _patcherSucceeded.removeSource(it) }
+        currentWorkSource?.let {
+            _patcherSucceeded.removeSource(it)
+            _isPatchingActive.removeSource(it)
+        }
         currentWorkSource = source
         _patcherSucceeded.addSource(source) { workInfo ->
+            val progressActive =
+                workInfo?.progress?.getBoolean(PatcherWorker.PATCHING_ACTIVE_KEY, false) == true
+            _isPatchingActive.value = progressActive || when (workInfo?.state) {
+                WorkInfo.State.RUNNING,
+                WorkInfo.State.ENQUEUED,
+                WorkInfo.State.BLOCKED -> true
+                else -> false
+            }
             when (workInfo?.state) {
                 WorkInfo.State.SUCCEEDED -> {
+                    clearPatchingNotification()
                     forceKeepLocalInput = false
-                    if (input.selectedApp is SelectedApp.Local && input.selectedApp.temporary) {
-                        inputFile?.takeIf { it.exists() }?.delete()
-                        inputFile = null
+                    cleanupTemporaryLocalInput()
+                    if (requiresSplitPreparation) {
                         updateSplitStepRequirement(
                             file = null,
                             needsSplitOverride = requiresSplitPreparation,
                             merged = true
                         )
                     }
+                    reconcileProgressStateAfterSuccess()
                     refreshExportMetadata()
                     _patcherSucceeded.value = true
                 }
 
                 WorkInfo.State.FAILED -> {
+                    clearPatchingNotification()
                     handleWorkerFailure(workInfo)
                     _patcherSucceeded.value = false
                 }
@@ -2700,6 +3320,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 WorkInfo.State.RUNNING,
                 WorkInfo.State.ENQUEUED,
                 WorkInfo.State.BLOCKED -> _patcherSucceeded.value = null
+                WorkInfo.State.CANCELLED -> {
+                    clearPatchingNotification()
+                    _patcherSucceeded.value = null
+                }
                 else -> _patcherSucceeded.value = null
             }
         }
@@ -2757,6 +3381,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             memoryAdjustmentDialog = null
             handledFailureIds.clear()
             resetStateForRetry()
+            markInitialStepRunning()
+            _isPatchingActive.value = true
             patcherWorkerId?.uuid?.let(workManager::cancelWorkById)
             val newId = launchWorker()
             patcherWorkerId = ParcelUuid(newId)
@@ -2777,6 +3403,67 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         steps.addAll(newSteps)
         stepSubSteps.clear()
         _patcherSucceeded.value = null
+    }
+
+    private fun shouldResetProgressStateForAutomaticRetry(event: ProgressEvent): Boolean {
+        if (event !is ProgressEvent.Started || event.stepId != StepId.LoadPatches) return false
+
+        val loadIndex = steps.indexOfFirst { it.id == StepId.LoadPatches }
+        if (loadIndex == -1) return false
+
+        val loadStep = steps[loadIndex]
+        if (loadStep.state == State.COMPLETED || loadStep.state == State.FAILED) {
+            return true
+        }
+
+        val resettableIds = steps.drop(loadIndex).map { it.id }.toSet()
+        return steps.drop(loadIndex + 1).any { it.state != State.WAITING } ||
+            stepSubSteps.keys.any { it in resettableIds } ||
+            writeApkStepStarted ||
+            dexSubStepsReady ||
+            pendingDexCompileLines.isNotEmpty() ||
+            seenDexCompiles.isNotEmpty()
+    }
+
+    private fun resetProgressStateForAutomaticRetry() {
+        val loadIndex = steps.indexOfFirst { it.id == StepId.LoadPatches }
+        if (loadIndex == -1) return
+
+        val resettableIds = steps.drop(loadIndex).map { it.id }.toSet()
+        resetDexCompileState()
+        resetFailureLogState()
+        runtimeReportedMemoryLimitMb = null
+
+        steps.forEachIndexed { index, step ->
+            if (index < loadIndex) {
+                steps[index] = step.withState(
+                    state = if (step.state == State.FAILED) State.COMPLETED else step.state,
+                    progress = null
+                )
+                return@forEachIndexed
+            }
+
+            steps[index] = step.withState(
+                state = State.WAITING,
+                message = null,
+                progress = null
+            )
+        }
+
+        stepSubSteps.keys
+            .filter { it in resettableIds }
+            .toList()
+            .forEach(stepSubSteps::remove)
+    }
+
+    private fun markInitialStepRunning() {
+        val index = steps.indexOfFirst { step ->
+            !step.hide && step.state == State.WAITING
+        }
+        if (index == -1) return
+        val step = steps[index]
+        steps[index] = step.withState(state = State.RUNNING, message = null, progress = null)
+        stepSubSteps.remove(step.id)
     }
 
     private fun initialSplitRequirement(selectedApp: SelectedApp): Boolean =
@@ -2875,18 +3562,54 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
     }
 
-    private suspend fun savedEntryBundleUids(installedApp: InstalledApp): Set<Int> {
-        val payloadBundles = installedApp.selectionPayload
-            ?.bundles
-            ?.map { it.bundleUid }
-            ?.toSet()
-            .orEmpty()
-        if (payloadBundles.isNotEmpty()) return payloadBundles
-        return installedAppRepository.getAppliedPatches(installedApp.currentPackageName).keys
+    private suspend fun savedEntryIdentity(installedApp: InstalledApp): String {
+        val patchSelection = installedAppRepository.getAppliedPatches(installedApp.currentPackageName)
+        return buildSavedAppVariantIdentity(
+            appVersion = installedApp.version,
+            selectionPayload = installedApp.selectionPayload,
+            patchSelection = patchSelection
+        )
     }
 
-    private fun buildUniqueSavedAppEntryKey(packageName: String, bundleUids: Set<Int>): String {
-        val keyBase = buildSavedAppEntryKey(packageName, bundleUids)
+    private fun savedApkFile(installedApp: InstalledApp): File? {
+        val candidates = listOf(
+            fs.getPatchedAppFile(installedApp.currentPackageName, installedApp.version),
+            fs.getPatchedAppFile(installedApp.originalPackageName, installedApp.version)
+        ).distinct()
+        candidates.firstOrNull { it.exists() }?.let { return it }
+        return fs.findPatchedAppFile(installedApp.currentPackageName)
+            ?: fs.findPatchedAppFile(installedApp.originalPackageName)
+    }
+
+    private suspend fun preserveHistoricalInstalledEntry(
+        sourceApp: InstalledApp,
+        targetPackageName: String
+    ) {
+        val sourceApk = savedApkFile(sourceApp) ?: return
+        val targetApk = fs.getPatchedAppFile(targetPackageName, sourceApp.version)
+        if (!sourceApk.absolutePath.equals(targetApk.absolutePath, ignoreCase = true)) {
+            try {
+                targetApk.parentFile?.mkdirs()
+                sourceApk.copyTo(targetApk, overwrite = true)
+            } catch (error: IOException) {
+                Log.w(TAG, "Failed to archive previous patched app for ${sourceApp.currentPackageName}", error)
+                return
+            }
+        }
+        val sourceSelection = installedAppRepository.getAppliedPatches(sourceApp.currentPackageName)
+        installedAppRepository.addOrUpdate(
+            currentPackageName = targetPackageName,
+            originalPackageName = sourceApp.originalPackageName,
+            version = sourceApp.version,
+            installType = InstallType.SAVED,
+            patchSelection = sourceSelection,
+            selectionPayload = sourceApp.selectionPayload,
+            createdAtOverride = sourceApp.createdAt
+        )
+    }
+
+    private fun buildUniqueSavedAppEntryKey(packageName: String, variantIdentity: String): String {
+        val keyBase = buildSavedAppEntryKey(packageName, variantIdentity)
         val nonce = UUID.randomUUID().toString().replace("-", "").take(8)
         return "${keyBase}__${nonce}"
     }

@@ -23,6 +23,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun AppLabel(
     packageInfo: PackageInfo?,
+    labelOverride: String? = null,
     modifier: Modifier = Modifier,
     style: TextStyle = LocalTextStyle.current,
     defaultText: String? = stringResource(R.string.not_installed)
@@ -31,7 +32,11 @@ fun AppLabel(
 
     var label: String? by rememberSaveable { mutableStateOf(null) }
 
-    LaunchedEffect(packageInfo) {
+    LaunchedEffect(packageInfo, labelOverride) {
+        if (!labelOverride.isNullOrBlank()) {
+            label = labelOverride
+            return@LaunchedEffect
+        }
         label = withContext(Dispatchers.IO) {
             val packageName = packageInfo?.packageName
             val localLabelResult = runCatching {
@@ -59,10 +64,10 @@ fun AppLabel(
     }
 
     Text(
-        label ?: stringResource(R.string.loading),
+        labelOverride ?: label ?: stringResource(R.string.loading),
         modifier = Modifier
             .placeholder(
-                visible = label == null,
+                visible = labelOverride == null && label == null,
                 color = MaterialTheme.colorScheme.inverseOnSurface,
                 shape = RoundedCornerShape(100)
             )

@@ -1,5 +1,6 @@
 package app.revanced.manager.network.api
 
+import android.os.Build
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.network.dto.*
 import app.revanced.manager.network.service.HttpService
@@ -18,6 +19,11 @@ class ReVancedAPI(
     private val client: HttpService,
     private val prefs: PreferencesManager
 ) {
+    private data class ManagerAssetInfo(
+        val asset: GitHubAsset,
+        val abiSuffix: String?,
+    )
+
     private data class RepoConfig(
         val owner: String,
         val name: String,
@@ -84,16 +90,24 @@ class ReVancedAPI(
     private suspend fun fetchReleaseAsset(
         config: RepoConfig,
         includePrerelease: Boolean,
-        matcher: (GitHubAsset) -> Boolean
+        matcher: (GitHubAsset) -> Boolean,
+        pickAsset: (List<GitHubAsset>) -> GitHubAsset? = { assets ->
+            assets.firstOrNull()
+        }
     ): APIResponse<ReVancedAsset> {
         return when (val releasesResponse = githubRequest<List<GitHubRelease>>(config, "releases")) {
             is APIResponse.Success -> {
                 val mapped = runCatching {
-                    val release = releasesResponse.data.firstOrNull { release ->
-                        !release.draft && (includePrerelease || !release.prerelease) && release.assets.any(matcher)
-                    } ?: throw IllegalStateException("No matching release found")
-
-                    val asset = release.assets.first(matcher)
+                    val releaseAndAsset = releasesResponse.data
+                        .asSequence()
+                        .filter { release -> !release.draft && (includePrerelease || !release.prerelease) }
+                        .mapNotNull { release ->
+                            val matchingAssets = release.assets.filter(matcher)
+                            pickAsset(matchingAssets)?.let { asset -> release to asset }
+                        }
+                        .firstOrNull()
+                        ?: throw IllegalStateException("No compatible manager release asset found for this device ABI")
+                    val (release, asset) = releaseAndAsset
                     mapReleaseToAsset(config, release, asset)
                 }
 
@@ -140,15 +154,73 @@ class ReVancedAPI(
         return release.assets.firstOrNull { it.name in candidates }?.downloadUrl
     }
 
-    private fun isManagerAsset(asset: GitHubAsset) =
-        asset.name.endsWith(".apk", ignoreCase = true) ||
-                asset.contentType?.contains("android.package-archive", ignoreCase = true) == true
+    private fun isManagerAsset(asset: GitHubAsset): Boolean {
+        return parseManagerAsset(asset) != null
+    }
 
+    private fun deviceAbiSuffixes(): List<String> {
+        return Build.SUPPORTED_ABIS
+            .mapNotNull { abi ->
+                when (abi.lowercase()) {
+                    "arm64-v8a" -> "arm64_v8"
+                    "armeabi-v7a" -> "armeabi_v7a"
+                    "x86" -> "x86"
+                    "x86_64" -> "x86_64"
+                    else -> null
+                }
+            }
+            .distinct()
+    }
+
+    private fun pickManagerAsset(assets: List<GitHubAsset>): GitHubAsset? {
+        val managerAssets = assets.mapNotNull(::parseManagerAsset)
+        if (managerAssets.isEmpty()) return null
+
+        val preferredSuffixes = deviceAbiSuffixes()
+        preferredSuffixes.forEach { suffix ->
+            managerAssets.firstOrNull { asset ->
+                asset.abiSuffix?.let(::normalizeManagerAbiSuffix) == suffix
+            }?.let { return it.asset }
+        }
+
+        managerAssets.firstOrNull { it.abiSuffix.equals("all", ignoreCase = true) }?.let { return it.asset }
+        managerAssets.firstOrNull { it.abiSuffix.equals("universal", ignoreCase = true) }?.let { return it.asset }
+        managerAssets.firstOrNull { it.abiSuffix == null }?.let { return it.asset }
+        return null
+    }
+
+    private fun parseManagerAsset(asset: GitHubAsset): ManagerAssetInfo? {
+        val fileName = asset.name
+        if (!fileName.startsWith(MANAGER_ASSET_NAME_PREFIX, ignoreCase = true)) return null
+        if (!fileName.endsWith(".apk", ignoreCase = true)) return null
+
+        val stem = fileName.substring(MANAGER_ASSET_NAME_PREFIX.length, fileName.length - 4)
+        if (stem.isBlank()) return null
+
+        val abiSuffix = MANAGER_ASSET_SUFFIXES_DESC.firstOrNull { suffix ->
+            stem.endsWith("-$suffix", ignoreCase = true)
+        }
+        val version = abiSuffix?.let { stem.removeSuffix("-$it") } ?: stem
+        if (!MANAGER_ASSET_VERSION_REGEX.matches(version)) return null
+
+        return ManagerAssetInfo(
+            asset = asset,
+            abiSuffix = abiSuffix
+        )
+    }
+
+    private fun normalizeManagerAbiSuffix(suffix: String): String {
+        return when (suffix.lowercase()) {
+            "arm64-v8a" -> "arm64_v8"
+            "armeabi-v7a" -> "armeabi_v7a"
+            else -> suffix.lowercase()
+        }
+    }
 
     suspend fun getLatestAppInfo(): APIResponse<ReVancedAsset> {
         val config = repoConfig()
         val includePrerelease = prefs.useManagerPrereleases.get()
-        return fetchReleaseAsset(config, includePrerelease, ::isManagerAsset)
+        return fetchReleaseAsset(config, includePrerelease, ::isManagerAsset, ::pickManagerAsset)
     }
 
     suspend fun getAppUpdate(): ReVancedAsset? {
@@ -162,6 +234,38 @@ class ReVancedAPI(
 
     suspend fun getPatchesUpdate(): APIResponse<ReVancedAsset> =
         getPatchesUpdate(prefs.usePatchesPrereleases.get())
+
+    suspend fun getRepositoryReleaseHistory(
+        repoUrl: String,
+        prerelease: Boolean? = null,
+        limit: Int = 20
+    ): APIResponse<List<GitHubRelease>> {
+        val config = runCatching { parseRepoUrl(repoUrl) }
+            .getOrElse { return APIResponse.Failure(APIFailure(it, null)) }
+        val targetLimit = limit.coerceAtLeast(1)
+        val releases = mutableListOf<GitHubRelease>()
+        var page = 1
+
+        while (releases.size < targetLimit) {
+            val perPage = (targetLimit - releases.size)
+                .coerceAtLeast(20)
+                .coerceAtMost(100)
+            when (val response = githubRequest<List<GitHubRelease>>(config, "releases?per_page=$perPage&page=$page")) {
+                is APIResponse.Success -> {
+                    val batch = response.data
+                    releases += batch.filter { release ->
+                        !release.draft && (prerelease == null || release.prerelease == prerelease)
+                    }
+                    if (batch.size < perPage) break
+                    page += 1
+                }
+                is APIResponse.Error -> return APIResponse.Error(response.error)
+                is APIResponse.Failure -> return APIResponse.Failure(response.error)
+            }
+        }
+
+        return APIResponse.Success(releases.take(targetLimit))
+    }
 
     suspend fun getContributors(): APIResponse<List<ReVancedGitRepository>> {
         val config = repoConfig()
@@ -251,3 +355,18 @@ fun <T> APIResponse<T>.successOrThrow(context: String): T {
 }
 
 private const val MANAGER_REPO_URL = "https://github.com/Jman-Github/Universal-ReVanced-Manager"
+private const val MANAGER_ASSET_NAME_PREFIX = "universal-revanced-manager-"
+private val MANAGER_ASSET_VERSION_REGEX = Regex(
+    pattern = "^v?\\d+\\.\\d+\\.\\d+(?:[-.][a-z0-9]+)*$",
+    option = RegexOption.IGNORE_CASE
+)
+private val MANAGER_ASSET_SUFFIXES_DESC = listOf(
+    "armeabi_v7a",
+    "armeabi-v7a",
+    "arm64_v8",
+    "arm64-v8a",
+    "universal",
+    "x86_64",
+    "all",
+    "x86"
+).sortedByDescending(String::length)

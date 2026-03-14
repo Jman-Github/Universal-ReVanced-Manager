@@ -7,6 +7,7 @@ import android.widget.Toast
 import app.revanced.library.ApkSigner as RevancedApkSigner
 import com.android.apksig.ApkSigner as AndroidApkSigner
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -33,7 +34,6 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 import javax.crypto.EncryptedPrivateKeyInfo
-import kotlin.time.Duration.Companion.days
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 
 class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
@@ -44,15 +44,23 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         const val DEFAULT = "ReVanced"
         private const val LEGACY_DEFAULT_PASSWORD = "s3cur3p@ssw0rd"
         private const val LOG_TAG = "KeystoreManager"
-        private val eightYearsFromNow get() = Date(System.currentTimeMillis() + (365.days * 8).inWholeMilliseconds * 24)
+        private const val KEYSTORE_FILE_NAME = "urv_keystore.keystore"
+        private const val LEGACY_KEYSTORE_FILE_NAME = "manager.keystore"
+        // 9999-12-31T23:59:59Z. Keep cert validity fixed at the practical max.
+        private const val MAX_CERT_NOT_AFTER_MS = 253402300799000L
+        private val maxCertificateNotAfter = Date(MAX_CERT_NOT_AFTER_MS)
     }
 
     private val keystorePath =
-        app.getDir("signing", Context.MODE_PRIVATE).resolve("manager.keystore")
+        app.getDir("signing", Context.MODE_PRIVATE).resolve(KEYSTORE_FILE_NAME)
     private val credentialsPath =
         app.getDir("signing", Context.MODE_PRIVATE).resolve("keystore.txt")
-    private val legacyKeystorePath = app.filesDir.resolve("manager.keystore")
-    private val backupKeystorePath = app.getExternalFilesDir("keystore")?.resolve("manager.keystore")
+    private val legacySigningKeystorePath =
+        app.getDir("signing", Context.MODE_PRIVATE).resolve(LEGACY_KEYSTORE_FILE_NAME)
+    private val legacyKeystorePath = app.filesDir.resolve(LEGACY_KEYSTORE_FILE_NAME)
+    private val backupKeystorePath = app.getExternalFilesDir("keystore")?.resolve(KEYSTORE_FILE_NAME)
+    private val legacyBackupKeystorePath =
+        app.getExternalFilesDir("keystore")?.resolve(LEGACY_KEYSTORE_FILE_NAME)
     private val keystoreMutex = Mutex()
     private val appContext = app.applicationContext
     private val bcProvider: Provider by lazy {
@@ -231,7 +239,7 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
 
             val keyCertPair = RevancedApkSigner.newPrivateKeyCertificatePair(
                 normalizedAlias,
-                eightYearsFromNow
+                maxCertificateNotAfter
             )
             val generated = RevancedApkSigner.newKeyStore(
                 setOf(
@@ -372,6 +380,7 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
             withContext(Dispatchers.IO) {
                 Files.write(keystorePath.toPath(), persistedBytes)
                 writeBackupKeystore(persistedBytes)
+                deleteLegacyKeystoreCopies()
             }
 
             updatePrefs(keyMaterial.alias, normalizedStorePass, normalizedKeyPass, persistedType, fingerprint)
@@ -383,7 +392,7 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
     fun hasKeystore(): Boolean {
         if (keystorePath.exists() && keystorePath.length() > 0L) return true
         if (backupKeystorePath?.let { it.exists() && it.length() > 0L } == true) return true
-        return legacyKeystorePath.exists() && legacyKeystorePath.length() > 0L
+        return legacyRestoreCandidates().any { it.exists() && it.length() > 0L }
     }
 
     suspend fun export(target: OutputStream) = withContext(Dispatchers.IO) {
@@ -397,6 +406,8 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         val fileCreds = readCredentials()
         val resolved = resolveCredentials()
         val backupFile = backupKeystorePath
+        val legacyFile = legacyRestoreCandidates().firstOrNull { it.exists() && it.length() > 0L }
+            ?: legacySigningKeystorePath
         KeystoreDiagnostics(
             keystorePath = keystorePath.absolutePath,
             keystoreSize = if (keystorePath.exists()) keystorePath.length() else 0L,
@@ -404,8 +415,8 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
             credentialsExists = credentialsPath.exists(),
             backupPath = backupFile?.absolutePath,
             backupSize = backupFile?.takeIf { it.exists() }?.length(),
-            legacyPath = legacyKeystorePath.absolutePath,
-            legacySize = if (legacyKeystorePath.exists()) legacyKeystorePath.length() else 0L,
+            legacyPath = legacyFile.absolutePath,
+            legacySize = if (legacyFile.exists()) legacyFile.length() else 0L,
             alias = resolved.alias,
             storePass = resolved.storePass,
             keyPass = resolved.keyPass,
@@ -418,8 +429,8 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         if (keystorePath.exists() && keystorePath.length() > 0L) return
         Log.d(LOG_TAG, "Keystore missing at ${keystorePath.absolutePath}; attempting restore")
         if (tryRestoreKeystore()) return
-        Log.w(LOG_TAG, "Keystore still missing; user action required")
-        throw IllegalStateException("Keystore missing. Regenerate or import it in settings.")
+        Log.i(LOG_TAG, "Keystore restore unavailable; generating a new keystore")
+        regenerateLocked()
     }
 
     private fun keyStoreTypes(preferred: String?): List<String> {
@@ -614,15 +625,17 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
             keyMaterial.certificates
         ).build()
 
-        AndroidApkSigner.Builder(listOf(signerConfig))
-            .setInputApk(input)
-            .setOutputApk(output)
-            .setV1SigningEnabled(true)
-            .setV2SigningEnabled(true)
-            .setV3SigningEnabled(true)
-            .setV4SigningEnabled(false)
-            .build()
-            .sign()
+        runInterruptible(Dispatchers.IO) {
+            AndroidApkSigner.Builder(listOf(signerConfig))
+                .setInputApk(input)
+                .setOutputApk(output)
+                .setV1SigningEnabled(true)
+                .setV2SigningEnabled(true)
+                .setV3SigningEnabled(true)
+                .setV4SigningEnabled(false)
+                .build()
+                .sign()
+        }
     }
 
     private data class StrictLoadResult(
@@ -693,7 +706,7 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         Log.i(LOG_TAG, "Regenerating keystore")
         val keyCertPair = RevancedApkSigner.newPrivateKeyCertificatePair(
             prefs.keystoreAlias.get(),
-            eightYearsFromNow
+            maxCertificateNotAfter
         )
         val ks = RevancedApkSigner.newKeyStore(
             setOf(
@@ -712,6 +725,7 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         withContext(Dispatchers.IO) {
             Files.write(keystorePath.toPath(), bytes)
             writeBackupKeystore(bytes)
+            deleteLegacyKeystoreCopies()
         }
 
         updatePrefs(DEFAULT, DEFAULT, DEFAULT, "BKS", fingerprint)
@@ -723,15 +737,15 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         withContext(Dispatchers.IO) {
             backupPath.parentFile?.mkdirs()
             Files.write(backupPath.toPath(), bytes)
+            deleteLegacyKeystoreCopies()
         }
         Log.d(LOG_TAG, "Keystore backup saved to ${backupPath.absolutePath}")
     }
 
     private suspend fun tryRestoreKeystore(): Boolean = withContext(Dispatchers.IO) {
         val candidates = listOfNotNull(
-            backupKeystorePath?.takeIf { it.exists() && it.length() > 0L },
-            legacyKeystorePath.takeIf { it.exists() && it.length() > 0L }
-        )
+            backupKeystorePath?.takeIf { it.exists() && it.length() > 0L }
+        ) + legacyRestoreCandidates().filter { it.exists() && it.length() > 0L }
         val source = candidates.firstOrNull() ?: run {
             Log.w(LOG_TAG, "No keystore backup candidates found")
             return@withContext false
@@ -740,10 +754,30 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         Files.copy(source.toPath(), keystorePath.toPath(), StandardCopyOption.REPLACE_EXISTING)
         Log.i(LOG_TAG, "Keystore restored from ${source.absolutePath}")
         val bytes = Files.readAllBytes(keystorePath.toPath())
+        writeBackupKeystore(bytes)
         if (!rehydrateCredentials(bytes)) {
             Log.w(LOG_TAG, "Restored keystore but could not infer credentials")
         }
+        deleteLegacyKeystoreCopies()
         true
+    }
+
+    private fun legacyRestoreCandidates(): List<File> = listOfNotNull(
+        legacySigningKeystorePath.takeIf { it.absolutePath != keystorePath.absolutePath },
+        legacyBackupKeystorePath,
+        legacyKeystorePath
+    )
+
+    private fun deleteLegacyKeystoreCopies() {
+        legacyRestoreCandidates().forEach { legacyFile ->
+            runCatching {
+                if (legacyFile.exists()) {
+                    Files.deleteIfExists(legacyFile.toPath())
+                }
+            }.onFailure {
+                Log.w(LOG_TAG, "Failed to delete legacy keystore copy at ${legacyFile.absolutePath}", it)
+            }
+        }
     }
 
     private suspend fun rehydrateCredentials(keystoreData: ByteArray): Boolean {

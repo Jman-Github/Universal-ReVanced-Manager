@@ -76,7 +76,6 @@ fun ExceptionViewerDialog(text: String, onDismiss: () -> Unit) {
                     text,
                     modifier = Modifier
                         .consumeHorizontalScroll(stackScrollState)
-                        .horizontalScroll(stackScrollState)
                 )
             }
         }

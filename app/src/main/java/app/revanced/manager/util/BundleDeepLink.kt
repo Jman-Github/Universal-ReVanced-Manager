@@ -24,3 +24,17 @@ object BundleDeepLinkIntent {
         return BundleDeepLink(uid)
     }
 }
+
+object ManagerUpdateDeepLinkIntent {
+    private const val EXTRA_OPEN_MANAGER_UPDATE = "open_manager_update"
+
+    fun addOpenManagerUpdate(intent: Intent): Intent {
+        intent.putExtra(EXTRA_OPEN_MANAGER_UPDATE, true)
+        return intent
+    }
+
+    fun shouldOpenManagerUpdate(intent: Intent?): Boolean {
+        if (intent == null) return false
+        return intent.getBooleanExtra(EXTRA_OPEN_MANAGER_UPDATE, false)
+    }
+}

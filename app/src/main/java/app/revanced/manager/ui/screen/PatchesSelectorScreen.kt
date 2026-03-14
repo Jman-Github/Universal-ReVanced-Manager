@@ -1,6 +1,5 @@
 package app.revanced.manager.ui.screen
 
-import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.EaseInOut
@@ -40,6 +39,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerDefaults
+import androidx.compose.foundation.pager.PagerSnapDistance
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -76,6 +77,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SearchBarValue
 import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -135,9 +137,11 @@ import app.revanced.manager.patcher.patch.Option
 import app.revanced.manager.patcher.patch.PatchBundleInfo
 import app.revanced.manager.patcher.patch.PatchInfo
 import app.revanced.manager.domain.repository.PatchProfile
+import app.revanced.manager.domain.repository.resolvePatchProfileAppVersion
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.CheckedFilterChip
 import app.revanced.manager.ui.component.FullscreenDialog
+import app.revanced.manager.ui.component.InterceptBackHandler
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
 import app.revanced.manager.ui.component.SearchBar
 import app.revanced.manager.ui.component.SearchView
@@ -155,6 +159,7 @@ import app.revanced.manager.ui.viewmodel.PatchesSelectorViewModel.Companion.SHOW
 import app.revanced.manager.ui.viewmodel.PatchesSelectorViewModel.Companion.SHOW_TYPE_FILTER
 import app.revanced.manager.ui.viewmodel.PatchesSelectorViewModel.Companion.SHOW_UNIVERSAL
 import app.revanced.manager.util.Options
+import app.revanced.manager.util.consumeHorizontalScroll
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.isScrollingUp
 import app.revanced.manager.util.openUrl
@@ -162,6 +167,7 @@ import app.revanced.manager.util.toast
 import kotlinx.coroutines.flow.collectLatest
 import app.revanced.manager.util.transparentListItemColors
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 import kotlin.math.ceil
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -184,6 +190,35 @@ fun PatchesSelectorScreen(
     ) {
         bundles.size
     }
+    val settledPageIndex by remember(bundles.size) {
+        derivedStateOf {
+            pagerState.settledPage.coerceIn(0, bundles.lastIndex.coerceAtLeast(0))
+        }
+    }
+    val swipeSyncedTabIndex by remember(bundles.size) {
+        derivedStateOf {
+            if (bundles.isEmpty()) return@derivedStateOf 0
+            val pageIndex = if (pagerState.isScrollInProgress) {
+                pagerState.targetPage
+            } else {
+                pagerState.currentPage
+            }
+            pageIndex.coerceIn(0, bundles.lastIndex)
+        }
+    }
+    suspend fun scrollToBundlePage(targetIndex: Int, animated: Boolean = true) {
+        if (targetIndex !in bundles.indices) return
+        if (
+            (pagerState.currentPage == targetIndex && !pagerState.isScrollInProgress) ||
+            (pagerState.isScrollInProgress && pagerState.targetPage == targetIndex)
+        ) return
+        val canAnimateDirectly = abs(pagerState.currentPage - targetIndex) <= 1
+        if (animated && canAnimateDirectly) {
+            pagerState.animateScrollToPage(targetIndex)
+        } else {
+            pagerState.scrollToPage(targetIndex)
+        }
+    }
     val composableScope = rememberCoroutineScope()
     val textFieldState = rememberTextFieldState()
     val searchBarState = rememberSearchBarState()
@@ -202,6 +237,8 @@ fun PatchesSelectorScreen(
             replace(0, length, value)
         }
     }
+    fun List<PatchInfo>.searched(searchQuery: String): List<PatchInfo> =
+        if (searchQuery.isBlank()) this else filter { it.name.contains(searchQuery, true) }
     var showBottomSheet by rememberSaveable { mutableStateOf(false) }
     val actionOrderPref by viewModel.prefs.patchSelectionActionOrder.getAsState()
     val hiddenActionsPref by viewModel.prefs.patchSelectionHiddenActions.getAsState()
@@ -209,6 +246,8 @@ fun PatchesSelectorScreen(
     val sortSettingsModePref by viewModel.prefs.patchSelectionSortSettingsMode.getAsState()
     val searchEngineHost by viewModel.prefs.searchEngineHost.getAsState()
     val showVersionTags by viewModel.prefs.patchSelectionShowVersionTags.getAsState()
+    val disablePatchSelectionTabSwipe by viewModel.prefs.disablePatchSelectionTabSwipe.getAsState()
+    val preventAccidentalTouching by viewModel.prefs.preventAccidentalTouching.getAsState()
     val showPatchProfilesTab by viewModel.prefs.showPatchProfilesTab.getAsState()
     val orderedActionKeys = remember(actionOrderPref) {
         val parsed = actionOrderPref
@@ -298,7 +337,7 @@ fun PatchesSelectorScreen(
     }
     val currentBundleHasSelection by remember {
         derivedStateOf {
-            val bundle = bundles.getOrNull(pagerState.currentPage)
+            val bundle = bundles.getOrNull(settledPageIndex)
             bundle != null && viewModel.bundleHasSelection(bundle.uid)
         }
     }
@@ -344,20 +383,24 @@ fun PatchesSelectorScreen(
             }
     }
     LaunchedEffect(pagerState) {
-        snapshotFlow { pagerState.currentPage }
+        snapshotFlow { pagerState.settledPage }
             .collectLatest {
                 actionsExpanded = false
             }
     }
-    BackHandler(enabled = !dialogsOpen && (if (useFallbackSearch) searchActive else searchExpanded)) {
-        if (useFallbackSearch) {
-            searchActive = false
-        } else {
-            focusManager.clearFocus(force = true)
-            keyboardController?.hide()
-            composableScope.launch {
-                searchBarState.animateToCollapsed()
+    InterceptBackHandler(enabled = !dialogsOpen && (searchActive || searchExpanded || query.isNotBlank())) {
+        when {
+            useFallbackSearch && searchActive -> {
+                searchActive = false
             }
+            !useFallbackSearch && searchExpanded -> {
+                focusManager.clearFocus(force = true)
+                keyboardController?.hide()
+                composableScope.launch {
+                    searchBarState.animateToCollapsed()
+                }
+            }
+            query.isNotBlank() -> updateQuery("")
         }
     }
     LaunchedEffect(searchActive, useFallbackSearch) {
@@ -385,7 +428,7 @@ fun PatchesSelectorScreen(
         if (bundles.isEmpty() || isSavingProfile) return
         selectedBundleUids.clear()
         val defaultBundleUid =
-            bundles.getOrNull(pagerState.currentPage)?.uid ?: bundles.firstOrNull()?.uid
+            bundles.getOrNull(settledPageIndex)?.uid ?: bundles.firstOrNull()?.uid
         defaultBundleUid?.let { selectedBundleUids.add(it) }
         pendingProfileName = ""
         selectedProfileId = null
@@ -584,11 +627,17 @@ fun PatchesSelectorScreen(
                     val targetProfile = selectedId?.let { id -> profiles.firstOrNull { it.uid == id } }
                     if (selectedId != null && targetProfile != null) {
                         val resolvedVersion = viewModel.previewResolvedAppVersion(selectedBundleUids.toSet())
-                        if (resolvedVersion != targetProfile.appVersion) {
+                        val existingVersion = resolvePatchProfileAppVersion(
+                            appVersion = targetProfile.appVersion,
+                            apkPath = targetProfile.apkPath,
+                            apkVersion = targetProfile.apkVersion,
+                            useSelectedApkVersion = targetProfile.useSelectedApkVersion
+                        )
+                        if (resolvedVersion != existingVersion) {
                             versionConflict = ProfileVersionConflict(
                                 profileId = selectedId,
                                 profileName = targetProfile.name,
-                                existingVersion = targetProfile.appVersion,
+                                existingVersion = existingVersion,
                                 newVersion = resolvedVersion
                             )
                             return@launch
@@ -600,7 +649,14 @@ fun PatchesSelectorScreen(
                         existingProfileId = selectedId,
                         appVersionOverride = null,
                         keepExistingVersion = selectedId != null,
-                        existingProfileVersion = targetProfile?.appVersion
+                        existingProfileVersion = targetProfile?.let { profile ->
+                            resolvePatchProfileAppVersion(
+                                appVersion = profile.appVersion,
+                                apkPath = profile.apkPath,
+                                apkVersion = profile.apkVersion,
+                                useSelectedApkVersion = profile.useSelectedApkVersion
+                            )
+                        }
                     )
                 }
             }
@@ -715,6 +771,30 @@ fun PatchesSelectorScreen(
             text = {
                 Text(
                     text = stringResource(R.string.mixed_patch_bundles_description),
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Start
+                )
+            }
+        )
+    }
+    if (viewModel.showMixedRevancedPatcherVersionsDialog) {
+        AlertDialogExtended(
+            onDismissRequest = viewModel::dismissMixedRevancedPatcherVersionsDialog,
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissMixedRevancedPatcherVersionsDialog) {
+                    Text(stringResource(R.string.ok))
+                }
+            },
+            title = {
+                Text(
+                    text = stringResource(R.string.mixed_revanced_patcher_versions_title),
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Start
+                )
+            },
+            text = {
+                Text(
+                    text = stringResource(R.string.mixed_revanced_patcher_versions_description),
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Start
                 )
@@ -858,17 +938,18 @@ fun PatchesSelectorScreen(
                     },
                     compatible = compatible,
                     packageName = viewModel.appPackageName,
+                    optionValues = viewModel.getOptions(uid, patch),
                     suggestedVersion = suggestedVersion
                 )
             }
         }
     }
 
-    val currentBundle = bundles.getOrNull(pagerState.currentPage)
+    val currentBundle = bundles.getOrNull(settledPageIndex)
     val currentBundleDisplayName = currentBundle?.let { bundleDisplayNames[it.uid] ?: it.name }
     val warningEnabled = viewModel.selectionWarningEnabled
     val currentBundleUid by remember {
-        derivedStateOf { bundles.getOrNull(pagerState.currentPage)?.uid }
+        derivedStateOf { bundles.getOrNull(settledPageIndex)?.uid }
     }
     val currentBundleSelectionCount by remember {
         derivedStateOf {
@@ -1045,21 +1126,20 @@ fun PatchesSelectorScreen(
             onActiveChange = { searchActive = it },
             placeholder = { Text(stringResource(R.string.search_patches)) }
         ) {
-            val bundle = bundles[pagerState.currentPage]
+            val bundle = bundles[settledPageIndex]
             val suggestedVersion = suggestedVersionsByBundle[bundle.uid]?.get(viewModel.appPackageName)
             val searchQuery = query
+            val regularPatches = bundle.compatible.searched(searchQuery)
+            val incompatiblePatches = bundle.incompatible.searched(searchQuery)
+            val universalPatches = bundle.universal.searched(searchQuery)
 
             LazyColumnWithScrollbar(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                fun List<PatchInfo>.searched() = filter {
-                    it.name.contains(searchQuery, true)
-                }
-
                 if (nonUniversalSelected) {
-                    if (bundle.compatible.isNotEmpty()) {
+                    if (regularPatches.isNotEmpty()) {
                         item(contentType = 0) {
                             ListHeader(
                                 title = stringResource(R.string.regular_patches)
@@ -1068,14 +1148,14 @@ fun PatchesSelectorScreen(
                     }
                     patchList(
                         uid = bundle.uid,
-                        patches = bundle.compatible.searched(),
+                        patches = regularPatches,
                         visible = true,
                         compatible = true,
                         suggestedVersion = suggestedVersion
                     )
                     patchList(
                         uid = bundle.uid,
-                        patches = bundle.incompatible.searched(),
+                        patches = incompatiblePatches,
                         visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
                         compatible = viewModel.allowIncompatiblePatches,
                         suggestedVersion = suggestedVersion
@@ -1087,7 +1167,7 @@ fun PatchesSelectorScreen(
                     }
                     patchList(
                         uid = bundle.uid,
-                        patches = bundle.universal.searched(),
+                        patches = universalPatches,
                         visible = true,
                         compatible = true,
                         suggestedVersion = suggestedVersion
@@ -1099,7 +1179,7 @@ fun PatchesSelectorScreen(
                 } else {
                     patchList(
                         uid = bundle.uid,
-                        patches = bundle.universal.searched(),
+                        patches = universalPatches,
                         visible = true,
                         compatible = true,
                         suggestedVersion = suggestedVersion
@@ -1108,7 +1188,7 @@ fun PatchesSelectorScreen(
                             title = stringResource(R.string.universal_patches),
                         )
                     }
-                    if (bundle.compatible.isNotEmpty()) {
+                    if (regularPatches.isNotEmpty()) {
                         item(contentType = 0) {
                             ListHeader(
                                 title = stringResource(R.string.regular_patches)
@@ -1117,14 +1197,14 @@ fun PatchesSelectorScreen(
                     }
                     patchList(
                         uid = bundle.uid,
-                        patches = bundle.compatible.searched(),
+                        patches = regularPatches,
                         visible = true,
                         compatible = true,
                         suggestedVersion = suggestedVersion
                     )
                     patchList(
                         uid = bundle.uid,
-                        patches = bundle.incompatible.searched(),
+                        patches = incompatiblePatches,
                         visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
                         compatible = viewModel.allowIncompatiblePatches,
                         suggestedVersion = suggestedVersion
@@ -1233,14 +1313,16 @@ fun PatchesSelectorScreen(
                         )
                         IconButton(
                             onClick = {
-                                if (searchExpanded) {
-                                    focusManager.clearFocus(force = true)
-                                    keyboardController?.hide()
-                                    composableScope.launch {
-                                        searchBarState.animateToCollapsed()
+                                when {
+                                    searchExpanded -> {
+                                        focusManager.clearFocus(force = true)
+                                        keyboardController?.hide()
+                                        composableScope.launch {
+                                            searchBarState.animateToCollapsed()
+                                        }
                                     }
-                                } else {
-                                    onBackClick()
+                                    query.isNotBlank() -> updateQuery("")
+                                    else -> onBackClick()
                                 }
                             }
                         ) {
@@ -1331,21 +1413,20 @@ fun PatchesSelectorScreen(
                         }
                     }
                 ) {
-                    val bundle = bundles[pagerState.currentPage]
+                    val bundle = bundles[settledPageIndex]
                     val suggestedVersion = suggestedVersionsByBundle[bundle.uid]?.get(viewModel.appPackageName)
                     val searchQuery = query
+                    val regularPatches = bundle.compatible.searched(searchQuery)
+                    val incompatiblePatches = bundle.incompatible.searched(searchQuery)
+                    val universalPatches = bundle.universal.searched(searchQuery)
 
                     LazyColumnWithScrollbar(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        fun List<PatchInfo>.searched() = filter {
-                            it.name.contains(searchQuery, true)
-                        }
-
                         if (nonUniversalSelected) {
-                            if (bundle.compatible.isNotEmpty()) {
+                            if (regularPatches.isNotEmpty()) {
                                 item(contentType = 0) {
                                     ListHeader(
                                         title = stringResource(R.string.regular_patches)
@@ -1354,14 +1435,14 @@ fun PatchesSelectorScreen(
                             }
                             patchList(
                                 uid = bundle.uid,
-                                patches = bundle.compatible.searched(),
+                                patches = regularPatches,
                                 visible = true,
                                 compatible = true,
                                 suggestedVersion = suggestedVersion
                             )
                             patchList(
                                 uid = bundle.uid,
-                                patches = bundle.incompatible.searched(),
+                                patches = incompatiblePatches,
                                 visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
                                 compatible = viewModel.allowIncompatiblePatches,
                                 suggestedVersion = suggestedVersion
@@ -1373,7 +1454,7 @@ fun PatchesSelectorScreen(
                             }
                             patchList(
                                 uid = bundle.uid,
-                                patches = bundle.universal.searched(),
+                                patches = universalPatches,
                                 visible = true,
                                 compatible = true,
                                 suggestedVersion = suggestedVersion
@@ -1385,7 +1466,7 @@ fun PatchesSelectorScreen(
                         } else {
                             patchList(
                                 uid = bundle.uid,
-                                patches = bundle.universal.searched(),
+                                patches = universalPatches,
                                 visible = true,
                                 compatible = true,
                                 suggestedVersion = suggestedVersion
@@ -1394,7 +1475,7 @@ fun PatchesSelectorScreen(
                                     title = stringResource(R.string.universal_patches),
                                 )
                             }
-                            if (bundle.compatible.isNotEmpty()) {
+                            if (regularPatches.isNotEmpty()) {
                                 item(contentType = 0) {
                                     ListHeader(
                                         title = stringResource(R.string.regular_patches)
@@ -1403,14 +1484,14 @@ fun PatchesSelectorScreen(
                             }
                             patchList(
                                 uid = bundle.uid,
-                                patches = bundle.compatible.searched(),
+                                patches = regularPatches,
                                 visible = true,
                                 compatible = true,
                                 suggestedVersion = suggestedVersion
                             )
                             patchList(
                                 uid = bundle.uid,
-                                patches = bundle.incompatible.searched(),
+                                patches = incompatiblePatches,
                                 visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
                                 compatible = viewModel.allowIncompatiblePatches,
                                 suggestedVersion = suggestedVersion
@@ -1446,7 +1527,7 @@ fun PatchesSelectorScreen(
                     horizontalAlignment = Alignment.End
                 ) {
                     val saveButtonExpanded =
-                        patchLazyListStates.getOrNull(pagerState.currentPage)?.isScrollingUp ?: true
+                        patchLazyListStates.getOrNull(settledPageIndex)?.isScrollingUp ?: true
                     val saveButtonText = stringResource(
                         R.string.save_with_count,
                         selectedPatchCount
@@ -1486,55 +1567,107 @@ fun PatchesSelectorScreen(
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    if (bundles.size > 1) {
-                        ScrollableTabRow(
-                            selectedTabIndex = pagerState.currentPage,
-                            containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp),
-                            modifier = Modifier.onSizeChanged { tabRowHeightPx = it.height }
-                        ) {
-                            bundles.forEachIndexed { index, bundle ->
-                                HapticTab(
-                                    selected = pagerState.currentPage == index,
-                                    onClick = {
-                                        composableScope.launch {
-                                            pagerState.animateScrollToPage(
-                                                index
-                                            )
-                                        }
-                                    },
-                                    text = {
-                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Text(
-                                                text = bundleDisplayNames[bundle.uid] ?: bundle.name,
-                                                style = MaterialTheme.typography.bodyMedium
-                                            )
-                                            Text(
-                                                text = bundle.version.orEmpty(),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                            Text(
-                                                text = stringResource(bundleTypeLabelRes(bundleTypes[bundle.uid])),
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.outline
-                                            )
-                                        }
-                                    },
-                                    selectedContentColor = MaterialTheme.colorScheme.primary,
-                                    unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                    if (bundles.isNotEmpty()) {
+                        if (bundles.size == 1) {
+                            TabRow(
+                                selectedTabIndex = swipeSyncedTabIndex,
+                                containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp),
+                                modifier = Modifier.onSizeChanged { tabRowHeightPx = it.height }
+                            ) {
+                                bundles.forEachIndexed { index, bundle ->
+                                    HapticTab(
+                                        selected = swipeSyncedTabIndex == index,
+                                        onClick = {
+                                            composableScope.launch {
+                                                scrollToBundlePage(index)
+                                            }
+                                        },
+                                        text = {
+                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Text(
+                                                    text = bundleDisplayNames[bundle.uid] ?: bundle.name,
+                                                    style = MaterialTheme.typography.bodyMedium
+                                                )
+                                                Text(
+                                                    text = bundle.version.orEmpty(),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                Text(
+                                                    text = stringResource(bundleTypeLabelRes(bundleTypes[bundle.uid])),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.outline
+                                                )
+                                            }
+                                        },
+                                        selectedContentColor = MaterialTheme.colorScheme.primary,
+                                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        } else {
+                            ScrollableTabRow(
+                                selectedTabIndex = swipeSyncedTabIndex,
+                                containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp),
+                                modifier = Modifier.onSizeChanged { tabRowHeightPx = it.height }
+                            ) {
+                                bundles.forEachIndexed { index, bundle ->
+                                    HapticTab(
+                                        selected = swipeSyncedTabIndex == index,
+                                        onClick = {
+                                            composableScope.launch {
+                                                scrollToBundlePage(index)
+                                            }
+                                        },
+                                        text = {
+                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Text(
+                                                    text = bundleDisplayNames[bundle.uid] ?: bundle.name,
+                                                    style = MaterialTheme.typography.bodyMedium
+                                                )
+                                                Text(
+                                                    text = bundle.version.orEmpty(),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                Text(
+                                                    text = stringResource(bundleTypeLabelRes(bundleTypes[bundle.uid])),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.outline
+                                                )
+                                            }
+                                        },
+                                        selectedContentColor = MaterialTheme.colorScheme.primary,
+                                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }
 
+                    val pagerFlingBehavior = if (preventAccidentalTouching) {
+                        PagerDefaults.flingBehavior(state = pagerState)
+                    } else {
+                        PagerDefaults.flingBehavior(
+                            state = pagerState,
+                            pagerSnapDistance = PagerSnapDistance.atMost(1),
+                            snapPositionalThreshold = 0.2f
+                        )
+                    }
+
                     HorizontalPager(
                         state = pagerState,
-                        userScrollEnabled = true,
+                        flingBehavior = pagerFlingBehavior,
+                        userScrollEnabled = !disablePatchSelectionTabSwipe,
                         pageContent = { index ->
                             // Avoid crashing if the lists have not been fully initialized yet.
                             if (index > bundles.lastIndex || bundles.size != patchLazyListStates.size) return@HorizontalPager
                         val bundle = bundles[index]
                         val suggestedVersion = suggestedVersionsByBundle[bundle.uid]?.get(viewModel.appPackageName)
+                        val searchQuery = query
+                        val regularPatches = bundle.compatible.searched(searchQuery)
+                        val incompatiblePatches = bundle.incompatible.searched(searchQuery)
+                        val universalPatches = bundle.universal.searched(searchQuery)
 
                             LazyColumnWithScrollbar(
                                 modifier = Modifier.fillMaxSize(),
@@ -1552,7 +1685,7 @@ fun PatchesSelectorScreen(
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                             if (nonUniversalSelected) {
-                                if (bundle.compatible.isNotEmpty()) {
+                                if (regularPatches.isNotEmpty()) {
                                     item(contentType = 0) {
                                         ListHeader(
                                             title = stringResource(R.string.regular_patches)
@@ -1561,14 +1694,14 @@ fun PatchesSelectorScreen(
                                 }
                                 patchList(
                                     uid = bundle.uid,
-                                    patches = bundle.compatible,
+                                    patches = regularPatches,
                                     visible = true,
                                     compatible = true,
                                     suggestedVersion = suggestedVersion
                                 )
                                 patchList(
                                     uid = bundle.uid,
-                                    patches = bundle.incompatible,
+                                    patches = incompatiblePatches,
                                     visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
                                     compatible = viewModel.allowIncompatiblePatches,
                                     suggestedVersion = suggestedVersion
@@ -1580,7 +1713,7 @@ fun PatchesSelectorScreen(
                                 }
                                 patchList(
                                     uid = bundle.uid,
-                                    patches = bundle.universal,
+                                    patches = universalPatches,
                                     visible = true,
                                     compatible = true,
                                     suggestedVersion = suggestedVersion
@@ -1592,7 +1725,7 @@ fun PatchesSelectorScreen(
                             } else {
                                 patchList(
                                     uid = bundle.uid,
-                                    patches = bundle.universal,
+                                    patches = universalPatches,
                                     visible = true,
                                     compatible = true,
                                     suggestedVersion = suggestedVersion
@@ -1601,7 +1734,7 @@ fun PatchesSelectorScreen(
                                         title = stringResource(R.string.universal_patches),
                                     )
                                 }
-                                if (bundle.compatible.isNotEmpty()) {
+                                if (regularPatches.isNotEmpty()) {
                                     item(contentType = 0) {
                                         ListHeader(
                                             title = stringResource(R.string.regular_patches)
@@ -1610,14 +1743,14 @@ fun PatchesSelectorScreen(
                                 }
                                 patchList(
                                     uid = bundle.uid,
-                                    patches = bundle.compatible,
+                                    patches = regularPatches,
                                     visible = true,
                                     compatible = true,
                                     suggestedVersion = suggestedVersion
                                 )
                                 patchList(
                                     uid = bundle.uid,
-                                    patches = bundle.incompatible,
+                                    patches = incompatiblePatches,
                                     visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
                                     compatible = viewModel.allowIncompatiblePatches,
                                     suggestedVersion = suggestedVersion
@@ -1668,6 +1801,7 @@ private fun PatchItem(
     onToggle: () -> Unit,
     compatible: Boolean = true,
     packageName: String,
+    optionValues: Map<String, Any?>?,
     suggestedVersion: String?,
     searchEngineHost: String,
     showVersionTags: Boolean
@@ -1713,6 +1847,40 @@ private fun PatchItem(
     }
     val hasChips = suggestedVersionInfo != null || showAllVersionsChip || hasMoreVersions
     var showVersionsDialog by rememberSaveable(patch.name) { mutableStateOf(false) }
+    var showOptionPreview by rememberSaveable(patch.name) { mutableStateOf(false) }
+    var showOptionPreviewDialog by rememberSaveable(patch.name) { mutableStateOf(false) }
+    val optionValueEnabled = stringResource(R.string.option_value_enabled)
+    val optionValueDisabled = stringResource(R.string.option_value_disabled)
+    val optionValueUnset = stringResource(R.string.field_not_set)
+    val optionSummaries = remember(
+        patch.options,
+        optionValues,
+        optionValueEnabled,
+        optionValueDisabled,
+        optionValueUnset
+    ) {
+        patch.options.orEmpty().map { option ->
+            val resolvedValue = if (optionValues?.contains(option.key) == true) {
+                optionValues[option.key]
+            } else {
+                option.default
+            }
+            val presetLabel = option.presets
+                ?.entries
+                ?.firstOrNull { it.value == resolvedValue }
+                ?.key
+            val displayValue = when {
+                presetLabel != null -> presetLabel
+                resolvedValue == null -> optionValueUnset
+                resolvedValue is Boolean -> if (resolvedValue) optionValueEnabled else optionValueDisabled
+                resolvedValue is List<*> -> resolvedValue.joinToString(", ") { it?.toString().orEmpty() }
+                else -> resolvedValue.toString()
+            }
+            option.title to displayValue
+        }
+    }
+    val hasExpandableOptionPreview = optionSummaries.size > 1
+    val showExpandedOptionPreview = hasExpandableOptionPreview && showOptionPreview
     val dialogVersions = when {
         supportsAllVersions -> listOf(
             PatchVersionChipInfo(
@@ -1738,6 +1906,43 @@ private fun PatchItem(
             suggestedVersion = suggestedVersionInfo,
             searchEngineHost = searchEngineHost,
             onDismiss = { showVersionsDialog = false }
+        )
+    }
+
+    if (showOptionPreviewDialog) {
+        AlertDialog(
+            onDismissRequest = { showOptionPreviewDialog = false },
+            confirmButton = {
+                TextButton(onClick = { showOptionPreviewDialog = false }) {
+                    Text(stringResource(R.string.close))
+                }
+            },
+            title = { Text(stringResource(R.string.patch_option_preview_title, patch.name)) },
+            text = {
+                val optionPreviewScrollState = rememberScrollState()
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 320.dp)
+                        .verticalScroll(optionPreviewScrollState),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    optionSummaries.forEach { (title, value) ->
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = value,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
         )
     }
 
@@ -1818,6 +2023,93 @@ private fun PatchItem(
                             outlined = true,
                             onClick = { showVersionsDialog = true }
                         )
+                    }
+                }
+            }
+            if (patch.options?.isNotEmpty() == true && optionSummaries.isNotEmpty()) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = stringResource(R.string.options),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                IconButton(
+                                    onClick = { showOptionPreviewDialog = true },
+                                    modifier = Modifier.size(26.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.MoreHoriz,
+                                        contentDescription = stringResource(R.string.patch_option_preview_action),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                                if (hasExpandableOptionPreview) {
+                                    IconButton(
+                                        onClick = { showOptionPreview = !showOptionPreview },
+                                        modifier = Modifier.size(26.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (showExpandedOptionPreview) {
+                                                Icons.Outlined.UnfoldLess
+                                            } else {
+                                                Icons.Outlined.UnfoldMore
+                                            },
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        if (!showExpandedOptionPreview) {
+                            val first = optionSummaries.first()
+                            val moreCount = optionSummaries.size - 1
+                            Text(
+                                text = if (moreCount > 0) {
+                                    "${first.first}: ${first.second}  +$moreCount ${stringResource(R.string.more)}"
+                                } else {
+                                    "${first.first}: ${first.second}"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        } else {
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                optionSummaries.forEach { (title, value) ->
+                                    Text(
+                                        text = "$title: $value",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 4,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -2259,7 +2551,12 @@ private fun PatchProfileNameDialog(
                                     }
                                     .padding(horizontal = 4.dp),
                                 headlineContent = { Text(profile.name) },
-                                supportingContent = profile.appVersion?.let { version ->
+                                supportingContent = resolvePatchProfileAppVersion(
+                                    appVersion = profile.appVersion,
+                                    apkPath = profile.apkPath,
+                                    apkVersion = profile.apkVersion,
+                                    useSelectedApkVersion = profile.useSelectedApkVersion
+                                )?.let { version ->
                                     {
                                         Text(
                                             text = version.ifBlank { stringResource(R.string.any_version) },
@@ -2466,7 +2763,7 @@ private fun ActionChipRow(
 
         val rowPlaceable = subcompose("row") {
             val rowModifier = if (scrollNeeded) {
-                Modifier.horizontalScroll(scrollState)
+                Modifier.consumeHorizontalScroll(scrollState)
             } else {
                 Modifier
             }
@@ -2739,3 +3036,5 @@ private fun OptionsDialog(
         }
     }
 }
+
+

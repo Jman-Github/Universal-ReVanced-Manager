@@ -87,6 +87,7 @@ fun DownloadsSettingsScreen(
 ) {
     val prefs: PreferencesManager = koinInject()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
+    val autoSaveDownloaderApks by prefs.autoSaveDownloaderApks.getAsState()
     val downloadedApps by viewModel.downloadedApps.collectAsStateWithLifecycle(emptyList())
     val pluginStates by viewModel.downloaderPluginStates.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
@@ -97,12 +98,13 @@ fun DownloadsSettingsScreen(
     val fs: Filesystem = koinInject()
     val storageRoots = remember { fs.storageRoots() }
     val (permissionContract, permissionName) = remember { fs.permissionContract() }
-    var pendingExportState by rememberSaveable { mutableStateOf<DownloadedAppsExportState?>(null) }
-    var activeExportState by rememberSaveable { mutableStateOf<DownloadedAppsExportState?>(null) }
-    var pendingDocumentExportState by rememberSaveable { mutableStateOf<DownloadedAppsExportState?>(null) }
+    var pendingExportState by remember { mutableStateOf<DownloadedAppsExportState?>(null) }
+    var activeExportState by remember { mutableStateOf<DownloadedAppsExportState?>(null) }
+    var pendingDocumentExportState by remember { mutableStateOf<DownloadedAppsExportState?>(null) }
     var exportFileDialogState by remember { mutableStateOf<DownloadedAppsExportDialogState?>(null) }
     var pendingExportConfirmation by remember { mutableStateOf<PendingDownloadedAppsExportConfirmation?>(null) }
     var exportInProgress by rememberSaveable { mutableStateOf(false) }
+    var showDeleteAppsConfirmation by rememberSaveable { mutableStateOf(false) }
     val permissionLauncher =
         rememberLauncherForActivityResult(permissionContract) { granted ->
             if (granted) {
@@ -243,6 +245,18 @@ fun DownloadsSettingsScreen(
             icon = Icons.Outlined.WarningAmber
         )
     }
+    if (showDeleteAppsConfirmation && viewModel.appSelection.isNotEmpty()) {
+        ConfirmDialog(
+            onDismiss = { showDeleteAppsConfirmation = false },
+            onConfirm = {
+                viewModel.deleteApps()
+                showDeleteAppsConfirmation = false
+            },
+            title = stringResource(R.string.downloaded_apps_delete_title),
+            description = stringResource(R.string.downloaded_apps_delete_description),
+            icon = Icons.Outlined.Delete
+        )
+    }
     if (exportInProgress) {
         AlertDialog(
             onDismissRequest = {},
@@ -320,7 +334,7 @@ fun DownloadsSettingsScreen(
                         }) {
                             Icon(Icons.Outlined.Save, stringResource(R.string.downloaded_apps_export))
                         }
-                        IconButton(onClick = { viewModel.deleteApps() }) {
+                        IconButton(onClick = { showDeleteAppsConfirmation = true }) {
                             Icon(Icons.Default.Delete, stringResource(R.string.delete))
                         }
                     }
@@ -338,7 +352,7 @@ fun DownloadsSettingsScreen(
                 modifier = Modifier.fillMaxSize()
             ) {
                 item {
-                    GroupHeader(stringResource(R.string.download_settings))
+                    GroupHeader(stringResource(R.string.download_behavior_section))
                 }
                 item {
                     ExpressiveSettingsCard(
@@ -354,6 +368,20 @@ fun DownloadsSettingsScreen(
                                 preference = prefs.autoSaveDownloaderApks,
                                 headline = R.string.downloader_auto_save_title,
                                 description = R.string.downloader_auto_save_description
+                            )
+                        }
+                        ExpressiveSettingsDivider()
+                        SettingsSearchHighlight(
+                            targetKey = R.string.downloader_auto_save_latest_only_title,
+                            activeKey = highlightTarget,
+                            onHighlightComplete = { highlightTarget = null }
+                        ) { highlightModifier ->
+                            BooleanItem(
+                                modifier = highlightModifier,
+                                preference = prefs.autoSaveDownloaderLatestOnly,
+                                headline = R.string.downloader_auto_save_latest_only_title,
+                                description = R.string.downloader_auto_save_latest_only_description,
+                                enabled = autoSaveDownloaderApks
                             )
                         }
                     }
@@ -522,7 +550,7 @@ fun DownloadsSettingsScreen(
                         onHighlightComplete = { highlightTarget = null }
                     ) { highlightModifier ->
                         GroupHeader(
-                            stringResource(R.string.downloaded_apps),
+                            stringResource(R.string.download_export_section),
                             modifier = highlightModifier
                         )
                     }

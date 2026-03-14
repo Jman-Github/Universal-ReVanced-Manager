@@ -11,11 +11,25 @@ import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.util.Options
 import app.revanced.manager.util.PatchSelection
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.CancellationException
 
 /**
  * Simple [Runtime] implementation that runs the patcher using coroutines.
  */
 class CoroutineRuntime(context: Context) : Runtime(context) {
+    private val cancelRequested = AtomicBoolean(false)
+
+    override fun cancel() {
+        cancelRequested.set(true)
+    }
+
+    private fun ensureNotCancelled() {
+        if (cancelRequested.get()) {
+            throw CancellationException("Patching cancelled")
+        }
+    }
+
     override suspend fun execute(
         inputFile: String,
         outputFile: String,
@@ -27,25 +41,38 @@ class CoroutineRuntime(context: Context) : Runtime(context) {
         stripNativeLibs: Boolean,
         skipUnneededSplits: Boolean,
     ) {
-        val selectedBundles = selectedPatches.keys
-        val patchBundlesByUid = bundles()
-        val relatedBundleArchives = patchBundlesByUid
-            .filterKeys { it in selectedBundles }
-            .values
-            .map { File(it.patchesJar) }
-
-        val patchList = runStep(StepId.LoadPatches, onEvent) {
-            val bundles = bundles()
-            val uids = bundles.entries.associate { (key, value) -> value to key }
+        val (patchList, relatedBundleArchives) = runStep(
+            StepId.LoadPatches,
+            onEvent,
+            ::ensureNotCancelled
+        ) {
+            val activeSelectedPatches = selectedPatches.filterValues { it.isNotEmpty() }
+            val selectedBundles = activeSelectedPatches.keys
+            val patchBundlesByUid = bundles()
+            val selectedPatchBundlesByUid = patchBundlesByUid
+                .filterKeys { it in selectedBundles }
+            val staleBundleIds = selectedBundles - selectedPatchBundlesByUid.keys
+            if (staleBundleIds.isNotEmpty()) {
+                logger.warn(
+                    "Ignoring missing patch bundle IDs in selection: ${
+                        staleBundleIds.joinToString(",")
+                    }"
+                )
+            }
+            val uids = selectedPatchBundlesByUid.entries.associate { (key, value) -> value to key }
 
             val allPatches =
-                PatchBundle.Loader.patches(bundles.values, packageName)
+                PatchBundle.Loader.patches(selectedPatchBundlesByUid.values, packageName)
                     .mapKeys { (b, _) -> uids[b]!! }
-                    .filterKeys { it in selectedBundles }
 
-            val patchList = selectedPatches.flatMap { (bundle, selected) ->
-                allPatches[bundle]?.filter { it.name in selected }
-                    ?: throw IllegalArgumentException("Patch bundle $bundle does not exist")
+            val patchList = activeSelectedPatches.flatMap { (bundle, selected) ->
+                allPatches[bundle].orEmpty().filter { it.name in selected }
+            }
+
+            if (activeSelectedPatches.isNotEmpty() && patchList.isEmpty()) {
+                throw IllegalArgumentException(
+                    "Selected patches are unavailable. Re-open patch selection and select patches again."
+                )
             }
 
             // Set all patch options.
@@ -59,65 +86,68 @@ class CoroutineRuntime(context: Context) : Runtime(context) {
                 }
             }
 
-            patchList
+            patchList to selectedPatchBundlesByUid.values.map { File(it.patchesJar) }
         }
 
         val input = File(inputFile)
-        val preparation = if (SplitApkPreparer.isSplitArchive(input)) {
-            runStep(StepId.PrepareSplitApk, onEvent) {
-                SplitApkPreparer.prepareIfNeeded(
-                    input,
-                    File(cacheDir),
-                    logger,
-                    stripNativeLibs,
-                    skipUnneededSplits,
-                    onProgress = { message ->
-                        onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
-                    },
-                    onSubSteps = { subSteps ->
-                        onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
-                    }
-                )
+        suspend fun prepareInput() = SplitApkPreparer.prepareIfNeeded(
+            input,
+            File(cacheDir),
+            logger,
+            stripNativeLibs,
+            skipUnneededSplits,
+            onProgress = { message ->
+                ensureNotCancelled()
+                onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
+            },
+            onSubSteps = { subSteps ->
+                ensureNotCancelled()
+                onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
             }
-        } else {
-            SplitApkPreparer.prepareIfNeeded(
-                input,
-                File(cacheDir),
-                logger,
-                stripNativeLibs,
-                skipUnneededSplits,
-                onProgress = { message ->
-                    onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
-                },
-                onSubSteps = { subSteps ->
-                    onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
-                }
-            )
+        )
+        var preparation: SplitApkPreparer.PreparationResult? = null
+        if (SplitApkPreparer.isSplitArchive(input)) {
+            preparation = runStep(StepId.PrepareSplitApk, onEvent, ::ensureNotCancelled) {
+                prepareInput()
+            }
         }
 
         try {
-            val selectedAaptPath = resolveAaptPath(preparation.file, logger, relatedBundleArchives)
-            val session = runStep(StepId.ReadAPK, onEvent) {
+            val session = runStep(StepId.ReadAPK, onEvent, ::ensureNotCancelled) {
+                val preparedInput = preparation ?: prepareInput().also { preparation = it }
+                val selectedAaptPath = resolveAaptPath(preparedInput.file, logger, relatedBundleArchives)
+                val frameworkDir = FrameworkCacheResolver.resolve(
+                    baseFrameworkDir = frameworkPath,
+                    runtimeTag = "revanced",
+                    apkFile = preparedInput.file,
+                    aaptPath = selectedAaptPath,
+                    logger = logger
+                )
                 Session(
                     cacheDir,
-                    frameworkPath,
+                    frameworkDir,
                     selectedAaptPath,
                     logger,
-                    preparation.file,
-                    onEvent
+                    preparedInput.file,
+                    onEvent,
+                    ::ensureNotCancelled
                 )
             }
+            val preparedInput = requireNotNull(preparation) {
+                "APK preparation did not produce an input file."
+            }
 
+            ensureNotCancelled()
             session.use { s ->
                 s.run(
                     File(outputFile),
                     patchList,
                     stripNativeLibs,
-                    preparation.merged
+                    preparedInput.merged
                 )
             }
         } finally {
-            preparation.cleanup()
+            preparation?.cleanup()
         }
     }
 }

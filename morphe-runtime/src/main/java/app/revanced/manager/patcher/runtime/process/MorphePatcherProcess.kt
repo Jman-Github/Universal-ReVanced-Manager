@@ -15,6 +15,7 @@ import app.revanced.manager.patcher.logger.LogLevel
 import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.morphe.MorphePatchBundleLoader
 import app.revanced.manager.patcher.morphe.MorpheSession
+import app.revanced.manager.patcher.runtime.FrameworkCacheResolver
 import app.revanced.manager.patcher.runStep
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.patcher.toParcel
@@ -27,6 +28,7 @@ import java.io.FileInputStream
 import java.io.OutputStream
 import java.io.PrintStream
 import java.security.MessageDigest
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.logging.Handler
 import java.util.logging.Level
 import java.util.logging.LogRecord
@@ -38,14 +40,17 @@ import kotlin.system.exitProcess
  */
 class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
     private var eventBinder: IPatcherEvents? = null
+    private val eventsEnabled = AtomicBoolean(true)
 
     private val scope =
         CoroutineScope(Dispatchers.Default + CoroutineExceptionHandler { _, throwable ->
-            eventBinder?.let {
+            eventBinder?.let { binder ->
                 try {
-                    it.finished(throwable.stackTraceToString())
+                    if (!eventsEnabled.get()) return@let
+                    binder.finished(throwable.stackTraceToString())
                     return@CoroutineExceptionHandler
                 } catch (_: Exception) {
+                    eventsEnabled.set(false)
                 }
             }
 
@@ -57,7 +62,32 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
     override fun exit() = exitProcess(0)
 
     override fun start(parameters: MorpheParameters, events: IPatcherEvents) {
-        fun onEvent(event: ProgressEvent) = events.event(event.toParcel())
+        fun safeEvent(event: ProgressEvent) {
+            if (!eventsEnabled.get()) return
+            try {
+                events.event(event.toParcel())
+            } catch (_: Throwable) {
+                eventsEnabled.set(false)
+            }
+        }
+
+        fun safeLog(level: String, message: String) {
+            if (!eventsEnabled.get()) return
+            try {
+                events.log(level, message)
+            } catch (_: Throwable) {
+                eventsEnabled.set(false)
+            }
+        }
+
+        fun safeFinished(exceptionStackTrace: String?) {
+            if (!eventsEnabled.get()) return
+            try {
+                events.finished(exceptionStackTrace)
+            } catch (_: Throwable) {
+                eventsEnabled.set(false)
+            }
+        }
 
         eventBinder = events
 
@@ -67,7 +97,34 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
             val dexWritePattern =
                 Regex("Write\\s+\\[[^\\]]+\\]\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
             val seenDexCompiles = mutableSetOf<String>()
+            val writeApkActive = AtomicBoolean(false)
+            fun onEvent(event: ProgressEvent) {
+                when (event) {
+                    is ProgressEvent.Started -> {
+                        if (event.stepId == StepId.WriteAPK) {
+                            writeApkActive.set(true)
+                        }
+                    }
+
+                    is ProgressEvent.Completed -> {
+                        if (event.stepId == StepId.WriteAPK) {
+                            writeApkActive.set(false)
+                        }
+                    }
+
+                    is ProgressEvent.Failed -> {
+                        if (event.stepId == StepId.WriteAPK) {
+                            writeApkActive.set(false)
+                        }
+                    }
+
+                    is ProgressEvent.Progress -> Unit
+                }
+                safeEvent(event)
+            }
+
             fun handleDexCompileLine(rawLine: String) {
+                if (!writeApkActive.get()) return
                 val line = rawLine.trim()
                 if (line.isEmpty()) return
                 val match = dexCompilePattern.find(line)
@@ -86,13 +143,14 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
             val logger = object : Logger() {
                 override fun log(level: LogLevel, message: String) {
                     handleDexCompileLine(message)
-                    events.log(level.name, message)
+                    safeLog(level.name, message)
                 }
             }
 
             logger.info("Memory limit: ${Runtime.getRuntime().maxMemory() / (1024 * 1024)}MB")
             val aaptLogs = AaptLogCapture(onLine = ::handleDexCompileLine).apply { start() }
             val stdioCapture = StdIoCapture(onLine = ::handleDexCompileLine).apply { start() }
+            var exitCode = 0
 
             try {
                 val patchList = runStep(StepId.LoadPatches, ::onEvent) {
@@ -121,36 +179,24 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
                 }
 
                 val input = File(parameters.inputFile)
-                val preparation = if (SplitApkPreparer.isSplitArchive(input)) {
-                    runStep(StepId.PrepareSplitApk, ::onEvent) {
-                        SplitApkPreparer.prepareIfNeeded(
-                            input,
-                            File(parameters.cacheDir),
-                            logger,
-                            parameters.stripNativeLibs,
-                            parameters.skipUnneededSplits,
-                            onProgress = { message ->
-                                onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
-                            },
-                            onSubSteps = { subSteps ->
-                                onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
-                            }
-                        )
+                suspend fun prepareInput() = SplitApkPreparer.prepareIfNeeded(
+                    input,
+                    File(parameters.cacheDir),
+                    logger,
+                    parameters.stripNativeLibs,
+                    parameters.skipUnneededSplits,
+                    onProgress = { message ->
+                        onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
+                    },
+                    onSubSteps = { subSteps ->
+                        onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
                     }
-                } else {
-                    SplitApkPreparer.prepareIfNeeded(
-                        input,
-                        File(parameters.cacheDir),
-                        logger,
-                        parameters.stripNativeLibs,
-                        parameters.skipUnneededSplits,
-                        onProgress = { message ->
-                            onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
-                        },
-                        onSubSteps = { subSteps ->
-                            onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
-                        }
-                    )
+                )
+                var preparation: SplitApkPreparer.PreparationResult? = null
+                if (SplitApkPreparer.isSplitArchive(input)) {
+                    preparation = runStep(StepId.PrepareSplitApk, ::onEvent) {
+                        prepareInput()
+                    }
                 }
 
                 try {
@@ -159,23 +205,34 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
                         .filter { it.patches.isNotEmpty() }
                         .map { File(it.bundlePath) }
                         .toList()
-                    val selectedAaptPath = AaptSelector.select(
-                        parameters.aaptPath,
-                        parameters.aaptFallbackPath,
-                        preparation.file,
-                        logger,
-                        additionalArchives = relatedBundleArchives
-                    )
-                    logAapt2Info(selectedAaptPath, logger)
                     val session = runStep(StepId.ReadAPK, ::onEvent) {
+                        val preparedInput = preparation ?: prepareInput().also { preparation = it }
+                        val selectedAaptPath = AaptSelector.select(
+                            parameters.aaptPath,
+                            parameters.aaptFallbackPath,
+                            preparedInput.file,
+                            logger,
+                            additionalArchives = relatedBundleArchives
+                        )
+                        logAapt2Info(selectedAaptPath, logger)
+                        val frameworkDir = FrameworkCacheResolver.resolve(
+                            baseFrameworkDir = parameters.frameworkDir,
+                            runtimeTag = "morphe",
+                            apkFile = preparedInput.file,
+                            aaptPath = selectedAaptPath,
+                            logger = logger
+                        )
                         MorpheSession(
                             cacheDir = parameters.cacheDir,
-                            frameworkDir = parameters.frameworkDir,
+                            frameworkDir = frameworkDir,
                             aaptPath = selectedAaptPath,
                             logger = logger,
-                            input = preparation.file,
+                            input = preparedInput.file,
                             onEvent = ::onEvent,
                         )
+                    }
+                    val preparedInput = requireNotNull(preparation) {
+                        "APK preparation did not produce an input file."
                     }
 
                     session.use {
@@ -183,14 +240,15 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
                             File(parameters.outputFile),
                             patchList,
                             parameters.stripNativeLibs,
-                            preparation.merged
+                            preparedInput.merged
                         )
                     }
                 } finally {
-                    preparation.cleanup()
+                    preparation?.cleanup()
                 }
 
-                events.finished(null)
+                safeFinished(null)
+                exitCode = 0
             } catch (throwable: Throwable) {
                 val extra = aaptLogs.dump()
                 val stack = throwable.stackTraceToString()
@@ -199,10 +257,15 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
                 } else {
                     stack
                 }
-                events.finished(report)
+                safeFinished(report)
+                exitCode = 1
             } finally {
                 stdioCapture.close()
                 aaptLogs.stop()
+            }
+
+            if (!eventsEnabled.get()) {
+                exitProcess(exitCode)
             }
         }
     }
@@ -380,6 +443,7 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
             logger.warn("AAPT2 binary missing at $aaptPath")
             return
         }
+        logger.info("AAPT2 selected: ${aaptFile.name}")
         val digest = sha256(aaptFile)
         if (digest != null) {
             logger.info("AAPT2 sha256: $digest")

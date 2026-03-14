@@ -49,8 +49,10 @@ class AppSelectorViewModel(
     private val splitWorkspace = fs.tempDir
     val appList = pm.appList
 
-    private val storageSelectionChannel = Channel<SelectedApp.Local>()
+    private val storageSelectionChannel = Channel<SelectedApp.Local>(Channel.BUFFERED)
     val storageSelectionFlow = storageSelectionChannel.receiveAsFlow()
+    var storageSelectionInProgress by mutableStateOf(false)
+        private set
 
     val suggestedAppVersions = patchBundleRepository.suggestedVersions.flowOn(Dispatchers.Default)
     val bundleSuggestionsByApp =
@@ -132,34 +134,67 @@ class AppSelectorViewModel(
 
     fun continueWithUniversalFallback() = viewModelScope.launch {
         val selectedApp = universalFallbackDialogSubject ?: return@launch
+        storageSelectionInProgress = true
         dismissUniversalFallbackDialog()
         dismissNonSuggestedVersionDialog()
-        storageSelectionChannel.send(selectedApp)
+        runCatching {
+            storageSelectionChannel.send(selectedApp)
+        }.onFailure {
+            storageSelectionInProgress = false
+            app.toast(app.getString(R.string.failed_to_load_apk))
+        }
+    }
+
+    fun consumeStorageSelectionResult() {
+        storageSelectionInProgress = false
     }
 
     fun handleStorageResult(uri: Uri) = viewModelScope.launch {
-        val selectedApp = withContext(Dispatchers.IO) {
-            loadSelectedFile(uri)
-        }
-
-        if (selectedApp == null) {
+        storageSelectionInProgress = true
+        val loadResult = runCatching {
+            withContext(Dispatchers.IO) {
+                loadSelectedFile(uri)
+            }
+        }.getOrElse {
+            storageSelectionInProgress = false
             app.toast(app.getString(R.string.failed_to_load_apk))
             return@launch
         }
-        handleSelectedStorageApp(selectedApp)
+        when (loadResult) {
+            is StorageApkLoadResult.Success -> handleSelectedStorageApp(loadResult.app)
+            StorageApkLoadResult.InvalidType -> {
+                storageSelectionInProgress = false
+                app.toast(app.getString(R.string.selected_file_not_supported_apk))
+            }
+            StorageApkLoadResult.Failed -> {
+                storageSelectionInProgress = false
+                app.toast(app.getString(R.string.failed_to_load_apk))
+            }
+        }
     }
 
     fun handleStorageFile(file: File) = viewModelScope.launch {
-        val selectedApp = withContext(Dispatchers.IO) {
-            loadSelectedFile(file)
-        }
-
-        if (selectedApp == null) {
+        storageSelectionInProgress = true
+        val loadResult = runCatching {
+            withContext(Dispatchers.IO) {
+                loadSelectedFile(file)
+            }
+        }.getOrElse {
+            storageSelectionInProgress = false
             app.toast(app.getString(R.string.failed_to_load_apk))
             return@launch
         }
-
-        handleSelectedStorageApp(selectedApp)
+        when (loadResult) {
+            is StorageApkLoadResult.Success -> handleSelectedStorageApp(loadResult.app)
+            StorageApkLoadResult.InvalidType -> {
+                storageSelectionInProgress = false
+                app.toast(app.getString(R.string.selected_file_not_supported_apk))
+            }
+            StorageApkLoadResult.Failed -> {
+                storageSelectionInProgress = false
+                app.toast(app.getString(R.string.failed_to_load_apk))
+            }
+        }
     }
 
 
@@ -174,10 +209,12 @@ class AppSelectorViewModel(
         }
 
         if (assessment.canContinueWithUniversalFallback) {
+            storageSelectionInProgress = false
             universalFallbackDialogSubject = selectedApp
             universalFallbackDialogSuggestedVersion = assessment.suggestedVersion
             dismissNonSuggestedVersionDialog()
         } else {
+            storageSelectionInProgress = false
             nonSuggestedVersionDialogSubject = selectedApp
             nonSuggestedVersionDialogSuggestedVersion = assessment.suggestedVersion
             nonSuggestedVersionDialogRequiresUniversalEnabled =
@@ -186,10 +223,10 @@ class AppSelectorViewModel(
         }
     }
 
-    private suspend fun loadSelectedFile(uri: Uri) =
+    private suspend fun loadSelectedFile(uri: Uri): StorageApkLoadResult =
         app.contentResolver.openInputStream(uri)?.use { stream ->
             val extension = resolveExtension(uri)
-            if (extension !in APK_FILE_EXTENSIONS) return@use null
+            if (extension !in APK_FILE_EXTENSIONS) return@use StorageApkLoadResult.InvalidType
             val destination = prepareInputFile(extension)
             destination.delete()
             Files.copy(stream, destination.toPath())
@@ -204,13 +241,13 @@ class AppSelectorViewModel(
                     temporary = true,
                     resolved = true
                 )
-            }
-        }
+            }?.let(StorageApkLoadResult::Success) ?: StorageApkLoadResult.Failed
+        } ?: StorageApkLoadResult.Failed
 
-    private suspend fun loadSelectedFile(file: File): SelectedApp.Local? {
-        if (!file.exists()) return null
+    private suspend fun loadSelectedFile(file: File): StorageApkLoadResult {
+        if (!file.exists()) return StorageApkLoadResult.Failed
         val extension = file.extension.lowercase(Locale.ROOT)
-        if (extension !in APK_FILE_EXTENSIONS) return null
+        if (extension !in APK_FILE_EXTENSIONS) return StorageApkLoadResult.InvalidType
 
         val destination = prepareInputFile(extension)
         destination.delete()
@@ -226,7 +263,7 @@ class AppSelectorViewModel(
                 temporary = true,
                 resolved = true
             )
-        }
+        }?.let(StorageApkLoadResult::Success) ?: StorageApkLoadResult.Failed
     }
 
     private fun resolveExtension(uri: Uri): String {
@@ -262,6 +299,12 @@ class AppSelectorViewModel(
         } else {
             pm.getPackageInfo(file)
         }
+}
+
+private sealed interface StorageApkLoadResult {
+    data class Success(val app: SelectedApp.Local) : StorageApkLoadResult
+    data object InvalidType : StorageApkLoadResult
+    data object Failed : StorageApkLoadResult
 }
 
 data class BundleVersionSuggestion(

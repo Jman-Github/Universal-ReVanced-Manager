@@ -122,11 +122,11 @@ fun SelectedAppInfoScreen(
     val bundleRecommendationDetails by vm.bundleRecommendationDetailsFlow.collectAsStateWithLifecycle(emptyList())
     var showBundleRecommendationDialog by rememberSaveable { mutableStateOf(false) }
     var showMixedBundleDialog by rememberSaveable { mutableStateOf(false) }
+    var showMixedRevancedPatcherDialog by rememberSaveable { mutableStateOf(false) }
     var showPatchSummaryDialog by rememberSaveable { mutableStateOf(false) }
 
     val allowIncompatiblePatches by vm.prefs.disablePatchVersionCompatCheck.getAsState()
     val suggestedVersionSafeguard by vm.prefs.suggestedVersionSafeguard.getAsState()
-    val showPatchSummaryDialogSetting by vm.prefs.showPatchSelectionSummary.getAsState()
     val customBackgroundImageUri by vm.prefs.customBackgroundImageUri.getAsState()
     val useCardStylePageItems = customBackgroundImageUri.isNotBlank()
     val bundleRecommendationsEnabled = allowIncompatiblePatches && !suggestedVersionSafeguard
@@ -187,7 +187,7 @@ fun SelectedAppInfoScreen(
             }
         }
     val openDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
+        contract = ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri != null) {
             vm.handleStorageResult(uri)
@@ -201,7 +201,7 @@ fun SelectedAppInfoScreen(
                 permissionLauncher.launch(permissionName)
             }
         } else {
-            openDocumentLauncher.launch(arrayOf("*/*"))
+            openDocumentLauncher.launch("application/*")
         }
     }
     LaunchedEffect(useCustomFilePicker) {
@@ -267,6 +267,10 @@ fun SelectedAppInfoScreen(
                 showMixedBundleDialog = true
                 return@launch
             }
+            if (patchBundleRepository.selectionHasMixedRevancedPatcherVersions(patches)) {
+                showMixedRevancedPatcherDialog = true
+                return@launch
+            }
             if (!vm.hasSetRequiredOptions(patches)) {
                 val optionsSnapshot = vm.awaitOptions()
                 onRequiredOptions(
@@ -277,6 +281,7 @@ fun SelectedAppInfoScreen(
                 return@launch
             }
 
+            val showPatchSummaryDialogSetting = vm.prefs.showPatchSelectionSummary.get()
             if (showPatchSummaryDialogSetting) {
                 showPatchSummaryDialog = true
                 return@launch
@@ -325,7 +330,7 @@ fun SelectedAppInfoScreen(
     Scaffold(
         topBar = {
             AppTopBar(
-                title = stringResource(R.string.app_info),
+                title = stringResource(R.string.preparing_to_patch),
                 scrollBehavior = scrollBehavior,
                 onBackClick = onBackClick
             )
@@ -389,8 +394,11 @@ fun SelectedAppInfoScreen(
         ) {
             AppInfo(
                 appInfo = vm.selectedAppInfo,
+                labelOverride = vm.selectedAppInfoLabelOverride,
+                iconOverride = vm.selectedAppInfoIconOverride,
                 placeholderLabel = packageName,
-                placeholderMetaLines = 2
+                placeholderMetaLines = 0,
+                showExtraContentWhenLoading = true
             ) {
                 Text(
                     packageName,
@@ -552,6 +560,19 @@ fun SelectedAppInfoScreen(
         )
     }
 
+    if (showMixedRevancedPatcherDialog) {
+        AlertDialogExtended(
+            onDismissRequest = { showMixedRevancedPatcherDialog = false },
+            confirmButton = {
+                TextButton(onClick = { showMixedRevancedPatcherDialog = false }) {
+                    Text(stringResource(R.string.close))
+                }
+            },
+            title = { Text(stringResource(R.string.mixed_revanced_patcher_versions_title)) },
+            text = { Text(stringResource(R.string.mixed_revanced_patcher_versions_description)) }
+        )
+    }
+
     if (showPatchSummaryDialog) {
         AppliedPatchesDialog(
             bundles = selectedPatchSummary,
@@ -707,7 +728,6 @@ private fun BundleRecommendationCard(
                     modifier = Modifier
                         .weight(1f)
                         .consumeHorizontalScroll(nameScrollState)
-                        .horizontalScroll(nameScrollState)
                 )
                 if (isActive && selectedOverride == null) {
                     SelectionBadge(
@@ -1114,11 +1134,11 @@ private fun AppSourceSelectorDialog(
                     }
                 }
 
-                items(plugins, key = { "plugin_${it.packageName}" }) { plugin ->
+                items(plugins, key = { "plugin_${it.id}" }) { plugin ->
                     ListItem(
                         modifier = Modifier.clickable(enabled = canSelect) { onSelectPlugin(plugin) },
                         headlineContent = { Text(plugin.name) },
-                        trailingContent = (@Composable { LoadingIndicator() }).takeIf { activeSearchJob == plugin.packageName },
+                        trailingContent = (@Composable { LoadingIndicator() }).takeIf { activeSearchJob == plugin.id },
                         colors = transparentListItemColors
                     )
                 }

@@ -62,10 +62,19 @@ data class PatchBundle(val patchesJar: String) : Parcelable {
             }.getOrElse { error ->
                 throw IllegalStateException("Patch bundle is corrupted or incomplete", error)
             }
-            val entry = patchFiles.entries.singleOrNull()
-                ?: throw IllegalStateException("Unexpected patch bundle load result for ${bundle.patchesJar}")
+            if (patchFiles.isEmpty()) {
+                throw IllegalStateException("Unexpected patch bundle load result for ${bundle.patchesJar}")
+            }
 
-            return entry.value
+            val patches = patchFiles.values
+                .asSequence()
+                .flatten()
+                .toList()
+            if (patches.isEmpty()) {
+                throw IllegalStateException("Patch bundle contains no patches: ${bundle.patchesJar}")
+            }
+
+            return patches
         }
 
         private fun metadataFor(bundle: PatchBundle) = loadBundle(bundle).map(::PatchInfo)

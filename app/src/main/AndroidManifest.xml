@@ -7,8 +7,14 @@
         android:protectionLevel="signature"
         android:label="@string/plugin_host_permission_label"
         android:description="@string/plugin_host_permission_description" />
+    <permission
+        android:name="app.universal.revanced.manager.permission.DOWNLOADER_HOST"
+        android:protectionLevel="signature"
+        android:label="@string/downloader_host_permission_label"
+        android:description="@string/downloader_host_permission_description" />
 
     <uses-permission android:name="app.universal.revanced.manager.permission.PLUGIN_HOST" />
+    <uses-permission android:name="app.universal.revanced.manager.permission.DOWNLOADER_HOST" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -57,9 +63,34 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
+                <data android:mimeType="application/x-apkm" />
+                <data android:mimeType="application/x-apks" />
+                <data android:mimeType="application/x-xapk" />
+                <data android:mimeType="application/xapk" />
+                <data android:mimeType="application/vnd.android.xapk" />
+                <data android:mimeType="application/vnd.android.apkm" />
+                <data android:mimeType="application/apkm" />
+                <data android:mimeType="application/vnd.android.apks" />
+                <data android:mimeType="application/apks" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:pathPattern=".*\\.apkm" />
+                <data android:pathPattern=".*\\.apks" />
+                <data android:pathPattern=".*\\.xapk" />
+                <data android:pathPattern=".*\\.zip" />
+            </intent-filter>
         </activity>
 
         <activity android:name="app.revanced.manager.plugin.downloader.webview.WebViewActivity" android:exported="false" android:theme="@style/Theme.WebViewActivity" />
+        <activity android:name="app.revanced.manager.downloader.webview.WebViewActivity" android:exported="false" android:theme="@style/Theme.WebViewActivity" />
 
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
@@ -70,6 +101,15 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="patching"
                 />
+        </service>
+
+        <service
+            android:name="app.revanced.manager.service.BundleUpdateWebSocketService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="bundle_update_websocket" />
         </service>
 
         <provider

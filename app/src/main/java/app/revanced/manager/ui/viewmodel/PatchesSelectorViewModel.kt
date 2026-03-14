@@ -271,6 +271,8 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
     var optionsDialog by mutableStateOf<Pair<Int, PatchInfo>?>(null)
     var showMixedPatchBundlesDialog by mutableStateOf(false)
         private set
+    var showMixedRevancedPatcherVersionsDialog by mutableStateOf(false)
+        private set
 
     val compatibleVersions = mutableStateListOf<String>()
 
@@ -351,11 +353,18 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
             currentPatches.add(patch.name)
         }
 
-        customPatchSelection = if (newPatches.isEmpty()) {
+        val nextSelection = if (newPatches.isEmpty()) {
             baseSelection.remove(bundle)
         } else {
             baseSelection.put(bundle, newPatches)
         }
+
+        if (!isSelected && hasMixedRevancedPatcherVersions(nextSelection)) {
+            notifyMixedRevancedPatcherVersions()
+            return@launch
+        }
+
+        customPatchSelection = nextSelection
     }
 
     fun reset() {
@@ -374,14 +383,14 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         app.toast(app.getString(R.string.patch_selection_deselected_all_toast))
     }
 
-    fun selectAll() {
-        if (currentBundles.isEmpty()) return
+    fun selectAll() = viewModelScope.launch {
+        if (currentBundles.isEmpty()) return@launch
 
         val baseSelection = customPatchSelection ?: currentDefaultSelection
         val currentTypes = selectedBundleTypes(baseSelection)
         if (currentTypes.size > 1) {
             notifyMixedPatchBundles()
-            return
+            return@launch
         }
 
         val preferredType = currentTypes.firstOrNull()
@@ -392,7 +401,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         }
         if (preferredType == null && currentBundles.map { it.bundleType }.distinct().size > 1) {
             notifyMixedPatchBundles()
-            return
+            return@launch
         }
 
         val selections = eligibleBundles
@@ -405,7 +414,11 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
 
         if (selections.isEmpty()) {
             app.toast(app.getString(R.string.patch_selection_select_all_empty_toast))
-            return
+            return@launch
+        }
+        if (hasMixedRevancedPatcherVersions(selections.toPersistentMap())) {
+            notifyMixedRevancedPatcherVersions()
+            return@launch
         }
 
         recordSnapshot(actionLabel(R.string.patch_selection_action_select_all))
@@ -436,6 +449,10 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
 
         if (patches.isEmpty()) {
             app.toast(app.getString(R.string.patch_selection_select_bundle_empty_toast, bundleName))
+            return@launch
+        }
+        if (hasMixedRevancedPatcherVersions(baseSelection.put(bundleUid, patches))) {
+            notifyMixedRevancedPatcherVersions()
             return@launch
         }
 
@@ -494,8 +511,15 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         return types.isEmpty() || types.size == 1 && types.first() == targetType
     }
 
+    private suspend fun hasMixedRevancedPatcherVersions(selection: PersistentPatchSelection): Boolean =
+        patchBundleRepository.selectionHasMixedRevancedPatcherVersions(selection.toPatchSelection())
+
     private fun notifyMixedPatchBundles() {
         showMixedPatchBundlesDialog = true
+    }
+
+    private fun notifyMixedRevancedPatcherVersions() {
+        showMixedRevancedPatcherVersionsDialog = true
     }
 
     fun resetBundleToDefaults(bundleUid: Int, bundleName: String) = viewModelScope.launch {
@@ -672,15 +696,14 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
                 keepExistingVersion = keepExistingProfileVersion,
                 existingProfileVersion = existingProfileVersion
             )
-        val selection = (customPatchSelection ?: currentDefaultSelection).toPatchSelection()
-        val options = getOptions()
+        val snapshot = snapshotPatchProfileState(selectedBundles)
         val displayNames = bundleDisplayNames.first()
         val endpoints = bundleEndpoints.first()
         val identifiers = bundleIdentifiers.first()
 
-        val bundles = selectedBundles.map { bundleUid ->
-            val patches = selection[bundleUid]?.toList().orEmpty()
-            val serializedOptions = serializeOptions(bundleUid, patches.toSet(), options)
+        val bundles = snapshot.bundleOrder.map { bundleUid ->
+            val patches = snapshot.selection[bundleUid]?.toList().orEmpty()
+            val serializedOptions = serializeOptions(bundleUid, patches.toSet(), snapshot.options)
             PatchProfilePayload.Bundle(
                 bundleUid = bundleUid,
                 patches = patches,
@@ -747,6 +770,38 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
 
     suspend fun previewResolvedAppVersion(selectedBundles: Set<Int>): String? =
         resolveAppVersion(selectedBundles)
+
+    private data class PatchProfileStateSnapshot(
+        val bundleOrder: List<Int>,
+        val selection: PatchSelection,
+        val options: Options
+    )
+
+    private fun snapshotPatchProfileState(selectedBundles: Set<Int>): PatchProfileStateSnapshot {
+        val liveSelection = (customPatchSelection ?: currentDefaultSelection).toPatchSelection()
+        val knownBundleOrder = currentBundles.map(PatchBundleInfo.Scoped::uid).filter { it in selectedBundles }
+        val remainingBundles = selectedBundles.filterNot { it in knownBundleOrder }
+        val bundleOrder = knownBundleOrder + remainingBundles
+        val selection = bundleOrder.associateWith { bundleUid -> liveSelection[bundleUid].orEmpty() }
+        val liveOptions = getOptions()
+        val options = bundleOrder.mapNotNull { bundleUid ->
+            val selectedPatches = selection[bundleUid].orEmpty()
+            val filteredBundleOptions = liveOptions[bundleUid]
+                ?.let { bundleOptions ->
+                    if (selectedPatches.isEmpty()) bundleOptions
+                    else bundleOptions.filterKeys { it in selectedPatches }
+                }
+                ?.takeUnless { it.isEmpty() }
+                ?: return@mapNotNull null
+            bundleUid to filteredBundleOptions
+        }.toMap()
+
+        return PatchProfileStateSnapshot(
+            bundleOrder = bundleOrder,
+            selection = selection,
+            options = options
+        )
+    }
 
     private data class SerializedOptions(
         val values: Map<String, Map<String, StoredOption.SerializedValue>>,
@@ -821,6 +876,10 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
 
     fun dismissMixedPatchBundlesDialog() {
         showMixedPatchBundlesDialog = false
+    }
+
+    fun dismissMixedRevancedPatcherVersionsDialog() {
+        showMixedRevancedPatcherVersionsDialog = false
     }
 
     fun openIncompatibleDialog(incompatiblePatch: PatchInfo) {

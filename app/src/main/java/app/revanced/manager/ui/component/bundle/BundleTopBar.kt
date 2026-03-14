@@ -36,7 +36,6 @@ fun BundleTopBar(
                 maxLines = 1,
                 modifier = Modifier
                     .consumeHorizontalScroll(scrollState)
-                    .horizontalScroll(scrollState)
             )
         },
         scrollBehavior = scrollBehavior,

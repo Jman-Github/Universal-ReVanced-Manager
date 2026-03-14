@@ -19,6 +19,7 @@ import app.revanced.manager.domain.repository.PatchBundleRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
@@ -97,6 +98,23 @@ class PM(
         }
     }.flowOn(Dispatchers.IO)
 
+    val installedAppList = flow {
+        emit(
+            getInstalledPackages()
+                .map { packageInfo ->
+                    AppInfo(
+                        packageName = packageInfo.packageName,
+                        patches = 0,
+                        packageInfo = packageInfo
+                    )
+                }
+                .sortedWith(
+                    compareBy<AppInfo> { it.packageInfo?.label()?.lowercase() ?: it.packageName.lowercase() }
+                        .thenBy { it.packageName }
+                )
+        )
+    }.flowOn(Dispatchers.IO)
+
     private fun getInstalledPackages(flags: Int = 0): List<PackageInfo> =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
             app.packageManager.getInstalledPackages(PackageInfoFlags.of(flags.toLong()))
@@ -107,6 +125,12 @@ class PM(
         getInstalledPackages(PackageManager.GET_CONFIGURATIONS)
             .filter { pkg ->
                 pkg.reqFeatures?.any { it.name == feature } ?: false
+            }
+
+    fun getPackagesWithFeatures(features: Set<String>) =
+        getInstalledPackages(PackageManager.GET_CONFIGURATIONS)
+            .filter { pkg ->
+                pkg.reqFeatures?.any { it.name in features } ?: false
             }
 
     fun getPackageInfo(packageName: String, flags: Int = 0): PackageInfo? =
@@ -131,6 +155,20 @@ class PM(
         }
 
         return pkgInfo
+    }
+
+    fun hasSplitApks(packageInfo: PackageInfo): Boolean =
+        packageInfo.applicationInfo?.splitSourceDirs
+            ?.map(::File)
+            ?.any(File::exists)
+            ?: false
+
+    fun isSystemApp(packageInfo: PackageInfo): Boolean {
+        val flags = packageInfo.applicationInfo?.flags ?: return false
+        val systemFlags =
+            android.content.pm.ApplicationInfo.FLAG_SYSTEM or
+                android.content.pm.ApplicationInfo.FLAG_UPDATED_SYSTEM_APP
+        return flags and systemFlags != 0
     }
 
     fun PackageInfo.label(): String {

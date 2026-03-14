@@ -51,6 +51,7 @@ fun DeveloperSettingsScreen(
     val showBatteryOptimizationBanner by vm.prefs.showBatteryOptimizationBanner.getAsState()
     val allowPatchProfileBundleOverride by vm.prefs.allowPatchProfileBundleOverride.getAsState()
     var showBatteryOptimizationDialog by rememberSaveable { mutableStateOf(false) }
+    var showResetBundlesDialog by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(searchTarget) {
         val target = searchTarget
@@ -86,6 +87,29 @@ fun DeveloperSettingsScreen(
         )
     }
 
+    if (showResetBundlesDialog) {
+        AlertDialogExtended(
+            onDismissRequest = { showResetBundlesDialog = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        vm.resetBundles()
+                        showResetBundlesDialog = false
+                    }
+                ) {
+                    Text(stringResource(R.string.reset_patch_bundles_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetBundlesDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+            title = { Text(stringResource(R.string.reset_patch_bundles_dialog_title)) },
+            text = { Text(stringResource(R.string.reset_patch_bundles_dialog_description)) }
+        )
+    }
+
     Scaffold(
         topBar = {
             AppTopBar(
@@ -97,7 +121,7 @@ fun DeveloperSettingsScreen(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
     ) { paddingValues ->
         Column(modifier = Modifier.padding(paddingValues)) {
-            GroupHeader(stringResource(R.string.manager))
+            GroupHeader(stringResource(R.string.stability_update_controls_section))
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
@@ -122,11 +146,7 @@ fun DeveloperSettingsScreen(
                         description = R.string.battery_optimization_banner_description
                     )
                 }
-            }
-            GroupHeader(stringResource(R.string.patch_bundles))
-            ExpressiveSettingsCard(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-            ) {
+                ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
                     targetKey = R.string.patches_force_download,
                     activeKey = highlightTarget,
@@ -137,11 +157,19 @@ fun DeveloperSettingsScreen(
                         modifier = highlightModifier.clickable(onClick = vm::redownloadBundles)
                     )
                 }
-            }
-            GroupHeader(stringResource(R.string.tab_profiles))
-            ExpressiveSettingsCard(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-            ) {
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.reset_patch_bundles,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(R.string.reset_patch_bundles),
+                        supportingContent = stringResource(R.string.reset_patch_bundles_description),
+                        onClick = { showResetBundlesDialog = true }
+                    )
+                }
                 ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
                     targetKey = R.string.patch_profile_bundle_override_title,

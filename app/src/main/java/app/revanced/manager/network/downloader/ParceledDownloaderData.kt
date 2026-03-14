@@ -11,10 +11,12 @@ import kotlinx.parcelize.Parcelize
  */
 class ParceledDownloaderData private constructor(
     val pluginPackageName: String,
+    val pluginClassName: String? = null,
     private val bundle: Bundle
 ) : Parcelable {
     constructor(plugin: LoadedDownloaderPlugin, data: Parcelable) : this(
         plugin.packageName,
+        plugin.className,
         createBundle(data)
     )
 

@@ -20,6 +20,7 @@ import app.revanced.manager.util.toast
 import io.ktor.client.request.url
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -359,15 +360,22 @@ class BundleDiscoveryViewModel(
         viewModelScope.launch {
             patchesLoading[bundleId] = true
             patchesError[bundleId] = null
-            val patches = withContext(Dispatchers.IO) {
-                api.getBundlePatches(bundleId).getOrNull()
-            }
-            if (patches == null) {
+            try {
+                val patches = withContext(Dispatchers.IO) {
+                    api.getBundlePatches(bundleId).getOrNull()
+                }
+                if (patches == null) {
+                    patchesError[bundleId] = app.getString(R.string.patch_bundle_discovery_error)
+                } else {
+                    patchesByBundle[bundleId] = patches
+                }
+            } catch (cancel: CancellationException) {
+                throw cancel
+            } catch (error: Throwable) {
                 patchesError[bundleId] = app.getString(R.string.patch_bundle_discovery_error)
-            } else {
-                patchesByBundle[bundleId] = patches
+            } finally {
+                patchesLoading[bundleId] = false
             }
-            patchesLoading[bundleId] = false
         }
     }
 

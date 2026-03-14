@@ -134,10 +134,7 @@ object SplitApkPreparer {
         val skippedLookup = skippedModules
             .map { it.lowercase(Locale.ROOT) }
             .toSet()
-        val (skipped, remaining) = moduleNames.partition {
-            skippedLookup.contains(it.lowercase(Locale.ROOT))
-        }
-        (skipped + remaining).forEach { name ->
+        moduleNames.forEach { name ->
             val label = "Merging $name"
             val entry = if (skippedLookup.contains(name.lowercase(Locale.ROOT))) {
                 "$SKIPPED_STEP_PREFIX$label"

@@ -8,6 +8,7 @@ import app.revanced.manager.domain.bundles.RemotePatchBundle
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.revanced.manager.patcher.ample.AmpleRuntimeBridge
 import app.revanced.manager.patcher.morphe.MorpheRuntimeBridge
+import app.revanced.manager.patcher.revanced.Revanced22RuntimeBridge
 import app.revanced.manager.patcher.patch.PatchBundle
 import app.revanced.manager.patcher.patch.PatchBundleInfo
 import app.revanced.manager.util.Options
@@ -222,13 +223,16 @@ fun PatchProfilePayload.remapLocalBundles(
         val bundle = source.patchBundle ?: return@forEach
         val revancedNames = runCatching { PatchBundle.Loader.metadata(bundle) }
             .getOrNull()
-        val morpheNames = if (revancedNames == null) {
+        val revanced22Names = if (revancedNames == null) {
+            runCatching { Revanced22RuntimeBridge.loadMetadata(bundle.patchesJar) }.getOrNull()
+        } else null
+        val morpheNames = if (revancedNames == null && revanced22Names == null) {
             runCatching { MorpheRuntimeBridge.loadMetadata(bundle.patchesJar) }.getOrNull()
         } else null
-        val ampleNames = if (revancedNames == null && morpheNames == null) {
+        val ampleNames = if (revancedNames == null && revanced22Names == null && morpheNames == null) {
             runCatching { AmpleRuntimeBridge.loadMetadata(bundle.patchesJar) }.getOrNull()
         } else null
-        val names = (revancedNames ?: morpheNames ?: ampleNames)
+        val names = (revancedNames ?: revanced22Names ?: morpheNames ?: ampleNames)
             ?.map { it.name.trim().lowercase() }
             ?.toSet()
         if (!names.isNullOrEmpty()) resolvedSignatures[source.uid] = names

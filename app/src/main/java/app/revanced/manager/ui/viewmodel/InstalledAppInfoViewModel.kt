@@ -38,6 +38,7 @@ import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemote
 import app.revanced.manager.util.PM
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.asCode
+import app.revanced.manager.util.mergeWith
 import app.revanced.manager.util.savedAppBasePackage
 import app.revanced.manager.util.simpleMessage
 import app.revanced.manager.util.tag
@@ -198,15 +199,17 @@ class InstalledAppInfoViewModel(
     }
 
     private suspend fun resolveAppliedSelection(app: InstalledApp) = withContext(Dispatchers.IO) {
-        val selection = installedAppRepository.getAppliedPatches(app.currentPackageName)
-        if (selection.isNotEmpty()) return@withContext selection
-        val payload = app.selectionPayload ?: return@withContext emptyMap()
+        val storedSelection = installedAppRepository.getAppliedPatches(app.currentPackageName)
+        val payload = app.selectionPayload ?: return@withContext storedSelection
         val sources = patchBundleRepository.sources.first()
         val sourceIds = sources.map { it.uid }.toSet()
         val signatures = patchBundleRepository.allBundlesInfoFlow.first().toSignatureMap()
         val (remappedPayload, remappedSelection) = payload.remapAndExtractSelection(sources, signatures)
-        val persistableSelection = remappedSelection.filterKeys { it in sourceIds }
-        if (persistableSelection.isNotEmpty()) {
+        val mergedSelection = storedSelection.mergeWith(remappedSelection)
+        val persistableSelection = mergedSelection.filterKeys { it in sourceIds }
+        if (persistableSelection.isNotEmpty() &&
+            (persistableSelection != storedSelection || remappedPayload != payload)
+        ) {
             installedAppRepository.addOrUpdate(
                 app.currentPackageName,
                 app.originalPackageName,
@@ -216,11 +219,7 @@ class InstalledAppInfoViewModel(
                 remappedPayload
             )
         }
-        if (remappedSelection.isNotEmpty()) return@withContext remappedSelection
-
-        payload.bundles.associate { bundle ->
-            bundle.bundleUid to bundle.patches.filter { it.isNotBlank() }.toSet()
-        }.filterValues { it.isNotEmpty() }
+        mergedSelection
     }
 
     suspend fun getRepatchSelection(): PatchSelection? = withContext(Dispatchers.IO) {
@@ -282,6 +281,8 @@ class InstalledAppInfoViewModel(
         packageNameOverride: String? = null
     ) {
         val app = installedApp ?: return
+        val sourceEntryKey = app.currentPackageName
+        val sourceInstallType = app.installType
         val selection = appliedPatches ?: resolveAppliedSelection(app)
         val selectionPayload = app.selectionPayload
         val targetPackage = packageNameOverride ?: resolveDevicePackageName(app)
@@ -298,7 +299,15 @@ class InstalledAppInfoViewModel(
             selectionPayload = selectionPayload
         )
 
-        val updatedApp = app.copy(
+        // Installing from a saved entry can migrate from a synthetic key
+        // (for example, package__saved_<bundle-hash>) to the real package name.
+        // Remove the old saved row to avoid duplicate saved+installed entries.
+        if (sourceInstallType == InstallType.SAVED && sourceEntryKey != targetPackage) {
+            installedAppRepository.delete(app)
+        }
+
+        val updatedApp = installedAppRepository.get(targetPackage) ?: app.copy(
+            currentPackageName = targetPackage,
             version = resolvedVersion,
             installType = installType
         )
@@ -311,6 +320,14 @@ class InstalledAppInfoViewModel(
         stopUninstallProgressToasts()
         internalInstallTimeoutJob?.cancel()
         installResult = InstallResult.Failure(message)
+        isInstalling = false
+    }
+
+    private fun markUninstallFailure(message: String) {
+        stopInstallProgressToasts()
+        stopUninstallProgressToasts()
+        internalInstallTimeoutJob?.cancel()
+        installResult = InstallResult.UninstallError(message)
         isInstalling = false
     }
 
@@ -1290,7 +1307,7 @@ class InstalledAppInfoViewModel(
                         result.failure.message.orEmpty()
                     )
                     context.toast(failureMessage)
-                    markInstallFailure(failureMessage)
+                    markUninstallFailure(failureMessage)
                 }
 
                 Session.State.Succeeded -> {
@@ -1329,4 +1346,5 @@ data class MountWarningState(
 sealed class InstallResult {
     data class Success(val message: String) : InstallResult()
     data class Failure(val message: String) : InstallResult()
+    data class UninstallError(val message: String) : InstallResult()
 }

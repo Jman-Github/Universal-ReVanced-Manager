@@ -67,7 +67,13 @@ class ShizukuInstaller(private val app: Application) {
         return true
     }
 
-    suspend fun install(sourceFile: File, expectedPackage: String): InstallResult = withContext(Dispatchers.IO) {
+    suspend fun install(sourceFile: File, expectedPackage: String): InstallResult =
+        installMultiple(listOf(sourceFile), expectedPackage)
+
+    suspend fun installMultiple(sourceFiles: List<File>, expectedPackage: String?): InstallResult = withContext(Dispatchers.IO) {
+        if (sourceFiles.isEmpty()) {
+            throw IllegalArgumentException("No APK files provided")
+        }
         val packageInstaller = obtainPackageInstaller()
         val isRoot = runCatching { Shizuku.getUid() }.getOrDefault(-1) == 0
         val installerPackageName = if (isRoot) app.packageName else SHELL_PACKAGE
@@ -82,7 +88,9 @@ class ShizukuInstaller(private val app: Application) {
             app
         )
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
-            runCatching { setAppPackageName(expectedPackage) }
+            expectedPackage?.takeIf { it.isNotBlank() }?.let { packageName ->
+                runCatching { setAppPackageName(packageName) }
+            }
             setInstallReason(PackageManager.INSTALL_REASON_USER)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 setRequestUpdateOwnership(true)
@@ -97,10 +105,13 @@ class ShizukuInstaller(private val app: Application) {
         val session = PackageInstallerCompat.createSession(sessionBinder)
 
         try {
-            sourceFile.inputStream().use { input ->
-                session.openWrite(BASE_APK_NAME, 0, sourceFile.length()).use { output ->
-                    input.copyTo(output)
-                    session.fsync(output)
+            sourceFiles.forEachIndexed { index, sourceFile ->
+                val splitName = if (index == 0) BASE_APK_NAME else "split-$index.apk"
+                sourceFile.inputStream().use { input ->
+                    session.openWrite(splitName, 0, sourceFile.length()).use { output ->
+                        input.copyTo(output)
+                        session.fsync(output)
+                    }
                 }
             }
 

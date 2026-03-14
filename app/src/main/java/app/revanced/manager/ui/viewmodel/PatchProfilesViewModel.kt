@@ -16,6 +16,7 @@ import app.revanced.manager.domain.repository.DuplicatePatchProfileNameException
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.domain.repository.PatchProfile
 import app.revanced.manager.domain.repository.PatchProfileRepository
+import app.revanced.manager.domain.repository.resolvePatchProfileAppVersion
 import app.revanced.manager.domain.repository.remapLocalBundles
 import app.revanced.manager.domain.repository.toConfiguration
 import app.revanced.manager.patcher.split.SplitApkInspector
@@ -44,6 +45,7 @@ data class PatchProfileListItem(
     val apkPath: String?,
     val apkSourcePath: String?,
     val apkVersion: String?,
+    val useSelectedApkVersion: Boolean,
     val autoPatch: Boolean,
     val bundleCount: Int,
     val bundleNames: List<String>,
@@ -99,6 +101,63 @@ private fun Map<Int, Map<String, Map<String, Any?>>>.toStringMap(): Map<Int, Map
 
 private fun Map<String, Map<String, app.revanced.manager.data.room.options.Option.SerializedValue>>.toSerializedStringMap(): Map<String, Map<String, String>> =
     mapValues { (_, options) -> options.mapValues { (_, value) -> value.toJsonString() } }
+
+private fun <T> Map<String, T>.getIgnoreCase(key: String): T? =
+    this[key]
+        ?: this[key.trim()]
+        ?: entries.firstOrNull { it.key.equals(key, ignoreCase = true) }?.value
+
+private fun buildBundleOptionDisplays(
+    optionValues: Map<String, String>,
+    metadataOptions: List<app.revanced.manager.patcher.patch.Option<*>>,
+    fallbackDisplayEntries: Map<String, PatchProfilePayload.OptionDisplayInfo>
+): List<BundleOptionDisplay> {
+    val metadataByKey = metadataOptions.associateBy { it.key }
+    val orderedKeys = buildList {
+        addAll(metadataOptions.map { it.key })
+        addAll(optionValues.keys)
+        addAll(fallbackDisplayEntries.keys)
+    }.distinct()
+
+    return orderedKeys.map { key ->
+        val option = metadataByKey[key]
+        val fallbackEntry = fallbackDisplayEntries[key]
+        val serializedValue = optionValues[key]
+        val parsedResult = if (serializedValue != null && option != null) {
+            runCatching {
+                StoredOptionSerializedValue.fromJsonString(serializedValue).deserializeFor(option)
+            }
+        } else {
+            null
+        }
+        val parsedValue = parsedResult?.getOrNull()
+        val effectiveValue = when {
+            parsedResult?.isSuccess == true -> parsedValue
+            serializedValue == null -> option?.default
+            else -> null
+        }
+        val presetLabel = if (option != null && effectiveValue != null) {
+            option.presets?.entries?.firstOrNull { (_, presetValue) -> presetValue == effectiveValue }?.key
+        } else {
+            null
+        }
+        val label = option?.title ?: fallbackEntry?.label ?: key
+        val displayValue = presetLabel
+            ?: effectiveValue?.toDisplayString()
+            ?: fallbackEntry?.displayValue
+            ?: serializedValue
+            ?: ""
+        BundleOptionDisplay(
+            key = key,
+            label = label,
+            value = serializedValue ?: effectiveValue?.toDisplayString().orEmpty(),
+            displayValue = displayValue
+        )
+    }
+}
+
+private fun PatchProfile.effectiveAppVersion(): String? =
+    resolvePatchProfileAppVersion(appVersion, apkPath, apkVersion, useSelectedApkVersion)
 
 class PatchProfilesViewModel(
     private val app: Application,
@@ -181,8 +240,9 @@ class PatchProfilesViewModel(
                 remappedPayload
             }
             val workingProfile = profile.copy(payload = workingPayload)
+            val effectiveAppVersion = workingProfile.effectiveAppVersion()
             val scopedBundles = bundleInfoMap.mapValues { (_, info) ->
-                info.forPackage(profile.packageName, profile.appVersion)
+                info.forPackage(profile.packageName, effectiveAppVersion)
             }
             val configuration = workingProfile.toConfiguration(scopedBundles, sourceMap)
             val optionsByBundle = configuration.options.toStringMap()
@@ -203,42 +263,41 @@ class PatchProfilesViewModel(
                 val type = resolvedSource.determineType(bundle)
                 val resolvedUid = resolvedSource?.uid ?: bundle.bundleUid
                 val scopedInfo = scopedBundles[resolvedUid]
-                    val fallbackOptions = bundle.options.toSerializedStringMap()
-                    val resolvedOptions = optionsByBundle[resolvedUid]
-                    val optionPatchNames = buildSet {
-                        resolvedOptions?.keys?.let(::addAll)
-                        addAll(fallbackOptions.keys)
-                    }
+                val fallbackOptions = bundle.options.toSerializedStringMap()
+                val resolvedOptions = optionsByBundle[resolvedUid]
                 val fallbackDisplayInfo = bundle.optionDisplayInfo
                 val patchMetadataForDisplay = scopedInfo
-                    val optionDisplays = optionPatchNames.associateWith { patchName ->
-                        val optionValues =
-                            resolvedOptions?.get(patchName)?.takeUnless { it.isEmpty() }
-                                ?: fallbackOptions[patchName].orEmpty()
-                        val metadata = patchMetadataForDisplay?.patches
-                            ?.firstOrNull { it.name.trim().equals(patchName.trim(), ignoreCase = true) }
-                            ?.options
-                            ?.associateBy { it.key }
-                            ?: emptyMap()
-                    optionValues.map { (key, value) ->
-                        val fallbackEntry = fallbackDisplayInfo?.get(patchName)?.get(key)
-                        val label = metadata[key]?.title ?: fallbackEntry?.label ?: key
-                        val displayValue = metadata[key]?.let { option ->
-                            val parsedValue = runCatching {
-                                StoredOptionSerializedValue.fromJsonString(value).deserializeFor(option)
-                            }.getOrNull()
-                            val presetLabel = parsedValue?.let { parsed ->
-                                option.presets?.entries?.firstOrNull { (_, presetValue) -> presetValue == parsed }?.key
-                            }
-                            presetLabel ?: parsedValue?.toDisplayString()
-                        } ?: fallbackEntry?.displayValue ?: value
-                        BundleOptionDisplay(
-                            key = key,
-                            label = label,
-                            value = value,
-                            displayValue = displayValue ?: value
-                        )
-                    }
+                val patchMetadataByName = patchMetadataForDisplay?.patches
+                    ?.associateBy { it.name.trim().lowercase() }
+                    ?: emptyMap()
+                val optionPatchNames = buildSet {
+                    addAll(
+                        bundle.patches.filter { patchName ->
+                            patchMetadataByName[patchName.trim().lowercase()]
+                                ?.options
+                                ?.isNotEmpty() == true
+                        }
+                    )
+                    resolvedOptions?.keys?.let(::addAll)
+                    addAll(fallbackOptions.keys)
+                    fallbackDisplayInfo?.keys?.let(::addAll)
+                }
+                val optionDisplays = optionPatchNames.associateWith { patchName ->
+                    val metadataOptions = patchMetadataByName[patchName.trim().lowercase()]
+                        ?.options
+                        ?.toList()
+                        .orEmpty()
+                    val optionValues = resolvedOptions?.getIgnoreCase(patchName)
+                        ?.takeUnless { it.isEmpty() }
+                        ?: fallbackOptions.getIgnoreCase(patchName).orEmpty()
+                    val fallbackEntriesForPatch = fallbackDisplayInfo
+                        ?.getIgnoreCase(patchName)
+                        .orEmpty()
+                    buildBundleOptionDisplays(
+                        optionValues = optionValues,
+                        metadataOptions = metadataOptions,
+                        fallbackDisplayEntries = fallbackEntriesForPatch
+                    )
                 }
                 val optionDisplayInfoMap = optionDisplays
                     .filterValues { it.isNotEmpty() }
@@ -284,6 +343,7 @@ class PatchProfilesViewModel(
                 apkPath = profile.apkPath,
                 apkSourcePath = profile.apkSourcePath,
                 apkVersion = profile.apkVersion,
+                useSelectedApkVersion = profile.useSelectedApkVersion,
                 autoPatch = profile.autoPatch,
                 bundleCount = workingPayload.bundles.size,
                 bundleNames = bundleNames,
@@ -320,8 +380,9 @@ class PatchProfilesViewModel(
         }
         val remappedPayload = profile.payload.remapLocalBundles(sourcesList, signatureMap)
         val workingProfile = if (remappedPayload === profile.payload) profile else profile.copy(payload = remappedPayload)
+        val effectiveAppVersion = workingProfile.effectiveAppVersion()
         val scopedBundles = patchBundleRepository
-            .scopedBundleInfoFlow(workingProfile.packageName, workingProfile.appVersion)
+            .scopedBundleInfoFlow(workingProfile.packageName, effectiveAppVersion)
             .first()
             .associateBy { it.uid }
         val sources = sourcesList.associateBy { it.uid }
@@ -384,7 +445,11 @@ class PatchProfilesViewModel(
         }
     }
 
-    suspend fun updateProfileVersion(profileId: Int, version: String?): VersionUpdateResult =
+    suspend fun updateProfileVersion(
+        profileId: Int,
+        version: String?,
+        useSelectedApkVersion: Boolean = false
+    ): VersionUpdateResult =
         withContext(Dispatchers.Default) {
             val profile = patchProfileRepository.getProfile(profileId)
                 ?: return@withContext VersionUpdateResult.PROFILE_NOT_FOUND
@@ -395,7 +460,8 @@ class PatchProfilesViewModel(
                     packageName = profile.packageName,
                     appVersion = sanitized,
                     name = profile.name,
-                    payload = profile.payload
+                    payload = profile.payload,
+                    useSelectedApkVersion = useSelectedApkVersion
                 )
                 if (updated != null) VersionUpdateResult.SUCCESS else VersionUpdateResult.FAILED
             } catch (t: Exception) {
@@ -410,7 +476,14 @@ class PatchProfilesViewModel(
                 ?: return@withContext ApkSelectionResult.PROFILE_NOT_FOUND
             if (file == null) {
                 profile.apkPath?.let { File(it).delete() }
-                patchProfileRepository.updateProfileApk(profileId, null, null, null)
+                patchProfileRepository.updateProfileApk(
+                    profileId,
+                    null,
+                    null,
+                    null,
+                    appVersion = if (profile.useSelectedApkVersion) null else profile.appVersion,
+                    useSelectedApkVersion = false
+                )
                 return@withContext ApkSelectionResult.CLEARED
             }
             if (!file.exists()) return@withContext ApkSelectionResult.INVALID_FILE
@@ -443,7 +516,9 @@ class PatchProfilesViewModel(
                 profileId,
                 destination.absolutePath,
                 version,
-                file.absolutePath
+                file.absolutePath,
+                appVersion = profile.appVersion,
+                useSelectedApkVersion = true
             )
             if (updated == null) {
                 destination.delete()

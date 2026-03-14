@@ -4,7 +4,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material3.*
@@ -15,6 +19,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
+import app.revanced.manager.network.dto.ReVancedAsset
 import app.revanced.manager.ui.component.haptics.HapticCheckbox
 import app.revanced.manager.util.transparentListItemColors
 
@@ -23,7 +28,7 @@ fun AvailableUpdateDialog(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
     setShowManagerUpdateDialogOnLaunch: (Boolean) -> Unit,
-    newVersion: String
+    releaseInfo: ReVancedAsset
 ) {
     var dontShowAgain by rememberSaveable { mutableStateOf(false) }
     val dismissDialog = {
@@ -63,8 +68,27 @@ fun AvailableUpdateDialog(
             ) {
                 Text(
                     modifier = Modifier.padding(horizontal = 16.dp),
-                    text = stringResource(R.string.update_available_dialog_description, newVersion)
+                    text = stringResource(R.string.update_available_dialog_description, releaseInfo.version)
                 )
+                if (releaseInfo.description.isNotBlank()) {
+                    Surface(
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp)
+                            .fillMaxWidth()
+                            .heightIn(max = 280.dp),
+                        shape = MaterialTheme.shapes.medium,
+                        tonalElevation = 1.dp,
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .verticalScroll(rememberScrollState())
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                        ) {
+                            Markdown(releaseInfo.description.replace("`", ""))
+                        }
+                    }
+                }
                 ListItem(
                     modifier = Modifier.clickable { dontShowAgain = !dontShowAgain },
                     headlineContent = {

@@ -39,16 +39,19 @@ class AmpleSession(
     private val logger: Logger,
     private val input: File,
     private val onEvent: (ProgressEvent) -> Unit,
+    private val checkCancelled: () -> Unit = {},
 ) : Closeable {
     private val tempDir = File(cacheDir).resolve("patcher").also { it.mkdirs() }
     private val frameworkDirFile = File(frameworkDir).also { it.mkdirs() }
+    private val resolvedAaptPath = aaptPath
     private var patcher = createPatcher()
 
     private fun createPatcher() = Patcher(
         PatcherConfig(
-            input,
-            tempDir,
-            frameworkDirFile.absolutePath
+            apkFile = input,
+            temporaryFilesPath = tempDir,
+            frameworkFileDirectory = frameworkDirFile.absolutePath,
+            aaptBinaryPath = resolvedAaptPath
         )
     )
 
@@ -63,12 +66,14 @@ class AmpleSession(
         var nextIndex = 0
 
         fun startPatch(index: Int) {
+            checkCancelled()
             if (!started.add(index)) return
             onEvent(ProgressEvent.Started(StepId.ExecutePatch(index)))
         }
 
         startPatch(0)
         this().collect { (patch, exception) ->
+            checkCancelled()
             val index = indexByPatch[patch] ?: return@collect
 
             if (exception != null) {
@@ -110,6 +115,7 @@ class AmpleSession(
     }
 
     private suspend fun executePatchesOnce(orderedPatches: AmplePatchList) {
+        checkCancelled()
         with(patcher) {
             if (orderedPatches.isNotEmpty()) {
                 onEvent(ProgressEvent.Started(StepId.ExecutePatch(0)))
@@ -127,17 +133,7 @@ class AmpleSession(
 
     private suspend fun executePatchesWithFrameworkRecovery(orderedPatches: AmplePatchList) {
         ensureFrameworkCacheIsValid()
-        try {
-            executePatchesOnce(orderedPatches)
-        } catch (error: Throwable) {
-            if (!isFrameworkCacheReadFailure(error)) throw error
-
-            logger.warn("Framework cache read failed. Clearing framework cache and retrying once.")
-            clearFrameworkCache("retry after framework read failure")
-            resetPatcher()
-            ensureFrameworkCacheIsValid()
-            executePatchesOnce(orderedPatches)
-        }
+        executePatchesOnce(orderedPatches)
     }
 
     private fun ensureFrameworkCacheIsValid() {
@@ -185,41 +181,16 @@ class AmpleSession(
         }
     }
 
-    private fun resetPatcher() {
-        runCatching { patcher.close() }
-        patcher = createPatcher()
-    }
-
-    private fun isFrameworkCacheReadFailure(error: Throwable): Boolean {
-        val detail = buildString {
-            generateSequence(error) { it.cause }.forEach { cause ->
-                append(cause.message.orEmpty())
-                append('\n')
-                append(cause.stackTraceToString())
-                append('\n')
-            }
-        }
-
-        val hasFrameworkRef =
-            detail.contains("/framework/1.apk", ignoreCase = true) ||
-                detail.contains("\\framework\\1.apk", ignoreCase = true)
-        if (!hasFrameworkRef) return false
-
-        val hasKnownFailure =
-            detail.contains("Could not load resources.arsc", ignoreCase = true) ||
-                detail.contains("zip file is empty", ignoreCase = true)
-        return hasKnownFailure
-    }
-
     suspend fun run(
         output: File,
         selectedPatches: AmplePatchList,
         stripNativeLibs: Boolean,
         inputWasSplit: Boolean
     ) {
+        checkCancelled()
         val shouldStripNativeLibs = stripNativeLibs && !inputWasSplit
         val orderedPatches = selectedPatches.sortedBy { it.name }
-        runStep(StepId.ExecutePatches, onEvent) {
+        runStep(StepId.ExecutePatches, onEvent, checkCancelled) {
             java.util.logging.Logger.getLogger("").apply {
                 handlers.forEach {
                     it.close()
@@ -231,6 +202,7 @@ class AmpleSession(
             executePatchesWithFrameworkRecovery(orderedPatches)
         }
 
+        checkCancelled()
         onEvent(
             ProgressEvent.Progress(
                 stepId = StepId.WriteAPK,
@@ -238,91 +210,104 @@ class AmpleSession(
             )
         )
 
-        runStep(StepId.WriteAPK, onEvent) {
-            onEvent(
-                ProgressEvent.Progress(
-                    stepId = StepId.WriteAPK,
-                    message = "Copying base APK"
-                )
-            )
-            val initialDexNames = listDexNames(input)
-            onEvent(
-                ProgressEvent.Progress(
-                    stepId = StepId.WriteAPK,
-                    subSteps = buildWriteApkSubSteps(
-                        initialDexNames.map { "Compiling $it" },
-                        shouldStripNativeLibs
+        suspend fun writePatchedApkStep() {
+            runStep(StepId.WriteAPK, onEvent, checkCancelled) {
+                checkCancelled()
+                onEvent(
+                    ProgressEvent.Progress(
+                        stepId = StepId.WriteAPK,
+                        message = "Copying base APK"
                     )
                 )
-            )
-            logger.info("Writing patched files...")
-            XmlSurrogateSanitizer.sanitize(tempDir.resolve("apk"), logger)
-            val result = patcher.get()
-            val updatedDexNames = mergeDexNames(initialDexNames, result)
-            if (updatedDexNames != initialDexNames) {
+                val initialDexNames = listDexNames(input)
                 onEvent(
                     ProgressEvent.Progress(
                         stepId = StepId.WriteAPK,
                         subSteps = buildWriteApkSubSteps(
-                            updatedDexNames.map { "Compiling $it" },
+                            initialDexNames.map { "Compiling $it" },
                             shouldStripNativeLibs
                         )
                     )
                 )
-            }
-
-            val patched = tempDir.resolve("result.apk")
-            runInterruptible(Dispatchers.IO) {
-                fastCopy(input, patched)
-            }
-            onEvent(
-                ProgressEvent.Progress(
-                    stepId = StepId.WriteAPK,
-                    message = "Applying patched changes"
-                )
-            )
-            result.applyTo(patched)
-
-            logger.info("Patched apk saved to $patched")
-
-            withContext(Dispatchers.IO) {
-                onEvent(
-                    ProgressEvent.Progress(
-                        stepId = StepId.WriteAPK,
-                        message = "Writing output APK"
-                    )
-                )
-                try {
-                    Files.move(
-                        patched.toPath(),
-                        output.toPath(),
-                        StandardCopyOption.REPLACE_EXISTING,
-                        StandardCopyOption.ATOMIC_MOVE
-                    )
-                } catch (_: Exception) {
-                    Files.move(
-                        patched.toPath(),
-                        output.toPath(),
-                        StandardCopyOption.REPLACE_EXISTING
+                logger.info("Writing patched files...")
+                XmlSurrogateSanitizer.sanitize(tempDir.resolve("apk"), logger)
+                checkCancelled()
+                val result = patcher.get()
+                val updatedDexNames = mergeDexNames(initialDexNames, result)
+                if (updatedDexNames != initialDexNames) {
+                    onEvent(
+                        ProgressEvent.Progress(
+                            stepId = StepId.WriteAPK,
+                            subSteps = buildWriteApkSubSteps(
+                                updatedDexNames.map { "Compiling $it" },
+                                shouldStripNativeLibs
+                            )
+                        )
                     )
                 }
-            }
-            onEvent(
-                ProgressEvent.Progress(
-                    stepId = StepId.WriteAPK,
-                    message = "Finalizing output"
-                )
-            )
-            if (shouldStripNativeLibs) {
+
+                val patched = tempDir.resolve("result.apk")
+                runInterruptible(Dispatchers.IO) {
+                    fastCopy(input, patched)
+                }
+                checkCancelled()
                 onEvent(
                     ProgressEvent.Progress(
                         stepId = StepId.WriteAPK,
-                        message = "Stripping native libraries"
+                        message = "Applying patched changes"
                     )
                 )
-                NativeLibStripper.strip(output)
+                runInterruptible(Dispatchers.IO) {
+                    result.applyTo(patched)
+                }
+                checkCancelled()
+
+                logger.info("Patched apk saved to $patched")
+
+                withContext(Dispatchers.IO) {
+                    checkCancelled()
+                    onEvent(
+                        ProgressEvent.Progress(
+                            stepId = StepId.WriteAPK,
+                            message = "Writing output APK"
+                        )
+                    )
+                    try {
+                        Files.move(
+                            patched.toPath(),
+                            output.toPath(),
+                            StandardCopyOption.REPLACE_EXISTING,
+                            StandardCopyOption.ATOMIC_MOVE
+                        )
+                    } catch (_: Exception) {
+                        Files.move(
+                            patched.toPath(),
+                            output.toPath(),
+                            StandardCopyOption.REPLACE_EXISTING
+                        )
+                    }
+                }
+                onEvent(
+                    ProgressEvent.Progress(
+                        stepId = StepId.WriteAPK,
+                        message = "Finalizing output"
+                    )
+                )
+                if (shouldStripNativeLibs) {
+                    checkCancelled()
+                    onEvent(
+                        ProgressEvent.Progress(
+                            stepId = StepId.WriteAPK,
+                            message = "Stripping native libraries"
+                        )
+                    )
+                    NativeLibStripper.strip(output)
+                    checkCancelled()
+                }
             }
         }
+
+        writePatchedApkStep()
     }
 
     private fun buildWriteApkSubSteps(

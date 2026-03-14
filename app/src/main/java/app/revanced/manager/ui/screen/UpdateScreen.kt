@@ -203,7 +203,7 @@ private fun UpdateInfoSummary(
 
         releaseInfo.pageUrl?.let { url ->
             TextButton(onClick = { uriHandler.openUri(url) }) {
-                Text(stringResource(R.string.changelog))
+                Text(stringResource(R.string.changelog_open_github))
             }
         }
     }

@@ -7,6 +7,7 @@ import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Bundle
 import android.os.Parcelable
+import android.view.KeyEvent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -37,12 +39,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
+import androidx.navigation.NavOptionsBuilder
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import androidx.appcompat.app.AppCompatActivity
+import app.revanced.manager.domain.repository.resolvePatchProfileAppVersion
+import app.revanced.manager.util.LocalPreventAccidentalTouching
 import app.revanced.manager.ui.model.navigation.AppSelector
 import app.revanced.manager.ui.model.navigation.ComplexParameter
 import app.revanced.manager.ui.model.navigation.CreateYoutubeAssets
@@ -56,6 +61,7 @@ import app.revanced.manager.ui.model.navigation.PatchBundleDiscovery
 import app.revanced.manager.ui.model.navigation.PatchBundleDiscoveryPatches
 import app.revanced.manager.ui.model.navigation.SelectedApplicationInfo
 import app.revanced.manager.ui.model.navigation.Settings
+import app.revanced.manager.ui.model.navigation.SplitApkInstaller
 import app.revanced.manager.ui.model.navigation.Update
 import app.revanced.manager.ui.model.SelectedApp
 import app.revanced.manager.ui.screen.AppSelectorScreen
@@ -72,9 +78,11 @@ import app.revanced.manager.ui.screen.PatchesSelectorScreen
 import app.revanced.manager.ui.screen.RequiredOptionsScreen
 import app.revanced.manager.ui.screen.SelectedAppInfoScreen
 import app.revanced.manager.ui.screen.SettingsScreen
+import app.revanced.manager.ui.screen.SplitApkInstallerScreen
 import app.revanced.manager.ui.screen.UpdateScreen
 import app.revanced.manager.ui.screen.settings.AboutSettingsScreen
 import app.revanced.manager.ui.screen.settings.AdvancedSettingsScreen
+import app.revanced.manager.ui.screen.settings.AdvancedSettingsMode
 import app.revanced.manager.ui.screen.settings.ContributorSettingsScreen
 import app.revanced.manager.ui.screen.settings.DeveloperSettingsScreen
 import app.revanced.manager.ui.screen.settings.DownloadsSettingsScreen
@@ -102,6 +110,16 @@ import java.io.File
 import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
+    private var onSystemBackLongPress: (() -> Unit)? = null
+    private var consumedBackLongPress = false
+
+    fun setOnSystemBackLongPress(handler: (() -> Unit)?) {
+        onSystemBackLongPress = handler
+        if (handler == null) {
+            consumedBackLongPress = false
+        }
+    }
+
     @ExperimentalAnimationApi
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -126,6 +144,7 @@ class MainActivity : AppCompatActivity() {
             val customThemeColor by vm.prefs.customThemeColor.getAsState()
             val customBackgroundImageUri by vm.prefs.customBackgroundImageUri.getAsState()
             val customBackgroundImageOpacity by vm.prefs.customBackgroundImageOpacity.getAsState()
+            val preventAccidentalTouching by vm.prefs.preventAccidentalTouching.getAsState()
             val systemDark = isSystemInDarkTheme()
             val darkThemeEnabled = theme == Theme.SYSTEM && systemDark || theme == Theme.DARK
             val pureBlackEnabled = pureBlackTheme || (pureBlackOnSystemDark && theme == Theme.SYSTEM && systemDark)
@@ -137,22 +156,26 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            ReVancedManagerTheme(
-                darkTheme = darkThemeEnabled,
-                dynamicColor = dynamicColor,
-                pureBlackTheme = pureBlackEnabled,
-                accentColorHex = customAccentColor.takeUnless { it.isBlank() },
-                themeColorHex = customThemeColor.takeUnless { it.isBlank() },
-                hasCustomBackground = !customBackgroundImageUri.isNullOrBlank()
+            CompositionLocalProvider(
+                LocalPreventAccidentalTouching provides preventAccidentalTouching
             ) {
-                ReVancedManagerBackground(
-                    customBackgroundImageUri = customBackgroundImageUri.takeUnless { it.isBlank() },
-                    imageOverlayAlpha = customBackgroundImageOpacity
+                ReVancedManagerTheme(
+                    darkTheme = darkThemeEnabled,
+                    dynamicColor = dynamicColor,
+                    pureBlackTheme = pureBlackEnabled,
+                    accentColorHex = customAccentColor.takeUnless { it.isBlank() },
+                    themeColorHex = customThemeColor.takeUnless { it.isBlank() },
+                    hasCustomBackground = !customBackgroundImageUri.isNullOrBlank()
                 ) {
-                    ReVancedManager(
-                        vm = vm,
-                        disableScreenSlideTransitions = !customBackgroundImageUri.isNullOrBlank()
-                    )
+                    ReVancedManagerBackground(
+                        customBackgroundImageUri = customBackgroundImageUri.takeUnless { it.isBlank() },
+                        imageOverlayAlpha = customBackgroundImageOpacity
+                    ) {
+                        ReVancedManager(
+                            vm = vm,
+                            disableScreenSlideTransitions = !customBackgroundImageUri.isNullOrBlank()
+                        )
+                    }
                 }
             }
         }
@@ -162,6 +185,35 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         val vm: MainViewModel = getActivityViewModel()
         vm.handleIntent(intent)
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK && onSystemBackLongPress != null && event.repeatCount == 0) {
+            event.startTracking()
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onKeyLongPress(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK && onSystemBackLongPress != null) {
+            consumedBackLongPress = true
+            onSystemBackLongPress?.invoke()
+            return true
+        }
+        return super.onKeyLongPress(keyCode, event)
+    }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK && onSystemBackLongPress != null && event.isTracking) {
+            if (consumedBackLongPress || event.isCanceled) {
+                consumedBackLongPress = false
+                return true
+            }
+            onBackPressedDispatcher.onBackPressed()
+            return true
+        }
+        return super.onKeyUp(keyCode, event)
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -264,22 +316,40 @@ private fun ReVancedManager(
     val navController = rememberNavController()
     val dashboardVm: DashboardViewModel = koinViewModel()
     var pendingBundleDeepLink by remember { mutableStateOf<app.revanced.manager.util.BundleDeepLink?>(null) }
+    var pendingSplitArchiveIntent by remember { mutableStateOf<app.revanced.manager.util.SplitArchiveIntent?>(null) }
     val context = LocalContext.current
 
     EventEffect(vm.appSelectFlow) { params ->
-        navController.popBackStack(SelectedApplicationInfo.Main, inclusive = true)
-        if (params.returnToDashboard) {
-            navController.popBackStack(Dashboard, inclusive = false)
-        }
         navController.navigateComplex(
             SelectedApplicationInfo,
             params
-        )
+        ) {
+            if (params.returnToDashboard) {
+                popUpTo<Dashboard> { inclusive = false }
+            } else {
+                popUpTo<SelectedApplicationInfo.Main> { inclusive = true }
+            }
+            launchSingleTop = true
+        }
     }
 
     EventEffect(vm.bundleDeepLinkFlow) { deepLink ->
         pendingBundleDeepLink = deepLink
         navController.navigate(Dashboard) {
+            launchSingleTop = true
+            popUpTo(Dashboard) { inclusive = false }
+        }
+    }
+
+    EventEffect(vm.managerUpdateDeepLinkFlow) {
+        navController.navigate(Update()) {
+            launchSingleTop = true
+        }
+    }
+
+    EventEffect(vm.splitArchiveIntentFlow) { splitArchiveIntent ->
+        pendingSplitArchiveIntent = splitArchiveIntent
+        navController.navigate(SplitApkInstaller) {
             launchSingleTop = true
             popUpTo(Dashboard) { inclusive = false }
         }
@@ -297,8 +367,7 @@ private fun ReVancedManager(
             else slideOutHorizontally(targetOffsetX = { -it / 3 })
         },
         popEnterTransition = {
-            if (disableScreenSlideTransitions) EnterTransition.None
-            else slideInHorizontally(initialOffsetX = { -it / 3 })
+            EnterTransition.None
         },
         popExitTransition = {
             if (disableScreenSlideTransitions) ExitTransition.None
@@ -326,6 +395,11 @@ private fun ReVancedManager(
                 onMergeSplitClick = {
                     navController.navigate(MergeSplitApk)
                 },
+                onOpenSplitInstallerClick = {
+                    navController.navigate(SplitApkInstaller) {
+                        launchSingleTop = true
+                    }
+                },
                 onCreateYoutubeAssetsClick = {
                     navController.navigate(CreateYoutubeAssets)
                 },
@@ -342,9 +416,12 @@ private fun ReVancedManager(
                     val apkFile = launchData.profile.apkPath
                         ?.let(::File)
                         ?.takeIf { it.exists() }
-                    val resolvedVersion = launchData.profile.apkVersion
-                        ?: launchData.profile.appVersion
-                        ?: context.getString(R.string.app_version_unspecified)
+                    val resolvedVersion = resolvePatchProfileAppVersion(
+                        appVersion = launchData.profile.appVersion,
+                        apkPath = launchData.profile.apkPath,
+                        apkVersion = launchData.profile.apkVersion,
+                        useSelectedApkVersion = launchData.profile.useSelectedApkVersion
+                    ) ?: context.getString(R.string.app_version_unspecified)
                     val selectedApp = if (apkFile != null) {
                         SelectedApp.Local(
                             packageName = launchData.profile.packageName,
@@ -356,7 +433,12 @@ private fun ReVancedManager(
                     } else {
                         SelectedApp.Search(
                             launchData.profile.packageName,
-                            launchData.profile.appVersion
+                            resolvePatchProfileAppVersion(
+                                appVersion = launchData.profile.appVersion,
+                                apkPath = launchData.profile.apkPath,
+                                apkVersion = launchData.profile.apkVersion,
+                                useSelectedApkVersion = launchData.profile.useSelectedApkVersion
+                            )
                         )
                     }
                     navController.navigateComplex(
@@ -364,6 +446,7 @@ private fun ReVancedManager(
                         SelectedApplicationInfo.ViewModelParams(
                             app = selectedApp,
                             patches = null,
+                            persistConfiguration = false,
                             profileId = launchData.profile.uid,
                             requiresSourceSelection = apkFile == null
                         )
@@ -402,6 +485,12 @@ private fun ReVancedManager(
             val params = it.getComplexArg<Patcher.ViewModelParams>()
             PatcherScreen(
                 onBackClick = navController::popBackStack,
+                onBackToDashboard = {
+                    navController.navigate(Dashboard) {
+                        popUpTo<Dashboard> { inclusive = true }
+                        launchSingleTop = true
+                    }
+                },
                 onReviewSelection = { app, selection, options, missing ->
                     val appWithVersion = when (app) {
                         is SelectedApp.Search -> app.copy(version = app.version ?: params.selectedApp.version)
@@ -457,6 +546,14 @@ private fun ReVancedManager(
             MergeSplitApkScreen(
                 onBackClick = navController::popBackStack,
                 vm = dashboardVm
+            )
+        }
+
+        composable<SplitApkInstaller> {
+            SplitApkInstallerScreen(
+                onBackClick = navController::popBackStack,
+                pendingExternalInput = pendingSplitArchiveIntent,
+                onExternalInputConsumed = { pendingSplitArchiveIntent = null }
             )
         }
 
@@ -613,7 +710,24 @@ private fun ReVancedManager(
             }
 
             composable<Settings.Advanced> {
-                AdvancedSettingsScreen(onBackClick = navController::popBackStack)
+                AdvancedSettingsScreen(
+                    onBackClick = navController::popBackStack,
+                    mode = AdvancedSettingsMode.ADVANCED_SYSTEM
+                )
+            }
+
+            composable<Settings.Patcher> {
+                AdvancedSettingsScreen(
+                    onBackClick = navController::popBackStack,
+                    mode = AdvancedSettingsMode.PATCHER
+                )
+            }
+
+            composable<Settings.AdvancedSystem> {
+                AdvancedSettingsScreen(
+                    onBackClick = navController::popBackStack,
+                    mode = AdvancedSettingsMode.ADVANCED_SYSTEM
+                )
             }
 
             composable<Settings.Developer> {
@@ -663,9 +777,10 @@ private fun NavController.navGraphEntry(entry: NavBackStackEntry) =
 // Androidx Navigation does not support storing complex types in route objects, so we have to store them inside the saved state handle of the back stack entry instead.
 private fun <T : Parcelable, R : ComplexParameter<T>> NavController.navigateComplex(
     route: R,
-    data: T
+    data: T,
+    options: NavOptionsBuilder.() -> Unit = {}
 ) {
-    navigate(route)
+    navigate(route, options)
     getBackStackEntry(route).savedStateHandle["args"] = data
 }
 

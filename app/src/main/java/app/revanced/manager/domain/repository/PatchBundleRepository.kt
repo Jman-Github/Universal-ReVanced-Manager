@@ -36,6 +36,7 @@ import app.revanced.manager.network.dto.ExternalBundleSnapshot
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.patcher.ample.AmpleRuntimeBridge
 import app.revanced.manager.patcher.morphe.MorpheRuntimeBridge
+import app.revanced.manager.patcher.revanced.Revanced22RuntimeBridge
 import app.revanced.manager.patcher.patch.PatchInfo
 import app.revanced.manager.patcher.patch.PatchBundle
 import app.revanced.manager.patcher.patch.PatchBundleInfo
@@ -139,6 +140,36 @@ class PatchBundleRepository(
 
     suspend fun selectionHasMixedBundleTypes(selection: PatchSelection): Boolean =
         selectionBundleTypes(selection).size > 1
+
+    suspend fun selectionHasMixedRevancedPatcherVersions(selection: PatchSelection): Boolean {
+        val activeSelection = selection.filterValues { it.isNotEmpty() }
+        if (activeSelection.isEmpty()) return false
+
+        val info = allBundlesInfoFlow.first()
+        var hasV21 = false
+        var hasV22 = false
+
+        activeSelection.keys.forEach { uid ->
+            if (info[uid]?.bundleType != PatchBundleType.REVANCED) return@forEach
+            when (readRevancedPatcherHint(uid)) {
+                RevancedPatcherVersion.V22 -> hasV22 = true
+                else -> hasV21 = true
+            }
+        }
+
+        return hasV21 && hasV22
+    }
+
+    suspend fun selectionUsesRevancedPatcher22(selection: PatchSelection): Boolean {
+        val activeSelection = selection.filterValues { it.isNotEmpty() }
+        if (activeSelection.isEmpty()) return false
+
+        val info = allBundlesInfoFlow.first()
+        return activeSelection.keys.any { uid ->
+            info[uid]?.bundleType == PatchBundleType.REVANCED &&
+                readRevancedPatcherHint(uid) == RevancedPatcherVersion.V22
+        }
+    }
 
     fun scopedBundleInfoFlow(packageName: String, version: String?) = enabledBundlesInfoFlow.map {
         it.map { (_, bundleInfo) ->
@@ -366,30 +397,109 @@ class PatchBundleRepository(
     private fun changelogHistoryFile(uid: Int): File =
         directoryOf(uid).resolve("changelog_history.json")
 
+    private fun changelogHistoryIdentityFile(uid: Int): File =
+        directoryOf(uid).resolve("changelog_history_identity.txt")
+
+    suspend fun getChangelogHistory(source: PatchBundleSource): List<PatchBundleChangelogEntry> =
+        getChangelogHistory(source.uid, resolveChangelogHistoryIdentity(source))
+
     suspend fun getChangelogHistory(uid: Int): List<PatchBundleChangelogEntry> =
+        getChangelogHistory(uid, expectedIdentity = null)
+
+    private suspend fun getChangelogHistory(
+        uid: Int,
+        expectedIdentity: String?
+    ): List<PatchBundleChangelogEntry> =
         withContext(Dispatchers.IO) {
+            val storageLimit = normalizedChangelogStorageLimit()
             changelogHistoryMutex.withLock {
-                readChangelogHistoryInternal(uid)
+                reconcileChangelogHistoryIdentityInternal(uid, expectedIdentity)
+                val current = trimChangelogHistoryEntries(readChangelogHistoryInternal(uid), storageLimit)
+                writeChangelogHistoryInternal(uid, current)
+                current
             }
         }
 
+    suspend fun setChangelogHistory(source: PatchBundleSource, entries: List<PatchBundleChangelogEntry>) {
+        setChangelogHistory(source.uid, entries, resolveChangelogHistoryIdentity(source))
+    }
+
     suspend fun setChangelogHistory(uid: Int, entries: List<PatchBundleChangelogEntry>) {
+        setChangelogHistory(uid, entries, expectedIdentity = null)
+    }
+
+    private suspend fun setChangelogHistory(
+        uid: Int,
+        entries: List<PatchBundleChangelogEntry>,
+        expectedIdentity: String?
+    ) {
         withContext(Dispatchers.IO) {
+            val storageLimit = normalizedChangelogStorageLimit()
             changelogHistoryMutex.withLock {
-                writeChangelogHistoryInternal(uid, entries)
+                reconcileChangelogHistoryIdentityInternal(uid, expectedIdentity)
+                writeChangelogHistoryInternal(uid, trimChangelogHistoryEntries(entries, storageLimit))
             }
         }
     }
 
+    suspend fun mergeChangelogHistory(
+        uid: Int,
+        entries: List<PatchBundleChangelogEntry>
+    ): List<PatchBundleChangelogEntry> = mergeChangelogHistory(uid, entries, expectedIdentity = null)
+
+    private suspend fun mergeChangelogHistory(
+        uid: Int,
+        entries: List<PatchBundleChangelogEntry>,
+        expectedIdentity: String?
+    ): List<PatchBundleChangelogEntry> = withContext(Dispatchers.IO) {
+        val storageLimit = normalizedChangelogStorageLimit()
+        changelogHistoryMutex.withLock {
+            reconcileChangelogHistoryIdentityInternal(uid, expectedIdentity)
+            val current = trimChangelogHistoryEntries(readChangelogHistoryInternal(uid), storageLimit)
+            val updated = mergeChangelogHistoryEntries(current, entries, storageLimit)
+            writeChangelogHistoryInternal(uid, updated)
+            updated
+        }
+    }
+
+    suspend fun synchronizeChangelogHistory(source: RemotePatchBundle): List<PatchBundleChangelogEntry> {
+        val expectedIdentity = source.changelogHistoryIdentity()
+        runCatching { source.fetchLatestReleaseInfo() }
+            .getOrNull()
+            ?.let { latestAsset ->
+                recordChangelog(source, latestAsset)
+            }
+        val historyFetchLimit = normalizedChangelogFetchLimit().let { limit ->
+            if (limit == Int.MAX_VALUE) limit else limit + 1
+        }
+        val historyEntries = source.fetchHistoricalChangelogEntries(historyFetchLimit)
+        return if (historyEntries.isEmpty()) {
+            getChangelogHistory(source)
+        } else {
+            mergeChangelogHistory(source.uid, historyEntries, expectedIdentity)
+        }
+    }
+
+    suspend fun recordChangelog(source: RemotePatchBundle, asset: app.revanced.manager.network.dto.ReVancedAsset) {
+        recordChangelog(source.uid, asset, source.changelogHistoryIdentity())
+    }
+
     suspend fun recordChangelog(uid: Int, asset: app.revanced.manager.network.dto.ReVancedAsset) {
+        recordChangelog(uid, asset, expectedIdentity = null)
+    }
+
+    private suspend fun recordChangelog(
+        uid: Int,
+        asset: app.revanced.manager.network.dto.ReVancedAsset,
+        expectedIdentity: String?
+    ) {
         val entry = PatchBundleChangelogEntry.fromAsset(asset)
         withContext(Dispatchers.IO) {
+            val storageLimit = normalizedChangelogStorageLimit()
             changelogHistoryMutex.withLock {
-                val current = readChangelogHistoryInternal(uid)
-                val updated = current
-                    .filterNot { isSameChangelogEntry(it, entry) }
-                    .toMutableList()
-                updated.add(0, entry)
+                reconcileChangelogHistoryIdentityInternal(uid, expectedIdentity)
+                val current = trimChangelogHistoryEntries(readChangelogHistoryInternal(uid), storageLimit)
+                val updated = mergeChangelogHistoryEntries(current, listOf(entry), storageLimit)
                 writeChangelogHistoryInternal(uid, updated)
             }
         }
@@ -410,6 +520,36 @@ class PatchBundleRepository(
             existing.publishedAtMillis == published &&
             existing.description.trim() == candidate.description.trim()
     }
+
+    private fun mergeChangelogHistoryEntries(
+        current: List<PatchBundleChangelogEntry>,
+        incoming: List<PatchBundleChangelogEntry>,
+        maxEntries: Int
+    ): List<PatchBundleChangelogEntry> {
+        if (incoming.isEmpty()) return trimChangelogHistoryEntries(current, maxEntries)
+        val merged = current.toMutableList()
+        incoming.forEach { candidate ->
+            merged.removeAll { existing -> isSameChangelogEntry(existing, candidate) }
+            merged.add(candidate)
+        }
+        return trimChangelogHistoryEntries(merged, maxEntries)
+    }
+
+    private fun trimChangelogHistoryEntries(
+        entries: List<PatchBundleChangelogEntry>,
+        maxEntries: Int
+    ): List<PatchBundleChangelogEntry> =
+        entries.sortedWith(
+            compareByDescending<PatchBundleChangelogEntry> { it.publishedAtMillis ?: Long.MIN_VALUE }
+        ).take(maxEntries.coerceAtLeast(PreferencesManager.MIN_BUNDLE_CHANGELOG_HISTORY_LIMIT))
+
+    private suspend fun normalizedChangelogFetchLimit(): Int =
+        prefs.bundleChangelogFetchLimit.get()
+            .coerceAtLeast(PreferencesManager.MIN_BUNDLE_CHANGELOG_HISTORY_LIMIT)
+
+    private suspend fun normalizedChangelogStorageLimit(): Int =
+        prefs.bundleChangelogStorageLimit.get()
+            .coerceAtLeast(PreferencesManager.MIN_BUNDLE_CHANGELOG_HISTORY_LIMIT)
 
     private fun readChangelogHistoryInternal(uid: Int): List<PatchBundleChangelogEntry> {
         val file = changelogHistoryFile(uid)
@@ -432,6 +572,46 @@ class PatchBundleRepository(
             file.writeText(changelogHistoryJson.encodeToString(entries))
         }
     }
+
+    private fun readChangelogHistoryIdentityInternal(uid: Int): String? {
+        val file = changelogHistoryIdentityFile(uid)
+        if (!file.exists()) return null
+        return runCatching { file.readText().trim() }
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
+    }
+
+    private fun writeChangelogHistoryIdentityInternal(uid: Int, identity: String?) {
+        val file = changelogHistoryIdentityFile(uid)
+        val normalized = identity?.trim()?.takeIf { it.isNotEmpty() }
+        if (normalized == null) {
+            runCatching { file.delete() }
+            return
+        }
+        file.parentFile?.mkdirs()
+        runCatching { file.writeText(normalized) }
+    }
+
+    private fun reconcileChangelogHistoryIdentityInternal(uid: Int, expectedIdentity: String?) {
+        val normalized = expectedIdentity?.trim()?.takeIf { it.isNotEmpty() }
+        val current = readChangelogHistoryIdentityInternal(uid)
+        if (normalized == null) {
+            if (current != null) writeChangelogHistoryIdentityInternal(uid, null)
+            return
+        }
+        if (current != null && current != normalized) {
+            writeChangelogHistoryInternal(uid, emptyList())
+        }
+        if (current != normalized) {
+            writeChangelogHistoryIdentityInternal(uid, normalized)
+        }
+    }
+
+    private suspend fun resolveChangelogHistoryIdentity(source: PatchBundleSource): String? =
+        source.asRemoteOrNull
+            ?.changelogHistoryIdentity()
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
 
     private fun setLocalImportProgress(
         baseProcessed: Int,
@@ -840,7 +1020,7 @@ class PatchBundleRepository(
         source: PatchBundleSource? = null
     ): Pair<PatchBundleType, List<PatchInfo>> {
         val bundlePath = bundle.patchesJar
-        val extension = File(bundlePath).extension.lowercase(Locale.US)
+        val extension = resolveBundleExtension(bundle, source)
         if (extension == "mpp") {
             return PatchBundleType.MORPHE to MorpheRuntimeBridge.loadMetadata(bundlePath)
         }
@@ -857,12 +1037,12 @@ class PatchBundleRepository(
                     attributes.website
                 )
                     .filterNotNull()
-                    .any { value -> value.contains("ample", ignoreCase = true) }
+                    .any(::looksLikeAmpleMarker)
             } == true
         val ampleEndpointHint = source
             ?.asRemoteOrNull
             ?.endpoint
-            ?.contains("ample", ignoreCase = true) == true
+            ?.let(::looksLikeAmpleMarker) == true
         val localAmpleHint = source
             ?.takeIf { it.asRemoteOrNull == null }
             ?.let { bundleLooksAmple(bundlePath, it.uid) } == true
@@ -875,10 +1055,46 @@ class PatchBundleRepository(
             }
         }
 
-        val revancedResult = runCatching { PatchBundle.Loader.metadata(bundle) }
-        if (revancedResult.isSuccess) {
-            return PatchBundleType.REVANCED to revancedResult.getOrThrow()
+        val preferredRevancedVersion = source?.uid
+            ?.let(::readRevancedPatcherHint)
+            ?: RevancedPatcherVersion.V21
+        val revancedVersionsToTry = buildList {
+            add(preferredRevancedVersion)
+            add(
+                when (preferredRevancedVersion) {
+                    RevancedPatcherVersion.V21 -> RevancedPatcherVersion.V22
+                    RevancedPatcherVersion.V22 -> RevancedPatcherVersion.V21
+                }
+            )
+        }.distinct()
+
+        val revancedFailures = linkedMapOf<RevancedPatcherVersion, Throwable>()
+        for ((index, version) in revancedVersionsToTry.withIndex()) {
+            val revancedResult = runCatching { loadRevancedMetadata(bundle, bundlePath, version) }
+            if (revancedResult.isSuccess) {
+                source?.uid?.let { uid ->
+                    persistRevancedPatcherHint(uid, version)
+                }
+                return PatchBundleType.REVANCED to revancedResult.getOrThrow()
+            }
+
+            val throwable = revancedResult.exceptionOrNull()
+            if (throwable != null) {
+                revancedFailures[version] = throwable
+                if (index < revancedVersionsToTry.lastIndex) {
+                    Log.w(
+                        tag,
+                        "Failed to load ReVanced metadata with patcher ${version.versionName}; retrying.",
+                        throwable
+                    )
+                }
+            }
         }
+
+        val revancedResult = Result.failure<List<PatchInfo>>(
+            revancedFailures.values.firstOrNull()
+                ?: IllegalStateException("Failed to load patch bundle metadata")
+        )
 
         if (extension == "rvp") {
             val ampleResult = runCatching { AmpleRuntimeBridge.loadMetadata(bundlePath) }
@@ -887,7 +1103,10 @@ class PatchBundleRepository(
             }
 
             val error = IllegalStateException("Failed to load patch bundle metadata")
-            revancedResult.exceptionOrNull()?.let(error::addSuppressed)
+            revancedFailures.values.forEach(error::addSuppressed)
+            if (revancedFailures.isEmpty()) {
+                revancedResult.exceptionOrNull()?.let(error::addSuppressed)
+            }
             ampleResult.exceptionOrNull()?.let(error::addSuppressed)
             throw error
         }
@@ -903,10 +1122,29 @@ class PatchBundleRepository(
         }
 
         val error = IllegalStateException("Failed to load patch bundle metadata")
-        revancedResult.exceptionOrNull()?.let(error::addSuppressed)
+        revancedFailures.values.forEach(error::addSuppressed)
+        if (revancedFailures.isEmpty()) {
+            revancedResult.exceptionOrNull()?.let(error::addSuppressed)
+        }
         morpheResult.exceptionOrNull()?.let(error::addSuppressed)
         ampleResult.exceptionOrNull()?.let(error::addSuppressed)
         throw error
+    }
+
+    private fun loadRevancedMetadata(
+        bundle: PatchBundle,
+        bundlePath: String,
+        version: RevancedPatcherVersion
+    ): List<PatchInfo> = when (version) {
+        RevancedPatcherVersion.V21 -> PatchBundle.Loader.metadata(bundle)
+        RevancedPatcherVersion.V22 -> Revanced22RuntimeBridge.loadMetadata(bundlePath)
+    }
+
+    private fun persistRevancedPatcherHint(uid: Int, version: RevancedPatcherVersion) {
+        when (version) {
+            RevancedPatcherVersion.V22 -> writeRevancedPatcherHint(uid, version)
+            RevancedPatcherVersion.V21 -> clearRevancedPatcherHint(uid)
+        }
     }
 
     private val ampleDetectionTokens = listOf(
@@ -914,11 +1152,56 @@ class PatchBundleRepository(
         "ample/revanced",
         "ample.revanced"
     )
+    private val ampleWordRegex = Regex("(^|[^a-z0-9])ample([^a-z0-9]|$)")
+
+    private fun looksLikeAmpleMarker(value: String?): Boolean {
+        val normalized = value
+            ?.trim()
+            ?.lowercase(Locale.US)
+            .orEmpty()
+        if (normalized.isBlank()) return false
+        if (ampleDetectionTokens.any(normalized::contains)) return true
+        return ampleWordRegex.containsMatchIn(normalized)
+    }
+
+    private fun resolveBundleExtension(
+        bundle: PatchBundle,
+        source: PatchBundleSource?
+    ): String? {
+        val sourceHint = source?.uid?.let(::readLocalBundleHint)
+        val candidates = sequenceOf(
+            source?.asRemoteOrNull?.endpoint,
+            sourceHint,
+            source?.name,
+            source?.displayName,
+            bundle.manifestAttributes?.source,
+            bundle.manifestAttributes?.website,
+            bundle.manifestAttributes?.name
+        )
+        return candidates
+            .mapNotNull(::extractBundleExtension)
+            .firstOrNull()
+    }
+
+    private fun extractBundleExtension(value: String?): String? {
+        val normalized = value
+            ?.trim()
+            .orEmpty()
+        if (normalized.isBlank()) return null
+        val candidate = normalized
+            .substringBefore('?')
+            .substringBefore('#')
+            .substringAfterLast('/')
+        val extension = candidate
+            .substringAfterLast('.', "")
+            .lowercase(Locale.US)
+        return extension.takeIf { it in supportedBundleExtensions }
+    }
 
     private fun bundleLooksAmple(bundlePath: String, localUid: Int?): Boolean {
         if (localUid != null) {
             val hint = readLocalBundleHint(localUid)
-            if (!hint.isNullOrBlank() && hint.contains("ample", ignoreCase = true)) {
+            if (looksLikeAmpleMarker(hint)) {
                 return true
             }
         }
@@ -954,6 +1237,24 @@ class PatchBundleRepository(
         val normalized = hint?.trim().takeIf { !it.isNullOrBlank() } ?: return
         val file = directoryOf(uid).resolve(LOCAL_BUNDLE_HINT_FILE)
         runCatching { file.writeText(normalized) }
+    }
+
+    private fun readRevancedPatcherHint(uid: Int): RevancedPatcherVersion? {
+        val file = directoryOf(uid).resolve(REVANCED_PATCHER_HINT_FILE)
+        if (!file.exists()) return null
+        val raw = runCatching { file.readText().trim() }.getOrNull().orEmpty()
+        return RevancedPatcherVersion.fromStorage(raw)
+    }
+
+    private fun writeRevancedPatcherHint(uid: Int, version: RevancedPatcherVersion) {
+        val file = directoryOf(uid).resolve(REVANCED_PATCHER_HINT_FILE)
+        runCatching { file.writeText(version.storageValue) }
+    }
+
+    private fun clearRevancedPatcherHint(uid: Int) {
+        val file = directoryOf(uid).resolve(REVANCED_PATCHER_HINT_FILE)
+        if (!file.exists()) return
+        runCatching { file.delete() }
     }
 
     private suspend fun loadBundleMetadata(
@@ -1545,6 +1846,11 @@ class PatchBundleRepository(
         dispatchAction("Update bundle url (${src.uid})") { state ->
             val props = dao.getProps(src.uid) ?: return@dispatchAction state
             val now = System.currentTimeMillis()
+            changelogHistoryMutex.withLock {
+                writeChangelogHistoryInternal(src.uid, emptyList())
+                writeChangelogHistoryIdentityInternal(src.uid, null)
+            }
+            ExternalBundleMetadataStore.clear(directoryOf(src.uid))
             updateDb(src.uid) {
                 it.copy(
                     source = SourceInfo.from(normalizedUrl),
@@ -1707,9 +2013,7 @@ class PatchBundleRepository(
                         uid = uid,
                         displayName = existingProps?.displayName
                     )
-                    if (sourceNameHint?.contains("ample", ignoreCase = true) == true) {
-                        writeLocalBundleHint(uid, sourceNameHint)
-                    }
+                    writeLocalBundleHint(uid, sourceNameHint)
                     val localBundle = entity.load() as LocalPatchBundle
 
                     try {
@@ -2478,7 +2782,7 @@ class PatchBundleRepository(
 
                     if (result != null) {
                         results[bundle] = result
-                        runCatching { recordChangelog(bundle.uid, bundle.fetchLatestReleaseInfo()) }
+                        runCatching { recordChangelog(bundle, bundle.fetchLatestReleaseInfo()) }
                         onBundleUpdated?.invoke(bundle, downloadedName)
                     }
                 }
@@ -2674,6 +2978,20 @@ class PatchBundleRepository(
         val usesUniversalFallback: Boolean
     )
 
+    private enum class RevancedPatcherVersion(
+        val versionName: String,
+        val storageValue: String
+    ) {
+        V21(versionName = "21.0.0", storageValue = "21"),
+        V22(versionName = "22.0.0", storageValue = "22");
+
+        companion object {
+            fun fromStorage(value: String): RevancedPatcherVersion? = entries.firstOrNull {
+                it.storageValue == value
+            }
+        }
+    }
+
     data class State(
         val sources: PersistentMap<Int, PatchBundleSource> = persistentMapOf(),
         val info: PersistentMap<Int, PatchBundleInfo.Global> = persistentMapOf()
@@ -2740,6 +3058,8 @@ class PatchBundleRepository(
         const val DEFAULT_SOURCE_UID = 0
         const val LOCAL_IMPORT_STEPS = 2
         const val LOCAL_BUNDLE_HINT_FILE = "bundle_hint.txt"
+        const val REVANCED_PATCHER_HINT_FILE = "revanced_patcher_hint.txt"
+        val supportedBundleExtensions = setOf("rvp", "mpp", "arp")
         const val REMOTE_BUNDLE_UPDATE_TIMEOUT_MS = 120_000L
         fun defaultSource() = PatchBundleEntity(
             uid = DEFAULT_SOURCE_UID,

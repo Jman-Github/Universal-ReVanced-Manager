@@ -1,20 +1,23 @@
 package app.revanced.manager.ui.screen
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageInfo
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.provider.Settings
 import android.text.format.Formatter
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -27,10 +30,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerDefaults
+import androidx.compose.foundation.pager.PagerSnapDistance
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.shrinkHorizontally
@@ -84,6 +91,7 @@ import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -108,8 +116,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
@@ -131,14 +141,20 @@ import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.patcher.aapt.Aapt
 import app.revanced.manager.ui.component.AlertDialogExtended
+import app.revanced.manager.ui.component.AppIcon
+import app.revanced.manager.ui.component.AppLabel
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.AutoUpdatesDialog
 import app.revanced.manager.ui.component.AvailableUpdateDialog
+import app.revanced.manager.ui.component.CheckedFilterChip
 import app.revanced.manager.ui.component.DownloadProgressBanner
+import app.revanced.manager.ui.component.FullscreenDialog
+import app.revanced.manager.ui.component.InterceptBackHandler
 import app.revanced.manager.ui.component.NotificationCard
 import app.revanced.manager.ui.component.ConfirmDialog
 import app.revanced.manager.ui.component.ExportSavedApkFileNameDialog
 import app.revanced.manager.ui.component.NonSuggestedVersionDialog
+import app.revanced.manager.ui.component.TransparentLoadingDialog
 import app.revanced.manager.ui.component.UniversalFallbackVersionDialog
 import app.revanced.manager.ui.component.bundle.BundleTopBar
 import app.revanced.manager.ui.component.bundle.ImportPatchBundleDialog
@@ -165,11 +181,11 @@ import app.revanced.manager.ui.viewmodel.MountWarningReason
 import app.revanced.manager.ui.viewmodel.SplitMergeState
 import app.revanced.manager.ui.viewmodel.SplitMergeStepStatus
 import app.revanced.manager.util.RequestInstallAppsContract
+import app.revanced.manager.util.AppInfo
 import app.revanced.manager.util.BundleDeepLink
 import app.revanced.manager.util.EventEffect
 import app.revanced.manager.util.ExportNameFormatter
 import app.revanced.manager.util.PatchedAppExportData
-import app.revanced.manager.util.SPLIT_ARCHIVE_MIME_TYPES
 import app.revanced.manager.util.isAllowedApkFile
 import app.revanced.manager.util.isAllowedPatchBundleFile
 import app.revanced.manager.util.isAllowedSplitArchiveFile
@@ -180,10 +196,14 @@ import app.revanced.manager.data.room.apps.installed.InstallType
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.Locale
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
+import kotlin.math.abs
 
 enum class DashboardPage(
     val titleResId: Int,
@@ -208,6 +228,7 @@ fun DashboardScreen(
     onDownloaderPluginClick: () -> Unit,
     onBundleDiscoveryClick: () -> Unit,
     onMergeSplitClick: () -> Unit,
+    onOpenSplitInstallerClick: () -> Unit,
     onCreateYoutubeAssetsClick: () -> Unit,
     onOpenKeystoreCreatorClick: () -> Unit,
     onOpenKeystoreConverterClick: () -> Unit,
@@ -235,8 +256,11 @@ fun DashboardScreen(
     val fs = koinInject<Filesystem>()
     val prefs: PreferencesManager = koinInject()
     val savedAppsEnabled by prefs.enableSavedApps.getAsState()
+    val viewedManagerUpdateVersion by prefs.viewedManagerUpdateVersion.getAsState()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val hideMainTabLabels by prefs.hideMainTabLabels.getAsState()
+    val disableMainTabSwipe by prefs.disableMainTabSwipe.getAsState()
+    val preventAccidentalTouching by prefs.preventAccidentalTouching.getAsState()
     val showPatchProfilesTab by prefs.showPatchProfilesTab.getAsState()
     val showToolsTab by prefs.showToolsTab.getAsState()
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
@@ -247,12 +271,14 @@ fun DashboardScreen(
     val selectedProfileCount by remember { derivedStateOf { patchProfilesViewModel.selectedProfiles.size } }
     val profilesSelectable = showPatchProfilesTab && selectedProfileCount > 0
     val availablePatches by vm.availablePatches.collectAsStateWithLifecycle(0)
+    val splitMergeState by vm.splitMergeState.collectAsStateWithLifecycle()
     val showNewDownloaderPluginsNotification by vm.newDownloaderPluginsAvailable.collectAsStateWithLifecycle(
         false
     )
     val downloaderPlugins by vm.loadedDownloaderPlugins.collectAsStateWithLifecycle(emptyList())
     val storageRoots = remember { fs.storageRoots() }
     EventEffect(flow = storageVm.storageSelectionFlow) { selected ->
+        storageVm.consumeStorageSelectionResult()
         onStorageSelect(selected)
     }
     var showStorageDialog by rememberSaveable { mutableStateOf(false) }
@@ -264,7 +290,7 @@ fun DashboardScreen(
             }
         }
     val openStorageDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
+        contract = ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri != null) {
             storageVm.handleStorageResult(uri)
@@ -278,7 +304,7 @@ fun DashboardScreen(
                 permissionLauncher.launch(permissionName)
             }
         } else {
-            openStorageDocumentLauncher.launch(arrayOf("*/*"))
+            openStorageDocumentLauncher.launch("application/*")
         }
     }
     val downloaderPluginLauncher = rememberLauncherForActivityResult(
@@ -308,6 +334,7 @@ fun DashboardScreen(
             }
         }
     }
+    var activeDashboardPage by rememberSaveable { mutableStateOf(DashboardPage.DASHBOARD) }
     val pagerState = rememberPagerState(
         initialPage = 0,
         initialPageOffsetFraction = 0f
@@ -315,11 +342,28 @@ fun DashboardScreen(
     val pageIndexByType = remember(visibleTabs) {
         visibleTabs.withIndex().associate { (index, page) -> page to index }
     }
-    val currentPage = visibleTabs.getOrElse(pagerState.currentPage) { DashboardPage.DASHBOARD }
+    val currentPage = activeDashboardPage
+    val swipeSyncedTabIndex by remember(visibleTabs) {
+        derivedStateOf {
+            if (visibleTabs.isEmpty()) return@derivedStateOf 0
+            val pageIndex = if (pagerState.isScrollInProgress) {
+                pagerState.targetPage
+            } else {
+                pagerState.currentPage
+            }
+            pageIndex.coerceIn(0, visibleTabs.lastIndex)
+        }
+    }
+    val swipeSyncedPage = visibleTabs.getOrElse(swipeSyncedTabIndex) { DashboardPage.DASHBOARD }
+    val uiPage = swipeSyncedPage
     suspend fun scrollToVisiblePage(page: DashboardPage, animated: Boolean) {
         val targetIndex = pageIndexByType[page] ?: return
-        if (pagerState.currentPage == targetIndex) return
-        if (animated) {
+        if (
+            (pagerState.currentPage == targetIndex && !pagerState.isScrollInProgress) ||
+            (pagerState.isScrollInProgress && pagerState.targetPage == targetIndex)
+        ) return
+        val canAnimateDirectly = abs(pagerState.currentPage - targetIndex) <= 1
+        if (animated && canAnimateDirectly) {
             pagerState.animateScrollToPage(targetIndex)
         } else {
             pagerState.scrollToPage(targetIndex)
@@ -340,6 +384,69 @@ fun DashboardScreen(
     var showQuickSavedUninstallDialog by remember { mutableStateOf(false) }
     var showQuickUnmountDialog by remember { mutableStateOf(false) }
     var showQuickMixedBundleDialog by remember { mutableStateOf(false) }
+    var showQuickMixedRevancedPatcherDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(pagerState.settledPage, visibleTabs) {
+        visibleTabs.getOrNull(pagerState.settledPage)?.let { page ->
+            if (activeDashboardPage != page) {
+                activeDashboardPage = page
+            }
+        }
+    }
+
+    LaunchedEffect(visibleTabs) {
+        if (activeDashboardPage !in visibleTabs) {
+            activeDashboardPage = DashboardPage.DASHBOARD
+            scrollToVisiblePage(DashboardPage.DASHBOARD, animated = false)
+        }
+    }
+
+    fun previousVisibleTab(page: DashboardPage): DashboardPage {
+        val currentIndex = visibleTabs.indexOf(page).takeIf { it >= 0 } ?: 0
+        val previousIndex = if (currentIndex == 0) visibleTabs.lastIndex else currentIndex - 1
+        return visibleTabs[previousIndex]
+    }
+
+    InterceptBackHandler(
+        enabled = visibleTabs.size > 1 || appsSelectionActive || bundlesSelectable || profilesSelectable
+    ) {
+        when (currentPage) {
+            DashboardPage.DASHBOARD -> {
+                if (appsSelectionActive) {
+                    installedAppsViewModel.clearSelection()
+                } else {
+                    (androidContext as? Activity)?.finish()
+                }
+            }
+
+            DashboardPage.BUNDLES -> {
+                if (bundlesSelectable) {
+                    vm.cancelSourceSelection()
+                } else {
+                    composableScope.launch {
+                        scrollToVisiblePage(previousVisibleTab(currentPage), animated = true)
+                    }
+                }
+            }
+
+            DashboardPage.PROFILES -> {
+                if (profilesSelectable) {
+                    patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
+                } else {
+                    composableScope.launch {
+                        scrollToVisiblePage(previousVisibleTab(currentPage), animated = true)
+                    }
+                }
+            }
+
+            DashboardPage.TOOLS -> {
+                composableScope.launch {
+                    scrollToVisiblePage(previousVisibleTab(currentPage), animated = true)
+                }
+            }
+        }
+    }
+
     val quickActionApp = remember(quickActionPackage, installedApps) {
         quickActionPackage?.let { pkg -> installedApps.firstOrNull { it.currentPackageName == pkg } }
     }
@@ -386,7 +493,7 @@ fun DashboardScreen(
             }
         }
     val bundleDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
+        contract = ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri != null) {
             selectedBundleUri = uri
@@ -413,13 +520,26 @@ fun DashboardScreen(
                 bundlePermissionLauncher.launch(bundlePermissionName)
             }
         } else {
-            bundleDocumentLauncher.launch(arrayOf("*/*"))
+            bundleDocumentLauncher.launch("application/octet-stream")
         }
     }
 
     var showSplitInputPicker by rememberSaveable { mutableStateOf(false) }
     var showSplitSourceDialog by rememberSaveable { mutableStateOf(false) }
     var showSplitPluginDialog by rememberSaveable { mutableStateOf(false) }
+    var showSplitInstalledAppsDialog by rememberSaveable { mutableStateOf(false) }
+    var pendingSplitInstalledPackage by rememberSaveable { mutableStateOf<String?>(null) }
+    val splitInstalledAppsFlow = remember(showSplitInstalledAppsDialog, pm) {
+        if (showSplitInstalledAppsDialog) {
+            pm.installedAppList.map { apps -> apps as List<AppInfo>? }
+        } else {
+            flowOf<List<AppInfo>?>(null)
+        }
+    }
+    val splitInstalledApps by splitInstalledAppsFlow.collectAsStateWithLifecycle(initialValue = null)
+    val showSplitMergeLoading = pendingSplitInstalledPackage != null ||
+        splitMergeState.preparingSelection ||
+        (showSplitInstalledAppsDialog && splitInstalledApps == null)
     var splitPluginPackageName by rememberSaveable { mutableStateOf("") }
     var splitPluginVersion by rememberSaveable { mutableStateOf("") }
     var pendingSplitPermissionRequest by rememberSaveable {
@@ -436,7 +556,7 @@ fun DashboardScreen(
             pendingSplitPermissionRequest = null
         }
     val splitInputDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
+        contract = ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         val displayName = runCatching {
@@ -451,12 +571,16 @@ fun DashboardScreen(
                 if (index != -1 && cursor.moveToFirst()) cursor.getString(index) else null
             }
         }.getOrNull()
+        val resolvedName = displayName ?: uri.lastPathSegment ?: "split.apks"
+        if (!isAllowedSplitArchiveName(resolvedName)) {
+            androidContext.toast(androidContext.getString(R.string.merge_split_apk_input_invalid))
+            return@rememberLauncherForActivityResult
+        }
         vm.clearSplitMergeState()
         vm.startSplitMergeFromUri(
             inputUri = uri,
-            inputDisplayName = displayName ?: uri.lastPathSegment ?: "split.apks"
+            inputDisplayName = resolvedName
         )
-        onMergeSplitClick()
     }
 
     fun launchSplitMergeFromStorage() {
@@ -469,12 +593,20 @@ fun DashboardScreen(
                 splitPermissionLauncher.launch(permissionName)
             }
         } else {
-            splitInputDocumentLauncher.launch(SPLIT_ARCHIVE_MIME_TYPES)
+            splitInputDocumentLauncher.launch("application/*")
         }
     }
 
     fun launchSplitMerge() {
         showSplitSourceDialog = true
+    }
+
+    LaunchedEffect(pendingSplitInstalledPackage) {
+        val packageName = pendingSplitInstalledPackage ?: return@LaunchedEffect
+        withFrameNanos { }
+        vm.clearSplitMergeState()
+        vm.startSplitMergeFromInstalledPackage(packageName)
+        pendingSplitInstalledPackage = null
     }
 
     var showSavedAppsExportPicker by rememberSaveable { mutableStateOf(false) }
@@ -884,6 +1016,11 @@ fun DashboardScreen(
                     pendingQuickAction = null
                     return@LaunchedEffect
                 }
+                if (patchBundleRepository.selectionHasMixedRevancedPatcherVersions(selection)) {
+                    showQuickMixedRevancedPatcherDialog = true
+                    pendingQuickAction = null
+                    return@LaunchedEffect
+                }
                 val payload = actionApp.selectionPayload
                 val persistConfiguration = actionApp.installType != InstallType.SAVED
                 mainVm.selectApp(
@@ -947,6 +1084,10 @@ fun DashboardScreen(
                 showSplitSourceDialog = false
                 launchSplitMergeFromStorage()
             },
+            onSelectInstalled = {
+                showSplitSourceDialog = false
+                showSplitInstalledAppsDialog = true
+            },
             onSelectDownloader = {
                 showSplitSourceDialog = false
                 if (downloaderPlugins.isEmpty()) {
@@ -961,10 +1102,23 @@ fun DashboardScreen(
             }
         )
     }
+    if (showSplitInstalledAppsDialog) {
+        splitInstalledApps?.let { apps ->
+            MergeSplitInstalledAppsDialog(
+                apps = apps,
+                pm = pm,
+                onDismissRequest = { showSplitInstalledAppsDialog = false },
+                onSelectApp = { packageName ->
+                    showSplitInstalledAppsDialog = false
+                    pendingSplitInstalledPackage = packageName
+                }
+            )
+        }
+    }
     if (showSplitPluginDialog) {
         MergeSplitPluginDialog(
             plugins = downloaderPlugins,
-            activePluginPackageName = vm.activeSplitMergePluginPackageName,
+            activePluginId = vm.activeSplitMergePluginId,
             packageName = splitPluginPackageName,
             version = splitPluginVersion,
             onPackageNameChange = { splitPluginPackageName = it },
@@ -989,11 +1143,13 @@ fun DashboardScreen(
                 if (path == null) return@PathSelectorDialog
                 vm.clearSplitMergeState()
                 vm.startSplitMergeFromPath(path.toString())
-                onMergeSplitClick()
             },
             fileFilter = ::isAllowedSplitArchiveFile,
             allowDirectorySelection = false
         )
+    }
+    if (showSplitMergeLoading) {
+        TransparentLoadingDialog()
     }
     if (showSavedAppsExportPicker && useCustomFilePicker) {
         PathSelectorDialog(
@@ -1108,15 +1264,15 @@ fun DashboardScreen(
 
     var showUpdateDialog by rememberSaveable { mutableStateOf(vm.prefs.showManagerUpdateDialogOnLaunch.getBlocking()) }
     val availableUpdate by remember {
-        derivedStateOf { vm.updatedManagerVersion.takeIf { showUpdateDialog } }
+        derivedStateOf { vm.updatedManagerRelease.takeIf { showUpdateDialog } }
     }
 
-    availableUpdate?.let { version ->
+    availableUpdate?.let { releaseInfo ->
         AvailableUpdateDialog(
             onDismiss = { showUpdateDialog = false },
             setShowManagerUpdateDialogOnLaunch = vm::setShowManagerUpdateDialogOnLaunch,
             onConfirm = onUpdateClick,
-            newVersion = version
+            releaseInfo = releaseInfo
         )
     }
 
@@ -1318,6 +1474,7 @@ fun DashboardScreen(
         val (titleRes, message) = when (result) {
             is InstallResult.Success -> R.string.install_app_success to result.message
             is InstallResult.Failure -> R.string.install_app_fail_title to result.message
+            is InstallResult.UninstallError -> R.string.uninstall_app_fail_title to result.message
         }
         AlertDialog(
             onDismissRequest = quickActionViewModel::clearInstallResult,
@@ -1465,10 +1622,23 @@ fun DashboardScreen(
         )
     }
 
+    if (showQuickMixedRevancedPatcherDialog) {
+        AlertDialog(
+            onDismissRequest = { showQuickMixedRevancedPatcherDialog = false },
+            confirmButton = {
+                TextButton(onClick = { showQuickMixedRevancedPatcherDialog = false }) {
+                    Text(stringResource(R.string.close))
+                }
+            },
+            title = { Text(stringResource(R.string.mixed_revanced_patcher_versions_title)) },
+            text = { Text(stringResource(R.string.mixed_revanced_patcher_versions_description)) }
+        )
+    }
+
     Scaffold(
         topBar = {
             when {
-                appsSelectionActive && currentPage == DashboardPage.DASHBOARD -> {
+                appsSelectionActive && uiPage == DashboardPage.DASHBOARD -> {
                     BundleTopBar(
                         title = stringResource(R.string.selected_apps_count, selectedAppCount),
                         onBackClick = installedAppsViewModel::clearSelection,
@@ -1567,6 +1737,9 @@ fun DashboardScreen(
                 }
 
                 else -> {
+                    val managerUpdateViewed =
+                        !vm.updatedManagerVersion.isNullOrEmpty() &&
+                            vm.updatedManagerVersion == viewedManagerUpdateVersion
                     AppTopBar(
                         title = { Text(stringResource(R.string.main_top_title)) },
                         actions = {
@@ -1574,18 +1747,25 @@ fun DashboardScreen(
                                 IconButton(
                                     onClick = onUpdateClick,
                                 ) {
-                                    BadgedBox(
-                                        badge = {
-                                            Badge(modifier = Modifier.size(6.dp))
-                                        }
-                                    ) {
+                                    if (managerUpdateViewed) {
                                         Icon(Icons.Outlined.Update, stringResource(R.string.update))
+                                    } else {
+                                        BadgedBox(
+                                            badge = {
+                                                Badge(modifier = Modifier.size(6.dp))
+                                            }
+                                        ) {
+                                            Icon(
+                                                Icons.Outlined.Update,
+                                                stringResource(R.string.update)
+                                            )
+                                        }
                                     }
                                 }
                             }
-                            val isAppsTab = currentPage == DashboardPage.DASHBOARD
-                            val isBundlesTab = currentPage == DashboardPage.BUNDLES
-                            val isProfilesTab = currentPage == DashboardPage.PROFILES && showPatchProfilesTab
+                            val isAppsTab = uiPage == DashboardPage.DASHBOARD
+                            val isBundlesTab = uiPage == DashboardPage.BUNDLES
+                            val isProfilesTab = uiPage == DashboardPage.PROFILES && showPatchProfilesTab
                             val searchActive = when {
                                 isAppsTab -> appsSearchActive
                                 isBundlesTab -> bundlesSearchActive
@@ -1617,7 +1797,7 @@ fun DashboardScreen(
                                     )
                                 }
                             }
-                            if (currentPage == DashboardPage.BUNDLES && !bundlesSelectable) {
+                            if (uiPage == DashboardPage.BUNDLES && !bundlesSelectable) {
                                 IconButton(
                                     onClick = {
                                         installedAppsViewModel.clearSelection()
@@ -1634,7 +1814,7 @@ fun DashboardScreen(
                                     Icon(Icons.Outlined.Sort, stringResource(R.string.bundle_reorder))
                                 }
                             }
-                            if (currentPage == DashboardPage.DASHBOARD && !appsSelectionActive) {
+                            if (uiPage == DashboardPage.DASHBOARD && !appsSelectionActive) {
                                 IconButton(
                                     onClick = {
                                         installedAppsViewModel.clearSelection()
@@ -1650,7 +1830,7 @@ fun DashboardScreen(
                                     Icon(Icons.Outlined.Sort, stringResource(R.string.apps_reorder))
                                 }
                             }
-                            if (currentPage == DashboardPage.PROFILES && showPatchProfilesTab && !profilesSelectable) {
+                            if (uiPage == DashboardPage.PROFILES && showPatchProfilesTab && !profilesSelectable) {
                                 IconButton(
                                     onClick = {
                                         patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
@@ -1676,7 +1856,7 @@ fun DashboardScreen(
             }
         },
         floatingActionButton = {
-            when (currentPage) {
+            when (uiPage) {
                 DashboardPage.BUNDLES -> {
                     val enterExitSpec = tween<IntOffset>(durationMillis = 220, easing = FastOutSlowInEasing)
                     val sizeSpec = tween<IntSize>(durationMillis = 220, easing = FastOutSlowInEasing)
@@ -1791,15 +1971,14 @@ fun DashboardScreen(
     ) { paddingValues ->
         Box(Modifier.padding(paddingValues)) {
             Column {
-            val selectedTabIndex = visibleTabs.indexOf(currentPage).coerceAtLeast(0)
             TabRow(
-                selectedTabIndex = selectedTabIndex,
+                selectedTabIndex = swipeSyncedTabIndex,
                 containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp),
                 indicator = {},
                 divider = {}
             ) {
                 visibleTabs.forEach { page ->
-                    val selected = page == currentPage
+                    val selected = page == swipeSyncedPage
                     val tabScale by animateFloatAsState(
                         targetValue = if (selected) 1.02f else 1f,
                         animationSpec = spring(
@@ -1883,9 +2062,9 @@ fun DashboardScreen(
                 } else null
             )
 
-            val isAppsTab = currentPage == DashboardPage.DASHBOARD
-            val isBundlesTab = currentPage == DashboardPage.BUNDLES
-            val isProfilesTab = currentPage == DashboardPage.PROFILES && showPatchProfilesTab
+            val isAppsTab = uiPage == DashboardPage.DASHBOARD
+            val isBundlesTab = uiPage == DashboardPage.BUNDLES
+            val isProfilesTab = uiPage == DashboardPage.PROFILES && showPatchProfilesTab
             val searchActive = when {
                 isAppsTab -> appsSearchActive
                 isBundlesTab -> bundlesSearchActive
@@ -1946,16 +2125,24 @@ fun DashboardScreen(
                 modifier = Modifier.padding(top = 8.dp)
             )
 
+            val pagerFlingBehavior = if (preventAccidentalTouching) {
+                PagerDefaults.flingBehavior(state = pagerState)
+            } else {
+                PagerDefaults.flingBehavior(
+                    state = pagerState,
+                    pagerSnapDistance = PagerSnapDistance.atMost(1),
+                    snapPositionalThreshold = 0.2f
+                )
+            }
+
             HorizontalPager(
                 state = pagerState,
-                userScrollEnabled = true,
+                flingBehavior = pagerFlingBehavior,
+                userScrollEnabled = !disableMainTabSwipe,
                 modifier = Modifier.fillMaxSize(),
                 pageContent = { index ->
                     when (visibleTabs[index]) {
                         DashboardPage.DASHBOARD -> {
-                            BackHandler(enabled = appsSelectionActive) {
-                                installedAppsViewModel.clearSelection()
-                            }
                             InstalledAppsScreen(
                                 onAppClick = {
                                     installedAppsViewModel.clearSelection()
@@ -2002,6 +2189,10 @@ fun DashboardScreen(
                                                 showQuickMixedBundleDialog = true
                                                 return@launch
                                             }
+                                            if (patchBundleRepository.selectionHasMixedRevancedPatcherVersions(selection)) {
+                                                showQuickMixedRevancedPatcherDialog = true
+                                                return@launch
+                                            }
                                             val payload = app.selectionPayload
                                             val persistConfiguration = app.installType != InstallType.SAVED
                                             mainVm.selectApp(
@@ -2026,12 +2217,6 @@ fun DashboardScreen(
                         }
 
                         DashboardPage.BUNDLES -> {
-                            BackHandler {
-                                if (bundlesSelectable) vm.cancelSourceSelection() else composableScope.launch {
-                                    scrollToVisiblePage(DashboardPage.DASHBOARD, animated = true)
-                                }
-                            }
-
                             BundleListScreen(
                                 eventsFlow = vm.bundleListEventsFlow,
                                 setSelectedSourceCount = { selectedSourceCount = it },
@@ -2059,6 +2244,7 @@ fun DashboardScreen(
                         DashboardPage.TOOLS -> {
                             ToolsTabScreen(
                                 onOpenMergeScreen = ::launchSplitMerge,
+                                onOpenSplitInstallerScreen = onOpenSplitInstallerClick,
                                 onOpenYoutubeAssetsScreen = onCreateYoutubeAssetsClick,
                                 onOpenKeystoreCreatorScreen = onOpenKeystoreCreatorClick,
                                 onOpenKeystoreConverterScreen = onOpenKeystoreConverterClick
@@ -2084,13 +2270,16 @@ private enum class SplitPermissionRequest {
 @Composable
 private fun ToolsTabScreen(
     onOpenMergeScreen: () -> Unit,
+    onOpenSplitInstallerScreen: () -> Unit,
     onOpenYoutubeAssetsScreen: () -> Unit,
     onOpenKeystoreCreatorScreen: () -> Unit,
     onOpenKeystoreConverterScreen: () -> Unit
 ) {
+    val scrollState = rememberScrollState()
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(scrollState)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -2181,6 +2370,53 @@ private fun ToolsTabScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = stringResource(R.string.tools_merge_split_idle_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            tonalElevation = 2.dp,
+            shadowElevation = 6.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpenSplitInstallerScreen)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                    modifier = Modifier.size(52.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Download,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .padding(11.dp)
+                            .size(30.dp)
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.tools_split_installer_title),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.tools_split_installer_description),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -2294,6 +2530,7 @@ private fun MergeSplitSourceDialog(
     hasDownloaderPlugins: Boolean,
     onDismissRequest: () -> Unit,
     onSelectStorage: () -> Unit,
+    onSelectInstalled: () -> Unit,
     onSelectDownloader: () -> Unit
 ) {
     AlertDialogExtended(
@@ -2312,6 +2549,12 @@ private fun MergeSplitSourceDialog(
                     description = stringResource(R.string.tools_merge_split_source_storage_description),
                     enabled = true,
                     onClick = onSelectStorage
+                )
+                MergeSplitSourceOption(
+                    title = stringResource(R.string.tools_merge_split_source_installed_title),
+                    description = stringResource(R.string.tools_merge_split_source_installed_description),
+                    enabled = true,
+                    onClick = onSelectInstalled
                 )
                 MergeSplitSourceOption(
                     title = stringResource(R.string.tools_merge_split_source_plugin_title),
@@ -2363,10 +2606,259 @@ private fun MergeSplitSourceOption(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MergeSplitInstalledAppsDialog(
+    apps: List<AppInfo>,
+    pm: PM,
+    onDismissRequest: () -> Unit,
+    onSelectApp: (String) -> Unit
+) {
+    var filterText by rememberSaveable { mutableStateOf("") }
+    var showUserApps by rememberSaveable { mutableStateOf(false) }
+    var showSystemApps by rememberSaveable { mutableStateOf(false) }
+    var showSplitApks by rememberSaveable { mutableStateOf(false) }
+    var showSingleApks by rememberSaveable { mutableStateOf(false) }
+    val filterScrollState = rememberScrollState()
+    val chipColors = FilterChipDefaults.filterChipColors(
+        containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp),
+        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
+    )
+    val filteredApps = remember(
+        apps,
+        filterText,
+        showUserApps,
+        showSystemApps,
+        showSplitApks,
+        showSingleApks
+    ) {
+        apps.filter { app ->
+            val packageInfo = app.packageInfo ?: return@filter false
+            val isSystemApp = pm.isSystemApp(packageInfo)
+            val hasSplitApks = pm.hasSplitApks(packageInfo)
+            val typeMatches = when {
+                showUserApps && !showSystemApps -> !isSystemApp
+                !showUserApps && showSystemApps -> isSystemApp
+                else -> true
+            }
+            val splitTypeMatches = when {
+                showSplitApks && !showSingleApks -> hasSplitApks
+                !showSplitApks && showSingleApks -> !hasSplitApks
+                else -> true
+            }
+            val label = pm.run { packageInfo.label() }
+            typeMatches && splitTypeMatches && (
+                filterText.isBlank() ||
+                    label.contains(filterText, ignoreCase = true) ||
+                    app.packageName.contains(filterText, ignoreCase = true)
+            )
+        }
+    }
+
+    FullscreenDialog(onDismissRequest = onDismissRequest) {
+        Scaffold(
+            topBar = {
+                AppTopBar(
+                    title = stringResource(R.string.tools_merge_split_source_installed_title),
+                    onBackClick = onDismissRequest
+                )
+            }
+        ) { paddingValues ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item(key = "merge-installed-search") {
+                    TextField(
+                        value = filterText,
+                        onValueChange = { filterText = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(stringResource(R.string.search_apps)) },
+                        singleLine = true
+                    )
+                }
+                item(key = "merge-installed-filters") {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(filterScrollState),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        CheckedFilterChip(
+                            selected = showUserApps,
+                            onClick = { showUserApps = !showUserApps },
+                            colors = chipColors,
+                            label = { Text(stringResource(R.string.merge_split_installed_filter_user_apps)) }
+                        )
+                        CheckedFilterChip(
+                            selected = showSystemApps,
+                            onClick = { showSystemApps = !showSystemApps },
+                            colors = chipColors,
+                            label = { Text(stringResource(R.string.merge_split_installed_filter_system_apps)) }
+                        )
+                        CheckedFilterChip(
+                            selected = showSplitApks,
+                            onClick = { showSplitApks = !showSplitApks },
+                            colors = chipColors,
+                            label = { Text(stringResource(R.string.merge_split_installed_filter_split_apks)) }
+                        )
+                        CheckedFilterChip(
+                            selected = showSingleApks,
+                            onClick = { showSingleApks = !showSingleApks },
+                            colors = chipColors,
+                            label = { Text(stringResource(R.string.merge_split_installed_filter_single_apks)) }
+                        )
+                    }
+                }
+                item(key = "merge-installed-description") {
+                    Text(
+                        text = stringResource(R.string.merge_split_installed_picker_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (filteredApps.isEmpty()) {
+                    item(key = "merge-installed-empty") {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.merge_split_installed_no_results),
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Text(
+                                text = stringResource(R.string.merge_split_installed_no_results_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                } else {
+                    items(
+                        items = filteredApps,
+                        key = { it.packageName }
+                    ) { app ->
+                        val packageInfo = app.packageInfo ?: return@items
+                        MergeSplitInstalledAppCard(
+                            packageInfo = packageInfo,
+                            isSystemApp = pm.isSystemApp(packageInfo),
+                            hasSplitApks = pm.hasSplitApks(packageInfo),
+                            onClick = { onSelectApp(app.packageName) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MergeSplitInstalledAppCard(
+    packageInfo: PackageInfo,
+    isSystemApp: Boolean,
+    hasSplitApks: Boolean,
+    onClick: () -> Unit
+) {
+    val cardAlpha = if (hasSplitApks) 1f else 0.56f
+    Surface(
+        modifier = Modifier
+            .alpha(cardAlpha)
+            .then(
+                if (hasSplitApks) Modifier.clickable(onClick = onClick)
+                else Modifier
+            ),
+        shape = RoundedCornerShape(20.dp),
+        tonalElevation = 2.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AppIcon(
+                    packageInfo = packageInfo,
+                    contentDescription = null,
+                    modifier = Modifier.size(44.dp)
+                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    AppLabel(
+                        packageInfo = packageInfo,
+                        defaultText = packageInfo.packageName,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        text = packageInfo.packageName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    packageInfo.versionName?.takeIf { it.isNotBlank() }?.let { versionName ->
+                        Text(
+                            text = versionName,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                MergeSplitInstalledStatusChip(
+                    label = stringResource(
+                        if (hasSplitApks) R.string.merge_split_installed_status_split
+                        else R.string.merge_split_installed_status_single
+                    )
+                )
+                if (isSystemApp) {
+                    MergeSplitInstalledStatusChip(
+                        label = stringResource(R.string.merge_split_installed_status_system)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MergeSplitInstalledStatusChip(label: String) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        shape = RoundedCornerShape(999.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+        )
+    }
+}
+
 @Composable
 private fun MergeSplitPluginDialog(
     plugins: List<LoadedDownloaderPlugin>,
-    activePluginPackageName: String?,
+    activePluginId: String?,
     packageName: String,
     version: String,
     onPackageNameChange: (String) -> Unit,
@@ -2374,7 +2866,7 @@ private fun MergeSplitPluginDialog(
     onDismissRequest: () -> Unit,
     onSelectPlugin: (LoadedDownloaderPlugin) -> Unit
 ) {
-    val canSelect = activePluginPackageName == null
+    val canSelect = activePluginId == null
     AlertDialogExtended(
         onDismissRequest = onDismissRequest,
         confirmButton = {
@@ -2428,7 +2920,7 @@ private fun MergeSplitPluginDialog(
                     ) {
                         items(
                             items = plugins,
-                            key = { it.packageName }
+                            key = { it.id }
                         ) { plugin ->
                             Surface(
                                 modifier = Modifier
@@ -2457,7 +2949,7 @@ private fun MergeSplitPluginDialog(
                                             overflow = TextOverflow.Ellipsis
                                         )
                                     }
-                                    if (activePluginPackageName == plugin.packageName) {
+                                    if (activePluginId == plugin.id) {
                                         CircularProgressIndicator(
                                             modifier = Modifier.size(18.dp),
                                             strokeWidth = 2.dp
@@ -2545,9 +3037,9 @@ private fun BundleFabHandle(
     val container = MaterialTheme.colorScheme.primaryContainer
     val contentColor = MaterialTheme.colorScheme.onPrimaryContainer
     val icon = if (collapsed) {
-        Icons.Outlined.ChevronRight
-    } else {
         Icons.Outlined.ChevronLeft
+    } else {
+        Icons.Outlined.ChevronRight
     }
 
     Box(
@@ -2569,6 +3061,11 @@ private fun BundleFabHandle(
             modifier = Modifier.size(16.dp)
         )
     }
+}
+
+private fun isAllowedSplitArchiveName(name: String): Boolean {
+    val normalized = name.substringAfterLast('.', missingDelimiterValue = "").lowercase(Locale.ROOT)
+    return normalized == "apks" || normalized == "apkm" || normalized == "xapk" || normalized == "zip"
 }
 
 @Composable
@@ -2640,3 +3137,4 @@ fun Android11Dialog(onDismissRequest: () -> Unit, onContinue: () -> Unit) {
         }
     )
 }
+

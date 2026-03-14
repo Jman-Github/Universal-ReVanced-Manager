@@ -113,6 +113,11 @@ fun BundleItem(
     var showBundleChangelog by rememberSaveable { mutableStateOf(false) }
     var showBundleChangelogHistory by rememberSaveable { mutableStateOf(false) }
     var changelogHistory by remember { mutableStateOf<List<PatchBundleChangelogEntry>>(emptyList()) }
+    var changelogHistoryLoading by remember { mutableStateOf(false) }
+    var changelogHistoryError by remember { mutableStateOf<Throwable?>(null) }
+    val remoteSource = src.asRemoteOrNull
+    val historicalChangelogSource = remoteSource?.takeIf { it.supportsHistoricalChangelog }
+    val supportsHistoricalChangelog = historicalChangelogSource != null
 
     if (viewBundleDialogPage) {
         BundleInformationDialog(
@@ -148,9 +153,31 @@ fun BundleItem(
         }
     }
 
-    if (showBundleChangelogHistory) {
+    LaunchedEffect(supportsHistoricalChangelog) {
+        if (!supportsHistoricalChangelog) {
+            showBundleChangelogHistory = false
+        }
+    }
+
+    if (showBundleChangelogHistory && supportsHistoricalChangelog) {
         BundleChangelogHistoryDialog(
             entries = changelogHistory.drop(1),
+            isRefreshing = changelogHistoryLoading,
+            error = changelogHistoryError,
+            onRetry = {
+                changelogHistoryError = null
+                coroutineScope.launch {
+                    changelogHistoryLoading = true
+                    changelogHistory = bundleRepo.getChangelogHistory(src)
+                    try {
+                        changelogHistory = bundleRepo.synchronizeChangelogHistory(historicalChangelogSource!!)
+                    } catch (t: Throwable) {
+                        changelogHistoryError = t
+                    } finally {
+                        changelogHistoryLoading = false
+                    }
+                }
+            },
             onDismissRequest = { showBundleChangelogHistory = false }
         )
     }
@@ -250,7 +277,6 @@ fun BundleItem(
     }
 
     val displayVersion = src.version
-    val remoteSource = src.asRemoteOrNull
     val installedSignature = remoteSource?.installedVersionSignature
     val manualUpdateBadge = manualUpdateInfo?.takeIf { info ->
         val latest = info.latestVersion
@@ -258,9 +284,28 @@ fun BundleItem(
         !latest.isNullOrBlank() && baseline != null && latest != baseline
     }
 
-    LaunchedEffect(showBundleChangelogHistory, src.uid, src.updatedAt) {
-        if (showBundleChangelogHistory && remoteSource != null) {
-            changelogHistory = bundleRepo.getChangelogHistory(src.uid)
+    fun refreshChangelogHistory() {
+        changelogHistoryError = null
+        coroutineScope.launch {
+            changelogHistoryLoading = true
+            changelogHistory = bundleRepo.getChangelogHistory(src)
+            try {
+                changelogHistory = if (historicalChangelogSource != null) {
+                    bundleRepo.synchronizeChangelogHistory(historicalChangelogSource)
+                } else {
+                    bundleRepo.getChangelogHistory(src)
+                }
+            } catch (t: Throwable) {
+                changelogHistoryError = t
+            } finally {
+                changelogHistoryLoading = false
+            }
+        }
+    }
+
+    LaunchedEffect(showBundleChangelogHistory, supportsHistoricalChangelog, src.uid, src.updatedAt) {
+        if (showBundleChangelogHistory && supportsHistoricalChangelog) {
+            refreshChangelogHistory()
         }
     }
 
@@ -332,7 +377,6 @@ fun BundleItem(
                         modifier = Modifier
                             .weight(1f, fill = false)
                             .consumeHorizontalScroll(titleScrollState)
-                            .horizontalScroll(titleScrollState)
                     )
                     statusIcon?.let { (icon, description) ->
                         Icon(
@@ -426,8 +470,7 @@ fun BundleItem(
         Row(
             modifier = Modifier
                 .widthIn(min = maxWidth)
-                .consumeHorizontalScroll(actionScrollState)
-                .horizontalScroll(actionScrollState),
+                .consumeHorizontalScroll(actionScrollState),
             horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -462,7 +505,7 @@ fun BundleItem(
                             onClick = { showBundleChangelog = true }
                         )
                     }
-                    PatchBundleActionKey.CHANGELOG_HISTORY -> if (remoteSource != null) {
+                    PatchBundleActionKey.CHANGELOG_HISTORY -> if (supportsHistoricalChangelog) {
                         BundleActionPill(
                             text = stringResource(R.string.bundle_previous_changelogs),
                             icon = Icons.Outlined.History,

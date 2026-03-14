@@ -1,6 +1,8 @@
 package app.revanced.manager.ui.screen
 
-import androidx.activity.compose.BackHandler
+import android.graphics.drawable.ColorDrawable
+import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -18,6 +20,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -29,6 +33,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -42,6 +47,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -50,6 +56,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -58,6 +65,7 @@ import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -71,21 +79,30 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.revanced.manager.ui.component.AppIcon
+import app.revanced.manager.ui.component.InterceptBackHandler
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
+import app.revanced.manager.ui.component.LoadingIndicator
 import app.revanced.manager.ui.component.Scrollbar
 import app.revanced.manager.ui.component.TextInputDialog
+import app.revanced.manager.ui.component.haptics.HapticTab
 import app.revanced.manager.ui.component.haptics.HapticCheckbox
 import app.revanced.manager.ui.component.patches.PathSelectorDialog
 import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.domain.manager.PreferencesManager
-import app.revanced.manager.patcher.split.SplitApkInspector
+import app.revanced.manager.domain.repository.DownloadedAppRepository
+import app.revanced.manager.domain.repository.resolvePatchProfileAppVersion
+import app.revanced.manager.patcher.split.SplitArchiveDisplayResolver
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.ui.viewmodel.BundleSourceType
 import app.revanced.manager.ui.viewmodel.BundleOptionDisplay
@@ -95,6 +112,7 @@ import app.revanced.manager.ui.viewmodel.PatchProfilesViewModel
 import app.revanced.manager.ui.viewmodel.PatchProfilesViewModel.RenameResult
 import app.revanced.manager.util.APK_FILE_EXTENSIONS
 import app.revanced.manager.util.PM
+import app.revanced.manager.util.consumeHorizontalScroll
 import app.revanced.manager.util.relativeTime
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.isAllowedApkFile
@@ -107,8 +125,9 @@ import sh.calvin.reorderable.ReorderableCollectionItemScope
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import java.io.File
+import java.util.Locale
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun PatchProfilesScreen(
     onProfileClick: (PatchProfileLaunchData) -> Unit,
@@ -133,6 +152,8 @@ fun PatchProfilesScreen(
         initialValue = prefs.allowPatchProfileBundleOverride.default
     )
     val filesystem = koinInject<Filesystem>()
+    val downloadedAppRepository = koinInject<DownloadedAppRepository>()
+    val downloadedApps by downloadedAppRepository.getAll().collectAsStateWithLifecycle(emptyList())
     val pm = koinInject<PM>()
     val storageRoots = remember { filesystem.storageRoots() }
     var loadingProfileId by remember { mutableStateOf<Int?>(null) }
@@ -142,9 +163,11 @@ fun PatchProfilesScreen(
     var versionDialogProfile by remember { mutableStateOf<PatchProfileListItem?>(null) }
     var versionDialogValue by rememberSaveable { mutableStateOf("") }
     var versionDialogAllVersions by rememberSaveable { mutableStateOf(false) }
+    var versionDialogUseSelectedApkVersion by remember { mutableStateOf(false) }
     var versionDialogSaving by remember { mutableStateOf(false) }
     var settingsDialogProfile by remember { mutableStateOf<PatchProfileListItem?>(null) }
     var apkPickerProfile by remember { mutableStateOf<PatchProfileListItem?>(null) }
+    var downloadedApkPickerProfile by remember { mutableStateOf<PatchProfileListItem?>(null) }
     var pendingDocumentApkPickerProfile by remember { mutableStateOf<PatchProfileListItem?>(null) }
     var apkPickerBusy by remember { mutableStateOf(false) }
     data class ChangeUidTarget(val profileId: Int, val bundleUid: Int, val bundleName: String?)
@@ -166,6 +189,7 @@ fun PatchProfilesScreen(
     )
     var remoteBundleIncompatibleTarget by remember { mutableStateOf<RemoteBundleOverrideTarget?>(null) }
     val expandedProfiles = remember { mutableStateMapOf<Int, Boolean>() }
+    val selectedBundleTabs = remember { mutableStateMapOf<Int, Int>() }
     val selectionActive = viewModel.selectedProfiles.isNotEmpty()
     data class OptionDialogData(val patchName: String, val entries: List<BundleOptionDisplay>)
     var optionDialogData by remember { mutableStateOf<OptionDialogData?>(null) }
@@ -182,6 +206,10 @@ fun PatchProfilesScreen(
                     append(' ')
                     append(version)
                 }
+                profile.apkVersion?.let { version ->
+                    append(' ')
+                    append(version)
+                }
                 profile.bundleNames.forEach { name ->
                     append(' ')
                     append(name)
@@ -191,7 +219,9 @@ fun PatchProfilesScreen(
         }
     }
 
-    BackHandler(enabled = selectionActive) { viewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL) }
+    InterceptBackHandler(enabled = selectionActive) {
+        viewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
+    }
 
     fun handleApkSelectionResult(profileName: String, result: PatchProfilesViewModel.ApkSelectionResult) {
         when (result) {
@@ -212,16 +242,24 @@ fun PatchProfilesScreen(
         }
     }
     val apkDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
+        contract = ActivityResultContracts.GetContent()
     ) { uri ->
         val profile = pendingDocumentApkPickerProfile
         pendingDocumentApkPickerProfile = null
         apkPickerProfile = null
         if (profile == null || uri == null) return@rememberLauncherForActivityResult
+        if (!isAllowedApkUri(context, uri)) {
+            handleApkSelectionResult(profile.name, PatchProfilesViewModel.ApkSelectionResult.INVALID_FILE)
+            return@rememberLauncherForActivityResult
+        }
         apkPickerBusy = true
         scope.launch {
             val tempFile = withContext(Dispatchers.IO) {
-                val file = File.createTempFile("patch-profile-apk", ".apk", context.cacheDir)
+                val displayName = resolveApkUriDisplayName(context, uri)
+                val extension = resolveApkDisplayExtension(displayName)
+                    .takeIf { it in APK_FILE_EXTENSIONS }
+                    ?: "apk"
+                val file = File.createTempFile("patch-profile-apk", ".${extension}", context.cacheDir)
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     file.outputStream().use { output -> input.copyTo(output) }
                 }
@@ -263,8 +301,88 @@ fun PatchProfilesScreen(
         val profile = apkPickerProfile
         if (profile != null && !useCustomFilePicker) {
             pendingDocumentApkPickerProfile = profile
-            apkDocumentLauncher.launch(arrayOf("*/*"))
+            apkDocumentLauncher.launch("application/*")
         }
+    }
+    downloadedApkPickerProfile?.let { profile ->
+        val matchingDownloadedApps = remember(downloadedApps, profile.packageName) {
+            downloadedApps
+                .asSequence()
+                .filter { it.packageName.equals(profile.packageName, ignoreCase = true) }
+                .sortedByDescending { it.lastUsed }
+                .toList()
+        }
+        AlertDialog(
+            onDismissRequest = {
+                if (apkPickerBusy) return@AlertDialog
+                downloadedApkPickerProfile = null
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { downloadedApkPickerProfile = null },
+                    enabled = !apkPickerBusy
+                ) { Text(stringResource(R.string.close)) }
+            },
+            title = { Text(stringResource(R.string.downloaded_apps)) },
+            text = {
+                if (matchingDownloadedApps.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.patch_profile_apk_not_set),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.heightIn(max = 320.dp)
+                    ) {
+                        items(
+                            items = matchingDownloadedApps,
+                            key = { "${it.packageName}:${it.version}" }
+                        ) { downloadedApp ->
+                            TextButton(
+                                onClick = {
+                                    if (apkPickerBusy) return@TextButton
+                                    apkPickerBusy = true
+                                    scope.launch {
+                                        try {
+                                            val sourceFile = withContext(Dispatchers.IO) {
+                                                downloadedAppRepository.getApkFileForApp(downloadedApp)
+                                            }
+                                            val result = viewModel.updateProfileApk(profile.id, sourceFile)
+                                            handleApkSelectionResult(profile.name, result)
+                                            if (result == PatchProfilesViewModel.ApkSelectionResult.SUCCESS) {
+                                                downloadedApkPickerProfile = null
+                                            }
+                                        } finally {
+                                            apkPickerBusy = false
+                                        }
+                                    }
+                                },
+                                enabled = !apkPickerBusy,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                                    horizontalAlignment = Alignment.Start,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = downloadedApp.version,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Text(
+                                        text = downloadedApp.packageName,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        )
     }
 
     renameProfileId?.let { targetId ->
@@ -374,14 +492,25 @@ fun PatchProfilesScreen(
                 profile.bundleCount,
                 profile.bundleCount
             )
-            val versionLabel = when (val version = profile.appVersion) {
-                null -> stringResource(R.string.bundle_version_all_versions)
-                else -> if (version.startsWith("v", ignoreCase = true)) version else "v$version"
+            val storedApkPath = profile.apkPath?.takeIf { it.isNotBlank() }
+            val hasAvailableApk = remember(storedApkPath) {
+                storedApkPath?.let { File(it).exists() } == true
             }
+            val hasMissingApk = storedApkPath != null && !hasAvailableApk
+            val apkPath = storedApkPath?.takeIf { hasAvailableApk }
+            val displayedVersion = resolvePatchProfileAppVersion(
+                appVersion = profile.appVersion,
+                apkPath = storedApkPath,
+                apkVersion = profile.apkVersion,
+                useSelectedApkVersion = profile.useSelectedApkVersion
+            )
+            val versionLabel = formatProfileVersionLabel(
+                version = displayedVersion,
+                allVersionsLabel = stringResource(R.string.bundle_version_all_versions)
+            )
             val creationText = profile.createdAt.takeIf { it > 0 }?.relativeTime(context)?.let {
                 stringResource(R.string.patch_profile_created_at, it)
             }
-            val apkPath = profile.apkPath?.takeIf { it.isNotBlank() }
             val expanded = expandedProfiles[profile.id] == true
             val isSelected = profile.id in viewModel.selectedProfiles
             val cardShape = RoundedCornerShape(16.dp)
@@ -501,11 +630,14 @@ fun PatchProfilesScreen(
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.horizontalScroll(rememberScrollState())
+                            modifier = Modifier.consumeHorizontalScroll(rememberScrollState())
                         ) {
                             ProfileMetaPill(text = patchCountText)
                             ProfileMetaPill(text = bundleCountText)
                             ProfileMetaPill(text = versionLabel)
+                            if (hasMissingApk) {
+                                ProfileMetaPill(text = stringResource(R.string.patch_profile_apk_missing))
+                            }
                         }
                         creationText?.let { created ->
                             Text(
@@ -525,7 +657,7 @@ fun PatchProfilesScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     modifier = Modifier
                                         .widthIn(min = maxWidth)
-                                        .horizontalScroll(actionScrollState)
+                                        .consumeHorizontalScroll(actionScrollState)
                                 ) {
                                     ProfileActionPill(
                                         text = stringResource(R.string.patch_profile_rename),
@@ -558,86 +690,153 @@ fun PatchProfilesScreen(
                         enter = fadeIn(),
                         exit = fadeOut()
                     ) {
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            profile.bundleDetails.forEach { detail ->
-                                val baseName = detail.displayName
-                                    ?: stringResource(R.string.patches_name_fallback)
-                                val displayName = if (detail.isAvailable) {
-                                    baseName
-                                } else {
-                                    stringResource(
-                                        R.string.patch_profile_bundle_unavailable_suffix,
-                                        baseName
-                                    )
-                                }
-                                val typeLabel = stringResource(
-                                    when (detail.type) {
-                                        BundleSourceType.Preinstalled -> R.string.bundle_type_preinstalled
-                                        BundleSourceType.Remote -> R.string.bundle_type_remote
-                                        else -> R.string.bundle_type_local
-                                    }
+                        val bundleDetails = profile.bundleDetails
+                        if (bundleDetails.isNotEmpty()) {
+                            val selectedBundleIndex = (selectedBundleTabs[profile.id] ?: 0)
+                                .coerceIn(0, bundleDetails.lastIndex)
+                            val detail = bundleDetails[selectedBundleIndex]
+                            val selectedBundleBaseName = detail.displayName
+                                ?: stringResource(R.string.patches_name_fallback)
+                            val selectedBundleDisplayName = if (detail.isAvailable) {
+                                selectedBundleBaseName
+                            } else {
+                                stringResource(
+                                    R.string.patch_profile_bundle_unavailable_suffix,
+                                    selectedBundleBaseName
                                 )
-                                Column(
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Text(
-                                        text = displayName,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = typeLabel,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.outline
-                                    )
-                                    if (!detail.isAvailable && detail.type == BundleSourceType.Remote && !selectionActive) {
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        ProfileActionText(
-                                            text = stringResource(R.string.patch_profile_bundle_select_remote)
-                                        ) {
-                                            remoteBundleTarget = RemoteBundleTarget(
-                                                profileId = profile.id,
-                                                bundleUid = detail.uid,
-                                                bundleName = detail.displayName ?: detail.uid.toString(),
-                                                requiredPatchesLowercase = detail.patches
-                                                    .mapTo(mutableSetOf()) { it.trim().lowercase() }
+                            }
+                            val selectedBundleTypeLabel = stringResource(
+                                when (detail.type) {
+                                    BundleSourceType.Preinstalled -> R.string.bundle_type_preinstalled
+                                    BundleSourceType.Remote -> R.string.bundle_type_remote
+                                    else -> R.string.bundle_type_local
+                                }
+                            )
+                            val showRemoteReplacementAction =
+                                !detail.isAvailable && detail.type == BundleSourceType.Remote && !selectionActive
+                            val showLocalUidRow = detail.type == BundleSourceType.Local
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                if (bundleDetails.size > 1) {
+                                    ScrollableTabRow(
+                                        selectedTabIndex = selectedBundleIndex,
+                                        containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+                                        edgePadding = 0.dp,
+                                        divider = {}
+                                    ) {
+                                        bundleDetails.forEachIndexed { index, bundleDetail ->
+                                            val tabTitle = bundleDetail.displayName
+                                                ?: context.getString(R.string.patches_name_fallback)
+                                            val tabTypeLabel = context.getString(
+                                                when (bundleDetail.type) {
+                                                    BundleSourceType.Preinstalled -> R.string.bundle_type_preinstalled
+                                                    BundleSourceType.Remote -> R.string.bundle_type_remote
+                                                    else -> R.string.bundle_type_local
+                                                }
                                             )
-                                            remoteBundleSelectionUid = null
+                                            HapticTab(
+                                                selected = index == selectedBundleIndex,
+                                                onClick = { selectedBundleTabs[profile.id] = index },
+                                                text = {
+                                                    Column(
+                                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                                                    ) {
+                                                        Text(
+                                                            text = tabTitle,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                        Text(
+                                                            text = tabTypeLabel,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis,
+                                                            style = MaterialTheme.typography.labelSmall
+                                                        )
+                                                    }
+                                                },
+                                                selectedContentColor = MaterialTheme.colorScheme.primary,
+                                                unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
                                         }
                                     }
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Divider(color = MaterialTheme.colorScheme.outlineVariant)
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    if (detail.type == BundleSourceType.Local) {
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Row(
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                text = stringResource(
-                                                    R.string.patch_profile_bundle_uid_label,
-                                                    detail.uid
-                                                ),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                            if (!selectionActive) {
-                                                ProfileActionText(
-                                                    text = stringResource(R.string.patch_profile_bundle_change_uid)
-                                                ) {
-                                                    changeUidTarget = ChangeUidTarget(
-                                                        profileId = profile.id,
-                                                        bundleUid = detail.uid,
-                                                        bundleName = detail.displayName
-                                                            ?: detail.uid.toString()
-                                                    )
+                                } else {
+                                    Column(
+                                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                                    ) {
+                                        Text(
+                                            text = selectedBundleDisplayName,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = selectedBundleTypeLabel,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.outline
+                                        )
+                                    }
+                                }
+                                if (showRemoteReplacementAction || showLocalUidRow) {
+                                    Column(
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        if (showRemoteReplacementAction) {
+                                            ProfileActionText(
+                                                text = stringResource(R.string.patch_profile_bundle_select_remote)
+                                            ) {
+                                                remoteBundleTarget = RemoteBundleTarget(
+                                                    profileId = profile.id,
+                                                    bundleUid = detail.uid,
+                                                    bundleName = detail.displayName ?: detail.uid.toString(),
+                                                    requiredPatchesLowercase = detail.patches
+                                                        .mapTo(mutableSetOf()) { it.trim().lowercase() }
+                                                )
+                                                remoteBundleSelectionUid = null
+                                            }
+                                        }
+                                        if (showLocalUidRow) {
+                                            Row(
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = stringResource(
+                                                        R.string.patch_profile_bundle_uid_label,
+                                                        detail.uid
+                                                    ),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                if (!selectionActive) {
+                                                    ProfileActionText(
+                                                        text = stringResource(R.string.patch_profile_bundle_change_uid)
+                                                    ) {
+                                                        changeUidTarget = ChangeUidTarget(
+                                                            profileId = profile.id,
+                                                            bundleUid = detail.uid,
+                                                            bundleName = detail.displayName
+                                                                ?: detail.uid.toString()
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Divider(color = MaterialTheme.colorScheme.outlineVariant)
                                     }
+                                }
+                                val patchCountText = pluralStringResource(
+                                    R.plurals.patch_profile_bundle_patch_count,
+                                    detail.patches.size,
+                                    detail.patches.size
+                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    ProfileMetaPill(text = patchCountText)
+                                }
                                 Surface(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(12.dp),
@@ -666,29 +865,34 @@ fun PatchProfilesScreen(
                                                     }?.value
                                                     ?: emptyList()
                                                 val hasOptions = optionList.isNotEmpty()
-                                                Column(
-                                                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                                                    modifier = Modifier
-                                                        .then(
-                                                            if (hasOptions) Modifier.clickable {
-                                                                optionDialogData = OptionDialogData(
-                                                                    patchName = patchName,
-                                                                    entries = optionList
-                                                                )
-                                                            } else Modifier
-                                                        )
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                                 ) {
                                                     Text(
                                                         text = patchName,
                                                         style = MaterialTheme.typography.bodySmall,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        modifier = Modifier.weight(1f)
                                                     )
                                                     if (hasOptions) {
-                                                        Text(
-                                                            text = stringResource(R.string.patch_profile_view_options),
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                            color = MaterialTheme.colorScheme.primary
-                                                        )
+                                                        IconButton(
+                                                            onClick = {
+                                                                optionDialogData = OptionDialogData(
+                                                                    patchName = patchName,
+                                                                    entries = optionList
+                                                                )
+                                                            },
+                                                            modifier = Modifier.size(24.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Outlined.MoreVert,
+                                                                contentDescription = stringResource(R.string.patch_profile_view_options),
+                                                                tint = MaterialTheme.colorScheme.primary,
+                                                                modifier = Modifier.size(18.dp)
+                                                            )
+                                                        }
                                                     }
                                                 }
                                                 if (index != detail.patches.lastIndex) {
@@ -707,7 +911,6 @@ fun PatchProfilesScreen(
                         }
                     }
                 }
-            }
             }
         }
     }
@@ -902,11 +1105,23 @@ fun PatchProfilesScreen(
 
     settingsDialogProfile?.let { profile ->
         val settingsProfile = profiles.firstOrNull { it.id == profile.id } ?: profile
-        val apkPath = settingsProfile.apkPath?.takeIf { it.isNotBlank() }
-        val apkDisplayPath = settingsProfile.apkSourcePath?.takeIf { it.isNotBlank() } ?: apkPath
-        val versionSummary = settingsProfile.appVersion?.takeIf { it.isNotBlank() }?.let { version ->
-            if (version.startsWith("v", ignoreCase = true)) version else "v$version"
-        } ?: stringResource(R.string.bundle_version_all_versions)
+        val storedApkPath = settingsProfile.apkPath?.takeIf { it.isNotBlank() }
+        val hasAvailableApk = remember(storedApkPath) {
+            storedApkPath?.let { File(it).exists() } == true
+        }
+        val hasMissingApk = storedApkPath != null && !hasAvailableApk
+        val apkPath = storedApkPath?.takeIf { hasAvailableApk }
+        val apkDisplayPath = settingsProfile.apkSourcePath?.takeIf { it.isNotBlank() } ?: storedApkPath
+        val effectiveVersion = resolvePatchProfileAppVersion(
+            appVersion = settingsProfile.appVersion,
+            apkPath = storedApkPath,
+            apkVersion = settingsProfile.apkVersion,
+            useSelectedApkVersion = settingsProfile.useSelectedApkVersion
+        )
+        val versionSummary = formatProfileVersionLabel(
+            version = effectiveVersion,
+            allVersionsLabel = stringResource(R.string.bundle_version_all_versions)
+        )
         var autoPatchUpdating by remember(settingsProfile.id) { mutableStateOf(false) }
         AlertDialog(
             onDismissRequest = {
@@ -940,11 +1155,19 @@ fun PatchProfilesScreen(
                             overflow = TextOverflow.Visible,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .horizontalScroll(apkScrollState)
+                                .consumeHorizontalScroll(apkScrollState)
                         )
-                        Row(
+                        if (hasMissingApk) {
+                            Text(
+                                text = stringResource(R.string.patch_profile_apk_missing),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                        FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             TextButton(
                                 onClick = {
@@ -952,7 +1175,21 @@ fun PatchProfilesScreen(
                                     apkPickerProfile = settingsProfile
                                 }
                             ) {
-                                Text(stringResource(R.string.patch_profile_apk_select))
+                                Text(
+                                    text = stringResource(R.string.patch_profile_apk_select),
+                                    maxLines = 1
+                                )
+                            }
+                            TextButton(
+                                onClick = {
+                                    if (apkPickerBusy) return@TextButton
+                                    downloadedApkPickerProfile = settingsProfile
+                                }
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.downloaded_apps),
+                                    maxLines = 1
+                                )
                             }
                             if (apkPath != null) {
                                 TextButton(
@@ -982,7 +1219,10 @@ fun PatchProfilesScreen(
                                         }
                                     }
                                 ) {
-                                    Text(stringResource(R.string.patch_profile_apk_clear))
+                                    Text(
+                                        text = stringResource(R.string.patch_profile_apk_clear),
+                                        maxLines = 1
+                                    )
                                 }
                             }
                         }
@@ -1002,8 +1242,11 @@ fun PatchProfilesScreen(
                             onClick = {
                                 if (apkPickerBusy) return@TextButton
                                 versionDialogProfile = settingsProfile
-                                versionDialogValue = settingsProfile.appVersion.orEmpty()
-                                versionDialogAllVersions = settingsProfile.appVersion.isNullOrBlank()
+                                versionDialogValue = effectiveVersion.orEmpty()
+                                versionDialogUseSelectedApkVersion =
+                                    settingsProfile.useSelectedApkVersion && hasAvailableApk
+                                versionDialogAllVersions =
+                                    !versionDialogUseSelectedApkVersion && effectiveVersion.isNullOrBlank()
                                 settingsDialogProfile = null
                             }
                         ) {
@@ -1047,6 +1290,11 @@ fun PatchProfilesScreen(
     }
 
     versionDialogProfile?.let { profile ->
+        val versionDialogHasSelectedApk = remember(profile.apkPath, profile.apkVersion) {
+            profile.apkVersion?.isNotBlank() == true &&
+                profile.apkPath?.let(::File)?.exists() == true
+        }
+        val currentApkVersion = profile.apkVersion?.takeIf { version -> version.isNotBlank() }
         AlertDialog(
             onDismissRequest = {
                 if (versionDialogSaving) return@AlertDialog
@@ -1065,7 +1313,13 @@ fun PatchProfilesScreen(
                                 context.toast(context.getString(R.string.patch_profile_version_override_set_to_all, quoted))
                             }
                             try {
-                                when (viewModel.updateProfileVersion(profile.id, versionToSave)) {
+                                when (
+                                    viewModel.updateProfileVersion(
+                                        profile.id,
+                                        versionToSave,
+                                        useSelectedApkVersion = versionDialogUseSelectedApkVersion && !versionDialogAllVersions
+                                    )
+                                ) {
                                     PatchProfilesViewModel.VersionUpdateResult.SUCCESS -> context.toast(
                                         context.getString(R.string.patch_profile_version_override_saved_toast)
                                     )
@@ -1113,19 +1367,54 @@ fun PatchProfilesScreen(
                             if (versionDialogAllVersions && it.isNotBlank()) {
                                 versionDialogAllVersions = false
                             }
+                            if (
+                                versionDialogUseSelectedApkVersion &&
+                                currentApkVersion != null &&
+                                it != currentApkVersion
+                            ) {
+                                versionDialogUseSelectedApkVersion = false
+                            }
                         },
                         label = { Text(stringResource(R.string.patch_profile_version_override_label)) },
                         placeholder = { Text(stringResource(R.string.patch_profile_version_override_hint)) },
                         singleLine = true,
                         enabled = !versionDialogAllVersions
                     )
+                    if (versionDialogHasSelectedApk && currentApkVersion != null) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            HapticCheckbox(
+                                checked = versionDialogUseSelectedApkVersion,
+                                onCheckedChange = {
+                                    versionDialogUseSelectedApkVersion = it
+                                    if (it) {
+                                        versionDialogAllVersions = false
+                                        versionDialogValue = currentApkVersion
+                                    }
+                                }
+                            )
+                            Text(
+                                text = stringResource(
+                                    R.string.patch_profile_version_override_use_selected_apk,
+                                    currentApkVersion
+                                )
+                            )
+                        }
+                    }
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         HapticCheckbox(
                             checked = versionDialogAllVersions,
-                            onCheckedChange = { versionDialogAllVersions = it }
+                            onCheckedChange = {
+                                versionDialogAllVersions = it
+                                if (it) {
+                                    versionDialogUseSelectedApkVersion = false
+                                }
+                            }
                         )
                         Text(text = stringResource(R.string.patch_profile_version_override_all_versions))
                     }
@@ -1224,6 +1513,38 @@ fun PatchProfilesScreen(
                 )
             }
         )
+    }
+
+    if (apkPickerBusy) {
+        Dialog(
+            onDismissRequest = {},
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false
+            )
+        ) {
+            val view = LocalView.current
+            SideEffect {
+                val window = (view.parent as DialogWindowProvider).window
+                window.setDimAmount(0f)
+                window.setBackgroundDrawable(ColorDrawable(android.graphics.Color.TRANSPARENT))
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.45f)),
+                contentAlignment = Alignment.Center
+            ) {
+                LoadingIndicator(
+                    modifier = Modifier.size(56.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.35f),
+                    strokeWidth = 4.dp
+                )
+            }
+        }
     }
 }
 
@@ -1444,6 +1765,7 @@ private fun PatchProfileApkIcon(
             if (packageInfo != null) {
                 AppIcon(
                     packageInfo = packageInfo,
+                    iconOverride = iconInfo?.iconOverride,
                     contentDescription = null,
                     modifier = Modifier
                         .size(28.dp)
@@ -1461,8 +1783,39 @@ private fun PatchProfileApkIcon(
     }
 }
 
+private fun resolveApkUriDisplayName(context: android.content.Context, uri: Uri): String =
+    runCatching {
+        context.contentResolver.query(
+            uri,
+            arrayOf(OpenableColumns.DISPLAY_NAME),
+            null,
+            null,
+            null
+        )?.use { cursor ->
+            val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (index != -1 && cursor.moveToFirst()) cursor.getString(index) else null
+        }
+    }.getOrNull() ?: uri.lastPathSegment.orEmpty()
+
+private fun resolveApkDisplayExtension(displayName: String): String =
+    displayName
+        .substringAfterLast('.', missingDelimiterValue = "")
+        .lowercase(Locale.ROOT)
+
+private fun isAllowedApkUri(context: android.content.Context, uri: Uri): Boolean {
+    val extension = resolveApkDisplayExtension(resolveApkUriDisplayName(context, uri))
+    return extension in APK_FILE_EXTENSIONS
+}
+
+private fun formatProfileVersionLabel(version: String?, allVersionsLabel: String): String =
+    version
+        ?.takeIf { it.isNotBlank() }
+        ?.let { if (it.startsWith("v", ignoreCase = true)) it else "v$it" }
+        ?: allVersionsLabel
+
 private data class PatchProfileApkIconInfo(
     val packageInfo: android.content.pm.PackageInfo?,
+    val iconOverride: android.graphics.drawable.Drawable? = null,
     val cleanup: (() -> Unit)?
 )
 
@@ -1473,16 +1826,31 @@ private suspend fun loadPatchProfileApkIconInfo(
 ): PatchProfileApkIconInfo? = withContext(Dispatchers.IO) {
     if (!file.exists()) return@withContext null
     val extension = file.extension.lowercase()
-    if (extension !in APK_FILE_EXTENSIONS) return@withContext null
-    val isSplitArchive = extension != "apk" && SplitApkPreparer.isSplitArchive(file)
-    if (extension != "apk" && !isSplitArchive) return@withContext null
+    val isSplitArchive = SplitApkPreparer.isSplitArchive(file)
+    if (extension !in APK_FILE_EXTENSIONS && !isSplitArchive) return@withContext null
 
     if (isSplitArchive) {
-        val extracted = SplitApkInspector.extractRepresentativeApk(file, filesystem.tempDir)
-            ?: return@withContext null
-        val pkgInfo = pm.getPackageInfo(extracted.file)
-        PatchProfileApkIconInfo(pkgInfo, extracted.cleanup)
-    } else {
-        PatchProfileApkIconInfo(pm.getPackageInfo(file), null)
+        val resolved = runCatching {
+            SplitArchiveDisplayResolver.resolve(
+                source = file,
+                workspace = filesystem.tempDir,
+                app = pm.application,
+                pm = pm
+            )
+        }.getOrNull()
+        if (resolved != null) {
+            return@withContext PatchProfileApkIconInfo(
+                packageInfo = resolved.packageInfo,
+                iconOverride = resolved.icon,
+                cleanup = null
+            )
+        }
     }
+
+    PatchProfileApkIconInfo(
+        packageInfo = pm.getPackageInfo(file),
+        iconOverride = null,
+        cleanup = null
+    )
 }
+

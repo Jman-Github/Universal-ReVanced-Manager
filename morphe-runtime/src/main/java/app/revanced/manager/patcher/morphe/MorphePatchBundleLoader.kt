@@ -14,10 +14,19 @@ object MorphePatchBundleLoader {
         }.getOrElse { error ->
             throw IllegalStateException("Patch bundle is corrupted or incomplete", error)
         }
-        val entry = patchFiles.entries.singleOrNull()
-            ?: throw IllegalStateException("Unexpected patch bundle load result for $bundlePath")
+        if (patchFiles.isEmpty()) {
+            throw IllegalStateException("Unexpected patch bundle load result for $bundlePath")
+        }
 
-        return entry.value
+        val patches = patchFiles.values
+            .asSequence()
+            .flatten()
+            .toList()
+        if (patches.isEmpty()) {
+            throw IllegalStateException("Patch bundle contains no patches: $bundlePath")
+        }
+
+        return patches
     }
 
     fun patches(bundles: Iterable<String>, packageName: String) =

@@ -29,6 +29,7 @@ import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.mutableStateSetOf
 import app.revanced.manager.util.PatchedAppExportData
 import app.revanced.manager.util.ExportNameFormatter
+import app.revanced.manager.util.mergeWith
 import app.revanced.manager.util.savedAppBasePackage
 import app.revanced.manager.patcher.patch.PatchBundleInfo
 import kotlinx.coroutines.Dispatchers
@@ -103,13 +104,9 @@ class InstalledAppsViewModel(
                 val missingToAdd = newMissing.filterNot { it in missingPackages }.toSet()
                 missingPackages.addAll(missingToAdd)
 
-                val selectablePackages = installedApps.mapNotNull { app ->
-                    when {
-                        app.installType == InstallType.SAVED -> app.currentPackageName
-                        app.currentPackageName in newMissing -> app.currentPackageName
-                        else -> null
-                    }
-                }.toSet()
+                val selectablePackages = installedApps
+                    .map(InstalledApp::currentPackageName)
+                    .toSet()
                 selectedApps.retainAll(selectablePackages)
             }
         }
@@ -237,16 +234,17 @@ class InstalledAppsViewModel(
     }
 
     suspend fun getRepatchSelection(app: InstalledApp): PatchSelection? = withContext(Dispatchers.IO) {
-        val selection = loadAppliedPatches(app.currentPackageName)
-        if (selection.isNotEmpty()) return@withContext selection
-
-        val payload = app.selectionPayload ?: return@withContext null
+        val storedSelection = loadAppliedPatches(app.currentPackageName)
+        val payload = app.selectionPayload ?: return@withContext storedSelection.takeIf { it.isNotEmpty() }
         val sources = patchBundleRepository.sources.first()
         val sourceIds = sources.map { it.uid }.toSet()
         val signatures = patchBundleRepository.allBundlesInfoFlow.first().toSignatureMap()
         val (remappedPayload, remappedSelection) = payload.remapAndExtractSelection(sources, signatures)
-        val persistableSelection = remappedSelection.filterKeys { it in sourceIds }
-        if (persistableSelection.isNotEmpty()) {
+        val mergedSelection = storedSelection.mergeWith(remappedSelection)
+        val persistableSelection = mergedSelection.filterKeys { it in sourceIds }
+        if (persistableSelection.isNotEmpty() &&
+            (persistableSelection != storedSelection || remappedPayload != payload)
+        ) {
             installedAppsRepository.addOrUpdate(
                 app.currentPackageName,
                 app.originalPackageName,
@@ -256,12 +254,7 @@ class InstalledAppsViewModel(
                 remappedPayload
             )
         }
-        if (remappedSelection.isNotEmpty()) return@withContext remappedSelection
-
-        val fallback = payload.bundles.associate { bundle ->
-            bundle.bundleUid to bundle.patches.filter { it.isNotBlank() }.toSet()
-        }.filterValues { it.isNotEmpty() }
-        fallback.takeIf { it.isNotEmpty() }
+        mergedSelection.takeIf { it.isNotEmpty() }
     }
 
     override fun onCleared() {
@@ -392,31 +385,12 @@ class InstalledAppsViewModel(
 
     private suspend fun setSelectionInternal(installedApp: InstalledApp, shouldSelect: Boolean) {
         val packageName = installedApp.currentPackageName
-        if (shouldSelect && !isSelectable(installedApp)) return
 
         if (shouldSelect) {
             selectedApps.add(packageName)
         } else {
             selectedApps.remove(packageName)
         }
-    }
-
-    private suspend fun isSelectable(installedApp: InstalledApp): Boolean {
-        if (installedApp.installType == InstallType.SAVED) return true
-
-        val packageName = installedApp.currentPackageName
-        if (packageName in missingPackages) return true
-
-        val info = withContext(Dispatchers.IO) { pm.getPackageInfo(packageName) }
-        packageInfoMap[packageName] = info
-
-        val isMissing = info == null
-        if (isMissing) {
-            missingPackages.add(packageName)
-        } else {
-            missingPackages.remove(packageName)
-        }
-        return isMissing
     }
 
     private suspend fun resolvePackageInfo(installedApp: InstalledApp): PackageInfo? =
@@ -446,13 +420,39 @@ class InstalledAppsViewModel(
 
             when (installedApp.installType) {
                 InstallType.SAVED -> {
-                    val savedFile = filesystem.getPatchedAppFile(packageName, installedApp.version)
-                    val resolvedFile = if (savedFile.exists()) {
-                        savedFile
+                    val expectedSavedFile = filesystem.getPatchedAppFile(packageName, installedApp.version)
+                    val resolvedFile = if (expectedSavedFile.exists()) {
+                        expectedSavedFile
                     } else {
                         filesystem.findPatchedAppFile(packageName)
+                            ?: filesystem.findPatchedAppFile(installedApp.originalPackageName)
                     }
-                    val archivePackageInfo = resolvedFile?.let(pm::getPackageInfo)
+                    if (resolvedFile == null) {
+                        return@withContext null
+                    }
+                    val resolvedName = resolvedFile.name.removeSuffix(".apk")
+                    val recoveredVersion = listOf(packageName, installedApp.originalPackageName)
+                        .map(FilenameUtils::sanitize)
+                        .firstNotNullOfOrNull { safePackage ->
+                            resolvedName.takeIf { it.startsWith("${safePackage}_") }
+                                ?.removePrefix("${safePackage}_")
+                                ?.takeIf { it.isNotBlank() }
+                        }
+                        ?: installedApp.version
+                    val canonicalSavedFile = filesystem.getPatchedAppFile(packageName, recoveredVersion)
+                    if (resolvedFile != canonicalSavedFile) {
+                        if (!canonicalSavedFile.exists()) {
+                            runCatching {
+                                canonicalSavedFile.parentFile?.mkdirs()
+                                resolvedFile.copyTo(canonicalSavedFile, overwrite = false)
+                            }
+                        }
+                        if (canonicalSavedFile.exists()) {
+                            resolvedFile.delete()
+                        }
+                    }
+                    val packageInfoSource = canonicalSavedFile.takeIf { it.exists() } ?: resolvedFile
+                    val archivePackageInfo = pm.getPackageInfo(packageInfoSource)
                     val devicePackageName = archivePackageInfo?.packageName
                         ?.takeIf { it.isNotBlank() }
                         ?: installedApp.originalPackageName.takeIf { it.isNotBlank() }
@@ -464,15 +464,7 @@ class InstalledAppsViewModel(
                     if (installedInfo != null) {
                         return@withContext installedInfo
                     }
-                    if (resolvedFile == null) {
-                        return@withContext null
-                    }
-                    if (resolvedFile != savedFile) {
-                        val safePackage = FilenameUtils.sanitize(packageName)
-                        val recoveredVersion = resolvedFile.name
-                            .removePrefix("${safePackage}_")
-                            .removeSuffix(".apk")
-                            .ifBlank { installedApp.version }
+                    if (recoveredVersion != installedApp.version) {
                         val selection = installedAppsRepository.getAppliedPatches(packageName)
                         installedAppsRepository.addOrUpdate(
                             currentPackageName = installedApp.currentPackageName,
@@ -480,10 +472,11 @@ class InstalledAppsViewModel(
                             version = recoveredVersion,
                             installType = installedApp.installType,
                             patchSelection = selection,
-                            selectionPayload = installedApp.selectionPayload
+                            selectionPayload = installedApp.selectionPayload,
+                            createdAtOverride = installedApp.createdAt
                         )
                     }
-                    archivePackageInfo ?: pm.getPackageInfo(resolvedFile)
+                    archivePackageInfo ?: pm.getPackageInfo(packageInfoSource)
                 }
 
                 else -> {

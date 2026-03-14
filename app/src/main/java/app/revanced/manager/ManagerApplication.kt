@@ -11,9 +11,11 @@ import app.revanced.manager.di.*
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.repository.DownloaderPluginRepository
 import app.revanced.manager.domain.repository.PatchBundleRepository
+import app.revanced.manager.domain.worker.BundleUpdateWebSocketCoordinator
 import app.revanced.manager.domain.worker.WorkerRepository
 import app.revanced.manager.patcher.ample.AmpleRuntimeBridge
 import app.revanced.manager.patcher.morphe.MorpheRuntimeBridge
+import app.revanced.manager.patcher.revanced.Revanced22RuntimeBridge
 import app.revanced.manager.network.service.HttpService
 import app.revanced.manager.util.AppForeground
 import app.revanced.manager.util.tag
@@ -45,6 +47,7 @@ class ManagerApplication : Application() {
     private val patchBundleRepository: PatchBundleRepository by inject()
     private val downloaderPluginRepository: DownloaderPluginRepository by inject()
     private val workerRepository: WorkerRepository by inject()
+    private val bundleUpdateWebSocketCoordinator: BundleUpdateWebSocketCoordinator by inject()
     private val fs: Filesystem by inject()
     private val httpService: HttpService by inject()
 
@@ -72,6 +75,7 @@ class ManagerApplication : Application() {
         PatchListCatalog.initialize(this)
         MorpheRuntimeBridge.initialize(this)
         AmpleRuntimeBridge.initialize(this)
+        Revanced22RuntimeBridge.initialize(this)
 
         val pixels = 512
         Coil.setImageLoader(
@@ -92,10 +96,15 @@ class ManagerApplication : Application() {
         val shellBuilder = BuilderImpl.create().setFlags(Shell.FLAG_MOUNT_MASTER)
         Shell.setDefaultBuilder(shellBuilder)
 
+        bundleUpdateWebSocketCoordinator.start()
+
         scope.launch {
             prefs.preload()
-            workerRepository.scheduleBundleUpdateNotificationWork(
+            workerRepository.ensureBundleUpdateNotificationWork(
                 prefs.searchForUpdatesBackgroundInterval.get()
+            )
+            workerRepository.ensureManagerUpdateNotificationWork(
+                prefs.searchForManagerUpdatesBackgroundInterval.get()
             )
             val currentApi = prefs.api.get()
             if (currentApi == LEGACY_MANAGER_REPO_URL || currentApi == LEGACY_MANAGER_REPO_API_URL) {
@@ -137,9 +146,11 @@ class ManagerApplication : Application() {
             override fun onActivityStarted(activity: Activity) {}
             override fun onActivityResumed(activity: Activity) {
                 AppForeground.onResumed()
+                bundleUpdateWebSocketCoordinator.onAppForegroundChanged(true)
             }
             override fun onActivityPaused(activity: Activity) {
                 AppForeground.onPaused()
+                bundleUpdateWebSocketCoordinator.onAppForegroundChanged(false)
             }
             override fun onActivityStopped(activity: Activity) {}
             override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}

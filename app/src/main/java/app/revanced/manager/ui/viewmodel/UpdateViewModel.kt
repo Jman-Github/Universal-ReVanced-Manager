@@ -86,9 +86,12 @@ class UpdateViewModel(
         private set
 
     private val location = fs.tempDir.resolve("updater.apk")
+    private val versionMarkerLocation = fs.tempDir.resolve("updater.version")
     private val job = viewModelScope.launch {
         uiSafe(app, R.string.download_manager_failed, "Failed to download Universal ReVanced Manager") {
-            releaseInfo = reVancedAPI.getAppUpdate() ?: throw Exception("No update available")
+            val update = reVancedAPI.getAppUpdate() ?: throw Exception("No update available")
+            releaseInfo = update
+            prefs.viewedManagerUpdateVersion.update(update.version)
 
             if (downloadOnScreenEntry) {
                 downloadUpdate()
@@ -106,14 +109,20 @@ class UpdateViewModel(
                 if (!allowMeteredUpdates && !networkInfo.isSafe() && !ignoreInternetCheck) {
                     showInternetCheckDialog = true
                 } else {
+                    if (currentDownloadVersion == null) {
+                        currentDownloadVersion = readPersistedDownloadVersion()
+                    }
                     if (currentDownloadVersion != release.version) {
                         currentDownloadVersion = release.version
+                        persistDownloadVersion(release.version)
                         if (location.exists()) {
                             location.delete()
                         }
                         downloadedSize = 0L
                         totalSize = 0L
                         canResumeDownload = false
+                    } else {
+                        persistDownloadVersion(release.version)
                     }
 
                     val resumeOffset = if (location.exists()) location.length() else 0L
@@ -124,21 +133,14 @@ class UpdateViewModel(
                     state = State.DOWNLOADING
 
                     try {
-                        if (resumeOffset == 0L) {
-                            http.downloadToFile(
-                                saveLocation = location,
-                                builder = { url(release.downloadUrl) },
-                                onProgress = { bytesRead, contentLength ->
-                                    downloadedSize = bytesRead
-                                    totalSize = contentLength ?: totalSize
-                                }
-                            )
-                        } else {
-                            http.download(location, resumeOffset) {
-                                url(release.downloadUrl)
-                                onDownload { bytesSentTotal, contentLength ->
-                                    downloadedSize = resumeOffset + bytesSentTotal
-                                    totalSize = resumeOffset + contentLength
+                        http.download(location, resumeOffset) {
+                            url(release.downloadUrl)
+                            onDownload { bytesSentTotal, contentLength ->
+                                downloadedSize = resumeOffset + bytesSentTotal
+                                totalSize = when {
+                                    contentLength > 0L -> resumeOffset + contentLength
+                                    totalSize > 0L -> totalSize
+                                    else -> downloadedSize
                                 }
                             }
                         }
@@ -283,6 +285,28 @@ class UpdateViewModel(
         state = State.SUCCESS
     }
 
+    private fun readPersistedDownloadVersion(): String? =
+        runCatching {
+            versionMarkerLocation
+                .takeIf { it.exists() }
+                ?.readText()
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+        }.getOrNull()
+
+    private fun persistDownloadVersion(version: String?) {
+        runCatching {
+            if (version.isNullOrBlank()) {
+                if (versionMarkerLocation.exists()) {
+                    versionMarkerLocation.delete()
+                }
+            } else {
+                versionMarkerLocation.parentFile?.mkdirs()
+                versionMarkerLocation.writeText(version)
+            }
+        }
+    }
+
     private val externalInstallReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val plan = pendingExternalInstall ?: return
@@ -318,6 +342,7 @@ class UpdateViewModel(
 
         job.cancel()
         location.delete()
+        persistDownloadVersion(null)
     }
 
     companion object {

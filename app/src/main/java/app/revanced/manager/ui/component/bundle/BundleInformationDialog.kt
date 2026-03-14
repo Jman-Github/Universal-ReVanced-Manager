@@ -120,6 +120,12 @@ fun BundleInformationDialog(
     var showLinkSheet by rememberSaveable { mutableStateOf(false) }
     var showForceUpdateDialog by rememberSaveable { mutableStateOf(false) }
     var changelogHistory by remember { mutableStateOf<List<PatchBundleChangelogEntry>>(emptyList()) }
+    var changelogHistoryFetchedOnce by remember { mutableStateOf(false) }
+    var changelogHistoryLoading by remember { mutableStateOf(false) }
+    var changelogHistoryError by remember { mutableStateOf<Throwable?>(null) }
+    val remoteSource = src.asRemoteOrNull
+    val historicalChangelogSource = remoteSource?.takeIf { it.supportsHistoricalChangelog }
+    val supportsHistoricalChangelog = historicalChangelogSource != null
     val isLocal = src is LocalPatchBundle
     val bundleManifestAttributes = src.patchBundle?.manifestAttributes
     val manifestSource = bundleManifestAttributes?.source
@@ -127,7 +133,7 @@ fun BundleInformationDialog(
         if (src.isDefault) PatchListCatalog.revancedCatalogUrl() else PatchListCatalog.resolveCatalogUrl(src)
     }
     val bundleInfo by bundleRepo.allBundlesInfoFlow.collectAsStateWithLifecycle(emptyMap())
-    val (autoUpdate, endpoint, searchUpdate) = src.asRemoteOrNull?.let {
+    val (autoUpdate, endpoint, searchUpdate) = remoteSource?.let {
         Triple(it.autoUpdate, it.endpoint, it.searchUpdate)
     } ?: Triple(null, null, null)
     val bundleTitle = src.displayTitle
@@ -176,7 +182,7 @@ fun BundleInformationDialog(
             return@launch
         }
 
-        val remote = src.asRemoteOrNull
+        val remote = remoteSource
         if (remote == null) {
             context.toast(context.getString(R.string.bundle_release_page_unavailable))
             return@launch
@@ -211,6 +217,26 @@ fun BundleInformationDialog(
         }
     }
 
+    fun refreshChangelogHistory() {
+        changelogHistoryError = null
+        composableScope.launch {
+            changelogHistoryLoading = true
+            changelogHistory = bundleRepo.getChangelogHistory(src)
+            try {
+                changelogHistory = if (historicalChangelogSource != null) {
+                    bundleRepo.synchronizeChangelogHistory(historicalChangelogSource)
+                } else {
+                    bundleRepo.getChangelogHistory(src)
+                }
+                changelogHistoryFetchedOnce = supportsHistoricalChangelog
+            } catch (t: Throwable) {
+                changelogHistoryError = t
+            } finally {
+                changelogHistoryLoading = false
+            }
+        }
+    }
+
     LaunchedEffect(autoOpenReleaseRequest) {
         autoOpenReleaseRequest?.let {
             openReleasePage()
@@ -219,7 +245,8 @@ fun BundleInformationDialog(
     }
 
     LaunchedEffect(src.uid, src.updatedAt) {
-        changelogHistory = bundleRepo.getChangelogHistory(src.uid)
+        changelogHistory = bundleRepo.getChangelogHistory(src)
+        changelogHistoryFetchedOnce = changelogHistory.size > 1
     }
 
     if (viewCurrentBundlePatches) {
@@ -231,7 +258,7 @@ fun BundleInformationDialog(
         )
     }
     if (viewBundleChangelog) {
-        val remote = src.asRemoteOrNull
+        val remote = remoteSource
         if (remote != null) {
             BundleChangelogDialog(
                 src = remote,
@@ -243,9 +270,25 @@ fun BundleInformationDialog(
             viewBundleChangelog = false
         }
     }
-    if (viewBundleChangelogHistory) {
+
+    LaunchedEffect(supportsHistoricalChangelog) {
+        if (!supportsHistoricalChangelog) {
+            viewBundleChangelogHistory = false
+        }
+    }
+
+    LaunchedEffect(viewBundleChangelogHistory, supportsHistoricalChangelog, src.uid, src.updatedAt) {
+        if (viewBundleChangelogHistory && supportsHistoricalChangelog) {
+            refreshChangelogHistory()
+        }
+    }
+
+    if (viewBundleChangelogHistory && supportsHistoricalChangelog) {
         BundleChangelogHistoryDialog(
             entries = changelogHistory.drop(1),
+            isRefreshing = changelogHistoryLoading,
+            error = changelogHistoryError,
+            onRetry = { refreshChangelogHistory() },
             onDismissRequest = { viewBundleChangelogHistory = false }
         )
     }
@@ -591,23 +634,23 @@ fun BundleInformationDialog(
                         )
                     }
 
-                    val previousEntries = changelogHistory.drop(1)
-                    val hasPrevious = previousEntries.isNotEmpty()
-                    BundleListItem(
-                        headlineText = stringResource(R.string.bundle_previous_changelogs),
-                        supportingText = stringResource(
-                            if (hasPrevious) {
-                                R.string.bundle_view_previous_changelogs
-                            } else {
-                                R.string.bundle_previous_changelogs_empty
+                    if (supportsHistoricalChangelog) {
+                        val previousEntries = changelogHistory.drop(1)
+                        val hasPrevious = previousEntries.isNotEmpty()
+                        val previousSupportingText = when {
+                            changelogHistoryLoading -> stringResource(R.string.changelog_loading)
+                            hasPrevious -> stringResource(R.string.bundle_view_previous_changelogs)
+                            changelogHistoryFetchedOnce && changelogHistoryError == null ->
+                                stringResource(R.string.bundle_previous_changelogs_empty)
+                            else -> stringResource(R.string.bundle_view_previous_changelogs)
+                        }
+                        BundleListItem(
+                            headlineText = stringResource(R.string.bundle_previous_changelogs),
+                            supportingText = previousSupportingText,
+                            modifier = Modifier.clickable {
+                                viewBundleChangelogHistory = true
                             }
-                        ),
-                        modifier = Modifier.clickable(
-                            enabled = hasPrevious,
-                            onClick = { viewBundleChangelogHistory = true }
-                        )
-                    ) {
-                        if (hasPrevious) {
+                        ) {
                             Icon(
                                 Icons.AutoMirrored.Outlined.ArrowRight,
                                 stringResource(R.string.bundle_previous_changelogs)

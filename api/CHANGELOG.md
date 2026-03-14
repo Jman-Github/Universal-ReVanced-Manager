@@ -1,3 +1,150 @@
+# v1.8.1 (TBD)
+
+
+# Features
+
+- Adjusted the wording for the search bar in the custom file picker from `Search folder` to `Search current directory` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/183
+- Rename the `Show patch summary before patching` settings toggle to `Show patch confirmation screen` for consistency
+- Made the filter selection states on the `Select an app` screen persist https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/193
+- Added setting to disable the swipe gesture to switch between tabs on the main screen (located in Settings > General) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/196
+- Added the android document providers directory sort filters to the custom file picker https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/182
+- Added patch option & value preview cards to the patch selection screens patch widgets https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/188
+- Made it so hold tapping on the top left back button on the patcher screen brings you back to the `Apps` screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/190
+- Improved the metadata loader for split APKs on the `App info` screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/190
+- Made the patch bundle bar on the patch selection screen show even when theres only one bundle available https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/192
+- Added a versioned per-runtime framework cache keys and updated modern AAPT2 binaries to TechnoIndian builds that are used for SDK 35+ patching
+- Added upstream changes https://github.com/ReVanced/revanced-manager/pull/2916
+- Allow external apps to appear in the Android document provider as options to select files with https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/203
+- Pressing the system back buton on the `Apps` tab now exits the app
+- Made search queries and filters on the custom file picker persist across sessions https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/209
+- Improved export filenames for patch selections and keystores https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/205
+- Added persistent bundle sorting to the `Patch Bundle Discovery` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/206
+- Added a toggle in Settings > General that disables the swipe guesture on the patch selection screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/212
+- Added live patching progress foreground notifications https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/207
+- Set keystores generated with the `Keystore creator` tool to use the maximum possible expiration date
+- Improved the push notification system by using websockets (this avoids having to use FCM) to keep the notifcation worker alive
+- Added push notifications for manager updates https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/214
+- Renamed `Search bundles` on the `Discover patch bundles` screen to `Search by bundle name` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/219
+- Improved bundle and manager update alerts and websocket status wording
+- Added a `Split APK installer` tool to the `Tools` tab https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/189
+- Redesigned and completely reorganized the settings screens https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/222
+- Slight UI corrections and improvements in multiple parts of the app https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/223
+- Added an option to choose an APK from URV downloaded apps for the Patch Profiles preset APK setting https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/224
+- Made the package name of apps always shown on the `App info` screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/225
+- Improved the `Create custom YouTube icons & headers` tool https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/211
+- Added a toggle in Settings > Patcher that disables/enables the expansion of the main categories on the patcher screen that are running https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/201
+- Corrected a few inconsistencies in Settings https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/240
+- Aligned patcher step naming in the notification with the steps on the patcher screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/253
+- Added a loading screen that appears when selecting an app from storage from the `Select an app` screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/255
+- Added support for the ReVanced Patcher v22 while keeping backwards compatibility with v21 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/252
+- Overall improved the stability to all patcher runtimes
+- Added device architecture, Android version, device model, and patcher version to the patcher logs
+- Removed the duplicate export button from the App info screen top bar, keeping the existing export action in the main action row https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/260
+- Updated the Morphe runtimes aapt2 binaries to the ones used by the official ReVanced Manager https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/272
+- Improved the existing `Previous changelog` system to backfill to a user set limit through settings
+- Remove `AAPT2 version` and `AAPT sha256` from the patcher logs and added `AAPT2 selected`, `Environment`, `Device name` and `Selected patches` lines
+- Bumped Morphe dependencies
+- Improved the `Patching in progress` notification https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/278
+- Renamed the manager keystore file to `urv_keystore.keystore` and added migration/restore support for legacy `manager.keystore` backups https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/268 
+- Updated the ReVanced `libaapt2.so` binaries to the ones used by the official ReVanced Manager
+- Added live substep counts to patcher progress group https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/261
+- Improved app and patch search so closing search keeps filtered results visible, and both system back and top-bar back clear the search before leaving https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/261
+- Improved patch option previews with a larger inline preview and a full preview dialog for long values like file paths https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/261
+- Improved patch profile APK handling by preserving split archive extensions, loading split APK icons correctly and using detected APK versions for compatibilit https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/261
+- Patch profiles can now use the version detected from a selected APK
+- Added an option to only keep the latest plugin-downloaded APK per app
+- Added a delete confirmation for selected downloaded apps in `Downloads`
+- Updated the manager update notification and update banner text to use clearer URV-specific wording, including `URV Manager update found` and `A new manager update is available` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/274
+- Increased the size of the status bar icon https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/230
+- Improved patch bundle update notifications to use clearer "update found" wording and correct singular/plural grammar for available bundle updates https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/235
+- Added persistent tracking for the currently viewed manager update version so the icon state stays correct across app restarts https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/232
+- Reordered the General settings screen so Navigation & Tabs appears before Themes, while Themes and Background remain grouped together https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/234
+- Renamed the screen shown after selecting an app to patch from App info to `Preparing to patch` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/264
+- Updated the `Apps` and `Patch Profiles` tab search hints to use consistent wording of `Search by app name` and `Search by profile name` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/237
+- Improved the Patch Profiles bundle selector with tabbed bundle switching and cleaner bundle source labeling https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/242
+- Improved patch option viewing in Patch Profiles with a three-dots menu for patches with options
+- Clarified changelog link wording by changing the external action to `View changelogs on GitHub` on the manager update and changelog settings screens https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/233
+- Added a scrollable changelog preview directly to the manager update popup, so release notes can be read without opening the full updater screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/229
+- Added a restart prompt after changing the in-app language https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/244
+- Removed an extra UI separator from the `General` settings screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/287
+- Improved patcher state handling across all patcher runtimes
+- Added a `Prevent accidental touching` setting that protects against accidental page/tab swipes when enabled, and makes page/tab swipes easier with shorter drags when disabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/286
+- Added installed apps as a source for the Split APK merge tool https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/197
+- Added a split selection step before merging so specific modules can be included or excluded https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/197
+- mproved split merge loading, cancellation, and progress handling
+
+
+# Bug fixes
+
+- Fixed pressing the system back button on the `Patch Profiles` and `Tools` tabs sending the user back to the Android home screen instead of a different tab https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/191
+- Fixed the `Patch confirmation` screen's scroll bar being very large https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/186
+- Fixed the Android document provider file picker not resolving intents to local paths https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/202 
+- Fixed an issue where the export filename variables wouldn't be placed at the cursor position https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/187
+- Fixed the `Effective memory limit` listing in the patcher logs using the `Requested memory limit value` (needs testing)
+- Fixed issues with loading patches from patch bundles on the discovery
+- Fixed an issue where saved app entries would be duplicated when installing a entry marked as `Saved`
+- Fixed issues with loading metadata for certain APKs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/216
+- Fixed missing-split install failures when patching apps that are installed as split APKs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/217
+- Fixed issues with memeory on Android 10 and lower devices (needs testing) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/150
+- Fixed the `Patch confirmation` screen on older Android versions being covered by the three button navigation
+- Fixed issues with the patcher screen being "frozen" and showing no progress or anyting at all for a few seconds on older Android versions
+- Fixed UI lagging/buffering issues on the `Download APK file` step
+- Fixed issues where downloading certain APK files using the downloader plugins would cause an error https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/221
+- Fixed issues with the swiping to switch tabs guesture on the main screen and patch selection screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/204
+- Fixed an issue where exported keystores would have the `.json` file extension https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/238
+- Fixed several UI issues and visual bugs on the `Create custom YouTube icons & headers` tool screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/243
+- Fixed an issue where the `Tools` tab wasn't scrollable
+- Fixed the wrong UI being shown when switching tabs quickly on the main screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/245
+- Clarified the patch profile APK placeholder text from `No APK selected` to `No APK for this package` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/241
+- Fixed issues with the patching notification not appearing immediately when patching starts https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/256
+- Fixed an issue where the patching notification would disappear before patching was actually finished https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/257
+- Fixed an issue where using the Android Documents Provider to export apps from `Downloads` would cause a crash https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/258
+- Fixed an issue where the patcher process would die for some users https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/267
+- Fixed an issue where the ReVanced v22 patcher runtime wouldn't follow the experimental patcher setting
+- Fixed an issue where the patching process would die (needs testing) https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/267
+- Fixed issues where the patcher screen would not show the progress of patching accurately
+- Fixed issues where the ReVanced v22 runtime would patch incorrectly resulting in broken patched apps
+- Fixed an issue where if you patched an app with multiple patch bundles they sometimes would not be listed on the `App info` and `Applied patches` screens https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/262
+- Fixed an issue where the hold tap guesture would not work for some apps in the `Apps` tab
+- Fixed an issue where you couldn't select certain apps in the `Apps` tab on multiselection mode
+- Fixed dependent patching flow settings so they are disabled when inactive and automatically reset when their parent toggle is turned off
+- Fixed the `Export filename format` editor so tapping the text field no longer jumps the view to the end, and its helper content now scrolls separately without disrupting cursor placement https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/269
+- Fixed issues where there would be a pause between the patchers main categories/steps
+- Fixed more issues with patching on certain runtimes
+- Fixed issues with resuming manager updates with the in-app manager updater https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/277
+- Fixed manager update asset selection so the updater correctly resolves both ABI-specific APKs
+- Fixed issues with the `Always create a new saved app entry` setting https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
+- Fixed the patcher screens pause between `Load patches` and `Read APK file` sub-steps
+- Fixed issues with progress being reordered live during split APK merging for the AmpleReVanced runtime
+- Fixed the `Export filename format` dialog so the single-line text field slides with the cursor https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/276
+- Fixed issues with the fullscreen back gesture causing UI glitches and showing the wrong screens https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/280
+- Fixed an issue where the `AAPT2 selected` line in patcher logs would always be listed as `Unknown`
+- Fixed RGB inputs in the custom YouTube color picker so typed values are visible and use numeric keyboard input https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/261
+- Fixed previous patch bundle changelog history so it resets when a bundle source changes, fetches the correct number of older entries, and only shows historical changelog actions for bundle sources that actually supports them
+- Fixed an issue where the `Patching in progress` notification would clear early https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/257
+- Fixed an issue where the `Patchng in progress` notification would appear late https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/285
+- Fixed an issue where on fresh installs the user would be required to regenerate the keystore manually
+- Fixed background bundle and manager update checks being rescheduled on every app launch
+- Fixed websocket-triggered update checks so newer refreshes are not dropped behind older queued work
+- Fixed stale bundle update notifications not clearing when no updates remain
+- Fixed manager update notifications being suppressed after notification permission is turned off and back on
+- Clarified package selection text to use generic app package wording instead of APK-only wording for local files and patch profiles https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/264
+- Fixed (hopefully) the fullscreen back gesture showing the wrong screen preview so the back animation now matches the actual destination screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/280
+- Fixed an issue where the `Patching in progress` notification could remain visible after canceling patching https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/285`
+- Fixed patch profiles and last used patch selections/options from overriding each other
+ - Fixed saved patched app entries being overwritten, duplicated, or showing incorrect version/date metadata when repatching installed apps https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
+- Fixed stale merged APK output being offered after a later merge failure
+- Fixed installed split archive creation to fail cleanly when APK parts are missing
+- Fixed uninstall failures sometimes showing as Installation failed instead of Uninstall failed
+- Fixed the uninstall service error messaging
+- Fixed fullscreen back gestures showing the wrong screen preview on some devices and OEM ROMs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/280
+
+
+# CI
+
+- All prereleases/releases are published with a universal (all ABI) APK, and the ABI specific APKs. The in-app updater now automatically picks the APK that matches your ABI
+
+
 # v1.8.0 (2026-02-15)
 
 

@@ -94,6 +94,8 @@ class RootInstaller(
         }
     }
 
+    fun peekRootAccess(): Boolean? = Shell.isAppGrantedRoot() ?: cachedHasRoot
+
     fun isDeviceRooted() = System.getenv("PATH")?.split(":")?.any { path ->
         File(path, "su").canExecute()
     } ?: false

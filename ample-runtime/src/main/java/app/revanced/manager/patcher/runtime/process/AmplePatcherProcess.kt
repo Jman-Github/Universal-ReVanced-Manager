@@ -15,6 +15,7 @@ import app.revanced.manager.patcher.logger.LogLevel
 import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.ample.AmplePatchBundleLoader
 import app.revanced.manager.patcher.ample.AmpleSession
+import app.revanced.manager.patcher.runtime.FrameworkCacheResolver
 import app.revanced.manager.patcher.runStep
 import app.revanced.manager.patcher.split.ApkEditorMergeRuntime
 import app.revanced.manager.patcher.split.SplitApkPreparer
@@ -44,11 +45,13 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
 
     private val scope =
         CoroutineScope(Dispatchers.Default + CoroutineExceptionHandler { _, throwable ->
-            eventBinder?.let {
+            eventBinder?.let { binder ->
                 try {
-                    it.finished(throwable.stackTraceToString())
+                    if (!eventsEnabled.get()) return@let
+                    binder.finished(throwable.stackTraceToString())
                     return@CoroutineExceptionHandler
                 } catch (_: Exception) {
+                    eventsEnabled.set(false)
                 }
             }
 
@@ -72,6 +75,14 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
             if (!eventsEnabled.get()) return
             try {
                 events.log(level, message)
+            } catch (_: Throwable) {
+                eventsEnabled.set(false)
+            }
+        }
+        fun safeFinished(exceptionStackTrace: String?) {
+            if (!eventsEnabled.get()) return
+            try {
+                events.finished(exceptionStackTrace)
             } catch (_: Throwable) {
                 eventsEnabled.set(false)
             }
@@ -120,6 +131,7 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
             logger.info("Memory limit: ${Runtime.getRuntime().maxMemory() / (1024 * 1024)}MB")
             val aaptLogs = AaptLogCapture(onLine = ::handleDexCompileLine).apply { start() }
             val stdioCapture = StdIoCapture(onLine = ::handleDexCompileLine).apply { start() }
+            var exitCode = 0
 
             try {
                 val patchList = runStep(StepId.LoadPatches, ::safeEvent) {
@@ -148,36 +160,24 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
                 }
 
                 val input = File(parameters.inputFile)
-                val preparation = if (SplitApkPreparer.isSplitArchive(input)) {
-                    runStep(StepId.PrepareSplitApk, ::safeEvent) {
-                        SplitApkPreparer.prepareIfNeeded(
-                            input,
-                            File(parameters.cacheDir),
-                            logger,
-                            parameters.stripNativeLibs,
-                            parameters.skipUnneededSplits,
-                            onProgress = { message ->
-                                safeEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
-                            },
-                            onSubSteps = { subSteps ->
-                                safeEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
-                            }
-                        )
+                suspend fun prepareInput() = SplitApkPreparer.prepareIfNeeded(
+                    input,
+                    File(parameters.cacheDir),
+                    logger,
+                    parameters.stripNativeLibs,
+                    parameters.skipUnneededSplits,
+                    onProgress = { message ->
+                        safeEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
+                    },
+                    onSubSteps = { subSteps ->
+                        safeEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
                     }
-                } else {
-                    SplitApkPreparer.prepareIfNeeded(
-                        input,
-                        File(parameters.cacheDir),
-                        logger,
-                        parameters.stripNativeLibs,
-                        parameters.skipUnneededSplits,
-                        onProgress = { message ->
-                            safeEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
-                        },
-                        onSubSteps = { subSteps ->
-                            safeEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
-                        }
-                    )
+                )
+                var preparation: SplitApkPreparer.PreparationResult? = null
+                if (SplitApkPreparer.isSplitArchive(input)) {
+                    preparation = runStep(StepId.PrepareSplitApk, ::safeEvent) {
+                        prepareInput()
+                    }
                 }
 
                 try {
@@ -186,23 +186,34 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
                         .filter { it.patches.isNotEmpty() }
                         .map { File(it.bundlePath) }
                         .toList()
-                    val selectedAaptPath = AaptSelector.select(
-                        parameters.aaptPath,
-                        parameters.aaptFallbackPath,
-                        preparation.file,
-                        logger,
-                        additionalArchives = relatedBundleArchives
-                    )
-                    logAapt2Info(selectedAaptPath, logger)
                     val session = runStep(StepId.ReadAPK, ::safeEvent) {
+                        val preparedInput = preparation ?: prepareInput().also { preparation = it }
+                        val selectedAaptPath = AaptSelector.select(
+                            parameters.aaptPath,
+                            parameters.aaptFallbackPath,
+                            preparedInput.file,
+                            logger,
+                            additionalArchives = relatedBundleArchives
+                        )
+                        logAapt2Info(selectedAaptPath, logger)
+                        val frameworkDir = FrameworkCacheResolver.resolve(
+                            baseFrameworkDir = parameters.frameworkDir,
+                            runtimeTag = "ample",
+                            apkFile = preparedInput.file,
+                            aaptPath = selectedAaptPath,
+                            logger = logger
+                        )
                         AmpleSession(
                             cacheDir = parameters.cacheDir,
-                            frameworkDir = parameters.frameworkDir,
+                            frameworkDir = frameworkDir,
                             aaptPath = selectedAaptPath,
                             logger = logger,
-                            input = preparation.file,
+                            input = preparedInput.file,
                             onEvent = ::safeEvent,
                         )
+                    }
+                    val preparedInput = requireNotNull(preparation) {
+                        "APK preparation did not produce an input file."
                     }
 
                     session.use {
@@ -210,17 +221,15 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
                             File(parameters.outputFile),
                             patchList,
                             parameters.stripNativeLibs,
-                            preparation.merged
+                            preparedInput.merged
                         )
                     }
                 } finally {
-                    preparation.cleanup()
+                    preparation?.cleanup()
                 }
 
-                try {
-                    events.finished(null)
-                } catch (_: Throwable) {
-                }
+                safeFinished(null)
+                exitCode = 0
             } catch (throwable: Throwable) {
                 val extra = aaptLogs.dump()
                 val stack = throwable.stackTraceToString()
@@ -229,13 +238,15 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
                 } else {
                     stack
                 }
-                try {
-                    events.finished(report)
-                } catch (_: Throwable) {
-                }
+                safeFinished(report)
+                exitCode = 1
             } finally {
                 stdioCapture.close()
                 aaptLogs.stop()
+            }
+
+            if (!eventsEnabled.get()) {
+                exitProcess(exitCode)
             }
         }
     }
@@ -413,6 +424,7 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
             logger.warn("AAPT2 binary missing at $aaptPath")
             return
         }
+        logger.info("AAPT2 selected: ${aaptFile.name}")
         val digest = sha256(aaptFile)
         if (digest != null) {
             logger.info("AAPT2 sha256: $digest")

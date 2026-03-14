@@ -20,9 +20,14 @@ object MorpheRuntimeAssets {
             outputDir,
             "$OUTPUT_PREFIX-${BuildConfig.VERSION_CODE}-${BuildConfig.BUILD_ID}.apk"
         )
-        if (output.exists() && output.length() > 0L) {
+        val appUpdatedAt = appLastUpdateTime(appContext)
+        if (output.exists() && output.length() > 0L && output.lastModified() >= appUpdatedAt) {
             ensureReadOnly(output)
             return output
+        }
+        if (output.exists()) {
+            output.setWritable(true, true)
+            output.delete()
         }
 
         val temp = File(outputDir, "${output.name}.tmp")
@@ -38,6 +43,9 @@ object MorpheRuntimeAssets {
         if (!temp.renameTo(output)) {
             temp.delete()
             throw IOException("Failed to finalize Morphe runtime APK.")
+        }
+        runCatching {
+            output.setLastModified(maxOf(System.currentTimeMillis(), appUpdatedAt))
         }
 
         ensureReadOnly(output)
@@ -57,9 +65,13 @@ object MorpheRuntimeAssets {
         }
 
         val jar = File(runtimeApk.parentFile, "${runtimeApk.nameWithoutExtension}.jar")
-        if (jar.exists() && jar.length() > 0L) {
+        if (jar.exists() && jar.length() > 0L && jar.lastModified() >= runtimeApk.lastModified()) {
             ensureReadOnly(jar)
             return jar
+        }
+        if (jar.exists()) {
+            jar.setWritable(true, true)
+            jar.delete()
         }
 
         val temp = File(runtimeApk.parentFile, "${jar.name}.tmp")
@@ -81,10 +93,18 @@ object MorpheRuntimeAssets {
             temp.delete()
             throw IOException("Failed to finalize Morphe runtime dex payload.")
         }
+        runCatching {
+            jar.setLastModified(runtimeApk.lastModified())
+        }
 
         ensureReadOnly(jar)
         return jar
     }
+
+    private fun appLastUpdateTime(context: Context): Long = runCatching {
+        @Suppress("DEPRECATION")
+        context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime
+    }.getOrDefault(0L)
 
     private fun ensureReadOnly(file: File) {
         file.setReadable(true, false)

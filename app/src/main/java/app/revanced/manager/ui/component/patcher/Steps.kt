@@ -56,6 +56,7 @@ fun Steps(
     subStepsById: Map<StepId, List<StepDetail>> = emptyMap(),
     isExpanded: Boolean = false,
     autoExpandRunning: Boolean = true,
+    autoExpandRunningMainOnly: Boolean = false,
     onExpand: () -> Unit,
     onClick: () -> Unit,
     autoCollapseCompleted: Boolean = false
@@ -143,7 +144,7 @@ fun Steps(
                             subSteps = subSteps,
                             progress = progress,
                             progressText = progressText,
-                            autoExpandRunning = autoExpandRunning,
+                            autoExpandSubSteps = !autoExpandRunningMainOnly,
                             autoCollapseCompleted = autoCollapseCompleted,
                             isFirst = index == 0,
                             isLast = index == filteredSteps.lastIndex
@@ -171,19 +172,20 @@ private fun ExpandableSubStep(
     subSteps: List<StepDetail>,
     progress: Float?,
     progressText: String?,
-    autoExpandRunning: Boolean,
+    autoExpandSubSteps: Boolean,
     autoCollapseCompleted: Boolean,
     isFirst: Boolean,
     isLast: Boolean,
 ) {
     var expanded by rememberSaveable(step.id.toString()) { mutableStateOf(false) }
     var autoCollapsed by rememberSaveable("${step.id}-auto") { mutableStateOf(false) }
+    val completedSubSteps = subSteps.count { it.state == State.COMPLETED || it.skipped }
 
     LaunchedEffect(step.state) {
         if (step.state != State.COMPLETED) {
             autoCollapsed = false
         }
-        if ((autoExpandRunning && step.state == State.RUNNING) || step.state == State.FAILED) {
+        if (autoExpandSubSteps && (step.state == State.RUNNING || step.state == State.FAILED)) {
             expanded = true
         }
     }
@@ -217,6 +219,12 @@ private fun ExpandableSubStep(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, true),
+            )
+
+            Text(
+                text = "$completedSubSteps/${subSteps.size}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             if (progressText != null) {

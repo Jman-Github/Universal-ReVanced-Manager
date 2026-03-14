@@ -27,11 +27,15 @@ import com.github.pgreze.process.process
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.AtomicBoolean
 import java.io.File
 import org.koin.core.component.inject
 
@@ -41,9 +45,11 @@ import org.koin.core.component.inject
 class ProcessRuntime(private val context: Context) : Runtime(context) {
     private val pm: PM by inject()
     private val binderRef = AtomicReference<IPatcherProcess?>()
+    private val eventHandlerRef = AtomicReference<IPatcherEvents?>()
 
     override fun cancel() {
         runCatching { binderRef.getAndSet(null)?.exit() }
+        eventHandlerRef.set(null)
     }
 
     private suspend fun awaitBinderConnection(): IPatcherProcess {
@@ -83,17 +89,29 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
     ) = coroutineScope {
         currentCoroutineContext()[Job]?.invokeOnCompletion {
             runCatching { binderRef.get()?.exit() }
+            eventHandlerRef.set(null)
+        }
+        val logQueue = Channel<Pair<String, String>>(Channel.UNLIMITED)
+        val eventQueue = Channel<ProgressEvent>(Channel.UNLIMITED)
+        val logDrainJob = launch(Dispatchers.Default) {
+            for ((level, msg) in logQueue) {
+                runCatching { logger.log(enumValueOf(level), msg) }
+            }
+        }
+        val eventDrainJob = launch(Dispatchers.Default) {
+            for (event in eventQueue) {
+                runCatching { onEvent(event) }
+            }
         }
         // Get the location of our own Apk.
         val managerBaseApk = pm.getPackageInfo(context.packageName)!!.applicationInfo!!.sourceDir
 
         val requestedLimit = prefs.patcherProcessMemoryLimit.get()
         val aggressiveLimit = prefs.patcherProcessMemoryAggressive.get()
-        val runtimeLimit = if (aggressiveLimit) {
-            MemoryLimitConfig.maxLimitMb(context)
-        } else {
-            requestedLimit
-        }
+        val runtimeLimit = MemoryLimitConfig.clampLimitMb(
+            context,
+            if (aggressiveLimit) MemoryLimitConfig.maxLimitMb(context) else requestedLimit
+        )
         val limit = "${runtimeLimit}M"
         val usePropOverride = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
         val propOverride = if (usePropOverride) {
@@ -118,28 +136,63 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
 
         val appProcessBin = resolveAppProcessBin(context)
 
-        launch(Dispatchers.IO) {
-            val result = process(
-                appProcessBin,
-                "-Djava.io.tmpdir=$cacheDir", // The process will use /tmp if this isn't set, which is a problem because that folder is not accessible on Android.
-                "/", // The unused cmd-dir parameter
-                "--nice-name=${context.packageName}:Patcher",
-                PatcherProcess::class.java.name, // The class with the main function.
-                context.packageName,
-                env = env,
-                stdout = Redirect.CAPTURE,
-                stderr = Redirect.CAPTURE,
-            ) { line ->
-                // The process shouldn't generally be writing to stdio. Log any lines we get as warnings.
-                logger.warn("[STDIO]: $line")
+        val patching = CompletableDeferred<Unit>()
+        val finishedReported = AtomicBoolean(false)
+
+        fun completeSuccess() {
+            if (!patching.isCompleted) {
+                patching.complete(Unit)
             }
-
-            Log.d(tag, "Process finished with exit code ${result.resultCode}")
-
-            if (result.resultCode != 0) throw ProcessExitException(result.resultCode)
         }
 
-        val patching = CompletableDeferred<Unit>()
+        fun completeFailure(throwable: Throwable) {
+            if (!patching.isCompleted) {
+                patching.completeExceptionally(throwable)
+            }
+        }
+
+        launch(Dispatchers.IO) {
+            try {
+                val result = process(
+                    appProcessBin,
+                    "-Djava.io.tmpdir=$cacheDir", // The process will use /tmp if this isn't set, which is a problem because that folder is not accessible on Android.
+                    "/", // The unused cmd-dir parameter
+                    "--nice-name=${context.packageName}:Patcher",
+                    PatcherProcess::class.java.name, // The class with the main function.
+                    context.packageName,
+                    env = env,
+                    stdout = Redirect.CAPTURE,
+                    stderr = Redirect.CAPTURE,
+                ) { line ->
+                    // The process shouldn't generally be writing to stdio. Log any lines we get as warnings.
+                    logger.warn("[STDIO]: $line")
+                }
+
+                Log.d(tag, "Process finished with exit code ${result.resultCode}")
+
+                if (result.resultCode == 0) {
+                    if (finishedReported.get()) {
+                        completeSuccess()
+                    } else {
+                        withTimeoutOrNull(FINISHED_CALLBACK_GRACE_PERIOD_MS) {
+                            while (!finishedReported.get() && !patching.isCompleted) {
+                                delay(25)
+                            }
+                        }
+                        if (!patching.isCompleted) {
+                            logger.warn(
+                                "Patcher process exited without finished callback; using process exit fallback."
+                            )
+                            completeSuccess()
+                        }
+                    }
+                } else {
+                    completeFailure(ProcessExitException(result.resultCode))
+                }
+            } catch (throwable: Throwable) {
+                completeFailure(throwable)
+            }
+        }
 
         launch(Dispatchers.IO) {
             val binder = awaitBinderConnection()
@@ -151,21 +204,39 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
             if (binder.buildId() != BuildConfig.BUILD_ID) throw Exception("app_process is running outdated code. Clear the app cache or disable disable Android 11 deployment optimizations in your IDE")
 
             val eventHandler = object : IPatcherEvents.Stub() {
-                override fun log(level: String, msg: String) = logger.log(enumValueOf(level), msg)
+                override fun log(level: String, msg: String) {
+                    logQueue.trySend(level to msg)
+                }
 
                 override fun event(event: ProgressEventParcel?) {
-                    event?.let { onEvent(it.toEvent()) }
+                    event?.let { eventQueue.trySend(it.toEvent()) }
                 }
 
                 override fun finished(exceptionStackTrace: String?) {
+                    finishedReported.set(true)
                     runCatching { binder.exit() }
 
                     exceptionStackTrace?.let {
-                        patching.completeExceptionally(RemoteFailureException(it))
+                        completeFailure(RemoteFailureException(it))
                         return
                     }
-                    patching.complete(Unit)
+                    completeSuccess()
                 }
+            }
+            eventHandlerRef.set(eventHandler)
+
+            val activeSelectedPatches = selectedPatches.filterValues { it.isNotEmpty() }
+            val selectedBundleIds = activeSelectedPatches.keys
+            val bundlesByUid = bundles()
+            val selectedBundlesByUid = bundlesByUid.filterKeys { it in selectedBundleIds }
+            val staleBundleIds = selectedBundleIds - selectedBundlesByUid.keys
+            if (staleBundleIds.isNotEmpty()) {
+                logger.warn("Ignoring missing patch bundle IDs in selection: ${staleBundleIds.joinToString(",")}")
+            }
+            if (activeSelectedPatches.isNotEmpty() && selectedBundlesByUid.isEmpty()) {
+                throw IllegalArgumentException(
+                    "Selected patches are unavailable. Re-open patch selection and select patches again."
+                )
             }
 
             val parameters = Parameters(
@@ -176,10 +247,10 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
                 packageName = packageName,
                 inputFile = inputFile,
                 outputFile = outputFile,
-                configurations = bundles().map { (uid, bundle) ->
+                configurations = selectedBundlesByUid.map { (uid, bundle) ->
                     PatchConfiguration(
                         bundle,
-                        selectedPatches[uid].orEmpty(),
+                        activeSelectedPatches[uid].orEmpty(),
                         options[uid].orEmpty()
                     )
                 },
@@ -191,7 +262,20 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
         }
 
         // Wait until patching finishes.
-        patching.await()
+        try {
+            patching.await()
+        } finally {
+            eventHandlerRef.set(null)
+            logQueue.close()
+            eventQueue.close()
+            withTimeoutOrNull(2_000L) {
+                logDrainJob.join()
+                eventDrainJob.join()
+            } ?: run {
+                logDrainJob.cancel()
+                eventDrainJob.cancel()
+            }
+        }
     }
 
     companion object : LibraryResolver() {
@@ -203,6 +287,7 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
         const val CONNECT_TO_APP_ACTION = "CONNECT_TO_APP_ACTION"
         const val INTENT_BUNDLE_KEY = "BUNDLE"
         const val BUNDLE_BINDER_KEY = "BINDER"
+        private const val FINISHED_CALLBACK_GRACE_PERIOD_MS = 1_500L
 
         private fun resolvePropOverride(context: Context) = findLibrary(context, "prop_override")
         private fun resolveAppProcessBin(context: Context): String {

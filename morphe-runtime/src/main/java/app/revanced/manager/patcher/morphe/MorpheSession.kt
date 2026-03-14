@@ -1,8 +1,8 @@
 package app.revanced.manager.patcher.morphe
 
-import app.morphe.library.ApkUtils.applyTo
 import app.morphe.patcher.Patcher
 import app.morphe.patcher.PatcherConfig
+import app.morphe.patcher.apk.ApkUtils.applyTo
 import app.morphe.patcher.patch.Patch
 import app.morphe.patcher.patch.PatchResult
 import app.revanced.manager.patcher.ProgressEvent
@@ -41,12 +41,12 @@ class MorpheSession(
     private val logger: Logger,
     private val input: File,
     private val onEvent: (ProgressEvent) -> Unit,
+    private val checkCancelled: () -> Unit = {},
 ) : Closeable {
     private val tempDir = File(cacheDir).resolve("patcher").also { it.mkdirs() }
     private val frameworkDirFile = File(frameworkDir).also { it.mkdirs() }
     private val resolvedAaptPath = aaptPath
     private var patcher = createPatcher()
-    private var resourcesDecoded = false
 
     private fun createPatcher() = Patcher(
         PatcherConfig(
@@ -68,12 +68,14 @@ class MorpheSession(
         var nextIndex = 0
 
         fun startPatch(index: Int) {
+            checkCancelled()
             if (!started.add(index)) return
             onEvent(ProgressEvent.Started(StepId.ExecutePatch(index)))
         }
 
         startPatch(0)
         this().collect { (patch, exception) ->
+            checkCancelled()
             val index = indexByPatch[patch] ?: return@collect
 
             if (exception != null) {
@@ -115,13 +117,13 @@ class MorpheSession(
     }
 
     private suspend fun executePatchesOnce(orderedPatches: MorphePatchList) {
+        checkCancelled()
         with(patcher) {
             if (orderedPatches.isNotEmpty()) {
                 onEvent(ProgressEvent.Started(StepId.ExecutePatch(0)))
             }
             logger.info("Merging integrations")
             this += LinkedHashSet(orderedPatches)
-            decodeResourcesIfNeeded()
 
             logger.info("Applying patches...")
             applyPatchesVerbose(
@@ -133,17 +135,7 @@ class MorpheSession(
 
     private suspend fun executePatchesWithFrameworkRecovery(orderedPatches: MorphePatchList) {
         ensureFrameworkCacheIsValid()
-        try {
-            executePatchesOnce(orderedPatches)
-        } catch (error: Throwable) {
-            if (!isFrameworkCacheReadFailure(error)) throw error
-
-            logger.warn("Framework cache read failed. Clearing framework cache and retrying once.")
-            clearFrameworkCache("retry after framework read failure")
-            resetPatcher()
-            ensureFrameworkCacheIsValid()
-            executePatchesOnce(orderedPatches)
-        }
+        executePatchesOnce(orderedPatches)
     }
 
     private fun ensureFrameworkCacheIsValid() {
@@ -191,42 +183,16 @@ class MorpheSession(
         }
     }
 
-    private fun resetPatcher() {
-        runCatching { patcher.close() }
-        patcher = createPatcher()
-        resourcesDecoded = false
-    }
-
-    private fun isFrameworkCacheReadFailure(error: Throwable): Boolean {
-        val detail = buildString {
-            generateSequence(error) { it.cause }.forEach { cause ->
-                append(cause.message.orEmpty())
-                append('\n')
-                append(cause.stackTraceToString())
-                append('\n')
-            }
-        }
-
-        val hasFrameworkRef =
-            detail.contains("/framework/1.apk", ignoreCase = true) ||
-                detail.contains("\\framework\\1.apk", ignoreCase = true)
-        if (!hasFrameworkRef) return false
-
-        val hasKnownFailure =
-            detail.contains("Could not load resources.arsc", ignoreCase = true) ||
-                detail.contains("zip file is empty", ignoreCase = true)
-        return hasKnownFailure
-    }
-
     suspend fun run(
         output: File,
         selectedPatches: MorphePatchList,
         stripNativeLibs: Boolean,
         inputWasSplit: Boolean
     ) {
+        checkCancelled()
         val shouldStripNativeLibs = stripNativeLibs && !inputWasSplit
         val orderedPatches = selectedPatches.sortedBy { it.name }
-        runStep(StepId.ExecutePatches, onEvent) {
+        runStep(StepId.ExecutePatches, onEvent, checkCancelled) {
             java.util.logging.Logger.getLogger("").apply {
                 handlers.forEach {
                     it.close()
@@ -238,6 +204,7 @@ class MorpheSession(
             executePatchesWithFrameworkRecovery(orderedPatches)
         }
 
+        checkCancelled()
         onEvent(
             ProgressEvent.Progress(
                 stepId = StepId.WriteAPK,
@@ -245,81 +212,94 @@ class MorpheSession(
             )
         )
 
-        runStep(StepId.WriteAPK, onEvent) {
-            onEvent(
-                ProgressEvent.Progress(
-                    stepId = StepId.WriteAPK,
-                    message = "Copying base APK"
-                )
-            )
-            val initialDexNames = listDexNames(input)
-            onEvent(
-                ProgressEvent.Progress(
-                    stepId = StepId.WriteAPK,
-                    subSteps = buildWriteApkSubSteps(
-                        initialDexNames.map { "Compiling $it" },
-                        shouldStripNativeLibs
-                    )
-                )
-            )
-            logger.info("Writing patched files...")
-            XmlSurrogateSanitizer.sanitize(tempDir.resolve("apk"), logger)
-            ensureMissingDrawables()
-            validateMissingResourceReferences()
-            val result = patcher.get()
-
-            val patched = tempDir.resolve("result.apk")
-            runInterruptible(Dispatchers.IO) {
-                fastCopy(input, patched)
-            }
-            onEvent(
-                ProgressEvent.Progress(
-                    stepId = StepId.WriteAPK,
-                    message = "Applying patched changes"
-                )
-            )
-            result.applyTo(patched)
-
-            logger.info("Patched apk saved to $patched")
-
-            withContext(Dispatchers.IO) {
+        suspend fun writePatchedApkStep() {
+            runStep(StepId.WriteAPK, onEvent, checkCancelled) {
+                checkCancelled()
                 onEvent(
                     ProgressEvent.Progress(
                         stepId = StepId.WriteAPK,
-                        message = "Writing output APK"
+                        message = "Copying base APK"
                     )
                 )
-                try {
-                    Files.move(
-                        patched.toPath(),
-                        output.toPath(),
-                        StandardCopyOption.REPLACE_EXISTING,
-                        StandardCopyOption.ATOMIC_MOVE
+                val initialDexNames = listDexNames(input)
+                onEvent(
+                    ProgressEvent.Progress(
+                        stepId = StepId.WriteAPK,
+                        subSteps = buildWriteApkSubSteps(
+                            initialDexNames.map { "Compiling $it" },
+                            shouldStripNativeLibs
+                        )
                     )
-                } catch (_: Exception) {
-                    Files.move(
-                        patched.toPath(),
-                        output.toPath(),
-                        StandardCopyOption.REPLACE_EXISTING
+                )
+                logger.info("Writing patched files...")
+                XmlSurrogateSanitizer.sanitize(tempDir.resolve("apk"), logger)
+                ensureMissingDrawables()
+                validateMissingResourceReferences()
+                checkCancelled()
+                val result = patcher.get()
+
+                val patched = tempDir.resolve("result.apk")
+                runInterruptible(Dispatchers.IO) {
+                    fastCopy(input, patched)
+                }
+                checkCancelled()
+                onEvent(
+                    ProgressEvent.Progress(
+                        stepId = StepId.WriteAPK,
+                        message = "Applying patched changes"
                     )
+                )
+                runInterruptible(Dispatchers.IO) {
+                    result.applyTo(patched)
+                }
+                checkCancelled()
+
+                logger.info("Patched apk saved to $patched")
+
+                withContext(Dispatchers.IO) {
+                    checkCancelled()
+                    onEvent(
+                        ProgressEvent.Progress(
+                            stepId = StepId.WriteAPK,
+                            message = "Writing output APK"
+                        )
+                    )
+                    try {
+                        Files.move(
+                            patched.toPath(),
+                            output.toPath(),
+                            StandardCopyOption.REPLACE_EXISTING,
+                            StandardCopyOption.ATOMIC_MOVE
+                        )
+                    } catch (_: Exception) {
+                        Files.move(
+                            patched.toPath(),
+                            output.toPath(),
+                            StandardCopyOption.REPLACE_EXISTING
+                        )
+                    }
+                }
+                onEvent(
+                    ProgressEvent.Progress(
+                        stepId = StepId.WriteAPK,
+                        message = "Finalizing output"
+                    )
+                )
+                if (shouldStripNativeLibs) {
+                    checkCancelled()
+                    onEvent(
+                        ProgressEvent.Progress(
+                            stepId = StepId.WriteAPK,
+                            message = "Stripping native libraries"
+                        )
+                    )
+                    NativeLibStripper.strip(output)
+                    checkCancelled()
                 }
             }
-            onEvent(
-                ProgressEvent.Progress(
-                    stepId = StepId.WriteAPK,
-                    message = "Finalizing output"
-                )
-            )
-            if (shouldStripNativeLibs) {
-                onEvent(
-                    ProgressEvent.Progress(
-                        stepId = StepId.WriteAPK,
-                        message = "Stripping native libraries"
-                    )
-                )
-                NativeLibStripper.strip(output)
-            }
         }
+
+        writePatchedApkStep()
     }
 
     private fun buildWriteApkSubSteps(
@@ -610,32 +590,6 @@ class MorpheSession(
     override fun close() {
         tempDir.deleteRecursively()
         patcher.close()
-    }
-
-    private fun decodeResourcesIfNeeded() {
-        if (resourcesDecoded) return
-        runCatching {
-            val configField = patcher.javaClass.getDeclaredField("config").apply {
-                isAccessible = true
-            }
-            val config = configField.get(patcher) as? PatcherConfig ?: return
-            val resourceMode = config.javaClass
-                .getMethod("getResourceMode\$morphe_patcher")
-                .invoke(config) ?: return
-            if (resourceMode.toString() == "NONE") return
-
-            val resourceContext = patcher.context.javaClass
-                .getMethod("getResourceContext\$morphe_patcher")
-                .invoke(patcher.context)
-            val decodeMethod = resourceContext.javaClass.getMethod(
-                "decodeResources\$morphe_patcher",
-                resourceMode.javaClass
-            )
-            decodeMethod.invoke(resourceContext, resourceMode)
-            resourcesDecoded = true
-        }.onFailure { error ->
-            logger.warn("Failed to decode Morphe resources: ${error.message}")
-        }
     }
 
     companion object {

@@ -132,16 +132,32 @@ fun KeystoreConverterScreen(onBackClick: () -> Unit) {
     }
 
     val openDocumentLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
+        ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
+        val displayName = runCatching {
+            context.contentResolver.query(
+                uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (index != -1 && cursor.moveToFirst()) cursor.getString(index) else null
+            }
+        }.getOrNull() ?: uri.lastPathSegment
+        if (!isKeystoreFileName(displayName)) {
+            errorText = context.getString(R.string.selected_file_not_supported_keystore)
+            return@rememberLauncherForActivityResult
+        }
         runCatching {
             context.contentResolver.takePersistableUriPermission(
                 uri,
                 Intent.FLAG_GRANT_READ_URI_PERMISSION
             )
         }
-        setInput(uri, null)
+        setInput(uri, displayName)
     }
 
     val saveDocumentLauncher = rememberLauncherForActivityResult(
@@ -173,7 +189,7 @@ fun KeystoreConverterScreen(onBackClick: () -> Unit) {
                 permissionLauncher.launch(permissionName)
             }
         } else {
-            openDocumentLauncher.launch(arrayOf("*/*"))
+            openDocumentLauncher.launch("application/octet-stream")
         }
     }
 
@@ -461,12 +477,16 @@ private enum class KeystorePermissionRequest {
 }
 
 private fun isKeystoreFile(path: Path): Boolean {
-    val name = path.fileName?.toString()?.lowercase().orEmpty()
-    return name.endsWith(".jks") ||
-        name.endsWith(".keystore") ||
-        name.endsWith(".p12") ||
-        name.endsWith(".pfx") ||
-        name.endsWith(".bks")
+    return isKeystoreFileName(path.fileName?.toString())
+}
+
+private fun isKeystoreFileName(name: String?): Boolean {
+    val normalized = name?.lowercase().orEmpty()
+    return normalized.endsWith(".jks") ||
+        normalized.endsWith(".keystore") ||
+        normalized.endsWith(".p12") ||
+        normalized.endsWith(".pfx") ||
+        normalized.endsWith(".bks")
 }
 
 private fun openSourceInputStream(context: android.content.Context, source: String): InputStream {
