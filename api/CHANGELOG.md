@@ -137,6 +137,7 @@
 - Fixed installed split archive creation to fail cleanly when APK parts are missing
 - Fixed uninstall failures sometimes showing as Installation failed instead of Uninstall failed
 - Fixed the uninstall service error messaging
+- Fixed fullscreen back gestures showing the wrong screen preview on some devices and OEM ROMs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/280
 
 
 # CI

@@ -367,8 +367,7 @@ private fun ReVancedManager(
             else slideOutHorizontally(targetOffsetX = { -it / 3 })
         },
         popEnterTransition = {
-            if (disableScreenSlideTransitions) EnterTransition.None
-            else slideInHorizontally(initialOffsetX = { -it / 3 })
+            EnterTransition.None
         },
         popExitTransition = {
             if (disableScreenSlideTransitions) ExitTransition.None

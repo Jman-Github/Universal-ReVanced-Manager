@@ -1,3 +1,15 @@
+# v1.8.1-dev.09 (TBD)
+
+
+# Features
+
+
+
+# Bug fixes
+
+- Fixed fullscreen back gestures showing the wrong screen preview on some devices and OEM ROMs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/280
+
+
 # v1.8.1-dev.08 (2026-03-12)
 
 
