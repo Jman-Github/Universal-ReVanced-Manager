@@ -1123,6 +1123,14 @@ class InstalledAppInfoViewModel(
 
     private suspend fun refreshAppState(app: InstalledApp) {
         val devicePackageName = resolveDevicePackageName(app)
+        val savedInfo = withContext(Dispatchers.IO) {
+            savedApkFile(app)?.let(pm::getPackageInfo)
+        }
+        val displayInfo = if (app.installType == InstallType.SAVED) {
+            savedInfo
+        } else {
+            null
+        }
         val installedInfo = withContext(Dispatchers.IO) {
             pm.getPackageInfo(devicePackageName)
         }
@@ -1130,12 +1138,10 @@ class InstalledAppInfoViewModel(
 
         if (installedInfo != null) {
             isInstalledOnDevice = true
-            appInfo = installedInfo
+            appInfo = displayInfo ?: installedInfo
         } else {
             isInstalledOnDevice = false
-            appInfo = withContext(Dispatchers.IO) {
-                savedApkFile(app)?.let(pm::getPackageInfo)
-            }
+            appInfo = savedInfo
         }
     }
 

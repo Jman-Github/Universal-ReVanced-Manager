@@ -1180,24 +1180,19 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             savedEntriesForPackage.forEach { savedApp ->
                 savedEntryIdentities[savedApp.currentPackageName] = savedEntryIdentity(savedApp)
             }
-            val matchingSavedEntry = if (disableSavedAppOverwrite) {
-                null
-            } else {
-                savedEntriesForPackage.firstOrNull { savedApp ->
-                    savedEntryIdentities[savedApp.currentPackageName] == newVariantIdentity
-                }
+            val matchingSavedEntries = savedEntriesForPackage.filter { savedApp ->
+                savedEntryIdentities[savedApp.currentPackageName] == newVariantIdentity
             }
-            val preserveSavedEntry =
-                !disableSavedAppOverwrite && savedAppsEnabled && (
-                    latestInstalledApp?.installType == InstallType.SAVED ||
-                        matchingSavedEntry != null
-                    )
-            val persistedInstallType = if (preserveSavedEntry) InstallType.SAVED else installType
+            val matchingSavedEntry = if (disableSavedAppOverwrite) null else matchingSavedEntries.firstOrNull()
+            val persistedInstallType = installType
             val existingFinalPackageEntry = installedAppRepository.get(finalPackageName)
             val existingInstalledEntry = existingFinalPackageEntry?.takeIf {
                 it.installType != InstallType.SAVED
             }
-            val effectiveShouldSaveForLater = shouldSaveForLater || preserveSavedEntry
+            val existingSavedEntryAtBaseKey = existingFinalPackageEntry?.takeIf {
+                it.installType == InstallType.SAVED
+            }
+            val effectiveShouldSaveForLater = shouldSaveForLater
             val existingInstalledIdentity = existingInstalledEntry?.let { savedEntryIdentity(it) }
             if (
                 disableSavedAppOverwrite &&
@@ -1211,6 +1206,23 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 preserveHistoricalInstalledEntry(
                     sourceApp = existingInstalledEntry,
                     targetPackageName = buildSavedAppEntryKey(finalPackageName, existingInstalledIdentity)
+                )
+            }
+            val existingSavedEntryIdentity = existingSavedEntryAtBaseKey?.let { savedEntryIdentity(it) }
+            if (
+                disableSavedAppOverwrite &&
+                effectiveShouldSaveForLater &&
+                persistedInstallType != InstallType.SAVED &&
+                existingSavedEntryAtBaseKey != null &&
+                existingSavedEntryIdentity != null &&
+                existingSavedEntryIdentity != newVariantIdentity &&
+                existingSavedEntryIdentity !in savedEntryIdentities
+                    .filterKeys { it != existingSavedEntryAtBaseKey.currentPackageName }
+                    .values
+            ) {
+                preserveHistoricalInstalledEntry(
+                    sourceApp = existingSavedEntryAtBaseKey,
+                    targetPackageName = buildSavedAppEntryKey(finalPackageName, existingSavedEntryIdentity)
                 )
             }
             val persistedPackageName = if (persistedInstallType == InstallType.SAVED) {
@@ -1286,6 +1298,19 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     selectionPayload,
                     resetCreatedAt = true
                 )
+            }
+            if (persistedInstallType != InstallType.SAVED) {
+                if (!disableSavedAppOverwrite) {
+                    matchingSavedEntries
+                        .filter { it.currentPackageName != finalPackageName }
+                        .forEach { savedEntry ->
+                            installedAppRepository.delete(savedEntry)
+                            fs.getPatchedAppFile(
+                                savedEntry.currentPackageName,
+                                savedEntry.version
+                            ).takeIf { it.exists() }?.delete()
+                        }
+                }
             }
 
             if (finalPackageName != packageName) {

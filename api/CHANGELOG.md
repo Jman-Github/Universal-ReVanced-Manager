@@ -138,6 +138,7 @@
 - Fixed uninstall failures sometimes showing as Installation failed instead of Uninstall failed
 - Fixed the uninstall service error messaging
 - Fixed fullscreen back gestures showing the wrong screen preview on some devices and OEM ROMs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/280
+- Fixed patched app installs sometimes creating duplicate `Saved` and installed entries in the `Apps` tab https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
 
 
 # CI

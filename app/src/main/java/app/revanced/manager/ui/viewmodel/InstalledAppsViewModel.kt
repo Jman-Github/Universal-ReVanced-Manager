@@ -23,12 +23,12 @@ import app.revanced.manager.domain.repository.InstalledAppRepository
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.domain.repository.remapAndExtractSelection
 import app.revanced.manager.domain.repository.toSignatureMap
-import app.revanced.manager.util.FilenameUtils
 import app.revanced.manager.util.PM
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.mutableStateSetOf
 import app.revanced.manager.util.PatchedAppExportData
 import app.revanced.manager.util.ExportNameFormatter
+import app.revanced.manager.util.buildSavedAppVariantIdentity
 import app.revanced.manager.util.mergeWith
 import app.revanced.manager.util.savedAppBasePackage
 import app.revanced.manager.patcher.patch.PatchBundleInfo
@@ -65,6 +65,7 @@ class InstalledAppsViewModel(
     val mountedOnDeviceMap = mutableStateMapOf<String, Boolean>()
     val savedCopyMap = mutableStateMapOf<String, Boolean>()
     private val devicePackageLookupMap = mutableStateMapOf<String, String>()
+    private var normalizingSavedEntries = false
     val selectedApps = mutableStateSetOf<String>()
     val missingPackages = mutableStateSetOf<String>()
     val bundleSummaries = mutableStateMapOf<String, List<AppBundleSummary>>()
@@ -73,6 +74,9 @@ class InstalledAppsViewModel(
     init {
         viewModelScope.launch {
             apps.collect { installedApps ->
+                if (normalizeDuplicateSavedEntries(installedApps)) {
+                    return@collect
+                }
                 val seenPackages = mutableSetOf<String>()
                 val newMissing = mutableSetOf<String>()
 
@@ -420,39 +424,11 @@ class InstalledAppsViewModel(
 
             when (installedApp.installType) {
                 InstallType.SAVED -> {
-                    val expectedSavedFile = filesystem.getPatchedAppFile(packageName, installedApp.version)
-                    val resolvedFile = if (expectedSavedFile.exists()) {
-                        expectedSavedFile
-                    } else {
-                        filesystem.findPatchedAppFile(packageName)
-                            ?: filesystem.findPatchedAppFile(installedApp.originalPackageName)
-                    }
+                    val resolvedFile = savedApkFile(installedApp)
                     if (resolvedFile == null) {
                         return@withContext null
                     }
-                    val resolvedName = resolvedFile.name.removeSuffix(".apk")
-                    val recoveredVersion = listOf(packageName, installedApp.originalPackageName)
-                        .map(FilenameUtils::sanitize)
-                        .firstNotNullOfOrNull { safePackage ->
-                            resolvedName.takeIf { it.startsWith("${safePackage}_") }
-                                ?.removePrefix("${safePackage}_")
-                                ?.takeIf { it.isNotBlank() }
-                        }
-                        ?: installedApp.version
-                    val canonicalSavedFile = filesystem.getPatchedAppFile(packageName, recoveredVersion)
-                    if (resolvedFile != canonicalSavedFile) {
-                        if (!canonicalSavedFile.exists()) {
-                            runCatching {
-                                canonicalSavedFile.parentFile?.mkdirs()
-                                resolvedFile.copyTo(canonicalSavedFile, overwrite = false)
-                            }
-                        }
-                        if (canonicalSavedFile.exists()) {
-                            resolvedFile.delete()
-                        }
-                    }
-                    val packageInfoSource = canonicalSavedFile.takeIf { it.exists() } ?: resolvedFile
-                    val archivePackageInfo = pm.getPackageInfo(packageInfoSource)
+                    val archivePackageInfo = pm.getPackageInfo(resolvedFile)
                     val devicePackageName = archivePackageInfo?.packageName
                         ?.takeIf { it.isNotBlank() }
                         ?: installedApp.originalPackageName.takeIf { it.isNotBlank() }
@@ -461,22 +437,20 @@ class InstalledAppsViewModel(
 
                     val installedInfo = pm.getPackageInfo(devicePackageName)
                     installedOnDeviceMap[packageName] = installedInfo != null
-                    if (installedInfo != null) {
-                        return@withContext installedInfo
-                    }
-                    if (recoveredVersion != installedApp.version) {
+                    val archiveVersion = archivePackageInfo?.versionName?.takeIf { it.isNotBlank() }
+                    if (archiveVersion != null && archiveVersion != installedApp.version) {
                         val selection = installedAppsRepository.getAppliedPatches(packageName)
                         installedAppsRepository.addOrUpdate(
                             currentPackageName = installedApp.currentPackageName,
                             originalPackageName = installedApp.originalPackageName,
-                            version = recoveredVersion,
+                            version = archiveVersion,
                             installType = installedApp.installType,
                             patchSelection = selection,
                             selectionPayload = installedApp.selectionPayload,
                             createdAtOverride = installedApp.createdAt
                         )
                     }
-                    archivePackageInfo ?: pm.getPackageInfo(packageInfoSource)
+                    archivePackageInfo ?: installedInfo
                 }
 
                 else -> {
@@ -595,6 +569,63 @@ class InstalledAppsViewModel(
 
     private suspend fun loadAppliedPatches(packageName: String): PatchSelection =
         withContext(Dispatchers.IO) { installedAppsRepository.getAppliedPatches(packageName) }
+
+    private suspend fun normalizeDuplicateSavedEntries(installedApps: List<InstalledApp>): Boolean {
+        if (normalizingSavedEntries || installedApps.isEmpty()) return false
+        val duplicateSavedEntries = withContext(Dispatchers.IO) {
+            val duplicates = mutableListOf<InstalledApp>()
+            installedApps
+                .groupBy(::appsBasePackage)
+                .values
+                .forEach { entries ->
+                    val installedEntries = entries.filter { it.installType != InstallType.SAVED }
+                    if (installedEntries.isEmpty()) return@forEach
+                    val installedIdentities = installedEntries.mapTo(mutableSetOf()) { app ->
+                        savedEntryIdentity(app)
+                    }
+                    entries
+                        .filter { it.installType == InstallType.SAVED }
+                        .forEach { savedEntry ->
+                            if (savedEntryIdentity(savedEntry) in installedIdentities) {
+                                duplicates += savedEntry
+                            }
+                        }
+                }
+            duplicates
+        }
+        if (duplicateSavedEntries.isEmpty()) return false
+
+        normalizingSavedEntries = true
+        try {
+            withContext(Dispatchers.IO) {
+                duplicateSavedEntries.forEach { savedEntry ->
+                    installedAppsRepository.delete(savedEntry)
+                    filesystem.getPatchedAppFile(
+                        savedEntry.currentPackageName,
+                        savedEntry.version
+                    ).takeIf { it.exists() }?.delete()
+                }
+            }
+        } finally {
+            normalizingSavedEntries = false
+        }
+        return true
+    }
+
+    private suspend fun savedEntryIdentity(app: InstalledApp): String =
+        buildSavedAppVariantIdentity(
+            appVersion = app.version,
+            selectionPayload = app.selectionPayload,
+            patchSelection = loadAppliedPatches(app.currentPackageName)
+        )
+
+    private fun appsBasePackage(app: InstalledApp): String =
+        if (app.installType == InstallType.SAVED) {
+            app.originalPackageName.takeIf { it.isNotBlank() }
+                ?: savedAppBasePackage(app.currentPackageName)
+        } else {
+            app.currentPackageName
+        }
 
     private fun buildBundleSummaries(
         app: InstalledApp,
