@@ -48,6 +48,7 @@ import app.revanced.manager.ui.component.GroupHeader
 import app.revanced.manager.ui.component.SettingsSectionIcons
 import app.revanced.manager.ui.component.settings.BooleanItem
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsCard
+import app.revanced.manager.ui.component.settings.ExpressiveSettingsConfigurableItem
 import app.revanced.manager.ui.component.settings.IntegerItem
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsDivider
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsItem
@@ -415,14 +416,20 @@ fun UpdatesSettingsScreen(
                     ),
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
-                    ExpressiveSettingsItem(
+                    ExpressiveSettingsConfigurableItem(
                         modifier = highlightModifier,
                         headlineContent = stringResource(R.string.bundle_update_delivery_mode),
                         supportingContent = stringResource(
                             R.string.bundle_update_delivery_mode_description_with_current,
                             stringResource(deliveryMode.displayName)
                         ),
-                        onClick = { showDeliveryModeDialog = true }
+                        secondaryActionLabel = stringResource(R.string.reset),
+                        onSecondaryAction = {
+                            vm.updateBundleUpdateDeliveryMode(vm.bundleUpdateDeliveryMode.default)
+                        },
+                        secondaryActionEnabled = deliveryMode != vm.bundleUpdateDeliveryMode.default,
+                        primaryActionLabel = stringResource(R.string.edit),
+                        onPrimaryAction = { showDeliveryModeDialog = true }
                     )
                 }
             }
@@ -591,11 +598,20 @@ fun UpdatesSettingsScreen(
                     ),
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
-                    ExpressiveSettingsItem(
+                    ExpressiveSettingsConfigurableItem(
                         modifier = highlightModifier,
                         headlineContent = stringResource(R.string.background_manager_update),
                         supportingContent = stringResource(R.string.background_manager_update_description),
-                        onClick = { showBackgroundManagerUpdateDialog = true }
+                        secondaryActionLabel = stringResource(R.string.reset),
+                        onSecondaryAction = {
+                            vm.updateBackgroundManagerUpdateTime(
+                                vm.backgroundManagerUpdateInterval.default
+                            )
+                        },
+                        secondaryActionEnabled =
+                            managerInterval != vm.backgroundManagerUpdateInterval.default,
+                        primaryActionLabel = stringResource(R.string.settings),
+                        onPrimaryAction = { showBackgroundManagerUpdateDialog = true }
                     )
                 }
                 ExpressiveSettingsDivider()
@@ -608,11 +624,20 @@ fun UpdatesSettingsScreen(
                     ),
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
-                    ExpressiveSettingsItem(
+                    ExpressiveSettingsConfigurableItem(
                         modifier = highlightModifier,
                         headlineContent = stringResource(R.string.background_bundle_update),
                         supportingContent = stringResource(R.string.background_bundle_update_description),
-                        onClick = { showBackgroundUpdateDialog = true }
+                        secondaryActionLabel = stringResource(R.string.reset),
+                        onSecondaryAction = {
+                            vm.updateBackgroundBundleUpdateTime(
+                                vm.backgroundBundleUpdateInterval.default
+                            )
+                        },
+                        secondaryActionEnabled =
+                            backgroundInterval != vm.backgroundBundleUpdateInterval.default,
+                        primaryActionLabel = stringResource(R.string.settings),
+                        onPrimaryAction = { showBackgroundUpdateDialog = true }
                     )
                 }
             }

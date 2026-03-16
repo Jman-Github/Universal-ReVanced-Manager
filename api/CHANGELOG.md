@@ -73,6 +73,8 @@
 - Added a split selection step before merging so specific modules can be included or excluded https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/197
 - mproved split merge loading, cancellation, and progress handling
 - Added icons to settings subsections and refined the settings card styling for a cleaner, flatter look
+- Improved the main Settings screen layout, pinned the About card to the bottom when space allows, and added button-only `Reset`/`Edit` or `Reset`/`Settings` controls for configurable settings
+- Improved the dashboard header and main tab labels on smaller screens by keeping the title on one scrollable line and widening the selected tab highlight
 
 
 # Bug fixes

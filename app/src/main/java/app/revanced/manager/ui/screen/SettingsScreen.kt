@@ -1,11 +1,18 @@
 package app.revanced.manager.ui.screen
 
 import androidx.annotation.StringRes
+import androidx.appcompat.content.res.AppCompatResources
+import app.universal.revanced.manager.BuildConfig
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -23,9 +30,13 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.SubcomposeLayout
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
+import app.revanced.manager.ui.component.AppIcon
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.ColumnWithScrollbar
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsCard
@@ -53,6 +64,10 @@ private data class SearchEntry(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> Unit) {
+    val context = LocalContext.current
+    val appIcon = remember {
+        AppCompatResources.getDrawable(context, R.mipmap.ic_launcher)
+    }
     val settingsSections = remember {
         listOf(
             Section(
@@ -330,6 +345,8 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             searchText.contains(normalizedQuery)
         }
     }
+    val aboutSection = filteredSections.firstOrNull { it.destination == Settings.About }
+    val mainSections = filteredSections.filterNot { it.destination == Settings.About }
 
     Scaffold(
         topBar = {
@@ -339,11 +356,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             )
         }
     ) { paddingValues ->
-        ColumnWithScrollbar(
-            modifier = Modifier
-                .padding(paddingValues)
-                .fillMaxSize()
-        ) {
+        val searchCard: @Composable () -> Unit = {
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
@@ -372,84 +385,182 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                     )
                 )
             }
-            if (normalizedQuery.isNotBlank() && filteredEntries.isEmpty()) {
-                Text(
-                    text = stringResource(R.string.settings_search_no_results),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
-                )
-            } else if (normalizedQuery.isNotBlank()) {
-                val highlightStyle = SpanStyle(
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold
-                )
+        }
+        val mainSectionsCard: @Composable () -> Unit = {
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+            ) {
+                mainSections.forEachIndexed { index, (name, description, icon, destination) ->
+                    ExpressiveSettingsItem(
+                        headlineContent = stringResource(name),
+                        supportingContent = stringResource(description),
+                        leadingContent = { Icon(icon, null) },
+                        onClick = { navigate(destination) }
+                    )
+                    if (index != mainSections.lastIndex) {
+                        ExpressiveSettingsDivider()
+                    }
+                }
+            }
+        }
+        val aboutCard: (@Composable () -> Unit)? = aboutSection?.let { destination ->
+            {
                 ExpressiveSettingsCard(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
                 ) {
-                    filteredEntries.forEachIndexed { index, entry ->
-                        val titleText = stringResource(entry.title)
-                        val descriptionText = entry.description?.let { stringResource(it) }
-                        val categoryText = stringResource(entry.category)
-                        ExpressiveSettingsItem(
-                            headlineContent = {
-                                Column {
-                                    Text(
-                                        text = buildHighlightedText(categoryText, normalizedQuery, highlightStyle),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Text(
-                                        text = buildHighlightedText(titleText, normalizedQuery, highlightStyle),
-                                        style = MaterialTheme.typography.titleMedium
-                                    )
-                                }
-                            },
-                            supportingContentSlot = {
-                                Column {
-                                    descriptionText?.let { description ->
-                                        androidx.compose.material3.Text(
-                                            text = buildHighlightedText(description, normalizedQuery, highlightStyle),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            },
-                            leadingContent = {
-                                Icon(
-                                    sectionIconMap[entry.destination] ?: Icons.Outlined.Tune,
-                                    null
-                                )
-                            },
-                            onClick = {
-                                SettingsSearchState.setTarget(
-                                    SettingsSearchTarget(entry.destination, entry.title)
-                                )
-                                navigate(entry.destination)
-                            }
+                    ExpressiveSettingsItem(
+                        headlineContent = stringResource(R.string.about_revanced_manager),
+                        supportingContent = BuildConfig.VERSION_NAME,
+                        leadingContent = {
+                            AppIcon(
+                                packageInfo = null,
+                                contentDescription = stringResource(R.string.app_name),
+                                modifier = Modifier.size(32.dp),
+                                iconOverride = appIcon
+                            )
+                        },
+                        onClick = { navigate(destination.destination) }
+                    )
+                }
+            }
+        }
+        Column(
+            modifier = Modifier
+                .padding(paddingValues)
+                .fillMaxSize()
+        ) {
+            searchCard()
+            if (normalizedQuery.isNotBlank()) {
+                ColumnWithScrollbar(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                ) {
+                    if (filteredEntries.isEmpty()) {
+                        Text(
+                            text = stringResource(R.string.settings_search_no_results),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
                         )
-                        if (index != filteredEntries.lastIndex) {
-                            ExpressiveSettingsDivider()
+                    } else {
+                        val highlightStyle = SpanStyle(
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        ExpressiveSettingsCard(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                        ) {
+                            filteredEntries.forEachIndexed { index, entry ->
+                                val titleText = stringResource(entry.title)
+                                val descriptionText = entry.description?.let { stringResource(it) }
+                                val categoryText = stringResource(entry.category)
+                                ExpressiveSettingsItem(
+                                    headlineContent = {
+                                        Column {
+                                            Text(
+                                                text = buildHighlightedText(categoryText, normalizedQuery, highlightStyle),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Text(
+                                                text = buildHighlightedText(titleText, normalizedQuery, highlightStyle),
+                                                style = MaterialTheme.typography.titleMedium
+                                            )
+                                        }
+                                    },
+                                    supportingContentSlot = {
+                                        Column {
+                                            descriptionText?.let { description ->
+                                                androidx.compose.material3.Text(
+                                                    text = buildHighlightedText(description, normalizedQuery, highlightStyle),
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                    },
+                                    leadingContent = {
+                                        Icon(
+                                            sectionIconMap[entry.destination] ?: Icons.Outlined.Tune,
+                                            null
+                                        )
+                                    },
+                                    onClick = {
+                                        SettingsSearchState.setTarget(
+                                            SettingsSearchTarget(entry.destination, entry.title)
+                                        )
+                                        navigate(entry.destination)
+                                    }
+                                )
+                                if (index != filteredEntries.lastIndex) {
+                                    ExpressiveSettingsDivider()
+                                }
+                            }
                         }
                     }
                 }
             } else {
-                ExpressiveSettingsCard(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                SettingsOverviewLayout(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    mainContent = mainSectionsCard,
+                    aboutContent = aboutCard
+                )
+            }
+        }
+    }
+}
+
+private enum class SettingsOverviewSlot {
+    Main,
+    About,
+    Scroll
+}
+
+@Composable
+private fun SettingsOverviewLayout(
+    modifier: Modifier = Modifier,
+    mainContent: @Composable () -> Unit,
+    aboutContent: (@Composable () -> Unit)?,
+    minAboutGap: Dp = 24.dp
+) {
+    val scrollState = rememberScrollState()
+    SubcomposeLayout(modifier = modifier) { constraints ->
+        val relaxedConstraints = constraints.copy(minWidth = 0, minHeight = 0)
+        val mainPlaceable = subcompose(SettingsOverviewSlot.Main, mainContent)
+            .single()
+            .measure(relaxedConstraints)
+        val aboutPlaceable = aboutContent?.let {
+            subcompose(SettingsOverviewSlot.About, it)
+                .single()
+                .measure(relaxedConstraints)
+        }
+        val requiredHeight = mainPlaceable.height +
+            (aboutPlaceable?.let { minAboutGap.roundToPx() + it.height } ?: 0)
+
+        if (requiredHeight > constraints.maxHeight) {
+            val scrollPlaceable = subcompose(SettingsOverviewSlot.Scroll) {
+                ColumnWithScrollbar(
+                    modifier = Modifier.fillMaxSize(),
+                    state = scrollState
                 ) {
-                    filteredSections.forEachIndexed { index, (name, description, icon, destination) ->
-                        ExpressiveSettingsItem(
-                            headlineContent = stringResource(name),
-                            supportingContent = stringResource(description),
-                            leadingContent = { Icon(icon, null) },
-                            onClick = { navigate(destination) }
-                        )
-                        if (index != filteredSections.lastIndex) {
-                            ExpressiveSettingsDivider()
-                        }
+                    mainContent()
+                    aboutContent?.let {
+                        Spacer(modifier = Modifier.height(minAboutGap))
+                        it()
                     }
                 }
+            }.single().measure(constraints)
+
+            layout(constraints.maxWidth, constraints.maxHeight) {
+                scrollPlaceable.place(0, 0)
+            }
+        } else {
+            layout(constraints.maxWidth, constraints.maxHeight) {
+                mainPlaceable.place(0, 0)
+                aboutPlaceable?.place(0, constraints.maxHeight - aboutPlaceable.height)
             }
         }
     }

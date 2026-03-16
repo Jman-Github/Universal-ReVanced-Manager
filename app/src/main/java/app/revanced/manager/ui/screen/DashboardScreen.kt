@@ -8,6 +8,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import android.provider.Settings
 import android.text.format.Formatter
+import androidx.appcompat.content.res.AppCompatResources
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -1740,8 +1741,36 @@ fun DashboardScreen(
                     val managerUpdateViewed =
                         !vm.updatedManagerVersion.isNullOrEmpty() &&
                             vm.updatedManagerVersion == viewedManagerUpdateVersion
+                    val appIcon = remember {
+                        AppCompatResources.getDrawable(androidContext, R.mipmap.ic_launcher)
+                    }
+                    val titleScrollState = rememberScrollState()
                     AppTopBar(
-                        title = { Text(stringResource(R.string.main_top_title)) },
+                        title = {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                AppIcon(
+                                    packageInfo = null,
+                                    contentDescription = stringResource(R.string.app_name),
+                                    modifier = Modifier.size(28.dp),
+                                    iconOverride = appIcon
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .horizontalScroll(titleScrollState)
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.main_top_title),
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                }
+                            }
+                        },
                         actions = {
                             if (!vm.updatedManagerVersion.isNullOrEmpty()) {
                                 IconButton(
@@ -3000,8 +3029,8 @@ private fun DashboardTabLabel(
             Text(
                 text = text,
                 modifier = Modifier
-                    .widthIn(max = 74.dp)
-                    .padding(horizontal = 2.dp, vertical = 2.dp),
+                    .widthIn(min = 56.dp, max = 88.dp)
+                    .padding(horizontal = 6.dp, vertical = 3.dp),
                 style = compactTabLabelStyle,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                 maxLines = 2,
@@ -3012,7 +3041,7 @@ private fun DashboardTabLabel(
     } else {
         Text(
             text = text,
-            modifier = Modifier.widthIn(max = 74.dp),
+            modifier = Modifier.widthIn(min = 56.dp, max = 88.dp),
             style = compactTabLabelStyle,
             maxLines = 2,
             textAlign = TextAlign.Center,

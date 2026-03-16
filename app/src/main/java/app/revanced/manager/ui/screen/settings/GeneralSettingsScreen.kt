@@ -85,6 +85,7 @@ import app.revanced.manager.ui.component.GroupHeader
 import app.revanced.manager.ui.component.SettingsSectionIcons
 import app.revanced.manager.ui.component.patches.PathSelectorDialog
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsCard
+import app.revanced.manager.ui.component.settings.ExpressiveSettingsConfigurableItem
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsDivider
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsItem
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsSwitch
@@ -414,7 +415,7 @@ fun GeneralSettingsScreen(
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
-                    ExpressiveSettingsItem(
+                    ExpressiveSettingsConfigurableItem(
                         modifier = highlightModifier.alpha(themeControlsAlpha),
                         headlineContent = stringResource(R.string.theme_color),
                         supportingContent = stringResource(R.string.theme_color_description),
@@ -433,7 +434,12 @@ fun GeneralSettingsScreen(
                             )
                         },
                         enabled = canAdjustThemeColor,
-                        onClick = { showThemeColorPicker = true }
+                        secondaryActionLabel = stringResource(R.string.reset),
+                        onSecondaryAction = { viewModel.setCustomThemeColor(null) },
+                        secondaryActionEnabled = canAdjustThemeColor && customThemeColorHex.isNotBlank(),
+                        primaryActionLabel = stringResource(R.string.edit),
+                        onPrimaryAction = { showThemeColorPicker = true },
+                        primaryActionEnabled = canAdjustThemeColor
                     )
                 }
                 ExpressiveSettingsDivider()
@@ -442,7 +448,7 @@ fun GeneralSettingsScreen(
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
-                    ExpressiveSettingsItem(
+                    ExpressiveSettingsConfigurableItem(
                         modifier = highlightModifier.alpha(accentControlsAlpha),
                         headlineContent = stringResource(R.string.accent_color),
                         supportingContent = stringResource(R.string.accent_color_description),
@@ -461,7 +467,12 @@ fun GeneralSettingsScreen(
                             )
                         },
                         enabled = canAdjustAccentColor,
-                        onClick = { showAccentPicker = true }
+                        secondaryActionLabel = stringResource(R.string.reset),
+                        onSecondaryAction = { viewModel.setCustomAccentColor(null) },
+                        secondaryActionEnabled = canAdjustAccentColor && customAccentColorHex.isNotBlank(),
+                        primaryActionLabel = stringResource(R.string.edit),
+                        onPrimaryAction = { showAccentPicker = true },
+                        primaryActionEnabled = canAdjustAccentColor
                     )
                 }
                 ExpressiveSettingsDivider()

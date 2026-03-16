@@ -1,11 +1,6 @@
 package app.revanced.manager.ui.component.settings
 
 import androidx.annotation.StringRes
-import androidx.compose.foundation.clickable
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,6 +39,7 @@ fun IntegerItem(
         description = description,
         supportingText = supportingText,
         trailingContent = trailingContent,
+        defaultValue = preference.default,
         neutralButtonLabel = neutralButtonLabel,
         neutralValueProvider = neutralValueProvider,
         validator = validator,
@@ -60,6 +56,7 @@ fun IntegerItem(
     @StringRes description: Int,
     supportingText: String? = null,
     trailingContent: (@Composable () -> Unit)? = null,
+    defaultValue: Int? = null,
     neutralButtonLabel: String? = null,
     neutralValueProvider: (() -> Int?)? = null,
     validator: (Int) -> Boolean = { true },
@@ -83,21 +80,17 @@ fun IntegerItem(
         )
     }
 
-    ExpressiveSettingsItem(
-        modifier = Modifier
-            .clickable(enabled = enabled) { dialogOpen = true }
-            .then(modifier),
+    ExpressiveSettingsConfigurableItem(
+        modifier = modifier,
         headlineContent = stringResource(headline),
         supportingContent = supportingText ?: stringResource(description),
         enabled = enabled,
-        trailingContent = {
-            IconButton(onClick = { dialogOpen = true }, enabled = enabled) {
-                Icon(
-                    Icons.Outlined.Edit,
-                    contentDescription = stringResource(R.string.edit)
-                )
-            }
-            trailingContent?.invoke()
-        }
+        trailingContent = trailingContent,
+        secondaryActionLabel = stringResource(R.string.reset),
+        onSecondaryAction = { defaultValue?.let(onValueChange) },
+        primaryActionLabel = stringResource(R.string.edit),
+        onPrimaryAction = { dialogOpen = true },
+        secondaryActionEnabled = enabled && defaultValue != null && value != defaultValue,
+        primaryActionEnabled = enabled
     )
 }

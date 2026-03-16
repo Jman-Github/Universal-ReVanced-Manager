@@ -178,6 +178,7 @@ import app.revanced.manager.patcher.runtime.MemoryLimitConfig
 import app.revanced.manager.ui.component.settings.IntegerItem
 import app.revanced.manager.ui.component.settings.SafeguardBooleanItem
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsCard
+import app.revanced.manager.ui.component.settings.ExpressiveSettingsConfigurableItem
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsDivider
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsItem
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsSwitch
@@ -359,11 +360,19 @@ fun AdvancedSettingsScreen(
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
-                    ExpressiveSettingsItem(
+                    ExpressiveSettingsConfigurableItem(
                         modifier = highlightModifier,
                         headlineContent = stringResource(R.string.app_language),
                         supportingContent = stringResource(selectedLanguageLabel),
-                        onClick = { showLanguageDialog = true }
+                        secondaryActionLabel = stringResource(R.string.reset),
+                        onSecondaryAction = {
+                            if (appLanguage != viewModel.prefs.appLanguage.default) {
+                                pendingLanguageRestart = viewModel.prefs.appLanguage.default
+                            }
+                        },
+                        secondaryActionEnabled = appLanguage != viewModel.prefs.appLanguage.default,
+                        primaryActionLabel = stringResource(R.string.edit),
+                        onPrimaryAction = { showLanguageDialog = true }
                     )
                 }
                 ExpressiveSettingsDivider()
@@ -386,14 +395,20 @@ fun AdvancedSettingsScreen(
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
-                    ExpressiveSettingsItem(
+                    ExpressiveSettingsConfigurableItem(
                         modifier = highlightModifier,
                         headlineContent = stringResource(R.string.search_engine_host_title),
                         supportingContent = stringResource(
                             R.string.search_engine_host_description,
                             searchEngineHost
                         ),
-                        onClick = { showSearchEngineDialog = true }
+                        secondaryActionLabel = stringResource(R.string.reset),
+                        onSecondaryAction = {
+                            viewModel.setSearchEngineHost(viewModel.prefs.searchEngineHost.default)
+                        },
+                        secondaryActionEnabled = searchEngineHost != viewModel.prefs.searchEngineHost.default,
+                        primaryActionLabel = stringResource(R.string.edit),
+                        onPrimaryAction = { showSearchEngineDialog = true }
                     )
                 }
             }
@@ -451,11 +466,15 @@ fun AdvancedSettingsScreen(
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
-                    ExpressiveSettingsItem(
+                    ExpressiveSettingsConfigurableItem(
                         modifier = highlightModifier,
                         headlineContent = stringResource(R.string.api_url),
                         supportingContent = stringResource(R.string.api_url_description),
-                        onClick = { showApiUrlDialog = true }
+                        secondaryActionLabel = stringResource(R.string.reset),
+                        onSecondaryAction = { viewModel.setApiUrl(viewModel.prefs.api.default) },
+                        secondaryActionEnabled = apiUrl != viewModel.prefs.api.default,
+                        primaryActionLabel = stringResource(R.string.edit),
+                        onPrimaryAction = { showApiUrlDialog = true }
                     )
                 }
                 ExpressiveSettingsDivider()
@@ -464,11 +483,15 @@ fun AdvancedSettingsScreen(
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
-                    ExpressiveSettingsItem(
+                    ExpressiveSettingsConfigurableItem(
                         modifier = highlightModifier,
                         headlineContent = stringResource(R.string.github_pat),
                         supportingContent = stringResource(R.string.github_pat_description),
-                        onClick = { showGitHubPatDialog = true }
+                        secondaryActionLabel = stringResource(R.string.reset),
+                        onSecondaryAction = { viewModel.setGitHubPat(viewModel.prefs.gitHubPat.default) },
+                        secondaryActionEnabled = gitHubPat != viewModel.prefs.gitHubPat.default,
+                        primaryActionLabel = stringResource(R.string.edit),
+                        onPrimaryAction = { showGitHubPatDialog = true }
                     )
                 }
                 ExpressiveSettingsDivider()
@@ -624,12 +647,20 @@ fun AdvancedSettingsScreen(
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
-                    ExpressiveSettingsItem(
+                    ExpressiveSettingsConfigurableItem(
                         modifier = highlightModifier,
                         headlineContent = stringResource(R.string.installer_primary_title),
                         supportingContent = primarySupporting,
                         leadingContent = primaryLeadingContent,
-                        onClick = { installerDialogTarget = InstallerDialogTarget.Primary }
+                        secondaryActionLabel = stringResource(R.string.reset),
+                        onSecondaryAction = {
+                            viewModel.setPrimaryInstaller(
+                                installerManager.parseToken(viewModel.prefs.installerPrimary.default)
+                            )
+                        },
+                        secondaryActionEnabled = primaryPreference != viewModel.prefs.installerPrimary.default,
+                        primaryActionLabel = stringResource(R.string.settings),
+                        onPrimaryAction = { installerDialogTarget = InstallerDialogTarget.Primary }
                     )
                 }
                 ExpressiveSettingsDivider()
@@ -638,12 +669,20 @@ fun AdvancedSettingsScreen(
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
-                    ExpressiveSettingsItem(
+                    ExpressiveSettingsConfigurableItem(
                         modifier = highlightModifier,
                         headlineContent = stringResource(R.string.installer_fallback_title),
                         supportingContent = fallbackSupporting,
                         leadingContent = fallbackLeadingContent,
-                        onClick = { installerDialogTarget = InstallerDialogTarget.Fallback }
+                        secondaryActionLabel = stringResource(R.string.reset),
+                        onSecondaryAction = {
+                            viewModel.setFallbackInstaller(
+                                installerManager.parseToken(viewModel.prefs.installerFallback.default)
+                            )
+                        },
+                        secondaryActionEnabled = fallbackPreference != viewModel.prefs.installerFallback.default,
+                        primaryActionLabel = stringResource(R.string.settings),
+                        onPrimaryAction = { installerDialogTarget = InstallerDialogTarget.Fallback }
                     )
                 }
                 ExpressiveSettingsDivider()
@@ -1830,7 +1869,7 @@ fun AdvancedSettingsScreen(
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
-                    ExpressiveSettingsItem(
+                    ExpressiveSettingsConfigurableItem(
                         modifier = highlightModifier,
                         headlineContent = stringResource(R.string.export_name_format),
                         supportingContentSlot = {
@@ -1853,7 +1892,11 @@ fun AdvancedSettingsScreen(
                                 }
                             }
                         },
-                        onClick = { showExportFormatDialog = true }
+                        secondaryActionLabel = stringResource(R.string.reset),
+                        onSecondaryAction = { viewModel.resetPatchedAppExportFormat() },
+                        secondaryActionEnabled = exportFormat != viewModel.prefs.patchedAppExportFormat.default,
+                        primaryActionLabel = stringResource(R.string.edit),
+                        onPrimaryAction = { showExportFormatDialog = true }
                     )
                 }
             }
