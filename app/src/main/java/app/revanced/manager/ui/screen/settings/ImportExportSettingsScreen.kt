@@ -84,6 +84,7 @@ import app.revanced.manager.ui.component.DownloadProgressBanner
 import app.revanced.manager.ui.component.GroupHeader
 import app.revanced.manager.ui.component.ShimmerBox
 import app.revanced.manager.ui.component.PasswordField
+import app.revanced.manager.ui.component.SettingsSectionIcons
 import app.revanced.manager.ui.component.bundle.BundleSelector
 import app.revanced.manager.ui.component.patches.PathSelectorDialog
 import app.revanced.manager.ui.component.settings.ExpandableSettingListItem
@@ -628,7 +629,10 @@ fun ImportExportSettingsScreen(
                 }
             }
 
-            GroupHeader(stringResource(R.string.keystore_section))
+            GroupHeader(
+                stringResource(R.string.keystore_section),
+                icon = SettingsSectionIcons.Keystore
+            )
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
@@ -699,7 +703,10 @@ fun ImportExportSettingsScreen(
                 }
             }
 
-            GroupHeader(stringResource(R.string.settings_selections_bundles_section))
+            GroupHeader(
+                stringResource(R.string.settings_selections_bundles_section),
+                icon = SettingsSectionIcons.SettingsSelectionsBundles
+            )
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
@@ -876,7 +883,10 @@ fun ImportExportSettingsScreen(
                 }
             }
 
-            GroupHeader(stringResource(R.string.reset))
+            GroupHeader(
+                stringResource(R.string.reset),
+                icon = SettingsSectionIcons.Reset
+            )
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {

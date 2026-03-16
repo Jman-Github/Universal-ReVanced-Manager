@@ -172,6 +172,7 @@ import app.universal.revanced.manager.R
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.ColumnWithScrollbar
 import app.revanced.manager.ui.component.GroupHeader
+import app.revanced.manager.ui.component.SettingsSectionIcons
 import app.revanced.manager.ui.component.settings.BooleanItem
 import app.revanced.manager.patcher.runtime.MemoryLimitConfig
 import app.revanced.manager.ui.component.settings.IntegerItem
@@ -345,7 +346,10 @@ fun AdvancedSettingsScreen(
             ) {
             val searchEngineHost by viewModel.prefs.searchEngineHost.getAsState()
             var showSearchEngineDialog by rememberSaveable { mutableStateOf(false) }
-            GroupHeader(stringResource(R.string.app_behavior_section))
+            GroupHeader(
+                stringResource(R.string.app_behavior_section),
+                icon = SettingsSectionIcons.AppBehavior
+            )
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -394,7 +398,10 @@ fun AdvancedSettingsScreen(
                 }
             }
 
-            GroupHeader(stringResource(R.string.network_integrations_section))
+            GroupHeader(
+                stringResource(R.string.network_integrations_section),
+                icon = SettingsSectionIcons.NetworkIntegrations
+            )
 
             val apiUrl by viewModel.prefs.api.getAsState()
             val gitHubPat by viewModel.prefs.gitHubPat.getAsState()
@@ -480,7 +487,10 @@ fun AdvancedSettingsScreen(
                 }
             }
 
-            GroupHeader(stringResource(R.string.installer_section))
+            GroupHeader(
+                stringResource(R.string.installer_section),
+                icon = SettingsSectionIcons.Installer
+            )
             val installTarget = InstallerManager.InstallTarget.PATCHER
             val primaryPreference by viewModel.prefs.installerPrimary.getAsState()
             val fallbackPreference by viewModel.prefs.installerFallback.getAsState()
@@ -689,7 +699,10 @@ fun AdvancedSettingsScreen(
             }
 
             if (mode == AdvancedSettingsMode.ADVANCED_SYSTEM) {
-            GroupHeader(stringResource(R.string.safeguards_compatibility_section))
+            GroupHeader(
+                stringResource(R.string.safeguards_compatibility_section),
+                icon = SettingsSectionIcons.SafeguardsCompatibility
+            )
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -782,7 +795,10 @@ fun AdvancedSettingsScreen(
                     )
                 }
             } else null
-            GroupHeader(stringResource(R.string.bundle_system_recovery_section))
+            GroupHeader(
+                stringResource(R.string.bundle_system_recovery_section),
+                icon = SettingsSectionIcons.BundleSystemRecovery
+            )
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -805,7 +821,10 @@ fun AdvancedSettingsScreen(
             }
 
             if (mode == AdvancedSettingsMode.PATCHER) {
-            GroupHeader(stringResource(R.string.patching_engine_section))
+            GroupHeader(
+                stringResource(R.string.patching_engine_section),
+                icon = SettingsSectionIcons.PatchingEngine
+            )
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -968,7 +987,10 @@ fun AdvancedSettingsScreen(
                 }
             }
 
-            GroupHeader(stringResource(R.string.patching_flow_section))
+            GroupHeader(
+                stringResource(R.string.patching_flow_section),
+                icon = SettingsSectionIcons.PatchingFlow
+            )
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -1045,7 +1067,10 @@ fun AdvancedSettingsScreen(
                 }
             }
 
-            GroupHeader(stringResource(R.string.saved_apps_section))
+            GroupHeader(
+                stringResource(R.string.saved_apps_section),
+                icon = SettingsSectionIcons.SavedApps
+            )
             val savedAppsEnabled by viewModel.prefs.enableSavedApps.getAsState()
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -1188,7 +1213,10 @@ fun AdvancedSettingsScreen(
                     }
             }
 
-            GroupHeader(stringResource(R.string.action_buttons_patch_list_section))
+            GroupHeader(
+                stringResource(R.string.action_buttons_patch_list_section),
+                icon = SettingsSectionIcons.ActionButtonsPatchList
+            )
             ExpressiveSettingsCard(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1789,7 +1817,10 @@ fun AdvancedSettingsScreen(
         }
 
         if (mode == AdvancedSettingsMode.ADVANCED_SYSTEM) {
-        GroupHeader(stringResource(R.string.diagnostics_output_section))
+        GroupHeader(
+            stringResource(R.string.diagnostics_output_section),
+            icon = SettingsSectionIcons.DiagnosticsOutput
+        )
         ExpressiveSettingsCard(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)

@@ -59,6 +59,7 @@ import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.ExceptionViewerDialog
 import app.revanced.manager.ui.component.GroupHeader
 import app.revanced.manager.ui.component.LazyColumnWithScrollbar
+import app.revanced.manager.ui.component.SettingsSectionIcons
 import app.revanced.manager.ui.component.ConfirmDialog
 import app.revanced.manager.ui.component.patches.PathSelectorDialog
 import app.revanced.manager.ui.component.haptics.HapticCheckbox
@@ -352,7 +353,10 @@ fun DownloadsSettingsScreen(
                 modifier = Modifier.fillMaxSize()
             ) {
                 item {
-                    GroupHeader(stringResource(R.string.download_behavior_section))
+                    GroupHeader(
+                        stringResource(R.string.download_behavior_section),
+                        icon = SettingsSectionIcons.DownloadBehavior
+                    )
                 }
                 item {
                     ExpressiveSettingsCard(
@@ -394,6 +398,7 @@ fun DownloadsSettingsScreen(
                     ) { highlightModifier ->
                         GroupHeader(
                             stringResource(R.string.downloader_plugins),
+                            icon = SettingsSectionIcons.DownloaderPlugins,
                             modifier = highlightModifier
                         )
                     }
@@ -551,6 +556,7 @@ fun DownloadsSettingsScreen(
                     ) { highlightModifier ->
                         GroupHeader(
                             stringResource(R.string.download_export_section),
+                            icon = SettingsSectionIcons.DownloadExport,
                             modifier = highlightModifier
                         )
                     }

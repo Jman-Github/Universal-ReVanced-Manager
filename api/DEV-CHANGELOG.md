@@ -3,6 +3,7 @@
 
 # Features
 
+- Added icons to settings subsections and refined the settings card styling for a cleaner, flatter look
 
 
 # Bug fixes

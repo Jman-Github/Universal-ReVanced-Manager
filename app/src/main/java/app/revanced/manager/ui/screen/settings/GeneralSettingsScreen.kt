@@ -82,6 +82,7 @@ import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.ColumnWithScrollbar
 import app.revanced.manager.ui.component.GroupHeader
+import app.revanced.manager.ui.component.SettingsSectionIcons
 import app.revanced.manager.ui.component.patches.PathSelectorDialog
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsCard
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsDivider
@@ -238,7 +239,10 @@ fun GeneralSettingsScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            GroupHeader(stringResource(R.string.navigation_tabs_section))
+            GroupHeader(
+                stringResource(R.string.navigation_tabs_section),
+                icon = SettingsSectionIcons.NavigationTabs
+            )
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -336,7 +340,10 @@ fun GeneralSettingsScreen(
                 }
             }
 
-            GroupHeader(stringResource(R.string.theme_section))
+            GroupHeader(
+                stringResource(R.string.theme_section),
+                icon = SettingsSectionIcons.Theme
+            )
 
             val baseThemeSwatches = remember(supportsDynamicColor) {
                 buildList {
@@ -641,7 +648,10 @@ fun GeneralSettingsScreen(
                 }
             }
 
-            GroupHeader(stringResource(R.string.background_section))
+            GroupHeader(
+                stringResource(R.string.background_section),
+                icon = SettingsSectionIcons.Background
+            )
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)

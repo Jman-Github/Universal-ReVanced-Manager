@@ -45,6 +45,7 @@ import app.revanced.manager.domain.manager.SearchForUpdatesBackgroundInterval
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.ColumnWithScrollbar
 import app.revanced.manager.ui.component.GroupHeader
+import app.revanced.manager.ui.component.SettingsSectionIcons
 import app.revanced.manager.ui.component.settings.BooleanItem
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsCard
 import app.revanced.manager.ui.component.settings.IntegerItem
@@ -383,7 +384,10 @@ fun UpdatesSettingsScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            GroupHeader(stringResource(R.string.network_delivery_section))
+            GroupHeader(
+                stringResource(R.string.network_delivery_section),
+                icon = SettingsSectionIcons.NetworkDelivery
+            )
 
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -423,7 +427,10 @@ fun UpdatesSettingsScreen(
                 }
             }
 
-            GroupHeader(stringResource(R.string.update_checks_section))
+            GroupHeader(
+                stringResource(R.string.update_checks_section),
+                icon = SettingsSectionIcons.UpdateChecks
+            )
 
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -508,7 +515,10 @@ fun UpdatesSettingsScreen(
                 }
             }
 
-            GroupHeader(stringResource(R.string.bundle_changelog_history_section))
+            GroupHeader(
+                stringResource(R.string.bundle_changelog_history_section),
+                icon = SettingsSectionIcons.BundleChangelogHistory
+            )
 
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -564,7 +574,10 @@ fun UpdatesSettingsScreen(
                 }
             }
 
-            GroupHeader(stringResource(R.string.background_updates_section))
+            GroupHeader(
+                stringResource(R.string.background_updates_section),
+                icon = SettingsSectionIcons.BackgroundUpdates
+            )
 
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)

@@ -72,6 +72,7 @@
 - Added installed apps as a source for the Split APK merge tool https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/197
 - Added a split selection step before merging so specific modules can be included or excluded https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/197
 - mproved split merge loading, cancellation, and progress handling
+- Added icons to settings subsections and refined the settings card styling for a cleaner, flatter look
 
 
 # Bug fixes

@@ -27,6 +27,7 @@ import app.universal.revanced.manager.R
 import app.revanced.manager.ui.component.AlertDialogExtended
 import app.revanced.manager.ui.component.AppTopBar
 import app.revanced.manager.ui.component.GroupHeader
+import app.revanced.manager.ui.component.SettingsSectionIcons
 import app.revanced.manager.ui.component.settings.BooleanItem
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsCard
 import app.revanced.manager.ui.component.settings.ExpressiveSettingsDivider
@@ -121,7 +122,10 @@ fun DeveloperSettingsScreen(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
     ) { paddingValues ->
         Column(modifier = Modifier.padding(paddingValues)) {
-            GroupHeader(stringResource(R.string.stability_update_controls_section))
+            GroupHeader(
+                stringResource(R.string.stability_update_controls_section),
+                icon = SettingsSectionIcons.StabilityUpdateControls
+            )
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {

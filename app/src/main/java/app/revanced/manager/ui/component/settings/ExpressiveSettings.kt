@@ -1,6 +1,5 @@
 package app.revanced.manager.ui.component.settings
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -20,7 +19,6 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import app.revanced.manager.ui.component.haptics.HapticSwitch
@@ -30,17 +28,9 @@ import androidx.compose.material3.surfaceColorAtElevation
 @Composable
 fun ExpressiveSettingsCard(
     modifier: Modifier = Modifier,
-    containerColor: Color = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp),
-    shadowElevation: Dp = 2.dp,
-    border: BorderStroke = BorderStroke(
-        1.dp,
-        lerp(
-            MaterialTheme.colorScheme.outlineVariant,
-            MaterialTheme.colorScheme.surfaceTint,
-            0.22f
-        ).copy(alpha = 0.5f)
-    ),
-    contentPadding: PaddingValues = PaddingValues(horizontal = 8.dp),
+    containerColor: Color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+    shadowElevation: Dp = 0.dp,
+    contentPadding: PaddingValues = PaddingValues(0.dp),
     content: @Composable () -> Unit
 ) {
     Surface(
@@ -48,7 +38,6 @@ fun ExpressiveSettingsCard(
         color = containerColor,
         tonalElevation = 0.dp,
         shadowElevation = shadowElevation,
-        border = border,
         modifier = modifier
     ) {
         Column(
@@ -66,12 +55,8 @@ fun ExpressiveSettingsDivider(
     modifier: Modifier = Modifier
 ) {
     HorizontalDivider(
-        modifier = modifier.padding(horizontal = 12.dp),
-        color = lerp(
-            MaterialTheme.colorScheme.outlineVariant,
-            MaterialTheme.colorScheme.surfaceTint,
-            0.18f
-        ).copy(alpha = 0.55f)
+        modifier = modifier.padding(horizontal = 16.dp),
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
     )
 }
 
