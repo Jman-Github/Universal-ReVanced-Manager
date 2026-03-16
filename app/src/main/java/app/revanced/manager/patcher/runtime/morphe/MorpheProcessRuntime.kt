@@ -13,6 +13,7 @@ import app.revanced.manager.patcher.ProgressEvent
 import app.revanced.manager.patcher.ProgressEventParcel
 import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.runtime.MemoryLimitConfig
+import app.revanced.manager.patcher.runtime.StdIoWarningAccumulator
 import app.revanced.manager.patcher.runtime.process.IMorphePatcherProcess
 import app.revanced.manager.patcher.runtime.process.IPatcherEvents
 import app.revanced.manager.patcher.runtime.process.MorpheParameters
@@ -138,6 +139,9 @@ class MorpheProcessRuntime(
 
         val patching = CompletableDeferred<Unit>()
         val finishedReported = AtomicBoolean(false)
+        val stdioWarnings = StdIoWarningAccumulator { message ->
+            logger.warn("[STDIO]: $message")
+        }
 
         fun completeSuccess() {
             if (!patching.isCompleted) {
@@ -153,18 +157,22 @@ class MorpheProcessRuntime(
 
         launch(Dispatchers.IO) {
             try {
-                val result = process(
-                    appProcessBin,
-                    "-Djava.io.tmpdir=$cacheDir",
-                    "/",
-                    "--nice-name=${context.packageName}:MorphePatcher",
-                    MORPHE_PROCESS_CLASS_NAME,
-                    context.packageName,
-                    env = env,
-                    stdout = Redirect.CAPTURE,
-                    stderr = Redirect.CAPTURE,
-                ) { line ->
-                    logger.warn("[STDIO]: $line")
+                val result = try {
+                    process(
+                        appProcessBin,
+                        "-Djava.io.tmpdir=$cacheDir",
+                        "/",
+                        "--nice-name=${context.packageName}:MorphePatcher",
+                        MORPHE_PROCESS_CLASS_NAME,
+                        context.packageName,
+                        env = env,
+                        stdout = Redirect.CAPTURE,
+                        stderr = Redirect.CAPTURE,
+                    ) { line ->
+                        stdioWarnings.onLine(line)
+                    }
+                } finally {
+                    stdioWarnings.flush()
                 }
 
                 Log.d(tag, "Morphe process finished with exit code ${result.resultCode}")

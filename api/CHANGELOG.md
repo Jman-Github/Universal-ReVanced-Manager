@@ -142,6 +142,7 @@
 - Fixed the uninstall service error messaging
 - Fixed fullscreen back gestures showing the wrong screen preview on some devices and OEM ROMs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/280
 - Fixed patched app installs sometimes creating duplicate `Saved` and installed entries in the `Apps` tab https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
+- Fixed patcher warnings breaking progress on the patcher screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/267#issuecomment-4028751450
 
 
 # CI

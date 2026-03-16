@@ -13,6 +13,7 @@ import app.revanced.manager.patcher.ProgressEvent
 import app.revanced.manager.patcher.ProgressEventParcel
 import app.revanced.manager.patcher.StepId
 import app.revanced.manager.patcher.logger.Logger
+import app.revanced.manager.patcher.runtime.StdIoWarningAccumulator
 import app.revanced.manager.patcher.runtime.process.IPatcherEvents
 import app.revanced.manager.patcher.runtime.process.IPatcherProcess
 import app.revanced.manager.patcher.runtime.process.Parameters
@@ -187,6 +188,9 @@ class Revanced22ProcessRuntime(
 
         val patching = CompletableDeferred<Unit>()
         val finishedReported = AtomicBoolean(false)
+        val stdioWarnings = StdIoWarningAccumulator { message ->
+            logger.warn("[STDIO]: $message")
+        }
 
         fun completeSuccess() {
             if (!patching.isCompleted) {
@@ -202,18 +206,22 @@ class Revanced22ProcessRuntime(
 
         launch(Dispatchers.IO) {
             try {
-                val result = process(
-                    appProcessBin,
-                    "-Djava.io.tmpdir=$cacheDir",
-                    "/",
-                    "--nice-name=${context.packageName}:Revanced22Patcher",
-                    Revanced22PatcherProcess::class.java.name,
-                    context.packageName,
-                    env = env,
-                    stdout = Redirect.CAPTURE,
-                    stderr = Redirect.CAPTURE,
-                ) { line ->
-                    logger.warn("[STDIO]: $line")
+                val result = try {
+                    process(
+                        appProcessBin,
+                        "-Djava.io.tmpdir=$cacheDir",
+                        "/",
+                        "--nice-name=${context.packageName}:Revanced22Patcher",
+                        Revanced22PatcherProcess::class.java.name,
+                        context.packageName,
+                        env = env,
+                        stdout = Redirect.CAPTURE,
+                        stderr = Redirect.CAPTURE,
+                    ) { line ->
+                        stdioWarnings.onLine(line)
+                    }
+                } finally {
+                    stdioWarnings.flush()
                 }
 
                 Log.d(tag, "ReVanced v22 process finished with exit code ${result.resultCode}")

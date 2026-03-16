@@ -98,33 +98,48 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
                 Regex("Write\\s+\\[[^\\]]+\\]\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
             val seenDexCompiles = mutableSetOf<String>()
             val writeApkActive = AtomicBoolean(false)
+            val applyChangesActive = AtomicBoolean(false)
             fun onEvent(event: ProgressEvent) {
                 when (event) {
                     is ProgressEvent.Started -> {
                         if (event.stepId == StepId.WriteAPK) {
                             writeApkActive.set(true)
+                            applyChangesActive.set(false)
+                            seenDexCompiles.clear()
                         }
                     }
 
                     is ProgressEvent.Completed -> {
                         if (event.stepId == StepId.WriteAPK) {
                             writeApkActive.set(false)
+                            applyChangesActive.set(false)
                         }
                     }
 
                     is ProgressEvent.Failed -> {
                         if (event.stepId == StepId.WriteAPK) {
                             writeApkActive.set(false)
+                            applyChangesActive.set(false)
                         }
                     }
 
-                    is ProgressEvent.Progress -> Unit
+                    is ProgressEvent.Progress -> {
+                        if (event.stepId == StepId.WriteAPK &&
+                            event.message.equals("Applying patched changes", ignoreCase = true)
+                        ) {
+                            applyChangesActive.set(true)
+                        }
+                        if (event.stepId == StepId.SignAPK) {
+                            writeApkActive.set(false)
+                            applyChangesActive.set(false)
+                        }
+                    }
                 }
                 safeEvent(event)
             }
 
             fun handleDexCompileLine(rawLine: String) {
-                if (!writeApkActive.get()) return
+                if (!writeApkActive.get() || !applyChangesActive.get()) return
                 val line = rawLine.trim()
                 if (line.isEmpty()) return
                 val match = dexCompilePattern.find(line)

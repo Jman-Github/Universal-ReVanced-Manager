@@ -138,6 +138,9 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
 
         val patching = CompletableDeferred<Unit>()
         val finishedReported = AtomicBoolean(false)
+        val stdioWarnings = StdIoWarningAccumulator { message ->
+            logger.warn("[STDIO]: $message")
+        }
 
         fun completeSuccess() {
             if (!patching.isCompleted) {
@@ -153,19 +156,24 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
 
         launch(Dispatchers.IO) {
             try {
-                val result = process(
-                    appProcessBin,
-                    "-Djava.io.tmpdir=$cacheDir", // The process will use /tmp if this isn't set, which is a problem because that folder is not accessible on Android.
-                    "/", // The unused cmd-dir parameter
-                    "--nice-name=${context.packageName}:Patcher",
-                    PatcherProcess::class.java.name, // The class with the main function.
-                    context.packageName,
-                    env = env,
-                    stdout = Redirect.CAPTURE,
-                    stderr = Redirect.CAPTURE,
-                ) { line ->
-                    // The process shouldn't generally be writing to stdio. Log any lines we get as warnings.
-                    logger.warn("[STDIO]: $line")
+                val result = try {
+                    process(
+                        appProcessBin,
+                        "-Djava.io.tmpdir=$cacheDir", // The process will use /tmp if this isn't set, which is a problem because that folder is not accessible on Android.
+                        "/", // The unused cmd-dir parameter
+                        "--nice-name=${context.packageName}:Patcher",
+                        PatcherProcess::class.java.name, // The class with the main function.
+                        context.packageName,
+                        env = env,
+                        stdout = Redirect.CAPTURE,
+                        stderr = Redirect.CAPTURE,
+                    ) { line ->
+                        // Collapse stack traces into a single warning entry so OEM stderr noise
+                        // does not flood the UI with per-line log updates.
+                        stdioWarnings.onLine(line)
+                    }
+                } finally {
+                    stdioWarnings.flush()
                 }
 
                 Log.d(tag, "Process finished with exit code ${result.resultCode}")

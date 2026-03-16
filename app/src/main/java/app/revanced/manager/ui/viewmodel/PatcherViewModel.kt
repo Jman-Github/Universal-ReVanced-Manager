@@ -151,6 +151,9 @@ class PatcherViewModel(
     private val savedStateHandle: SavedStateHandle = get()
     private val ackpineInstaller: AckpinePackageInstaller = get()
     private val ackpineUninstaller: PackageUninstaller = get()
+    private val selectionBundleType by lazy(LazyThreadSafetyMode.NONE) {
+        runBlocking { patchBundleRepository.selectionBundleType(input.selectedPatches) }
+    }
 
     private var pendingExternalInstall: InstallerManager.InstallPlan.External? = null
     private var externalInstallBaseline: Pair<Long?, Long?>? = null
@@ -2489,6 +2492,12 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     event.subSteps?.let { prepareSubSteps(eventStepId, it) }
                     if (!event.message.isNullOrBlank() || progress != null) {
                         updateSubStep(eventStepId, event.message, progress)
+                        if (eventStepId == StepId.WriteAPK &&
+                            selectionBundleType == PatchBundleType.MORPHE &&
+                            event.message.equals("Applying patched changes", ignoreCase = true)
+                        ) {
+                            flushPendingDexCompileLines(force = true)
+                        }
                     }
                 }
                 is ProgressEvent.Completed -> {
@@ -3066,6 +3075,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             line.contains("Compiled patched resources", ignoreCase = true)
         ) {
             viewModelScope.launch {
+                if (shouldBufferMorpheWriteApkLogProgress()) {
+                    pendingDexCompileLines += "Compiling modified resources"
+                    return@launch
+                }
                 updateSubStep(StepId.WriteAPK, line, null)
                 markDexSubStepsReady()
             }
@@ -3073,6 +3086,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
         if (isDexCompilePhaseTitle(line)) {
             viewModelScope.launch {
+                if (shouldBufferMorpheWriteApkLogProgress()) {
+                    pendingDexCompileLines += line
+                    return@launch
+                }
                 updateSubStep(StepId.WriteAPK, line, null)
                 markDexSubStepsReady()
             }
@@ -3085,8 +3102,21 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             val isCompletion = completionKeyword.equals("Compiled", ignoreCase = true)
             val title = if (isCompletion) "Compiled $dexName" else "Compiling $dexName"
             if (!isCompletion && !seenDexCompiles.add("Compiling $dexName")) return@launch
+            if (shouldBufferMorpheWriteApkLogProgress()) {
+                pendingDexCompileLines += title
+                return@launch
+            }
             updateSubStep(StepId.WriteAPK, title, null)
         }
+    }
+
+    private fun shouldBufferMorpheWriteApkLogProgress(): Boolean {
+        if (selectionBundleType != PatchBundleType.MORPHE) return false
+        val list = stepSubSteps[StepId.WriteAPK] ?: return true
+        val applyStep = list.firstOrNull {
+            it.title.equals("Applying patched changes", ignoreCase = true)
+        } ?: return true
+        return applyStep.state == State.WAITING
     }
 
     private fun shouldStartWriteApkFromLog(line: String): Boolean {

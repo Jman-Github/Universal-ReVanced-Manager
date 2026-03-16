@@ -59,6 +59,7 @@ object MorpheRuntimeEntry {
         val seenDexCompiles = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
         val seenResourceCompile = AtomicBoolean(false)
         val writeApkActive = AtomicBoolean(false)
+        val applyChangesActive = AtomicBoolean(false)
         fun throwIfCancelled() {
             if (callback.isCancelled()) {
                 throw CancellationException("Patching cancelled")
@@ -70,17 +71,27 @@ object MorpheRuntimeEntry {
                 StepId.WriteAPK -> when (event) {
                     is ProgressEvent.Started -> {
                         writeApkActive.set(true)
+                        applyChangesActive.set(false)
                         seenDexCompiles.clear()
                         seenResourceCompile.set(false)
                     }
 
-                    is ProgressEvent.Progress -> writeApkActive.set(true)
+                    is ProgressEvent.Progress -> {
+                        writeApkActive.set(true)
+                        if (event.message.equals("Applying patched changes", ignoreCase = true)) {
+                            applyChangesActive.set(true)
+                        }
+                    }
                     is ProgressEvent.Completed,
-                    is ProgressEvent.Failed -> writeApkActive.set(false)
+                    is ProgressEvent.Failed -> {
+                        writeApkActive.set(false)
+                        applyChangesActive.set(false)
+                    }
                 }
 
                 StepId.SignAPK -> if (event is ProgressEvent.Started) {
                     writeApkActive.set(false)
+                    applyChangesActive.set(false)
                 }
                 else -> Unit
             }
@@ -88,7 +99,7 @@ object MorpheRuntimeEntry {
         }
 
         fun handleWriteProgressLine(rawLine: String) {
-            if (!writeApkActive.get()) return
+            if (!writeApkActive.get() || !applyChangesActive.get()) return
             val line = rawLine.trim()
             if (line.isEmpty()) return
             if (line.contains("Compiling modified resources", ignoreCase = true) ||
