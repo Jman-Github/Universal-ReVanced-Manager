@@ -346,6 +346,7 @@ fun AdvancedSettingsScreen(
                 mode == AdvancedSettingsMode.ADVANCED_SYSTEM
             ) {
             val searchEngineHost by viewModel.prefs.searchEngineHost.getAsState()
+            val announcementSystemEnabled by viewModel.prefs.announcementSystemEnabled.getAsState()
             var showSearchEngineDialog by rememberSaveable { mutableStateOf(false) }
             GroupHeader(
                 stringResource(R.string.app_behavior_section),
@@ -387,6 +388,20 @@ fun AdvancedSettingsScreen(
                         coroutineScope = viewModel.viewModelScope,
                         headline = R.string.use_custom_file_picker_title,
                         description = R.string.use_custom_file_picker_description,
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.announcement_system_enabled,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        value = announcementSystemEnabled,
+                        onValueChange = viewModel::updateAnnouncementSystemEnabled,
+                        headline = R.string.announcement_system_enabled,
+                        description = R.string.announcement_system_enabled_description
                     )
                 }
                 ExpressiveSettingsDivider()

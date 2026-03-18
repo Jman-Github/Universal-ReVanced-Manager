@@ -28,6 +28,7 @@ val repositoryModule = module {
     singleOf(::BundleUpdateWebSocketCoordinator) {
         createdAtStart()
     }
+    singleOf(::AnnouncementRepository)
     singleOf(::DownloaderPluginRepository)
     singleOf(::WorkerRepository)
     singleOf(::DownloadedAppRepository)

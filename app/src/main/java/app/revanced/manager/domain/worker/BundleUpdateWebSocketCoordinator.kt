@@ -83,13 +83,27 @@ class BundleUpdateWebSocketCoordinator(
     fun start() {
         if (!started.compareAndSet(false, true)) return
         scope.launch {
+            val announcementListeningFlow = combine(
+                prefs.announcementSystemEnabled.flow,
+                prefs.announcementPushNotificationInterval.flow
+            ) { announcementSystemEnabled, announcementInterval ->
+                announcementSystemEnabled &&
+                    announcementInterval != SearchForUpdatesBackgroundInterval.NEVER
+            }
             combine(
                 prefs.searchForManagerUpdatesBackgroundInterval.flow,
                 prefs.searchForUpdatesBackgroundInterval.flow,
+                announcementListeningFlow,
                 prefs.bundleUpdateDeliveryMode.flow,
                 appForeground
-            ) { managerInterval, bundleInterval, mode, isForeground ->
-                DesiredState.from(managerInterval, bundleInterval, mode, isForeground)
+            ) { managerInterval, bundleInterval, announcementListeningEnabled, mode, isForeground ->
+                DesiredState.from(
+                    managerInterval,
+                    bundleInterval,
+                    announcementListeningEnabled,
+                    mode,
+                    isForeground
+                )
             }.distinctUntilChanged()
                 .collect { state ->
                     desiredState = state
@@ -117,7 +131,8 @@ class BundleUpdateWebSocketCoordinator(
         val targetListenState = if (shouldRun) {
             ForegroundListenState(
                 listenForBundle = state.listenForBundle,
-                listenForManager = state.listenForManager
+                listenForManager = state.listenForManager,
+                listenForAnnouncements = state.listenForAnnouncements
             )
         } else {
             null
@@ -132,6 +147,7 @@ class BundleUpdateWebSocketCoordinator(
         val intent = Intent(app, BundleUpdateWebSocketService::class.java).apply {
             putExtra(BundleUpdateWebSocketService.EXTRA_LISTEN_BUNDLE_UPDATES, state.listenForBundle)
             putExtra(BundleUpdateWebSocketService.EXTRA_LISTEN_MANAGER_UPDATES, state.listenForManager)
+            putExtra(BundleUpdateWebSocketService.EXTRA_LISTEN_ANNOUNCEMENTS, state.listenForAnnouncements)
         }
         if (shouldRun) {
             runCatching {
@@ -341,6 +357,15 @@ class BundleUpdateWebSocketCoordinator(
         }.getOrDefault(false)
     }
 
+    private fun launchAnnouncementWorker(): Boolean {
+        return runCatching {
+            workerRepository.launchAnnouncementNotificationNow()
+            true
+        }.onFailure {
+            Log.w(TAG, "Failed to enqueue announcement check from websocket", it)
+        }.getOrDefault(false)
+    }
+
     private suspend fun launchEnabledWebSocketWorkers(): Boolean {
         var launchedAny = false
         if (prefs.searchForUpdatesBackgroundInterval.get() != SearchForUpdatesBackgroundInterval.NEVER) {
@@ -348,6 +373,12 @@ class BundleUpdateWebSocketCoordinator(
         }
         if (prefs.searchForManagerUpdatesBackgroundInterval.get() != SearchForUpdatesBackgroundInterval.NEVER) {
             launchedAny = launchManagerUpdateWorker() || launchedAny
+        }
+        if (
+            prefs.announcementSystemEnabled.get() &&
+            prefs.announcementPushNotificationInterval.get() != SearchForUpdatesBackgroundInterval.NEVER
+        ) {
+            launchedAny = launchAnnouncementWorker() || launchedAny
         }
         return launchedAny
     }
@@ -401,24 +432,28 @@ class BundleUpdateWebSocketCoordinator(
         val requiresForegroundService: Boolean,
         val listenForBundle: Boolean,
         val listenForManager: Boolean,
+        val listenForAnnouncements: Boolean,
     ) {
         companion object {
             val NONE = DesiredState(
                 shouldRunSocket = false,
                 requiresForegroundService = false,
                 listenForBundle = false,
-                listenForManager = false
+                listenForManager = false,
+                listenForAnnouncements = false
             )
 
             fun from(
                 managerInterval: SearchForUpdatesBackgroundInterval,
                 bundleInterval: SearchForUpdatesBackgroundInterval,
+                announcementListeningEnabled: Boolean,
                 mode: BundleUpdateDeliveryMode,
                 isForeground: Boolean
             ): DesiredState {
                 val listenForBundle = bundleInterval != SearchForUpdatesBackgroundInterval.NEVER
                 val listenForManager = managerInterval != SearchForUpdatesBackgroundInterval.NEVER
-                if (!listenForBundle && !listenForManager) {
+                val listenForAnnouncements = announcementListeningEnabled
+                if (!listenForBundle && !listenForManager && !listenForAnnouncements) {
                     return NONE
                 }
 
@@ -428,13 +463,15 @@ class BundleUpdateWebSocketCoordinator(
                         shouldRunSocket = isForeground,
                         requiresForegroundService = false,
                         listenForBundle = listenForBundle,
-                        listenForManager = listenForManager
+                        listenForManager = listenForManager,
+                        listenForAnnouncements = listenForAnnouncements
                     )
                     BundleUpdateDeliveryMode.WEBSOCKET_PREFERRED -> DesiredState(
                         shouldRunSocket = true,
                         requiresForegroundService = true,
                         listenForBundle = listenForBundle,
-                        listenForManager = listenForManager
+                        listenForManager = listenForManager,
+                        listenForAnnouncements = listenForAnnouncements
                     )
                 }
             }
@@ -470,6 +507,7 @@ class BundleUpdateWebSocketCoordinator(
 
     private data class ForegroundListenState(
         val listenForBundle: Boolean,
-        val listenForManager: Boolean
+        val listenForManager: Boolean,
+        val listenForAnnouncements: Boolean
     )
 }

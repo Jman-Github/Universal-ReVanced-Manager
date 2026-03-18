@@ -9,6 +9,7 @@ import android.util.Log
 import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.di.*
 import app.revanced.manager.domain.manager.PreferencesManager
+import app.revanced.manager.domain.manager.SearchForUpdatesBackgroundInterval
 import app.revanced.manager.domain.repository.DownloaderPluginRepository
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.domain.worker.BundleUpdateWebSocketCoordinator
@@ -100,11 +101,19 @@ class ManagerApplication : Application() {
 
         scope.launch {
             prefs.preload()
+            prefs.migrateAnnouncementPushNotificationInterval()
             workerRepository.ensureBundleUpdateNotificationWork(
                 prefs.searchForUpdatesBackgroundInterval.get()
             )
             workerRepository.ensureManagerUpdateNotificationWork(
                 prefs.searchForManagerUpdatesBackgroundInterval.get()
+            )
+            workerRepository.ensureAnnouncementNotificationWork(
+                if (prefs.announcementSystemEnabled.get()) {
+                    prefs.announcementPushNotificationInterval.get()
+                } else {
+                    SearchForUpdatesBackgroundInterval.NEVER
+                }
             )
             val currentApi = prefs.api.get()
             if (currentApi == LEGACY_MANAGER_REPO_URL || currentApi == LEGACY_MANAGER_REPO_API_URL) {

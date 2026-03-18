@@ -1,6 +1,7 @@
 package app.revanced.manager.ui.viewmodel
 
 import android.app.Application
+import android.app.NotificationManager
 import android.content.ComponentName
 import android.net.Uri
 import android.util.Log
@@ -15,8 +16,11 @@ import app.revanced.manager.domain.manager.hideInstallerComponent
 import app.revanced.manager.domain.manager.showInstallerComponent
 import app.revanced.manager.domain.repository.InstalledAppRepository
 import app.revanced.manager.domain.repository.PatchBundleRepository
+import app.revanced.manager.domain.worker.WorkerRepository
 import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.data.room.apps.installed.InstallType
+import app.revanced.manager.domain.manager.SearchForUpdatesBackgroundInterval
+import app.revanced.manager.patcher.worker.AnnouncementNotificationWorker
 import app.revanced.manager.util.tag
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.simpleMessage
@@ -43,6 +47,7 @@ class AdvancedSettingsViewModel(
     private val patchBundleRepository: PatchBundleRepository,
     private val installedAppRepository: InstalledAppRepository,
     private val filesystem: Filesystem,
+    private val workerRepository: WorkerRepository,
     private val installerManager: InstallerManager,
     private val rootInstaller: RootInstaller
 ) : ViewModel() {
@@ -75,6 +80,24 @@ class AdvancedSettingsViewModel(
 
     fun setSearchEngineHost(value: String) = viewModelScope.launch(Dispatchers.Default) {
         prefs.searchEngineHost.update(normalizeSearchEngineHost(value, prefs.searchEngineHost.default))
+    }
+
+    fun updateAnnouncementSystemEnabled(enabled: Boolean) = viewModelScope.launch(Dispatchers.Default) {
+        prefs.announcementSystemEnabled.update(enabled)
+        if (!enabled) {
+            prefs.announcementPushNotificationInterval.update(SearchForUpdatesBackgroundInterval.NEVER)
+        }
+        workerRepository.scheduleAnnouncementNotificationWork(
+            if (enabled) {
+                prefs.announcementPushNotificationInterval.get()
+            } else {
+                SearchForUpdatesBackgroundInterval.NEVER
+            }
+        )
+        if (!enabled) {
+            app.getSystemService(NotificationManager::class.java)
+                ?.cancel(AnnouncementNotificationWorker.ANNOUNCEMENT_NOTIFICATION_ID)
+        }
     }
 
     fun exportDebugLogs(target: Uri) = viewModelScope.launch {

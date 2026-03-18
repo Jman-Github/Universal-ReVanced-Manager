@@ -23,15 +23,18 @@ import app.revanced.manager.data.platform.NetworkInfo
 import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.revanced.manager.domain.manager.KeystoreManager
 import app.revanced.manager.domain.manager.PreferencesManager
+import app.revanced.manager.domain.repository.AnnouncementRepository
 import app.revanced.manager.domain.repository.DownloaderPluginRepository
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import app.revanced.manager.network.downloader.LoadedDownloaderPlugin
 import app.revanced.manager.network.api.ReVancedAPI
+import app.revanced.manager.network.dto.ReVancedAnnouncement
 import app.revanced.manager.network.dto.ReVancedAsset
 import app.revanced.manager.patcher.split.InstalledSplitArchiveBuilder
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.patcher.split.SplitMergeProcessRuntime
 import app.revanced.manager.util.PM
+import app.revanced.manager.util.announcementTagKey
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.uiSafe
 import app.revanced.manager.plugin.downloader.GetScope
@@ -54,6 +57,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -70,6 +74,7 @@ class DashboardViewModel(
     private val app: Application,
     private val patchBundleRepository: PatchBundleRepository,
     private val downloaderPluginRepository: DownloaderPluginRepository,
+    private val announcementRepository: AnnouncementRepository,
     private val reVancedAPI: ReVancedAPI,
     private val networkInfo: NetworkInfo,
     val prefs: PreferencesManager,
@@ -102,6 +107,8 @@ class DashboardViewModel(
         private set
     val updatedManagerVersion: String?
         get() = updatedManagerRelease?.version
+    var unreadAnnouncement: ReVancedAnnouncement? by mutableStateOf(null)
+        private set
     var showBatteryOptimizationsWarning by mutableStateOf(false)
         private set
 
@@ -131,6 +138,13 @@ class DashboardViewModel(
             updateBatteryOptimizationsWarning()
         }
         viewModelScope.launch {
+            prefs.announcementSystemEnabled.flow.collect { enabled ->
+                if (!enabled) {
+                    unreadAnnouncement = null
+                }
+            }
+        }
+        viewModelScope.launch {
             prefs.showBatteryOptimizationBanner.flow.collect { bannerEnabled ->
                 showBatteryOptimizationsWarning = bannerEnabled &&
                     !powerManager.isIgnoringBatteryOptimizations(app.packageName)
@@ -150,6 +164,71 @@ class DashboardViewModel(
             updatedManagerRelease = update
             if (update == null && prefs.viewedManagerUpdateVersion.get().isNotEmpty()) {
                 prefs.viewedManagerUpdateVersion.update("")
+            }
+        }
+    }
+
+    fun refreshAnnouncements(forceRefresh: Boolean = false) {
+        viewModelScope.launch {
+            checkForAnnouncements(forceRefresh)
+        }
+    }
+
+    private suspend fun checkForAnnouncements(forceRefresh: Boolean = false) {
+        if (!prefs.announcementSystemEnabled.get() || !networkInfo.isConnected()) {
+            unreadAnnouncement = null
+            return
+        }
+
+        uiSafe(app, R.string.failed_to_check_announcements, "Failed to check for announcements") {
+            val announcements = withContext(Dispatchers.IO) {
+                announcementRepository.getAnnouncements(forceRefresh = forceRefresh)
+            } ?: return@uiSafe
+
+            if (!prefs.announcementSystemEnabled.get()) {
+                unreadAnnouncement = null
+                return@uiSafe
+            }
+
+            val readAnnouncements = prefs.readAnnouncements.get()
+            if (readAnnouncements.isEmpty()) {
+                prefs.readAnnouncements.update(announcements.mapTo(mutableSetOf()) { it.id.toString() })
+                return@uiSafe
+            }
+
+            unreadAnnouncement = announcements.firstOrNull { announcement ->
+                val notArchived = announcement.archivedAt
+                    ?.toEpochMilliseconds()
+                    ?.let { it > System.currentTimeMillis() }
+                    ?: true
+                val relevantTag = announcement.tags.any { tag ->
+                    val normalized = announcementTagKey(tag)
+                    normalized.contains("revanced") || normalized.contains("manager")
+                }
+                val unread = announcement.id.toString() !in readAnnouncements
+                notArchived && relevantTag && unread
+            }
+        }
+    }
+
+    fun markUnreadAnnouncementRead() {
+        viewModelScope.launch {
+            unreadAnnouncement?.let { announcement ->
+                prefs.edit {
+                    prefs.readAnnouncements += announcement.id.toString()
+                }
+            }
+            unreadAnnouncement = null
+        }
+    }
+
+    fun markAnnouncementRead(id: Long) {
+        viewModelScope.launch {
+            prefs.edit {
+                prefs.readAnnouncements += id.toString()
+            }
+            if (unreadAnnouncement?.id == id) {
+                unreadAnnouncement = null
             }
         }
     }

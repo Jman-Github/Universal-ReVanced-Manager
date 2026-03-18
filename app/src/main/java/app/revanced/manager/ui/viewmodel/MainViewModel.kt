@@ -21,6 +21,7 @@ import app.revanced.manager.ui.model.SelectedApp
 import app.revanced.manager.ui.model.navigation.SelectedApplicationInfo
 import app.revanced.manager.ui.theme.Theme
 import app.revanced.manager.util.PatchSelection
+import app.revanced.manager.util.AnnouncementDeepLinkIntent
 import app.revanced.manager.util.BundleDeepLink
 import app.revanced.manager.util.BundleDeepLinkIntent
 import app.revanced.manager.util.ManagerUpdateDeepLinkIntent
@@ -54,6 +55,9 @@ class MainViewModel(
     val bundleDeepLinkFlow = bundleDeepLinkChannel.receiveAsFlow()
     private val managerUpdateDeepLinkChannel = Channel<Unit>(Channel.BUFFERED)
     val managerUpdateDeepLinkFlow = managerUpdateDeepLinkChannel.receiveAsFlow()
+    private val announcementDeepLinkChannel =
+        Channel<app.revanced.manager.ui.model.navigation.Announcement.Payload>(Channel.BUFFERED)
+    val announcementDeepLinkFlow = announcementDeepLinkChannel.receiveAsFlow()
     private val splitArchiveIntentChannel = Channel<SplitArchiveIntent>(Channel.BUFFERED)
     val splitArchiveIntentFlow = splitArchiveIntentChannel.receiveAsFlow()
 
@@ -130,6 +134,11 @@ class MainViewModel(
         }
         SplitArchiveIntentParser.fromIntent(intent, app.contentResolver)?.let { splitArchiveIntent ->
             splitArchiveIntentChannel.trySend(splitArchiveIntent)
+        }
+        AnnouncementDeepLinkIntent.fromIntent(intent)?.let { announcement ->
+            if (prefs.announcementSystemEnabled.getBlocking()) {
+                announcementDeepLinkChannel.trySend(announcement)
+            }
         }
         val deepLink = BundleDeepLinkIntent.fromIntent(intent) ?: return
         bundleDeepLinkChannel.trySend(deepLink)

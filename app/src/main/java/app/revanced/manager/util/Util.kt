@@ -45,6 +45,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.format.MonthNames
@@ -202,6 +203,46 @@ fun LocalDateTime.relativeTime(context: Context): String {
                     year()
                 }
             }.format(this)
+        }
+    } catch (e: IllegalArgumentException) {
+        return context.getString(R.string.invalid_date)
+    }
+}
+
+fun Instant.relativeTime(context: Context): String {
+    try {
+        val now = Clock.System.now()
+        val duration = now - this
+
+        return when {
+            duration.inWholeMinutes < 1 -> context.getString(R.string.just_now)
+            duration.inWholeMinutes < 60 -> context.getString(
+                R.string.minutes_ago,
+                duration.inWholeMinutes.toString()
+            )
+
+            duration.inWholeHours < 24 -> context.getString(
+                R.string.hours_ago,
+                duration.inWholeHours.toString()
+            )
+
+            duration.inWholeHours < 30 -> context.getString(
+                R.string.days_ago,
+                duration.inWholeDays.toString()
+            )
+
+            else -> {
+                val localDateTime = this.toLocalDateTime(TimeZone.UTC)
+                LocalDateTime.Format {
+                    monthName(MonthNames.ENGLISH_ABBREVIATED)
+                    char(' ')
+                    dayOfMonth()
+                    if (now.toLocalDateTime(TimeZone.UTC).year != localDateTime.year) {
+                        chars(", ")
+                        year()
+                    }
+                }.format(localDateTime)
+            }
         }
     } catch (e: IllegalArgumentException) {
         return context.getString(R.string.invalid_date)

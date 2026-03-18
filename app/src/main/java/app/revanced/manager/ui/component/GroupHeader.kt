@@ -16,6 +16,7 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.InstallMobile
 import androidx.compose.material.icons.outlined.MoreHoriz
+import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.Save
@@ -61,6 +62,7 @@ object SettingsSectionIcons {
     val UpdateChecks: ImageVector = Icons.Outlined.Update
     val BundleChangelogHistory: ImageVector = Icons.Outlined.History
     val BackgroundUpdates: ImageVector = Icons.Outlined.Update
+    val Announcements: ImageVector = Icons.Outlined.NotificationsActive
 }
 
 @Composable

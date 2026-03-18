@@ -72,6 +72,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Image
@@ -141,6 +142,7 @@ import app.universal.revanced.manager.R
 import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.patcher.aapt.Aapt
+import app.revanced.manager.ui.model.navigation.Announcement
 import app.revanced.manager.ui.component.AlertDialogExtended
 import app.revanced.manager.ui.component.AppIcon
 import app.revanced.manager.ui.component.AppLabel
@@ -226,6 +228,7 @@ fun DashboardScreen(
     onStorageSelect: (SelectedApp.Local) -> Unit,
     onSettingsClick: () -> Unit,
     onUpdateClick: () -> Unit,
+    onAnnouncementsClick: () -> Unit,
     onDownloaderPluginClick: () -> Unit,
     onBundleDiscoveryClick: () -> Unit,
     onMergeSplitClick: () -> Unit,
@@ -234,6 +237,7 @@ fun DashboardScreen(
     onOpenKeystoreCreatorClick: () -> Unit,
     onOpenKeystoreConverterClick: () -> Unit,
     onAppClick: (String, InstalledAppAction?) -> Unit,
+    onAnnouncementClick: (Announcement.Payload) -> Unit,
     onProfileLaunch: (PatchProfileLaunchData) -> Unit,
     bundleDeepLink: BundleDeepLink? = null,
     onBundleDeepLinkConsumed: () -> Unit = {}
@@ -264,6 +268,7 @@ fun DashboardScreen(
     val preventAccidentalTouching by prefs.preventAccidentalTouching.getAsState()
     val showPatchProfilesTab by prefs.showPatchProfilesTab.getAsState()
     val showToolsTab by prefs.showToolsTab.getAsState()
+    val announcementSystemEnabled by prefs.announcementSystemEnabled.getAsState()
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
     val bundlesFabCollapsed by prefs.dashboardBundlesFabCollapsed.getAsState()
     val appsFabCollapsed by prefs.dashboardAppsFabCollapsed.getAsState()
@@ -387,6 +392,12 @@ fun DashboardScreen(
     var showQuickUnmountDialog by remember { mutableStateOf(false) }
     var showQuickMixedBundleDialog by remember { mutableStateOf(false) }
     var showQuickMixedRevancedPatcherDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(announcementSystemEnabled) {
+        if (announcementSystemEnabled) {
+            vm.refreshAnnouncements(forceRefresh = true)
+        }
+    }
 
     LaunchedEffect(pagerState.settledPage, visibleTabs) {
         visibleTabs.getOrNull(pagerState.settledPage)?.let { page ->
@@ -1793,6 +1804,22 @@ fun DashboardScreen(
                                     }
                                 }
                             }
+                            if (announcementSystemEnabled) {
+                                IconButton(onClick = onAnnouncementsClick) {
+                                    BadgedBox(
+                                        badge = {
+                                            if (vm.unreadAnnouncement != null) {
+                                                Badge(modifier = Modifier.size(6.dp))
+                                            }
+                                        }
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.Notifications,
+                                            stringResource(R.string.announcements)
+                                        )
+                                    }
+                                }
+                            }
                             val isAppsTab = uiPage == DashboardPage.DASHBOARD
                             val isBundlesTab = uiPage == DashboardPage.BUNDLES
                             val isProfilesTab = uiPage == DashboardPage.PROFILES && showPatchProfilesTab
@@ -2085,6 +2112,28 @@ fun DashboardScreen(
                             actions = {
                                 TextButton(onClick = vm::ignoreNewDownloaderPlugins) {
                                     Text(stringResource(R.string.dismiss))
+                                }
+                            }
+                        )
+                    }
+                } else null,
+                if (announcementSystemEnabled) vm.unreadAnnouncement?.let { announcement ->
+                    {
+                        NotificationCard(
+                            text = stringResource(R.string.new_announcement, announcement.title),
+                            icon = Icons.Outlined.Notifications,
+                            isWarning = announcement.level > 0,
+                            actions = {
+                                TextButton(onClick = vm::markUnreadAnnouncementRead) {
+                                    Text(stringResource(R.string.dismiss))
+                                }
+                                TextButton(
+                                    onClick = {
+                                        vm.markUnreadAnnouncementRead()
+                                        onAnnouncementClick(Announcement.Payload.from(announcement))
+                                    }
+                                ) {
+                                    Text(stringResource(R.string.view_announcement))
                                 }
                             }
                         )

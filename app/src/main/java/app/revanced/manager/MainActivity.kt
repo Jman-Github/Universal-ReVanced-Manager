@@ -48,6 +48,8 @@ import androidx.navigation.toRoute
 import androidx.appcompat.app.AppCompatActivity
 import app.revanced.manager.domain.repository.resolvePatchProfileAppVersion
 import app.revanced.manager.util.LocalPreventAccidentalTouching
+import app.revanced.manager.ui.model.navigation.Announcement
+import app.revanced.manager.ui.model.navigation.Announcements
 import app.revanced.manager.ui.model.navigation.AppSelector
 import app.revanced.manager.ui.model.navigation.ComplexParameter
 import app.revanced.manager.ui.model.navigation.CreateYoutubeAssets
@@ -64,6 +66,8 @@ import app.revanced.manager.ui.model.navigation.Settings
 import app.revanced.manager.ui.model.navigation.SplitApkInstaller
 import app.revanced.manager.ui.model.navigation.Update
 import app.revanced.manager.ui.model.SelectedApp
+import app.revanced.manager.ui.screen.AnnouncementScreen
+import app.revanced.manager.ui.screen.AnnouncementsScreen
 import app.revanced.manager.ui.screen.AppSelectorScreen
 import app.revanced.manager.ui.screen.CreateYoutubeAssetsScreen
 import app.revanced.manager.ui.screen.DashboardScreen
@@ -347,6 +351,16 @@ private fun ReVancedManager(
         }
     }
 
+    EventEffect(vm.announcementDeepLinkFlow) { announcement ->
+        dashboardVm.markAnnouncementRead(announcement.id)
+        navController.navigateComplex(
+            Announcement,
+            announcement
+        ) {
+            launchSingleTop = true
+        }
+    }
+
     EventEffect(vm.splitArchiveIntentFlow) { splitArchiveIntent ->
         pendingSplitArchiveIntent = splitArchiveIntent
         navController.navigate(SplitApkInstaller) {
@@ -386,6 +400,11 @@ private fun ReVancedManager(
                 onUpdateClick = {
                     navController.navigate(Update())
                 },
+                onAnnouncementsClick = {
+                    navController.navigate(Announcements) {
+                        launchSingleTop = true
+                    }
+                },
                 onDownloaderPluginClick = {
                     navController.navigate(Settings.Downloads)
                 },
@@ -411,6 +430,14 @@ private fun ReVancedManager(
                 },
                 onAppClick = { packageName, action ->
                     navController.navigate(InstalledApplicationInfo(packageName, action))
+                },
+                onAnnouncementClick = { announcement ->
+                    navController.navigateComplex(
+                        Announcement,
+                        announcement
+                    ) {
+                        launchSingleTop = true
+                    }
                 },
                 onProfileLaunch = { launchData ->
                     val apkFile = launchData.profile.apkPath
@@ -522,6 +549,27 @@ private fun ReVancedManager(
             UpdateScreen(
                 onBackClick = navController::popBackStack,
                 vm = koinViewModel { parametersOf(data.downloadOnScreenEntry) }
+            )
+        }
+
+        composable<Announcements> {
+            AnnouncementsScreen(
+                onBackClick = navController::popBackStack,
+                onAnnouncementClick = { announcement ->
+                    navController.navigateComplex(
+                        Announcement,
+                        announcement
+                    ) {
+                        launchSingleTop = true
+                    }
+                }
+            )
+        }
+
+        composable<Announcement> {
+            AnnouncementScreen(
+                onBackClick = navController::popBackStack,
+                announcement = it.getComplexArg()
             )
         }
 

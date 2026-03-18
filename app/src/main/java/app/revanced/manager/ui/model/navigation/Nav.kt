@@ -1,6 +1,7 @@
 package app.revanced.manager.ui.model.navigation
 
 import android.os.Parcelable
+import app.revanced.manager.network.dto.ReVancedAnnouncement
 import app.revanced.manager.ui.model.InstalledAppAction
 import app.revanced.manager.ui.model.SelectedApp
 import app.revanced.manager.util.Options
@@ -43,6 +44,37 @@ data class InstalledApplicationInfo(val packageName: String, val action: Install
 
 @Serializable
 data class Update(val downloadOnScreenEntry: Boolean = false)
+
+@Serializable
+data object Announcements
+
+@Serializable
+data object Announcement : ComplexParameter<Announcement.Payload> {
+    @Parcelize
+    data class Payload(
+        val id: Long,
+        val author: String,
+        val title: String,
+        val content: String,
+        val tags: List<String>,
+        val createdAt: String,
+        val archivedAt: String?,
+        val level: Int
+    ) : Parcelable {
+        companion object {
+            fun from(announcement: ReVancedAnnouncement) = Payload(
+                id = announcement.id,
+                author = announcement.author,
+                title = announcement.title,
+                content = announcement.content,
+                tags = announcement.tags,
+                createdAt = announcement.createdAt.toString(),
+                archivedAt = announcement.archivedAt?.toString(),
+                level = announcement.level
+            )
+        }
+    }
+}
 
 @Serializable
 data object SelectedApplicationInfo : ComplexParameter<SelectedApplicationInfo.ViewModelParams> {

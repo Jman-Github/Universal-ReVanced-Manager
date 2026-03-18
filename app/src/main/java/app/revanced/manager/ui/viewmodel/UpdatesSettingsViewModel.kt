@@ -1,6 +1,7 @@
 package app.revanced.manager.ui.viewmodel
 
 import android.app.Application
+import android.app.NotificationManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.universal.revanced.manager.R
@@ -10,6 +11,7 @@ import app.revanced.manager.domain.manager.PreferencesManager
 import app.revanced.manager.domain.manager.SearchForUpdatesBackgroundInterval
 import app.revanced.manager.domain.worker.WorkerRepository
 import app.revanced.manager.network.api.ReVancedAPI
+import app.revanced.manager.patcher.worker.AnnouncementNotificationWorker
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.uiSafe
 import kotlinx.coroutines.launch
@@ -23,6 +25,8 @@ class UpdatesSettingsViewModel(
 ) : ViewModel() {
     val managerAutoUpdates = prefs.managerAutoUpdates
     val showManagerUpdateDialogOnLaunch = prefs.showManagerUpdateDialogOnLaunch
+    val announcementSystemEnabled = prefs.announcementSystemEnabled
+    val announcementPushNotificationInterval = prefs.announcementPushNotificationInterval
     val useManagerPrereleases = prefs.useManagerPrereleases
     val allowMeteredUpdates = prefs.allowMeteredUpdates
     val backgroundManagerUpdateInterval = prefs.searchForManagerUpdatesBackgroundInterval
@@ -56,6 +60,39 @@ class UpdatesSettingsViewModel(
         viewModelScope.launch {
             uiSafe(app, R.string.failed_to_check_updates, "Failed to update background delivery mode") {
                 bundleUpdateDeliveryMode.update(mode)
+            }
+        }
+    }
+
+    fun updateAnnouncementPushNotificationTime(interval: SearchForUpdatesBackgroundInterval) {
+        viewModelScope.launch {
+            uiSafe(app, R.string.failed_to_check_updates, "Failed to update announcement notifications") {
+                announcementPushNotificationInterval.update(interval)
+                workerRepository.scheduleAnnouncementNotificationWork(
+                    if (announcementSystemEnabled.get()) interval else SearchForUpdatesBackgroundInterval.NEVER
+                )
+            }
+        }
+    }
+
+    fun updateAnnouncementSystemEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            uiSafe(app, R.string.failed_to_check_updates, "Failed to update announcement settings") {
+                announcementSystemEnabled.update(enabled)
+                if (!enabled) {
+                    announcementPushNotificationInterval.update(SearchForUpdatesBackgroundInterval.NEVER)
+                }
+                workerRepository.scheduleAnnouncementNotificationWork(
+                    if (enabled) {
+                        announcementPushNotificationInterval.get()
+                    } else {
+                        SearchForUpdatesBackgroundInterval.NEVER
+                    }
+                )
+                if (!enabled) {
+                    app.getSystemService(NotificationManager::class.java)
+                        ?.cancel(AnnouncementNotificationWorker.ANNOUNCEMENT_NOTIFICATION_ID)
+                }
             }
         }
     }

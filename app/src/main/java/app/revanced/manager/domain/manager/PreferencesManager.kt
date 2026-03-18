@@ -41,6 +41,7 @@ class PreferencesManager(
             PatchBundleActionKey.DefaultOrder.joinToString(",") { it.storageId }
         private val SAVED_APP_ACTION_ORDER_DEFAULT =
             SavedAppActionKey.DefaultOrder.joinToString(",") { it.storageId }
+        val DEFAULT_ANNOUNCEMENT_TAGS: Set<String> = emptySet()
         const val MIN_BUNDLE_CHANGELOG_HISTORY_LIMIT = 1
         const val DEFAULT_BUNDLE_CHANGELOG_FETCH_LIMIT = 20
         const val DEFAULT_BUNDLE_CHANGELOG_STORAGE_LIMIT = 40
@@ -109,7 +110,20 @@ class PreferencesManager(
     val firstLaunch = booleanPreference("first_launch", true)
     val managerAutoUpdates = booleanPreference("manager_auto_updates", false)
     val showManagerUpdateDialogOnLaunch = booleanPreference("show_manager_update_dialog_on_launch", true)
+    val announcementSystemEnabled = booleanPreference("announcement_system_enabled", false)
+    private val announcementPushNotificationsLegacy =
+        booleanPreference("announcement_push_notifications", false)
+    private val announcementPushNotificationIntervalMigrated =
+        booleanPreference("announcement_push_notifications_interval_migrated", false)
+    val announcementPushNotificationInterval = enumPreference(
+        "announcement_push_notifications_interval",
+        SearchForUpdatesBackgroundInterval.NEVER
+    )
     val viewedManagerUpdateVersion = stringPreference("viewed_manager_update_version", "")
+    val readAnnouncements = stringSetPreference("read_announcements", emptySet())
+    val notifiedAnnouncements = stringSetPreference("notified_announcements", emptySet())
+    val selectedAnnouncementTags =
+        stringSetPreference("selected_announcement_tags", DEFAULT_ANNOUNCEMENT_TAGS)
     val useManagerPrereleases = booleanPreference("manager_prereleases", false)
     val usePatchesPrereleases = booleanPreference("patches_prereleases", false)
     val showBatteryOptimizationBanner = booleanPreference("show_battery_optimization_banner", true)
@@ -232,6 +246,9 @@ class PreferencesManager(
         val firstLaunch: Boolean? = null,
         val managerAutoUpdates: Boolean? = null,
         val showManagerUpdateDialogOnLaunch: Boolean? = null,
+        val announcementSystemEnabled: Boolean? = null,
+        val announcementPushNotifications: Boolean? = null,
+        val announcementPushNotificationInterval: SearchForUpdatesBackgroundInterval? = null,
         val useManagerPrereleases: Boolean? = null,
         val showBatteryOptimizationBanner: Boolean? = null,
         val allowPatchProfileBundleOverride: Boolean? = null,
@@ -290,6 +307,23 @@ class PreferencesManager(
         importDiscoverySettings(snapshot)
     }
 
+    suspend fun migrateAnnouncementPushNotificationInterval() = edit {
+        if (announcementPushNotificationIntervalMigrated.value) return@edit
+
+        val legacyAnnouncementsEnabled = announcementPushNotificationsLegacy.value
+        announcementPushNotificationInterval.value =
+            if (legacyAnnouncementsEnabled) {
+                SearchForUpdatesBackgroundInterval.MIN15
+            } else {
+                SearchForUpdatesBackgroundInterval.NEVER
+            }
+        if (legacyAnnouncementsEnabled) {
+            announcementSystemEnabled.value = true
+        }
+        announcementPushNotificationsLegacy.value = false
+        announcementPushNotificationIntervalMigrated.value = true
+    }
+
     private suspend fun exportAppearanceSettings(snapshot: SettingsSnapshot): SettingsSnapshot {
         return snapshot.copy(
             dynamicColor = dynamicColor.get(),
@@ -320,6 +354,10 @@ class PreferencesManager(
             firstLaunch = firstLaunch.get(),
             managerAutoUpdates = managerAutoUpdates.get(),
             showManagerUpdateDialogOnLaunch = showManagerUpdateDialogOnLaunch.get(),
+            announcementSystemEnabled = announcementSystemEnabled.get(),
+            announcementPushNotifications =
+                announcementPushNotificationInterval.get() != SearchForUpdatesBackgroundInterval.NEVER,
+            announcementPushNotificationInterval = announcementPushNotificationInterval.get(),
             useManagerPrereleases = useManagerPrereleases.get(),
             showBatteryOptimizationBanner = showBatteryOptimizationBanner.get(),
             allowPatchProfileBundleOverride = allowPatchProfileBundleOverride.get(),
@@ -427,6 +465,19 @@ class PreferencesManager(
         snapshot.managerAutoUpdates?.let { managerAutoUpdates.value = it }
         snapshot.showManagerUpdateDialogOnLaunch?.let {
             showManagerUpdateDialogOnLaunch.value = it
+        }
+        snapshot.announcementSystemEnabled?.let { announcementSystemEnabled.value = it }
+        snapshot.announcementPushNotificationInterval?.let {
+            announcementPushNotificationInterval.value = it
+        } ?: snapshot.announcementPushNotifications?.let {
+            announcementPushNotificationInterval.value = if (it) {
+                SearchForUpdatesBackgroundInterval.MIN15
+            } else {
+                SearchForUpdatesBackgroundInterval.NEVER
+            }
+            if (snapshot.announcementSystemEnabled == null && it) {
+                announcementSystemEnabled.value = true
+            }
         }
         snapshot.useManagerPrereleases?.let { useManagerPrereleases.value = it }
         snapshot.showBatteryOptimizationBanner?.let { showBatteryOptimizationBanner.value = it }

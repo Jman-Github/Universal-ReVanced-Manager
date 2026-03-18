@@ -7,6 +7,9 @@
 - Improved the main Settings screen layout, pinned the About card to the bottom when space allows, and added button-only `Reset`/`Edit` or `Reset`/`Settings` controls for configurable settings
 - Improved the dashboard header and main tab labels on smaller screens by keeping the title on one scrollable line and widening the selected tab highlight
 - Added remote downloader plugin importing/updating with improved plugin naming and trust handling, seeded default remote downloaders on fresh install, and support for newer official downloader plugins
+- Added a full ReVanced announcements system with announcement list/detail screens, tag filtering, archived announcements, unread badges, and dashboard announcement banners https://github.com/ReVanced/revanced-manager/pull/2948
+- Added announcement push notifications with deep links to the specific announcement, integrated into the existing websocket/background update system
+- Added settings to enable or disable announcements and announcement notifications
 
 
 # Bug fixes

@@ -79,11 +79,14 @@ class ReVancedAPI(
 
     private suspend fun apiUrl(): String = prefs.api.get().trim().removeSuffix("/")
 
-    private suspend inline fun <reified T> apiRequest(route: String): APIResponse<T> {
+    private suspend inline fun <reified T> apiRequest(
+        route: String,
+        version: String = "v4"
+    ): APIResponse<T> {
         val normalizedRoute = route.trimStart('/')
         val baseUrl = apiUrl()
         return client.request {
-            url("$baseUrl/v4/$normalizedRoute")
+            url("$baseUrl/$version/$normalizedRoute")
         }
     }
 
@@ -234,6 +237,12 @@ class ReVancedAPI(
 
     suspend fun getPatchesUpdate(): APIResponse<ReVancedAsset> =
         getPatchesUpdate(prefs.usePatchesPrereleases.get())
+
+    suspend fun getAnnouncements(): APIResponse<List<ReVancedAnnouncement>> =
+        apiRequest("announcements", version = "v5")
+
+    suspend fun getAnnouncementTags(): APIResponse<List<ReVancedAnnouncementTag>> =
+        apiRequest("announcements/tags")
 
     suspend fun getRepositoryReleaseHistory(
         repoUrl: String,
