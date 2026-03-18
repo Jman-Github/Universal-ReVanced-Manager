@@ -61,6 +61,7 @@ class AdvancedSettingsViewModel(
 
         prefs.api.update(value)
         patchBundleRepository.reloadApiBundles()
+        patchBundleRepository.updateCheck()
     }
 
     // PR #35: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35

@@ -198,7 +198,10 @@ class DownloadedAppRepository(
             if (markUsed) dao.markUsed(packageName, version)
         }
 
-    suspend fun getLatest(packageName: String) = dao.getLatest(packageName)
+    suspend fun getLatest(packageName: String, markUsed: Boolean = false) =
+        dao.getLatest(packageName)?.also {
+            if (markUsed) dao.markUsed(it.packageName, it.version)
+        }
 
     suspend fun delete(downloadedApps: Collection<DownloadedApp>) {
         deleteStoredApps(downloadedApps)

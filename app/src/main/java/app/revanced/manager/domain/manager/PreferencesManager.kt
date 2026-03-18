@@ -176,6 +176,9 @@ class PreferencesManager(
     val patchBundleDiscoverySortMode = stringPreference("patch_bundle_discovery_sort_mode", "UPDATED_DESC")
 
     val acknowledgedDownloaderPlugins = stringSetPreference("acknowledged_downloader_plugins", emptySet())
+    val downloaderPluginSourcesJson = stringPreference("downloader_plugin_sources_json", "")
+    val defaultDownloaderSourcesSeeded =
+        booleanPreference("default_downloader_sources_seeded", false)
     val autoSaveDownloaderApks = booleanPreference("auto_save_downloader_apks", true)
     val autoSaveDownloaderLatestOnly =
         booleanPreference("auto_save_downloader_latest_only", false)
@@ -255,6 +258,7 @@ class PreferencesManager(
         val savedAppActionOrder: String? = null,
         val savedAppHiddenActions: Set<String>? = null,
         val acknowledgedDownloaderPlugins: Set<String>? = null,
+        val downloaderPluginSourcesJson: String? = null,
         val autoSaveDownloaderApks: Boolean? = null,
         val autoSaveDownloaderLatestOnly: Boolean? = null,
         val pathSelectorFavorites: Set<String>? = null,
@@ -381,6 +385,7 @@ class PreferencesManager(
     private suspend fun exportDiscoverySettings(snapshot: SettingsSnapshot): SettingsSnapshot {
         return snapshot.copy(
             acknowledgedDownloaderPlugins = acknowledgedDownloaderPlugins.get(),
+            downloaderPluginSourcesJson = downloaderPluginSourcesJson.get().takeIf { it.isNotBlank() },
             autoSaveDownloaderApks = autoSaveDownloaderApks.get(),
             autoSaveDownloaderLatestOnly = autoSaveDownloaderLatestOnly.get(),
             pathSelectorFavorites = pathSelectorFavorites.get(),
@@ -492,6 +497,7 @@ class PreferencesManager(
 
     private fun EditorContext.importDiscoverySettings(snapshot: SettingsSnapshot) {
         snapshot.acknowledgedDownloaderPlugins?.let { acknowledgedDownloaderPlugins.value = it }
+        snapshot.downloaderPluginSourcesJson?.let { downloaderPluginSourcesJson.value = it }
         snapshot.autoSaveDownloaderApks?.let { autoSaveDownloaderApks.value = it }
         snapshot.autoSaveDownloaderLatestOnly?.let { autoSaveDownloaderLatestOnly.value = it }
         snapshot.pathSelectorFavorites?.let { favorites ->

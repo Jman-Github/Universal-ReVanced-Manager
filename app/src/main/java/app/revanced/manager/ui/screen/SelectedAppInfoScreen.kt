@@ -480,7 +480,12 @@ fun SelectedAppInfoScreen(
                     is SelectedApp.Installed -> stringResource(R.string.apk_source_installed)
                     is SelectedApp.Download -> stringResource(
                         R.string.apk_source_downloader,
-                        plugins.find { it.packageName == app.data.pluginPackageName }?.name
+                        plugins.firstOrNull { it.id == app.data.pluginId }?.name
+                            ?: plugins.firstOrNull {
+                                it.packageName == app.data.pluginPackageName &&
+                                    (app.data.pluginClassName == null || it.className == app.data.pluginClassName)
+                            }
+                            ?.name
                             ?: app.data.pluginPackageName
                     )
 
@@ -1032,6 +1037,9 @@ private fun AppSourceSelectorDialog(
     onSelect: (SelectedApp) -> Unit,
 ) {
     val canSelect = activeSearchJob == null
+    val hasDownloadedApps = downloadedApps.isNotEmpty()
+    val hasPlugins = plugins.isNotEmpty()
+    val hasAutoChoice = hasDownloadedApps || hasPlugins
     var showDownloadedApps by remember { mutableStateOf(false) }
 
     AlertDialogExtended(
@@ -1076,15 +1084,16 @@ private fun AppSourceSelectorDialog(
 
                 if (includeAutoOption) {
                     item(key = "auto") {
-                        val hasPlugins = plugins.isNotEmpty()
                         ListItem(
                             modifier = Modifier
-                                .clickable(enabled = canSelect && hasPlugins) { onSelect(searchApp) }
-                                .enabled(hasPlugins),
+                                .clickable(enabled = canSelect && hasAutoChoice) {
+                                    onSelect(searchApp)
+                                }
+                                .enabled(hasAutoChoice),
                             headlineContent = { Text(stringResource(R.string.app_source_dialog_option_auto)) },
                             supportingContent = {
                                 Text(
-                                    if (hasPlugins)
+                                    if (hasAutoChoice)
                                         stringResource(R.string.app_source_dialog_option_auto_description)
                                     else
                                         stringResource(R.string.app_source_dialog_option_auto_unavailable)
@@ -1137,7 +1146,7 @@ private fun AppSourceSelectorDialog(
                 items(plugins, key = { "plugin_${it.id}" }) { plugin ->
                     ListItem(
                         modifier = Modifier.clickable(enabled = canSelect) { onSelectPlugin(plugin) },
-                        headlineContent = { Text(plugin.name) },
+                        headlineContent = { Text(plugin.shortDisplayName) },
                         trailingContent = (@Composable { LoadingIndicator() }).takeIf { activeSearchJob == plugin.id },
                         colors = transparentListItemColors
                     )

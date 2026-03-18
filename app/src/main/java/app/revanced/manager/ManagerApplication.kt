@@ -117,7 +117,11 @@ class ManagerApplication : Application() {
             applyAppLanguage(storedLanguage)
         }
         scope.launch(Dispatchers.Default) {
-            downloaderPluginRepository.reload()
+            with(downloaderPluginRepository) {
+                ensureDefaultSourcesImported()
+                reload()
+                updateCheck()
+            }
         }
         scope.launch(Dispatchers.Default) {
             PatchListCatalog.refreshIfNeeded(httpService)

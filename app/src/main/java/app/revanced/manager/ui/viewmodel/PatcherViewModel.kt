@@ -2440,7 +2440,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     if (currentActivityRequest != null) throw Exception("Another request is already pending.")
                     try {
                         val accepted = with(CompletableDeferred<Boolean>()) {
-                            currentActivityRequest = this to plugin.name
+                            currentActivityRequest = this to plugin.shortDisplayName
                             await()
                         }
                         if (!accepted) throw UserInteractionException.RequestDenied()

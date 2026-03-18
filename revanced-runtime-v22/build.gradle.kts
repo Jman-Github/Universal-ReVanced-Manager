@@ -2,6 +2,7 @@ import kotlin.random.Random
 import org.gradle.api.tasks.Copy
 import org.gradle.jvm.tasks.Jar
 import org.gradle.api.file.DuplicatesStrategy
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
@@ -96,11 +97,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-        freeCompilerArgs += "-Xskip-metadata-version-check"
-    }
-
     buildFeatures {
         aidl = true
         buildConfig = true
@@ -129,5 +125,13 @@ tasks.matching { it.name.endsWith("Assets") && it.name.startsWith("merge") }.con
 
 tasks.matching { it.name.contains("lintVital", ignoreCase = true) }.configureEach {
     dependsOn(copyApkEditorAssets)
+}
+
+kotlin {
+    jvmToolchain(17)
+    compilerOptions {
+        jvmTarget = JvmTarget.JVM_17
+        freeCompilerArgs.add("-Xskip-metadata-version-check")
+    }
 }
 

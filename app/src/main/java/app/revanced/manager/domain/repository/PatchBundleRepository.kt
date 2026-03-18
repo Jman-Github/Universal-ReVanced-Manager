@@ -222,6 +222,8 @@ class PatchBundleRepository(
 
     private val bundleUpdateProgressFlow = MutableStateFlow<BundleUpdateProgress?>(null)
     val bundleUpdateProgress: StateFlow<BundleUpdateProgress?> = bundleUpdateProgressFlow.asStateFlow()
+    private val updateErrorFlow = MutableStateFlow<Throwable?>(null)
+    val updateError: StateFlow<Throwable?> = updateErrorFlow.asStateFlow()
 
     private val bundleImportProgressFlow = MutableStateFlow<ImportProgress?>(null)
     val bundleImportProgress: StateFlow<ImportProgress?> = bundleImportProgressFlow.asStateFlow()
@@ -2571,6 +2573,7 @@ class PatchBundleRepository(
 
         override suspend fun catch(exception: Exception) {
             Log.e(tag, "Failed to update patches", exception)
+            updateErrorFlow.value = exception
             toast(R.string.patches_download_fail, exception.simpleMessage())
         }
     }
@@ -2678,6 +2681,7 @@ class PatchBundleRepository(
             }
 
             var hadBundleFailures = false
+            var lastUpdateError: Throwable? = null
             val updated: Map<RemotePatchBundle, PatchBundleDownloadResult> = try {
                 val results = LinkedHashMap<RemotePatchBundle, PatchBundleDownloadResult>()
                 var completed = 0
@@ -2745,10 +2749,12 @@ class PatchBundleRepository(
                         null
                     } catch (e: TimeoutCancellationException) {
                         hadBundleFailures = true
+                        if (lastUpdateError == null) lastUpdateError = e
                         Log.e(tag, "Timed out while updating patch bundle: ${bundle.name}", e)
                         null
                     } catch (e: Exception) {
                         hadBundleFailures = true
+                        if (lastUpdateError == null) lastUpdateError = e
                         Log.e(tag, "Failed to update patch bundle: ${bundle.name}", e)
                         null
                     }
@@ -2790,6 +2796,7 @@ class PatchBundleRepository(
                 results
             } catch (e: Exception) {
                 Log.e(tag, "Failed to update patches", e)
+                updateErrorFlow.value = e
                 toast(R.string.patches_download_fail, e.simpleMessage())
                 emptyMap()
             } finally {
@@ -2799,6 +2806,11 @@ class PatchBundleRepository(
             }
 
             if (updated.isEmpty()) {
+                if (hadBundleFailures) {
+                    updateErrorFlow.value = lastUpdateError ?: IllegalStateException("Some bundles failed to update")
+                } else {
+                    updateErrorFlow.value = null
+                }
                 if (showToast) {
                     if (hadBundleFailures) {
                         toast(R.string.patches_download_fail, "Some bundles failed to update")
@@ -2833,6 +2845,7 @@ class PatchBundleRepository(
 
             val updatedUids = updated.keys.map(RemotePatchBundle::uid).toSet()
             manualUpdateInfoFlow.update { currentMap -> currentMap - updatedUids }
+            updateErrorFlow.value = null
             if (showToast) toast(R.string.patches_update_success)
             true
         } finally {

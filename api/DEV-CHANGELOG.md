@@ -6,6 +6,7 @@
 - Added icons to settings subsections and refined the settings card styling for a cleaner, flatter look
 - Improved the main Settings screen layout, pinned the About card to the bottom when space allows, and added button-only `Reset`/`Edit` or `Reset`/`Settings` controls for configurable settings
 - Improved the dashboard header and main tab labels on smaller screens by keeping the title on one scrollable line and widening the selected tab highlight
+- Added remote downloader plugin importing/updating with improved plugin naming and trust handling, seeded default remote downloaders on fresh install, and support for newer official downloader plugins
 
 
 # Bug fixes

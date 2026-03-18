@@ -145,7 +145,13 @@ class PM(
 
     fun getPackageInfo(file: File): PackageInfo? {
         val path = file.absolutePath
-        val flags = PackageManager.GET_META_DATA or PackageManager.GET_ACTIVITIES
+        val signingFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            PackageManager.GET_SIGNING_CERTIFICATES
+        } else {
+            @Suppress("DEPRECATION")
+            PackageManager.GET_SIGNATURES
+        }
+        val flags = PackageManager.GET_META_DATA or PackageManager.GET_ACTIVITIES or signingFlags
         val pkgInfo = app.packageManager.getPackageArchiveInfo(path, flags) ?: return null
 
         // This is needed in order to load label and icon.
@@ -156,6 +162,19 @@ class PM(
 
         return pkgInfo
     }
+
+    fun getSignature(packageInfo: PackageInfo): Signature? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            packageInfo.signingInfo
+                ?.apkContentsSigners
+                ?.lastOrNull()
+                ?: packageInfo.signingInfo
+                    ?.signingCertificateHistory
+                    ?.lastOrNull()
+        } else {
+            @Suppress("DEPRECATION")
+            packageInfo.signatures?.lastOrNull()
+        }
 
     fun hasSplitApks(packageInfo: PackageInfo): Boolean =
         packageInfo.applicationInfo?.splitSourceDirs

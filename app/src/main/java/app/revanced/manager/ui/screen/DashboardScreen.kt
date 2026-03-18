@@ -320,6 +320,7 @@ fun DashboardScreen(
     }
     val bundleUpdateProgress by vm.bundleUpdateProgress.collectAsStateWithLifecycle(null)
     val bundleImportProgress by vm.bundleImportProgress.collectAsStateWithLifecycle(null)
+    val bundleDownloadError by vm.bundleDownloadError.collectAsStateWithLifecycle(null)
     val storageSuggestedVersions by storageVm.suggestedAppVersions.collectAsStateWithLifecycle(emptyMap())
     val androidContext = LocalContext.current
     val composableScope = rememberCoroutineScope()
@@ -2088,6 +2089,17 @@ fun DashboardScreen(
                             }
                         )
                     }
+                } else null,
+                if (bundleDownloadError != null) {
+                    {
+                        NotificationCard(
+                            isWarning = true,
+                            icon = Icons.Outlined.WarningAmber,
+                            title = stringResource(R.string.api_not_working_title),
+                            text = stringResource(R.string.api_not_working_description),
+                            onClick = onSettingsClick
+                        )
+                    }
                 } else null
             )
 
@@ -2965,15 +2977,8 @@ private fun MergeSplitPluginDialog(
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = plugin.name,
+                                            text = plugin.shortDisplayName,
                                             style = MaterialTheme.typography.bodyLarge,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                        Text(
-                                            text = plugin.packageName,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )

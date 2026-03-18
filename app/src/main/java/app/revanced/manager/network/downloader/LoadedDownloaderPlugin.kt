@@ -10,15 +10,27 @@ class LoadedDownloaderPlugin(
     val className: String,
     val name: String,
     val version: String,
+    val sourceId: String? = null,
     private val getImpl: suspend GetScope.(packageName: String, version: String?) -> Pair<Parcelable, String?>?,
     private val downloadImpl: suspend OutputDownloadScope.(data: Parcelable, outputStream: OutputStream) -> Unit,
     val classLoader: ClassLoader
 ) {
-    val id = "$packageName:$className"
+    val id = sourceId?.let { "$it:$className" } ?: "$packageName:$className"
+    val shortDisplayName: String
+        get() = name.toDownloaderMainName()
 
     suspend fun get(scope: GetScope, packageName: String, version: String?) =
         getImpl(scope.asDualGetScope(), packageName, version)
 
     suspend fun download(scope: OutputDownloadScope, data: Parcelable, outputStream: OutputStream) =
         downloadImpl(scope.asDualOutputScope(), data, outputStream)
+}
+
+fun String.toDownloaderMainName(): String {
+    val withoutPrefix = substringAfterLast(':', this).trim()
+    return withoutPrefix
+        .removeSuffix(" downloader")
+        .removeSuffix(" Downloader")
+        .trim()
+        .ifBlank { this }
 }

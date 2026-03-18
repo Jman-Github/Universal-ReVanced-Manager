@@ -14,6 +14,7 @@ import app.revanced.manager.data.room.apps.downloaded.DownloadedApp
 import app.revanced.manager.domain.repository.DownloadedAppRepository
 import app.revanced.manager.domain.repository.DownloaderPluginRepository
 import app.revanced.manager.util.PM
+import app.revanced.manager.util.simpleMessage
 import app.revanced.manager.util.mutableStateSetOf
 
 import app.revanced.manager.util.toast
@@ -35,7 +36,13 @@ class DownloadsViewModel(
     private val downloaderPluginRepository: DownloaderPluginRepository,
     val pm: PM
 ) : ViewModel() {
+    sealed interface RemoteSourceBusyState {
+        data object Importing : RemoteSourceBusyState
+        data class Updating(val id: String) : RemoteSourceBusyState
+    }
+
     val downloaderPluginStates = downloaderPluginRepository.pluginStates
+    val downloaderPluginSourceStates = downloaderPluginRepository.sourceStates
     val downloadedApps = downloadedAppRepository.getAll().map { downloadedApps ->
         downloadedApps.sortedWith(
             compareBy<DownloadedApp> {
@@ -46,6 +53,8 @@ class DownloadsViewModel(
     val appSelection = mutableStateSetOf<DownloadedApp>()
 
     var isRefreshingPlugins by mutableStateOf(false)
+        private set
+    var remoteSourceBusyState by mutableStateOf<RemoteSourceBusyState?>(null)
         private set
     private val appContext = pm.application
 
@@ -68,6 +77,67 @@ class DownloadsViewModel(
 
     fun refreshPlugins() = viewModelScope.launch {
         reloadPlugins()
+    }
+
+    fun importPluginSource(url: String) = viewModelScope.launch {
+        remoteSourceBusyState = RemoteSourceBusyState.Importing
+        runCatching {
+            downloaderPluginRepository.importSourcesFromUrl(url)
+        }.onFailure {
+            appContext.toast(
+                appContext.getString(
+                    R.string.downloader_replace_fail,
+                    it.simpleMessage().orEmpty()
+                )
+            )
+        }.also {
+            remoteSourceBusyState = null
+        }
+    }
+
+    fun updatePluginSource(id: String) = viewModelScope.launch {
+        remoteSourceBusyState = RemoteSourceBusyState.Updating(id)
+        runCatching {
+            downloaderPluginRepository.updateSource(id)
+        }.onFailure {
+            appContext.toast(
+                appContext.getString(
+                    R.string.downloader_update_failed,
+                    it.simpleMessage().orEmpty()
+                )
+            )
+        }.also {
+            remoteSourceBusyState = null
+        }
+    }
+
+    fun removePluginSource(id: String) = viewModelScope.launch {
+        downloaderPluginRepository.removeSource(id)
+    }
+
+    fun trustPluginSource(id: String) = viewModelScope.launch {
+        runCatching {
+            downloaderPluginRepository.trustSource(id)
+        }.onFailure {
+            appContext.toast(
+                appContext.getString(
+                    R.string.downloader_replace_fail,
+                    it.simpleMessage().orEmpty()
+                )
+            )
+        }
+    }
+
+    fun revokePluginSourceTrust(id: String) = viewModelScope.launch {
+        downloaderPluginRepository.revokeTrustForSource(id)
+    }
+
+    fun setPluginSourceAutoUpdate(id: String, enabled: Boolean) = viewModelScope.launch {
+        downloaderPluginRepository.setSourceAutoUpdate(id, enabled)
+    }
+
+    fun setPluginSourcePrerelease(id: String, enabled: Boolean) = viewModelScope.launch {
+        downloaderPluginRepository.setSourcePrerelease(id, enabled)
     }
 
     fun trustPlugin(packageName: String) = viewModelScope.launch {
@@ -207,8 +277,13 @@ class DownloadsViewModel(
 
     private suspend fun reloadPlugins() {
         isRefreshingPlugins = true
-        downloaderPluginRepository.reload()
-        isRefreshingPlugins = false
+        try {
+            downloaderPluginRepository.ensureDefaultSourcesImported()
+            downloaderPluginRepository.reload()
+            downloaderPluginRepository.updateCheck()
+        } finally {
+            isRefreshingPlugins = false
+        }
     }
 
     override fun onCleared() {

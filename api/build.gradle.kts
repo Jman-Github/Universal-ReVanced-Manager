@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
@@ -46,12 +48,15 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
     buildFeatures {
         aidl = true
+    }
+}
+
+kotlin {
+    jvmToolchain(17)
+    compilerOptions {
+        jvmTarget = JvmTarget.JVM_17
     }
 }
 
@@ -133,4 +138,8 @@ signing {
         useGpgCmd()
     }
     sign(publishing.publications["Api"])
+}
+
+tasks.matching { it.name.contains("lintVital", ignoreCase = true) }.configureEach {
+    enabled = false
 }

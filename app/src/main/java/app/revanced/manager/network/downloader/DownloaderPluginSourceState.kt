@@ -1,0 +1,39 @@
+package app.revanced.manager.network.downloader
+
+import kotlinx.serialization.Serializable
+
+@Serializable
+data class DownloaderPluginSourceEntry(
+    val id: String,
+    val repoUrl: String,
+    val assetSelector: String,
+    val autoUpdate: Boolean = true,
+    val prerelease: Boolean = false,
+    val versionKey: String? = null,
+    val trustedSignatureHex: String? = null
+)
+
+data class DownloaderPluginSourceState(
+    val entry: DownloaderPluginSourceEntry,
+    val name: String,
+    val version: String?,
+    val repoUrl: String,
+    val state: State
+) {
+    sealed interface State {
+        data class Loaded(
+            val plugins: List<LoadedDownloaderPlugin>
+        ) : State
+
+        data class Untrusted(
+            val packageName: String,
+            val signature: String
+        ) : State
+
+        data object Missing : State
+
+        data class Failed(
+            val throwable: Throwable
+        ) : State
+    }
+}

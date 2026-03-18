@@ -3,6 +3,7 @@ import kotlin.random.Random
 import org.gradle.api.file.DuplicatesStrategy
 import org.gradle.api.tasks.Copy
 import org.gradle.jvm.tasks.Jar
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
@@ -307,10 +308,6 @@ android {
         arg("room.schemaLocation", "$projectDir/schemas")
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
     buildFeatures {
         compose = true
         aidl = true
@@ -338,6 +335,9 @@ android {
 
 kotlin {
     jvmToolchain(17)
+    compilerOptions {
+        jvmTarget = JvmTarget.JVM_17
+    }
 }
 
 tasks {

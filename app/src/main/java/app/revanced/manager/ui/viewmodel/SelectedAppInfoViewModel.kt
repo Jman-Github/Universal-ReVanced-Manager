@@ -741,9 +741,9 @@ class SelectedAppInfoViewModel(
     private val launchActivityChannel = Channel<Intent>()
     val launchActivityFlow = launchActivityChannel.receiveAsFlow()
 
-    val errorFlow = combine(plugins, snapshotFlow { selectedApp }) { pluginsList, app ->
+    val errorFlow = combine(plugins, downloadedApps, snapshotFlow { selectedApp }) { pluginsList, downloadedApps, app ->
         when {
-            app is SelectedApp.Search && pluginsList.isEmpty() -> Error.NoPlugins
+            app is SelectedApp.Search && pluginsList.isEmpty() && downloadedApps.isEmpty() -> Error.NoPlugins
             else -> null
         }
     }
