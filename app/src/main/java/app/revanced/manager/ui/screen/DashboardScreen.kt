@@ -467,10 +467,13 @@ fun DashboardScreen(
         koinViewModel<InstalledAppInfoViewModel>(key = "quick-action-$pkg") { parametersOf(pkg) }
     }
     val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner, installedAppsViewModel) {
+    DisposableEffect(lifecycleOwner, installedAppsViewModel, announcementSystemEnabled, vm) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 installedAppsViewModel.refreshDeviceAndMountState()
+                if (announcementSystemEnabled) {
+                    vm.refreshAnnouncements(forceRefresh = true)
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)

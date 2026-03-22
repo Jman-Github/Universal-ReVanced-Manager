@@ -148,6 +148,7 @@
 - Fixed patched app installs sometimes creating duplicate `Saved` and installed entries in the `Apps` tab https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
 - Fixed patcher warnings breaking progress on the patcher screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/267#issuecomment-4028751450
 - Fixed multiple patching and split APK merge issues across runtimes, including bundle loading regressions, cancellation/cleanup problems, merge failures, and write-progress glitches https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/308
+- Fixed new announcement banners not appearing on the dashboard until the screen or app was reloaded
 
 
 # CI
