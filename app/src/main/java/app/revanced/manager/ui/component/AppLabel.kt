@@ -1,6 +1,7 @@
 package app.revanced.manager.ui.component
 
 import android.content.pm.PackageInfo
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
@@ -15,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import app.universal.revanced.manager.R
 import io.github.fornewid.placeholder.material3.placeholder
 import kotlinx.coroutines.Dispatchers
@@ -26,6 +28,7 @@ fun AppLabel(
     labelOverride: String? = null,
     modifier: Modifier = Modifier,
     style: TextStyle = LocalTextStyle.current,
+    centered: Boolean = false,
     defaultText: String? = stringResource(R.string.not_installed)
 ) {
     val context = LocalContext.current
@@ -65,14 +68,14 @@ fun AppLabel(
 
     Text(
         labelOverride ?: label ?: stringResource(R.string.loading),
-        modifier = Modifier
+        modifier = (if (centered) modifier.fillMaxWidth() else modifier)
             .placeholder(
                 visible = labelOverride == null && label == null,
                 color = MaterialTheme.colorScheme.inverseOnSurface,
                 shape = RoundedCornerShape(100)
-            )
-            .then(modifier),
-        style = style
+            ),
+        style = style,
+        textAlign = if (centered) TextAlign.Center else TextAlign.Start
     )
 }
 

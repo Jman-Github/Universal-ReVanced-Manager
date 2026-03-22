@@ -49,6 +49,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,6 +60,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -100,6 +104,7 @@ fun PatcherScreen(
     viewModel: PatcherViewModel
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val prefs: PreferencesManager = koinInject()
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
@@ -228,6 +233,18 @@ fun PatcherScreen(
         hostActivity?.setOnSystemBackLongPress(::onPageBackToDashboard)
         onDispose {
             hostActivity?.setOnSystemBackLongPress(null)
+        }
+    }
+
+    DisposableEffect(lifecycleOwner, viewModel) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.onHostResumed()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -800,28 +817,30 @@ fun PatcherScreen(
         activityLauncher.launch(intent)
     }
 
-    viewModel.activityPromptDialog?.let { title ->
-        AlertDialog(
-            onDismissRequest = viewModel::rejectInteraction,
-            confirmButton = {
-                TextButton(
-                    onClick = viewModel::allowInteraction
-                ) {
-                    Text(stringResource(R.string.continue_))
+    viewModel.activityPromptDialog?.let { dialog ->
+        key(dialog.requestId) {
+            AlertDialog(
+                onDismissRequest = { viewModel.rejectInteraction(dialog.requestId) },
+                confirmButton = {
+                    TextButton(
+                        onClick = { viewModel.allowInteraction(dialog.requestId) }
+                    ) {
+                        Text(stringResource(R.string.continue_))
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { viewModel.rejectInteraction(dialog.requestId) }
+                    ) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                },
+                title = { Text(dialog.title) },
+                text = {
+                    Text(stringResource(R.string.plugin_activity_dialog_body))
                 }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = viewModel::rejectInteraction
-                ) {
-                    Text(stringResource(R.string.cancel))
-                }
-            },
-            title = { Text(title) },
-            text = {
-                Text(stringResource(R.string.plugin_activity_dialog_body))
-            }
-        )
+            )
+        }
     }
 
     AppScaffold(

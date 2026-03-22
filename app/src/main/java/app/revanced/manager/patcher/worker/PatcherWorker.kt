@@ -49,6 +49,7 @@ import app.revanced.manager.patcher.runtime.morphe.MorpheBridgeRuntime
 import app.revanced.manager.patcher.runtime.morphe.MorpheProcessRuntime
 import app.revanced.manager.patcher.runtime.Revanced22BridgeRuntime
 import app.revanced.manager.patcher.runtime.Revanced22ProcessRuntime
+import app.revanced.manager.patcher.runCancellableBlockingIo
 import app.revanced.manager.patcher.runStep
 import app.revanced.manager.patcher.toRemoteError
 import app.revanced.manager.patcher.patch.PatchBundleType
@@ -74,8 +75,11 @@ import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.io.File
 import java.util.LinkedHashSet
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -472,6 +476,7 @@ class PatcherWorker(
     }
 
     private suspend fun runPatcher(args: Args, totalPatchCount: Int): Result {
+        cleanupTemporarySplitArtifacts()
         val patchedApk = fs.tempDir.resolve("patched.apk")
         var downloadCleanup: (() -> Unit)? = null
         patchNotificationSteps = args.selectedPatches.values
@@ -544,37 +549,60 @@ class PatcherWorker(
                 }
 
                 is SelectedApp.Search -> runStep(StepId.DownloadAPK, eventDispatcher) {
-                    downloaderPluginRepository.loadedPluginsFlow.first()
-                        .firstNotNullOfOrNull { plugin ->
-                            try {
-                                val getScope = object : GetScope {
-                                    override val pluginPackageName = plugin.packageName
-                                    override val hostPackageName = applicationContext.packageName
-                                    override suspend fun requestStartActivity(intent: Intent): Intent? {
-                                        val result = args.handleStartActivityRequest(plugin, intent)
-                                        return when (result.resultCode) {
-                                            Activity.RESULT_OK -> result.data
-                                            Activity.RESULT_CANCELED -> throw UserInteractionException.Activity.Cancelled()
-                                            else -> throw UserInteractionException.Activity.NotCompleted(
+                    var lastUserInteractionFailure: UserInteractionException? = null
+                    for (plugin in downloaderPluginRepository.loadedPluginsFlow.first()) {
+                        val interactionFailure = AtomicReference<UserInteractionException?>(null)
+                        try {
+                            val getScope = object : GetScope {
+                                override val pluginPackageName = plugin.packageName
+                                override val hostPackageName = applicationContext.packageName
+                                override suspend fun requestStartActivity(intent: Intent): Intent? {
+                                    interactionFailure.get()?.let { error -> throw error }
+                                    val result = try {
+                                        args.handleStartActivityRequest(plugin, intent)
+                                    } catch (e: UserInteractionException) {
+                                        interactionFailure.compareAndSet(null, e)
+                                        throw e
+                                    }
+                                    interactionFailure.get()?.let { error -> throw error }
+                                    return when (result.resultCode) {
+                                        Activity.RESULT_OK -> result.data
+                                        Activity.RESULT_CANCELED -> {
+                                            val error = UserInteractionException.Activity.Cancelled()
+                                            interactionFailure.compareAndSet(null, error)
+                                            throw error
+                                        }
+                                        else -> {
+                                            val error = UserInteractionException.Activity.NotCompleted(
                                                 result.resultCode,
                                                 result.data
                                             )
+                                            interactionFailure.compareAndSet(null, error)
+                                            throw error
                                         }
                                     }
                                 }
-                                withContext(Dispatchers.IO) {
-                                    plugin.get(
-                                        getScope,
-                                        selectedApp.packageName,
-                                        selectedApp.version
-                                    )
-                                }?.takeIf { (_, version) -> selectedApp.version == null || version == selectedApp.version }
-                            } catch (e: UserInteractionException.Activity.NotCompleted) {
-                                throw e
-                            } catch (_: UserInteractionException) {
-                                null
-                            }?.let { (data, _) -> download(plugin, data) }
-                        } ?: throw Exception("App is not available.")
+                            }
+                            val result = runInterruptiblePluginGet(interactionFailure) {
+                                plugin.get(
+                                    getScope,
+                                    selectedApp.packageName,
+                                    selectedApp.version
+                                )
+                            }?.takeIf { (_, version) ->
+                                selectedApp.version == null || version == selectedApp.version
+                            }
+                            if (result != null) {
+                                val (data, _) = result
+                                return@runStep download(plugin, data)
+                            }
+                        } catch (e: UserInteractionException.Activity.NotCompleted) {
+                            throw e
+                        } catch (e: UserInteractionException) {
+                            lastUserInteractionFailure = e
+                        }
+                    }
+                    throw (lastUserInteractionFailure ?: Exception("App is not available."))
                 }
 
                 is SelectedApp.Local -> {
@@ -606,10 +634,36 @@ class PatcherWorker(
             val stripNativeLibs = prefs.stripUnusedNativeLibs.get()
             val skipUnneededSplits = prefs.skipUnneededSplitApks.get()
             val inputIsSplitArchive = SplitApkPreparer.isSplitArchive(inputFile)
+            val inputHasProblematicEmbeddedApks =
+                !inputIsSplitArchive && hasProblematicEmbeddedApkPayloads(inputFile)
             val selectedCount = totalPatchCount
             val processRuntimeRequested = prefs.useProcessRuntime.get()
             val processRuntimeSupported = Build.VERSION.SDK_INT > Build.VERSION_CODES.Q
-            val useProcessRuntime = processRuntimeRequested && processRuntimeSupported
+            val useRevancedPatcher22 =
+                bundleType == PatchBundleType.REVANCED &&
+                    patchBundleRepository.selectionUsesRevancedPatcher22(args.selectedPatches)
+            val forceProcessRuntimeReason =
+                if (!processRuntimeRequested && processRuntimeSupported) {
+                    when (bundleType) {
+                        PatchBundleType.AMPLE -> when {
+                            inputIsSplitArchive -> "legacy split APK input"
+                            inputHasProblematicEmbeddedApks -> "embedded APK payloads in legacy input"
+                            else -> null
+                        }
+                        PatchBundleType.REVANCED -> when {
+                            useRevancedPatcher22 -> null
+                            inputIsSplitArchive -> "legacy split APK input"
+                            inputHasProblematicEmbeddedApks -> "embedded APK payloads in legacy input"
+                            else -> null
+                        }
+                        PatchBundleType.MORPHE -> null
+                    }
+                } else {
+                    null
+                }
+            val forceProcessRuntimeForLegacyInput = forceProcessRuntimeReason != null
+            val useProcessRuntime =
+                (processRuntimeRequested && processRuntimeSupported) || forceProcessRuntimeForLegacyInput
             val memoryOverrideActive = useProcessRuntime && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
             val requestedLimit = prefs.patcherProcessMemoryLimit.get()
             val aggressiveLimit = prefs.patcherProcessMemoryAggressive.get()
@@ -638,9 +692,17 @@ class PatcherWorker(
                     "Process runtime requested but unsupported on Android ${Build.VERSION.SDK_INT}; using in-process runtime"
                 )
             }
+            if (forceProcessRuntimeReason != null) {
+                args.logger.warn(
+                    "Forcing process runtime for legacy input because the in-process legacy runtime " +
+                        "cannot reliably initialize $forceProcessRuntimeReason"
+                )
+            }
             args.logger.info("Runtime mode: ${if (useProcessRuntime) "process" else "in-process"}")
             args.logger.info("Memory override: ${if (memoryOverrideActive) "enabled" else "disabled"}")
-            eventDispatcher(ProgressEvent.Started(StepId.LoadPatches))
+            if (!inputIsSplitArchive) {
+                eventDispatcher(ProgressEvent.Started(StepId.LoadPatches))
+            }
 
             when (bundleType) {
                 PatchBundleType.MORPHE -> {
@@ -682,8 +744,6 @@ class PatcherWorker(
                     )
                 }
                 PatchBundleType.REVANCED -> {
-                    val useRevancedPatcher22 =
-                        patchBundleRepository.selectionUsesRevancedPatcher22(args.selectedPatches)
                     val runtime: app.revanced.manager.patcher.runtime.Runtime =
                         if (useRevancedPatcher22) {
                             if (useProcessRuntime) {
@@ -935,6 +995,16 @@ class PatcherWorker(
             Result.failure(
                 workDataOf(PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(e.originalStackTrace))
             )
+        } catch (e: UserInteractionException) {
+            Log.i(tag, "User cancelled downloader interaction".logFmt(), e)
+            eventDispatcher(ProgressEvent.Failed(null, e.toRemoteError()))
+            Result.failure(
+                workDataOf(
+                    PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(
+                        e.message ?: "Downloader interaction cancelled by user"
+                    )
+                )
+            )
         } catch (e: Exception) {
             Log.e(tag, "An exception occurred while patching".logFmt(), e)
             eventDispatcher(ProgressEvent.Failed(null, e.toRemoteError()))
@@ -949,6 +1019,7 @@ class PatcherWorker(
             foregroundStarted = false
             patchedApk.delete()
             downloadCleanup?.invoke()
+            cleanupTemporarySplitArtifacts()
         }
     }
 
@@ -993,6 +1064,64 @@ class PatcherWorker(
             end -= 1
         }
         return message.take(512) + "\n[truncated]"
+    }
+
+    private suspend fun <T> runInterruptiblePluginGet(
+        interactionFailure: AtomicReference<UserInteractionException?>,
+        block: suspend () -> T
+    ): T = runCancellableBlockingIo(
+        checkCancelled = {
+            interactionFailure.get()?.let { error -> throw error }
+        }
+    ) {
+        runBlocking { block() }
+    }.also {
+        interactionFailure.get()?.let { error -> throw error }
+    }
+
+    private fun cleanupTemporarySplitArtifacts() {
+        fs.tempDir.listFiles()?.forEach { child ->
+            val shouldDelete = child.name == "patched.apk" ||
+                child.name.startsWith("split-") ||
+                child.name.startsWith("installed-splits-")
+            if (!shouldDelete) return@forEach
+            runCatching {
+                if (child.isDirectory) {
+                    child.deleteRecursively()
+                } else {
+                    child.delete()
+                }
+            }
+        }
+    }
+
+    private fun hasProblematicEmbeddedApkPayloads(file: File): Boolean {
+        if (!file.exists() || !file.extension.equals("apk", ignoreCase = true)) return false
+        return runCatching {
+            ZipFile(file).use { zip ->
+                zip.entries().asSequence()
+                    .filterNot { it.isDirectory }
+                    .any { entry ->
+                        val name = entry.name
+                        name.endsWith(".apk", ignoreCase = true) &&
+                            !SplitApkPreparer.isLikelySplitApkEntryName(name) &&
+                            isProblematicEmbeddedApkEntryName(name)
+                    }
+            }
+        }.getOrDefault(false)
+    }
+
+    private fun isProblematicEmbeddedApkEntryName(entryName: String): Boolean {
+        val normalized = entryName.replace('\\', '/')
+        val fileName = normalized.substringAfterLast('/')
+        if (!fileName.endsWith(".apk", ignoreCase = true)) return false
+
+        val stem = fileName.removeSuffix(".apk").lowercase(Locale.ROOT)
+        val parts = stem.split('.')
+        if (parts.size < 3) return false
+        return parts.all { part ->
+            part.isNotBlank() && part.all { ch -> ch.isLowerCase() || ch.isDigit() || ch == '_' }
+        }
     }
 
     private suspend fun prepareInstalledInput(packageName: String): DownloadResult = withContext(Dispatchers.IO) {

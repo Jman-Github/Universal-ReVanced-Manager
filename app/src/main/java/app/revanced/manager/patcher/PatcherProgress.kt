@@ -1,7 +1,15 @@
 package app.revanced.manager.patcher
 
 import android.os.Parcelable
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 import kotlinx.parcelize.Parcelize
 
 @Parcelize
@@ -98,4 +106,36 @@ internal fun usedMemoryMb(): Long {
     val runtime = Runtime.getRuntime()
     val usedBytes = runtime.totalMemory() - runtime.freeMemory()
     return usedBytes / (1024 * 1024)
+}
+
+suspend fun <T> runCancellableBlockingIo(
+    checkCancelled: () -> Unit = {},
+    block: () -> T,
+): T = withContext(Dispatchers.IO) {
+    currentCoroutineContext().ensureActive()
+    checkCancelled()
+    val executor = Executors.newSingleThreadExecutor()
+    val future = executor.submit<T> { block() }
+    try {
+        var outcome: Result<T>? = null
+        while (outcome == null) {
+            currentCoroutineContext().ensureActive()
+            checkCancelled()
+            try {
+                outcome = Result.success(future.get(50, TimeUnit.MILLISECONDS))
+            } catch (_: TimeoutException) {
+            } catch (error: ExecutionException) {
+                val cause = error.cause ?: error
+                if (cause is CancellationException) throw cause
+                throw cause
+            }
+        }
+        outcome.getOrThrow()
+    } catch (error: CancellationException) {
+        future.cancel(true)
+        throw error
+    } finally {
+        future.cancel(true)
+        executor.shutdownNow()
+    }
 }

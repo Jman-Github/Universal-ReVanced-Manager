@@ -5,6 +5,7 @@ import com.reandroid.apk.ApkBundle;
 import com.reandroid.apk.ApkModule;
 import com.reandroid.arsc.chunk.xml.AndroidManifestBlock;
 import com.reandroid.arsc.header.TableHeader;
+import com.reandroid.archive.block.ApkSignatureBlock;
 
 import java.io.Closeable;
 import java.io.File;
@@ -110,7 +111,7 @@ public final class ApkEditorMergeProcess {
 
             ApkModule mergedModule;
             try {
-                mergedModule = bundle.mergeModules(false);
+                mergedModule = mergeModules(bundle, logger);
             } catch (Throwable error) {
                 Throwable cause = error.getCause();
                 if (error instanceof CoderMalfunctionError ||
@@ -129,13 +130,11 @@ public final class ApkEditorMergeProcess {
             mergedModule.setLoadDefaultFramework(false);
             closeables.add(mergedModule);
 
-            if (sortApkEntries && mergedModule.hasTableBlock()) {
+            if (mergedModule.hasTableBlock()) {
                 mergedModule.getTableBlock().sortPackages();
                 mergedModule.getTableBlock().refresh();
             }
-            if (sortApkEntries) {
-                mergedModule.getZipEntryMap().autoSortApkFiles();
-            }
+            mergedModule.getZipEntryMap().autoSortApkFiles();
 
             SplitManifestCleaner.clean(mergedModule);
             applyExtractNativeLibs(mergedModule);
@@ -197,6 +196,48 @@ public final class ApkEditorMergeProcess {
             }
         }
         return order;
+    }
+
+    private static ApkModule mergeModules(ApkBundle bundle, APKLogger logger) throws IOException {
+        List<ApkModule> modules = bundle.getApkModuleList();
+        ApkModule baseModule = bundle.getBaseModule();
+        if (baseModule == null) {
+            baseModule = findLargestTableModule(modules);
+        }
+        if (baseModule == null) {
+            baseModule = modules.get(0);
+        }
+
+        ApkModule mergedModule = new ApkModule(generateMergedModuleName(bundle), new com.reandroid.archive.ZipEntryMap());
+        mergedModule.setAPKLogger(logger);
+        mergedModule.setLoadDefaultFramework(false);
+
+        ApkSignatureBlock signatureBlock = null;
+        for (ApkModule module : buildMergeOrder(modules, baseModule)) {
+            String displayName = moduleDisplayName(module);
+            logger.logMessage("Merging " + displayName);
+            ApkSignatureBlock moduleSignature = module.getApkSignatureBlock();
+            if (module == baseModule && moduleSignature != null) {
+                signatureBlock = moduleSignature;
+            } else if (signatureBlock == null) {
+                signatureBlock = moduleSignature;
+            }
+            mergedModule.merge(module, false);
+        }
+        mergedModule.setApkSignatureBlock(signatureBlock);
+        return mergedModule;
+    }
+
+    private static String generateMergedModuleName(ApkBundle bundle) {
+        Set<String> moduleNames = new HashSet<>(bundle.listModuleNames());
+        String baseName = "merged";
+        String candidate = baseName;
+        int index = 1;
+        while (moduleNames.contains(candidate)) {
+            candidate = baseName + "_" + index;
+            index += 1;
+        }
+        return candidate;
     }
 
     private static ApkModule findLargestTableModule(List<ApkModule> modules) {

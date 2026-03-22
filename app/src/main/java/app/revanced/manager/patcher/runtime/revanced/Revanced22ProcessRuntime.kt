@@ -13,6 +13,8 @@ import app.revanced.manager.patcher.ProgressEvent
 import app.revanced.manager.patcher.ProgressEventParcel
 import app.revanced.manager.patcher.StepId
 import app.revanced.manager.patcher.logger.Logger
+import app.revanced.manager.patcher.runStep
+import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.patcher.runtime.StdIoWarningAccumulator
 import app.revanced.manager.patcher.runtime.process.IPatcherEvents
 import app.revanced.manager.patcher.runtime.process.IPatcherProcess
@@ -32,6 +34,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -51,8 +54,10 @@ class Revanced22ProcessRuntime(
     private val pm: PM by inject()
     private val binderRef = AtomicReference<IPatcherProcess?>()
     private val eventHandlerRef = AtomicReference<IPatcherEvents?>()
+    private val cancellationRequested = AtomicBoolean(false)
 
     override fun cancel() {
+        cancellationRequested.set(true)
         runCatching { binderRef.getAndSet(null)?.exit() }
         eventHandlerRef.set(null)
     }
@@ -96,9 +101,40 @@ class Revanced22ProcessRuntime(
         skipUnneededSplits: Boolean,
     ) = coroutineScope {
         currentCoroutineContext()[Job]?.invokeOnCompletion {
+            cancellationRequested.set(true)
             runCatching { binderRef.get()?.exit() }
             eventHandlerRef.set(null)
         }
+        cancellationRequested.set(false)
+        val sourceInput = File(inputFile)
+        val hostPreparation = if (SplitApkPreparer.isSplitArchive(sourceInput)) {
+            runStep(
+                stepId = StepId.PrepareSplitApk,
+                onEvent = onEvent,
+                checkCancelled = {
+                    if (cancellationRequested.get()) {
+                        throw CancellationException("Patching cancelled")
+                    }
+                }
+            ) {
+                SplitApkPreparer.prepareIfNeeded(
+                    source = sourceInput,
+                    workspace = File(cacheDir),
+                    logger = logger,
+                    stripNativeLibs = stripNativeLibs,
+                    skipUnneededSplits = skipUnneededSplits,
+                    onProgress = { message ->
+                        onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
+                    },
+                    onSubSteps = { subSteps ->
+                        onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
+                    }
+                )
+            }
+        } else {
+            null
+        }
+        val runtimeInputFile = hostPreparation?.file?.absolutePath ?: inputFile
         val logQueue = Channel<Pair<String, String>>(Channel.UNLIMITED)
         val eventQueue = Channel<ProgressEvent>(Channel.UNLIMITED)
         val logDrainJob = launch(Dispatchers.Default) {
@@ -149,11 +185,10 @@ class Revanced22ProcessRuntime(
         }
 
         val fallbackWriteSubStepsEmitted = AtomicBoolean(false)
-        val inputIsSplitArchive = inputFile.endsWith(".apks", ignoreCase = true)
-        val includeStripNativeLibs = stripNativeLibs && !inputIsSplitArchive
+        val includeStripNativeLibs = stripNativeLibs
         val fallbackWriteSubSteps = runCatching {
             buildWriteApkSubSteps(
-                listDexNames(inputFile).map { "Compiling $it" },
+                listDexNames(runtimeInputFile).map { "Compiling $it" },
                 includeStripNativeLibs
             )
         }.getOrNull()
@@ -198,8 +233,19 @@ class Revanced22ProcessRuntime(
             }
         }
 
+        fun completeCancelled(cause: Throwable? = null) {
+            if (patching.isCompleted) return
+            val error = CancellationException("Patching cancelled")
+            cause?.let(error::initCause)
+            patching.completeExceptionally(error)
+        }
+
         fun completeFailure(throwable: Throwable) {
             if (!patching.isCompleted) {
+                if (cancellationRequested.get()) {
+                    completeCancelled(throwable)
+                    return
+                }
                 patching.completeExceptionally(throwable)
             }
         }
@@ -227,6 +273,10 @@ class Revanced22ProcessRuntime(
                 Log.d(tag, "ReVanced v22 process finished with exit code ${result.resultCode}")
 
                 if (result.resultCode == 0) {
+                    if (cancellationRequested.get()) {
+                        completeCancelled()
+                        return@launch
+                    }
                     if (finishedReported.get()) {
                         completeSuccess()
                     } else {
@@ -236,6 +286,10 @@ class Revanced22ProcessRuntime(
                             }
                         }
                         if (!patching.isCompleted) {
+                            if (cancellationRequested.get()) {
+                                completeCancelled()
+                                return@launch
+                            }
                             logger.warn(
                                 "ReVanced v22 process exited without finished callback; using process exit fallback."
                             )
@@ -307,7 +361,7 @@ class Revanced22ProcessRuntime(
                 frameworkDir = frameworkPath,
                 cacheDir = cacheDir,
                 packageName = packageName,
-                inputFile = inputFile,
+                inputFile = runtimeInputFile,
                 outputFile = outputFile,
                 configurations = selectedBundlesByUid.map { (uid, bundle) ->
                     PatchConfiguration(
@@ -325,6 +379,9 @@ class Revanced22ProcessRuntime(
 
         try {
             patching.await()
+            if (cancellationRequested.get()) {
+                throw CancellationException("Patching cancelled")
+            }
         } finally {
             eventHandlerRef.set(null)
             logQueue.close()
@@ -336,6 +393,7 @@ class Revanced22ProcessRuntime(
                 logDrainJob.cancel()
                 eventDrainJob.cancel()
             }
+            hostPreparation?.cleanup()
         }
     }
 
@@ -399,10 +457,11 @@ class Revanced22ProcessRuntime(
         private fun listDexNamesFromSplitArchive(file: File): List<String> =
             runCatching {
                 val dexNames = linkedSetOf<String>()
+                val splitEntryNames = SplitApkPreparer.splitApkEntryNames(file)
                 ZipFile(file).use { outer ->
                     val entries = outer.entries().asSequence()
                         .filterNot { it.isDirectory }
-                        .filter { it.name.endsWith(".apk", ignoreCase = true) }
+                        .filter { it.name in splitEntryNames }
                         .toList()
                     entries.forEach { entry ->
                         outer.getInputStream(entry).use { raw ->

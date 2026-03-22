@@ -10,6 +10,7 @@ data class AmpleParameters(
     val aaptPath: String,
     val aaptFallbackPath: String?,
     val frameworkDir: String,
+    val runtimeClassPath: String?,
     val apkEditorJarPath: String?,
     val apkEditorMergeJarPath: String?,
     val packageName: String,

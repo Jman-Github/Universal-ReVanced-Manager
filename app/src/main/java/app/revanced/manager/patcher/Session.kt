@@ -12,9 +12,11 @@ import app.revanced.patcher.PatcherConfig
 import app.revanced.patcher.PatcherResult
 import app.revanced.patcher.patch.Patch
 import app.revanced.patcher.patch.PatchResult
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.runInterruptible
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import java.io.Closeable
 import java.io.File
 import java.io.FileInputStream
@@ -22,36 +24,92 @@ import java.io.FileOutputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.io.BufferedInputStream
+import java.util.Enumeration
+import java.util.Locale
+import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 import javax.xml.parsers.DocumentBuilderFactory
 import org.w3c.dom.Attr
 import org.w3c.dom.Element
 
 internal typealias PatchList = List<Patch<*>>
 
-class Session(
+class Session private constructor(
     cacheDir: String,
     frameworkDir: String,
     aaptPath: String,
     private val logger: Logger,
     private val input: File,
+    private val sanitizeAllEmbeddedApksOnInit: Boolean = false,
     private val onEvent: (ProgressEvent) -> Unit,
     private val checkCancelled: () -> Unit = {},
 ) : Closeable {
     private val tempDir = File(cacheDir).resolve("patcher").also { it.mkdirs() }
+    private val patcherInputDir = File(cacheDir).resolve("patcher-inputs").also { it.mkdirs() }
     private val frameworkDirFile = File(frameworkDir).also { it.mkdirs() }
     private val resolvedAaptPath = aaptPath
-    private var patcher = createPatcher()
+    private var patcherInput = initializePatcherInput()
+    private lateinit var patcher: Patcher
 
-    private fun createPatcher() = Patcher(
+    private fun initializePatcherInput(): PreparedPatcherInput =
+        prepareLegacyPatcherInputIfNeeded(
+            logReason = false,
+            hideAllEmbeddedApks = sanitizeAllEmbeddedApksOnInit
+        ) ?: PreparedPatcherInput(input)
+
+    private suspend fun initializePatcher() {
+        onEvent(
+            ProgressEvent.Progress(
+                stepId = StepId.ReadAPK,
+                message = "Initializing patcher"
+            )
+        )
+        logger.info("Initializing legacy patcher")
+        patcher = try {
+            createPatcherWithTimeout(patcherInput.file)
+        } catch (originalError: Throwable) {
+            rethrowIfActuallyCancelled(originalError)
+            val fallbackInput = prepareLegacyPatcherFallbackInput(originalError) ?: throw originalError
+            patcherInput.cleanup()
+            patcherInput = fallbackInput
+            try {
+                createPatcherWithTimeout(fallbackInput.file)
+            } catch (fallbackError: Throwable) {
+                fallbackInput.cleanup()
+                rethrowIfActuallyCancelled(fallbackError)
+                originalError.addSuppressed(fallbackError)
+                throw originalError
+            }
+        }
+        logger.info("Legacy patcher initialized")
+    }
+
+    private fun rethrowIfActuallyCancelled(error: Throwable) {
+        if (error is CancellationException) {
+            checkCancelled()
+        }
+    }
+
+    private suspend fun createPatcherWithTimeout(apkFile: File): Patcher =
+        withTimeout(PATCHER_INIT_TIMEOUT_MS) {
+            runCancellableBlockingIo(checkCancelled) { createPatcher(apkFile) }
+        }
+
+    private fun createPatcher(apkFile: File) = Patcher(
         PatcherConfig(
-            apkFile = input,
+            apkFile = apkFile,
             temporaryFilesPath = tempDir,
             frameworkFileDirectory = frameworkDirFile.absolutePath,
             aaptBinaryPath = resolvedAaptPath
         )
     )
+
+    private fun requirePatcher(): Patcher {
+        check(::patcher.isInitialized) { "Patcher has not been initialized." }
+        return patcher
+    }
 
     private suspend fun Patcher.applyPatchesVerbose(selectedPatches: PatchList) {
         if (selectedPatches.isEmpty()) return
@@ -109,7 +167,7 @@ class Session(
 
     private suspend fun executePatchesOnce(orderedPatches: PatchList) {
         checkCancelled()
-        with(patcher) {
+        with(requirePatcher()) {
             logger.info("Merging integrations")
             this += LinkedHashSet(orderedPatches)
 
@@ -221,7 +279,7 @@ class Session(
                 validateMissingResourceReferences()
                 validateInvalidNumericCharacterReferences()
                 checkCancelled()
-                val result = patcher.get()
+                val result = runCancellableBlockingIo(checkCancelled) { requirePatcher().get() }
                 val updatedDexNames = mergeDexNames(initialDexNames, result)
                 if (updatedDexNames != initialDexNames) {
                     onEvent(
@@ -236,7 +294,7 @@ class Session(
                 }
 
                 val patched = tempDir.resolve("result.apk")
-                runInterruptible(Dispatchers.IO) {
+                runCancellableBlockingIo(checkCancelled) {
                     fastCopy(input, patched)
                 }
                 checkCancelled()
@@ -246,14 +304,18 @@ class Session(
                         message = "Compiling modified resources"
                     )
                 )
-                runInterruptible(Dispatchers.IO) {
+                runCancellableBlockingIo(checkCancelled) {
                     result.applyTo(patched)
+                }
+                checkCancelled()
+                runCancellableBlockingIo(checkCancelled) {
+                    restoreHiddenEntriesIfNeeded(patched)
                 }
                 checkCancelled()
 
                 logger.info("Patched apk saved to $patched")
 
-                withContext(Dispatchers.IO) {
+                runCancellableBlockingIo(checkCancelled) {
                     checkCancelled()
                     onEvent(
                         ProgressEvent.Progress(
@@ -290,7 +352,7 @@ class Session(
                             message = "Stripping native libraries"
                         )
                     )
-                    NativeLibStripper.strip(output)
+                    NativeLibStripper.strip(output, checkCancelled = checkCancelled)
                     checkCancelled()
                 }
             }
@@ -636,10 +698,11 @@ class Session(
         runInterruptible(Dispatchers.IO) {
             if (!file.exists()) return@runInterruptible emptyList<String>()
             val dexNames = mutableSetOf<String>()
+            val splitEntryNames = SplitApkPreparer.splitApkEntryNames(file)
             ZipFile(file).use { outer ->
                 val entries = outer.entries().asSequence()
                     .filterNot { it.isDirectory }
-                    .filter { it.name.endsWith(".apk", ignoreCase = true) }
+                    .filter { it.name in splitEntryNames }
                     .toList()
                 if (entries.isEmpty()) return@use
                 entries.forEach { entry ->
@@ -662,13 +725,242 @@ class Session(
         }
 
     override fun close() {
+        if (::patcher.isInitialized) {
+            patcher.close()
+        }
+        patcherInput.cleanup()
         tempDir.deleteRecursively()
-        patcher.close()
     }
+
+    private fun prepareLegacyPatcherFallbackInput(originalError: Throwable): PreparedPatcherInput? {
+        if (patcherInput.file.absolutePath != input.absolutePath) {
+            return null
+        }
+        return prepareLegacyPatcherInputIfNeeded(
+            logReason = true,
+            originalError = originalError,
+            hideAllEmbeddedApks = true
+        )
+    }
+
+    private fun prepareLegacyPatcherInputIfNeeded(
+        logReason: Boolean,
+        originalError: Throwable? = null,
+        hideAllEmbeddedApks: Boolean = false,
+    ): PreparedPatcherInput? {
+        if (!input.exists() || !input.extension.equals("apk", ignoreCase = true)) {
+            return null
+        }
+        if (SplitApkPreparer.isSplitArchive(input)) {
+            return null
+        }
+
+        return runCatching {
+            ZipFile(input).use { zip ->
+                val embeddedApks = zip.entries()
+                    .asSequence()
+                    .filterNot { it.isDirectory }
+                    .filter { it.name.endsWith(".apk", ignoreCase = true) }
+                    .filter { hideAllEmbeddedApks || isProblematicEmbeddedApkEntry(it.name) }
+                    .toList()
+                if (embeddedApks.isEmpty() && !hideAllEmbeddedApks) {
+                    return null
+                }
+
+                val sanitized = Files.createTempFile(
+                    patcherInputDir.toPath(),
+                    "${input.nameWithoutExtension}-patcher-input-",
+                    ".apk"
+                ).toFile()
+                ZipOutputStream(FileOutputStream(sanitized).buffered()).use { output ->
+                    copyWithoutEntries(
+                        zip = zip,
+                        entries = zip.entries(),
+                        entriesToSkip = embeddedApks.mapTo(HashSet()) { it.name },
+                        output = output
+                    )
+                }
+
+                val hiddenEntries = embeddedApks.mapTo(LinkedHashSet()) { it.name }
+                if (logReason) {
+                    val failureSummary = when (originalError) {
+                        is TimeoutCancellationException -> "timed out after ${PATCHER_INIT_TIMEOUT_MS / 1000}s"
+                        null -> "init failure"
+                        is CancellationException -> "init failure reported as cancellation"
+                        else -> "${originalError::class.java.simpleName}: ${originalError.message}"
+                    }
+                    if (hiddenEntries.isEmpty()) {
+                        logger.warn(
+                            "Retrying legacy patcher with normalized APK container after init failure " +
+                                "($failureSummary)"
+                        )
+                    } else {
+                        logger.warn(
+                            "Retrying legacy patcher with embedded APK payloads hidden after init failure " +
+                                "($failureSummary): " +
+                                hiddenEntries.joinToString()
+                        )
+                    }
+                } else {
+                    if (hiddenEntries.isEmpty()) {
+                        logger.info("Using normalized patcher input during init")
+                    } else {
+                        logger.info(
+                            "Using sanitized patcher input with embedded APK payloads hidden during init: " +
+                                hiddenEntries.joinToString()
+                        )
+                    }
+                }
+                PreparedPatcherInput(
+                    file = sanitized,
+                    hiddenEntries = hiddenEntries,
+                    cleanup = { sanitized.delete() }
+                )
+            }
+        }.getOrElse { error ->
+            logger.warn("Failed to prepare legacy patcher fallback input, using original APK failure: ${error.message}")
+            null
+        }
+    }
+
+    private fun restoreHiddenEntriesIfNeeded(patched: File) {
+        val hiddenEntries = patcherInput.hiddenEntries
+        if (hiddenEntries.isEmpty()) return
+
+        val restored = Files.createTempFile(tempDir.toPath(), "restored-result-", ".apk").toFile()
+        try {
+            ZipFile(patched).use { patchedZip ->
+                ZipFile(input).use { originalZip ->
+                    ZipOutputStream(FileOutputStream(restored).buffered()).use { output ->
+                        copyWithoutEntries(
+                            zip = patchedZip,
+                            entries = patchedZip.entries(),
+                            entriesToSkip = emptySet(),
+                            output = output
+                        )
+                        hiddenEntries.forEach { name ->
+                            if (patchedZip.getEntry(name) != null) return@forEach
+                            val entry = originalZip.getEntry(name) ?: return@forEach
+                            output.putNextEntry(cloneEntry(entry))
+                            originalZip.getInputStream(entry).use { input -> input.copyTo(output) }
+                            output.closeEntry()
+                        }
+                    }
+                }
+            }
+
+            try {
+                Files.move(
+                    restored.toPath(),
+                    patched.toPath(),
+                    StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.ATOMIC_MOVE
+                )
+            } catch (_: Exception) {
+                Files.move(
+                    restored.toPath(),
+                    patched.toPath(),
+                    StandardCopyOption.REPLACE_EXISTING
+                )
+            }
+        } finally {
+            restored.delete()
+        }
+    }
+
+    private fun isProblematicEmbeddedApkEntry(entryName: String): Boolean {
+        val normalized = entryName.replace('\\', '/')
+        val fileName = normalized.substringAfterLast('/')
+        if (!fileName.endsWith(".apk", ignoreCase = true)) return false
+        if (SplitApkPreparer.isLikelySplitApkEntryName(entryName)) return false
+
+        val stem = fileName.removeSuffix(".apk").lowercase(Locale.ROOT)
+        val parts = stem.split('.')
+        if (parts.size < 3) return false
+        return parts.all { part ->
+            part.isNotBlank() && part.all { ch -> ch.isLowerCase() || ch.isDigit() || ch == '_' }
+        }
+    }
+
+    private fun copyWithoutEntries(
+        zip: ZipFile,
+        entries: Enumeration<out ZipEntry>,
+        entriesToSkip: Set<String>,
+        output: ZipOutputStream
+    ) {
+        while (entries.hasMoreElements()) {
+            val entry = entries.nextElement()
+            if (entry.isDirectory || entry.name in entriesToSkip) continue
+            output.putNextEntry(cloneEntry(entry))
+            zip.getInputStream(entry).use { input -> input.copyTo(output) }
+            output.closeEntry()
+        }
+    }
+
+    private fun cloneEntry(entry: ZipEntry): ZipEntry {
+        val clone = ZipEntry(entry.name)
+        clone.time = entry.time
+        clone.comment = entry.comment
+        entry.extra?.let { clone.extra = it.copyOf() }
+        when (entry.method) {
+            ZipEntry.STORED -> {
+                clone.method = ZipEntry.STORED
+                if (entry.size >= 0) clone.size = entry.size
+                if (entry.compressedSize >= 0) clone.compressedSize = entry.compressedSize
+                clone.crc = entry.crc
+            }
+
+            ZipEntry.DEFLATED -> clone.method = ZipEntry.DEFLATED
+            else -> if (entry.method != -1) clone.method = entry.method
+        }
+        return clone
+    }
+
+    private data class PreparedPatcherInput(
+        val file: File,
+        val hiddenEntries: Set<String> = emptySet(),
+        val cleanup: () -> Unit = {}
+    )
 
     companion object {
         private const val FRAMEWORK_APK_NAME = "1.apk"
         private const val FRAMEWORK_RESOURCES_TABLE = "resources.arsc"
+        private const val PATCHER_INIT_TIMEOUT_MS = 90_000L
+
+        suspend fun open(
+            cacheDir: String,
+            frameworkDir: String,
+            aaptPath: String,
+            logger: Logger,
+            input: File,
+            sanitizeAllEmbeddedApksOnInit: Boolean = false,
+            onEvent: (ProgressEvent) -> Unit,
+            checkCancelled: () -> Unit = {},
+        ): Session {
+            val session = Session(
+                cacheDir = cacheDir,
+                frameworkDir = frameworkDir,
+                aaptPath = aaptPath,
+                logger = logger,
+                input = input,
+                sanitizeAllEmbeddedApksOnInit = sanitizeAllEmbeddedApksOnInit,
+                onEvent = onEvent,
+                checkCancelled = checkCancelled
+            )
+            return try {
+                if (sanitizeAllEmbeddedApksOnInit) {
+                    session.clearFrameworkCache("reset before legacy split init")
+                } else {
+                    session.ensureFrameworkCacheIsValid()
+                }
+                session.initializePatcher()
+                session
+            } catch (error: Throwable) {
+                session.close()
+                throw error
+            }
+        }
+
         operator fun PatchResult.component1() = patch
         operator fun PatchResult.component2() = exception
     }

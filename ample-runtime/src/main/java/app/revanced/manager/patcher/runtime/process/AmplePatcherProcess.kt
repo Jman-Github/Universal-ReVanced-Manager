@@ -20,10 +20,13 @@ import app.revanced.manager.patcher.runStep
 import app.revanced.manager.patcher.split.ApkEditorMergeRuntime
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.patcher.toParcel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.io.FileInputStream
 import java.io.OutputStream
@@ -42,6 +45,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
     private var eventBinder: IPatcherEvents? = null
     private val eventsEnabled = AtomicBoolean(true)
+    private val exitRequested = AtomicBoolean(false)
+    @Volatile
+    private var runningJob: Job? = null
 
     private val scope =
         CoroutineScope(Dispatchers.Default + CoroutineExceptionHandler { _, throwable ->
@@ -60,7 +66,18 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
         })
 
     override fun buildId() = BuildConfig.BUILD_ID
-    override fun exit() = exitProcess(0)
+
+    override fun exit() {
+        if (!exitRequested.compareAndSet(false, true)) return
+        eventsEnabled.set(false)
+        runningJob?.cancel(CancellationException("Patching cancelled"))
+        scope.launch {
+            withTimeoutOrNull(2_000L) {
+                runningJob?.join()
+            }
+            exitProcess(0)
+        }
+    }
 
     override fun start(parameters: AmpleParameters, events: IPatcherEvents) {
         fun safeEvent(event: ProgressEvent) {
@@ -89,8 +106,9 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
         }
 
         eventBinder = events
+        exitRequested.set(false)
 
-        scope.launch {
+        runningJob = scope.launch {
             val dexCompilePattern =
                 Regex("(Compiling|Compiled)\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
             val dexWritePattern =
@@ -126,7 +144,8 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
                 parameters.propOverridePath,
                 parameters.mergeMemoryLimitMb,
                 parameters.appProcessPath,
-                androidDataDir
+                androidDataDir,
+                resolveRuntimeClassPath(parameters.runtimeClassPath)
             )
             logger.info("Memory limit: ${Runtime.getRuntime().maxMemory() / (1024 * 1024)}MB")
             val aaptLogs = AaptLogCapture(onLine = ::handleDexCompileLine).apply { start() }
@@ -203,12 +222,13 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
                             aaptPath = selectedAaptPath,
                             logger = logger
                         )
-                        AmpleSession(
+                        AmpleSession.open(
                             cacheDir = parameters.cacheDir,
                             frameworkDir = frameworkDir,
                             aaptPath = selectedAaptPath,
                             logger = logger,
                             input = preparedInput.file,
+                            sanitizeAllEmbeddedApksOnInit = preparedInput.merged,
                             onEvent = ::safeEvent,
                         )
                     }
@@ -458,4 +478,22 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
         }
         hex.toString()
     }.getOrNull()
+
+    private fun resolveRuntimeClassPath(explicitPath: String?): String? {
+        val explicit = explicitPath
+            ?.takeIf { it.isNotBlank() }
+            ?.let(::File)
+            ?.takeIf(File::exists)
+            ?.absolutePath
+        if (explicit != null) return explicit
+
+        return runCatching {
+            val location = AmplePatcherProcess::class.java.protectionDomain
+                ?.codeSource
+                ?.location
+                ?: return@runCatching null
+            val path = File(location.toURI()).absolutePath
+            path.takeIf { File(it).exists() }
+        }.getOrNull()
+    }
 }

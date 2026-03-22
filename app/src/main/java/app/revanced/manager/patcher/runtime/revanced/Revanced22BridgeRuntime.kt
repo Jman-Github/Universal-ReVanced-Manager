@@ -4,10 +4,13 @@ import android.content.Context
 import android.os.Build
 import app.revanced.manager.patcher.LibraryResolver
 import app.revanced.manager.patcher.ProgressEvent
+import app.revanced.manager.patcher.StepId
 import app.revanced.manager.patcher.logger.Logger
+import app.revanced.manager.patcher.runStep
 import app.revanced.manager.patcher.revanced.Revanced22BridgeFailureException
 import app.revanced.manager.patcher.revanced.Revanced22RuntimeBridge
 import app.revanced.manager.patcher.runtime.revanced.Revanced22RuntimeAssets
+import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.util.Options
 import app.revanced.manager.util.PatchSelection
 import java.io.File
@@ -40,6 +43,31 @@ class Revanced22BridgeRuntime(context: Context) : Runtime(context) {
         skipUnneededSplits: Boolean,
     ) {
         ensureNotCancelled()
+        val sourceInput = File(inputFile)
+        val hostPreparation = if (SplitApkPreparer.isSplitArchive(sourceInput)) {
+            runStep(
+                stepId = StepId.PrepareSplitApk,
+                onEvent = onEvent,
+                checkCancelled = ::ensureNotCancelled
+            ) {
+                SplitApkPreparer.prepareIfNeeded(
+                    source = sourceInput,
+                    workspace = File(cacheDir),
+                    logger = logger,
+                    stripNativeLibs = stripNativeLibs,
+                    skipUnneededSplits = skipUnneededSplits,
+                    onProgress = { message ->
+                        onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
+                    },
+                    onSubSteps = { subSteps ->
+                        onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
+                    }
+                )
+            }
+        } else {
+            null
+        }
+        val runtimeInputFile = hostPreparation?.file?.absolutePath ?: inputFile
         val activeSelectedPatches = selectedPatches.filterValues { it.isNotEmpty() }
         val selectedBundleIds = activeSelectedPatches.keys
         val bundlesByUid = bundles()
@@ -84,29 +112,33 @@ class Revanced22BridgeRuntime(context: Context) : Runtime(context) {
             null
         }
 
-        val params = mapOf(
-            "aaptPath" to aaptPrimaryPath,
-            "aaptFallbackPath" to aaptFallbackPath,
-            "frameworkDir" to frameworkPath,
-            "cacheDir" to cacheDir,
-            "apkEditorJarPath" to apkEditorJarPath,
-            "apkEditorMergeJarPath" to apkEditorMergeJarPath,
-            "runtimeClassPath" to runtimeClassPath,
-            "propOverridePath" to propOverridePath,
-            "mergeMemoryLimitMb" to mergeMemoryLimitMb,
-            "appProcessPath" to appProcessPath,
-            "packageName" to packageName,
-            "inputFile" to inputFile,
-            "outputFile" to outputFile,
-            "stripNativeLibs" to stripNativeLibs,
-            "skipUnneededSplits" to skipUnneededSplits,
-            "configurations" to configs
-        )
+        try {
+            val params = mapOf(
+                "aaptPath" to aaptPrimaryPath,
+                "aaptFallbackPath" to aaptFallbackPath,
+                "frameworkDir" to frameworkPath,
+                "cacheDir" to cacheDir,
+                "apkEditorJarPath" to apkEditorJarPath,
+                "apkEditorMergeJarPath" to apkEditorMergeJarPath,
+                "runtimeClassPath" to runtimeClassPath,
+                "propOverridePath" to propOverridePath,
+                "mergeMemoryLimitMb" to mergeMemoryLimitMb,
+                "appProcessPath" to appProcessPath,
+                "packageName" to packageName,
+                "inputFile" to runtimeInputFile,
+                "outputFile" to outputFile,
+                "stripNativeLibs" to stripNativeLibs,
+                "skipUnneededSplits" to skipUnneededSplits,
+                "configurations" to configs
+            )
 
-        ensureNotCancelled()
-        val error = Revanced22RuntimeBridge.runPatcher(params, logger, onEvent, cancelRequested::get)
-        if (!error.isNullOrBlank()) {
-            throw Revanced22BridgeFailureException(error)
+            ensureNotCancelled()
+            val error = Revanced22RuntimeBridge.runPatcher(params, logger, onEvent, cancelRequested::get)
+            if (!error.isNullOrBlank()) {
+                throw Revanced22BridgeFailureException(error)
+            }
+        } finally {
+            hostPreparation?.cleanup()
         }
     }
 

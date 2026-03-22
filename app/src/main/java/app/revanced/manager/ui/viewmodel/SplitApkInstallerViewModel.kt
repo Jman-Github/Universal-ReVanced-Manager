@@ -654,12 +654,13 @@ class SplitApkInstallerViewModel(
 
     private fun extractSplitEntries(source: File, outputDir: File): List<ExtractedSplitApk> {
         val results = mutableListOf<ExtractedSplitApk>()
+        val selectedEntryNames = SplitApkPreparer.splitApkEntryNames(source)
         ZipFile(source).use { zip ->
             val entries = zip.entries()
             var index = 0
             while (entries.hasMoreElements()) {
                 val entry = entries.nextElement()
-                if (entry.isDirectory || !entry.name.endsWith(".apk", ignoreCase = true)) continue
+                if (entry.isDirectory || entry.name !in selectedEntryNames) continue
 
                 val rawName = entry.name.substringAfterLast('/').ifBlank { "split-$index.apk" }
                 val fileName = sanitizeFileName(rawName).ifBlank { "split-$index.apk" }

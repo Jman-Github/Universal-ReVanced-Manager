@@ -6,6 +6,7 @@ import android.os.Build
 import android.system.Os
 import java.io.File
 import java.io.IOException
+import java.security.MessageDigest
 import java.util.zip.ZipFile
 
 object Revanced22RuntimeAssets {
@@ -18,12 +19,12 @@ object Revanced22RuntimeAssets {
     fun ensureRuntimeApk(context: Context): File {
         val appContext = context.applicationContext ?: context
         val outputDir = File(appContext.codeCacheDir, OUTPUT_PREFIX).apply { mkdirs() }
+        val assetHash = runtimeAssetHash(appContext)
         val output = File(
             outputDir,
-            "$OUTPUT_PREFIX-${BuildConfig.VERSION_CODE}-${BuildConfig.BUILD_ID}.apk"
+            "$OUTPUT_PREFIX-${BuildConfig.VERSION_CODE}-${assetHash}.apk"
         )
-        val appUpdatedAt = appLastUpdateTime(appContext)
-        if (output.exists() && output.length() > 0L && output.lastModified() >= appUpdatedAt) {
+        if (output.exists() && output.length() > 0L) {
             ensureReadOnly(output)
             return output
         }
@@ -45,9 +46,6 @@ object Revanced22RuntimeAssets {
         if (!temp.renameTo(output)) {
             temp.delete()
             throw IOException("Failed to finalize ReVanced runtime APK.")
-        }
-        runCatching {
-            output.setLastModified(maxOf(System.currentTimeMillis(), appUpdatedAt))
         }
 
         ensureReadOnly(output)
@@ -149,10 +147,20 @@ object Revanced22RuntimeAssets {
         return output
     }
 
-    private fun appLastUpdateTime(context: Context): Long = runCatching {
-        @Suppress("DEPRECATION")
-        context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime
-    }.getOrDefault(0L)
+    private fun runtimeAssetHash(context: Context): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        context.assets.open(RUNTIME_ASSET_NAME).use { input ->
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            while (true) {
+                val read = input.read(buffer)
+                if (read <= 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        return digest.digest()
+            .joinToString(separator = "") { byte -> "%02x".format(byte) }
+            .take(16)
+    }
 
     private fun ensureReadOnly(file: File) {
         file.setReadable(true, false)

@@ -75,15 +75,18 @@ object SplitArchiveDisplayResolver {
         val density = deviceDensityQualifier()
         val abiTokens = deviceAbiTokens()
         val output = mutableListOf<File>()
+        val selectedEntryNames = SplitApkPreparer.splitApkEntryNames(source)
 
         ZipFile(source).use { zip ->
             val entries = zip.entries().asSequence()
                 .filterNot { it.isDirectory }
-                .filter { it.name.lowercase(Locale.ROOT).endsWith(".apk") }
+                .filter { it.name in selectedEntryNames }
                 .toList()
             if (entries.isEmpty()) return emptyList()
 
             val base = entries.firstOrNull { isBaseApkName(it.name) }
+                ?: entries.filter { !isConfigLikeApkName(it.name) }
+                    .maxByOrNull { entry -> entry.size }
             val selected = LinkedHashSet<String>()
             base?.let { selected.add(it.name) }
 
@@ -114,6 +117,13 @@ object SplitArchiveDisplayResolver {
         }
 
         return output
+    }
+
+    private fun isConfigLikeApkName(name: String): Boolean {
+        val lower = name.lowercase(Locale.ROOT)
+        return lower.startsWith("config") ||
+            lower.contains("split_config") ||
+            lower.contains("config.")
     }
 
     private data class ResourcesSession(

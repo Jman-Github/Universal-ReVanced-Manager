@@ -12,6 +12,7 @@ import app.revanced.manager.patcher.LibraryResolver
 import app.revanced.manager.patcher.ProgressEvent
 import app.revanced.manager.patcher.ProgressEventParcel
 import app.revanced.manager.patcher.logger.Logger
+import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.patcher.runtime.MemoryLimitConfig
 import app.revanced.manager.patcher.runtime.StdIoWarningAccumulator
 import app.revanced.manager.patcher.runtime.process.IMorphePatcherProcess
@@ -25,6 +26,7 @@ import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.tag
 import com.github.pgreze.process.Redirect
 import com.github.pgreze.process.process
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -45,8 +47,10 @@ class MorpheProcessRuntime(
 ) : MorpheRuntime(context) {
     private val binderRef = AtomicReference<IMorphePatcherProcess?>()
     private val eventHandlerRef = AtomicReference<IPatcherEvents?>()
+    private val cancellationRequested = AtomicBoolean(false)
 
     override fun cancel() {
+        cancellationRequested.set(true)
         runCatching { binderRef.getAndSet(null)?.exit() }
         eventHandlerRef.set(null)
     }
@@ -87,9 +91,11 @@ class MorpheProcessRuntime(
         skipUnneededSplits: Boolean,
     ) = coroutineScope {
         currentCoroutineContext()[Job]?.invokeOnCompletion {
+            cancellationRequested.set(true)
             runCatching { binderRef.get()?.exit() }
             eventHandlerRef.set(null)
         }
+        cancellationRequested.set(false)
         val logQueue = Channel<Pair<String, String>>(Channel.UNLIMITED)
         val eventQueue = Channel<ProgressEvent>(Channel.UNLIMITED)
         val logDrainJob = launch(Dispatchers.Default) {
@@ -102,7 +108,9 @@ class MorpheProcessRuntime(
                 runCatching { onEvent(event) }
             }
         }
-        onEvent(ProgressEvent.Started(app.revanced.manager.patcher.StepId.LoadPatches))
+        if (!SplitApkPreparer.isSplitArchive(File(inputFile))) {
+            onEvent(ProgressEvent.Started(app.revanced.manager.patcher.StepId.LoadPatches))
+        }
         val runtimeClassPath = MorpheRuntimeAssets.ensureRuntimeClassPath(context).absolutePath
 
         val env = System.getenv().toMutableMap().apply {
@@ -149,8 +157,19 @@ class MorpheProcessRuntime(
             }
         }
 
+        fun completeCancelled(cause: Throwable? = null) {
+            if (patching.isCompleted) return
+            val error = CancellationException("Patching cancelled")
+            cause?.let(error::initCause)
+            patching.completeExceptionally(error)
+        }
+
         fun completeFailure(throwable: Throwable) {
             if (!patching.isCompleted) {
+                if (cancellationRequested.get()) {
+                    completeCancelled(throwable)
+                    return
+                }
                 patching.completeExceptionally(throwable)
             }
         }
@@ -178,6 +197,10 @@ class MorpheProcessRuntime(
                 Log.d(tag, "Morphe process finished with exit code ${result.resultCode}")
 
                 if (result.resultCode == 0) {
+                    if (cancellationRequested.get()) {
+                        completeCancelled()
+                        return@launch
+                    }
                     if (finishedReported.get()) {
                         completeSuccess()
                     } else {
@@ -187,6 +210,10 @@ class MorpheProcessRuntime(
                             }
                         }
                         if (!patching.isCompleted) {
+                            if (cancellationRequested.get()) {
+                                completeCancelled()
+                                return@launch
+                            }
                             logger.warn(
                                 "Morphe process exited without finished callback; using process exit fallback."
                             )
@@ -269,6 +296,9 @@ class MorpheProcessRuntime(
 
         try {
             patching.await()
+            if (cancellationRequested.get()) {
+                throw CancellationException("Patching cancelled")
+            }
         } finally {
             eventHandlerRef.set(null)
             logQueue.close()

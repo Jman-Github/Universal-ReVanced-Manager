@@ -59,7 +59,6 @@ object MorpheRuntimeEntry {
         val seenDexCompiles = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
         val seenResourceCompile = AtomicBoolean(false)
         val writeApkActive = AtomicBoolean(false)
-        val applyChangesActive = AtomicBoolean(false)
         fun throwIfCancelled() {
             if (callback.isCancelled()) {
                 throw CancellationException("Patching cancelled")
@@ -71,27 +70,19 @@ object MorpheRuntimeEntry {
                 StepId.WriteAPK -> when (event) {
                     is ProgressEvent.Started -> {
                         writeApkActive.set(true)
-                        applyChangesActive.set(false)
                         seenDexCompiles.clear()
                         seenResourceCompile.set(false)
                     }
 
-                    is ProgressEvent.Progress -> {
-                        writeApkActive.set(true)
-                        if (event.message.equals("Applying patched changes", ignoreCase = true)) {
-                            applyChangesActive.set(true)
-                        }
-                    }
+                    is ProgressEvent.Progress -> writeApkActive.set(true)
                     is ProgressEvent.Completed,
                     is ProgressEvent.Failed -> {
                         writeApkActive.set(false)
-                        applyChangesActive.set(false)
                     }
                 }
 
                 StepId.SignAPK -> if (event is ProgressEvent.Started) {
                     writeApkActive.set(false)
-                    applyChangesActive.set(false)
                 }
                 else -> Unit
             }
@@ -99,7 +90,7 @@ object MorpheRuntimeEntry {
         }
 
         fun handleWriteProgressLine(rawLine: String) {
-            if (!writeApkActive.get() || !applyChangesActive.get()) return
+            if (!writeApkActive.get()) return
             val line = rawLine.trim()
             if (line.isEmpty()) return
             if (line.contains("Compiling modified resources", ignoreCase = true) ||
@@ -178,7 +169,39 @@ object MorpheRuntimeEntry {
                     }
                 }
                 try {
-                    val patchList = runStep(StepId.LoadPatches, ::onEvent, ::throwIfCancelled) {
+                val input = File(inputFile)
+                suspend fun prepareInput() = SplitApkPreparer.prepareIfNeeded(
+                    input,
+                    File(cacheDir),
+                    logger,
+                    stripNativeLibs,
+                    skipUnneededSplits,
+                    onProgress = { message ->
+                        throwIfCancelled()
+                        onEvent(
+                            ProgressEvent.Progress(
+                                stepId = StepId.PrepareSplitApk,
+                                message = message
+                            )
+                        )
+                    },
+                    onSubSteps = { subSteps ->
+                        throwIfCancelled()
+                        onEvent(
+                            ProgressEvent.Progress(
+                                stepId = StepId.PrepareSplitApk,
+                                subSteps = subSteps
+                            )
+                        )
+                    }
+                )
+                var preparation: SplitApkPreparer.PreparationResult? = null
+                if (SplitApkPreparer.isSplitArchive(input)) {
+                    preparation = runStep(StepId.PrepareSplitApk, ::onEvent, ::throwIfCancelled) {
+                        prepareInput()
+                    }
+                }
+                val patchList = runStep(StepId.LoadPatches, ::onEvent, ::throwIfCancelled) {
                     val activeConfigs = configs.filter { it.patches.isNotEmpty() }
                     val allPatches = MorphePatchBundleLoader.patches(
                         activeConfigs.map { it.bundlePath },
@@ -215,39 +238,6 @@ object MorpheRuntimeEntry {
                     }
 
                     selectedPatches
-                }
-
-                val input = File(inputFile)
-                suspend fun prepareInput() = SplitApkPreparer.prepareIfNeeded(
-                    input,
-                    File(cacheDir),
-                    logger,
-                    stripNativeLibs,
-                    skipUnneededSplits,
-                    onProgress = { message ->
-                        throwIfCancelled()
-                        onEvent(
-                            ProgressEvent.Progress(
-                                stepId = StepId.PrepareSplitApk,
-                                message = message
-                            )
-                        )
-                    },
-                    onSubSteps = { subSteps ->
-                        throwIfCancelled()
-                        onEvent(
-                            ProgressEvent.Progress(
-                                stepId = StepId.PrepareSplitApk,
-                                subSteps = subSteps
-                            )
-                        )
-                    }
-                )
-                var preparation: SplitApkPreparer.PreparationResult? = null
-                if (SplitApkPreparer.isSplitArchive(input)) {
-                    preparation = runStep(StepId.PrepareSplitApk, ::onEvent, ::throwIfCancelled) {
-                        prepareInput()
-                    }
                 }
 
                 try {

@@ -20,10 +20,13 @@ import app.revanced.manager.patcher.runStep
 import app.revanced.manager.patcher.runtime.ProcessRuntime
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.patcher.toParcel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.io.FileInputStream
 import java.io.OutputStream
@@ -42,6 +45,9 @@ import kotlin.system.exitProcess
 class PatcherProcess : IPatcherProcess.Stub() {
     private var eventBinder: IPatcherEvents? = null
     private val eventsEnabled = AtomicBoolean(true)
+    private val exitRequested = AtomicBoolean(false)
+    @Volatile
+    private var runningJob: Job? = null
 
     private val scope =
         CoroutineScope(Dispatchers.Default + CoroutineExceptionHandler { _, throwable ->
@@ -61,7 +67,18 @@ class PatcherProcess : IPatcherProcess.Stub() {
         })
 
     override fun buildId() = BuildConfig.BUILD_ID
-    override fun exit() = exitProcess(0)
+
+    override fun exit() {
+        if (!exitRequested.compareAndSet(false, true)) return
+        eventsEnabled.set(false)
+        runningJob?.cancel(CancellationException("Patching cancelled"))
+        scope.launch {
+            withTimeoutOrNull(2_000L) {
+                runningJob?.join()
+            }
+            exitProcess(0)
+        }
+    }
 
     override fun start(parameters: Parameters, events: IPatcherEvents) {
         fun safeEvent(event: ProgressEvent) {
@@ -92,8 +109,9 @@ class PatcherProcess : IPatcherProcess.Stub() {
         }
 
         eventBinder = events
+        exitRequested.set(false)
 
-        scope.launch {
+        runningJob = scope.launch {
             val dexCompilePattern =
                 Regex("(Compiling|Compiled)\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
             val dexWritePattern =
@@ -129,6 +147,26 @@ class PatcherProcess : IPatcherProcess.Stub() {
 
             var exitCode = 0
             try {
+                val input = File(parameters.inputFile)
+                suspend fun prepareInput() = SplitApkPreparer.prepareIfNeeded(
+                    input,
+                    File(parameters.cacheDir),
+                    logger,
+                    parameters.stripNativeLibs,
+                    parameters.skipUnneededSplits,
+                    onProgress = { message ->
+                        safeEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
+                    },
+                    onSubSteps = { subSteps ->
+                        safeEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
+                    }
+                )
+                var preparation: SplitApkPreparer.PreparationResult? = null
+                if (SplitApkPreparer.isSplitArchive(input)) {
+                    preparation = runStep(StepId.PrepareSplitApk, ::safeEvent) {
+                        prepareInput()
+                    }
+                }
                 val patchList = runStep(StepId.LoadPatches, ::safeEvent) {
                     val allPatches = PatchBundle.Loader.patches(
                         parameters.configurations.map { it.bundle },
@@ -151,27 +189,6 @@ class PatcherProcess : IPatcherProcess.Stub() {
                         }
 
                         patches.values
-                    }
-                }
-
-                val input = File(parameters.inputFile)
-                suspend fun prepareInput() = SplitApkPreparer.prepareIfNeeded(
-                    input,
-                    File(parameters.cacheDir),
-                    logger,
-                    parameters.stripNativeLibs,
-                    parameters.skipUnneededSplits,
-                    onProgress = { message ->
-                        safeEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
-                    },
-                    onSubSteps = { subSteps ->
-                        safeEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
-                    }
-                )
-                var preparation: SplitApkPreparer.PreparationResult? = null
-                if (SplitApkPreparer.isSplitArchive(input)) {
-                    preparation = runStep(StepId.PrepareSplitApk, ::safeEvent) {
-                        prepareInput()
                     }
                 }
 
@@ -198,12 +215,13 @@ class PatcherProcess : IPatcherProcess.Stub() {
                             aaptPath = selectedAaptPath,
                             logger = logger
                         )
-                        Session(
+                        Session.open(
                             cacheDir = parameters.cacheDir,
                             aaptPath = selectedAaptPath,
                             frameworkDir = frameworkDir,
                             logger = logger,
                             input = preparedInput.file,
+                            sanitizeAllEmbeddedApksOnInit = preparedInput.merged,
                             onEvent = ::safeEvent,
                         )
                     }

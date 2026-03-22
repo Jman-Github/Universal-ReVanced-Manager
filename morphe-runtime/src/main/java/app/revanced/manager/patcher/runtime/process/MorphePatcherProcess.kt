@@ -19,10 +19,13 @@ import app.revanced.manager.patcher.runtime.FrameworkCacheResolver
 import app.revanced.manager.patcher.runStep
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.patcher.toParcel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.io.FileInputStream
 import java.io.OutputStream
@@ -41,6 +44,9 @@ import kotlin.system.exitProcess
 class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
     private var eventBinder: IPatcherEvents? = null
     private val eventsEnabled = AtomicBoolean(true)
+    private val exitRequested = AtomicBoolean(false)
+    @Volatile
+    private var runningJob: Job? = null
 
     private val scope =
         CoroutineScope(Dispatchers.Default + CoroutineExceptionHandler { _, throwable ->
@@ -59,7 +65,18 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
         })
 
     override fun buildId() = BuildConfig.BUILD_ID
-    override fun exit() = exitProcess(0)
+
+    override fun exit() {
+        if (!exitRequested.compareAndSet(false, true)) return
+        eventsEnabled.set(false)
+        runningJob?.cancel(CancellationException("Patching cancelled"))
+        scope.launch {
+            withTimeoutOrNull(2_000L) {
+                runningJob?.join()
+            }
+            exitProcess(0)
+        }
+    }
 
     override fun start(parameters: MorpheParameters, events: IPatcherEvents) {
         fun safeEvent(event: ProgressEvent) {
@@ -90,48 +107,42 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
         }
 
         eventBinder = events
+        exitRequested.set(false)
 
-        scope.launch {
+        runningJob = scope.launch {
             val dexCompilePattern =
                 Regex("(Compiling|Compiled)\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
             val dexWritePattern =
                 Regex("Write\\s+\\[[^\\]]+\\]\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
             val seenDexCompiles = mutableSetOf<String>()
+            val seenResourceCompile = AtomicBoolean(false)
             val writeApkActive = AtomicBoolean(false)
-            val applyChangesActive = AtomicBoolean(false)
             fun onEvent(event: ProgressEvent) {
                 when (event) {
                     is ProgressEvent.Started -> {
                         if (event.stepId == StepId.WriteAPK) {
                             writeApkActive.set(true)
-                            applyChangesActive.set(false)
                             seenDexCompiles.clear()
+                            seenResourceCompile.set(false)
                         }
                     }
 
                     is ProgressEvent.Completed -> {
                         if (event.stepId == StepId.WriteAPK) {
                             writeApkActive.set(false)
-                            applyChangesActive.set(false)
                         }
                     }
 
                     is ProgressEvent.Failed -> {
                         if (event.stepId == StepId.WriteAPK) {
                             writeApkActive.set(false)
-                            applyChangesActive.set(false)
                         }
                     }
 
                     is ProgressEvent.Progress -> {
-                        if (event.stepId == StepId.WriteAPK &&
-                            event.message.equals("Applying patched changes", ignoreCase = true)
-                        ) {
-                            applyChangesActive.set(true)
-                        }
+                        if (event.stepId == StepId.WriteAPK) writeApkActive.set(true)
                         if (event.stepId == StepId.SignAPK) {
                             writeApkActive.set(false)
-                            applyChangesActive.set(false)
                         }
                     }
                 }
@@ -139,9 +150,22 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
             }
 
             fun handleDexCompileLine(rawLine: String) {
-                if (!writeApkActive.get() || !applyChangesActive.get()) return
+                if (!writeApkActive.get()) return
                 val line = rawLine.trim()
                 if (line.isEmpty()) return
+                if (line.contains("Compiling modified resources", ignoreCase = true) ||
+                    line.contains("Compiling patched resources", ignoreCase = true)
+                ) {
+                    if (seenResourceCompile.compareAndSet(false, true)) {
+                        onEvent(
+                            ProgressEvent.Progress(
+                                stepId = StepId.WriteAPK,
+                                message = "Compiling modified resources"
+                            )
+                        )
+                    }
+                    return
+                }
                 val match = dexCompilePattern.find(line)
                     ?: dexWritePattern.find(line)
                     ?: return
@@ -168,6 +192,26 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
             var exitCode = 0
 
             try {
+                val input = File(parameters.inputFile)
+                suspend fun prepareInput() = SplitApkPreparer.prepareIfNeeded(
+                    input,
+                    File(parameters.cacheDir),
+                    logger,
+                    parameters.stripNativeLibs,
+                    parameters.skipUnneededSplits,
+                    onProgress = { message ->
+                        onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
+                    },
+                    onSubSteps = { subSteps ->
+                        onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
+                    }
+                )
+                var preparation: SplitApkPreparer.PreparationResult? = null
+                if (SplitApkPreparer.isSplitArchive(input)) {
+                    preparation = runStep(StepId.PrepareSplitApk, ::onEvent) {
+                        prepareInput()
+                    }
+                }
                 val patchList = runStep(StepId.LoadPatches, ::onEvent) {
                     val allPatches = MorphePatchBundleLoader.patches(
                         parameters.configurations.map { it.bundlePath },
@@ -190,27 +234,6 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
                         }
 
                         patches.values
-                    }
-                }
-
-                val input = File(parameters.inputFile)
-                suspend fun prepareInput() = SplitApkPreparer.prepareIfNeeded(
-                    input,
-                    File(parameters.cacheDir),
-                    logger,
-                    parameters.stripNativeLibs,
-                    parameters.skipUnneededSplits,
-                    onProgress = { message ->
-                        onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
-                    },
-                    onSubSteps = { subSteps ->
-                        onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
-                    }
-                )
-                var preparation: SplitApkPreparer.PreparationResult? = null
-                if (SplitApkPreparer.isSplitArchive(input)) {
-                    preparation = runStep(StepId.PrepareSplitApk, ::onEvent) {
-                        prepareInput()
                     }
                 }
 

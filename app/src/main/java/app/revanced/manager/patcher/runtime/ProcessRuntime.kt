@@ -24,6 +24,7 @@ import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.tag
 import com.github.pgreze.process.Redirect
 import com.github.pgreze.process.process
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -46,8 +47,10 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
     private val pm: PM by inject()
     private val binderRef = AtomicReference<IPatcherProcess?>()
     private val eventHandlerRef = AtomicReference<IPatcherEvents?>()
+    private val cancellationRequested = AtomicBoolean(false)
 
     override fun cancel() {
+        cancellationRequested.set(true)
         runCatching { binderRef.getAndSet(null)?.exit() }
         eventHandlerRef.set(null)
     }
@@ -88,9 +91,11 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
         skipUnneededSplits: Boolean,
     ) = coroutineScope {
         currentCoroutineContext()[Job]?.invokeOnCompletion {
+            cancellationRequested.set(true)
             runCatching { binderRef.get()?.exit() }
             eventHandlerRef.set(null)
         }
+        cancellationRequested.set(false)
         val logQueue = Channel<Pair<String, String>>(Channel.UNLIMITED)
         val eventQueue = Channel<ProgressEvent>(Channel.UNLIMITED)
         val logDrainJob = launch(Dispatchers.Default) {
@@ -148,8 +153,19 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
             }
         }
 
+        fun completeCancelled(cause: Throwable? = null) {
+            if (patching.isCompleted) return
+            val error = CancellationException("Patching cancelled")
+            cause?.let(error::initCause)
+            patching.completeExceptionally(error)
+        }
+
         fun completeFailure(throwable: Throwable) {
             if (!patching.isCompleted) {
+                if (cancellationRequested.get()) {
+                    completeCancelled(throwable)
+                    return
+                }
                 patching.completeExceptionally(throwable)
             }
         }
@@ -179,6 +195,10 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
                 Log.d(tag, "Process finished with exit code ${result.resultCode}")
 
                 if (result.resultCode == 0) {
+                    if (cancellationRequested.get()) {
+                        completeCancelled()
+                        return@launch
+                    }
                     if (finishedReported.get()) {
                         completeSuccess()
                     } else {
@@ -188,6 +208,10 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
                             }
                         }
                         if (!patching.isCompleted) {
+                            if (cancellationRequested.get()) {
+                                completeCancelled()
+                                return@launch
+                            }
                             logger.warn(
                                 "Patcher process exited without finished callback; using process exit fallback."
                             )
@@ -272,6 +296,9 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
         // Wait until patching finishes.
         try {
             patching.await()
+            if (cancellationRequested.get()) {
+                throw CancellationException("Patching cancelled")
+            }
         } finally {
             eventHandlerRef.set(null)
             logQueue.close()

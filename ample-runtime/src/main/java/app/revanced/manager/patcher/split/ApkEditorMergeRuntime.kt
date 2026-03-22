@@ -4,8 +4,15 @@ import com.reandroid.apk.APKLogger
 import java.io.File
 import java.io.IOException
 import java.util.ArrayDeque
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 
 internal object ApkEditorMergeRuntime {
@@ -35,6 +42,11 @@ internal object ApkEditorMergeRuntime {
     @Volatile
     private var runtimeClassPath: String? = null
 
+    private val activeProcessLock = Any()
+
+    @Volatile
+    private var activeProcess: Process? = null
+
     fun configure(
         apkEditorJar: String?,
         mergeJar: String?,
@@ -51,6 +63,11 @@ internal object ApkEditorMergeRuntime {
         this.appProcessPath = appProcessPath
         this.androidDataDir = androidDataDir
         this.runtimeClassPath = runtimeClassPath
+    }
+
+    fun cancelActiveExecution() {
+        val process = synchronized(activeProcessLock) { activeProcess } ?: return
+        destroyProcess(process)
     }
 
     private fun resolveClasspath(): String {
@@ -113,49 +130,160 @@ internal object ApkEditorMergeRuntime {
         skipModules: Set<String>,
         sortApkEntries: Boolean,
         onLine: ((String) -> Unit)? = null
-    ) = withContext(Dispatchers.IO) {
-        val inProcessAvailable = canRunInProcess()
-        if (!inProcessAvailable) {
-            onLine?.invoke("APKEditor: in-process merge unavailable, using app_process.")
-            runProcess(
-                action = ACTION_MERGE,
+    ) = coroutineScope {
+        runCatching { outputApk.delete() }
+        val cancellationWatcher = launch(Dispatchers.IO) {
+            try {
+                awaitCancellation()
+            } finally {
+                cancelActiveExecution()
+            }
+        }
+        try {
+            runMergeProcess(
                 apkDir = apkDir,
                 outputApk = outputApk,
                 skipModules = skipModules,
                 sortApkEntries = sortApkEntries,
                 onLine = onLine
             )
-            return@withContext
+        } finally {
+            cancellationWatcher.cancel()
+        }
+    }
+
+    private suspend fun runMergeProcess(
+        apkDir: File,
+        outputApk: File,
+        skipModules: Set<String>,
+        sortApkEntries: Boolean,
+        onLine: ((String) -> Unit)? = null,
+        heapLimitMb: Int? = memoryLimitMb,
+        allowHeapFallback: Boolean = true
+    ): Unit = coroutineScope {
+        val classpath = resolveClasspath()
+        val appProcess = appProcessPath?.takeIf { it.isNotBlank() } ?: resolveAppProcessBin()
+        val androidData = androidDataDir?.takeIf { it.isNotBlank() }
+        if (androidData != null) {
+            val dataDir = File(androidData)
+            dataDir.mkdirs()
+            File(dataDir, "dalvik-cache").mkdirs()
+            File(dataDir, "cache").mkdirs()
+        }
+        val args = ArrayList<String>().apply {
+            add(appProcess)
+            heapLimitMb?.takeIf { it > 0 && propOverridePath.isNullOrBlank() }?.let { limit ->
+                add("-Xmx${limit}m")
+                add("-XX:HeapGrowthLimit=${limit}m")
+            }
+            add("-Djava.io.tmpdir=${apkDir.parentFile?.absolutePath ?: apkDir.absolutePath}")
+            add("/")
+            add("--nice-name=${MERGE_CLASS}")
+            add(MERGE_CLASS)
+            add(ACTION_MERGE)
+            add(apkDir.absolutePath)
+            add(outputApk.absolutePath)
+            add(skipModules.joinToString(","))
+            add(sortApkEntries.toString())
+        }
+
+        val process = withContext(Dispatchers.IO) {
+            ProcessBuilder(args)
+                .redirectErrorStream(true)
+                .apply {
+                    val env = environment()
+                    env["CLASSPATH"] = classpath
+                    if (androidData != null) {
+                        env["ANDROID_DATA"] = androidData
+                        env["ANDROID_CACHE"] = File(androidData, "cache").absolutePath
+                    }
+                    val overridePath = propOverridePath
+                    val limitMb = heapLimitMb
+                    if (!overridePath.isNullOrBlank() && limitMb != null) {
+                        val limit = "${limitMb}M"
+                        env["LD_PRELOAD"] = overridePath
+                        env["PROP_dalvik.vm.heapgrowthlimit"] = limit
+                        env["PROP_dalvik.vm.heapsize"] = limit
+                    }
+                }
+                .start()
+        }
+        synchronized(activeProcessLock) {
+            activeProcess = process
+        }
+
+        val outputLines = ArrayDeque<String>(MAX_OUTPUT_LINES)
+        val outputRef = AtomicReference(outputLines)
+        var completed = false
+        val stdoutJob = launch(Dispatchers.IO) {
+            process.inputStream.bufferedReader().useLines { lines ->
+                lines.forEach { line ->
+                    val buffer = outputRef.get()
+                    val trimmed = line.trim()
+                    if (trimmed.isNotEmpty()) {
+                        if (buffer.size == MAX_OUTPUT_LINES) {
+                            buffer.removeFirst()
+                        }
+                        buffer.addLast(limitLineLength(trimmed))
+                        if (shouldEmit(trimmed)) {
+                            onLine?.invoke(limitLineLength(trimmed))
+                        }
+                    }
+                }
+            }
         }
 
         try {
-            runInProcess(
-                action = ACTION_MERGE,
-                apkDir = apkDir,
-                outputApk = outputApk,
-                skipModules = skipModules,
-                sortApkEntries = sortApkEntries,
-                onLine = onLine
-            )
-        } catch (error: Throwable) {
-            onLine?.invoke("APKEditor: merge in-process failed, retrying via app_process.")
-            try {
-                runProcess(
-                    action = ACTION_MERGE,
-                    apkDir = apkDir,
-                    outputApk = outputApk,
-                    skipModules = skipModules,
-                    sortApkEntries = sortApkEntries,
-                    onLine = onLine
-                )
-            } catch (fallbackError: Throwable) {
-                val message = buildString {
-                    append("APKEditor merge failed in-process: ")
-                    append(error.message ?: error.javaClass.simpleName)
-                    append(". app_process retry failed: ")
-                    append(fallbackError.message ?: fallbackError.javaClass.simpleName)
+            val exitCode = try {
+                runInterruptible(Dispatchers.IO) { process.waitFor() }
+            } catch (error: CancellationException) {
+                destroyProcess(process)
+                throw error
+            }
+
+            withContext(NonCancellable) {
+                runCatching { stdoutJob.join() }
+            }
+
+            if (exitCode != 0) {
+                if (allowHeapFallback && isHeapFailureExitCode(exitCode)) {
+                    val configured = heapLimitMb ?: memoryLimitMb ?: 0
+                    if (configured > SAFE_RETRY_HEAP_MB) {
+                        onLine?.invoke(
+                            "APKEditor: merge process failed ($exitCode), retrying with ${SAFE_RETRY_HEAP_MB}MB heap."
+                        )
+                        runMergeProcess(
+                            apkDir = apkDir,
+                            outputApk = outputApk,
+                            skipModules = skipModules,
+                            sortApkEntries = sortApkEntries,
+                            onLine = onLine,
+                            heapLimitMb = SAFE_RETRY_HEAP_MB,
+                            allowHeapFallback = false
+                        )
+                        return@coroutineScope
+                    }
                 }
-                throw IOException(message, fallbackError)
+                val output = outputRef.get().joinToString("\n").trim()
+                throw IOException("APKEditor merge process failed ($exitCode). ${output.takeIf { it.isNotBlank() } ?: ""}")
+            }
+            completed = true
+        } finally {
+            synchronized(activeProcessLock) {
+                if (activeProcess === process) {
+                    activeProcess = null
+                }
+            }
+            withContext(NonCancellable) {
+                destroyProcess(process)
+                runCatching { process.outputStream.close() }
+                runCatching { process.inputStream.close() }
+                runCatching { process.errorStream.close() }
+                stdoutJob.cancel()
+                runCatching { stdoutJob.join() }
+            }
+            if (!completed) {
+                runCatching { outputApk.delete() }
             }
         }
     }
@@ -247,11 +375,11 @@ internal object ApkEditorMergeRuntime {
 
         val exitCode = process.waitFor()
         if (exitCode != 0) {
-            if (allowHeapFallback && exitCode == 137) {
+            if (allowHeapFallback && isHeapFailureExitCode(exitCode)) {
                 val configured = heapLimitMb ?: memoryLimitMb ?: 0
                 if (configured > SAFE_RETRY_HEAP_MB) {
                     onLine?.invoke(
-                        "APKEditor: merge process killed (137), retrying with ${SAFE_RETRY_HEAP_MB}MB heap."
+                        "APKEditor: merge process failed ($exitCode), retrying with ${SAFE_RETRY_HEAP_MB}MB heap."
                     )
                     runProcess(
                         action = action,
@@ -347,6 +475,17 @@ internal object ApkEditorMergeRuntime {
         return paths.firstOrNull { File(it).exists() } ?: paths.last()
     }
 
+    private fun destroyProcess(process: Process) {
+        runCatching { process.destroy() }
+        runCatching {
+            if (!process.waitFor(150, TimeUnit.MILLISECONDS)) {
+                process.destroyForcibly()
+                process.waitFor(1500, TimeUnit.MILLISECONDS)
+            }
+        }
+        runCatching { process.destroyForcibly() }
+    }
+
     private const val MAX_OUTPUT_LINES = 400
     private const val MAX_EVENT_LINE_LENGTH = 2000
     private const val SAFE_RETRY_HEAP_MB = 320
@@ -367,5 +506,7 @@ internal object ApkEditorMergeRuntime {
             line.take(MAX_EVENT_LINE_LENGTH) + "…"
         }
     }
+
+    private fun isHeapFailureExitCode(exitCode: Int): Boolean = exitCode == 134 || exitCode == 137
 
 }

@@ -10,7 +10,9 @@ import app.universal.revanced.manager.BuildConfig
 import app.revanced.manager.patcher.LibraryResolver
 import app.revanced.manager.patcher.ProgressEvent
 import app.revanced.manager.patcher.ProgressEventParcel
+import app.revanced.manager.patcher.StepId
 import app.revanced.manager.patcher.logger.Logger
+import app.revanced.manager.patcher.runStep
 import app.revanced.manager.patcher.runtime.MemoryLimitConfig
 import app.revanced.manager.patcher.runtime.StdIoWarningAccumulator
 import app.revanced.manager.patcher.runtime.process.IAmplePatcherProcess
@@ -18,12 +20,14 @@ import app.revanced.manager.patcher.runtime.process.IPatcherEvents
 import app.revanced.manager.patcher.runtime.process.AmpleParameters
 import app.revanced.manager.patcher.runtime.process.AmplePatchConfiguration
 import app.revanced.manager.patcher.runtime.ample.AmpleRuntimeAssets
+import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.patcher.toEvent
 import app.revanced.manager.util.Options
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.tag
 import com.github.pgreze.process.Redirect
 import com.github.pgreze.process.process
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -44,8 +48,10 @@ class AmpleProcessRuntime(
 ) : AmpleRuntime(context) {
     private val binderRef = AtomicReference<IAmplePatcherProcess?>()
     private val eventHandlerRef = AtomicReference<IPatcherEvents?>()
+    private val cancellationRequested = AtomicBoolean(false)
 
     override fun cancel() {
+        cancellationRequested.set(true)
         runCatching { binderRef.getAndSet(null)?.exit() }
         eventHandlerRef.set(null)
     }
@@ -86,9 +92,40 @@ class AmpleProcessRuntime(
         skipUnneededSplits: Boolean,
     ) = coroutineScope {
         currentCoroutineContext()[Job]?.invokeOnCompletion {
+            cancellationRequested.set(true)
             runCatching { binderRef.get()?.exit() }
             eventHandlerRef.set(null)
         }
+        cancellationRequested.set(false)
+        val sourceInput = File(inputFile)
+        val hostPreparation = if (SplitApkPreparer.isSplitArchive(sourceInput)) {
+            runStep(
+                stepId = StepId.PrepareSplitApk,
+                onEvent = onEvent,
+                checkCancelled = {
+                    if (cancellationRequested.get()) {
+                        throw CancellationException("Patching cancelled")
+                    }
+                }
+            ) {
+                SplitApkPreparer.prepareIfNeeded(
+                    source = sourceInput,
+                    workspace = File(cacheDir),
+                    logger = logger,
+                    stripNativeLibs = stripNativeLibs,
+                    skipUnneededSplits = skipUnneededSplits,
+                    onProgress = { message ->
+                        onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
+                    },
+                    onSubSteps = { subSteps ->
+                        onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
+                    }
+                )
+            }
+        } else {
+            null
+        }
+        val runtimeInputFile = hostPreparation?.file?.absolutePath ?: inputFile
         val logQueue = Channel<Pair<String, String>>(Channel.UNLIMITED)
         val eventQueue = Channel<ProgressEvent>(Channel.UNLIMITED)
         val logDrainJob = launch(Dispatchers.Default) {
@@ -101,7 +138,6 @@ class AmpleProcessRuntime(
                 runCatching { onEvent(event) }
             }
         }
-        onEvent(ProgressEvent.Started(app.revanced.manager.patcher.StepId.LoadPatches))
         val runtimeClassPath = AmpleRuntimeAssets.ensureRuntimeClassPath(context).absolutePath
         val apkEditorJarPath = AmpleRuntimeAssets.ensureApkEditorJar(context).absolutePath
         val apkEditorMergeJarPath = AmpleRuntimeAssets.ensureApkEditorMergeJar(context).absolutePath
@@ -144,8 +180,19 @@ class AmpleProcessRuntime(
             }
         }
 
+        fun completeCancelled(cause: Throwable? = null) {
+            if (patching.isCompleted) return
+            val error = CancellationException("Patching cancelled")
+            cause?.let(error::initCause)
+            patching.completeExceptionally(error)
+        }
+
         fun completeFailure(throwable: Throwable) {
             if (!patching.isCompleted) {
+                if (cancellationRequested.get()) {
+                    completeCancelled(throwable)
+                    return
+                }
                 patching.completeExceptionally(throwable)
             }
         }
@@ -173,6 +220,10 @@ class AmpleProcessRuntime(
                 Log.d(tag, "Ample process finished with exit code ${result.resultCode}")
 
                 if (result.resultCode == 0) {
+                    if (cancellationRequested.get()) {
+                        completeCancelled()
+                        return@launch
+                    }
                     if (finishedReported.get()) {
                         completeSuccess()
                     } else {
@@ -182,6 +233,10 @@ class AmpleProcessRuntime(
                             }
                         }
                         if (!patching.isCompleted) {
+                            if (cancellationRequested.get()) {
+                                completeCancelled()
+                                return@launch
+                            }
                             logger.warn(
                                 "Ample process exited without finished callback; using process exit fallback."
                             )
@@ -245,8 +300,9 @@ class AmpleProcessRuntime(
                 aaptFallbackPath = aaptFallbackPath,
                 frameworkDir = frameworkPath,
                 cacheDir = cacheDir,
+                runtimeClassPath = runtimeClassPath,
                 packageName = packageName,
-                inputFile = inputFile,
+                inputFile = runtimeInputFile,
                 outputFile = outputFile,
                 configurations = selectedBundlesByUid.map { (uid, bundle) ->
                     AmplePatchConfiguration(
@@ -269,6 +325,9 @@ class AmpleProcessRuntime(
 
         try {
             patching.await()
+            if (cancellationRequested.get()) {
+                throw CancellationException("Patching cancelled")
+            }
         } finally {
             eventHandlerRef.set(null)
             logQueue.close()
@@ -280,6 +339,7 @@ class AmpleProcessRuntime(
                 logDrainJob.cancel()
                 eventDrainJob.cancel()
             }
+            hostPreparation?.cleanup()
         }
     }
 

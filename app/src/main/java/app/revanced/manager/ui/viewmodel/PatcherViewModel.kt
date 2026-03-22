@@ -1,5 +1,7 @@
 package app.revanced.manager.ui.viewmodel
 
+import android.app.Activity
+
 import android.app.Application
 import android.app.NotificationManager
 import android.content.ActivityNotFoundException
@@ -102,6 +104,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.time.withTimeout
 import kotlinx.coroutines.withContext
@@ -301,12 +305,23 @@ fun proceedAfterMissingPatchWarning() {
         }
     }
 
-    private var currentActivityRequest: Pair<CompletableDeferred<Boolean>, String>? by mutableStateOf(
-        null
+    data class ActivityPromptDialogState(
+        val title: String,
+        val requestId: Long
     )
-    val activityPromptDialog by derivedStateOf { currentActivityRequest?.second }
+
+    private data class ActivityPromptRequest(
+        val completion: CompletableDeferred<Boolean>,
+        val dialogState: ActivityPromptDialogState
+    )
+
+    private var nextActivityPromptRequestId = 0L
+    private var currentActivityRequest: ActivityPromptRequest? by mutableStateOf(null)
+    val activityPromptDialog by derivedStateOf { currentActivityRequest?.dialogState }
+    private val activityRequestMutex = Mutex()
 
     private var launchedActivity: CompletableDeferred<ActivityResult>? = null
+    private var pendingActivityResumeFallback: Job? = null
     private val launchActivityChannel = Channel<Intent>()
     val launchActivityFlow = launchActivityChannel.receiveAsFlow()
 
@@ -1421,16 +1436,49 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     fun isDeviceRooted() = rootInstaller.isDeviceRooted()
 
-    fun rejectInteraction() {
-        currentActivityRequest?.first?.complete(false)
+    private fun completeActivityRequest(requestId: Long, accepted: Boolean) {
+        currentActivityRequest
+            ?.takeIf { it.dialogState.requestId == requestId }
+            ?.let { request ->
+                request.completion.complete(accepted)
+            }
     }
 
-    fun allowInteraction() {
-        currentActivityRequest?.first?.complete(true)
-    }
+    fun rejectInteraction(requestId: Long) = completeActivityRequest(requestId, accepted = false)
+
+    fun allowInteraction(requestId: Long) = completeActivityRequest(requestId, accepted = true)
 
     fun handleActivityResult(result: ActivityResult) {
+        pendingActivityResumeFallback?.cancel()
+        pendingActivityResumeFallback = null
         launchedActivity?.complete(result)
+    }
+
+    fun onHostResumed() {
+        val pending = launchedActivity ?: return
+        if (currentActivityRequest != null || pending.isCompleted) return
+
+        pendingActivityResumeFallback?.cancel()
+        pendingActivityResumeFallback = viewModelScope.launch {
+            delay(DOWNLOADER_ACTIVITY_RESULT_GRACE_MS)
+            if (launchedActivity === pending && currentActivityRequest == null && !pending.isCompleted) {
+                pending.complete(ActivityResult(Activity.RESULT_CANCELED, null))
+                launchedActivity = null
+            }
+        }
+    }
+
+    private fun clearPendingActivityInteractions() {
+        pendingActivityResumeFallback?.cancel()
+        pendingActivityResumeFallback = null
+        currentActivityRequest?.let { request ->
+            if (currentActivityRequest === request) {
+                currentActivityRequest = null
+            }
+            request.completion.complete(false)
+        }
+        launchedActivity?.complete(ActivityResult(Activity.RESULT_CANCELED, null))
+        launchedActivity = null
     }
 
     fun export(uri: Uri?) = viewModelScope.launch {
@@ -1588,15 +1636,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
         val splitCount = inputFile
             ?.takeIf { SplitApkPreparer.isSplitArchive(it) }
-            ?.let { file ->
-                runCatching {
-                    ZipFile(file).use { zip ->
-                        zip.entries().asSequence().count { entry ->
-                            !entry.isDirectory && entry.name.endsWith(".apk", ignoreCase = true)
-                        }
-                    }
-                }.getOrNull()
-            }
+            ?.let { file -> SplitApkPreparer.splitApkEntryNames(file).size }
 
         val aapt2Selected = findLogValue("AAPT2 selected:") ?: "unknown"
 
@@ -2437,25 +2477,40 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             },
             handleStartActivityRequest = { plugin, intent ->
                 withContext(Dispatchers.Main) {
-                    if (currentActivityRequest != null) throw Exception("Another request is already pending.")
-                    try {
-                        val accepted = with(CompletableDeferred<Boolean>()) {
-                            currentActivityRequest = this to plugin.shortDisplayName
-                            await()
-                        }
-                        if (!accepted) throw UserInteractionException.RequestDenied()
-
+                    activityRequestMutex.withLock {
+                        val request = ActivityPromptRequest(
+                            completion = CompletableDeferred(),
+                            dialogState = ActivityPromptDialogState(
+                                title = plugin.shortDisplayName,
+                                requestId = nextActivityPromptRequestId++
+                            )
+                        )
                         try {
-                            with(CompletableDeferred<ActivityResult>()) {
-                                launchedActivity = this
-                                launchActivityChannel.send(intent)
-                                await()
+                            currentActivityRequest = request
+                            val accepted = try {
+                                request.completion.await()
+                            } finally {
+                                if (currentActivityRequest === request) {
+                                    currentActivityRequest = null
+                                }
+                            }
+                            delay(DOWNLOADER_DIALOG_SETTLE_MS)
+                            if (!accepted) throw UserInteractionException.RequestDenied()
+
+                            try {
+                                with(CompletableDeferred<ActivityResult>()) {
+                                    launchedActivity = this
+                                    launchActivityChannel.send(intent)
+                                    await()
+                                }
+                            } finally {
+                                launchedActivity = null
                             }
                         } finally {
-                            launchedActivity = null
+                            if (currentActivityRequest === request) {
+                                currentActivityRequest = null
+                            }
                         }
-                    } finally {
-                        currentActivityRequest = null
                     }
                 }
             },
@@ -2560,7 +2615,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     if (event.stepId == null && steps.any { it.state == State.FAILED }) return@launch
                     step.withState(
                         State.FAILED,
-                        message = event.error.stackTrace,
+                        message = formatDisplayedFailure(event.error),
                         progress = null
                     )
                 }
@@ -2594,6 +2649,13 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         if (signature == lastLoggedErrorSignature) return false
         lastLoggedErrorSignature = signature
         return true
+    }
+
+    private fun formatDisplayedFailure(error: app.revanced.manager.patcher.RemoteError): String {
+        if (error.type.contains("UserInteractionException")) {
+            return error.message ?: "Downloader search cancelled by user."
+        }
+        return error.stackTrace
     }
 
     private fun handleKeystoreMissing(error: app.revanced.manager.patcher.RemoteError) {
@@ -3113,10 +3175,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private fun shouldBufferMorpheWriteApkLogProgress(): Boolean {
         if (selectionBundleType != PatchBundleType.MORPHE) return false
         val list = stepSubSteps[StepId.WriteAPK] ?: return true
-        val applyStep = list.firstOrNull {
-            it.title.equals("Applying patched changes", ignoreCase = true)
-        } ?: return true
-        return applyStep.state == State.WAITING
+        return list.isEmpty()
     }
 
     private fun shouldStartWriteApkFromLog(line: String): Boolean {
@@ -3242,10 +3301,11 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private fun listDexNamesFromSplitArchive(file: File): List<String> {
         if (!file.exists()) return emptyList()
         val dexNames = LinkedHashSet<String>()
+        val splitEntryNames = SplitApkPreparer.splitApkEntryNames(file)
         ZipFile(file).use { outer ->
             val entries = outer.entries().asSequence()
                 .filterNot { it.isDirectory }
-                .filter { it.name.endsWith(".apk", ignoreCase = true) }
+                .filter { it.name in splitEntryNames }
                 .toList()
             entries.forEach { entry ->
                 outer.getInputStream(entry).use { raw ->
@@ -3343,14 +3403,19 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         _patcherSucceeded.addSource(source) { workInfo ->
             val progressActive =
                 workInfo?.progress?.getBoolean(PatcherWorker.PATCHING_ACTIVE_KEY, false) == true
-            _isPatchingActive.value = progressActive || when (workInfo?.state) {
+            _isPatchingActive.value = when (workInfo?.state) {
+                WorkInfo.State.SUCCEEDED,
+                WorkInfo.State.FAILED,
+                WorkInfo.State.CANCELLED -> false
                 WorkInfo.State.RUNNING,
                 WorkInfo.State.ENQUEUED,
                 WorkInfo.State.BLOCKED -> true
-                else -> false
+                else -> progressActive
             }
             when (workInfo?.state) {
                 WorkInfo.State.SUCCEEDED -> {
+                    patcherWorkerId = null
+                    clearPendingActivityInteractions()
                     clearPatchingNotification()
                     forceKeepLocalInput = false
                     cleanupTemporaryLocalInput()
@@ -3367,6 +3432,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 }
 
                 WorkInfo.State.FAILED -> {
+                    patcherWorkerId = null
+                    clearPendingActivityInteractions()
                     clearPatchingNotification()
                     handleWorkerFailure(workInfo)
                     _patcherSucceeded.value = false
@@ -3376,7 +3443,13 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 WorkInfo.State.ENQUEUED,
                 WorkInfo.State.BLOCKED -> _patcherSucceeded.value = null
                 WorkInfo.State.CANCELLED -> {
+                    patcherWorkerId = null
+                    clearPendingActivityInteractions()
                     clearPatchingNotification()
+                    reconcileFailureState(
+                        failureMessage = workInfo.outputData.getString(PatcherWorker.PROCESS_FAILURE_MESSAGE_KEY)
+                            ?: "Patching was cancelled."
+                    )
                     _patcherSucceeded.value = null
                 }
                 else -> _patcherSucceeded.value = null
@@ -3386,6 +3459,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private fun handleWorkerFailure(workInfo: WorkInfo) {
         if (!handledFailureIds.add(workInfo.id)) return
+        reconcileFailureState(workInfo.outputData.getString(PatcherWorker.PROCESS_FAILURE_MESSAGE_KEY))
         val exitCode = workInfo.outputData.getInt(PatcherWorker.PROCESS_EXIT_CODE_KEY, Int.MIN_VALUE)
         if (exitCode == ProcessRuntime.OOM_EXIT_CODE) {
             viewModelScope.launch {
@@ -3421,6 +3495,22 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
 
         // Missing patch issues are handled during preflight validation.
+    }
+
+    private fun reconcileFailureState(failureMessage: String?) {
+        val message = failureMessage?.takeIf { it.isNotBlank() }
+        if (steps.any { it.state == State.FAILED }) return
+
+        val failedIndex = steps.indexOfFirst { it.state == State.RUNNING }
+            .takeIf { it != -1 }
+            ?: steps.indexOfFirst { it.state == State.WAITING }.takeIf { it != -1 }
+            ?: return
+
+        steps[failedIndex] = steps[failedIndex].withState(
+            state = State.FAILED,
+            message = message,
+            progress = null
+        )
     }
 
     fun dismissMemoryAdjustmentDialog() {
@@ -3471,8 +3561,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             return true
         }
 
-        val resettableIds = steps.drop(loadIndex).map { it.id }.toSet()
-        return steps.drop(loadIndex + 1).any { it.state != State.WAITING } ||
+        val preservedIds = setOf<StepId>(StepId.PrepareSplitApk)
+        val resettableIds = steps.drop(loadIndex).map { it.id }.toSet() - preservedIds
+        return steps.drop(loadIndex + 1).any { it.id !in preservedIds && it.state != State.WAITING } ||
             stepSubSteps.keys.any { it in resettableIds } ||
             writeApkStepStarted ||
             dexSubStepsReady ||
@@ -3484,13 +3575,22 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         val loadIndex = steps.indexOfFirst { it.id == StepId.LoadPatches }
         if (loadIndex == -1) return
 
-        val resettableIds = steps.drop(loadIndex).map { it.id }.toSet()
+        val preservedIds = setOf<StepId>(StepId.PrepareSplitApk)
+        val resettableIds = steps.drop(loadIndex).map { it.id }.toSet() - preservedIds
         resetDexCompileState()
         resetFailureLogState()
         runtimeReportedMemoryLimitMb = null
 
         steps.forEachIndexed { index, step ->
             if (index < loadIndex) {
+                steps[index] = step.withState(
+                    state = if (step.state == State.FAILED) State.COMPLETED else step.state,
+                    progress = null
+                )
+                return@forEachIndexed
+            }
+
+            if (step.id in preservedIds) {
                 steps[index] = step.withState(
                     state = if (step.state == State.FAILED) State.COMPLETED else step.state,
                     progress = null
@@ -3562,7 +3662,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
         val loadIndex = steps.indexOfFirst { it.id == StepId.LoadPatches }
         val insertIndex = when {
-            loadIndex >= 0 -> loadIndex + 1
+            loadIndex >= 0 -> loadIndex
             else -> steps.indexOfFirst { it.id == StepId.ReadAPK }.takeIf { it >= 0 } ?: steps.size
         }
         steps.add(insertIndex, buildSplitStep(app))
@@ -3672,6 +3772,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private companion object {
         const val TAG = "ReVanced Patcher"
         const val SKIPPED_SUBSTEP_PREFIX = "[skipped]"
+        private const val DOWNLOADER_DIALOG_SETTLE_MS = 32L
+        private const val DOWNLOADER_ACTIVITY_RESULT_GRACE_MS = 750L
         private const val SYSTEM_INSTALL_TIMEOUT_MS = 60_000L
         private const val EXTERNAL_INSTALL_TIMEOUT_MS = 60_000L
         private const val POST_TIMEOUT_GRACE_MS = 5_000L
@@ -3707,6 +3809,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 )
             }
 
+            if (splitStepActive) {
+                add(buildSplitStep(context))
+            }
+
             add(
                 Step(
                     StepId.LoadPatches,
@@ -3714,10 +3820,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     StepCategory.PREPARING
                 )
             )
-
-            if (splitStepActive) {
-                add(buildSplitStep(context))
-            }
 
             add(
                 Step(

@@ -23,9 +23,10 @@ object SplitApkInspector {
 
         return try {
             withContext(Dispatchers.IO) {
+                val selectedEntries = SplitApkPreparer.splitApkEntryNames(source)
                 try {
                     ZipFile(source).use { zip ->
-                        val entry = selectBestEntry(zip)
+                        val entry = selectBestEntry(zip, selectedEntries)
                             ?: throw IOException("Split archive does not contain any APK entries.")
                         zip.getInputStream(entry).use { input ->
                             Files.newOutputStream(temp.toPath()).use { output ->
@@ -38,7 +39,7 @@ object SplitApkInspector {
                     if (!message.contains("no such device") && !message.contains("enodev")) {
                         throw error
                     }
-                    extractWithStream(source, temp)
+                    extractWithStream(source, temp, selectedEntries)
                 }
             }
             ExtractedApk(temp) { temp.delete() }
@@ -48,10 +49,13 @@ object SplitApkInspector {
         }
     }
 
-    private fun selectBestEntry(zip: ZipFile): ZipEntry? {
+    private fun selectBestEntry(
+        zip: ZipFile,
+        selectedEntries: Set<String>
+    ): ZipEntry? {
         val entries = zip.entries().asSequence()
             .filterNot { it.isDirectory }
-            .filter { it.name.lowercase(Locale.ROOT).endsWith(".apk") }
+            .filter { it.name in selectedEntries }
             .toList()
         if (entries.isEmpty()) return null
 
@@ -87,8 +91,12 @@ object SplitApkInspector {
         )
     }
 
-    private fun extractWithStream(source: File, temp: File) {
-        val entryName = selectBestEntryName(source)
+    private fun extractWithStream(
+        source: File,
+        temp: File,
+        selectedEntries: Set<String>
+    ) {
+        val entryName = selectBestEntryName(source, selectedEntries)
             ?: throw IOException("Split archive does not contain any APK entries.")
         ZipInputStream(FileInputStream(source)).use { zip ->
             var entry = zip.nextEntry
@@ -105,7 +113,10 @@ object SplitApkInspector {
         throw IOException("Split archive entry not found: $entryName")
     }
 
-    private fun selectBestEntryName(source: File): String? {
+    private fun selectBestEntryName(
+        source: File,
+        selectedEntries: Set<String>
+    ): String? {
         var baseEntry: ZipEntry? = null
         var primaryEntry: ZipEntry? = null
         var largestNonConfig: ZipEntry? = null
@@ -139,22 +150,20 @@ object SplitApkInspector {
         ZipInputStream(FileInputStream(source)).use { zip ->
             var entry = zip.nextEntry
             while (entry != null) {
-                if (!entry.isDirectory) {
+                if (!entry.isDirectory && entry.name in selectedEntries) {
                     val lower = entry.name.lowercase(Locale.ROOT)
-                    if (lower.endsWith(".apk")) {
-                        if (baseEntry == null && (lower.endsWith("/base.apk") || lower.endsWith("base.apk") || "base-master" in lower || "base-main" in lower)) {
-                            baseEntry = entry
-                        }
-                        if (primaryEntry == null && ("main" in lower || "master" in lower)) {
-                            primaryEntry = entry
-                        }
-                        if (!lower.startsWith("config") && !lower.contains("split_config") && !lower.contains("config.")) {
-                            if (entry.size >= 0 && (largestNonConfig == null || entry.size > (largestNonConfig?.size ?: -1))) {
-                                largestNonConfig = entry
-                            }
-                        }
-                        updateFallback(entry)
+                    if (baseEntry == null && (lower.endsWith("/base.apk") || lower.endsWith("base.apk") || "base-master" in lower || "base-main" in lower)) {
+                        baseEntry = entry
                     }
+                    if (primaryEntry == null && ("main" in lower || "master" in lower)) {
+                        primaryEntry = entry
+                    }
+                    if (!lower.startsWith("config") && !lower.contains("split_config") && !lower.contains("config.")) {
+                        if (entry.size >= 0 && (largestNonConfig == null || entry.size > (largestNonConfig?.size ?: -1))) {
+                            largestNonConfig = entry
+                        }
+                    }
+                    updateFallback(entry)
                 }
                 entry = zip.nextEntry
             }

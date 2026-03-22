@@ -5,11 +5,13 @@ import app.morphe.patcher.PatcherConfig
 import app.morphe.patcher.apk.ApkUtils.applyTo
 import app.morphe.patcher.patch.Patch
 import app.morphe.patcher.patch.PatchResult
+import app.morphe.patcher.PatcherResult
 import app.revanced.manager.patcher.ProgressEvent
 import app.revanced.manager.patcher.StepId
 import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.morphe.MorpheSession.Companion.component1
 import app.revanced.manager.patcher.morphe.MorpheSession.Companion.component2
+import app.revanced.manager.patcher.runCancellableBlockingIo
 import app.revanced.manager.patcher.runStep
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.patcher.util.NativeLibStripper
@@ -17,7 +19,6 @@ import app.revanced.manager.patcher.util.XmlSurrogateSanitizer
 import app.revanced.manager.patcher.toRemoteError
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
-import kotlinx.coroutines.withContext
 import java.io.BufferedInputStream
 import java.io.Closeable
 import java.io.File
@@ -231,32 +232,50 @@ class MorpheSession(
                         )
                     )
                 )
-                logger.info("Writing patched files...")
-                XmlSurrogateSanitizer.sanitize(tempDir.resolve("apk"), logger)
-                ensureMissingDrawables()
-                validateMissingResourceReferences()
-                checkCancelled()
-                val result = patcher.get()
-
-                val patched = tempDir.resolve("result.apk")
-                runInterruptible(Dispatchers.IO) {
-                    fastCopy(input, patched)
-                }
-                checkCancelled()
                 onEvent(
                     ProgressEvent.Progress(
                         stepId = StepId.WriteAPK,
                         message = "Applying patched changes"
                     )
                 )
-                runInterruptible(Dispatchers.IO) {
+                logger.info("Writing patched files...")
+                XmlSurrogateSanitizer.sanitize(tempDir.resolve("apk"), logger)
+                ensureMissingDrawables()
+                validateMissingResourceReferences()
+                checkCancelled()
+                val result = runCancellableBlockingIo(checkCancelled) { patcher.get() }
+                val updatedDexNames = mergeDexNames(initialDexNames, result)
+                if (updatedDexNames != initialDexNames) {
+                    onEvent(
+                        ProgressEvent.Progress(
+                            stepId = StepId.WriteAPK,
+                            subSteps = buildWriteApkSubSteps(
+                                updatedDexNames.map { "Compiling $it" },
+                                shouldStripNativeLibs
+                            )
+                        )
+                    )
+                }
+
+                val patched = tempDir.resolve("result.apk")
+                runCancellableBlockingIo(checkCancelled) {
+                    fastCopy(input, patched)
+                }
+                checkCancelled()
+                onEvent(
+                    ProgressEvent.Progress(
+                        stepId = StepId.WriteAPK,
+                        message = "Compiling modified resources"
+                    )
+                )
+                runCancellableBlockingIo(checkCancelled) {
                     result.applyTo(patched)
                 }
                 checkCancelled()
 
                 logger.info("Patched apk saved to $patched")
 
-                withContext(Dispatchers.IO) {
+                runCancellableBlockingIo(checkCancelled) {
                     checkCancelled()
                     onEvent(
                         ProgressEvent.Progress(
@@ -293,7 +312,7 @@ class MorpheSession(
                             message = "Stripping native libraries"
                         )
                     )
-                    NativeLibStripper.strip(output)
+                    NativeLibStripper.strip(output, checkCancelled = checkCancelled)
                     checkCancelled()
                 }
             }
@@ -332,6 +351,19 @@ class MorpheSession(
         return listDexNamesFromSplitArchive(file)
     }
 
+    private fun mergeDexNames(
+        initialDexNames: List<String>,
+        result: PatcherResult
+    ): List<String> {
+        val patchedDexNames = result.dexFiles
+            .mapNotNull { it.name }
+            .filter { it.endsWith(".dex", ignoreCase = true) }
+        if (patchedDexNames.isEmpty()) return initialDexNames
+        return (initialDexNames + patchedDexNames)
+            .distinct()
+            .sortedWith(compareBy { dexSortKey(it) })
+    }
+
     private suspend fun listDexNamesFromApk(file: File): List<String> =
         runInterruptible(Dispatchers.IO) {
             if (!file.exists()) return@runInterruptible emptyList<String>()
@@ -349,10 +381,11 @@ class MorpheSession(
         runInterruptible(Dispatchers.IO) {
             if (!file.exists()) return@runInterruptible emptyList<String>()
             val dexNames = mutableSetOf<String>()
+            val splitEntryNames = SplitApkPreparer.splitApkEntryNames(file)
             ZipFile(file).use { outer ->
                 val entries = outer.entries().asSequence()
                     .filterNot { it.isDirectory }
-                    .filter { it.name.endsWith(".apk", ignoreCase = true) }
+                    .filter { it.name in splitEntryNames }
                     .toList()
                 if (entries.isEmpty()) return@use
                 entries.forEach { entry ->

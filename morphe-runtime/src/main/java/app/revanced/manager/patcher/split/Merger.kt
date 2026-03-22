@@ -18,7 +18,10 @@ import java.io.IOException
 import java.nio.charset.CoderMalfunctionError
 import java.nio.file.Path
 import java.util.Locale
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 
 private class ApkEditorLogger(
@@ -72,8 +75,10 @@ internal object Merger {
     ) {
         val closeables = mutableSetOf<Closeable>()
         try {
+            coroutineContext.ensureActive()
             val merged = withContext(Dispatchers.Default) {
                 try {
+                    coroutineContext.ensureActive()
                     val logger = ApkEditorLogger(onProgress)
                     val bundle = ApkBundle().apply {
                         setAPKLogger(logger)
@@ -91,6 +96,7 @@ internal object Merger {
                         val skipLookup = skipped.map(::normalizeModuleName).toSet()
                         val baseModule = bundle.baseModule
                         bundle.apkModuleList.toList().forEach { module ->
+                            coroutineContext.ensureActive()
                             if (module === baseModule) return@forEach
                             val normalized = normalizeModuleName(module.moduleName)
                             if (skipLookup.contains(normalized)) {
@@ -101,7 +107,10 @@ internal object Merger {
 
                     closeables.add(bundle)
 
-                    val mergedModule = bundle.mergeModules(false).apply {
+                    coroutineContext.ensureActive()
+                    val mergedModule = runInterruptible(Dispatchers.Default) {
+                        bundle.mergeModules(false)
+                    }.apply {
                         setAPKLogger(logger)
                         setLoadDefaultFramework(false)
                     }
@@ -194,9 +203,10 @@ internal object Merger {
             merged.refreshTable()
             merged.refreshManifest()
             applyExtractNativeLibs(merged)
+            coroutineContext.ensureActive()
 
             outputApk.parentFile?.mkdirs()
-            withContext(Dispatchers.IO) {
+            runInterruptible(Dispatchers.IO) {
                 onProgress?.invoke("Writing merged APK")
                 merged.writeApk(outputApk)
             }

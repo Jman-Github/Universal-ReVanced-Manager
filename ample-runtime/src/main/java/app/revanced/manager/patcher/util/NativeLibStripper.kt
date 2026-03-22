@@ -3,10 +3,14 @@ package app.revanced.manager.patcher.util
 import android.os.Build
 import android.util.Log
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -16,8 +20,19 @@ object NativeLibStripper {
     suspend fun strip(apkFile: File): Boolean =
         strip(apkFile, Build.SUPPORTED_ABIS.filter { it.isNotBlank() })
 
-    suspend fun strip(apkFile: File, supportedAbis: List<String>): Boolean =
+    suspend fun strip(
+        apkFile: File,
+        checkCancelled: () -> Unit,
+    ): Boolean = strip(apkFile, Build.SUPPORTED_ABIS.filter { it.isNotBlank() }, checkCancelled)
+
+    suspend fun strip(
+        apkFile: File,
+        supportedAbis: List<String>,
+        checkCancelled: () -> Unit = {},
+    ): Boolean =
         withContext(Dispatchers.IO) {
+            currentCoroutineContext().ensureActive()
+            checkCancelled()
             if (supportedAbis.isEmpty()) return@withContext false
 
             val preferredAbi = determinePreferredAbi(apkFile, supportedAbis)
@@ -30,41 +45,68 @@ object NativeLibStripper {
             val tempFile = File(apkFile.parentFile, "${apkFile.nameWithoutExtension}-abi-stripped.apk")
             var removedEntries = 0
 
-            ZipInputStream(apkFile.inputStream().buffered()).use { zis ->
-                ZipOutputStream(tempFile.outputStream().buffered()).use { zos ->
-                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                    var entry = zis.nextEntry
-                    while (entry != null) {
-                        val name = entry.name
-                        val keepEntry = shouldKeepZipEntry(name, allowedAbis)
+            try {
+                ZipInputStream(apkFile.inputStream().buffered()).use { zis ->
+                    ZipOutputStream(tempFile.outputStream().buffered()).use { zos ->
+                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                        var entry = zis.nextEntry
+                        while (entry != null) {
+                            currentCoroutineContext().ensureActive()
+                            checkCancelled()
+                            val name = entry.name
+                            val keepEntry = shouldKeepZipEntry(name, allowedAbis)
 
-                        if (keepEntry) {
-                            val newEntry = cloneEntry(entry)
-                            zos.putNextEntry(newEntry)
-                            if (!entry.isDirectory) {
-                                while (true) {
-                                    val read = zis.read(buffer)
-                                    if (read == -1) break
-                                    zos.write(buffer, 0, read)
+                            if (keepEntry) {
+                                val newEntry = cloneEntry(entry)
+                                zos.putNextEntry(newEntry)
+                                if (!entry.isDirectory) {
+                                    while (true) {
+                                        currentCoroutineContext().ensureActive()
+                                        checkCancelled()
+                                        val read = zis.read(buffer)
+                                        if (read == -1) break
+                                        zos.write(buffer, 0, read)
+                                    }
                                 }
+                                zos.closeEntry()
+                            } else if (!entry.isDirectory) {
+                                removedEntries++
                             }
-                            zos.closeEntry()
-                        } else if (!entry.isDirectory) {
-                            removedEntries++
-                        }
 
-                        zis.closeEntry()
-                        entry = zis.nextEntry
+                            zis.closeEntry()
+                            entry = zis.nextEntry
+                        }
                     }
                 }
+            } catch (error: Throwable) {
+                tempFile.delete()
+                throw error
             }
 
             if (removedEntries > 0) {
-                if (!apkFile.delete()) {
-                    Log.w(TAG, "Failed to delete original APK before stripping ABIs")
+                currentCoroutineContext().ensureActive()
+                checkCancelled()
+                try {
+                    try {
+                        Files.move(
+                            tempFile.toPath(),
+                            apkFile.toPath(),
+                            StandardCopyOption.REPLACE_EXISTING,
+                            StandardCopyOption.ATOMIC_MOVE
+                        )
+                    } catch (_: Exception) {
+                        currentCoroutineContext().ensureActive()
+                        checkCancelled()
+                        Files.move(
+                            tempFile.toPath(),
+                            apkFile.toPath(),
+                            StandardCopyOption.REPLACE_EXISTING
+                        )
+                    }
+                } catch (error: Throwable) {
+                    tempFile.delete()
+                    throw error
                 }
-                tempFile.copyTo(apkFile, overwrite = true)
-                tempFile.delete()
                 Log.i(TAG, "Removed $removedEntries native library entries for unsupported ABIs")
                 true
             } else {

@@ -12,13 +12,16 @@ import java.io.IOException
 import java.nio.file.Files
 import java.util.Locale
 import java.util.zip.ZipFile
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 
 object SplitApkPreparer {
     private val SUPPORTED_EXTENSIONS = setOf("apks", "apkm", "xapk")
     private const val SKIPPED_STEP_PREFIX = "[skipped]"
+    private const val MAX_FLATTEN_RETRIES = 2
     private val KNOWN_ABIS = setOf("armeabi", "armeabi-v7a", "arm64-v8a", "x86", "x86_64")
     private val DENSITY_QUALIFIERS =
         setOf("ldpi", "mdpi", "tvdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi")
@@ -26,8 +29,21 @@ object SplitApkPreparer {
     fun isSplitArchive(file: File?): Boolean {
         if (file == null || !file.exists()) return false
         val extension = file.extension.lowercase(Locale.ROOT)
-        if (extension in SUPPORTED_EXTENSIONS) return true
-        return hasEmbeddedApkEntries(file)
+        if (extension !in SUPPORTED_EXTENSIONS && extension != "zip" && extension != "apk") return false
+        return splitApkEntryNames(file).isNotEmpty()
+    }
+
+    internal fun splitApkEntryNames(file: File): Set<String> {
+        if (!file.exists()) return emptySet()
+        val extension = file.extension.lowercase(Locale.ROOT)
+        if (extension !in SUPPORTED_EXTENSIONS && extension != "zip" && extension != "apk") {
+            return emptySet()
+        }
+        return runCatching {
+            ZipFile(file).use { zip ->
+                resolveSplitApkEntryNames(zip, extension)
+            }
+        }.getOrDefault(emptySet())
     }
 
     suspend fun prepareIfNeeded(
@@ -46,63 +62,104 @@ object SplitApkPreparer {
 
         workspace.mkdirs()
         val workingDir = File(workspace, "split-${System.currentTimeMillis()}")
-        val modulesDir = workingDir.resolve("modules").also { it.mkdirs() }
-        val mergedApk = workingDir.resolve("${source.nameWithoutExtension}-merged.apk")
 
         return try {
-            val sourceSize = source.length()
-            logger.info("Preparing split APK bundle from ${source.name} (size=${sourceSize} bytes)")
-            val entries = extractSplitEntries(source, modulesDir, onProgress)
-            logger.info("Found ${entries.size} split modules: ${entries.joinToString { it.name }}")
-            logger.info("Module sizes: ${entries.joinToString { "${it.name}=${it.file.length()} bytes" }}")
-            val mergeOrder = runCatching {
-                Merger.listMergeOrder(modulesDir.toPath())
-            }.getOrElse {
-                entries.map { it.name }
-            }
-            val supportedTokens = supportedAbiTokens()
-            val skippedModules = buildSet {
-                if (stripNativeLibs) {
-                    addAll(mergeOrder.filter { shouldSkipModule(it, supportedTokens) })
+            var preparationSource = source
+            var mergedApk: File? = null
+            var mergeEntries = 0
+            var flattenPass = 0
+            while (true) {
+                coroutineContext.ensureActive()
+                val passDir = workingDir.resolve("pass-$flattenPass")
+                val modulesDir = passDir.resolve("modules").also { it.mkdirs() }
+                val passOutput = workingDir.resolve(
+                    "${source.nameWithoutExtension}-merged-${flattenPass + 1}.apk"
+                )
+                val sourceSize = preparationSource.length()
+                logger.info(
+                    "Preparing split APK bundle from ${preparationSource.name} " +
+                        "(size=${sourceSize} bytes, pass=${flattenPass + 1})"
+                )
+                val entries = extractSplitEntries(preparationSource, modulesDir, onProgress)
+                coroutineContext.ensureActive()
+                logger.info("Found ${entries.size} split modules: ${entries.joinToString { it.name }}")
+                logger.info("Module sizes: ${entries.joinToString { "${it.name}=${it.file.length()} bytes" }}")
+                val mergeOrder = runCatching {
+                    Merger.listMergeOrder(modulesDir.toPath())
+                }.getOrElse {
+                    entries.map { it.name }
                 }
-                if (skipUnneededSplits) {
-                    val localeTokens = deviceLocaleTokens()
-                    val densityQualifier = deviceDensityQualifier()
-                    addAll(
-                        mergeOrder.filter {
-                            shouldSkipModuleForDevice(
-                                moduleName = it,
-                                localeTokens = localeTokens,
-                                densityQualifier = densityQualifier
-                            )
-                        }
+                coroutineContext.ensureActive()
+                val supportedTokens = supportedAbiTokens()
+                val skippedModules = buildSet {
+                    if (stripNativeLibs) {
+                        addAll(mergeOrder.filter { shouldSkipModule(it, supportedTokens) })
+                    }
+                    if (skipUnneededSplits) {
+                        val localeTokens = deviceLocaleTokens()
+                        val densityQualifier = deviceDensityQualifier()
+                        addAll(
+                            mergeOrder.filter {
+                                shouldSkipModuleForDevice(
+                                    moduleName = it,
+                                    localeTokens = localeTokens,
+                                    densityQualifier = densityQualifier
+                                )
+                            }
+                        )
+                    }
+                }
+                if (flattenPass == 0) {
+                    onSubSteps?.invoke(buildSplitSubSteps(mergeOrder, skippedModules, stripNativeLibs))
+                }
+                coroutineContext.ensureActive()
+
+                Merger.merge(
+                    apkDir = modulesDir.toPath(),
+                    outputApk = passOutput,
+                    skipModules = skippedModules,
+                    onProgress = onProgress,
+                    sortApkEntries = sortMergedApkEntries
+                )
+                coroutineContext.ensureActive()
+
+                val validation = validatePreparedApk(passOutput)
+                if (validation.isUsable) {
+                    mergedApk = passOutput
+                    mergeEntries = entries.size
+                    break
+                }
+                if (flattenPass >= MAX_FLATTEN_RETRIES || validation.embeddedSplitEntries.isEmpty()) {
+                    throw IOException(
+                        "Merged APK is missing required root files: ${validation.describe()}"
                     )
                 }
+                logger.warn(
+                    "Merged APK still looks like a split container " +
+                        "(${validation.describe()}); retrying flatten pass ${flattenPass + 2}."
+                )
+                preparationSource = passOutput
+                flattenPass += 1
             }
-            onSubSteps?.invoke(buildSplitSubSteps(mergeOrder, skippedModules, stripNativeLibs))
-
-            Merger.merge(
-                apkDir = modulesDir.toPath(),
-                outputApk = mergedApk,
-                skipModules = skippedModules,
-                onProgress = onProgress,
-                sortApkEntries = sortMergedApkEntries
-            )
 
             if (stripNativeLibs) {
+                val finalApk = requireNotNull(mergedApk)
                 onProgress?.invoke("Stripping native libraries")
-                NativeLibStripper.strip(mergedApk)
+                NativeLibStripper.strip(finalApk)
+                coroutineContext.ensureActive()
             }
 
             onProgress?.invoke("Finalizing merged APK")
-            persistMergedIfDownloaded(source, mergedApk, logger)
+            coroutineContext.ensureActive()
+            val finalApk = requireNotNull(mergedApk)
+            persistMergedIfDownloaded(source, finalApk, logger)
 
             logger.info(
-                "Split APK merged to ${mergedApk.absolutePath} " +
-                        "(modules=${entries.size}, mergedSize=${mergedApk.length()} bytes)"
+                "Split APK merged to ${finalApk.absolutePath} " +
+                        "(modules=${mergeEntries}, mergedSize=${finalApk.length()} bytes)"
             )
             PreparationResult(
-                file = mergedApk,
+                file = finalApk,
                 merged = true
             ) {
                 workingDir.deleteRecursively()
@@ -113,16 +170,163 @@ object SplitApkPreparer {
         }
     }
 
-    private fun hasEmbeddedApkEntries(file: File): Boolean =
-        runCatching {
-            ZipFile(file).use { zip ->
-                zip.entries().asSequence().any { entry ->
-                    !entry.isDirectory && entry.name.endsWith(".apk", ignoreCase = true)
+    private fun resolveSplitApkEntryNames(
+        zip: ZipFile,
+        extension: String
+    ): Set<String> {
+        val candidates = zip.entries().asSequence()
+            .filterNot { it.isDirectory }
+            .filter { it.name.endsWith(".apk", ignoreCase = true) }
+            .toList()
+        if (candidates.isEmpty()) return emptySet()
+
+        if (extension in SUPPORTED_EXTENSIONS) {
+            return candidates.mapTo(LinkedHashSet()) { it.name }
+        }
+        if (extension == "zip") {
+            return resolveZipApkEntryNames(candidates)
+        }
+
+        if (extension == "apk" && hasRootManifest(zip)) return emptySet()
+        if (candidates.size < 2 || candidates.none { isLikelySplitApkEntryName(it.name) }) {
+            return emptySet()
+        }
+        if (!isVerifiedSplitCandidateSet(zip, candidates)) return emptySet()
+        return candidates.mapTo(LinkedHashSet()) { it.name }
+    }
+
+    private fun hasRootManifest(zip: ZipFile): Boolean =
+        zip.entries().asSequence().any { entry ->
+            !entry.isDirectory && entry.name == "AndroidManifest.xml"
+        }
+
+    private fun hasRootResourcesTable(zip: ZipFile): Boolean =
+        zip.entries().asSequence().any { entry ->
+            !entry.isDirectory && entry.name == "resources.arsc"
+        }
+
+    private fun resolveZipApkEntryNames(
+        candidates: List<java.util.zip.ZipEntry>
+    ): Set<String> {
+        if (candidates.size == 1) {
+            return linkedSetOf(candidates.single().name)
+        }
+
+        val splitLike = candidates.filter { isLikelySplitApkEntryName(it.name) }
+        if (splitLike.isEmpty()) return emptySet()
+
+        val selected = LinkedHashSet<String>()
+        selectProbableZipBaseEntry(candidates, splitLike)?.let { selected += it.name }
+        splitLike.forEach { selected += it.name }
+        return selected
+    }
+
+    private fun selectProbableZipBaseEntry(
+        candidates: List<java.util.zip.ZipEntry>,
+        splitLike: List<java.util.zip.ZipEntry>
+    ): java.util.zip.ZipEntry? {
+        candidates.firstOrNull { isExplicitBaseApkEntryName(it.name) }?.let { return it }
+        val splitLikeNames = splitLike.mapTo(HashSet()) { it.name }
+        return candidates
+            .asSequence()
+            .filterNot { it.name in splitLikeNames }
+            .maxByOrNull { entry -> if (entry.size >= 0L) entry.size else Long.MIN_VALUE }
+    }
+
+    private fun isExplicitBaseApkEntryName(entryName: String): Boolean {
+        val normalized = entryName.replace('\\', '/')
+        val fileName = normalized.substringAfterLast('/').lowercase(Locale.ROOT)
+        if (!fileName.endsWith(".apk")) return false
+        val stem = fileName.removeSuffix(".apk")
+        return fileName == "base.apk" ||
+            stem == "base" ||
+            stem == "main" ||
+            stem == "master" ||
+            stem.startsWith("base-") ||
+            stem.endsWith("-main") ||
+            stem.endsWith("-master")
+    }
+
+    private fun isVerifiedSplitCandidateSet(
+        zip: ZipFile,
+        candidates: List<java.util.zip.ZipEntry>
+    ): Boolean = runCatching {
+        val workingDir = Files.createTempDirectory("split-verify-").toFile()
+        try {
+            candidates.forEach { entry ->
+                val destination = workingDir.resolve(entry.name.substringAfterLast('/'))
+                zip.getInputStream(entry).use { input ->
+                    Files.newOutputStream(destination.toPath()).use { output ->
+                        input.copyTo(output)
+                    }
                 }
             }
-        }.getOrDefault(false)
+            val mergeOrder = runCatching {
+                Merger.listMergeOrder(workingDir.toPath())
+            }.getOrDefault(emptyList())
+            mergeOrder.size >= 2 && mergeOrder.any(::isLikelySplitApkEntryName)
+        } finally {
+            workingDir.deleteRecursively()
+        }
+    }.getOrDefault(false)
+
+    internal fun isLikelySplitApkEntryName(entryName: String): Boolean {
+        val normalized = entryName.replace('\\', '/')
+        val fileName = normalized.substringAfterLast('/')
+        if (!fileName.endsWith(".apk", ignoreCase = true)) return false
+        val lowerName = fileName.lowercase(Locale.ROOT)
+        val stem = lowerName.removeSuffix(".apk")
+
+        if (lowerName == "base.apk") return true
+        if (lowerName.startsWith("split_config.") || lowerName.startsWith("config.")) return true
+        if (stem.startsWith("split_")) return true
+        if (stem == "main" || stem == "master") return true
+        if (stem.startsWith("base-") || stem.endsWith("-main") || stem.endsWith("-master")) return true
+        return false
+    }
+
+    private fun validatePreparedApk(file: File): PreparedApkValidation =
+        runCatching {
+            ZipFile(file).use { zip ->
+                val embeddedSplitEntries = zip.entries().asSequence()
+                    .filterNot { it.isDirectory }
+                    .map { it.name }
+                    .filter { it.endsWith(".apk", ignoreCase = true) }
+                    .filter { isExplicitBaseApkEntryName(it) || isLikelySplitApkEntryName(it) }
+                    .toCollection(LinkedHashSet())
+                PreparedApkValidation(
+                    hasRootManifest = hasRootManifest(zip),
+                    hasRootResources = hasRootResourcesTable(zip),
+                    embeddedSplitEntries = embeddedSplitEntries
+                )
+            }
+        }.getOrElse {
+            PreparedApkValidation(
+                hasRootManifest = false,
+                hasRootResources = false,
+                embeddedSplitEntries = linkedSetOf()
+            )
+        }
 
     private data class ExtractedModule(val name: String, val file: File)
+
+    private data class PreparedApkValidation(
+        val hasRootManifest: Boolean,
+        val hasRootResources: Boolean,
+        val embeddedSplitEntries: Set<String>
+    ) {
+        val isUsable: Boolean
+            get() = hasRootManifest && hasRootResources && embeddedSplitEntries.isEmpty()
+
+        fun describe(): String {
+            val embedded = if (embeddedSplitEntries.isEmpty()) {
+                "none"
+            } else {
+                embeddedSplitEntries.joinToString(",")
+            }
+            return "manifest=$hasRootManifest, resources=$hasRootResources, embeddedSplits=$embedded"
+        }
+    }
 
     private fun buildSplitSubSteps(
         moduleNames: List<String>,
@@ -310,10 +514,12 @@ object SplitApkPreparer {
     ): List<ExtractedModule> =
         withContext(Dispatchers.IO) {
             val extracted = mutableListOf<ExtractedModule>()
+            coroutineContext.ensureActive()
+            val splitEntryNames = splitApkEntryNames(source)
             ZipFile(source).use { zip ->
                 val apkEntries = zip.entries().asSequence()
                     .filterNot { it.isDirectory }
-                    .filter { it.name.endsWith(".apk", ignoreCase = true) }
+                    .filter { it.name in splitEntryNames }
                     .toList()
 
                 if (apkEntries.isEmpty()) {
@@ -322,6 +528,7 @@ object SplitApkPreparer {
 
                 onProgress?.invoke("Extracting split APKs")
                 apkEntries.forEach { entry ->
+                    coroutineContext.ensureActive()
                     val destination = targetDir.resolve(entry.name.substringAfterLast('/'))
                     destination.parentFile?.mkdirs()
                     zip.getInputStream(entry).use { input ->
@@ -330,6 +537,7 @@ object SplitApkPreparer {
                         }
                     }
                     extracted += ExtractedModule(destination.name, destination)
+                    coroutineContext.ensureActive()
                 }
             }
             extracted

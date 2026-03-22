@@ -81,6 +81,7 @@ fun AppInfo(
                 labelOverride = labelOverride,
                 modifier = Modifier.padding(top = 16.dp),
                 style = MaterialTheme.typography.titleLarge,
+                centered = true,
                 defaultText = placeholderLabel
             )
 

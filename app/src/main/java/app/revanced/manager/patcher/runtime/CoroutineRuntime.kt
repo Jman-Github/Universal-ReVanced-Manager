@@ -41,6 +41,28 @@ class CoroutineRuntime(context: Context) : Runtime(context) {
         stripNativeLibs: Boolean,
         skipUnneededSplits: Boolean,
     ) {
+        val input = File(inputFile)
+        suspend fun prepareInput() = SplitApkPreparer.prepareIfNeeded(
+            input,
+            File(cacheDir),
+            logger,
+            stripNativeLibs,
+            skipUnneededSplits,
+            onProgress = { message ->
+                ensureNotCancelled()
+                onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
+            },
+            onSubSteps = { subSteps ->
+                ensureNotCancelled()
+                onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
+            }
+        )
+        var preparation: SplitApkPreparer.PreparationResult? = null
+        if (SplitApkPreparer.isSplitArchive(input)) {
+            preparation = runStep(StepId.PrepareSplitApk, onEvent, ::ensureNotCancelled) {
+                prepareInput()
+            }
+        }
         val (patchList, relatedBundleArchives) = runStep(
             StepId.LoadPatches,
             onEvent,
@@ -89,29 +111,6 @@ class CoroutineRuntime(context: Context) : Runtime(context) {
             patchList to selectedPatchBundlesByUid.values.map { File(it.patchesJar) }
         }
 
-        val input = File(inputFile)
-        suspend fun prepareInput() = SplitApkPreparer.prepareIfNeeded(
-            input,
-            File(cacheDir),
-            logger,
-            stripNativeLibs,
-            skipUnneededSplits,
-            onProgress = { message ->
-                ensureNotCancelled()
-                onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
-            },
-            onSubSteps = { subSteps ->
-                ensureNotCancelled()
-                onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
-            }
-        )
-        var preparation: SplitApkPreparer.PreparationResult? = null
-        if (SplitApkPreparer.isSplitArchive(input)) {
-            preparation = runStep(StepId.PrepareSplitApk, onEvent, ::ensureNotCancelled) {
-                prepareInput()
-            }
-        }
-
         try {
             val session = runStep(StepId.ReadAPK, onEvent, ::ensureNotCancelled) {
                 val preparedInput = preparation ?: prepareInput().also { preparation = it }
@@ -123,14 +122,15 @@ class CoroutineRuntime(context: Context) : Runtime(context) {
                     aaptPath = selectedAaptPath,
                     logger = logger
                 )
-                Session(
-                    cacheDir,
-                    frameworkDir,
-                    selectedAaptPath,
-                    logger,
-                    preparedInput.file,
-                    onEvent,
-                    ::ensureNotCancelled
+                Session.open(
+                    cacheDir = cacheDir,
+                    frameworkDir = frameworkDir,
+                    aaptPath = selectedAaptPath,
+                    logger = logger,
+                    input = preparedInput.file,
+                    sanitizeAllEmbeddedApksOnInit = preparedInput.merged,
+                    onEvent = onEvent,
+                    checkCancelled = ::ensureNotCancelled
                 )
             }
             val preparedInput = requireNotNull(preparation) {

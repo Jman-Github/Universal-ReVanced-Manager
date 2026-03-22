@@ -3,6 +3,7 @@ package app.revanced.manager.patcher.revanced
 import app.revanced.manager.patcher.ProgressEvent
 import app.revanced.manager.patcher.StepId
 import app.revanced.manager.patcher.logger.Logger
+import app.revanced.manager.patcher.runCancellableBlockingIo
 import app.revanced.manager.patcher.runStep
 import app.revanced.manager.patcher.toRemoteError
 import app.revanced.manager.patcher.split.SplitApkPreparer
@@ -28,7 +29,6 @@ import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
-import kotlinx.coroutines.withContext
 
 internal typealias RevancedPatchList = List<Patch>
 
@@ -261,7 +261,7 @@ class RevancedSession(
                 }
 
                 val patched = tempDir.resolve("result.apk")
-                runInterruptible(Dispatchers.IO) {
+                runCancellableBlockingIo(checkCancelled) {
                     fastCopy(input, patched)
                 }
                 checkCancelled()
@@ -271,14 +271,14 @@ class RevancedSession(
                         message = "Applying patched changes"
                     )
                 )
-                runInterruptible(Dispatchers.IO) {
+                runCancellableBlockingIo(checkCancelled) {
                     applyResultToApk(patched, patchResult)
                 }
                 checkCancelled()
 
                 logger.info("Patched apk saved to $patched")
 
-                withContext(Dispatchers.IO) {
+                runCancellableBlockingIo(checkCancelled) {
                     checkCancelled()
                     onEvent(
                         ProgressEvent.Progress(
@@ -315,7 +315,7 @@ class RevancedSession(
                             message = "Stripping native libraries"
                         )
                     )
-                    NativeLibStripper.strip(output)
+                    NativeLibStripper.strip(output, checkCancelled = checkCancelled)
                     checkCancelled()
                 }
             }
@@ -468,10 +468,11 @@ class RevancedSession(
         runInterruptible(Dispatchers.IO) {
             if (!file.exists()) return@runInterruptible emptyList<String>()
             val dexNames = mutableSetOf<String>()
+            val splitEntryNames = SplitApkPreparer.splitApkEntryNames(file)
             ZipFile(file).use { outer ->
                 val entries = outer.entries().asSequence()
                     .filterNot { it.isDirectory }
-                    .filter { it.name.endsWith(".apk", ignoreCase = true) }
+                    .filter { it.name in splitEntryNames }
                     .toList()
                 if (entries.isEmpty()) return@use
                 entries.forEach { entry ->

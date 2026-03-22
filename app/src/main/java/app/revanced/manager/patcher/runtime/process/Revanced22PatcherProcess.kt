@@ -24,10 +24,13 @@ import java.util.logging.Handler
 import java.util.logging.Level
 import java.util.logging.LogRecord
 import java.util.logging.Logger as JavaLogger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.system.exitProcess
 
 /**
@@ -38,6 +41,9 @@ class Revanced22PatcherProcess(
 ) : IPatcherProcess.Stub() {
     private var eventBinder: IPatcherEvents? = null
     private val eventsEnabled = AtomicBoolean(true)
+    private val exitRequested = AtomicBoolean(false)
+    @Volatile
+    private var runningJob: Job? = null
 
     private val scope =
         CoroutineScope(Dispatchers.Default + CoroutineExceptionHandler { _, throwable ->
@@ -56,7 +62,18 @@ class Revanced22PatcherProcess(
         })
 
     override fun buildId() = BuildConfig.BUILD_ID
-    override fun exit() = exitProcess(0)
+
+    override fun exit() {
+        if (!exitRequested.compareAndSet(false, true)) return
+        eventsEnabled.set(false)
+        runningJob?.cancel(CancellationException("Patching cancelled"))
+        scope.launch {
+            withTimeoutOrNull(2_000L) {
+                runningJob?.join()
+            }
+            exitProcess(0)
+        }
+    }
 
     override fun start(parameters: Parameters, events: IPatcherEvents) {
         fun safeEvent(event: ProgressEvent) {
@@ -87,8 +104,9 @@ class Revanced22PatcherProcess(
         }
 
         eventBinder = events
+        exitRequested.set(false)
 
-        scope.launch {
+        runningJob = scope.launch {
             fun onEvent(event: ProgressEvent) {
                 safeEvent(event)
             }

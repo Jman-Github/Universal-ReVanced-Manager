@@ -6,6 +6,7 @@ import com.reandroid.apk.ApkBundle
 import com.reandroid.apk.ApkModule
 import com.reandroid.app.AndroidManifest
 import com.reandroid.archive.ZipEntryMap
+import com.reandroid.archive.block.ApkSignatureBlock
 import com.reandroid.arsc.chunk.xml.ResXmlElement
 import com.reandroid.arsc.container.SpecTypePair
 import com.reandroid.arsc.header.TableHeader
@@ -109,22 +110,18 @@ internal object Merger {
                     closeables.add(bundle)
                     coroutineContext.ensureActive()
 
-                    val mergedModule = runInterruptible(Dispatchers.Default) {
-                        bundle.mergeModules(false)
-                    }.apply {
+                    val mergedModule = mergeBundleModules(bundle, logger).apply {
                         setAPKLogger(logger)
                         setLoadDefaultFramework(false)
                     }
                     closeables.add(mergedModule)
 
-                    if (sortApkEntries && mergedModule.hasTableBlock()) {
+                    if (mergedModule.hasTableBlock()) {
                         val table = mergedModule.tableBlock
                         table.sortPackages()
                         table.refresh()
                     }
-                    if (sortApkEntries) {
-                        mergedModule.zipEntryMap.autoSortApkFiles()
-                    }
+                    mergedModule.zipEntryMap.autoSortApkFiles()
                     mergedModule
                 } catch (error: Throwable) {
                     val cause = error.cause
@@ -249,6 +246,38 @@ internal object Merger {
             index += 1
         }
         return candidate
+    }
+
+    private suspend fun mergeBundleModules(
+        bundle: ApkBundle,
+        logger: ApkEditorLogger
+    ): ApkModule {
+        val modules = bundle.apkModuleList
+        val baseModule = bundle.baseModule
+            ?: findLargestTableModule(modules)
+            ?: modules.first()
+        val mergedModule = ApkModule(generateMergedModuleName(bundle), ZipEntryMap()).apply {
+            setAPKLogger(logger)
+            setLoadDefaultFramework(false)
+        }
+        val mergeOrder = buildMergeOrder(modules, baseModule)
+        var signatureBlock: ApkSignatureBlock? = null
+        mergeOrder.forEach { module ->
+            coroutineContext.ensureActive()
+            val displayName = moduleDisplayName(module)
+            logger.logMessage("Merging $displayName")
+            val moduleSignature = module.apkSignatureBlock
+            if (module === baseModule && moduleSignature != null) {
+                signatureBlock = moduleSignature
+            } else if (signatureBlock == null) {
+                signatureBlock = moduleSignature
+            }
+            runInterruptible(Dispatchers.Default) {
+                mergedModule.merge(module, false)
+            }
+        }
+        mergedModule.setApkSignatureBlock(signatureBlock)
+        return mergedModule
     }
 
     private fun buildMergeOrder(

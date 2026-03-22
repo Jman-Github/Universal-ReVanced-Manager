@@ -285,12 +285,13 @@ object AmpleRuntimeEntry {
                             aaptPath = selectedAaptPath,
                             logger = logger
                         )
-                        AmpleSession(
+                        AmpleSession.open(
                             cacheDir = cacheDir,
                             frameworkDir = frameworkCacheDir,
                             aaptPath = selectedAaptPath,
                             logger = logger,
                             input = preparedInput.file,
+                            sanitizeAllEmbeddedApksOnInit = preparedInput.merged,
                             onEvent = ::onEvent,
                             checkCancelled = ::throwIfCancelled,
                         )
