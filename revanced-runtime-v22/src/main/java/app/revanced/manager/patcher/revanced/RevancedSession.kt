@@ -343,6 +343,12 @@ class RevancedSession(
             }
 
             result.resources?.let { resources ->
+                onEvent(
+                    ProgressEvent.Progress(
+                        stepId = StepId.WriteAPK,
+                        message = "Compiling modified resources"
+                    )
+                )
                 resources.resourcesApk?.let { resourcesApkFile ->
                     ZFile.openReadOnly(resourcesApkFile).use { resourcesApk ->
                         apk.entries()

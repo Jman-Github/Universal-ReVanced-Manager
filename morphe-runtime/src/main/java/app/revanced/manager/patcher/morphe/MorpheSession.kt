@@ -19,6 +19,7 @@ import app.revanced.manager.patcher.util.XmlSurrogateSanitizer
 import app.revanced.manager.patcher.toRemoteError
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.yield
 import java.io.BufferedInputStream
 import java.io.Closeable
 import java.io.File
@@ -215,13 +216,19 @@ class MorpheSession(
 
         suspend fun writePatchedApkStep() {
             runStep(StepId.WriteAPK, onEvent, checkCancelled) {
-                checkCancelled()
-                onEvent(
-                    ProgressEvent.Progress(
-                        stepId = StepId.WriteAPK,
-                        message = "Copying base APK"
+                suspend fun emitWriteApkProgress(message: String) {
+                    checkCancelled()
+                    onEvent(
+                        ProgressEvent.Progress(
+                            stepId = StepId.WriteAPK,
+                            message = message
+                        )
                     )
-                )
+                    yield()
+                    checkCancelled()
+                }
+
+                checkCancelled()
                 val initialDexNames = listDexNames(input)
                 onEvent(
                     ProgressEvent.Progress(
@@ -232,12 +239,12 @@ class MorpheSession(
                         )
                     )
                 )
-                onEvent(
-                    ProgressEvent.Progress(
-                        stepId = StepId.WriteAPK,
-                        message = "Applying patched changes"
-                    )
-                )
+                val patched = tempDir.resolve("result.apk")
+                emitWriteApkProgress("Copying base APK")
+                runCancellableBlockingIo(checkCancelled) {
+                    fastCopy(input, patched)
+                }
+                emitWriteApkProgress("Applying patched changes")
                 logger.info("Writing patched files...")
                 XmlSurrogateSanitizer.sanitize(tempDir.resolve("apk"), logger)
                 ensureMissingDrawables()
@@ -256,18 +263,7 @@ class MorpheSession(
                         )
                     )
                 }
-
-                val patched = tempDir.resolve("result.apk")
-                runCancellableBlockingIo(checkCancelled) {
-                    fastCopy(input, patched)
-                }
-                checkCancelled()
-                onEvent(
-                    ProgressEvent.Progress(
-                        stepId = StepId.WriteAPK,
-                        message = "Compiling modified resources"
-                    )
-                )
+                emitWriteApkProgress("Compiling modified resources")
                 runCancellableBlockingIo(checkCancelled) {
                     result.applyTo(patched)
                 }
@@ -275,14 +271,9 @@ class MorpheSession(
 
                 logger.info("Patched apk saved to $patched")
 
+                emitWriteApkProgress("Writing output APK")
                 runCancellableBlockingIo(checkCancelled) {
                     checkCancelled()
-                    onEvent(
-                        ProgressEvent.Progress(
-                            stepId = StepId.WriteAPK,
-                            message = "Writing output APK"
-                        )
-                    )
                     try {
                         Files.move(
                             patched.toPath(),
@@ -298,20 +289,10 @@ class MorpheSession(
                         )
                     }
                 }
-                onEvent(
-                    ProgressEvent.Progress(
-                        stepId = StepId.WriteAPK,
-                        message = "Finalizing output"
-                    )
-                )
+                emitWriteApkProgress("Finalizing output")
                 if (shouldStripNativeLibs) {
                     checkCancelled()
-                    onEvent(
-                        ProgressEvent.Progress(
-                            stepId = StepId.WriteAPK,
-                            message = "Stripping native libraries"
-                        )
-                    )
+                    emitWriteApkProgress("Stripping native libraries")
                     NativeLibStripper.strip(output, checkCancelled = checkCancelled)
                     checkCancelled()
                 }

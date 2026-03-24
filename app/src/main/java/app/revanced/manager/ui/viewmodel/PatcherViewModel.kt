@@ -62,6 +62,7 @@ import app.revanced.manager.patcher.runtime.MemoryLimitConfig
 import app.revanced.manager.patcher.runtime.ProcessRuntime
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.patcher.worker.PatcherWorker
+import app.revanced.manager.patcher.worker.PatcherWorkerProgressState
 import app.revanced.manager.plugin.downloader.PluginHostApi
 import app.revanced.manager.plugin.downloader.UserInteractionException
 import app.revanced.manager.ui.model.InstallerModel
@@ -319,6 +320,7 @@ fun proceedAfterMissingPatchWarning() {
     private var currentActivityRequest: ActivityPromptRequest? by mutableStateOf(null)
     val activityPromptDialog by derivedStateOf { currentActivityRequest?.dialogState }
     private val activityRequestMutex = Mutex()
+    private val progressEventMutex = Mutex()
 
     private var launchedActivity: CompletableDeferred<ActivityResult>? = null
     private var pendingActivityResumeFallback: Job? = null
@@ -1012,6 +1014,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private val pendingDexCompileLines = mutableListOf<String>()
     private val seenDexCompiles = mutableSetOf<String>()
     private var writeApkStepStarted = false
+    private var deferLoadPatchesUntilSplitComplete = false
+    private val deferredLoadPatchesEvents = mutableListOf<ProgressEvent>()
+    private var deferredLoadPatchesStepSnapshot: Step? = null
 
     val progress by derivedStateOf {
         val current = steps.count { it.state == State.COMPLETED }
@@ -1030,6 +1035,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     val isPatchingActive: LiveData<Boolean> get() = _isPatchingActive
     private var currentWorkSource: LiveData<WorkInfo?>? = null
     private val handledFailureIds = mutableSetOf<UUID>()
+    private var replayWorkerProgressSnapshots = false
+    private var lastReplayedWorkerProgressSequence = Long.MIN_VALUE
     private var forceKeepLocalInput = false
     private var lastLoggedErrorSignature: String? = null
 
@@ -1046,6 +1053,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     init {
         val existingId = patcherWorkerId?.uuid
         if (existingId != null) {
+            replayWorkerProgressSnapshots = true
             observeWorker(existingId)
         } else {
             viewModelScope.launch {
@@ -1082,6 +1090,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         resetDexCompileState()
         resetFailureLogState()
         runtimeReportedMemoryLimitMb = null
+        replayWorkerProgressSnapshots = false
+        lastReplayedWorkerProgressSequence = Long.MIN_VALUE
         markInitialStepRunning()
         _isPatchingActive.value = true
         logBatteryOptimizationStatus()
@@ -2518,7 +2528,38 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         )
     }
 
-    private fun handleProgressEvent(event: ProgressEvent) = viewModelScope.launch {
+    private fun handleProgressEvent(event: ProgressEvent) {
+        enqueueProgressEvent(event)
+    }
+
+    private fun enqueueProgressEvent(
+        event: ProgressEvent,
+        seedFromWorkerSnapshot: Boolean = false
+    ) = viewModelScope.launch {
+        progressEventMutex.withLock {
+            if (seedFromWorkerSnapshot) {
+                seedProgressStateFromWorkerSnapshot(event)
+            }
+            processProgressEventLocked(event)
+        }
+    }
+
+    private fun processProgressEventLocked(event: ProgressEvent) {
+        prepareSplitStepForIncomingEvent(event)
+        if (bufferLoadPatchesEventDuringSplitPreparation(event)) return
+        applyProgressEvent(event)
+
+        if (event.stepId == StepId.PrepareSplitApk) {
+            when (event) {
+                is ProgressEvent.Completed -> replayDeferredLoadPatchesEvents()
+                is ProgressEvent.Failed -> clearDeferredLoadPatchesEvents()
+                else -> Unit
+            }
+        }
+        enforceSplitPreparationVisualPriority()
+    }
+
+    private fun applyProgressEvent(event: ProgressEvent) {
         val eventStepId = event.stepId
         if (shouldResetProgressStateForAutomaticRetry(event)) {
             resetProgressStateForAutomaticRetry()
@@ -2612,7 +2653,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 }
 
                 is ProgressEvent.Failed -> {
-                    if (event.stepId == null && steps.any { it.state == State.FAILED }) return@launch
+                    if (event.stepId == null && steps.any { it.state == State.FAILED }) return
                     step.withState(
                         State.FAILED,
                         message = formatDisplayedFailure(event.error),
@@ -2638,6 +2679,102 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             }
             handleKeystoreMissing(event.error)
         }
+    }
+
+    private fun bufferLoadPatchesEventDuringSplitPreparation(event: ProgressEvent): Boolean {
+        if (event.stepId != StepId.LoadPatches) return false
+        if (!shouldDeferLoadPatchesEventUntilSplitComplete()) return false
+
+        deferLoadPatchesUntilSplitComplete = true
+        deferredLoadPatchesEvents += event
+        pauseLoadPatchesVisualProgress()
+        return true
+    }
+
+    private fun shouldDeferLoadPatchesEventUntilSplitComplete(): Boolean {
+        val splitStep = steps.firstOrNull { it.id == StepId.PrepareSplitApk } ?: return false
+        return splitStep.state != State.COMPLETED && splitStep.state != State.FAILED
+    }
+
+    private fun prepareSplitStepForIncomingEvent(event: ProgressEvent) {
+        if (event.stepId != StepId.PrepareSplitApk) return
+        if (steps.none { it.id == StepId.PrepareSplitApk }) {
+            requiresSplitPreparation = true
+            addSplitStep()
+        }
+        when (event) {
+            is ProgressEvent.Started,
+            is ProgressEvent.Progress -> pauseLoadPatchesForSplitPreparation()
+            else -> Unit
+        }
+    }
+
+    private fun pauseLoadPatchesForSplitPreparation() {
+        val loadIndex = steps.indexOfFirst { it.id == StepId.LoadPatches }
+        if (loadIndex == -1) return
+
+        val loadStep = steps[loadIndex]
+        if (loadStep.state == State.WAITING || loadStep.state == State.FAILED) return
+
+        if (deferredLoadPatchesStepSnapshot == null) {
+            deferredLoadPatchesStepSnapshot = loadStep
+        }
+        deferLoadPatchesUntilSplitComplete = true
+        pauseLoadPatchesVisualProgress()
+    }
+
+    private fun pauseLoadPatchesVisualProgress() {
+        val loadIndex = steps.indexOfFirst { it.id == StepId.LoadPatches }
+        if (loadIndex != -1) {
+            val loadStep = steps[loadIndex]
+            if (loadStep.state != State.FAILED) {
+                steps[loadIndex] = loadStep.withState(
+                    state = State.WAITING,
+                    message = null,
+                    progress = null
+                )
+            }
+        }
+
+        val splitIndex = steps.indexOfFirst { it.id == StepId.PrepareSplitApk }
+        if (splitIndex == -1) return
+
+        val splitStep = steps[splitIndex]
+        if (splitStep.state == State.WAITING) {
+            steps[splitIndex] = splitStep.withState(
+                state = State.RUNNING,
+                message = null,
+                progress = null
+            )
+        }
+    }
+
+    private fun replayDeferredLoadPatchesEvents() {
+        if (!deferLoadPatchesUntilSplitComplete) return
+        val pending = deferredLoadPatchesEvents.toList()
+        val snapshot = deferredLoadPatchesStepSnapshot
+        deferredLoadPatchesEvents.clear()
+        deferredLoadPatchesStepSnapshot = null
+        deferLoadPatchesUntilSplitComplete = false
+        if (pending.isEmpty() && snapshot != null) {
+            val loadIndex = steps.indexOfFirst { it.id == StepId.LoadPatches }
+            if (loadIndex != -1 && steps[loadIndex].state != State.FAILED) {
+                steps[loadIndex] = snapshot
+            }
+            return
+        }
+        pending.forEach(::applyProgressEvent)
+    }
+
+    private fun clearDeferredLoadPatchesEvents() {
+        deferredLoadPatchesEvents.clear()
+        deferredLoadPatchesStepSnapshot = null
+        deferLoadPatchesUntilSplitComplete = false
+    }
+
+    private fun enforceSplitPreparationVisualPriority() {
+        if (!shouldDeferLoadPatchesEventUntilSplitComplete()) return
+        pauseLoadPatchesVisualProgress()
     }
 
     private fun resetFailureLogState() {
@@ -3401,6 +3538,12 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
         currentWorkSource = source
         _patcherSucceeded.addSource(source) { workInfo ->
+            when (workInfo?.state) {
+                WorkInfo.State.RUNNING,
+                WorkInfo.State.ENQUEUED,
+                WorkInfo.State.BLOCKED -> replayWorkerProgressSnapshot(workInfo)
+                else -> Unit
+            }
             val progressActive =
                 workInfo?.progress?.getBoolean(PatcherWorker.PATCHING_ACTIVE_KEY, false) == true
             _isPatchingActive.value = when (workInfo?.state) {
@@ -3414,6 +3557,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             }
             when (workInfo?.state) {
                 WorkInfo.State.SUCCEEDED -> {
+                    replayWorkerProgressSnapshots = false
                     patcherWorkerId = null
                     clearPendingActivityInteractions()
                     clearPatchingNotification()
@@ -3432,6 +3576,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 }
 
                 WorkInfo.State.FAILED -> {
+                    replayWorkerProgressSnapshots = false
                     patcherWorkerId = null
                     clearPendingActivityInteractions()
                     clearPatchingNotification()
@@ -3443,6 +3588,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 WorkInfo.State.ENQUEUED,
                 WorkInfo.State.BLOCKED -> _patcherSucceeded.value = null
                 WorkInfo.State.CANCELLED -> {
+                    replayWorkerProgressSnapshots = false
                     patcherWorkerId = null
                     clearPendingActivityInteractions()
                     clearPatchingNotification()
@@ -3453,6 +3599,42 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     _patcherSucceeded.value = null
                 }
                 else -> _patcherSucceeded.value = null
+            }
+        }
+    }
+
+    private fun replayWorkerProgressSnapshot(workInfo: WorkInfo) {
+        if (!replayWorkerProgressSnapshots) return
+
+        val snapshot = PatcherWorkerProgressState.fromWorkData(workInfo.progress) ?: return
+        if (snapshot.sequence <= lastReplayedWorkerProgressSequence) return
+
+        lastReplayedWorkerProgressSequence = snapshot.sequence
+        enqueueProgressEvent(snapshot.event, seedFromWorkerSnapshot = true)
+    }
+
+    private fun seedProgressStateFromWorkerSnapshot(event: ProgressEvent) {
+        if (event.stepId == StepId.PrepareSplitApk && steps.none { it.id == StepId.PrepareSplitApk }) {
+            requiresSplitPreparation = true
+            val regeneratedSteps = generateSteps(
+                app,
+                input.selectedApp,
+                input.selectedPatches,
+                splitStepActive = true
+            ).toMutableStateList()
+            steps.clear()
+            steps.addAll(regeneratedSteps)
+        }
+
+        val stepIndex = event.stepId?.let { stepId ->
+            steps.indexOfFirst { it.id == stepId }
+        } ?: -1
+        if (stepIndex == -1) return
+
+        for (index in 0 until stepIndex) {
+            val step = steps[index]
+            if (step.state == State.WAITING) {
+                steps[index] = step.withState(state = State.COMPLETED, progress = null)
             }
         }
     }
@@ -3528,6 +3710,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             resetStateForRetry()
             markInitialStepRunning()
             _isPatchingActive.value = true
+            replayWorkerProgressSnapshots = false
+            lastReplayedWorkerProgressSequence = Long.MIN_VALUE
             patcherWorkerId?.uuid?.let(workManager::cancelWorkById)
             val newId = launchWorker()
             patcherWorkerId = ParcelUuid(newId)
@@ -3572,6 +3756,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
 
     private fun resetProgressStateForAutomaticRetry() {
+        clearDeferredLoadPatchesEvents()
         val loadIndex = steps.indexOfFirst { it.id == StepId.LoadPatches }
         if (loadIndex == -1) return
 
@@ -3666,9 +3851,11 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             else -> steps.indexOfFirst { it.id == StepId.ReadAPK }.takeIf { it >= 0 } ?: steps.size
         }
         steps.add(insertIndex, buildSplitStep(app))
+        pauseLoadPatchesForSplitPreparation()
     }
 
     private fun removeSplitStep() {
+        clearDeferredLoadPatchesEvents()
         val index = steps.indexOfFirst { it.id == StepId.PrepareSplitApk }
         if (index == -1) return
         steps.removeAt(index)

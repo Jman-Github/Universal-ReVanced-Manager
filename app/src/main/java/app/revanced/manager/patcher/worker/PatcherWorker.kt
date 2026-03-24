@@ -36,6 +36,7 @@ import app.revanced.manager.patcher.ProgressEvent
 import app.revanced.manager.patcher.RemoteError
 import app.revanced.manager.patcher.StepId
 import app.revanced.manager.patcher.logger.Logger
+import app.revanced.manager.patcher.logger.LogLevel
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.patcher.runtime.CoroutineRuntime
 import app.revanced.manager.patcher.runtime.ProcessRuntime
@@ -66,10 +67,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -77,7 +81,9 @@ import java.io.File
 import java.util.LinkedHashSet
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
@@ -106,6 +112,16 @@ class PatcherWorker(
     private var patchNotificationSteps: List<String> = emptyList()
     @Volatile
     private var foregroundStarted: Boolean = false
+    private val workerProgressScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private val workerProgressMutex = Mutex()
+    private val progressSequence = AtomicLong(0L)
+    private var progressPersistenceClosed: Boolean = false
+    private var lastPersistedProgressSequence: Long = Long.MIN_VALUE
+    private val cachedExpandableSubSteps = ConcurrentHashMap<StepId, List<String>>()
+    private val dexCompilePattern =
+        Regex("(Compiling|Compiled)\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
+    private val dexWritePattern =
+        Regex("Write\\s+\\[[^\\]]+\\]\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
     private val notificationManager by lazy {
         applicationContext.getSystemService(NotificationManager::class.java)
     }
@@ -202,17 +218,7 @@ class PatcherWorker(
     private fun normalizeNotificationDetail(stepId: StepId?, message: String?): String? {
         val detail = message?.takeIf { it.isNotBlank() } ?: return null
         if (stepId != StepId.WriteAPK) return detail
-        val normalized = detail.trim()
-        return when {
-            normalized.equals("Applying patched changes", ignoreCase = true) ->
-                "Compiling modified resources"
-            normalized.startsWith("Applying patched changes", ignoreCase = true) ->
-                normalized.replaceFirst(
-                    Regex("^Applying\\s+patched\\s+changes", RegexOption.IGNORE_CASE),
-                    "Compiling modified resources"
-                )
-            else -> detail
-        }
+        return detail.trim()
     }
 
     private fun notificationStepTitle(step: StepId, totalPatchCount: Int): String = when (step) {
@@ -332,15 +338,18 @@ class PatcherWorker(
     private fun notificationWriteApkFraction(event: ProgressEvent.Progress): Float {
         val detail = normalizeNotificationDetail(event.stepId, event.message)?.trim()
         return when {
-            !event.subSteps.isNullOrEmpty() -> 0.25f
             detail == null -> 0.5f
             detail.equals("Preparing output APK", ignoreCase = true) -> 0.05f
             detail.equals("Copying base APK", ignoreCase = true) -> 0.15f
+            detail.equals("Applying patched changes", ignoreCase = true) -> 0.28f
+            detail.equals("Compiling patched dex files", ignoreCase = true) -> 0.4f
             detail.startsWith("Compiling ", ignoreCase = true) -> 0.4f
+            detail.startsWith("Compiled ", ignoreCase = true) -> 0.4f
             detail.equals("Compiling modified resources", ignoreCase = true) -> 0.65f
             detail.equals("Writing output APK", ignoreCase = true) -> 0.82f
             detail.equals("Finalizing output", ignoreCase = true) -> 0.92f
             detail.equals("Stripping native libraries", ignoreCase = true) -> 0.97f
+            !event.subSteps.isNullOrEmpty() -> 0.25f
             else -> 0.5f
         }
     }
@@ -405,12 +414,259 @@ class PatcherWorker(
         workerRepository.clearActiveUniqueWork(UNIQUE_WORK_NAME, id)
     }
 
-    private suspend fun updateActivePatchingState(active: Boolean) {
-        runCatching {
-            setProgress(workDataOf(PATCHING_ACTIVE_KEY to active))
+    private suspend fun updateWorkerProgressState(
+        active: Boolean,
+        snapshot: PatcherWorkerProgressSnapshot? = null
+    ): Boolean {
+        return runCatching {
+            setProgress(PatcherWorkerProgressState.toWorkData(active, snapshot))
+            true
         }.onFailure { error ->
             Log.d(tag, "Failed to update active patching state", error)
+        }.getOrDefault(false)
+    }
+
+    private suspend fun persistWorkerProgressSnapshot(snapshot: PatcherWorkerProgressSnapshot) {
+        workerProgressMutex.withLock {
+            if (progressPersistenceClosed) return
+            if (snapshot.sequence <= lastPersistedProgressSequence) return
+            if (updateWorkerProgressState(active = true, snapshot = snapshot)) {
+                lastPersistedProgressSequence = snapshot.sequence
+            }
         }
+    }
+
+    private suspend fun deactivateWorkerProgressState() {
+        workerProgressMutex.withLock {
+            progressPersistenceClosed = true
+            updateWorkerProgressState(active = false)
+        }
+    }
+
+    private fun persistProgressSnapshot(event: ProgressEvent) {
+        if (event is ProgressEvent.Failed) return
+
+        cacheExpandableSubSteps(event)
+        val snapshotEvent = when (event) {
+            is ProgressEvent.Progress -> {
+                val cachedSubSteps = if (isExpandableStep(event.stepId)) {
+                    event.subSteps ?: cachedExpandableSubSteps[event.stepId]
+                } else {
+                    null
+                }
+                event.copy(subSteps = cachedSubSteps)
+            }
+            else -> event
+        }
+        val snapshot = PatcherWorkerProgressSnapshot(
+            sequence = progressSequence.incrementAndGet(),
+            event = snapshotEvent
+        )
+
+        workerProgressScope.launch {
+            persistWorkerProgressSnapshot(snapshot)
+        }
+    }
+
+    private fun cacheExpandableSubSteps(event: ProgressEvent) {
+        when (event) {
+            is ProgressEvent.Started -> {
+                if (isExpandableStep(event.stepId)) {
+                    cachedExpandableSubSteps.remove(event.stepId)
+                }
+            }
+            is ProgressEvent.Progress -> {
+                if (isExpandableStep(event.stepId) && !event.subSteps.isNullOrEmpty()) {
+                    cachedExpandableSubSteps[event.stepId] = event.subSteps
+                }
+            }
+            is ProgressEvent.Completed,
+            is ProgressEvent.Failed -> {
+                event.stepId?.takeIf(::isExpandableStep)?.let(cachedExpandableSubSteps::remove)
+            }
+        }
+    }
+
+    private fun handleWorkerLogProgress(message: String, totalPatchCount: Int) {
+        if (shouldSkipForegroundUpdates()) return
+        val event = buildWriteApkLogEvent(message) ?: return
+        persistProgressSnapshot(event)
+        updateForegroundNotification(event, totalPatchCount)
+    }
+
+    private fun buildWriteApkLogEvent(rawMessage: String): ProgressEvent.Progress? {
+        val message = rawMessage.trim()
+        val rawDetail = when {
+            message.contains("Writing patched files", ignoreCase = true) ->
+                "Applying patched changes"
+            message.contains("Compiling modified resources", ignoreCase = true) ||
+                message.contains("Compiling patched resources", ignoreCase = true) ||
+                message.contains("Compiled modified resources", ignoreCase = true) ||
+                message.contains("Compiled patched resources", ignoreCase = true) ->
+                "Compiling modified resources"
+            message.contains("Writing output APK", ignoreCase = true) ->
+                "Writing output APK"
+            message.contains("Finalizing output", ignoreCase = true) ->
+                "Finalizing output"
+            message.contains("Patched apk saved to", ignoreCase = true) ->
+                "Writing output APK"
+            isDexCompilePhaseTitle(message) -> message
+            else -> {
+                val match = dexCompilePattern.find(message) ?: dexWritePattern.find(message)
+                val dexName =
+                    match?.groupValues?.lastOrNull()?.takeIf { it.endsWith(".dex", ignoreCase = true) }
+                        ?: return null
+                val completionKeyword = match.groupValues.getOrNull(1)
+                if (completionKeyword.equals("Compiled", ignoreCase = true)) {
+                    "Compiled $dexName"
+                } else {
+                    "Compiling $dexName"
+                }
+            }
+        }
+
+        updateCachedWriteApkNotificationSubSteps(rawDetail)
+        val detail = if (rawDetail.startsWith("Compiled ", ignoreCase = true)) {
+            val currentTitle = "Compiling ${rawDetail.removePrefix("Compiled ").trim()}"
+            nextWriteApkNotificationDetailAfter(currentTitle) ?: rawDetail
+        } else {
+            rawDetail
+        }
+
+        return ProgressEvent.Progress(
+            stepId = StepId.WriteAPK,
+            message = detail,
+            subSteps = cachedExpandableSubSteps[StepId.WriteAPK]
+        )
+    }
+
+    private fun updateCachedWriteApkNotificationSubSteps(detail: String) {
+        val normalized = normalizeWriteApkNotificationCacheTitle(detail)
+        if (normalized.isBlank()) return
+
+        val existing = cachedExpandableSubSteps[StepId.WriteAPK].orEmpty()
+        val updated = existing.toMutableList()
+        if (updated.isEmpty()) {
+            updated += defaultWriteApkNotificationSubSteps()
+        }
+
+        if (isWriteApkDexNotificationTitle(normalized)) {
+            ensureWriteApkDexNotificationTitle(updated, normalized)
+        } else {
+            ensureWriteApkPhaseNotificationTitle(updated, normalized)
+        }
+
+        if (updated != existing) {
+            cachedExpandableSubSteps[StepId.WriteAPK] = updated
+        }
+    }
+
+    private fun normalizeWriteApkNotificationCacheTitle(detail: String): String {
+        val trimmed = detail.trim()
+        if (trimmed.startsWith("Compiled ", ignoreCase = true)) {
+            return "Compiling ${trimmed.removePrefix("Compiled ").trim()}"
+        }
+        return trimmed
+    }
+
+    private fun isWriteApkDexNotificationTitle(title: String): Boolean {
+        if (!title.startsWith("Compiling ", ignoreCase = true)) return false
+        return title.removePrefix("Compiling ").trim().endsWith(".dex", ignoreCase = true)
+    }
+
+    private fun ensureWriteApkDexNotificationTitle(
+        subSteps: MutableList<String>,
+        title: String
+    ) {
+        if (subSteps.any { it.equals(title, ignoreCase = true) }) return
+
+        val resourceIndex = subSteps.indexOfFirst {
+            it.equals("Compiling modified resources", ignoreCase = true)
+        }.takeIf { it != -1 }
+            ?: subSteps.indexOfFirst {
+                it.equals("Writing output APK", ignoreCase = true)
+            }.takeIf { it != -1 }
+            ?: subSteps.size
+
+        val targetDexName = title.removePrefix("Compiling ").trim()
+        val targetSortKey = writeApkDexSortKey(targetDexName)
+        val insertIndex = (0 until resourceIndex)
+            .firstOrNull { index ->
+                val existing = subSteps[index]
+                isWriteApkDexNotificationTitle(existing) &&
+                    writeApkDexSortKey(existing.removePrefix("Compiling ").trim()) > targetSortKey
+            }
+            ?: resourceIndex
+        subSteps.add(insertIndex, title)
+    }
+
+    private fun ensureWriteApkPhaseNotificationTitle(
+        subSteps: MutableList<String>,
+        title: String
+    ) {
+        if (subSteps.any { it.equals(title, ignoreCase = true) }) return
+
+        val phaseOrder = listOf(
+            "Copying base APK",
+            "Applying patched changes",
+            "Compiling patched dex files",
+            "Compiling modified resources",
+            "Writing output APK",
+            "Finalizing output",
+            "Stripping native libraries"
+        )
+        val targetOrder = phaseOrder.indexOfFirst { it.equals(title, ignoreCase = true) }
+        if (targetOrder == -1) {
+            subSteps += title
+            return
+        }
+
+        val insertIndex = subSteps.indexOfFirst { existing ->
+            val existingOrder = phaseOrder.indexOfFirst { it.equals(existing, ignoreCase = true) }
+            existingOrder != -1 && existingOrder > targetOrder
+        }.takeIf { it != -1 } ?: subSteps.size
+        subSteps.add(insertIndex, title)
+    }
+
+    private fun defaultWriteApkNotificationSubSteps(): List<String> = listOf(
+        "Copying base APK",
+        "Applying patched changes",
+        "Compiling modified resources",
+        "Writing output APK",
+        "Finalizing output"
+    )
+
+    private fun writeApkDexSortKey(name: String): Int {
+        val base = name.removeSuffix(".dex")
+        if (base == "classes") return 1
+        val suffix = base.removePrefix("classes")
+        return suffix.toIntOrNull() ?: Int.MAX_VALUE
+    }
+
+    private fun nextWriteApkNotificationDetailAfter(currentTitle: String): String? {
+        val subSteps = cachedExpandableSubSteps[StepId.WriteAPK].orEmpty()
+        if (subSteps.isEmpty()) return null
+
+        val currentIndex = subSteps.indexOfFirst { title ->
+            title.equals(currentTitle, ignoreCase = true)
+        }
+        if (currentIndex == -1) return null
+
+        return ((currentIndex + 1) until subSteps.size)
+            .asSequence()
+            .map { subSteps[it].trim() }
+            .firstOrNull { it.isNotBlank() }
+    }
+
+    private fun isDexCompilePhaseTitle(message: String): Boolean {
+        return message.equals("Compiling patched dex files", ignoreCase = true) ||
+            message.equals("Applying patched changes", ignoreCase = true)
+    }
+
+    private fun isExpandableStep(stepId: StepId) = when (stepId) {
+        StepId.PrepareSplitApk,
+        StepId.WriteAPK -> true
+        else -> false
     }
 
     override suspend fun doWork(): Result {
@@ -454,7 +710,7 @@ class PatcherWorker(
                 Log.d(tag, "Failed to publish initial patching notification:", e)
             }
 
-            updateActivePatchingState(true)
+            updateWorkerProgressState(active = true)
             val result = runPatcher(args, totalPatchCount)
 
             if (result is Result.Success && args.input is SelectedApp.Local && args.input.temporary) {
@@ -466,12 +722,13 @@ class PatcherWorker(
             workerFinished.set(true)
             stopMonitor.cancel()
             withContext(NonCancellable) {
-                updateActivePatchingState(false)
+                deactivateWorkerProgressState()
             }
             if (wakeLock.isHeld) {
                 wakeLock.release()
             }
             stopForegroundUpdates()
+            workerProgressScope.cancel()
         }
     }
 
@@ -484,9 +741,16 @@ class PatcherWorker(
             .flatten()
             .sorted()
             .toList()
+        val workerLogger = object : Logger() {
+            override fun log(level: LogLevel, message: String) {
+                args.logger.log(level, message)
+                handleWorkerLogProgress(message, totalPatchCount)
+            }
+        }
         val eventDispatcher: (ProgressEvent) -> Unit = eventDispatcher@{ event ->
             if (shouldSkipForegroundUpdates()) return@eventDispatcher
             args.onEvent(event)
+            persistProgressSnapshot(event)
             updateForegroundNotification(event, totalPatchCount)
         }
 
@@ -676,30 +940,30 @@ class PatcherWorker(
                 }
             )
 
-            args.logger.info(
+            workerLogger.info(
                 "Patching started at ${System.currentTimeMillis()} " +
                         "pkg=${args.packageName} version=${args.input.version} " +
                         "input=${inputFile.absolutePath} size=${inputFile.length()} " +
                         "split=$inputIsSplitArchive patches=$selectedCount"
             )
-            args.logger.info(
+            workerLogger.info(
                 "Patcher runtime: bundle=$bundleType experimental=$processRuntimeRequested " +
                     "memoryLimit=${if (memoryOverrideActive) "${effectiveLimit}MB" else "disabled"} " +
                     "(requested=${requestedLimit}MB${if (aggressiveLimit) ", aggressive" else ""})"
             )
             if (processRuntimeRequested && !processRuntimeSupported) {
-                args.logger.warn(
+                workerLogger.warn(
                     "Process runtime requested but unsupported on Android ${Build.VERSION.SDK_INT}; using in-process runtime"
                 )
             }
             if (forceProcessRuntimeReason != null) {
-                args.logger.warn(
+                workerLogger.warn(
                     "Forcing process runtime for legacy input because the in-process legacy runtime " +
                         "cannot reliably initialize $forceProcessRuntimeReason"
                 )
             }
-            args.logger.info("Runtime mode: ${if (useProcessRuntime) "process" else "in-process"}")
-            args.logger.info("Memory override: ${if (memoryOverrideActive) "enabled" else "disabled"}")
+            workerLogger.info("Runtime mode: ${if (useProcessRuntime) "process" else "in-process"}")
+            workerLogger.info("Memory override: ${if (memoryOverrideActive) "enabled" else "disabled"}")
             if (!inputIsSplitArchive) {
                 eventDispatcher(ProgressEvent.Started(StepId.LoadPatches))
             }
@@ -718,7 +982,7 @@ class PatcherWorker(
                         args.packageName,
                         args.selectedPatches,
                         args.options,
-                        args.logger,
+                        workerLogger,
                         eventDispatcher,
                         stripNativeLibs,
                         skipUnneededSplits
@@ -737,7 +1001,7 @@ class PatcherWorker(
                         args.packageName,
                         args.selectedPatches,
                         args.options,
-                        args.logger,
+                        workerLogger,
                         eventDispatcher,
                         stripNativeLibs,
                         skipUnneededSplits
@@ -766,7 +1030,7 @@ class PatcherWorker(
                         args.packageName,
                         args.selectedPatches,
                         args.options,
-                        args.logger,
+                        workerLogger,
                         eventDispatcher,
                         stripNativeLibs,
                         skipUnneededSplits
@@ -783,7 +1047,7 @@ class PatcherWorker(
             val usedMem = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024)
             val totalMem = rt.totalMemory() / (1024 * 1024)
 
-            args.logger.info(
+            workerLogger.info(
                 "Patching succeeded: output=${args.output} size=${File(args.output).length()} " +
                         "elapsed=${elapsed}ms memory=${usedMem}MB/${totalMem}MB"
             )

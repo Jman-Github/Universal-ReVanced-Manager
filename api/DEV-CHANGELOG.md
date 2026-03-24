@@ -1,4 +1,4 @@
-# v1.8.1-dev.09 (2026-03-21)
+# v1.8.1-dev.09 (2026-03-23)
 
 
 # Features
@@ -10,6 +10,7 @@
 - Added a full ReVanced announcements system with announcement list/detail screens, tag filtering, archived announcements, unread badges, and dashboard announcement banners https://github.com/ReVanced/revanced-manager/pull/2948
 - Added announcement push notifications with deep links to the specific announcement, integrated into the existing websocket/background update system
 - Added settings to enable or disable announcements and announcement notifications
+- Bumped the Morphe patcher dependency
 
 
 # Bug fixes
@@ -19,6 +20,7 @@
 - Fixed patcher warnings breaking progress on the patcher screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/267#issuecomment-4028751450
 - Fixed multiple patching and split APK merge issues across runtimes, including bundle loading regressions, cancellation/cleanup problems, merge failures, and write-progress glitches https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/308
 - Fixed new announcement banners not appearing on the dashboard until the screen or app was reloaded
+- Fixed issues where the patching in progress notifaction would lag behind, or where the patcher UI would lag behind the notification https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/305 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/320
 
 
 # v1.8.1-dev.08 (2026-03-12)

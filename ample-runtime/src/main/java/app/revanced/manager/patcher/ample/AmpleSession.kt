@@ -316,6 +316,12 @@ class AmpleSession private constructor(
                         message = "Applying patched changes"
                     )
                 )
+                onEvent(
+                    ProgressEvent.Progress(
+                        stepId = StepId.WriteAPK,
+                        message = "Compiling modified resources"
+                    )
+                )
                 runCancellableBlockingIo(checkCancelled) {
                     result.applyTo(patched)
                 }
