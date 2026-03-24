@@ -151,6 +151,7 @@
 - Fixed multiple patching and split APK merge issues across runtimes, including bundle loading regressions, cancellation/cleanup problems, merge failures, and write-progress glitches https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/308
 - Fixed new announcement banners not appearing on the dashboard until the screen or app was reloaded
 - Fixed issues where the patching in progress notifaction would lag behind, or where the patcher UI would lag behind the notification https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/305 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/320
+- Fixed the patch bundle URL editor sometimes needing an extra `OK` press after editing https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/324
 
 
 # CI

@@ -533,6 +533,9 @@ fun BundleInformationDialog(
                             initial = url,
                             title = stringResource(patches_url),
                             onDismissRequest = { showUrlInputDialog = false },
+                            singleLine = false,
+                            minLines = 2,
+                            maxLines = 4,
                             onConfirm = { newUrl ->
                                 if (remote == null) {
                                     showUrlInputDialog = false
