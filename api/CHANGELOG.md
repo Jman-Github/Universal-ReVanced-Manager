@@ -80,6 +80,7 @@
 - Added announcement push notifications with deep links to the specific announcement, integrated into the existing websocket/background update system
 - Added settings to enable or disable announcements and announcement notifications
 - Bumped the Morphe patcher dependency
+- Removed the automatically imported remote downloader plugins
 
 
 # Bug fixes
@@ -152,6 +153,7 @@
 - Fixed new announcement banners not appearing on the dashboard until the screen or app was reloaded
 - Fixed issues where the patching in progress notifaction would lag behind, or where the patcher UI would lag behind the notification https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/305 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/320
 - Fixed the patch bundle URL editor sometimes needing an extra `OK` press after editing https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/324
+- Fixed downloader plugin signature verification failures potentially crashing URV during launch, reload, or update checks https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/332
 
 
 # CI

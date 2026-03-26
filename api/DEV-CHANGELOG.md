@@ -1,3 +1,16 @@
+# v1.8.1-dev.10 (2026-03-26)
+
+
+# Features
+
+- Removed the automatically imported remote downloader plugins
+
+
+# Bug fixes
+
+- Fixed downloader plugin signature verification failures potentially crashing URV during launch, reload, or update checks https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/332
+
+
 # v1.8.1-dev.09 (2026-03-23)
 
 

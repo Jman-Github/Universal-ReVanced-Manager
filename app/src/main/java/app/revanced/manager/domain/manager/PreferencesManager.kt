@@ -191,8 +191,6 @@ class PreferencesManager(
 
     val acknowledgedDownloaderPlugins = stringSetPreference("acknowledged_downloader_plugins", emptySet())
     val downloaderPluginSourcesJson = stringPreference("downloader_plugin_sources_json", "")
-    val defaultDownloaderSourcesSeeded =
-        booleanPreference("default_downloader_sources_seeded", false)
     val autoSaveDownloaderApks = booleanPreference("auto_save_downloader_apks", true)
     val autoSaveDownloaderLatestOnly =
         booleanPreference("auto_save_downloader_latest_only", false)

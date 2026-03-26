@@ -124,40 +124,6 @@ class DownloaderPluginRepository(
         importedEntries.size
     }
 
-    suspend fun ensureDefaultSourcesImported() = withContext(Dispatchers.IO) {
-        if (prefs.defaultDownloaderSourcesSeeded.get()) return@withContext
-        if (!networkInfo.isConnected()) return@withContext
-
-        val existingEntries = readSourceEntries()
-        if (existingEntries.any { it.repoUrl == DEFAULT_REMOTE_DOWNLOADER_REPO_URL }) {
-            prefs.defaultDownloaderSourcesSeeded.update(true)
-            return@withContext
-        }
-
-        val importedEntries = importSourceEntries(
-            importRequest = ImportRequest.Repository(DEFAULT_REMOTE_DOWNLOADER_REPO_URL)
-        )
-        check(importedEntries.isNotEmpty()) {
-            "Expected at least one default downloader source to be imported."
-        }
-
-        if (existingEntries.isEmpty()) {
-            val importedEntryIds = importedEntries.mapTo(mutableSetOf(), DownloaderPluginSourceEntry::id)
-            val seededEntries = readSourceEntries().map { entry ->
-                if (entry.id in importedEntryIds) {
-                    val packageInfo = readArchivePackageInfo(sourceFile(entry))
-                    entry.copy(trustedSignatureHex = archiveSignatureHex(packageInfo))
-                } else {
-                    entry
-                }
-            }
-            writeSourceEntries(seededEntries)
-        }
-
-        prefs.defaultDownloaderSourcesSeeded.update(true)
-        reload()
-    }
-
     suspend fun updateSource(id: String) = withContext(Dispatchers.IO) {
         val entries = readSourceEntries().toMutableList()
         val index = entries.indexOfFirst { it.id == id }
@@ -375,6 +341,15 @@ class DownloaderPluginRepository(
                         )
                     )
                 }
+                is ArchiveTrust.Unreadable -> {
+                    return DownloaderPluginSourceState(
+                        entry = entry,
+                        name = fallbackName,
+                        version = packageInfo.versionName,
+                        repoUrl = entry.repoUrl,
+                        state = DownloaderPluginSourceState.State.Failed(trust.throwable)
+                    )
+                }
             }
             val pluginContext = createArchiveContext(packageInfo)
             val resolved = loadResolvedPluginPackage(
@@ -477,7 +452,8 @@ class DownloaderPluginRepository(
         entry: DownloaderPluginSourceEntry,
         packageInfo: PackageInfo
     ): ArchiveTrust {
-        val actualSignatureHex = archiveSignatureHex(packageInfo)
+        val actualSignatureHex = runCatching { archiveSignatureHex(packageInfo) }
+            .getOrElse { return ArchiveTrust.Unreadable(it) }
         val expectedSignatureHex = entry.trustedSignatureHex
             ?: return ArchiveTrust.Untrusted(actualSignatureHex)
 
@@ -595,7 +571,14 @@ class DownloaderPluginRepository(
                 return false
             }
 
-        return verifyArchiveTrust(entry, packageInfo) == ArchiveTrust.Trusted
+        return when (val trust = verifyArchiveTrust(entry, packageInfo)) {
+            ArchiveTrust.Trusted -> true
+            is ArchiveTrust.Untrusted, is ArchiveTrust.Mismatch -> false
+            is ArchiveTrust.Unreadable -> {
+                Log.e(tag, "Failed to verify downloader source ${entry.repoUrl} before auto-update", trust.throwable)
+                false
+            }
+        }
     }
 
     private suspend fun releaseForImport(importRequest: ImportRequest): GitHubRelease = when (importRequest) {
@@ -661,8 +644,26 @@ class DownloaderPluginRepository(
                 }
             )
             val packageInfo = readArchivePackageInfo(tempFile)
-            when (verifyArchiveTrust(entry, packageInfo)) {
-                ArchiveTrust.Trusted, is ArchiveTrust.Untrusted, is ArchiveTrust.Mismatch -> Unit
+            if (entry.trustedSignatureHex != null) {
+                when (val trust = verifyArchiveTrust(entry, packageInfo)) {
+                    ArchiveTrust.Trusted -> Unit
+                    is ArchiveTrust.Mismatch -> {
+                        throw SecurityException(
+                            "Signer mismatch for ${packageInfo.packageName}"
+                        )
+                    }
+                    is ArchiveTrust.Unreadable -> {
+                        throw SecurityException(
+                            "Failed to read signer for ${packageInfo.packageName}",
+                            trust.throwable
+                        )
+                    }
+                    is ArchiveTrust.Untrusted -> {
+                        throw SecurityException(
+                            "Expected trusted downloader source for ${packageInfo.packageName}"
+                        )
+                    }
+                }
             }
             if (target.exists()) target.delete()
             tempFile.copyTo(target, overwrite = true)
@@ -693,6 +694,7 @@ class DownloaderPluginRepository(
         data object Trusted : ArchiveTrust
         data class Mismatch(val signatureHex: String) : ArchiveTrust
         data class Untrusted(val signatureHex: String) : ArchiveTrust
+        data class Unreadable(val throwable: Throwable) : ArchiveTrust
     }
 
     private fun parseImportUrl(rawUrl: String): ImportRequest {
@@ -866,9 +868,6 @@ class DownloaderPluginRepository(
 
     private companion object {
         private val json = Json { ignoreUnknownKeys = true }
-        private const val DEFAULT_REMOTE_DOWNLOADER_REPO_URL =
-            "https://github.com/brosssh/revanced-manager-downloaders"
-
         const val LEGACY_PLUGIN_FEATURE = "app.revanced.manager.plugin.downloader"
         const val MODERN_PLUGIN_FEATURE = "app.revanced.manager.downloader"
 

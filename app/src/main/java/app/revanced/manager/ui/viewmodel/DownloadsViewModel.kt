@@ -278,7 +278,6 @@ class DownloadsViewModel(
     private suspend fun reloadPlugins() {
         isRefreshingPlugins = true
         try {
-            downloaderPluginRepository.ensureDefaultSourcesImported()
             downloaderPluginRepository.reload()
             downloaderPluginRepository.updateCheck()
         } finally {

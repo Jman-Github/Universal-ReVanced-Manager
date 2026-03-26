@@ -126,10 +126,13 @@ class ManagerApplication : Application() {
             applyAppLanguage(storedLanguage)
         }
         scope.launch(Dispatchers.Default) {
-            with(downloaderPluginRepository) {
-                ensureDefaultSourcesImported()
-                reload()
-                updateCheck()
+            runCatching {
+                with(downloaderPluginRepository) {
+                    reload()
+                    updateCheck()
+                }
+            }.onFailure {
+                Log.e(tag, "Failed to initialize downloader plugins", it)
             }
         }
         scope.launch(Dispatchers.Default) {
