@@ -1,6 +1,7 @@
 package app.revanced.manager.patcher.runtime
 
 import android.content.Context
+import app.revanced.manager.patcher.PatchList
 import app.revanced.manager.patcher.ProgressEvent
 import app.revanced.manager.patcher.Session
 import app.revanced.manager.patcher.StepId
@@ -63,11 +64,7 @@ class CoroutineRuntime(context: Context) : Runtime(context) {
                 prepareInput()
             }
         }
-        val (patchList, relatedBundleArchives) = runStep(
-            StepId.LoadPatches,
-            onEvent,
-            ::ensureNotCancelled
-        ) {
+        val (loadSelectedPatches, relatedBundleArchives) = run {
             val activeSelectedPatches = selectedPatches.filterValues { it.isNotEmpty() }
             val selectedBundles = activeSelectedPatches.keys
             val patchBundlesByUid = bundles()
@@ -83,32 +80,43 @@ class CoroutineRuntime(context: Context) : Runtime(context) {
             }
             val uids = selectedPatchBundlesByUid.entries.associate { (key, value) -> value to key }
 
-            val allPatches =
-                PatchBundle.Loader.patches(selectedPatchBundlesByUid.values, packageName)
-                    .mapKeys { (b, _) -> uids[b]!! }
+            var cachedSelectedPatches: PatchList? = null
+            suspend fun loadSelectedPatches(): PatchList {
+                cachedSelectedPatches?.let { return it }
 
-            val patchList = activeSelectedPatches.flatMap { (bundle, selected) ->
-                allPatches[bundle].orEmpty().filter { it.name in selected }
-            }
+                val allPatches =
+                    PatchBundle.Loader.patches(selectedPatchBundlesByUid.values, packageName)
+                        .mapKeys { (b, _) -> uids[b]!! }
 
-            if (activeSelectedPatches.isNotEmpty() && patchList.isEmpty()) {
-                throw IllegalArgumentException(
-                    "Selected patches are unavailable. Re-open patch selection and select patches again."
-                )
-            }
+                val patchList = activeSelectedPatches.flatMap { (bundle, selected) ->
+                    allPatches[bundle].orEmpty().filter { it.name in selected }
+                }
 
-            // Set all patch options.
-            options.forEach { (bundle, bundlePatchOptions) ->
-                val patches = allPatches[bundle] ?: return@forEach
-                bundlePatchOptions.forEach { (patchName, configuredPatchOptions) ->
-                    val patchOptions = patches.single { it.name == patchName }.options
-                    configuredPatchOptions.forEach { (key, value) ->
-                        patchOptions[key] = value
+                if (activeSelectedPatches.isNotEmpty() && patchList.isEmpty()) {
+                    throw IllegalArgumentException(
+                        "Selected patches are unavailable. Re-open patch selection and select patches again."
+                    )
+                }
+
+                // Set all patch options.
+                options.forEach { (bundle, bundlePatchOptions) ->
+                    val patches = allPatches[bundle] ?: return@forEach
+                    bundlePatchOptions.forEach { (patchName, configuredPatchOptions) ->
+                        val patchOptions = patches.single { it.name == patchName }.options
+                        configuredPatchOptions.forEach { (key, value) ->
+                            patchOptions[key] = value
+                        }
                     }
                 }
+
+                return patchList.also { cachedSelectedPatches = it }
             }
 
-            patchList to selectedPatchBundlesByUid.values.map { File(it.patchesJar) }
+            runStep(StepId.LoadPatches, onEvent, ::ensureNotCancelled) {
+                loadSelectedPatches().size
+            }
+
+            ::loadSelectedPatches to selectedPatchBundlesByUid.values.map { File(it.patchesJar) }
         }
 
         try {
@@ -141,7 +149,7 @@ class CoroutineRuntime(context: Context) : Runtime(context) {
             session.use { s ->
                 s.run(
                     File(outputFile),
-                    patchList,
+                    { loadSelectedPatches() },
                     stripNativeLibs,
                     preparedInput.merged
                 )

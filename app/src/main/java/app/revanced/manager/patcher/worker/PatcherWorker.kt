@@ -964,10 +964,6 @@ class PatcherWorker(
             }
             workerLogger.info("Runtime mode: ${if (useProcessRuntime) "process" else "in-process"}")
             workerLogger.info("Memory override: ${if (memoryOverrideActive) "enabled" else "disabled"}")
-            if (!inputIsSplitArchive) {
-                eventDispatcher(ProgressEvent.Started(StepId.LoadPatches))
-            }
-
             when (bundleType) {
                 PatchBundleType.MORPHE -> {
                     val runtime = if (useProcessRuntime) {

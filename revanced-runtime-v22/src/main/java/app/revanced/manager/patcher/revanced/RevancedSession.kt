@@ -195,14 +195,14 @@ class RevancedSession(
 
     suspend fun run(
         output: File,
-        selectedPatches: RevancedPatchList,
+        loadSelectedPatches: suspend () -> RevancedPatchList,
         stripNativeLibs: Boolean,
         inputWasSplit: Boolean
     ) {
         checkCancelled()
         val shouldStripNativeLibs = stripNativeLibs && !inputWasSplit
-        val orderedPatches = selectedPatches.sortedBy { it.name.orEmpty() }
-        val patchResult = runStep(StepId.ExecutePatches, onEvent, checkCancelled) {
+        val (patchResult, patchCount) = runStep(StepId.ExecutePatches, onEvent, checkCancelled) {
+            val orderedPatches = loadSelectedPatches().sortedBy { it.name.orEmpty() }
             java.util.logging.Logger.getLogger("").apply {
                 handlers.forEach {
                     it.close()
@@ -210,11 +210,11 @@ class RevancedSession(
                 }
                 addHandler(logger.handler)
             }
-            executePatchesWithFrameworkRecovery(orderedPatches)
+            executePatchesWithFrameworkRecovery(orderedPatches) to orderedPatches.size
         }
 
         // Ensure patch rows are finalized before write/sign steps begin.
-        orderedPatches.indices.forEach { index ->
+        repeat(patchCount) { index ->
             checkCancelled()
             onEvent(ProgressEvent.Completed(StepId.ExecutePatch(index)))
         }

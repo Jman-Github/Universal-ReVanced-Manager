@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Looper
 import app.universal.revanced.manager.BuildConfig
+import app.revanced.manager.patcher.PatchList
 import app.revanced.manager.patcher.ProgressEvent
 import app.revanced.manager.patcher.Session
 import app.revanced.manager.patcher.StepId
@@ -167,29 +168,38 @@ class PatcherProcess : IPatcherProcess.Stub() {
                         prepareInput()
                     }
                 }
-                val patchList = runStep(StepId.LoadPatches, ::safeEvent) {
-                    val allPatches = PatchBundle.Loader.patches(
-                        parameters.configurations.map { it.bundle },
-                        parameters.packageName
-                    )
+                var cachedSelectedPatches: PatchList? = null
+                suspend fun loadSelectedPatches(): PatchList {
+                    cachedSelectedPatches?.let { return it }
 
-                    parameters.configurations.flatMap { config ->
-                        val patches = (allPatches[config.bundle] ?: return@flatMap emptyList())
-                            .filter { it.name in config.patches }
-                            .associateBy { it.name }
+                    return runCatching {
+                        val allPatches = PatchBundle.Loader.patches(
+                            parameters.configurations.map { it.bundle },
+                            parameters.packageName
+                        )
 
-                        val filteredOptions = config.options.filterKeys { it in patches }
-                        filteredOptions.forEach { (patchName, opts) ->
-                            val patchOptions = patches[patchName]?.options
-                                ?: throw Exception("Patch with name $patchName does not exist.")
+                        parameters.configurations.flatMap { config ->
+                            val patches = (allPatches[config.bundle] ?: return@flatMap emptyList())
+                                .filter { it.name in config.patches }
+                                .associateBy { it.name }
 
-                            opts.forEach { (key, value) ->
-                                patchOptions[key] = value
+                            val filteredOptions = config.options.filterKeys { it in patches }
+                            filteredOptions.forEach { (patchName, opts) ->
+                                val patchOptions = patches[patchName]?.options
+                                    ?: throw Exception("Patch with name $patchName does not exist.")
+
+                                opts.forEach { (key, value) ->
+                                    patchOptions[key] = value
+                                }
                             }
-                        }
 
-                        patches.values
-                    }
+                            patches.values
+                        }
+                    }.getOrThrow().also { cachedSelectedPatches = it }
+                }
+
+                runStep(StepId.LoadPatches, ::safeEvent) {
+                    loadSelectedPatches().size
                 }
 
                 try {
@@ -232,7 +242,7 @@ class PatcherProcess : IPatcherProcess.Stub() {
                     session.use {
                         it.run(
                             File(parameters.outputFile),
-                            patchList,
+                            { loadSelectedPatches() },
                             parameters.stripNativeLibs,
                             preparedInput.merged
                         )

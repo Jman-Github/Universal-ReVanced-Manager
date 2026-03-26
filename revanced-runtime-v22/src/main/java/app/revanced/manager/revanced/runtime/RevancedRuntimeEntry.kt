@@ -9,6 +9,7 @@ import app.revanced.manager.patcher.aapt.AaptSelector
 import app.revanced.manager.patcher.logger.LogLevel
 import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.revanced.RevancedPatchBundleLoader
+import app.revanced.manager.patcher.revanced.RevancedPatchList
 import app.revanced.manager.patcher.revanced.RevancedSession
 import app.revanced.manager.patcher.runtime.FrameworkCacheResolver
 import app.revanced.manager.patcher.runStep
@@ -189,47 +190,56 @@ object RevancedRuntimeEntry {
                     }
                 }
                 try {
-                    val patchList = runStep(StepId.LoadPatches, ::onEvent, ::throwIfCancelled) {
-                    val activeConfigs = configs.filter { it.patches.isNotEmpty() }
-                    val allPatches = RevancedPatchBundleLoader.patches(
-                        activeConfigs.map { it.bundlePath },
-                        packageName
-                    )
+                    var cachedSelectedPatches: RevancedPatchList? = null
+                    suspend fun loadSelectedPatches(): RevancedPatchList {
+                        cachedSelectedPatches?.let { return it }
 
-                    val selectedPatches = activeConfigs.flatMap { config ->
-                        val patches = (allPatches[config.bundlePath] ?: return@flatMap emptyList())
-                            .filter { patch ->
-                                val name = patch.name ?: return@filter false
-                                name in config.patches
+                        return runCatching {
+                            val activeConfigs = configs.filter { it.patches.isNotEmpty() }
+                            val allPatches = RevancedPatchBundleLoader.patches(
+                                activeConfigs.map { it.bundlePath },
+                                packageName
+                            )
+
+                        val selectedPatches = activeConfigs.flatMap { config ->
+                            val patches = (allPatches[config.bundlePath] ?: return@flatMap emptyList())
+                                .filter { patch ->
+                                    val name = patch.name ?: return@filter false
+                                    name in config.patches
+                                }
+                                .associateBy { it.name.orEmpty() }
+
+                            val filteredOptions = config.options
+                                .filterKeys { key -> key is String && key in patches }
+                                .mapKeys { (key, _) -> key as String }
+                                .mapValues { (_, value) -> value as? Map<*, *> ?: emptyMap<Any, Any?>() }
+
+                            filteredOptions.forEach { (patchName, opts) ->
+                                val patchOptions = patches[patchName]?.options
+                                    ?: throw Exception("Patch with name $patchName does not exist.")
+
+                                opts.forEach { (key, value) ->
+                                    val keyString = key as? String ?: return@forEach
+                                    patchOptions.set(keyString, value)
+                                }
                             }
-                            .associateBy { it.name.orEmpty() }
 
-                        val filteredOptions = config.options
-                            .filterKeys { key -> key is String && key in patches }
-                            .mapKeys { (key, _) -> key as String }
-                            .mapValues { (_, value) -> value as? Map<*, *> ?: emptyMap<Any, Any?>() }
-
-                        filteredOptions.forEach { (patchName, opts) ->
-                            val patchOptions = patches[patchName]?.options
-                                ?: throw Exception("Patch with name $patchName does not exist.")
-
-                            opts.forEach { (key, value) ->
-                                val keyString = key as? String ?: return@forEach
-                                patchOptions.set(keyString, value)
-                            }
+                            patches.values
                         }
 
-                        patches.values
+                        if (activeConfigs.isNotEmpty() && selectedPatches.isEmpty()) {
+                            throw IllegalArgumentException(
+                                "Selected patches are unavailable. Re-open patch selection and select patches again."
+                            )
+                        }
+
+                            selectedPatches
+                        }.getOrThrow().also { cachedSelectedPatches = it }
                     }
 
-                    if (activeConfigs.isNotEmpty() && selectedPatches.isEmpty()) {
-                        throw IllegalArgumentException(
-                            "Selected patches are unavailable. Re-open patch selection and select patches again."
-                        )
+                    runStep(StepId.LoadPatches, ::onEvent, ::throwIfCancelled) {
+                        loadSelectedPatches().size
                     }
-
-                    selectedPatches
-                }
 
                 val input = File(inputFile)
                 suspend fun prepareInput() = SplitApkPreparer.prepareIfNeeded(
@@ -305,7 +315,7 @@ object RevancedRuntimeEntry {
                     session.use {
                         it.run(
                             File(outputFile),
-                            patchList,
+                            { loadSelectedPatches() },
                             stripNativeLibs,
                             preparedInput.merged
                         )

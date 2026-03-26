@@ -9,6 +9,8 @@
 # Bug fixes
 
 - Fixed downloader plugin signature verification failures potentially crashing URV during launch, reload, or update checks https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/332
+- Fixed patcher runtimes holding loaded patch dex objects in memory longer than necessary by scoping patch loading closer to execution
+- Possibly resolved issues around patching Google Photos with `De-ReVanced` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/349 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/343
 
 
 # v1.8.1-dev.09 (2026-03-23)

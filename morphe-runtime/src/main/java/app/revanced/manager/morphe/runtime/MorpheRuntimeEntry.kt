@@ -9,6 +9,7 @@ import app.revanced.manager.patcher.aapt.AaptSelector
 import app.revanced.manager.patcher.logger.LogLevel
 import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.morphe.MorphePatchBundleLoader
+import app.revanced.manager.patcher.morphe.MorphePatchList
 import app.revanced.manager.patcher.morphe.MorpheSession
 import app.revanced.manager.patcher.runtime.FrameworkCacheResolver
 import app.revanced.manager.patcher.runStep
@@ -201,12 +202,16 @@ object MorpheRuntimeEntry {
                         prepareInput()
                     }
                 }
-                val patchList = runStep(StepId.LoadPatches, ::onEvent, ::throwIfCancelled) {
-                    val activeConfigs = configs.filter { it.patches.isNotEmpty() }
-                    val allPatches = MorphePatchBundleLoader.patches(
-                        activeConfigs.map { it.bundlePath },
-                        packageName
-                    )
+                var cachedSelectedPatches: MorphePatchList? = null
+                suspend fun loadSelectedPatches(): MorphePatchList {
+                    cachedSelectedPatches?.let { return it }
+
+                    return runCatching {
+                        val activeConfigs = configs.filter { it.patches.isNotEmpty() }
+                        val allPatches = MorphePatchBundleLoader.patches(
+                            activeConfigs.map { it.bundlePath },
+                            packageName
+                        )
 
                     val selectedPatches = activeConfigs.flatMap { config ->
                         val patches = (allPatches[config.bundlePath] ?: return@flatMap emptyList())
@@ -237,7 +242,12 @@ object MorpheRuntimeEntry {
                         )
                     }
 
-                    selectedPatches
+                        selectedPatches
+                    }.getOrThrow().also { cachedSelectedPatches = it }
+                }
+
+                runStep(StepId.LoadPatches, ::onEvent, ::throwIfCancelled) {
+                    loadSelectedPatches().size
                 }
 
                 try {
@@ -281,7 +291,7 @@ object MorpheRuntimeEntry {
                     session.use {
                         it.run(
                             File(outputFile),
-                            patchList,
+                            { loadSelectedPatches() },
                             stripNativeLibs,
                             preparedInput.merged
                         )

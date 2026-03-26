@@ -242,14 +242,14 @@ class AmpleSession private constructor(
 
     suspend fun run(
         output: File,
-        selectedPatches: AmplePatchList,
+        loadSelectedPatches: suspend () -> AmplePatchList,
         stripNativeLibs: Boolean,
         inputWasSplit: Boolean
     ) {
         checkCancelled()
         val shouldStripNativeLibs = stripNativeLibs && !inputWasSplit
-        val orderedPatches = selectedPatches.sortedBy { it.name }
         runStep(StepId.ExecutePatches, onEvent, checkCancelled) {
+            val orderedPatches = loadSelectedPatches().sortedBy { it.name }
             java.util.logging.Logger.getLogger("").apply {
                 handlers.forEach {
                     it.close()

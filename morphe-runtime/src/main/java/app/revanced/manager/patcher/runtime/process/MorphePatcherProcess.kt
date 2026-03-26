@@ -14,6 +14,7 @@ import app.revanced.manager.patcher.aapt.AaptSelector
 import app.revanced.manager.patcher.logger.LogLevel
 import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.morphe.MorphePatchBundleLoader
+import app.revanced.manager.patcher.morphe.MorphePatchList
 import app.revanced.manager.patcher.morphe.MorpheSession
 import app.revanced.manager.patcher.runtime.FrameworkCacheResolver
 import app.revanced.manager.patcher.runStep
@@ -212,29 +213,38 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
                         prepareInput()
                     }
                 }
-                val patchList = runStep(StepId.LoadPatches, ::onEvent) {
-                    val allPatches = MorphePatchBundleLoader.patches(
-                        parameters.configurations.map { it.bundlePath },
-                        parameters.packageName
-                    )
+                var cachedSelectedPatches: MorphePatchList? = null
+                suspend fun loadSelectedPatches(): MorphePatchList {
+                    cachedSelectedPatches?.let { return it }
 
-                    parameters.configurations.flatMap { config ->
-                        val patches = (allPatches[config.bundlePath] ?: return@flatMap emptyList())
-                            .filter { it.name in config.patches }
-                            .associateBy { it.name }
+                    return runCatching {
+                        val allPatches = MorphePatchBundleLoader.patches(
+                            parameters.configurations.map { it.bundlePath },
+                            parameters.packageName
+                        )
 
-                        val filteredOptions = config.options.filterKeys { it in patches }
-                        filteredOptions.forEach { (patchName, opts) ->
-                            val patchOptions = patches[patchName]?.options
-                                ?: throw Exception("Patch with name $patchName does not exist.")
+                        parameters.configurations.flatMap { config ->
+                            val patches = (allPatches[config.bundlePath] ?: return@flatMap emptyList())
+                                .filter { it.name in config.patches }
+                                .associateBy { it.name }
 
-                            opts.forEach { (key, value) ->
-                                patchOptions[key] = value
+                            val filteredOptions = config.options.filterKeys { it in patches }
+                            filteredOptions.forEach { (patchName, opts) ->
+                                val patchOptions = patches[patchName]?.options
+                                    ?: throw Exception("Patch with name $patchName does not exist.")
+
+                                opts.forEach { (key, value) ->
+                                    patchOptions[key] = value
+                                }
                             }
-                        }
 
-                        patches.values
-                    }
+                            patches.values
+                        }
+                    }.getOrThrow().also { cachedSelectedPatches = it }
+                }
+
+                runStep(StepId.LoadPatches, ::onEvent) {
+                    loadSelectedPatches().size
                 }
 
                 try {
@@ -276,7 +286,7 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
                     session.use {
                         it.run(
                             File(parameters.outputFile),
-                            patchList,
+                            { loadSelectedPatches() },
                             parameters.stripNativeLibs,
                             preparedInput.merged
                         )

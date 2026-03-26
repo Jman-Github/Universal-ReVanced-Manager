@@ -1,32 +1,10 @@
 import kotlin.random.Random
-import org.gradle.api.file.DuplicatesStrategy
-import org.gradle.jvm.tasks.Jar
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.parcelize)
-}
-
-val apkEditorLib by configurations.creating
-
-val strippedApkEditorLib by tasks.registering(Jar::class) {
-    archiveFileName.set("APKEditor-android.jar")
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    doFirst {
-        from(apkEditorLib.resolve().map { zipTree(it) })
-    }
-    exclude(
-        "android/**",
-        "org/xmlpull/**",
-        "antlr/**",
-        "org/antlr/**",
-        "com/beust/jcommander/**",
-        "javax/annotation/**",
-        "smali.properties",
-        "baksmali.properties"
-    )
 }
 
 android {
@@ -90,18 +68,15 @@ kotlin {
 }
 
 dependencies {
+    implementation(libs.arsclib)
     implementation(libs.morphe.patcher) {
         exclude(group = "xmlpull", module = "xmlpull")
         exclude(group = "xpp3", module = "xpp3")
-        exclude(group = "com.github.REAndroid", module = "arsclib")
-        exclude(group = "com.github.MorpheApp", module = "ARSCLib")
     }
     implementation(libs.morphe.library) {
         exclude(group = "xmlpull", module = "xmlpull")
         exclude(group = "xpp3", module = "xpp3")
     }
-    apkEditorLib(files("$rootDir/libs/APKEditor-1.4.7.jar"))
-    implementation(files(strippedApkEditorLib))
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     compileOnly(libs.hidden.api.stub)

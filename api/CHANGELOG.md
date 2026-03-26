@@ -154,6 +154,8 @@
 - Fixed issues where the patching in progress notifaction would lag behind, or where the patcher UI would lag behind the notification https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/305 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/320
 - Fixed the patch bundle URL editor sometimes needing an extra `OK` press after editing https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/324
 - Fixed downloader plugin signature verification failures potentially crashing URV during launch, reload, or update checks https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/332
+- Fixed patcher runtimes holding loaded patch dex objects in memory longer than necessary by scoping patch loading closer to execution
+- Possibly resolved issues around patching Google Photos with `De-ReVanced` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/349 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/343
 
 
 # CI
