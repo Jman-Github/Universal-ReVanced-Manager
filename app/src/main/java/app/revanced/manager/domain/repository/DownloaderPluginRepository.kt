@@ -443,7 +443,7 @@ class DownloaderPluginRepository(
     }
 
     private fun readArchivePackageInfo(file: File): PackageInfo {
-        val packageInfo = pm.getPackageInfo(file)
+        val packageInfo = pm.getPackageInfo(file, includeSigning = true)
             ?: throw Exception("Failed to read downloader archive ${file.name}")
         return packageInfo
     }

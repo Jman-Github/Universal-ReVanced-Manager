@@ -15,12 +15,12 @@ import app.universal.revanced.manager.R
 import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.domain.repository.PatchBundleRepository
 import androidx.documentfile.provider.DocumentFile
-import android.webkit.MimeTypeMap
 import app.revanced.manager.ui.model.SelectedApp
 import app.revanced.manager.patcher.split.SplitApkInspector
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.util.PM
 import app.revanced.manager.util.APK_FILE_EXTENSIONS
+import app.revanced.manager.util.resolveSupportedApkExtension
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.saveableVar
 import kotlinx.coroutines.Dispatchers
@@ -226,7 +226,7 @@ class AppSelectorViewModel(
     private suspend fun loadSelectedFile(uri: Uri): StorageApkLoadResult =
         app.contentResolver.openInputStream(uri)?.use { stream ->
             val extension = resolveExtension(uri)
-            if (extension !in APK_FILE_EXTENSIONS) return@use StorageApkLoadResult.InvalidType
+            if (extension.isBlank()) return@use StorageApkLoadResult.InvalidType
             val destination = prepareInputFile(extension)
             destination.delete()
             Files.copy(stream, destination.toPath())
@@ -247,7 +247,8 @@ class AppSelectorViewModel(
     private suspend fun loadSelectedFile(file: File): StorageApkLoadResult {
         if (!file.exists()) return StorageApkLoadResult.Failed
         val extension = file.extension.lowercase(Locale.ROOT)
-        if (extension !in APK_FILE_EXTENSIONS) return StorageApkLoadResult.InvalidType
+            .takeIf { it in APK_FILE_EXTENSIONS }
+            ?: "apk"
 
         val destination = prepareInputFile(extension)
         destination.delete()
@@ -268,12 +269,8 @@ class AppSelectorViewModel(
 
     private fun resolveExtension(uri: Uri): String {
         val document = DocumentFile.fromSingleUri(app, uri)
-        val nameExt = document?.name?.substringAfterLast('.', "")?.lowercase(Locale.ROOT)
-        if (!nameExt.isNullOrBlank()) return nameExt
-
         val mime = app.contentResolver.getType(uri)
-        val resolved = mime?.let { MimeTypeMap.getSingleton().getExtensionFromMimeType(it) }
-        return resolved?.lowercase(Locale.ROOT).orEmpty()
+        return resolveSupportedApkExtension(document?.name, mime).orEmpty()
     }
 
     private fun prepareInputFile(extension: String): File {

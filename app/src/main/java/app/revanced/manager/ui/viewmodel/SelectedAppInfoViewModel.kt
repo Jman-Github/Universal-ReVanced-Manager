@@ -8,7 +8,6 @@ import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Parcelable
 import android.util.Log
-import android.webkit.MimeTypeMap
 import androidx.activity.result.ActivityResult
 import androidx.annotation.StringRes
 import androidx.compose.runtime.getValue
@@ -63,6 +62,7 @@ import app.revanced.manager.util.Options
 import app.revanced.manager.util.APK_FILE_EXTENSIONS
 import app.revanced.manager.util.PM
 import app.revanced.manager.util.PatchSelection
+import app.revanced.manager.util.resolveSupportedApkExtension
 import app.revanced.manager.util.simpleMessage
 import app.revanced.manager.util.toast
 import androidx.documentfile.provider.DocumentFile
@@ -855,7 +855,7 @@ class SelectedAppInfoViewModel(
                 ?.filter { it.name.startsWith("profile_input.") }
                 ?.forEach(File::delete)
             val extension = resolveExtension(uri)
-            if (extension !in APK_FILE_EXTENSIONS) return@use LocalApkLoadResult.InvalidType
+            if (extension.isBlank()) return@use LocalApkLoadResult.InvalidType
             val sanitized = extension.lowercase(Locale.ROOT).takeIf { it.matches(Regex("^[a-z0-9]{1,10}$")) }
                 ?: "apk"
             val storageInputFile = File(storageInputDir, "profile_input.$sanitized").apply { delete() }
@@ -876,7 +876,8 @@ class SelectedAppInfoViewModel(
             ?.filter { it.name.startsWith("profile_input.") }
             ?.forEach(File::delete)
         val extension = file.extension.lowercase(Locale.ROOT)
-        if (extension !in APK_FILE_EXTENSIONS) return LocalApkLoadResult.InvalidType
+            .takeIf { it in APK_FILE_EXTENSIONS }
+            ?: "apk"
         val sanitized = extension.lowercase(Locale.ROOT).takeIf { it.matches(Regex("^[a-z0-9]{1,10}$")) }
             ?: "apk"
         val storageInputFile = File(storageInputDir, "profile_input.$sanitized").apply { delete() }
@@ -893,12 +894,8 @@ class SelectedAppInfoViewModel(
 
     private fun resolveExtension(uri: Uri): String {
         val document = DocumentFile.fromSingleUri(app, uri)
-        val nameExt = document?.name?.substringAfterLast('.', "")?.lowercase(Locale.ROOT)
-        if (!nameExt.isNullOrBlank()) return nameExt
-
         val mime = app.contentResolver.getType(uri)
-        val resolved = mime?.let { MimeTypeMap.getSingleton().getExtensionFromMimeType(it) }
-        return resolved?.lowercase(Locale.ROOT).orEmpty()
+        return resolveSupportedApkExtension(document?.name, mime).orEmpty()
     }
 
     private suspend fun resolvePackageInfo(file: File): PackageInfo? =

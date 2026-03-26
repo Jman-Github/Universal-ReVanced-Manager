@@ -489,7 +489,8 @@ class PatchProfilesViewModel(
             if (!file.exists()) return@withContext ApkSelectionResult.INVALID_FILE
 
             val extension = file.extension.lowercase(Locale.ROOT)
-            if (extension !in APK_FILE_EXTENSIONS) return@withContext ApkSelectionResult.INVALID_FILE
+                .takeIf { it in APK_FILE_EXTENSIONS }
+                ?: "apk"
 
             val destination = filesystem.getPatchProfileInputFile(profileId, extension)
             try {
@@ -694,4 +695,3 @@ data class PatchProfileLaunchData(
     val availableBundleCount: Int,
     val containsUniversalPatches: Boolean
 )
-

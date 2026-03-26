@@ -143,19 +143,32 @@ class PM(
             null
         }
 
-    fun getPackageInfo(file: File): PackageInfo? {
+    fun getPackageInfo(file: File, includeSigning: Boolean = false): PackageInfo? {
         val path = file.absolutePath
-        val signingFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            PackageManager.GET_SIGNING_CERTIFICATES
+        val baseFlags = (
+            PackageManager.GET_META_DATA.toLong() or
+                PackageManager.GET_ACTIVITIES.toLong()
+            )
+        val signingFlags = if (includeSigning) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                PackageManager.GET_SIGNING_CERTIFICATES.toLong()
+            } else {
+                @Suppress("DEPRECATION")
+                PackageManager.GET_SIGNATURES.toLong()
+            }
+        } else {
+            0L
+        }
+        val flags = baseFlags or signingFlags
+        val pkgInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            app.packageManager.getPackageArchiveInfo(path, PackageManager.PackageInfoFlags.of(flags))
         } else {
             @Suppress("DEPRECATION")
-            PackageManager.GET_SIGNATURES
-        }
-        val flags = PackageManager.GET_META_DATA or PackageManager.GET_ACTIVITIES or signingFlags
-        val pkgInfo = app.packageManager.getPackageArchiveInfo(path, flags) ?: return null
+            app.packageManager.getPackageArchiveInfo(path, flags.toInt())
+        } ?: return null
 
         // This is needed in order to load label and icon.
-        pkgInfo.applicationInfo!!.apply {
+        pkgInfo.applicationInfo?.apply {
             sourceDir = path
             publicSourceDir = path
         }

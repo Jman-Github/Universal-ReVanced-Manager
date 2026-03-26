@@ -113,6 +113,7 @@ import app.revanced.manager.ui.viewmodel.PatchProfilesViewModel.RenameResult
 import app.revanced.manager.util.APK_FILE_EXTENSIONS
 import app.revanced.manager.util.PM
 import app.revanced.manager.util.consumeHorizontalScroll
+import app.revanced.manager.util.resolveSupportedApkExtension
 import app.revanced.manager.util.relativeTime
 import app.revanced.manager.util.toast
 import app.revanced.manager.util.isAllowedApkFile
@@ -256,9 +257,10 @@ fun PatchProfilesScreen(
         scope.launch {
             val tempFile = withContext(Dispatchers.IO) {
                 val displayName = resolveApkUriDisplayName(context, uri)
-                val extension = resolveApkDisplayExtension(displayName)
-                    .takeIf { it in APK_FILE_EXTENSIONS }
-                    ?: "apk"
+                val extension = resolveSupportedApkExtension(
+                    displayName = displayName,
+                    mimeType = context.contentResolver.getType(uri)
+                ) ?: "apk"
                 val file = File.createTempFile("patch-profile-apk", ".${extension}", context.cacheDir)
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     file.outputStream().use { output -> input.copyTo(output) }
@@ -1797,14 +1799,11 @@ private fun resolveApkUriDisplayName(context: android.content.Context, uri: Uri)
         }
     }.getOrNull() ?: uri.lastPathSegment.orEmpty()
 
-private fun resolveApkDisplayExtension(displayName: String): String =
-    displayName
-        .substringAfterLast('.', missingDelimiterValue = "")
-        .lowercase(Locale.ROOT)
-
 private fun isAllowedApkUri(context: android.content.Context, uri: Uri): Boolean {
-    val extension = resolveApkDisplayExtension(resolveApkUriDisplayName(context, uri))
-    return extension in APK_FILE_EXTENSIONS
+    return resolveSupportedApkExtension(
+        displayName = resolveApkUriDisplayName(context, uri),
+        mimeType = context.contentResolver.getType(uri)
+    ) != null
 }
 
 private fun formatProfileVersionLabel(version: String?, allVersionsLabel: String): String =
