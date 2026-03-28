@@ -161,6 +161,7 @@
 - Fixed `.rvp` patch bundles being mislabeled as Ample without positive Ample markers https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/358
 - Fixed older ReVanced `.rvp` bundles staying identified as ReVanced even when metadata loading fails https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/358
 - Preserve replaced variants when reinstalling saved apps, and clarify that the “Always create a new saved app entry” option only affects patcher saves https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
+- Fixed fullscreen bundle/profile dialogs showing a mismatched status bar strip above the top bar https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/341
 
 
 # Refactors
