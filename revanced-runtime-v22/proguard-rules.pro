@@ -1,8 +1,8 @@
 # Keep entrypoint invoked via reflection from the app.
--keep class app.revanced.manager.revanced.runtime.** { *; }
+-keep class app.urv.manager.revanced.runtime.** { *; }
 
 # Keep IPC classes used across process boundaries.
--keep class app.revanced.manager.patcher.runtime.process.** { *; }
+-keep class app.urv.manager.patcher.runtime.process.** { *; }
 
 # Keep ReVanced patcher/library API classes that are accessed via reflection.
 -keep class app.revanced.patcher.** { *; }
@@ -16,7 +16,7 @@
 -keep class com.android.tools.smali.** { *; }
 
 # Keep shared patcher parcelables stable across processes.
--keep class app.revanced.manager.patcher.** { *; }
+-keep class app.urv.manager.patcher.** { *; }
 
 # Ignore desktop-only classes referenced by apktool/lib that aren't used on Android.
 -dontwarn java.awt.Graphics2D

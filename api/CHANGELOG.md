@@ -163,6 +163,11 @@
 - Preserve replaced variants when reinstalling saved apps, and clarify that the “Always create a new saved app entry” option only affects patcher saves https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
 
 
+# Refactors
+
+- Migrated URV’s internal source namespace from `app.revanced.manager` to `app.urv.manager` across the app, API, and runtime modules
+
+
 # CI
 
 - All prereleases/releases are published with a universal (all ABI) APK, and the ABI specific APKs. The in-app updater now automatically picks the APK that matches your ABI

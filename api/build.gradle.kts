@@ -61,7 +61,7 @@ kotlin {
 }
 
 apiValidation {
-    nonPublicMarkers += "app.revanced.manager.plugin.downloader.PluginHostApi"
+    nonPublicMarkers += "app.urv.manager.plugin.downloader.PluginHostApi"
 }
 
 publishing {
@@ -142,4 +142,23 @@ signing {
 
 tasks.matching { it.name.contains("lintVital", ignoreCase = true) }.configureEach {
     enabled = false
+}
+
+tasks.matching { it.name.startsWith("compile") && it.name.endsWith("Aidl") }.configureEach {
+    doLast {
+        val generatedRoot = layout.buildDirectory.dir("generated/aidl_source_output_dir").get().asFile
+        if (!generatedRoot.exists()) return@doLast
+        generatedRoot.walkTopDown()
+            .filter { it.isFile && it.extension == "java" }
+            .forEach { file ->
+                val original = file.readText()
+                val sanitized = original.lineSequence().joinToString(separator = "\n") { line ->
+                    if (line.startsWith(" * Using: ")) line.replace('\\', '/')
+                    else line
+                }
+                if (sanitized != original) {
+                    file.writeText(sanitized)
+                }
+            }
+    }
 }

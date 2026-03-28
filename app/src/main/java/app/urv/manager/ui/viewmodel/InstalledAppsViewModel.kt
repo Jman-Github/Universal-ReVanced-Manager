@@ -1,0 +1,698 @@
+package app.urv.manager.ui.viewmodel
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageInfo
+import android.net.Uri
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import androidx.core.content.ContextCompat
+import androidx.documentfile.provider.DocumentFile
+import app.urv.manager.data.platform.Filesystem
+import app.urv.manager.data.room.apps.installed.InstallType
+import app.urv.manager.data.room.apps.installed.InstalledApp
+import app.urv.manager.data.room.profile.PatchProfilePayload
+import app.urv.manager.domain.manager.PreferencesManager
+import app.urv.manager.domain.bundles.PatchBundleSource
+import app.urv.manager.domain.installer.RootInstaller
+import app.urv.manager.domain.installer.RootServiceException
+import app.urv.manager.domain.repository.InstalledAppRepository
+import app.urv.manager.domain.repository.PatchBundleRepository
+import app.urv.manager.domain.repository.remapAndExtractSelection
+import app.urv.manager.domain.repository.toSignatureMap
+import app.urv.manager.util.PM
+import app.urv.manager.util.PatchSelection
+import app.urv.manager.util.mutableStateSetOf
+import app.urv.manager.util.PatchedAppExportData
+import app.urv.manager.util.ExportNameFormatter
+import app.urv.manager.util.buildSavedAppVariantIdentity
+import app.urv.manager.util.mergeWith
+import app.urv.manager.util.savedAppBasePackage
+import app.urv.manager.patcher.patch.PatchBundleInfo
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.StandardCopyOption
+import java.util.Locale
+
+class InstalledAppsViewModel(
+    private val installedAppsRepository: InstalledAppRepository,
+    private val patchBundleRepository: PatchBundleRepository,
+    private val pm: PM,
+    private val rootInstaller: RootInstaller,
+    private val filesystem: Filesystem,
+    private val prefs: PreferencesManager
+) : ViewModel() {
+    val apps = combine(
+        installedAppsRepository.getAll(),
+        prefs.enableSavedApps.flow
+    ) { installedApps, savedAppsEnabled ->
+        if (savedAppsEnabled) installedApps
+        else installedApps.filter { it.installType != InstallType.SAVED }
+    }.flowOn(Dispatchers.IO)
+
+    val packageInfoMap = mutableStateMapOf<String, PackageInfo?>()
+    val installedOnDeviceMap = mutableStateMapOf<String, Boolean>()
+    val mountedOnDeviceMap = mutableStateMapOf<String, Boolean>()
+    val savedCopyMap = mutableStateMapOf<String, Boolean>()
+    private val devicePackageLookupMap = mutableStateMapOf<String, String>()
+    private var normalizingSavedEntries = false
+    val selectedApps = mutableStateSetOf<String>()
+    val missingPackages = mutableStateSetOf<String>()
+    val bundleSummaries = mutableStateMapOf<String, List<AppBundleSummary>>()
+    val bundleSummaryLoaded = mutableStateSetOf<String>()
+
+    init {
+        viewModelScope.launch {
+            apps.collect { installedApps ->
+                if (normalizeDuplicateSavedEntries(installedApps)) {
+                    return@collect
+                }
+                val seenPackages = mutableSetOf<String>()
+                val newMissing = mutableSetOf<String>()
+
+                installedApps.forEach { installedApp ->
+                    val packageName = installedApp.currentPackageName
+                    seenPackages += packageName
+
+                    val packageInfo = resolvePackageInfo(installedApp)
+                    packageInfoMap[packageName] = packageInfo
+
+                    if (installedApp.installType != InstallType.SAVED && packageInfo == null) {
+                        newMissing += packageName
+                    }
+                }
+
+                val stalePackages = packageInfoMap.keys.toSet() - seenPackages
+                stalePackages.forEach { packageName ->
+                    packageInfoMap.remove(packageName)
+                    installedOnDeviceMap.remove(packageName)
+                    mountedOnDeviceMap.remove(packageName)
+                    savedCopyMap.remove(packageName)
+                    devicePackageLookupMap.remove(packageName)
+                    missingPackages.remove(packageName)
+                    selectedApps.remove(packageName)
+                }
+
+                val missingToRemove = missingPackages.filterNot { it in newMissing }.toSet()
+                missingPackages.removeAll(missingToRemove)
+                val missingToAdd = newMissing.filterNot { it in missingPackages }.toSet()
+                missingPackages.addAll(missingToAdd)
+
+                val selectablePackages = installedApps
+                    .map(InstalledApp::currentPackageName)
+                    .toSet()
+                selectedApps.retainAll(selectablePackages)
+            }
+        }
+
+        viewModelScope.launch {
+            combine(
+                apps,
+                patchBundleRepository.allBundlesInfoFlow,
+                patchBundleRepository.sources
+            ) { installedApps, bundleInfo, sources ->
+                Triple(installedApps, bundleInfo, sources)
+            }.collect { (installedApps, bundleInfo, sources) ->
+                val sourceMap = sources.associateBy { it.uid }
+                val packageNames = installedApps.map { it.currentPackageName }.toSet()
+
+                installedApps.forEach { app ->
+                    val selection = loadAppliedPatches(app.currentPackageName)
+                    val summaries = buildBundleSummaries(app, selection, bundleInfo, sourceMap)
+                    if (summaries.isEmpty()) {
+                        bundleSummaries.remove(app.currentPackageName)
+                    } else {
+                        bundleSummaries[app.currentPackageName] = summaries
+                    }
+                    bundleSummaryLoaded.add(app.currentPackageName)
+                }
+
+                val stale = bundleSummaries.keys - packageNames
+                stale.forEach { bundleSummaries.remove(it) }
+                val staleLoaded = bundleSummaryLoaded - packageNames
+                bundleSummaryLoaded.removeAll(staleLoaded)
+            }
+        }
+    }
+
+    fun refreshDeviceAndMountState() = viewModelScope.launch {
+        val installedApps = apps.first()
+        val newMissing = mutableSetOf<String>()
+
+        installedApps.forEach { installedApp ->
+            val packageName = installedApp.currentPackageName
+            val packageInfo = resolvePackageInfo(installedApp)
+            packageInfoMap[packageName] = packageInfo
+
+            if (installedApp.installType != InstallType.SAVED && packageInfo == null) {
+                newMissing += packageName
+            }
+        }
+
+        val missingToRemove = missingPackages.filterNot { it in newMissing }.toSet()
+        missingPackages.removeAll(missingToRemove)
+        val missingToAdd = newMissing.filterNot { it in missingPackages }.toSet()
+        missingPackages.addAll(missingToAdd)
+    }
+
+    private val packageChangeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val action = intent?.action ?: return
+            if (action == Intent.ACTION_PACKAGE_REMOVED &&
+                intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)
+            ) {
+                return
+            }
+
+            val packageName = intent.data?.schemeSpecificPart ?: return
+            val matchingEntries = devicePackageLookupMap
+                .filterValues { it == packageName }
+                .keys
+                .toSet()
+            val targetEntries = if (matchingEntries.isNotEmpty()) {
+                matchingEntries
+            } else if (packageName in packageInfoMap || packageName in installedOnDeviceMap) {
+                setOf(packageName)
+            } else {
+                emptySet()
+            }
+            if (targetEntries.isEmpty()) return
+
+            viewModelScope.launch {
+                val installedInfo = withContext(Dispatchers.IO) {
+                    pm.getPackageInfo(packageName)
+                }
+                targetEntries.forEach { key ->
+                    installedOnDeviceMap[key] = installedInfo != null
+                    if (installedInfo != null) {
+                        packageInfoMap[key] = installedInfo
+                    }
+                }
+            }
+        }
+    }.also {
+        ContextCompat.registerReceiver(
+            pm.application,
+            it,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_PACKAGE_ADDED)
+                addAction(Intent.ACTION_PACKAGE_REPLACED)
+                addAction(Intent.ACTION_PACKAGE_REMOVED)
+                addDataScheme("package")
+            },
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+    }
+
+    data class AppBundleSummary(
+        val title: String,
+        val version: String?,
+        val hasUpdate: Boolean
+    )
+
+    data class SavedAppsExportResult(
+        val exported: Int,
+        val failed: Int,
+        val total: Int
+    )
+
+    fun removeSavedApp(app: InstalledApp) = viewModelScope.launch {
+        if (app.installType != InstallType.SAVED) return@launch
+        clearSavedData(app, deleteRecord = true)
+        savedCopyMap[app.currentPackageName] = false
+    }
+
+    fun deleteSavedEntry(app: InstalledApp) = viewModelScope.launch {
+        clearSavedData(app, deleteRecord = true)
+        savedCopyMap[app.currentPackageName] = false
+    }
+
+    suspend fun getRepatchSelection(app: InstalledApp): PatchSelection? = withContext(Dispatchers.IO) {
+        val storedSelection = loadAppliedPatches(app.currentPackageName)
+        val payload = app.selectionPayload ?: return@withContext storedSelection.takeIf { it.isNotEmpty() }
+        val sources = patchBundleRepository.sources.first()
+        val sourceIds = sources.map { it.uid }.toSet()
+        val signatures = patchBundleRepository.allBundlesInfoFlow.first().toSignatureMap()
+        val (remappedPayload, remappedSelection) = payload.remapAndExtractSelection(sources, signatures)
+        val mergedSelection = storedSelection.mergeWith(remappedSelection)
+        val persistableSelection = mergedSelection.filterKeys { it in sourceIds }
+        if (persistableSelection.isNotEmpty() &&
+            (persistableSelection != storedSelection || remappedPayload != payload)
+        ) {
+            installedAppsRepository.addOrUpdate(
+                app.currentPackageName,
+                app.originalPackageName,
+                app.version,
+                app.installType,
+                persistableSelection,
+                remappedPayload
+            )
+        }
+        mergedSelection.takeIf { it.isNotEmpty() }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        pm.application.unregisterReceiver(packageChangeReceiver)
+    }
+
+    fun toggleSelection(installedApp: InstalledApp) = viewModelScope.launch {
+        val packageName = installedApp.currentPackageName
+        val shouldSelect = packageName !in selectedApps
+        setSelectionInternal(installedApp, shouldSelect)
+    }
+
+    fun setSelection(installedApp: InstalledApp, shouldSelect: Boolean) =
+        viewModelScope.launch { setSelectionInternal(installedApp, shouldSelect) }
+
+    fun clearSelection() {
+        selectedApps.clear()
+    }
+
+    fun reorderApps(orderedPackageNames: List<String>) = viewModelScope.launch(Dispatchers.IO) {
+        installedAppsRepository.reorderApps(orderedPackageNames)
+    }
+
+    fun deleteSelectedApps() = viewModelScope.launch {
+        if (selectedApps.isEmpty()) return@launch
+
+        val snapshot = apps.first()
+        val toDelete = snapshot.filter { it.currentPackageName in selectedApps }
+        if (toDelete.isEmpty()) {
+            selectedApps.clear()
+            return@launch
+        }
+
+        toDelete.forEach { installedAppsRepository.delete(it) }
+        withContext(Dispatchers.IO) {
+            toDelete.filter { it.installType == InstallType.SAVED }.forEach { app ->
+                val file = filesystem.getPatchedAppFile(app.currentPackageName, app.version)
+                if (file.exists()) {
+                    file.delete()
+                }
+            }
+        }
+
+        val removedPackages = toDelete.map { it.currentPackageName }.toSet()
+        selectedApps.removeAll(removedPackages)
+        removedPackages.forEach { packageName ->
+            packageInfoMap.remove(packageName)
+            missingPackages.remove(packageName)
+        }
+    }
+
+    fun exportSelectedSavedAppsToDirectory(
+        context: Context,
+        directory: Path,
+        exportTemplate: String?,
+        onResult: (SavedAppsExportResult) -> Unit = {}
+    ) = viewModelScope.launch {
+        val snapshot = apps.first()
+        val selected = snapshot.filter {
+            it.currentPackageName in selectedApps && it.installType == InstallType.SAVED
+        }
+        if (selected.isEmpty()) {
+            onResult(SavedAppsExportResult(0, 0, 0))
+            return@launch
+        }
+
+        val result = withContext(Dispatchers.IO) {
+            exportSelectedSavedAppsInternal(selected, directory, exportTemplate)
+        }
+        onResult(result)
+    }
+
+    fun exportSelectedSavedAppsToTreeUri(
+        context: Context,
+        treeUri: Uri,
+        exportTemplate: String?,
+        onResult: (SavedAppsExportResult) -> Unit = {}
+    ) = viewModelScope.launch {
+        val snapshot = apps.first()
+        val selected = snapshot.filter {
+            it.currentPackageName in selectedApps && it.installType == InstallType.SAVED
+        }
+        if (selected.isEmpty()) {
+            onResult(SavedAppsExportResult(0, 0, 0))
+            return@launch
+        }
+
+        val root = DocumentFile.fromTreeUri(context, treeUri)
+        if (root == null || !root.isDirectory) {
+            onResult(SavedAppsExportResult(0, selected.size, selected.size))
+            return@launch
+        }
+
+        val result = withContext(Dispatchers.IO) {
+            var exported = 0
+            var failed = 0
+
+            selected.forEach { app ->
+                val source = savedApkFile(app)
+                if (source == null || !source.exists()) {
+                    failed++
+                    return@forEach
+                }
+
+                val exportData = buildExportMetadata(app, source)
+                val fileName = ExportNameFormatter.format(exportTemplate, exportData)
+                val targetName = resolveUniqueDocumentName(root, fileName)
+                val target = root.createFile("application/vnd.android.package-archive", targetName)
+                if (target == null) {
+                    failed++
+                    return@forEach
+                }
+
+                val success = runCatching {
+                    context.contentResolver.openOutputStream(target.uri)?.use { output ->
+                        source.inputStream().use { input -> input.copyTo(output) }
+                    } ?: error("Could not open output stream")
+                }.isSuccess
+
+                if (success) exported++ else failed++
+            }
+
+            SavedAppsExportResult(exported = exported, failed = failed, total = selected.size)
+        }
+        onResult(result)
+    }
+
+    private suspend fun setSelectionInternal(installedApp: InstalledApp, shouldSelect: Boolean) {
+        val packageName = installedApp.currentPackageName
+
+        if (shouldSelect) {
+            selectedApps.add(packageName)
+        } else {
+            selectedApps.remove(packageName)
+        }
+    }
+
+    private suspend fun resolvePackageInfo(installedApp: InstalledApp): PackageInfo? =
+        withContext(Dispatchers.IO) {
+            val packageName = installedApp.currentPackageName
+            val hasSavedCopy = savedApkFile(installedApp) != null
+            savedCopyMap[packageName] = hasSavedCopy
+            try {
+                if (
+                    installedApp.installType == InstallType.MOUNT &&
+                    !rootInstaller.isAppInstalled(packageName)
+                ) {
+                    installedAppsRepository.delete(installedApp)
+                    return@withContext null
+                }
+            } catch (_: RootServiceException) {
+                // Ignore root service availability issues for mounted apps and fall back to package info lookup.
+            }
+
+            if (installedApp.installType == InstallType.MOUNT) {
+                val mounted = runCatching { rootInstaller.isAppMounted(packageName) }
+                    .getOrDefault(false)
+                mountedOnDeviceMap[packageName] = mounted
+            } else {
+                mountedOnDeviceMap.remove(packageName)
+            }
+
+            when (installedApp.installType) {
+                InstallType.SAVED -> {
+                    val resolvedFile = savedApkFile(installedApp)
+                    if (resolvedFile == null) {
+                        return@withContext null
+                    }
+                    val archivePackageInfo = pm.getPackageInfo(resolvedFile)
+                    val devicePackageName = archivePackageInfo?.packageName
+                        ?.takeIf { it.isNotBlank() }
+                        ?: installedApp.originalPackageName.takeIf { it.isNotBlank() }
+                        ?: savedAppBasePackage(packageName)
+                    devicePackageLookupMap[packageName] = devicePackageName
+
+                    val installedInfo = pm.getPackageInfo(devicePackageName)
+                    installedOnDeviceMap[packageName] = installedInfo != null
+                    val archiveVersion = archivePackageInfo?.versionName?.takeIf { it.isNotBlank() }
+                    if (archiveVersion != null && archiveVersion != installedApp.version) {
+                        val selection = installedAppsRepository.getAppliedPatches(packageName)
+                        installedAppsRepository.addOrUpdate(
+                            currentPackageName = installedApp.currentPackageName,
+                            originalPackageName = installedApp.originalPackageName,
+                            version = archiveVersion,
+                            installType = installedApp.installType,
+                            patchSelection = selection,
+                            selectionPayload = installedApp.selectionPayload,
+                            createdAtOverride = installedApp.createdAt
+                        )
+                    }
+                    archivePackageInfo ?: installedInfo
+                }
+
+                else -> {
+                    devicePackageLookupMap[packageName] = packageName
+                    val installedInfo = pm.getPackageInfo(packageName)
+                    installedOnDeviceMap[packageName] = installedInfo != null
+                    installedInfo ?: run {
+                        val savedFile = filesystem.getPatchedAppFile(packageName, installedApp.version)
+                        if (savedFile.exists()) pm.getPackageInfo(savedFile) else null
+                    }
+                }
+            }
+        }
+
+    private fun exportSelectedSavedAppsInternal(
+        selected: List<InstalledApp>,
+        directory: Path,
+        exportTemplate: String?
+    ): SavedAppsExportResult {
+        Files.createDirectories(directory)
+
+        var exported = 0
+        var failed = 0
+        selected.forEach { app ->
+            val source = savedApkFile(app)
+            if (source == null || !source.exists()) {
+                failed++
+                return@forEach
+            }
+
+            val exportData = buildExportMetadata(app, source)
+            val fileName = ExportNameFormatter.format(exportTemplate, exportData)
+            val target = resolveUniqueTarget(directory, fileName)
+            val success = runCatching {
+                Files.copy(source.toPath(), target, StandardCopyOption.REPLACE_EXISTING)
+            }.isSuccess
+            if (success) exported++ else failed++
+        }
+
+        return SavedAppsExportResult(exported = exported, failed = failed, total = selected.size)
+    }
+
+    private fun buildExportMetadata(app: InstalledApp, source: File): PatchedAppExportData {
+        val packageInfo = pm.getPackageInfo(source)
+        val displayPackageName = if (app.installType == InstallType.SAVED) {
+            app.originalPackageName.takeIf { it.isNotBlank() }
+                ?: savedAppBasePackage(app.currentPackageName)
+        } else {
+            app.currentPackageName
+        }
+        val label = packageInfo?.applicationInfo
+            ?.loadLabel(pm.application.packageManager)
+            ?.toString()
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: displayPackageName
+        val summaries = bundleSummaries[app.currentPackageName].orEmpty()
+        val bundleVersions = summaries.mapNotNull { it.version?.takeIf(String::isNotBlank) }
+        val bundleNames = summaries.map { it.title }.filter(String::isNotBlank)
+        return PatchedAppExportData(
+            appName = label,
+            packageName = packageInfo?.packageName ?: displayPackageName,
+            appVersion = app.version,
+            patchBundleVersions = bundleVersions,
+            patchBundleNames = bundleNames
+        )
+    }
+
+    private fun resolveUniqueTarget(directory: Path, fileName: String): Path {
+        val lower = fileName.lowercase(Locale.ROOT)
+        val ext = if (lower.endsWith(".apk")) ".apk" else ""
+        val base = if (ext.isNotEmpty()) fileName.dropLast(ext.length) else fileName
+        var candidate = directory.resolve(fileName)
+        if (!Files.exists(candidate)) return candidate
+
+        var counter = 2
+        while (true) {
+            candidate = directory.resolve("${base}_$counter$ext")
+            if (!Files.exists(candidate)) return candidate
+            counter++
+        }
+    }
+
+    private fun resolveUniqueDocumentName(directory: DocumentFile, fileName: String): String {
+        val lower = fileName.lowercase(Locale.ROOT)
+        val ext = if (lower.endsWith(".apk")) ".apk" else ""
+        val base = if (ext.isNotEmpty()) fileName.dropLast(ext.length) else fileName
+        if (directory.findFile(fileName) == null) return fileName
+
+        var counter = 2
+        while (true) {
+            val candidate = "${base}_$counter$ext"
+            if (directory.findFile(candidate) == null) return candidate
+            counter++
+        }
+    }
+
+    private fun savedApkFile(app: InstalledApp): File? {
+        val candidates = listOf(
+            filesystem.getPatchedAppFile(app.currentPackageName, app.version),
+            filesystem.getPatchedAppFile(app.originalPackageName, app.version)
+        ).distinct()
+        candidates.firstOrNull { it.exists() }?.let { return it }
+        return filesystem.findPatchedAppFile(app.currentPackageName)
+            ?: filesystem.findPatchedAppFile(app.originalPackageName)
+    }
+
+    private suspend fun clearSavedData(app: InstalledApp, deleteRecord: Boolean) {
+        if (deleteRecord) {
+            installedAppsRepository.delete(app)
+        }
+        withContext(Dispatchers.IO) {
+            savedApkFile(app)?.delete()
+        }
+    }
+
+    private suspend fun loadAppliedPatches(packageName: String): PatchSelection =
+        withContext(Dispatchers.IO) { installedAppsRepository.getAppliedPatches(packageName) }
+
+    private suspend fun normalizeDuplicateSavedEntries(installedApps: List<InstalledApp>): Boolean {
+        if (normalizingSavedEntries || installedApps.isEmpty()) return false
+        val duplicateSavedEntries = withContext(Dispatchers.IO) {
+            val duplicates = mutableListOf<InstalledApp>()
+            installedApps
+                .groupBy(::appsBasePackage)
+                .values
+                .forEach { entries ->
+                    val installedEntries = entries.filter { it.installType != InstallType.SAVED }
+                    if (installedEntries.isEmpty()) return@forEach
+                    val installedIdentities = installedEntries.mapTo(mutableSetOf()) { app ->
+                        savedEntryIdentity(app)
+                    }
+                    entries
+                        .filter { it.installType == InstallType.SAVED }
+                        .forEach { savedEntry ->
+                            if (savedEntryIdentity(savedEntry) in installedIdentities) {
+                                duplicates += savedEntry
+                            }
+                        }
+                }
+            duplicates
+        }
+        if (duplicateSavedEntries.isEmpty()) return false
+
+        normalizingSavedEntries = true
+        try {
+            withContext(Dispatchers.IO) {
+                duplicateSavedEntries.forEach { savedEntry ->
+                    installedAppsRepository.delete(savedEntry)
+                    filesystem.getPatchedAppFile(
+                        savedEntry.currentPackageName,
+                        savedEntry.version
+                    ).takeIf { it.exists() }?.delete()
+                }
+            }
+        } finally {
+            normalizingSavedEntries = false
+        }
+        return true
+    }
+
+    private suspend fun savedEntryIdentity(app: InstalledApp): String =
+        buildSavedAppVariantIdentity(
+            appVersion = app.version,
+            selectionPayload = app.selectionPayload,
+            patchSelection = loadAppliedPatches(app.currentPackageName)
+        )
+
+    private fun appsBasePackage(app: InstalledApp): String =
+        if (app.installType == InstallType.SAVED) {
+            app.originalPackageName.takeIf { it.isNotBlank() }
+                ?: savedAppBasePackage(app.currentPackageName)
+        } else {
+            app.currentPackageName
+        }
+
+    private fun buildBundleSummaries(
+        app: InstalledApp,
+        selection: PatchSelection,
+        bundleInfo: Map<Int, PatchBundleInfo.Global>,
+        sourceMap: Map<Int, PatchBundleSource>
+    ): List<AppBundleSummary> {
+        val payloadBundles = app.selectionPayload?.bundles.orEmpty()
+        val summaries = mutableListOf<AppBundleSummary>()
+        val processed = mutableSetOf<Int>()
+
+        selection.keys.forEach { uid ->
+            processed += uid
+            buildSummaryEntry(uid, payloadBundles, bundleInfo, sourceMap)?.let(summaries::add)
+        }
+
+        payloadBundles.forEach { bundle ->
+            if (bundle.bundleUid in processed) return@forEach
+            buildSummaryEntry(bundle.bundleUid, payloadBundles, bundleInfo, sourceMap)?.let(summaries::add)
+        }
+
+        return summaries
+    }
+
+    private fun buildSummaryEntry(
+        uid: Int,
+        payloadBundles: List<PatchProfilePayload.Bundle>,
+        bundleInfo: Map<Int, PatchBundleInfo.Global>,
+        sourceMap: Map<Int, PatchBundleSource>
+    ): AppBundleSummary? {
+        val info = bundleInfo[uid]
+        val source = sourceMap[uid]
+        val payloadBundle = payloadBundles.firstOrNull { it.bundleUid == uid }
+
+        val title = source?.displayTitle
+            ?: payloadBundle?.displayName
+            ?: payloadBundle?.sourceName
+            ?: info?.name
+            ?: return null
+
+        val payloadVersion = payloadBundle?.version?.takeUnless { it.isBlank() }
+        val currentVersion = info?.version?.takeUnless { it.isBlank() }
+        val version = payloadVersion ?: currentVersion
+        val hasUpdate = payloadVersion != null &&
+            currentVersion != null &&
+            compareVersionStrings(currentVersion, payloadVersion) > 0
+
+        return AppBundleSummary(
+            title = title,
+            version = version,
+            hasUpdate = hasUpdate
+        )
+    }
+
+    private fun compareVersionStrings(first: String, second: String): Int {
+        val aParts = first.split(Regex("[^0-9]+"))
+            .filter { it.isNotBlank() }
+            .map { it.toIntOrNull() ?: 0 }
+        val bParts = second.split(Regex("[^0-9]+"))
+            .filter { it.isNotBlank() }
+            .map { it.toIntOrNull() ?: 0 }
+        val max = maxOf(aParts.size, bParts.size)
+        for (index in 0 until max) {
+            val a = aParts.getOrElse(index) { 0 }
+            val b = bParts.getOrElse(index) { 0 }
+            if (a != b) return a.compareTo(b)
+        }
+        return first.compareTo(second, ignoreCase = true)
+    }
+}

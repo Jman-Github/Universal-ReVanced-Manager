@@ -12,6 +12,11 @@
 - Preserve replaced variants when reinstalling saved apps, and clarify that the “Always create a new saved app entry” option only affects patcher saves https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
 
 
+# Refactors
+
+- Migrated URV’s internal source namespace from `app.revanced.manager` to `app.urv.manager` across the app, API, and runtime modules
+
+
 # v1.8.1-dev.10 (2026-03-26)
 
 

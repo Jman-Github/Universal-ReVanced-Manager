@@ -1,0 +1,835 @@
+package app.urv.manager
+
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
+import android.net.Uri
+import android.os.Bundle
+import android.os.Parcelable
+import android.view.KeyEvent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.core.view.WindowCompat
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.lifecycleScope
+import androidx.navigation.NavBackStackEntry
+import androidx.navigation.NavController
+import androidx.navigation.NavOptionsBuilder
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.navigation
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
+import androidx.appcompat.app.AppCompatActivity
+import app.urv.manager.domain.repository.resolvePatchProfileAppVersion
+import app.urv.manager.util.LocalPreventAccidentalTouching
+import app.urv.manager.ui.model.navigation.Announcement
+import app.urv.manager.ui.model.navigation.Announcements
+import app.urv.manager.ui.model.navigation.AppSelector
+import app.urv.manager.ui.model.navigation.ComplexParameter
+import app.urv.manager.ui.model.navigation.CreateYoutubeAssets
+import app.urv.manager.ui.model.navigation.Dashboard
+import app.urv.manager.ui.model.navigation.KeystoreConverter
+import app.urv.manager.ui.model.navigation.KeystoreCreator
+import app.urv.manager.ui.model.navigation.InstalledApplicationInfo
+import app.urv.manager.ui.model.navigation.MergeSplitApk
+import app.urv.manager.ui.model.navigation.Patcher
+import app.urv.manager.ui.model.navigation.PatchBundleDiscovery
+import app.urv.manager.ui.model.navigation.PatchBundleDiscoveryPatches
+import app.urv.manager.ui.model.navigation.SelectedApplicationInfo
+import app.urv.manager.ui.model.navigation.Settings
+import app.urv.manager.ui.model.navigation.SplitApkInstaller
+import app.urv.manager.ui.model.navigation.Update
+import app.urv.manager.ui.model.SelectedApp
+import app.urv.manager.ui.screen.AnnouncementScreen
+import app.urv.manager.ui.screen.AnnouncementsScreen
+import app.urv.manager.ui.screen.AppSelectorScreen
+import app.urv.manager.ui.screen.CreateYoutubeAssetsScreen
+import app.urv.manager.ui.screen.DashboardScreen
+import app.urv.manager.ui.screen.InstalledAppInfoScreen
+import app.urv.manager.ui.screen.KeystoreConverterScreen
+import app.urv.manager.ui.screen.KeystoreCreatorScreen
+import app.urv.manager.ui.screen.MergeSplitApkScreen
+import app.urv.manager.ui.screen.PatcherScreen
+import app.urv.manager.ui.screen.PatchBundleDiscoveryScreen
+import app.urv.manager.ui.screen.PatchBundleDiscoveryPatchesScreen
+import app.urv.manager.ui.screen.PatchesSelectorScreen
+import app.urv.manager.ui.screen.RequiredOptionsScreen
+import app.urv.manager.ui.screen.SelectedAppInfoScreen
+import app.urv.manager.ui.screen.SettingsScreen
+import app.urv.manager.ui.screen.SplitApkInstallerScreen
+import app.urv.manager.ui.screen.UpdateScreen
+import app.urv.manager.ui.screen.settings.AboutSettingsScreen
+import app.urv.manager.ui.screen.settings.AdvancedSettingsScreen
+import app.urv.manager.ui.screen.settings.AdvancedSettingsMode
+import app.urv.manager.ui.screen.settings.ContributorSettingsScreen
+import app.urv.manager.ui.screen.settings.DeveloperSettingsScreen
+import app.urv.manager.ui.screen.settings.DownloadsSettingsScreen
+import app.urv.manager.ui.screen.settings.GeneralSettingsScreen
+import app.urv.manager.ui.screen.settings.ImportExportSettingsScreen
+import app.urv.manager.ui.screen.settings.update.ChangelogsSettingsScreen
+import app.urv.manager.ui.screen.settings.update.UpdatesSettingsScreen
+import app.urv.manager.ui.theme.ReVancedManagerTheme
+import app.urv.manager.ui.theme.Theme
+import app.urv.manager.ui.viewmodel.MainViewModel
+import app.urv.manager.ui.viewmodel.DashboardViewModel
+import app.urv.manager.ui.viewmodel.SelectedAppInfoViewModel
+import app.urv.manager.util.EventEffect
+import app.urv.manager.util.AppForeground
+import app.universal.revanced.manager.R
+import coil.compose.AsyncImage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.koin.androidx.compose.koinViewModel
+import org.koin.androidx.compose.navigation.koinNavViewModel
+import org.koin.core.parameter.parametersOf
+import org.koin.androidx.viewmodel.ext.android.getViewModel as getActivityViewModel
+import java.io.File
+import java.util.Locale
+
+class MainActivity : AppCompatActivity() {
+    private var onSystemBackLongPress: (() -> Unit)? = null
+    private var consumedBackLongPress = false
+
+    fun setOnSystemBackLongPress(handler: (() -> Unit)?) {
+        onSystemBackLongPress = handler
+        if (handler == null) {
+            consumedBackLongPress = false
+        }
+    }
+
+    @ExperimentalAnimationApi
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        enableEdgeToEdge()
+        installSplashScreen()
+
+        val vm: MainViewModel = getActivityViewModel()
+        vm.handleIntent(intent)
+
+        setContent {
+            val launcher = rememberLauncherForActivityResult(
+                ActivityResultContracts.StartActivityForResult(),
+                onResult = vm::applyLegacySettings
+            )
+            val theme by vm.prefs.theme.getAsState()
+            val dynamicColor by vm.prefs.dynamicColor.getAsState()
+            val pureBlackTheme by vm.prefs.pureBlackTheme.getAsState()
+            val pureBlackOnSystemDark by vm.prefs.pureBlackOnSystemDark.getAsState()
+            val customAccentColor by vm.prefs.customAccentColor.getAsState()
+            val customThemeColor by vm.prefs.customThemeColor.getAsState()
+            val customBackgroundImageUri by vm.prefs.customBackgroundImageUri.getAsState()
+            val customBackgroundImageOpacity by vm.prefs.customBackgroundImageOpacity.getAsState()
+            val preventAccidentalTouching by vm.prefs.preventAccidentalTouching.getAsState()
+            val systemDark = isSystemInDarkTheme()
+            val darkThemeEnabled = theme == Theme.SYSTEM && systemDark || theme == Theme.DARK
+            val pureBlackEnabled = pureBlackTheme || (pureBlackOnSystemDark && theme == Theme.SYSTEM && systemDark)
+
+            EventEffect(vm.legacyImportActivityFlow) {
+                try {
+                    launcher.launch(it)
+                } catch (_: ActivityNotFoundException) {
+                }
+            }
+
+            CompositionLocalProvider(
+                LocalPreventAccidentalTouching provides preventAccidentalTouching
+            ) {
+                ReVancedManagerTheme(
+                    darkTheme = darkThemeEnabled,
+                    dynamicColor = dynamicColor,
+                    pureBlackTheme = pureBlackEnabled,
+                    accentColorHex = customAccentColor.takeUnless { it.isBlank() },
+                    themeColorHex = customThemeColor.takeUnless { it.isBlank() },
+                    hasCustomBackground = !customBackgroundImageUri.isNullOrBlank()
+                ) {
+                    ReVancedManagerBackground(
+                        customBackgroundImageUri = customBackgroundImageUri.takeUnless { it.isBlank() },
+                        imageOverlayAlpha = customBackgroundImageOpacity
+                    ) {
+                        ReVancedManager(
+                            vm = vm,
+                            disableScreenSlideTransitions = !customBackgroundImageUri.isNullOrBlank()
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val vm: MainViewModel = getActivityViewModel()
+        vm.handleIntent(intent)
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK && onSystemBackLongPress != null && event.repeatCount == 0) {
+            event.startTracking()
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onKeyLongPress(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK && onSystemBackLongPress != null) {
+            consumedBackLongPress = true
+            onSystemBackLongPress?.invoke()
+            return true
+        }
+        return super.onKeyLongPress(keyCode, event)
+    }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK && onSystemBackLongPress != null && event.isTracking) {
+            if (consumedBackLongPress || event.isCanceled) {
+                consumedBackLongPress = false
+                return true
+            }
+            onBackPressedDispatcher.onBackPressed()
+            return true
+        }
+        return super.onKeyUp(keyCode, event)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        AppForeground.onWindowFocusChanged(hasFocus)
+    }
+}
+
+@Composable
+private fun ReVancedManagerBackground(
+    customBackgroundImageUri: String?,
+    imageOverlayAlpha: Float,
+    content: @Composable () -> Unit
+) {
+    Box(modifier = androidx.compose.ui.Modifier.fillMaxSize()) {
+        if (!customBackgroundImageUri.isNullOrBlank()) {
+            // Keep a single shared base/tint layer outside screen transitions.
+            Box(
+                modifier = androidx.compose.ui.Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surface)
+            )
+            CustomBackgroundImage(
+                customBackgroundImageUri = customBackgroundImageUri,
+                modifier = androidx.compose.ui.Modifier.fillMaxSize()
+            )
+            Box(
+                modifier = androidx.compose.ui.Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = imageOverlayAlpha.coerceIn(0f, 1f)))
+            )
+        }
+        content()
+    }
+}
+
+@Composable
+private fun CustomBackgroundImage(
+    customBackgroundImageUri: String,
+    modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier
+) {
+    val context = LocalContext.current
+    val uri = remember(customBackgroundImageUri) { Uri.parse(customBackgroundImageUri) }
+    val isFileUri = remember(uri) { uri.scheme.equals("file", ignoreCase = true) }
+    val fileUriPath = remember(uri, isFileUri) { uri.path?.takeIf { isFileUri && it.isNotBlank() } }
+    val asyncImageModel = remember(uri, fileUriPath) {
+        fileUriPath?.let(::File) ?: uri
+    }
+    val mimeType = remember(uri) {
+        runCatching { context.contentResolver.getType(uri) }
+            .getOrNull()
+            .orEmpty()
+            .lowercase(Locale.ROOT)
+    }
+    val pathSegment = remember(uri) { uri.lastPathSegment.orEmpty().lowercase(Locale.ROOT) }
+    val isTiff = mimeType == "image/tiff" || pathSegment.endsWith(".tif") || pathSegment.endsWith(".tiff")
+
+    val tiffBitmap by produceState<ImageBitmap?>(initialValue = null, key1 = uri, key2 = isTiff) {
+        if (!isTiff) {
+            value = null
+            return@produceState
+        }
+
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                val bitmap = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                    fileUriPath?.let { ImageDecoder.decodeBitmap(ImageDecoder.createSource(File(it))) }
+                        ?: ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri))
+                } else {
+                    fileUriPath?.let(BitmapFactory::decodeFile)
+                        ?: context.contentResolver.openInputStream(uri)?.use(BitmapFactory::decodeStream)
+                }
+                bitmap?.asImageBitmap()
+            }.getOrNull()
+        }
+    }
+
+    if (isTiff && tiffBitmap != null) {
+        Image(
+            bitmap = tiffBitmap!!,
+            contentDescription = null,
+            modifier = modifier,
+            contentScale = ContentScale.Crop
+        )
+    } else {
+        AsyncImage(
+            model = asyncImageModel,
+            contentDescription = null,
+            modifier = modifier,
+            contentScale = ContentScale.Crop
+        )
+    }
+}
+
+@Composable
+private fun ReVancedManager(
+    vm: MainViewModel,
+    disableScreenSlideTransitions: Boolean
+) {
+    val navController = rememberNavController()
+    val dashboardVm: DashboardViewModel = koinViewModel()
+    var pendingBundleDeepLink by remember { mutableStateOf<app.urv.manager.util.BundleDeepLink?>(null) }
+    var pendingSplitArchiveIntent by remember { mutableStateOf<app.urv.manager.util.SplitArchiveIntent?>(null) }
+    val context = LocalContext.current
+
+    EventEffect(vm.appSelectFlow) { params ->
+        navController.navigateComplex(
+            SelectedApplicationInfo,
+            params
+        ) {
+            if (params.returnToDashboard) {
+                popUpTo<Dashboard> { inclusive = false }
+            } else {
+                popUpTo<SelectedApplicationInfo.Main> { inclusive = true }
+            }
+            launchSingleTop = true
+        }
+    }
+
+    EventEffect(vm.bundleDeepLinkFlow) { deepLink ->
+        pendingBundleDeepLink = deepLink
+        navController.navigate(Dashboard) {
+            launchSingleTop = true
+            popUpTo(Dashboard) { inclusive = false }
+        }
+    }
+
+    EventEffect(vm.managerUpdateDeepLinkFlow) {
+        navController.navigate(Update()) {
+            launchSingleTop = true
+        }
+    }
+
+    EventEffect(vm.announcementDeepLinkFlow) { announcement ->
+        dashboardVm.markAnnouncementRead(announcement.id)
+        navController.navigateComplex(
+            Announcement,
+            announcement
+        ) {
+            launchSingleTop = true
+        }
+    }
+
+    EventEffect(vm.splitArchiveIntentFlow) { splitArchiveIntent ->
+        pendingSplitArchiveIntent = splitArchiveIntent
+        navController.navigate(SplitApkInstaller) {
+            launchSingleTop = true
+            popUpTo(Dashboard) { inclusive = false }
+        }
+    }
+
+    NavHost(
+        navController = navController,
+        startDestination = Dashboard,
+        enterTransition = {
+            if (disableScreenSlideTransitions) EnterTransition.None
+            else slideInHorizontally(initialOffsetX = { it })
+        },
+        exitTransition = {
+            if (disableScreenSlideTransitions) ExitTransition.None
+            else slideOutHorizontally(targetOffsetX = { -it / 3 })
+        },
+        popEnterTransition = {
+            EnterTransition.None
+        },
+        popExitTransition = {
+            if (disableScreenSlideTransitions) ExitTransition.None
+            else slideOutHorizontally(targetOffsetX = { it })
+        },
+    ) {
+        composable<Dashboard> {
+            DashboardScreen(
+                vm = dashboardVm,
+                mainVm = vm,
+                onSettingsClick = { navController.navigate(Settings) },
+                onAppSelectorClick = {
+                    navController.navigate(AppSelector())
+                },
+                onStorageSelect = { saved -> vm.selectApp(saved) },
+                onUpdateClick = {
+                    navController.navigate(Update())
+                },
+                onAnnouncementsClick = {
+                    navController.navigate(Announcements) {
+                        launchSingleTop = true
+                    }
+                },
+                onDownloaderPluginClick = {
+                    navController.navigate(Settings.Downloads)
+                },
+                onBundleDiscoveryClick = {
+                    navController.navigate(PatchBundleDiscovery)
+                },
+                onMergeSplitClick = {
+                    navController.navigate(MergeSplitApk)
+                },
+                onOpenSplitInstallerClick = {
+                    navController.navigate(SplitApkInstaller) {
+                        launchSingleTop = true
+                    }
+                },
+                onCreateYoutubeAssetsClick = {
+                    navController.navigate(CreateYoutubeAssets)
+                },
+                onOpenKeystoreCreatorClick = {
+                    navController.navigate(KeystoreCreator)
+                },
+                onOpenKeystoreConverterClick = {
+                    navController.navigate(KeystoreConverter)
+                },
+                onAppClick = { packageName, action ->
+                    navController.navigate(InstalledApplicationInfo(packageName, action))
+                },
+                onAnnouncementClick = { announcement ->
+                    navController.navigateComplex(
+                        Announcement,
+                        announcement
+                    ) {
+                        launchSingleTop = true
+                    }
+                },
+                onProfileLaunch = { launchData ->
+                    val apkFile = launchData.profile.apkPath
+                        ?.let(::File)
+                        ?.takeIf { it.exists() }
+                    val resolvedVersion = resolvePatchProfileAppVersion(
+                        appVersion = launchData.profile.appVersion,
+                        apkPath = launchData.profile.apkPath,
+                        apkVersion = launchData.profile.apkVersion,
+                        useSelectedApkVersion = launchData.profile.useSelectedApkVersion
+                    ) ?: context.getString(R.string.app_version_unspecified)
+                    val selectedApp = if (apkFile != null) {
+                        SelectedApp.Local(
+                            packageName = launchData.profile.packageName,
+                            version = resolvedVersion,
+                            file = apkFile,
+                            temporary = false,
+                            resolved = true
+                        )
+                    } else {
+                        SelectedApp.Search(
+                            launchData.profile.packageName,
+                            resolvePatchProfileAppVersion(
+                                appVersion = launchData.profile.appVersion,
+                                apkPath = launchData.profile.apkPath,
+                                apkVersion = launchData.profile.apkVersion,
+                                useSelectedApkVersion = launchData.profile.useSelectedApkVersion
+                            )
+                        )
+                    }
+                    navController.navigateComplex(
+                        SelectedApplicationInfo,
+                        SelectedApplicationInfo.ViewModelParams(
+                            app = selectedApp,
+                            patches = null,
+                            persistConfiguration = false,
+                            profileId = launchData.profile.uid,
+                            requiresSourceSelection = apkFile == null
+                        )
+                    )
+                },
+                bundleDeepLink = pendingBundleDeepLink,
+                onBundleDeepLinkConsumed = { pendingBundleDeepLink = null }
+            )
+        }
+
+        composable<InstalledApplicationInfo> {
+            val data = it.toRoute<InstalledApplicationInfo>()
+
+            InstalledAppInfoScreen(
+                onPatchClick = { packageName, selection, selectionPayload, persistConfiguration ->
+                    vm.selectApp(packageName, selection, selectionPayload, persistConfiguration)
+                },
+                onBackClick = navController::popBackStack,
+                viewModel = koinViewModel { parametersOf(data.packageName) },
+                initialAction = data.action
+            )
+        }
+
+        composable<AppSelector> {
+            val args = it.toRoute<AppSelector>()
+            AppSelectorScreen(
+                onSelect = vm::selectApp,
+                onStorageSelect = vm::selectApp,
+                onBackClick = navController::popBackStack,
+                autoOpenStorage = args.autoStorage,
+                returnToDashboardOnStorage = args.autoStorageReturn
+            )
+        }
+
+        composable<Patcher> {
+            val params = it.getComplexArg<Patcher.ViewModelParams>()
+            PatcherScreen(
+                onBackClick = navController::popBackStack,
+                onBackToDashboard = {
+                    navController.navigate(Dashboard) {
+                        popUpTo<Dashboard> { inclusive = true }
+                        launchSingleTop = true
+                    }
+                },
+                onReviewSelection = { app, selection, options, missing ->
+                    val appWithVersion = when (app) {
+                        is SelectedApp.Search -> app.copy(version = app.version ?: params.selectedApp.version)
+                        is SelectedApp.Download -> if (app.version.isNullOrBlank()) app.copy(version = params.selectedApp.version) else app
+                        else -> app
+                    }
+                    navController.navigateComplex(
+                        SelectedApplicationInfo.PatchesSelector,
+                        SelectedApplicationInfo.PatchesSelector.ViewModelParams(
+                            app = appWithVersion,
+                            currentSelection = selection,
+                            options = options,
+                            missingPatchNames = missing,
+                            preferredAppVersion = app.version,
+                            preferredBundleVersion = null,
+                            preferredBundleUid = selection.keys.firstOrNull(),
+                            preferredBundleOverride = null,
+                            preferredBundleTargetsAllVersions = false
+                        )
+                    )
+                },
+                viewModel = koinViewModel { parametersOf(params) }
+            )
+        }
+
+        composable<Update> {
+            val data = it.toRoute<Update>()
+
+            UpdateScreen(
+                onBackClick = navController::popBackStack,
+                vm = koinViewModel { parametersOf(data.downloadOnScreenEntry) }
+            )
+        }
+
+        composable<Announcements> {
+            AnnouncementsScreen(
+                onBackClick = navController::popBackStack,
+                onAnnouncementClick = { announcement ->
+                    navController.navigateComplex(
+                        Announcement,
+                        announcement
+                    ) {
+                        launchSingleTop = true
+                    }
+                }
+            )
+        }
+
+        composable<Announcement> {
+            AnnouncementScreen(
+                onBackClick = navController::popBackStack,
+                announcement = it.getComplexArg()
+            )
+        }
+
+        composable<PatchBundleDiscovery> {
+            PatchBundleDiscoveryScreen(
+                onBackClick = navController::popBackStack,
+                onViewPatches = { bundleId ->
+                    navController.navigate(PatchBundleDiscoveryPatches(bundleId))
+                }
+            )
+        }
+
+        composable<PatchBundleDiscoveryPatches> {
+            val data = it.toRoute<PatchBundleDiscoveryPatches>()
+            PatchBundleDiscoveryPatchesScreen(
+                bundleId = data.bundleId,
+                onBackClick = navController::popBackStack
+            )
+        }
+
+        composable<MergeSplitApk> {
+            MergeSplitApkScreen(
+                onBackClick = navController::popBackStack,
+                vm = dashboardVm
+            )
+        }
+
+        composable<SplitApkInstaller> {
+            SplitApkInstallerScreen(
+                onBackClick = navController::popBackStack,
+                pendingExternalInput = pendingSplitArchiveIntent,
+                onExternalInputConsumed = { pendingSplitArchiveIntent = null }
+            )
+        }
+
+        composable<CreateYoutubeAssets> {
+            CreateYoutubeAssetsScreen(
+                onBackClick = navController::popBackStack
+            )
+        }
+
+        composable<KeystoreCreator> {
+            KeystoreCreatorScreen(
+                onBackClick = navController::popBackStack
+            )
+        }
+
+        composable<KeystoreConverter> {
+            KeystoreConverterScreen(
+                onBackClick = navController::popBackStack
+            )
+        }
+
+        navigation<SelectedApplicationInfo>(startDestination = SelectedApplicationInfo.Main) {
+            composable<SelectedApplicationInfo.Main> {
+                val parentBackStackEntry = navController.navGraphEntry(it)
+                val data =
+                    parentBackStackEntry.getComplexArg<SelectedApplicationInfo.ViewModelParams>()
+                val viewModel =
+                    koinNavViewModel<SelectedAppInfoViewModel>(viewModelStoreOwner = parentBackStackEntry) {
+                        parametersOf(data)
+                    }
+
+                SelectedAppInfoScreen(
+                    onBackClick = navController::popBackStack,
+                    onPatchClick = {
+                        it.lifecycleScope.launch {
+                            navController.navigateComplex(
+                                Patcher,
+                                viewModel.getPatcherParams()
+                            )
+                        }
+                    },
+                    onPatchSelectorClick = { app, patches, options ->
+                        val versionHint = viewModel.selectedAppInfo?.versionName?.takeUnless { it.isNullOrBlank() }
+                            ?: app.version?.takeUnless { it.isNullOrBlank() }
+                            ?: viewModel.preferredBundleVersion?.takeUnless { it.isNullOrBlank() }
+                            ?: viewModel.desiredVersion
+                        val appWithVersion = when (app) {
+                            is SelectedApp.Search -> app.copy(version = versionHint)
+                            is SelectedApp.Download -> if (app.version.isNullOrBlank()) app.copy(version = versionHint) else app
+                            else -> app
+                        }
+                        navController.navigateComplex(
+                            SelectedApplicationInfo.PatchesSelector,
+                            SelectedApplicationInfo.PatchesSelector.ViewModelParams(
+                                appWithVersion,
+                                patches,
+                                options,
+                                preferredAppVersion = versionHint,
+                                preferredBundleVersion = viewModel.preferredBundleVersion,
+                                preferredBundleUid = viewModel.selectedBundleUidFlow.value,
+                                preferredBundleOverride = viewModel.selectedBundleVersionOverrideFlow.value,
+                                preferredBundleTargetsAllVersions = viewModel.preferredBundleTargetsAllVersionsFlow.value
+                            )
+                        )
+                    },
+                    onRequiredOptions = { app, patches, options ->
+                        val versionHint = viewModel.selectedAppInfo?.versionName?.takeUnless { it.isNullOrBlank() }
+                            ?: app.version?.takeUnless { it.isNullOrBlank() }
+                            ?: viewModel.preferredBundleVersion?.takeUnless { it.isNullOrBlank() }
+                            ?: viewModel.desiredVersion
+                        val appWithVersion = when (app) {
+                            is SelectedApp.Search -> app.copy(version = versionHint)
+                            is SelectedApp.Download -> if (app.version.isNullOrBlank()) app.copy(version = versionHint) else app
+                            else -> app
+                        }
+                        navController.navigateComplex(
+                            SelectedApplicationInfo.RequiredOptions,
+                            SelectedApplicationInfo.PatchesSelector.ViewModelParams(
+                                appWithVersion,
+                                patches,
+                                options,
+                                preferredAppVersion = versionHint,
+                                preferredBundleVersion = viewModel.preferredBundleVersion,
+                                preferredBundleUid = viewModel.selectedBundleUidFlow.value,
+                                preferredBundleOverride = viewModel.selectedBundleVersionOverrideFlow.value,
+                                preferredBundleTargetsAllVersions = viewModel.preferredBundleTargetsAllVersionsFlow.value
+                            )
+                        )
+                    },
+                    vm = viewModel
+                )
+            }
+
+            composable<SelectedApplicationInfo.PatchesSelector> {
+                val data =
+                    it.getComplexArg<SelectedApplicationInfo.PatchesSelector.ViewModelParams>()
+                val parentEntry = navController.navGraphEntry(it)
+                val parentArgs =
+                    parentEntry.getComplexArg<SelectedApplicationInfo.ViewModelParams>()
+                val selectedAppInfoVm = koinNavViewModel<SelectedAppInfoViewModel>(
+                    viewModelStoreOwner = parentEntry
+                ) {
+                    parametersOf(parentArgs)
+                }
+
+                PatchesSelectorScreen(
+                    onBackClick = navController::popBackStack,
+                    onSave = { patches, options ->
+                        selectedAppInfoVm.updateConfiguration(patches, options)
+                        navController.popBackStack()
+                    },
+                    viewModel = koinViewModel { parametersOf(data) }
+                )
+            }
+
+            composable<SelectedApplicationInfo.RequiredOptions> {
+                val data =
+                    it.getComplexArg<SelectedApplicationInfo.PatchesSelector.ViewModelParams>()
+                val parentEntry = navController.navGraphEntry(it)
+                val parentArgs =
+                    parentEntry.getComplexArg<SelectedApplicationInfo.ViewModelParams>()
+                val selectedAppInfoVm = koinNavViewModel<SelectedAppInfoViewModel>(
+                    viewModelStoreOwner = parentEntry
+                ) {
+                    parametersOf(parentArgs)
+                }
+
+                RequiredOptionsScreen(
+                    onBackClick = navController::popBackStack,
+                    onContinue = { patches, options ->
+                        selectedAppInfoVm.updateConfiguration(patches, options)
+                        it.lifecycleScope.launch {
+                            navController.navigateComplex(
+                                Patcher,
+                                selectedAppInfoVm.getPatcherParams()
+                            )
+                        }
+                    },
+                    vm = koinViewModel { parametersOf(data) }
+                )
+            }
+        }
+
+        navigation<Settings>(startDestination = Settings.Main) {
+            composable<Settings.Main> {
+                SettingsScreen(
+                    onBackClick = navController::popBackStack,
+                    navigate = navController::navigate
+                )
+            }
+
+            composable<Settings.General> {
+                GeneralSettingsScreen(onBackClick = navController::popBackStack)
+            }
+
+            composable<Settings.Advanced> {
+                AdvancedSettingsScreen(
+                    onBackClick = navController::popBackStack,
+                    mode = AdvancedSettingsMode.ADVANCED_SYSTEM
+                )
+            }
+
+            composable<Settings.Patcher> {
+                AdvancedSettingsScreen(
+                    onBackClick = navController::popBackStack,
+                    mode = AdvancedSettingsMode.PATCHER
+                )
+            }
+
+            composable<Settings.AdvancedSystem> {
+                AdvancedSettingsScreen(
+                    onBackClick = navController::popBackStack,
+                    mode = AdvancedSettingsMode.ADVANCED_SYSTEM
+                )
+            }
+
+            composable<Settings.Developer> {
+                DeveloperSettingsScreen(onBackClick = navController::popBackStack)
+            }
+
+            composable<Settings.Updates> {
+                UpdatesSettingsScreen(
+                    onBackClick = navController::popBackStack,
+                    onChangelogClick = { navController.navigate(Settings.Changelogs) },
+                    onUpdateClick = { navController.navigate(Update()) }
+                )
+            }
+
+            composable<Settings.Downloads> {
+                DownloadsSettingsScreen(onBackClick = navController::popBackStack)
+            }
+
+            composable<Settings.ImportExport> {
+                ImportExportSettingsScreen(onBackClick = navController::popBackStack)
+            }
+
+            composable<Settings.About> {
+                AboutSettingsScreen(
+                    onBackClick = navController::popBackStack,
+                    navigate = navController::navigate
+                )
+            }
+
+            composable<Settings.Changelogs> {
+                ChangelogsSettingsScreen(onBackClick = navController::popBackStack)
+            }
+
+            composable<Settings.Contributors> {
+                ContributorSettingsScreen(onBackClick = navController::popBackStack)
+            }
+
+
+        }
+    }
+}
+
+@Composable
+private fun NavController.navGraphEntry(entry: NavBackStackEntry) =
+    remember(entry) { getBackStackEntry(entry.destination.parent!!.id) }
+
+// Androidx Navigation does not support storing complex types in route objects, so we have to store them inside the saved state handle of the back stack entry instead.
+private fun <T : Parcelable, R : ComplexParameter<T>> NavController.navigateComplex(
+    route: R,
+    data: T,
+    options: NavOptionsBuilder.() -> Unit = {}
+) {
+    navigate(route, options)
+    getBackStackEntry(route).savedStateHandle["args"] = data
+}
+
+private fun <T : Parcelable> NavBackStackEntry.getComplexArg() = savedStateHandle.get<T>("args")!!

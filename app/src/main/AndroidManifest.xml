@@ -33,7 +33,7 @@
     <uses-permission android:name="android.permission.ENFORCE_UPDATE_OWNERSHIP" />
 
     <application
-        android:name="app.revanced.manager.ManagerApplication"
+        android:name="app.urv.manager.ManagerApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:largeHeap="true"
@@ -55,7 +55,7 @@
             android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
         <activity
-            android:name="app.revanced.manager.MainActivity"
+            android:name="app.urv.manager.MainActivity"
             android:exported="true"
             android:theme="@style/Theme.ReVancedManager">
 
@@ -89,8 +89,8 @@
             </intent-filter>
         </activity>
 
-        <activity android:name="app.revanced.manager.plugin.downloader.webview.WebViewActivity" android:exported="false" android:theme="@style/Theme.WebViewActivity" />
-        <activity android:name="app.revanced.manager.downloader.webview.WebViewActivity" android:exported="false" android:theme="@style/Theme.WebViewActivity" />
+        <activity android:name="app.urv.manager.plugin.downloader.webview.WebViewActivity" android:exported="false" android:theme="@style/Theme.WebViewActivity" />
+        <activity android:name="app.urv.manager.downloader.webview.WebViewActivity" android:exported="false" android:theme="@style/Theme.WebViewActivity" />
 
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
@@ -104,7 +104,7 @@
         </service>
 
         <service
-            android:name="app.revanced.manager.service.BundleUpdateWebSocketService"
+            android:name="app.urv.manager.service.BundleUpdateWebSocketService"
             android:exported="false"
             android:foregroundServiceType="specialUse">
             <property
@@ -113,7 +113,7 @@
         </service>
 
         <provider
-            android:name="app.revanced.manager.domain.installer.InstallerFileProvider"
+            android:name="app.urv.manager.domain.installer.InstallerFileProvider"
             android:authorities="${applicationId}.installerfileprovider"
             android:exported="true"
             android:grantUriPermissions="true" />

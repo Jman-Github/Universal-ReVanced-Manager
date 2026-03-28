@@ -6,4 +6,4 @@
 # that external plugins may call.
 -keep class kotlin.** { *; }
 
--keep class app.revanced.manager.downloader.** { *; }
+-keep class app.urv.manager.downloader.** { *; }
