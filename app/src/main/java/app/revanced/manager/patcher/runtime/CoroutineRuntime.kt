@@ -9,6 +9,7 @@ import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.patch.PatchBundle
 import app.revanced.manager.patcher.runStep
 import app.revanced.manager.patcher.split.SplitApkPreparer
+import app.revanced.manager.patcher.util.MislabeledImageResourceSanitizer
 import app.revanced.manager.util.Options
 import app.revanced.manager.util.PatchSelection
 import java.io.File
@@ -119,14 +120,22 @@ class CoroutineRuntime(context: Context) : Runtime(context) {
             ::loadSelectedPatches to selectedPatchBundlesByUid.values.map { File(it.patchesJar) }
         }
 
+        var sanitizedInput: MislabeledImageResourceSanitizer.Result? = null
         try {
             val session = runStep(StepId.ReadAPK, onEvent, ::ensureNotCancelled) {
                 val preparedInput = preparation ?: prepareInput().also { preparation = it }
-                val selectedAaptPath = resolveAaptPath(preparedInput.file, logger, relatedBundleArchives)
+                val sanitized = MislabeledImageResourceSanitizer.sanitizeApkFile(
+                    apkFile = preparedInput.file,
+                    workingDir = File(cacheDir).resolve("patcher-inputs"),
+                    logger = logger
+                )
+                sanitizedInput = sanitized
+                val patcherInput = sanitized.file
+                val selectedAaptPath = resolveAaptPath(patcherInput, logger, relatedBundleArchives)
                 val frameworkDir = FrameworkCacheResolver.resolve(
                     baseFrameworkDir = frameworkPath,
                     runtimeTag = "revanced",
-                    apkFile = preparedInput.file,
+                    apkFile = patcherInput,
                     aaptPath = selectedAaptPath,
                     logger = logger
                 )
@@ -136,6 +145,7 @@ class CoroutineRuntime(context: Context) : Runtime(context) {
                     aaptPath = selectedAaptPath,
                     logger = logger,
                     input = preparedInput.file,
+                    initialPatcherInput = patcherInput,
                     sanitizeAllEmbeddedApksOnInit = preparedInput.merged,
                     onEvent = onEvent,
                     checkCancelled = ::ensureNotCancelled
@@ -155,6 +165,7 @@ class CoroutineRuntime(context: Context) : Runtime(context) {
                 )
             }
         } finally {
+            sanitizedInput?.cleanup()
             preparation?.cleanup()
         }
     }

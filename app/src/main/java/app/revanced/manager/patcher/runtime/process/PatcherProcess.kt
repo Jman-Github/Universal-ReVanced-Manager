@@ -21,6 +21,7 @@ import app.revanced.manager.patcher.runStep
 import app.revanced.manager.patcher.runtime.ProcessRuntime
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.patcher.toParcel
+import app.revanced.manager.patcher.util.MislabeledImageResourceSanitizer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -202,6 +203,7 @@ class PatcherProcess : IPatcherProcess.Stub() {
                     loadSelectedPatches().size
                 }
 
+                var sanitizedInput: MislabeledImageResourceSanitizer.Result? = null
                 try {
                     val relatedBundleArchives = parameters.configurations
                         .asSequence()
@@ -210,10 +212,17 @@ class PatcherProcess : IPatcherProcess.Stub() {
                         .toList()
                     val session = runStep(StepId.ReadAPK, ::safeEvent) {
                         val preparedInput = preparation ?: prepareInput().also { preparation = it }
+                        val sanitized = MislabeledImageResourceSanitizer.sanitizeApkFile(
+                            apkFile = preparedInput.file,
+                            workingDir = File(parameters.cacheDir).resolve("patcher-inputs"),
+                            logger = logger
+                        )
+                        sanitizedInput = sanitized
+                        val patcherInput = sanitized.file
                         val selectedAaptPath = AaptSelector.select(
                             parameters.aaptPath,
                             parameters.aaptFallbackPath,
-                            preparedInput.file,
+                            patcherInput,
                             logger,
                             additionalArchives = relatedBundleArchives
                         )
@@ -221,7 +230,7 @@ class PatcherProcess : IPatcherProcess.Stub() {
                         val frameworkDir = FrameworkCacheResolver.resolve(
                             baseFrameworkDir = parameters.frameworkDir,
                             runtimeTag = "revanced",
-                            apkFile = preparedInput.file,
+                            apkFile = patcherInput,
                             aaptPath = selectedAaptPath,
                             logger = logger
                         )
@@ -231,6 +240,7 @@ class PatcherProcess : IPatcherProcess.Stub() {
                             frameworkDir = frameworkDir,
                             logger = logger,
                             input = preparedInput.file,
+                            initialPatcherInput = patcherInput,
                             sanitizeAllEmbeddedApksOnInit = preparedInput.merged,
                             onEvent = ::safeEvent,
                         )
@@ -248,6 +258,7 @@ class PatcherProcess : IPatcherProcess.Stub() {
                         )
                     }
                 } finally {
+                    sanitizedInput?.cleanup()
                     preparation?.cleanup()
                 }
 

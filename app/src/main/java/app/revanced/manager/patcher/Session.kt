@@ -5,6 +5,8 @@ import app.revanced.manager.patcher.Session.Companion.component1
 import app.revanced.manager.patcher.Session.Companion.component2
 import app.revanced.manager.patcher.logger.Logger
 import app.revanced.manager.patcher.split.SplitApkPreparer
+import app.revanced.manager.patcher.util.ManifestDecimalResourceReferenceSanitizer
+import app.revanced.manager.patcher.util.MislabeledImageResourceSanitizer
 import app.revanced.manager.patcher.util.NativeLibStripper
 import app.revanced.manager.patcher.util.XmlSurrogateSanitizer
 import app.revanced.patcher.Patcher
@@ -42,6 +44,7 @@ class Session private constructor(
     aaptPath: String,
     private val logger: Logger,
     private val input: File,
+    private val initialPatcherInput: File? = null,
     private val sanitizeAllEmbeddedApksOnInit: Boolean = false,
     private val onEvent: (ProgressEvent) -> Unit,
     private val checkCancelled: () -> Unit = {},
@@ -53,11 +56,14 @@ class Session private constructor(
     private var patcherInput = initializePatcherInput()
     private lateinit var patcher: Patcher
 
-    private fun initializePatcherInput(): PreparedPatcherInput =
-        prepareLegacyPatcherInputIfNeeded(
+    private fun initializePatcherInput(): PreparedPatcherInput {
+        val baseInput = initialPatcherInput ?: input
+        return prepareLegacyPatcherInputIfNeeded(
+            sourceApk = baseInput,
             logReason = false,
             hideAllEmbeddedApks = sanitizeAllEmbeddedApksOnInit
-        ) ?: PreparedPatcherInput(input)
+        ) ?: PreparedPatcherInput(baseInput)
+    }
 
     private suspend fun initializePatcher() {
         onEvent(
@@ -276,6 +282,11 @@ class Session private constructor(
                 )
                 logger.info("Writing patched files...")
                 XmlSurrogateSanitizer.sanitize(tempDir.resolve("apk"), logger)
+                ManifestDecimalResourceReferenceSanitizer.sanitize(tempDir.resolve("apk"), logger)
+                MislabeledImageResourceSanitizer.sanitizeDecodedResources(
+                    tempDir.resolve("apk").resolve("res"),
+                    logger
+                )
                 validateMissingResourceReferences()
                 validateInvalidNumericCharacterReferences()
                 checkCancelled()
@@ -733,10 +744,13 @@ class Session private constructor(
     }
 
     private fun prepareLegacyPatcherFallbackInput(originalError: Throwable): PreparedPatcherInput? {
-        if (patcherInput.file.absolutePath != input.absolutePath) {
+        val expectedInitInputPath = initialPatcherInput?.absolutePath ?: input.absolutePath
+        if (patcherInput.file.absolutePath != expectedInitInputPath) {
             return null
         }
+        val fallbackSourceApk = initialPatcherInput ?: input
         return prepareLegacyPatcherInputIfNeeded(
+            sourceApk = fallbackSourceApk,
             logReason = true,
             originalError = originalError,
             hideAllEmbeddedApks = true
@@ -744,19 +758,20 @@ class Session private constructor(
     }
 
     private fun prepareLegacyPatcherInputIfNeeded(
+        sourceApk: File,
         logReason: Boolean,
         originalError: Throwable? = null,
         hideAllEmbeddedApks: Boolean = false,
     ): PreparedPatcherInput? {
-        if (!input.exists() || !input.extension.equals("apk", ignoreCase = true)) {
+        if (!sourceApk.exists() || !sourceApk.extension.equals("apk", ignoreCase = true)) {
             return null
         }
-        if (SplitApkPreparer.isSplitArchive(input)) {
+        if (SplitApkPreparer.isSplitArchive(sourceApk)) {
             return null
         }
 
         return runCatching {
-            ZipFile(input).use { zip ->
+            ZipFile(sourceApk).use { zip ->
                 val embeddedApks = zip.entries()
                     .asSequence()
                     .filterNot { it.isDirectory }
@@ -769,7 +784,7 @@ class Session private constructor(
 
                 val sanitized = Files.createTempFile(
                     patcherInputDir.toPath(),
-                    "${input.nameWithoutExtension}-patcher-input-",
+                    "${sourceApk.nameWithoutExtension}-patcher-input-",
                     ".apk"
                 ).toFile()
                 ZipOutputStream(FileOutputStream(sanitized).buffered()).use { output ->
@@ -933,6 +948,7 @@ class Session private constructor(
             aaptPath: String,
             logger: Logger,
             input: File,
+            initialPatcherInput: File? = null,
             sanitizeAllEmbeddedApksOnInit: Boolean = false,
             onEvent: (ProgressEvent) -> Unit,
             checkCancelled: () -> Unit = {},
@@ -943,6 +959,7 @@ class Session private constructor(
                 aaptPath = aaptPath,
                 logger = logger,
                 input = input,
+                initialPatcherInput = initialPatcherInput,
                 sanitizeAllEmbeddedApksOnInit = sanitizeAllEmbeddedApksOnInit,
                 onEvent = onEvent,
                 checkCancelled = checkCancelled

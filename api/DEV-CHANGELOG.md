@@ -1,3 +1,14 @@
+# v1.8.1-dev.11 (TBD)
+
+
+# Features
+
+
+# Bug fixes
+
+- Fixed mislabeled image resources and invalid decoded manifest resource references breaking patching across the ReVanced, ReVanced v22, and Ample runtimes https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/346
+
+
 # v1.8.1-dev.10 (2026-03-26)
 
 

@@ -16,6 +16,7 @@ import app.revanced.manager.patcher.runStep
 import app.revanced.manager.patcher.split.ApkEditorMergeRuntime
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.patcher.toRemoteError
+import app.revanced.manager.patcher.util.MislabeledImageResourceSanitizer
 import java.io.File
 import java.io.FileInputStream
 import java.io.OutputStream
@@ -274,6 +275,7 @@ object RevancedRuntimeEntry {
                     }
                 }
 
+                var sanitizedInput: MislabeledImageResourceSanitizer.Result? = null
                 try {
                     val relatedBundleArchives = configs
                         .asSequence()
@@ -282,10 +284,17 @@ object RevancedRuntimeEntry {
                         .toList()
                     val session = runStep(StepId.ReadAPK, ::onEvent, ::throwIfCancelled) {
                         val preparedInput = preparation ?: prepareInput().also { preparation = it }
+                        val sanitized = MislabeledImageResourceSanitizer.sanitizeApkFile(
+                            apkFile = preparedInput.file,
+                            workingDir = File(cacheDir).resolve("patcher-inputs"),
+                            logger = logger
+                        )
+                        sanitizedInput = sanitized
+                        val patcherInput = sanitized.file
                         val selectedAaptPath = AaptSelector.select(
                             aaptPath,
                             aaptFallbackPath,
-                            preparedInput.file,
+                            patcherInput,
                             logger,
                             additionalArchives = relatedBundleArchives
                         )
@@ -293,7 +302,7 @@ object RevancedRuntimeEntry {
                         val frameworkCacheDir = FrameworkCacheResolver.resolve(
                             baseFrameworkDir = frameworkDir,
                             runtimeTag = "revanced22",
-                            apkFile = preparedInput.file,
+                            apkFile = patcherInput,
                             aaptPath = selectedAaptPath,
                             logger = logger
                         )
@@ -303,6 +312,7 @@ object RevancedRuntimeEntry {
                             aaptPath = selectedAaptPath,
                             logger = logger,
                             input = preparedInput.file,
+                            initialPatcherInput = patcherInput,
                             onEvent = ::onEvent,
                             checkCancelled = ::throwIfCancelled,
                         )
@@ -321,6 +331,7 @@ object RevancedRuntimeEntry {
                         )
                     }
                 } finally {
+                    sanitizedInput?.cleanup()
                     preparation?.cleanup()
                 }
                 } finally {

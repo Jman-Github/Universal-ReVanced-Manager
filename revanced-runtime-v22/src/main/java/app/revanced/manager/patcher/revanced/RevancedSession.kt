@@ -7,6 +7,8 @@ import app.revanced.manager.patcher.runCancellableBlockingIo
 import app.revanced.manager.patcher.runStep
 import app.revanced.manager.patcher.toRemoteError
 import app.revanced.manager.patcher.split.SplitApkPreparer
+import app.revanced.manager.patcher.util.ManifestDecimalResourceReferenceSanitizer
+import app.revanced.manager.patcher.util.MislabeledImageResourceSanitizer
 import app.revanced.manager.patcher.util.NativeLibStripper
 import app.revanced.patcher.PatchesResult
 import app.revanced.patcher.patcher
@@ -28,6 +30,12 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 
 internal typealias RevancedPatchList = List<Patch>
@@ -38,6 +46,7 @@ class RevancedSession(
     aaptPath: String,
     private val logger: Logger,
     private val input: File,
+    private val initialPatcherInput: File = input,
     private val onEvent: (ProgressEvent) -> Unit,
     private val checkCancelled: () -> Unit = {},
 ) : Closeable {
@@ -48,11 +57,11 @@ class RevancedSession(
     private suspend fun applyPatchesVerbose(
         patches: RevancedPatchList,
         preStarted: Set<Int> = emptySet()
-    ): PatchesResult {
+    ): PatchesResult = coroutineScope {
         val selectedPatches = LinkedHashSet(patches)
         val runPatcher =
             patcher(
-                apkFile = input,
+                apkFile = initialPatcherInput,
                 temporaryFilesPath = tempDir,
                 aaptBinaryPath = aaptBinaryPath,
                 frameworkFileDirectory = frameworkDirFile.absolutePath,
@@ -63,6 +72,10 @@ class RevancedSession(
         val started = mutableSetOf<Int>()
         started.addAll(preStarted)
         var nextIndex = 0
+        val decodedResourcesJob =
+            launch(Dispatchers.IO) {
+                sanitizeDecodedResourcesWhenReady()
+            }
 
         fun patchNameAt(index: Int): String =
             patches.getOrNull(index)?.name ?: "Patch #${index + 1}"
@@ -78,19 +91,34 @@ class RevancedSession(
             startPatch(0)
         }
 
-        val patchResult = runPatcher { result ->
-            checkCancelled()
-            val patch = result.patch
-            val exception = result.exception
-            val index = indexByPatch[patch] ?: return@runPatcher
+        val patchResult = try {
+            val patcherResult = runPatcher { result ->
+                checkCancelled()
+                val patch = result.patch
+                val exception = result.exception
+                val index = indexByPatch[patch] ?: return@runPatcher
 
-            if (exception != null) {
-                if (index < nextIndex) {
+                if (exception != null) {
+                    if (index < nextIndex) {
+                        onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), exception.toRemoteError()))
+                        logger.error("${patch.name ?: patchNameAt(index)} failed:")
+                        logger.error(exception.stackTraceToString())
+                        throw exception
+                    }
+                    while (nextIndex < index) {
+                        startPatch(nextIndex)
+                        onEvent(ProgressEvent.Completed(StepId.ExecutePatch(nextIndex)))
+                        logger.info("${patchNameAt(nextIndex)} succeeded")
+                        nextIndex += 1
+                    }
+                    startPatch(index)
                     onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), exception.toRemoteError()))
                     logger.error("${patch.name ?: patchNameAt(index)} failed:")
                     logger.error(exception.stackTraceToString())
                     throw exception
                 }
+
+                if (index < nextIndex) return@runPatcher
                 while (nextIndex < index) {
                     startPatch(nextIndex)
                     onEvent(ProgressEvent.Completed(StepId.ExecutePatch(nextIndex)))
@@ -98,36 +126,55 @@ class RevancedSession(
                     nextIndex += 1
                 }
                 startPatch(index)
-                onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), exception.toRemoteError()))
-                logger.error("${patch.name ?: patchNameAt(index)} failed:")
-                logger.error(exception.stackTraceToString())
-                throw exception
+                onEvent(ProgressEvent.Completed(StepId.ExecutePatch(index)))
+                logger.info("${patch.name ?: patchNameAt(index)} succeeded")
+                nextIndex = index + 1
+                if (nextIndex < patches.size) {
+                    startPatch(nextIndex)
+                }
             }
 
-            if (index < nextIndex) return@runPatcher
-            while (nextIndex < index) {
+            while (nextIndex < patches.size) {
                 startPatch(nextIndex)
                 onEvent(ProgressEvent.Completed(StepId.ExecutePatch(nextIndex)))
                 logger.info("${patchNameAt(nextIndex)} succeeded")
                 nextIndex += 1
             }
-            startPatch(index)
-            onEvent(ProgressEvent.Completed(StepId.ExecutePatch(index)))
-            logger.info("${patch.name ?: patchNameAt(index)} succeeded")
-            nextIndex = index + 1
-            if (nextIndex < patches.size) {
-                startPatch(nextIndex)
+            patcherResult
+        } finally {
+            decodedResourcesJob.cancelAndJoin()
+        }
+        sanitizeDecodedResourcesPass()
+        patchResult
+    }
+
+    private suspend fun sanitizeDecodedResourcesWhenReady() {
+        var loggedDetection = false
+        while (currentCoroutineContext().isActive) {
+            if (!sanitizeDecodedResourcesPass(logDetection = !loggedDetection)) {
+                delay(DECODED_SANITIZER_INTERVAL_MS)
+                continue
             }
+            loggedDetection = true
+            delay(DECODED_SANITIZER_INTERVAL_MS)
+        }
+    }
+
+    private fun sanitizeDecodedResourcesPass(logDetection: Boolean = false): Boolean {
+        val apkDir = tempDir.resolve("apk")
+        val resourcesDir = apkDir.resolve("res")
+        val manifestFile = apkDir.resolve("AndroidManifest.xml")
+        if (!resourcesDir.isDirectory && !manifestFile.isFile) {
+            return false
         }
 
-        while (nextIndex < patches.size) {
-            startPatch(nextIndex)
-            onEvent(ProgressEvent.Completed(StepId.ExecutePatch(nextIndex)))
-            logger.info("${patchNameAt(nextIndex)} succeeded")
-            nextIndex += 1
+        if (logDetection) {
+            logger.info("Detected decoded resources, running manifest and image resource sanitizers")
         }
 
-        return patchResult
+        ManifestDecimalResourceReferenceSanitizer.sanitize(apkDir, logger)
+        MislabeledImageResourceSanitizer.sanitizeDecodedResources(resourcesDir, logger)
+        return true
     }
 
     private suspend fun executePatchesOnce(orderedPatches: RevancedPatchList): PatchesResult {
@@ -507,6 +554,7 @@ class RevancedSession(
     companion object {
         private const val FRAMEWORK_APK_NAME = "1.apk"
         private const val FRAMEWORK_RESOURCES_TABLE = "resources.arsc"
+        private const val DECODED_SANITIZER_INTERVAL_MS = 200L
         private val zFileOptions = ZFileOptions().apply {
             setAlignmentRule(
                 AlignmentRules.compose(

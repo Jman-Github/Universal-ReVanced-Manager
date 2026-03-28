@@ -16,6 +16,7 @@ import app.revanced.manager.patcher.runStep
 import app.revanced.manager.patcher.split.ApkEditorMergeRuntime
 import app.revanced.manager.patcher.split.SplitApkPreparer
 import app.revanced.manager.patcher.toRemoteError
+import app.revanced.manager.patcher.util.MislabeledImageResourceSanitizer
 import java.io.File
 import java.io.FileInputStream
 import java.io.OutputStream
@@ -272,6 +273,7 @@ object AmpleRuntimeEntry {
                     }
                 }
 
+                var sanitizedInput: MislabeledImageResourceSanitizer.Result? = null
                 try {
                     val relatedBundleArchives = configs
                         .asSequence()
@@ -280,10 +282,17 @@ object AmpleRuntimeEntry {
                         .toList()
                     val session = runStep(StepId.ReadAPK, ::onEvent, ::throwIfCancelled) {
                         val preparedInput = preparation ?: prepareInput().also { preparation = it }
+                        val sanitized = MislabeledImageResourceSanitizer.sanitizeApkFile(
+                            apkFile = preparedInput.file,
+                            workingDir = File(cacheDir).resolve("patcher-inputs"),
+                            logger = logger
+                        )
+                        sanitizedInput = sanitized
+                        val patcherInput = sanitized.file
                         val selectedAaptPath = AaptSelector.select(
                             aaptPath,
                             aaptFallbackPath,
-                            preparedInput.file,
+                            patcherInput,
                             logger,
                             additionalArchives = relatedBundleArchives
                         )
@@ -291,7 +300,7 @@ object AmpleRuntimeEntry {
                         val frameworkCacheDir = FrameworkCacheResolver.resolve(
                             baseFrameworkDir = frameworkDir,
                             runtimeTag = "ample",
-                            apkFile = preparedInput.file,
+                            apkFile = patcherInput,
                             aaptPath = selectedAaptPath,
                             logger = logger
                         )
@@ -301,6 +310,7 @@ object AmpleRuntimeEntry {
                             aaptPath = selectedAaptPath,
                             logger = logger,
                             input = preparedInput.file,
+                            initialPatcherInput = patcherInput,
                             sanitizeAllEmbeddedApksOnInit = preparedInput.merged,
                             onEvent = ::onEvent,
                             checkCancelled = ::throwIfCancelled,
@@ -320,6 +330,7 @@ object AmpleRuntimeEntry {
                         )
                     }
                 } finally {
+                    sanitizedInput?.cleanup()
                     preparation?.cleanup()
                 }
                 } finally {
