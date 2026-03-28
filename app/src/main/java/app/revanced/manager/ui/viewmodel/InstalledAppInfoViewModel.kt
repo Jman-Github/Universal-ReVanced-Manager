@@ -38,6 +38,9 @@ import app.revanced.manager.domain.bundles.PatchBundleSource.Extensions.asRemote
 import app.revanced.manager.util.PM
 import app.revanced.manager.util.PatchSelection
 import app.revanced.manager.util.asCode
+import app.revanced.manager.util.buildSavedAppEntryKey
+import app.revanced.manager.util.buildSavedAppVariantIdentity
+import app.revanced.manager.util.isSavedAppEntryForPackage
 import app.revanced.manager.util.mergeWith
 import app.revanced.manager.util.savedAppBasePackage
 import app.revanced.manager.util.simpleMessage
@@ -289,6 +292,18 @@ class InstalledAppInfoViewModel(
         val resolvedVersion = versionName
             ?: pm.getPackageInfo(targetPackage)?.versionName
             ?: app.version
+        val newVariantIdentity = buildSavedAppVariantIdentity(
+            appVersion = resolvedVersion,
+            selectionPayload = selectionPayload,
+            patchSelection = selection
+        )
+
+        if (sourceInstallType == InstallType.SAVED) {
+            preserveReplacedInstalledVariant(
+                targetPackage = targetPackage,
+                newVariantIdentity = newVariantIdentity
+            )
+        }
 
         installedAppRepository.addOrUpdate(
             currentPackageName = targetPackage,
@@ -313,6 +328,92 @@ class InstalledAppInfoViewModel(
         )
         installedApp = updatedApp
         refreshAppState(updatedApp)
+    }
+
+    private suspend fun preserveReplacedInstalledVariant(
+        targetPackage: String,
+        newVariantIdentity: String
+    ) {
+        val savedEntriesForPackage = installedAppRepository.getByInstallType(InstallType.SAVED).filter { savedApp ->
+            isSavedAppEntryForPackage(savedApp.currentPackageName, targetPackage)
+        }
+        val savedEntryIdentities = mutableMapOf<String, String>()
+        savedEntriesForPackage.forEach { savedApp ->
+            savedEntryIdentities[savedApp.currentPackageName] = savedVariantIdentity(savedApp)
+        }
+
+        val existingTargetEntry = installedAppRepository.get(targetPackage) ?: return
+        val existingInstalledEntry = existingTargetEntry.takeIf { it.installType != InstallType.SAVED }
+        val existingInstalledIdentity = existingInstalledEntry?.let { savedVariantIdentity(it) }
+        if (
+            existingInstalledEntry != null &&
+            existingInstalledIdentity != null &&
+            existingInstalledIdentity != newVariantIdentity &&
+            existingInstalledIdentity !in savedEntryIdentities.values
+        ) {
+            preserveHistoricalInstalledEntry(
+                sourceApp = existingInstalledEntry,
+                targetPackageName = buildSavedAppEntryKey(targetPackage, existingInstalledIdentity)
+            )
+        }
+
+        val existingSavedEntryAtBaseKey = existingTargetEntry.takeIf { it.installType == InstallType.SAVED }
+        val existingSavedEntryIdentity = existingSavedEntryAtBaseKey?.let { savedVariantIdentity(it) }
+        if (
+            existingSavedEntryAtBaseKey != null &&
+            existingSavedEntryIdentity != null &&
+            existingSavedEntryIdentity != newVariantIdentity &&
+            existingSavedEntryIdentity !in savedEntryIdentities
+                .filterKeys { it != existingSavedEntryAtBaseKey.currentPackageName }
+                .values
+        ) {
+            preserveHistoricalInstalledEntry(
+                sourceApp = existingSavedEntryAtBaseKey,
+                targetPackageName = buildSavedAppEntryKey(targetPackage, existingSavedEntryIdentity)
+            )
+        }
+    }
+
+    private suspend fun savedVariantIdentity(app: InstalledApp): String =
+        buildSavedAppVariantIdentity(
+            appVersion = app.version,
+            selectionPayload = app.selectionPayload,
+            patchSelection = resolveAppliedSelection(app)
+        )
+
+    private suspend fun preserveHistoricalInstalledEntry(
+        sourceApp: InstalledApp,
+        targetPackageName: String
+    ) {
+        val sourceApk = exactSavedApkFile(sourceApp) ?: return
+        val targetApk = filesystem.getPatchedAppFile(targetPackageName, sourceApp.version)
+        if (!sourceApk.absolutePath.equals(targetApk.absolutePath, ignoreCase = true)) {
+            try {
+                targetApk.parentFile?.mkdirs()
+                sourceApk.copyTo(targetApk, overwrite = true)
+            } catch (error: IOException) {
+                Log.w(tag, "Failed to archive previous patched app for ${sourceApp.currentPackageName}", error)
+                return
+            }
+        }
+        val sourceSelection = resolveAppliedSelection(sourceApp)
+        installedAppRepository.addOrUpdate(
+            currentPackageName = targetPackageName,
+            originalPackageName = sourceApp.originalPackageName,
+            version = sourceApp.version,
+            installType = InstallType.SAVED,
+            patchSelection = sourceSelection,
+            selectionPayload = sourceApp.selectionPayload,
+            createdAtOverride = sourceApp.createdAt
+        )
+    }
+
+    private fun exactSavedApkFile(app: InstalledApp): File? {
+        val exactCandidates = listOf(
+            filesystem.getPatchedAppFile(app.currentPackageName, app.version),
+            filesystem.getPatchedAppFile(app.originalPackageName, app.version)
+        ).distinct()
+        return exactCandidates.firstOrNull { it.exists() }
     }
 
     private fun markInstallFailure(message: String) {

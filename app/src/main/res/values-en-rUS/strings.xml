@@ -588,8 +588,8 @@ Patch profiles are not affected.</string>
     <string name="patcher_auto_expand_running_steps_exclusive_description">When auto-expand is enabled, keep only the currently running main patcher category expanded and do not auto-expand sub-steps</string>
     <string name="patcher_saved_apps_title">Save patched apps for later</string>
     <string name="patcher_saved_apps_description">When enabled, the manager saves a patched app entry and APK so it stays in the Apps tab and can be reinstalled later. Turning this off skips saving and deletes all saved patched apps. Any apps installed through the Rooted mount installer remain visible</string>
-    <string name="saved_apps_disable_overwrite_title">Always create a new saved app entry</string>
-    <string name="saved_apps_disable_overwrite_description">Prevent saved patched app entries from being overwritten. When enabled, every new saved patched app creates a separate Apps tab entry.</string>
+    <string name="saved_apps_disable_overwrite_title">Always create a new saved app entry when patching</string>
+    <string name="saved_apps_disable_overwrite_description">Prevent newly patched apps saved from the patcher from overwriting existing saved entries. When enabled, each new saved app created from the patcher gets a separate Apps tab entry.</string>
     <string name="use_custom_file_picker_title">Use custom file picker</string>
     <string name="use_custom_file_picker_description">Use the in-app custom file picker. Turn this off to use the Android Documents Provider instead.</string>
     <string name="patch_bundle_rename">Rename patch bundle</string>
