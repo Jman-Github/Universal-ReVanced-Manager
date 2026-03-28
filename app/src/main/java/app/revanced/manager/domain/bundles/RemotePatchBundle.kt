@@ -500,7 +500,7 @@ class GitHubPullRequestBundle(
                             var entry = zis.nextEntry
                             while (entry != null) {
                                 val entryName = entry.name.lowercase()
-                                if (!entry.isDirectory && (entryName.endsWith(".rvp") || entryName.endsWith(".mpp") || entryName.endsWith(".arp"))) {
+                                if (!entry.isDirectory && (entryName.endsWith(".rvp") || entryName.endsWith(".mpp"))) {
                                     extractedTotal = entry.size.takeIf { it > 0 }
                                     while (true) {
                                         val read = zis.read(buffer)
@@ -521,7 +521,7 @@ class GitHubPullRequestBundle(
                             }
 
                             if (copiedBytes <= 0L) {
-                                throw IOException("No .rvp, .mpp, or .arp file found in the pull request artifact.")
+                                throw IOException("No .rvp or .mpp file found in the pull request artifact.")
                             }
                             onProgress?.invoke(copiedBytes, extractedTotal)
                         }

@@ -1022,14 +1022,10 @@ class PatchBundleRepository(
         source: PatchBundleSource? = null
     ): Pair<PatchBundleType, List<PatchInfo>> {
         val bundlePath = bundle.patchesJar
-        val extension = resolveBundleExtension(bundle, source)
-        if (extension == "mpp") {
+        val declaredType = detectDeclaredBundleType(bundle, source)
+        if (declaredType == PatchBundleType.MORPHE) {
             return PatchBundleType.MORPHE to MorpheRuntimeBridge.loadMetadata(bundlePath)
         }
-        if (extension == "arp") {
-            return PatchBundleType.AMPLE to AmpleRuntimeBridge.loadMetadata(bundlePath)
-        }
-
         val ampleHint = bundle.manifestAttributes
             ?.let { attributes ->
                 sequenceOf(
@@ -1098,18 +1094,12 @@ class PatchBundleRepository(
                 ?: IllegalStateException("Failed to load patch bundle metadata")
         )
 
-        if (extension == "rvp") {
-            val ampleResult = runCatching { AmpleRuntimeBridge.loadMetadata(bundlePath) }
-            if (ampleResult.isSuccess) {
-                return PatchBundleType.AMPLE to ampleResult.getOrThrow()
-            }
-
+        if (declaredType == PatchBundleType.REVANCED) {
             val error = IllegalStateException("Failed to load patch bundle metadata")
             revancedFailures.values.forEach(error::addSuppressed)
             if (revancedFailures.isEmpty()) {
                 revancedResult.exceptionOrNull()?.let(error::addSuppressed)
             }
-            ampleResult.exceptionOrNull()?.let(error::addSuppressed)
             throw error
         }
 
@@ -1154,6 +1144,9 @@ class PatchBundleRepository(
         "ample/revanced",
         "ample.revanced"
     )
+    private val ampleDetectionRegexes = ampleDetectionTokens.map { token ->
+        Regex("(^|[^a-z0-9])${Regex.escape(token)}([^a-z0-9]|$)")
+    }
     private val ampleWordRegex = Regex("(^|[^a-z0-9])ample([^a-z0-9]|$)")
 
     private fun looksLikeAmpleMarker(value: String?): Boolean {
@@ -1162,8 +1155,42 @@ class PatchBundleRepository(
             ?.lowercase(Locale.US)
             .orEmpty()
         if (normalized.isBlank()) return false
-        if (ampleDetectionTokens.any(normalized::contains)) return true
+        if (ampleDetectionRegexes.any { it.containsMatchIn(normalized) }) return true
         return ampleWordRegex.containsMatchIn(normalized)
+    }
+
+    private fun detectDeclaredBundleType(
+        bundle: PatchBundle,
+        source: PatchBundleSource?
+    ): PatchBundleType? {
+        val extension = resolveBundleExtension(bundle, source)
+        if (extension == "mpp") return PatchBundleType.MORPHE
+
+        val bundlePath = bundle.patchesJar
+        val ampleHint = bundle.manifestAttributes
+            ?.let { attributes ->
+                sequenceOf(
+                    attributes.name,
+                    attributes.source,
+                    attributes.author,
+                    attributes.website
+                )
+                    .filterNotNull()
+                    .any(::looksLikeAmpleMarker)
+            } == true
+        val ampleEndpointHint = source
+            ?.asRemoteOrNull
+            ?.endpoint
+            ?.let(::looksLikeAmpleMarker) == true
+        val localAmpleHint = source
+            ?.takeIf { it.asRemoteOrNull == null }
+            ?.let { bundleLooksAmple(bundlePath, it.uid) } == true
+
+        if (ampleHint || ampleEndpointHint || localAmpleHint) {
+            return PatchBundleType.AMPLE
+        }
+
+        return if (extension == "rvp") PatchBundleType.REVANCED else null
     }
 
     private fun resolveBundleExtension(
@@ -1221,7 +1248,7 @@ class PatchBundleRepository(
                     }
                 }.getOrNull() ?: continue
 
-                if (ampleDetectionTokens.any { token -> payload.contains(token) }) {
+                if (ampleDetectionRegexes.any { regex -> regex.containsMatchIn(payload) }) {
                     return true
                 }
             }
@@ -1303,6 +1330,16 @@ class PatchBundleRepository(
                     patches
                 )
             } catch (error: Throwable) {
+                detectDeclaredBundleType(bundle, src)?.let { declaredType ->
+                    metadata[src.uid] = PatchBundleInfo.Global(
+                        src.displayTitle,
+                        bundle.manifestAttributes?.version,
+                        src.uid,
+                        declaredType,
+                        src.enabled,
+                        emptyList()
+                    )
+                }
                 failures += src.uid to error
                 Log.e(tag, "Failed to load bundle ${src.name}", error)
             }
@@ -3072,7 +3109,7 @@ class PatchBundleRepository(
         const val LOCAL_IMPORT_STEPS = 2
         const val LOCAL_BUNDLE_HINT_FILE = "bundle_hint.txt"
         const val REVANCED_PATCHER_HINT_FILE = "revanced_patcher_hint.txt"
-        val supportedBundleExtensions = setOf("rvp", "mpp", "arp")
+        val supportedBundleExtensions = setOf("rvp", "mpp")
         const val REMOTE_BUNDLE_UPDATE_TIMEOUT_MS = 120_000L
         fun defaultSource() = PatchBundleEntity(
             uid = DEFAULT_SOURCE_UID,

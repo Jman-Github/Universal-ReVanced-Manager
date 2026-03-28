@@ -157,6 +157,9 @@
 - Fixed patcher runtimes holding loaded patch dex objects in memory longer than necessary by scoping patch loading closer to execution
 - Possibly resolved issues around patching Google Photos with `De-ReVanced` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/349 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/343
 - Fixed valid APK files being rejected in various app flows https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/333
+- Fixed mislabeled image resources and invalid decoded manifest resource references breaking patching across the ReVanced, ReVanced v22, and Ample runtimes https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/346
+- Fixed `.rvp` patch bundles being mislabeled as Ample without positive Ample markers https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/358
+- Fixed older ReVanced `.rvp` bundles staying identified as ReVanced even when metadata loading fails https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/358
 
 
 # CI

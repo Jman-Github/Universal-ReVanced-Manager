@@ -35,7 +35,7 @@ fun resolveSupportedApkExtension(displayName: String?, mimeType: String?): Strin
 
 fun isAllowedPatchBundleFile(path: Path): Boolean {
     val extension = path.name.substringAfterLast('.', "").lowercase(Locale.ROOT)
-    return extension == "rvp" || extension == "mpp" || extension == "arp"
+    return extension == "rvp" || extension == "mpp"
 }
 
 fun isAllowedSplitArchiveFile(path: Path): Boolean {
