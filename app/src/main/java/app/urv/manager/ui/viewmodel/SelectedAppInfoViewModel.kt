@@ -741,9 +741,27 @@ class SelectedAppInfoViewModel(
     private val launchActivityChannel = Channel<Intent>()
     val launchActivityFlow = launchActivityChannel.receiveAsFlow()
 
-    val errorFlow = combine(plugins, downloadedApps, snapshotFlow { selectedApp }) { pluginsList, downloadedApps, app ->
+    private val downloaderEmptyStateFlow = combine(
+        pluginsRepository.pluginStates,
+        pluginsRepository.sourceStates,
+        pluginsRepository.hasLoadedInitialState
+    ) { pluginStates, sourceStates, hasLoadedDownloaderState ->
+        hasLoadedDownloaderState to (pluginStates.isNotEmpty() || sourceStates.isNotEmpty())
+    }
+
+    val errorFlow = combine(
+        plugins,
+        downloaderEmptyStateFlow,
+        downloadedApps,
+        snapshotFlow { selectedApp }
+    ) { pluginsList, downloaderEmptyState, downloadedApps, app ->
+        val (hasLoadedDownloaderState, hasAnyDownloaderPluginState) = downloaderEmptyState
         when {
-            app is SelectedApp.Search && pluginsList.isEmpty() && downloadedApps.isEmpty() -> Error.NoPlugins
+            app is SelectedApp.Search &&
+                pluginsList.isEmpty() &&
+                downloadedApps.isEmpty() &&
+                hasLoadedDownloaderState ->
+                if (hasAnyDownloaderPluginState) Error.NoUsablePlugins else Error.NoPluginsInstalled
             else -> null
         }
     }
@@ -1275,7 +1293,8 @@ class SelectedAppInfoViewModel(
     )
 
     enum class Error(@param:StringRes val resourceId: Int) {
-        NoPlugins(R.string.downloader_no_plugins_available)
+        NoPluginsInstalled(R.string.downloader_no_plugins_installed),
+        NoUsablePlugins(R.string.downloader_no_plugins_available)
     }
 
     private fun PatchBundleInfo.Scoped.collectBundleSupport(

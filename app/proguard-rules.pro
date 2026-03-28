@@ -12,6 +12,8 @@
 -keep class app.revanced.library.** { *; }
 
 -keep class app.urv.manager.patcher.runtime.process.* { *; }
+-keep class app.revanced.manager.plugin.downloader.** { *; }
+-keep class app.revanced.manager.downloader.** { *; }
 -keep class app.urv.manager.plugin.downloader.** { *; }
 -keep class app.urv.manager.downloader.** { *; }
 -keepnames class com.android.apksig.internal.** { *; }

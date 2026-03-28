@@ -29,6 +29,11 @@ import app.urv.manager.plugin.downloader.GetScope as LegacyGetScope
 import app.urv.manager.plugin.downloader.OutputDownloadScope as LegacyOutputDownloadScope
 import app.urv.manager.plugin.downloader.PluginHostApi
 import app.urv.manager.plugin.downloader.Scope as LegacyScope
+import app.revanced.manager.downloader.DownloaderBuilder as RevancedModernDownloaderBuilder
+import app.revanced.manager.downloader.DownloaderHostApi as RevancedModernDownloaderHostApi
+import app.revanced.manager.downloader.Scope as RevancedModernScope
+import app.revanced.manager.plugin.downloader.DownloaderBuilder as RevancedLegacyDownloaderBuilder
+import app.revanced.manager.plugin.downloader.Scope as RevancedLegacyScope
 import app.urv.manager.downloader.DownloaderBuilder as ModernDownloaderBuilder
 import app.urv.manager.downloader.DownloaderHostApi as ModernDownloaderHostApi
 import app.urv.manager.downloader.Scope as ModernScope
@@ -53,7 +58,7 @@ import java.lang.reflect.Modifier
 import java.net.URI
 import java.util.UUID
 
-@OptIn(PluginHostApi::class, ModernDownloaderHostApi::class)
+@OptIn(PluginHostApi::class, ModernDownloaderHostApi::class, RevancedModernDownloaderHostApi::class)
 class DownloaderPluginRepository(
     private val pm: PM,
     private val prefs: PreferencesManager,
@@ -67,8 +72,10 @@ class DownloaderPluginRepository(
     private val managedSourceRoot = app.getDir("managed_downloader_plugins", Context.MODE_PRIVATE)
     private val _pluginStates = MutableStateFlow(emptyMap<String, DownloaderPluginState>())
     private val _sourceStates = MutableStateFlow(emptyMap<String, DownloaderPluginSourceState>())
+    private val _hasLoadedInitialState = MutableStateFlow(false)
     val pluginStates = _pluginStates.asStateFlow()
     val sourceStates = _sourceStates.asStateFlow()
+    val hasLoadedInitialState = _hasLoadedInitialState.asStateFlow()
     val loadedPluginsFlow = combine(pluginStates, sourceStates) { installed, sources ->
         installed.values
             .filterIsInstance<DownloaderPluginState.Loaded>()
@@ -92,7 +99,14 @@ class DownloaderPluginRepository(
     suspend fun reload() {
         val installedPlugins =
             withContext(Dispatchers.IO) {
-                pm.getPackagesWithFeatures(setOf(LEGACY_PLUGIN_FEATURE, MODERN_PLUGIN_FEATURE))
+                pm.getPackagesWithFeatures(
+                    setOf(
+                        LEGACY_PLUGIN_FEATURE,
+                        MODERN_PLUGIN_FEATURE,
+                        REVANCED_LEGACY_PLUGIN_FEATURE,
+                        REVANCED_MODERN_PLUGIN_FEATURE
+                    )
+                )
                     .associate { it.packageName to loadInstalledPlugin(it.packageName) }
             }
         val managedSources =
@@ -107,6 +121,7 @@ class DownloaderPluginRepository(
         _pluginStates.value = installedPlugins
         _sourceStates.value = managedSources
         installedPluginPackageNames.value = installedPlugins.keys
+        _hasLoadedInitialState.value = true
 
         val acknowledgedPlugins = acknowledgedDownloaderPlugins.get()
         val uninstalledPlugins = acknowledgedPlugins subtract installedPluginPackageNames.value
@@ -190,15 +205,17 @@ class DownloaderPluginRepository(
 
         val entries = withContext(Dispatchers.IO) { readSourceEntries() }
         if (entries.none { it.autoUpdate && it.trustedSignatureHex != null }) return
+        val currentSourceStates = sourceStates.value
 
         val updatedEntries = buildList {
             entries.forEach { entry ->
-                if (!shouldAutoUpdate(entry)) {
+                val updateMode = shouldAutoUpdate(entry, currentSourceStates[entry.id]?.state)
+                if (updateMode == SourceUpdateMode.SKIP) {
                     add(entry)
                     return@forEach
                 }
 
-                val updated = runCatching { updateEntry(entry, force = false) }
+                val updated = runCatching { updateEntry(entry, force = updateMode == SourceUpdateMode.FORCE) }
                     .onFailure { Log.e(tag, "Failed to update downloader source ${entry.repoUrl}", it) }
                     .getOrElse { entry }
                 add(updated)
@@ -394,7 +411,7 @@ class DownloaderPluginRepository(
         val classLoader = PathClassLoader(packageInfo.applicationInfo!!.sourceDir, app.classLoader)
         val packageLabel = with(pm) { packageInfo.label() }
 
-        val scopeImpl = object : LegacyScope, ModernScope {
+        val scopeImpl = object : LegacyScope, ModernScope, RevancedLegacyScope, RevancedModernScope {
             override val hostPackageName = app.packageName
             override val pluginPackageName = pluginContext.packageName
             override val downloaderPackageName = pluginContext.packageName
@@ -498,7 +515,10 @@ class DownloaderPluginRepository(
 
         val selectedAssets = when (importRequest) {
             is ImportRequest.Asset -> {
-                apkAssets.filter { normalizeAssetSelector(it.name) == importRequest.assetSelector }
+                apkAssets.filter {
+                    canonicalAssetSelector(normalizeAssetSelector(it.name)) ==
+                        canonicalAssetSelector(importRequest.assetSelector)
+                }
             }
 
             is ImportRequest.Repository -> apkAssets
@@ -510,10 +530,11 @@ class DownloaderPluginRepository(
         val entries = readSourceEntries().toMutableList()
         val importedEntries = mutableListOf<DownloaderPluginSourceEntry>()
         selectedAssets.forEach { asset ->
-            val selector = normalizeAssetSelector(asset.name)
+            val selector = canonicalAssetSelector(normalizeAssetSelector(asset.name))
             val versionKey = releaseVersionKey(release, asset)
             val existingIndex = entries.indexOfFirst {
-                it.repoUrl == importRequest.repoUrl && it.assetSelector == selector
+                it.repoUrl == importRequest.repoUrl &&
+                    canonicalAssetSelector(it.assetSelector) == selector
             }
             val existing = entries.getOrNull(existingIndex)
             val entry = (existing ?: DownloaderPluginSourceEntry(
@@ -547,7 +568,10 @@ class DownloaderPluginRepository(
         val release = latestReleaseFor(entry.repoUrl, prerelease = entry.prerelease)
         val asset = release.assets
             .filter(::isSupportedDownloaderAsset)
-            .firstOrNull { normalizeAssetSelector(it.name) == entry.assetSelector }
+            .firstOrNull {
+                canonicalAssetSelector(normalizeAssetSelector(it.name)) ==
+                    canonicalAssetSelector(entry.assetSelector)
+            }
             ?: throw Exception("No matching downloader APK asset found for ${entry.repoUrl}")
 
         val versionKey = releaseVersionKey(release, asset)
@@ -559,24 +583,29 @@ class DownloaderPluginRepository(
         return entry.copy(versionKey = versionKey)
     }
 
-    private suspend fun shouldAutoUpdate(entry: DownloaderPluginSourceEntry): Boolean {
-        if (!entry.autoUpdate || entry.trustedSignatureHex == null) return false
+    private suspend fun shouldAutoUpdate(
+        entry: DownloaderPluginSourceEntry,
+        currentState: DownloaderPluginSourceState.State?
+    ): SourceUpdateMode {
+        if (!entry.autoUpdate || entry.trustedSignatureHex == null) return SourceUpdateMode.SKIP
+        if (currentState is DownloaderPluginSourceState.State.Missing) return SourceUpdateMode.FORCE
+        if (currentState is DownloaderPluginSourceState.State.Failed) return SourceUpdateMode.CHECK
 
         val file = sourceFile(entry)
-        if (!file.exists()) return true
+        if (!file.exists()) return SourceUpdateMode.FORCE
 
         val packageInfo = runCatching { readArchivePackageInfo(file) }
             .getOrElse {
                 Log.e(tag, "Failed to inspect downloader source ${entry.repoUrl} before auto-update", it)
-                return false
+                return SourceUpdateMode.FORCE
             }
 
         return when (val trust = verifyArchiveTrust(entry, packageInfo)) {
-            ArchiveTrust.Trusted -> true
-            is ArchiveTrust.Untrusted, is ArchiveTrust.Mismatch -> false
+            ArchiveTrust.Trusted -> SourceUpdateMode.CHECK
+            is ArchiveTrust.Untrusted, is ArchiveTrust.Mismatch -> SourceUpdateMode.SKIP
             is ArchiveTrust.Unreadable -> {
                 Log.e(tag, "Failed to verify downloader source ${entry.repoUrl} before auto-update", trust.throwable)
-                false
+                SourceUpdateMode.FORCE
             }
         }
     }
@@ -717,7 +746,7 @@ class DownloaderPluginRepository(
                 if (parts.size >= 5 && parts[2] == "releases" && parts[3] == "download") {
                     ImportRequest.Asset(
                         repoUrl = repoUrl,
-                        assetSelector = normalizeAssetSelector(parts.last()),
+                        assetSelector = canonicalAssetSelector(normalizeAssetSelector(parts.last())),
                         releaseTag = parts[4]
                     )
                 } else {
@@ -821,18 +850,26 @@ class DownloaderPluginRepository(
 
         addClassName(metaData?.getString(LEGACY_METADATA_PLUGIN_CLASS))
         addClassName(metaData?.getString(MODERN_METADATA_PLUGIN_CLASS))
+        addClassName(metaData?.getString(REVANCED_LEGACY_METADATA_PLUGIN_CLASS))
+        addClassName(metaData?.getString(REVANCED_MODERN_METADATA_PLUGIN_CLASS))
 
         addClassArray(metaData?.getInt(LEGACY_METADATA_CLASSES_ARRAY, 0) ?: 0)
         addClassArray(metaData?.getInt(MODERN_METADATA_CLASSES_ARRAY, 0) ?: 0)
+        addClassArray(metaData?.getInt(REVANCED_LEGACY_METADATA_CLASSES_ARRAY, 0) ?: 0)
+        addClassArray(metaData?.getInt(REVANCED_MODERN_METADATA_CLASSES_ARRAY, 0) ?: 0)
 
         addClassArray(findStringArrayResource(pluginContext, LEGACY_CLASSES_RESOURCE_NAME))
         addClassArray(findStringArrayResource(pluginContext, MODERN_CLASSES_RESOURCE_NAME))
+        addClassArray(findStringArrayResource(pluginContext, REVANCED_LEGACY_CLASSES_RESOURCE_NAME))
+        addClassArray(findStringArrayResource(pluginContext, REVANCED_MODERN_CLASSES_RESOURCE_NAME))
 
         if (names.isEmpty()) {
             throw Exception(
                 "Missing downloader class metadata. Expected one of " +
                     "$LEGACY_METADATA_PLUGIN_CLASS, $MODERN_METADATA_PLUGIN_CLASS, " +
-                    "$LEGACY_CLASSES_RESOURCE_NAME, or $MODERN_CLASSES_RESOURCE_NAME"
+                    "$REVANCED_LEGACY_METADATA_PLUGIN_CLASS, $REVANCED_MODERN_METADATA_PLUGIN_CLASS, " +
+                    "$LEGACY_CLASSES_RESOURCE_NAME, $MODERN_CLASSES_RESOURCE_NAME, " +
+                    "$REVANCED_LEGACY_CLASSES_RESOURCE_NAME, or $REVANCED_MODERN_CLASSES_RESOURCE_NAME"
             )
         }
 
@@ -857,6 +894,11 @@ class DownloaderPluginRepository(
         return (match?.groupValues?.getOrNull(1) ?: baseName).lowercase()
     }
 
+    private fun canonicalAssetSelector(selector: String): String =
+        selector
+            .lowercase()
+            .removePrefix("revanced-manager-")
+
     private fun String.toReadableSourceName(): String =
         split(Regex("[-_]+"))
             .filter(String::isNotBlank)
@@ -864,19 +906,33 @@ class DownloaderPluginRepository(
                 part.replaceFirstChar { ch -> ch.uppercase() }
             }
 
+    private enum class SourceUpdateMode {
+        SKIP,
+        CHECK,
+        FORCE
+    }
+
     private fun githubRepoUrl(owner: String, repo: String) = "https://github.com/$owner/$repo"
 
     private companion object {
         private val json = Json { ignoreUnknownKeys = true }
         const val LEGACY_PLUGIN_FEATURE = "app.urv.manager.plugin.downloader"
         const val MODERN_PLUGIN_FEATURE = "app.urv.manager.downloader"
+        const val REVANCED_LEGACY_PLUGIN_FEATURE = "app.revanced.manager.plugin.downloader"
+        const val REVANCED_MODERN_PLUGIN_FEATURE = "app.revanced.manager.downloader"
 
         const val LEGACY_METADATA_PLUGIN_CLASS = "app.urv.manager.plugin.downloader.class"
         const val MODERN_METADATA_PLUGIN_CLASS = "app.urv.manager.downloader.class"
+        const val REVANCED_LEGACY_METADATA_PLUGIN_CLASS = "app.revanced.manager.plugin.downloader.class"
+        const val REVANCED_MODERN_METADATA_PLUGIN_CLASS = "app.revanced.manager.downloader.class"
         const val LEGACY_METADATA_CLASSES_ARRAY = "app.urv.manager.plugin.downloader.classes"
         const val MODERN_METADATA_CLASSES_ARRAY = "app.urv.manager.downloader.classes"
+        const val REVANCED_LEGACY_METADATA_CLASSES_ARRAY = "app.revanced.manager.plugin.downloader.classes"
+        const val REVANCED_MODERN_METADATA_CLASSES_ARRAY = "app.revanced.manager.downloader.classes"
         const val LEGACY_CLASSES_RESOURCE_NAME = "app.urv.manager.plugin.downloader.classes"
         const val MODERN_CLASSES_RESOURCE_NAME = "app.urv.manager.downloader.classes"
+        const val REVANCED_LEGACY_CLASSES_RESOURCE_NAME = "app.revanced.manager.plugin.downloader.classes"
+        const val REVANCED_MODERN_CLASSES_RESOURCE_NAME = "app.revanced.manager.downloader.classes"
 
         val VERSION_SUFFIX_REGEX = Regex(
             pattern = "^(.*?)-v?\\d+(?:\\.\\d+)+(?:[-._][A-Za-z0-9]+)*$",
@@ -897,6 +953,8 @@ class DownloaderPluginRepository(
 
         val Class<*>.isDownloaderBuilder get() =
             DownloaderBuilder::class.java.isAssignableFrom(this) ||
+                RevancedLegacyDownloaderBuilder::class.java.isAssignableFrom(this) ||
+                RevancedModernDownloaderBuilder::class.java.isAssignableFrom(this) ||
                 ModernDownloaderBuilder::class.java.isAssignableFrom(this)
 
         @Suppress("UNCHECKED_CAST")

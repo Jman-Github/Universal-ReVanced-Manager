@@ -90,7 +90,9 @@
         </activity>
 
         <activity android:name="app.urv.manager.plugin.downloader.webview.WebViewActivity" android:exported="false" android:theme="@style/Theme.WebViewActivity" />
+        <activity android:name="app.revanced.manager.plugin.downloader.webview.WebViewActivity" android:exported="false" android:theme="@style/Theme.WebViewActivity" />
         <activity android:name="app.urv.manager.downloader.webview.WebViewActivity" android:exported="false" android:theme="@style/Theme.WebViewActivity" />
+        <activity android:name="app.revanced.manager.downloader.webview.WebViewActivity" android:exported="false" android:theme="@style/Theme.WebViewActivity" />
 
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
