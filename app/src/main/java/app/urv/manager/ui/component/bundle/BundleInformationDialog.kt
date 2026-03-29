@@ -546,14 +546,12 @@ fun BundleInformationDialog(
                                     showUrlInputDialog = false
                                     return@TextInputDialog
                                 }
+                                showUrlInputDialog = false
                                 composableScope.launch {
-                                    val updated = bundleRepo.updateRemoteEndpoint(
+                                    bundleRepo.updateRemoteEndpoint(
                                         src = remote,
                                         newUrl = trimmed
                                     )
-                                    if (updated) {
-                                        showUrlInputDialog = false
-                                    }
                                 }
                             },
                             validator = {

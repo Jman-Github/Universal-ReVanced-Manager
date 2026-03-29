@@ -12,6 +12,7 @@
 - Preserve replaced variants when reinstalling saved apps, and clarify that the “Always create a new saved app entry” option only affects patcher saves https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
 - Fixed fullscreen bundle/profile dialogs showing a mismatched status bar strip above the top bar https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/341
 - Fixed the patcher source selector showing a false untrusted downloader plugin warning on clean installs with no downloader plugins added or installed https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/353
+- Fixed the patch bundle URL editor sometimes requiring two OK taps after editing https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/339
 
 
 # Refactors

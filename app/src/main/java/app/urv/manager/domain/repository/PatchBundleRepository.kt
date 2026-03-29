@@ -1925,15 +1925,16 @@ class PatchBundleRepository(
             )
         }
 
-        val updatedSource = store.state.value.sources[src.uid] as? RemotePatchBundle ?: return false
+        val updatedSource = store.state.value.sources[src.uid] as? RemotePatchBundle ?: return true
         val allowUnsafeDownload = prefs.allowMeteredUpdates.get()
-        return updateNow(
+        updateNow(
             force = true,
             allowUnsafeNetwork = allowUnsafeDownload,
             onPerBundleProgress = { bundle, bytesRead, bytesTotal ->
                 if (bundle.uid == updatedSource.uid) onProgress?.invoke(bytesRead, bytesTotal)
             }
         ) { it.uid == updatedSource.uid }
+        return true
     }
 
     suspend fun updateTimestamps(src: PatchBundleSource, createdAt: Long?, updatedAt: Long?) {
