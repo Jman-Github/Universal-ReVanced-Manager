@@ -992,11 +992,6 @@ Patch profiles are not affected.</string>
     <string name="patch_profile_bundle_override_title">Allow incompatible bundle override</string>
     <string name="patch_profile_bundle_override_description">Show a developer-only override button when a patch profile bundle is incompatible.</string>
     <string name="patcher_process_exit_message">Patcher process exited with code %1$d.</string>
-    <string name="patcher_memory_adjustment_title">The patcher ran out of memory</string>
-    <string name="patcher_memory_adjustment_message_reduced">The experimental patcher process stopped because it ran out of memory. We lowered its memory limit from %1$d MB to %2$d MB so you can try again immediately.</string>
-    <string name="patcher_memory_adjustment_message_no_change">The experimental patcher process stopped because it ran out of memory, but the memory limit is already at %1$d MB. Try lowering it further in Advanced settings or disable the experimental mode before retrying.</string>
-    <string name="patcher_memory_adjustment_retry">Try again</string>
-    <string name="patcher_memory_adjustment_dismiss">Dismiss</string>
     <string name="patcher_missing_patch_title">Patch selection needs attention</string>
     <string name="patcher_preflight_missing_patch_message">The following patches aren’t available in the current bundle:
 %1$s

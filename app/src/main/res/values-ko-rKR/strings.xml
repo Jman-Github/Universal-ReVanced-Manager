@@ -780,11 +780,6 @@
     <string name="patch_profile_bundle_override_title">호환되지 않는 번들 재정의 허용</string>
     <string name="patch_profile_bundle_override_description">패치 프로필 번들이 호환되지 않을 경우에 개발자 전용 재정의 버튼을 표시합니다.</string>
     <string name="patcher_process_exit_message">패처 프로세스를 코드 \'%1$d\'로 종료하였습니다.</string>
-    <string name="patcher_memory_adjustment_title">패처의 메모리가 부족합니다</string>
-    <string name="patcher_memory_adjustment_message_reduced">실험용 패처 프로세스가 메모리 부족으로 중지되었습니다. 즉시 다시 시도할 수 있도록 메모리 제한을 %1$d MB에서 %2$d MB로 줄였습니다.</string>
-    <string name="patcher_memory_adjustment_message_no_change">실험용 패처 프로세서가 메모리 부족으로 중지되었지만 메모리 제한이 이미 %1$d MB에 도달하였습니다. 고급 설정에서 메모리 제한을 더 낮추거나 실험 모드를 비활성화한 후에 다시 시도하세요.</string>
-    <string name="patcher_memory_adjustment_retry">다시 시도</string>
-    <string name="patcher_memory_adjustment_dismiss">닫기</string>
     <string name="patcher_missing_patch_title">패치 선택에는 주의가 필요합니다</string>
     <string name="patcher_preflight_missing_patch_message">현재 번들에서 다음 패치는 사용할 수 없습니다:
 %1$s

@@ -529,11 +529,6 @@
     <string name="patch_profile_bundle_override_title">Cho ghi đè gói không tương thích</string>
     <string name="patch_profile_bundle_override_description">Hiện nút ghi đè khi gói của cấu hình vá không tương thích (chỉ dành cho nhà phát triển).</string>
     <string name="patcher_process_exit_message">Tiến trình vá bị thoát với mã %1$d.</string>
-    <string name="patcher_memory_adjustment_title">Không đủ RAM cho trình vá.</string>
-    <string name="patcher_memory_adjustment_message_reduced">Tiến trình vá thử nghiệm đã dừng vì hết bộ nhớ RAM. Chúng tôi đã giảm giới hạn bộ nhớ của nó từ %1$d MB xuống còn %2$d MB để bạn có thể thử lại ngay.</string>
-    <string name="patcher_memory_adjustment_message_no_change">Tiến trình vá thử nghiệm đã dừng vì hết bộ nhớ RAM, nhưng giới hạn bộ nhớ hiện đã ở mức %1$d MB. Hãy giảm thêm trong Cài đặt nâng cao hoặc tắt chế độ thử nghiệm trước khi thử lại.</string>
-    <string name="patcher_memory_adjustment_retry">Thử lại</string>
-    <string name="patcher_memory_adjustment_dismiss">Kệ</string>
     <string name="patcher_missing_patch_title">Cần kiểm tra lựa chọn bản vá</string>
     <string name="patcher_preflight_missing_patch_message">Các bản vá dưới đây hiện không còn trong gói hiện tại:\n%1$s\nBạn có thể tự xóa chúng, điều chỉnh lựa chọn, hoặc cứ tiếp tục.</string>
     <string name="patcher_preflight_missing_patch_remove">Xóa các bản vá bị thiếu</string>

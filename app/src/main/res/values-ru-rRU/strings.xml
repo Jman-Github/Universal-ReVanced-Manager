@@ -782,11 +782,6 @@
     <string name="patch_profile_bundle_override_title">Разрешить переопределение несовместимого пакета</string>
     <string name="patch_profile_bundle_override_description">Показывать кнопку переопределения, доступную только разработчикам, если пакет профиля патча несовместим.</string>
     <string name="patcher_process_exit_message">Процесс патчера завершился с кодом %1$d.</string>
-    <string name="patcher_memory_adjustment_title">Патчеру не хватает памяти</string>
-    <string name="patcher_memory_adjustment_message_reduced">Экспериментальный процесс патчинга остановился, поскольку ему не хватило памяти. Мы снизили лимит памяти с %1$d МБ до %2$d МБ, чтобы вы могли немедленно повторить попытку.</string>
-    <string name="patcher_memory_adjustment_message_no_change">Экспериментальный процесс патчинга остановился, поскольку ему не хватило памяти, но предел памяти уже составляет %1$d МБ. Попробуйте еще снизить его в дополнительных настройках или отключите экспериментальный режим, прежде чем повторять попытку.</string>
-    <string name="patcher_memory_adjustment_retry">Попробуйте еще раз</string>
-    <string name="patcher_memory_adjustment_dismiss">Отклонить</string>
     <string name="patcher_missing_patch_title">Выбор патча требует внимания</string>
     <string name="patcher_preflight_missing_patch_message">Следующие патчи недоступны в текущем пакете: %1$s Вы можете удалить их автоматически, изменить выбор или продолжить.</string>
     <string name="patcher_preflight_missing_patch_remove">Удалить недостающие патчи</string>

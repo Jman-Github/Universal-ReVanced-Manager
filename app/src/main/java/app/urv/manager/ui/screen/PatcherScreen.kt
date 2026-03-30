@@ -661,36 +661,6 @@ fun PatcherScreen(
         )
     }
 
-    viewModel.memoryAdjustmentDialog?.let { state ->
-        val message = if (state.adjusted) {
-            stringResource(
-                R.string.patcher_memory_adjustment_message_reduced,
-                state.previousLimit,
-                state.newLimit
-            )
-        } else {
-            stringResource(
-                R.string.patcher_memory_adjustment_message_no_change,
-                state.previousLimit
-            )
-        }
-        AlertDialog(
-            onDismissRequest = viewModel::dismissMemoryAdjustmentDialog,
-            title = { Text(stringResource(R.string.patcher_memory_adjustment_title)) },
-            text = { Text(message) },
-            confirmButton = {
-                TextButton(onClick = viewModel::retryAfterMemoryAdjustment) {
-                    Text(stringResource(R.string.patcher_memory_adjustment_retry))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = viewModel::dismissMemoryAdjustmentDialog) {
-                    Text(stringResource(R.string.patcher_memory_adjustment_dismiss))
-                }
-            }
-        )
-    }
-
     viewModel.missingPatchWarning?.let { state ->
         AlertDialog(
             onDismissRequest = {},

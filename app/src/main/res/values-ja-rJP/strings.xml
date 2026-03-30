@@ -462,11 +462,6 @@
     <string name="patch_profile_bundle_change_uid_success">バンドル UID を %1$d に更新しました。</string>
     <string name="patch_profile_bundle_change_uid_not_found">UID %1$d のローカルパッチソースが見つかりません。</string>
     <string name="patcher_process_exit_message">Patcher プロセスはコード %1$d で終了しました。</string>
-    <string name="patcher_memory_adjustment_title">Patcher がメモリ不足になりました</string>
-    <string name="patcher_memory_adjustment_message_reduced">実験的な Patcher プロセスはメモリ不足のため停止しました。すぐに再試行できるように、メモリ制限を %1$d MB から %2$d MB に下げました。</string>
-    <string name="patcher_memory_adjustment_message_no_change">実験的な Patcher プロセスはメモリ不足のため停止しましたが、メモリ制限はすでに %1$d MB です。詳細設定でさらに下げるか、実験モードを無効にしてから再試行してください。</string>
-    <string name="patcher_memory_adjustment_retry">再試行</string>
-    <string name="patcher_memory_adjustment_dismiss">閉じる</string>
     <string name="patcher_missing_patch_title">パッチ選択に注意が必要です</string>
     <string name="patcher_preflight_missing_patch_message">以下のパッチは現在のバンドルでは利用できません:\n%1$s\n自動的に削除するか、選択を調整するか、とにかく続行することができます。</string>
     <string name="patcher_preflight_missing_patch_remove">不足しているパッチを削除</string>

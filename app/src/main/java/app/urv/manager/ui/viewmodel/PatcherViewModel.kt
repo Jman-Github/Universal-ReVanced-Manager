@@ -884,15 +884,6 @@ fun proceedAfterMissingPatchWarning() {
         }
     }
 
-    data class MemoryAdjustmentDialogState(
-        val previousLimit: Int,
-        val newLimit: Int,
-        val adjusted: Boolean
-    )
-
-    var memoryAdjustmentDialog by mutableStateOf<MemoryAdjustmentDialogState?>(null)
-        private set
-
     data class MissingPatchWarningState(
         val patchNames: List<String>
     )
@@ -3647,32 +3638,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             viewModelScope.launch {
                 if (!prefs.useProcessRuntime.get()) return@launch
                 forceKeepLocalInput = true
-                val previousFromWorker = workInfo.outputData.getInt(
-                    PatcherWorker.PROCESS_PREVIOUS_LIMIT_KEY,
-                    -1
-                )
-                val aggressiveLimit = prefs.patcherProcessMemoryAggressive.get()
-                val previousLimit = if (aggressiveLimit) {
-                    MemoryLimitConfig.maxLimitMb(app)
-                } else if (previousFromWorker > 0) {
-                    previousFromWorker
-                } else {
-                    prefs.patcherProcessMemoryLimit.get()
-                }
-                val newLimit = (previousLimit - MEMORY_ADJUSTMENT_MB)
-                    .coerceAtLeast(MemoryLimitConfig.MIN_LIMIT_MB)
-                val adjusted = newLimit < previousLimit
-                if (aggressiveLimit) {
-                    prefs.patcherProcessMemoryAggressive.update(false)
-                }
-                if (adjusted) {
-                    prefs.patcherProcessMemoryLimit.update(newLimit)
-                }
-                memoryAdjustmentDialog = MemoryAdjustmentDialogState(
-                    previousLimit = previousLimit,
-                    newLimit = if (adjusted) newLimit else previousLimit,
-                    adjusted = adjusted
-                )
             }
         }
 
@@ -3695,28 +3660,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         )
     }
 
-    fun dismissMemoryAdjustmentDialog() {
-        memoryAdjustmentDialog = null
-    }
-
     fun dismissKeystoreMissingDialog() {
         keystoreMissingDialog = false
-    }
-
-    fun retryAfterMemoryAdjustment() {
-        viewModelScope.launch {
-            memoryAdjustmentDialog = null
-            handledFailureIds.clear()
-            resetStateForRetry()
-            markInitialStepRunning()
-            _isPatchingActive.value = true
-            replayWorkerProgressSnapshots = false
-            lastReplayedWorkerProgressSequence = Long.MIN_VALUE
-            patcherWorkerId?.uuid?.let(workManager::cancelWorkById)
-            val newId = launchWorker()
-            patcherWorkerId = ParcelUuid(newId)
-            observeWorker(newId)
-        }
     }
 
     private fun resetStateForRetry() {
@@ -3968,7 +3913,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         private const val EXTERNAL_INSTALLER_POST_CLOSE_TIMEOUT_MS = 30_000L
         private const val INSTALL_MONITOR_POLL_MS = 500L
         private const val INSTALL_PROGRESS_TOAST_INTERVAL_MS = 2500L
-        private const val MEMORY_ADJUSTMENT_MB = 200
         private const val SUPPRESS_FAILURE_AFTER_SUCCESS_MS = 5000L
         private const val PATCHER_LOG_ENTRY_SOFT_LIMIT = 9_000
         private const val PATCHER_LOG_ENTRY_HARD_LIMIT = 12_000
