@@ -252,9 +252,12 @@ object SplitApkPreparer {
         candidates: List<java.util.zip.ZipEntry>
     ): Boolean = runCatching {
         val workingDir = Files.createTempDirectory("split-verify-").toFile()
+        val usedFileNames = HashSet<String>()
         try {
             candidates.forEach { entry ->
-                val destination = workingDir.resolve(entry.name.substringAfterLast('/'))
+                val destination = workingDir.resolve(
+                    uniqueExtractedFileName(entry.name, usedFileNames)
+                )
                 zip.getInputStream(entry).use { input ->
                     Files.newOutputStream(destination.toPath()).use { output ->
                         input.copyTo(output)
@@ -514,6 +517,7 @@ object SplitApkPreparer {
     ): List<ExtractedModule> =
         withContext(Dispatchers.IO) {
             val extracted = mutableListOf<ExtractedModule>()
+            val usedFileNames = HashSet<String>()
             coroutineContext.ensureActive()
             val splitEntryNames = splitApkEntryNames(source)
             ZipFile(source).use { zip ->
@@ -529,7 +533,9 @@ object SplitApkPreparer {
                 onProgress?.invoke("Extracting split APKs")
                 apkEntries.forEach { entry ->
                     coroutineContext.ensureActive()
-                    val destination = targetDir.resolve(entry.name.substringAfterLast('/'))
+                    val destination = targetDir.resolve(
+                        uniqueExtractedFileName(entry.name, usedFileNames)
+                    )
                     destination.parentFile?.mkdirs()
                     zip.getInputStream(entry).use { input ->
                         Files.newOutputStream(destination.toPath()).use { output ->
@@ -542,6 +548,26 @@ object SplitApkPreparer {
             }
             extracted
         }
+
+    private fun uniqueExtractedFileName(
+        entryName: String,
+        usedFileNames: MutableSet<String>
+    ): String {
+        val original = entryName.substringAfterLast('/').ifBlank { "split.apk" }
+        if (usedFileNames.add(original)) return original
+
+        val dotIndex = original.lastIndexOf('.')
+        val stem = if (dotIndex > 0) original.substring(0, dotIndex) else original
+        val extension = if (dotIndex > 0) original.substring(dotIndex) else ""
+        val suffix = entryName.replace('\\', '/').hashCode().toUInt().toString(16)
+        var candidate = "$stem-$suffix$extension"
+        var collisionIndex = 1
+        while (!usedFileNames.add(candidate)) {
+            candidate = "$stem-$suffix-$collisionIndex$extension"
+            collisionIndex += 1
+        }
+        return candidate
+    }
 
     data class PreparationResult(
         val file: File,

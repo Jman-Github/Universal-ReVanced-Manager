@@ -130,11 +130,13 @@ public final class ApkEditorMergeProcess {
             mergedModule.setLoadDefaultFramework(false);
             closeables.add(mergedModule);
 
-            if (mergedModule.hasTableBlock()) {
+            if (sortApkEntries && mergedModule.hasTableBlock()) {
                 mergedModule.getTableBlock().sortPackages();
                 mergedModule.getTableBlock().refresh();
             }
-            mergedModule.getZipEntryMap().autoSortApkFiles();
+            if (sortApkEntries) {
+                mergedModule.getZipEntryMap().autoSortApkFiles();
+            }
 
             SplitManifestCleaner.clean(mergedModule);
             applyExtractNativeLibs(mergedModule);
