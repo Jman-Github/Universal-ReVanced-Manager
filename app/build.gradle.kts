@@ -51,6 +51,13 @@ val strippedApkEditorLib by tasks.registering(Jar::class) {
 }
 
 dependencies {
+    constraints {
+        implementation("com.android.tools.smali:smali-dexlib2:3.0.9")
+        implementation("com.android.tools.smali:smali-util:3.0.9")
+        implementation("com.android.tools.smali:smali:3.0.9")
+        implementation("com.android.tools.smali:smali-baksmali:3.0.9")
+    }
+
     // AndroidX Core
     implementation(libs.androidx.ktx)
     implementation(libs.runtime.ktx)

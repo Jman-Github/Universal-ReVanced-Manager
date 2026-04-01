@@ -17,8 +17,21 @@ object AppForeground {
     var isFocused: Boolean = false
         private set
 
+    @Volatile
+    var isMainTaskClosed: Boolean = false
+        private set
+
+    fun onMainTaskOpened() {
+        isMainTaskClosed = false
+    }
+
+    fun onMainTaskClosed() {
+        isMainTaskClosed = true
+    }
+
     fun onResumed() {
         isResumed = true
+        isMainTaskClosed = false
         resumeEvents.tryEmit(Unit)
     }
 

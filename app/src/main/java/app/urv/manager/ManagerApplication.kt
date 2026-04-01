@@ -2,6 +2,7 @@ package app.urv.manager
 
 import android.app.Activity
 import android.app.Application
+import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
 import android.os.Bundle
@@ -14,6 +15,7 @@ import app.urv.manager.domain.repository.DownloaderPluginRepository
 import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.domain.worker.BundleUpdateWebSocketCoordinator
 import app.urv.manager.domain.worker.WorkerRepository
+import app.urv.manager.patcher.worker.PatcherWorker
 import app.urv.manager.patcher.ample.AmpleRuntimeBridge
 import app.urv.manager.patcher.morphe.MorpheRuntimeBridge
 import app.urv.manager.patcher.revanced.Revanced22RuntimeBridge
@@ -148,6 +150,9 @@ class ManagerApplication : Application() {
             private var firstActivityCreated = false
 
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
+                if (activity is MainActivity) {
+                    AppForeground.onMainTaskOpened()
+                }
                 if (firstActivityCreated) return
                 firstActivityCreated = true
 
@@ -170,7 +175,16 @@ class ManagerApplication : Application() {
             }
             override fun onActivityStopped(activity: Activity) {}
             override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
-            override fun onActivityDestroyed(activity: Activity) {}
+            override fun onActivityDestroyed(activity: Activity) {
+                if (
+                    activity is MainActivity &&
+                    activity.isFinishing &&
+                    !activity.isChangingConfigurations
+                ) {
+                    AppForeground.onMainTaskClosed()
+                    cancelActivePatchingOnAppClose()
+                }
+            }
         })
     }
 
@@ -194,6 +208,15 @@ class ManagerApplication : Application() {
         fs.uiTempDir.apply {
             deleteRecursively()
             mkdirs()
+        }
+    }
+
+    private fun cancelActivePatchingOnAppClose() {
+        workerRepository.cancelUniqueWork(PatcherWorker.UNIQUE_WORK_NAME)
+        runCatching {
+            getSystemService(NotificationManager::class.java)?.cancel(PatcherWorker.NOTIFICATION_ID)
+        }.onFailure { error ->
+            Log.d(tag, "Failed to clear patching notification on app close", error)
         }
     }
 

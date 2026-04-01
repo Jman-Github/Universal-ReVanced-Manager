@@ -1,6 +1,7 @@
 package app.urv.manager.patcher.worker
 
 import android.app.Activity
+import android.app.ActivityManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -58,6 +59,7 @@ import app.urv.manager.plugin.downloader.GetScope
 import app.urv.manager.plugin.downloader.PluginHostApi
 import app.urv.manager.plugin.downloader.UserInteractionException
 import app.urv.manager.ui.model.SelectedApp
+import app.urv.manager.util.AppForeground
 import app.urv.manager.util.Options
 import app.urv.manager.util.PM
 import app.urv.manager.util.PatchSelection
@@ -366,6 +368,24 @@ class PatcherWorker(
         activeAmpleRuntime?.cancel()
     }
 
+    private fun isAppTaskPresent(): Boolean {
+        val activityManager = applicationContext.getSystemService(ActivityManager::class.java) ?: return true
+        return runCatching {
+            activityManager.appTasks.isNotEmpty()
+        }.onFailure { error ->
+            Log.d(tag, "Failed to inspect app task state", error)
+        }.getOrDefault(true)
+    }
+
+    private fun cancelForAppClosed(reason: String) {
+        if (!workerRepository.isActiveUniqueWork(UNIQUE_WORK_NAME, id)) return
+
+        Log.d(tag, "$reason; cancelling active patching work")
+        clearForegroundNotificationIfOwned()
+        workerRepository.cancelUniqueWork(UNIQUE_WORK_NAME)
+        cancelActiveRuntimes()
+    }
+
     private fun stopForegroundUpdates() {
         cancelActiveRuntimes()
         patchNotificationSteps = emptyList()
@@ -409,9 +429,26 @@ class PatcherWorker(
     }
 
     private fun clearForegroundNotificationIfOwned() {
-        if (!workerRepository.isActiveUniqueWork(UNIQUE_WORK_NAME, id)) return
+        if (!ownsCurrentPatchingNotification()) return
         clearForegroundNotification()
         workerRepository.clearActiveUniqueWork(UNIQUE_WORK_NAME, id)
+    }
+
+    private fun ownsCurrentPatchingNotification(): Boolean {
+        val activeWorkId = workerRepository.activeUniqueWorkId(UNIQUE_WORK_NAME)
+        if (activeWorkId == id) return true
+        if (activeWorkId != null) return false
+
+        return try {
+            runBlocking {
+                workerRepository.workManager.getWorkInfosForUniqueWorkFlow(UNIQUE_WORK_NAME).first()
+            }.none { workInfo ->
+                workInfo.id != id && !workInfo.state.isFinished
+            }
+        } catch (e: Exception) {
+            Log.d(tag, "Failed to resolve current patching work ownership:", e)
+            true
+        }
     }
 
     private suspend fun updateWorkerProgressState(
@@ -672,11 +709,21 @@ class PatcherWorker(
     override suspend fun doWork(): Result {
         val workerFinished = AtomicBoolean(false)
         val stopMonitor = CoroutineScope(Dispatchers.Default + SupervisorJob()).launch {
+            var missingTaskSamples = 0
             while (!workerFinished.get()) {
                 if (isStopped) {
                     cancelActiveRuntimes()
+                } else if (AppForeground.isMainTaskClosed) {
+                    cancelForAppClosed("Main activity destroyed")
+                } else if (isAppTaskPresent()) {
+                    missingTaskSamples = 0
+                } else {
+                    missingTaskSamples++
+                    if (missingTaskSamples >= 4) {
+                        cancelForAppClosed("App task removed")
+                    }
                 }
-                delay(50)
+                delay(250)
             }
         }
         if (runAttemptCount > 0) {

@@ -106,6 +106,10 @@
         </service>
 
         <service
+            android:name="app.urv.manager.service.PatchingTaskMonitorService"
+            android:exported="false" />
+
+        <service
             android:name="app.urv.manager.service.BundleUpdateWebSocketService"
             android:exported="false"
             android:foregroundServiceType="specialUse">

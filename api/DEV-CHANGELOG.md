@@ -1,4 +1,4 @@
-# v1.8.1-dev.11 (TBD)
+# v1.8.1-dev.11 (2026-04-01)
 
 
 # Features
@@ -18,6 +18,7 @@
 - Fixed the patch bundle URL editor sometimes requiring two OK taps after editing https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/339
 - Possibily resolved OOM and crashing errors that are occuring for certain users when patching Google Photos with the `De-ReVanced` patch bundle https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/343 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/349
 - Fixed several split APK merger edge cases across runtimes, including duplicate extracted split filenames, incorrect density split skipping, and process-mode merge sorting not honoring its setting
+- Improved patching stability by hardening worker shutdown and notification handling during restarts and app closure and added safer recovery for stale patch progress snapshots https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/365
 
 
 # Refactors

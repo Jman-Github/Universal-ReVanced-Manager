@@ -2,6 +2,7 @@ package app.urv.manager.patcher.worker
 
 import android.os.Build
 import android.os.Parcel
+import android.util.Log
 import androidx.work.Data
 import app.urv.manager.patcher.ProgressEvent
 import app.urv.manager.patcher.ProgressEventParcel
@@ -66,8 +67,15 @@ object PatcherWorkerProgressState {
                 parcel.readParcelable(ProgressEventParcel::class.java.classLoader)
             }
             restored?.toEvent()
+        } catch (e: Exception) {
+            // Older app builds persisted progress snapshots with a different parcelable class name.
+            // Treat unreadable snapshots as stale and skip replay instead of crashing on resume.
+            Log.w(TAG, "Skipping stale patch worker progress snapshot", e)
+            null
         } finally {
             parcel.recycle()
         }
     }
+
+    private const val TAG = "PatcherWorkerProgress"
 }

@@ -73,6 +73,7 @@ import app.urv.manager.ui.model.StepCategory
 import app.urv.manager.ui.model.StepDetail
 import app.urv.manager.ui.model.withState
 import app.urv.manager.ui.model.navigation.Patcher
+import app.urv.manager.service.PatchingTaskMonitorService
 import app.universal.revanced.manager.BuildConfig
 import app.urv.manager.util.PM
 import app.urv.manager.util.asCode
@@ -1045,6 +1046,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         val existingId = patcherWorkerId?.uuid
         if (existingId != null) {
             replayWorkerProgressSnapshots = true
+            startPatchingTaskMonitor()
             observeWorker(existingId)
         } else {
             viewModelScope.launch {
@@ -1085,6 +1087,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         lastReplayedWorkerProgressSequence = Long.MIN_VALUE
         markInitialStepRunning()
         _isPatchingActive.value = true
+        startPatchingTaskMonitor()
         logBatteryOptimizationStatus()
         val workId = launchWorker()
         patcherWorkerId = ParcelUuid(workId)
@@ -1096,6 +1099,22 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             notificationManager.cancel(PatcherWorker.NOTIFICATION_ID)
         }.onFailure { error ->
             Log.d(TAG, "Failed to clear patching notification", error)
+        }
+    }
+
+    private fun startPatchingTaskMonitor() {
+        runCatching {
+            PatchingTaskMonitorService.start(app)
+        }.onFailure { error ->
+            Log.d(TAG, "Failed to start patching task monitor", error)
+        }
+    }
+
+    private fun stopPatchingTaskMonitor() {
+        runCatching {
+            PatchingTaskMonitorService.stop(app)
+        }.onFailure { error ->
+            Log.d(TAG, "Failed to stop patching task monitor", error)
         }
     }
 
@@ -1430,6 +1449,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         if (_isPatchingActive.value == true) {
             val workId = patcherWorkerId?.uuid
             workId?.let(workManager::cancelWorkById)
+            stopPatchingTaskMonitor()
             cleanupTemporaryLocalInputAfterWorkStops(workId)
         }
         tempDir.deleteRecursively()
@@ -3550,6 +3570,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 WorkInfo.State.SUCCEEDED -> {
                     replayWorkerProgressSnapshots = false
                     patcherWorkerId = null
+                    stopPatchingTaskMonitor()
                     clearPendingActivityInteractions()
                     clearPatchingNotification()
                     forceKeepLocalInput = false
@@ -3569,6 +3590,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 WorkInfo.State.FAILED -> {
                     replayWorkerProgressSnapshots = false
                     patcherWorkerId = null
+                    stopPatchingTaskMonitor()
                     clearPendingActivityInteractions()
                     clearPatchingNotification()
                     handleWorkerFailure(workInfo)
@@ -3581,6 +3603,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 WorkInfo.State.CANCELLED -> {
                     replayWorkerProgressSnapshots = false
                     patcherWorkerId = null
+                    stopPatchingTaskMonitor()
                     clearPendingActivityInteractions()
                     clearPatchingNotification()
                     reconcileFailureState(

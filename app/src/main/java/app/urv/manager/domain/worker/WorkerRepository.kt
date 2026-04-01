@@ -63,10 +63,17 @@ class WorkerRepository(app: Application) {
         return request.id
     }
 
+    fun activeUniqueWorkId(name: String): UUID? = activeUniqueWorkIds[name]
+
     fun isActiveUniqueWork(name: String, id: UUID) = activeUniqueWorkIds[name] == id
 
     fun clearActiveUniqueWork(name: String, id: UUID) {
         activeUniqueWorkIds.remove(name, id)
+    }
+
+    fun cancelUniqueWork(name: String) {
+        activeUniqueWorkIds.remove(name)?.let(workerInputs::remove)
+        workManager.cancelUniqueWork(name)
     }
 
     inline fun <reified T> createNotification(
