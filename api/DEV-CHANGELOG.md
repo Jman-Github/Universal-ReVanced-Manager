@@ -9,6 +9,8 @@
 - Fixed the `Read APK file` step showing extra `Initializing patcher` subtext on some runtimes
 - Fixed `Prepare split APK` substep ordering so skipped and non-skipped merge rows stay grouped consistently
 - Reworked patcher progress handling across all runtimes so `Write patched APK` uses structured grouped progress instead of inconsistent fallback row creation
+- Fixed the patch selector action popup collapsing after toggling patches even when Collapse actions after toggling patches is disabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/338
+- Fixed patch selector action popup behavior so patch toggles no longer dismiss it as an outside click when auto-collapse is turned off https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/338
 
 
 # v1.8.1-dev.11 (2026-04-01)

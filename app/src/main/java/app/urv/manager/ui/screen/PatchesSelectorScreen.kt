@@ -803,6 +803,13 @@ fun PatchesSelectorScreen(
     }
     val disableActionConfirmations by viewModel.prefs.disablePatchSelectionConfirmations.getAsState()
     val collapseActionsOnSelection by viewModel.prefs.collapsePatchActionsOnSelection.getAsState()
+    val actionPopupProperties = remember(collapseActionsOnSelection) {
+        PopupProperties(
+            focusable = collapseActionsOnSelection,
+            dismissOnBackPress = collapseActionsOnSelection,
+            dismissOnClickOutside = collapseActionsOnSelection
+        )
+    }
 
     fun requestConfirmation(@StringRes title: Int, message: String, onConfirm: () -> Unit) {
         if (disableActionConfirmations) {
@@ -1263,11 +1270,7 @@ fun PatchesSelectorScreen(
                                         PatchSelectionActionsPopupPositionProvider(marginPx = marginPx)
                                     },
                                     onDismissRequest = { actionsExpanded = false },
-                                    properties = PopupProperties(
-                                        focusable = true,
-                                        dismissOnBackPress = true,
-                                        dismissOnClickOutside = true
-                                    )
+                                    properties = actionPopupProperties
                                 ) {
                                     PatchSelectionActionsPopup(
                                         actionSpecs = actionSpecs,
@@ -1382,11 +1385,7 @@ fun PatchesSelectorScreen(
                                                     PatchSelectionActionsPopupPositionProvider(marginPx = marginPx)
                                                 },
                                                 onDismissRequest = { actionsExpanded = false },
-                                                properties = PopupProperties(
-                                                    focusable = true,
-                                                    dismissOnBackPress = true,
-                                                    dismissOnClickOutside = true
-                                                )
+                                                properties = actionPopupProperties
                                             ) {
                                                 PatchSelectionActionsPopup(
                                                     actionSpecs = actionSpecs,
