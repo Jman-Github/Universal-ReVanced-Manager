@@ -80,7 +80,38 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
     }
 
     override fun start(parameters: MorpheParameters, events: IPatcherEvents) {
+        var writeApkSubStepsReady = false
+        val seenDexCompiles = mutableSetOf<String>()
+        val seenResourceCompile = AtomicBoolean(false)
         fun safeEvent(event: ProgressEvent) {
+            when (event.stepId) {
+                StepId.WriteAPK -> when (event) {
+                    is ProgressEvent.Started -> {
+                        writeApkSubStepsReady = !event.subSteps.isNullOrEmpty()
+                        seenDexCompiles.clear()
+                        seenResourceCompile.set(false)
+                    }
+                    is ProgressEvent.Progress -> {
+                        if (!event.subSteps.isNullOrEmpty()) {
+                            writeApkSubStepsReady = true
+                            seenDexCompiles.clear()
+                            seenResourceCompile.set(false)
+                        }
+                    }
+                    is ProgressEvent.Completed,
+                    is ProgressEvent.Failed -> {
+                        writeApkSubStepsReady = false
+                        seenDexCompiles.clear()
+                        seenResourceCompile.set(false)
+                    }
+                }
+                StepId.SignAPK -> if (event is ProgressEvent.Started) {
+                    writeApkSubStepsReady = false
+                    seenDexCompiles.clear()
+                    seenResourceCompile.set(false)
+                }
+                else -> Unit
+            }
             if (!eventsEnabled.get()) return
             try {
                 events.event(event.toParcel())
@@ -115,43 +146,13 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
                 Regex("(Compiling|Compiled)\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
             val dexWritePattern =
                 Regex("Write\\s+\\[[^\\]]+\\]\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
-            val seenDexCompiles = mutableSetOf<String>()
-            val seenResourceCompile = AtomicBoolean(false)
-            val writeApkActive = AtomicBoolean(false)
+            val dexAnyPattern = Regex("(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
             fun onEvent(event: ProgressEvent) {
-                when (event) {
-                    is ProgressEvent.Started -> {
-                        if (event.stepId == StepId.WriteAPK) {
-                            writeApkActive.set(true)
-                            seenDexCompiles.clear()
-                            seenResourceCompile.set(false)
-                        }
-                    }
-
-                    is ProgressEvent.Completed -> {
-                        if (event.stepId == StepId.WriteAPK) {
-                            writeApkActive.set(false)
-                        }
-                    }
-
-                    is ProgressEvent.Failed -> {
-                        if (event.stepId == StepId.WriteAPK) {
-                            writeApkActive.set(false)
-                        }
-                    }
-
-                    is ProgressEvent.Progress -> {
-                        if (event.stepId == StepId.WriteAPK) writeApkActive.set(true)
-                        if (event.stepId == StepId.SignAPK) {
-                            writeApkActive.set(false)
-                        }
-                    }
-                }
                 safeEvent(event)
             }
 
-            fun handleDexCompileLine(rawLine: String) {
-                if (!writeApkActive.get()) return
+            fun handleWriteProgressLine(rawLine: String) {
+                if (!writeApkSubStepsReady) return
                 val line = rawLine.trim()
                 if (line.isEmpty()) return
                 if (line.contains("Compiling modified resources", ignoreCase = true) ||
@@ -169,6 +170,7 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
                 }
                 val match = dexCompilePattern.find(line)
                     ?: dexWritePattern.find(line)
+                    ?: dexAnyPattern.find(line)
                     ?: return
                 val dexName = match.groupValues.lastOrNull()?.takeIf { it.endsWith(".dex") } ?: return
                 if (!seenDexCompiles.add(dexName)) return
@@ -182,14 +184,14 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
 
             val logger = object : Logger() {
                 override fun log(level: LogLevel, message: String) {
-                    handleDexCompileLine(message)
+                    handleWriteProgressLine(message)
                     safeLog(level.name, message)
                 }
             }
 
             logger.info("Memory limit: ${Runtime.getRuntime().maxMemory() / (1024 * 1024)}MB")
-            val aaptLogs = AaptLogCapture(onLine = ::handleDexCompileLine).apply { start() }
-            val stdioCapture = StdIoCapture(onLine = ::handleDexCompileLine).apply { start() }
+            val aaptLogs = AaptLogCapture(onLine = ::handleWriteProgressLine).apply { start() }
+            val stdioCapture = StdIoCapture(onLine = ::handleWriteProgressLine).apply { start() }
             var exitCode = 0
 
             try {

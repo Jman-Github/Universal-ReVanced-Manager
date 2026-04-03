@@ -182,7 +182,10 @@ object MorpheRuntimeBridge {
         val type = map["type"] as? String ?: return ProgressEvent.Progress(StepId.LoadPatches)
         val stepId = mapToStepId(map["stepId"] as? Map<*, *>)
         return when (type) {
-            "Started" -> ProgressEvent.Started(stepId ?: StepId.LoadPatches)
+            "Started" -> ProgressEvent.Started(
+                stepId ?: StepId.LoadPatches,
+                (map["subSteps"] as? Iterable<*>)?.mapNotNull { it as? String }
+            )
             "Completed" -> ProgressEvent.Completed(stepId ?: StepId.LoadPatches)
             "Progress" -> ProgressEvent.Progress(
                 stepId = stepId ?: StepId.LoadPatches,

@@ -1,6 +1,5 @@
 package app.urv.manager.patcher.ample
 
-import app.revanced.library.ApkUtils.applyTo
 import app.urv.manager.patcher.ProgressEvent
 import app.urv.manager.patcher.StepId
 import app.urv.manager.patcher.ample.AmpleSession.Companion.component1
@@ -19,6 +18,10 @@ import app.revanced.patcher.PatcherResult
 import app.revanced.patcher.patch.Patch
 import app.revanced.patcher.patch.PatchResult
 import app.urv.manager.patcher.split.SplitApkPreparer
+import com.android.tools.build.apkzlib.zip.AlignmentRules
+import com.android.tools.build.apkzlib.zip.ZFile
+import com.android.tools.build.apkzlib.zip.ZFileOptions
+import com.google.common.base.Predicate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
@@ -69,12 +72,6 @@ class AmpleSession private constructor(
     }
 
     private suspend fun initializePatcher() {
-        onEvent(
-            ProgressEvent.Progress(
-                stepId = StepId.ReadAPK,
-                message = "Initializing patcher"
-            )
-        )
         logger.info("Initializing legacy patcher")
         patcher = try {
             createPatcherWithTimeout(patcherInput.file)
@@ -267,33 +264,16 @@ class AmpleSession private constructor(
             executePatchesWithFrameworkRecovery(orderedPatches)
         }
 
-        checkCancelled()
-        onEvent(
-            ProgressEvent.Progress(
-                stepId = StepId.WriteAPK,
-                message = "Preparing output APK"
-            )
-        )
-
         suspend fun writePatchedApkStep() {
-            runStep(StepId.WriteAPK, onEvent, checkCancelled) {
+            runStep(
+                StepId.WriteAPK,
+                onEvent,
+                checkCancelled,
+                startedSubSteps = buildWriteApkSubSteps(
+                    includeStripNativeLibs = shouldStripNativeLibs
+                )
+            ) {
                 checkCancelled()
-                onEvent(
-                    ProgressEvent.Progress(
-                        stepId = StepId.WriteAPK,
-                        message = "Copying base APK"
-                    )
-                )
-                val initialDexNames = listDexNames(input)
-                onEvent(
-                    ProgressEvent.Progress(
-                        stepId = StepId.WriteAPK,
-                        subSteps = buildWriteApkSubSteps(
-                            initialDexNames.map { "Compiling $it" },
-                            shouldStripNativeLibs
-                        )
-                    )
-                )
                 logger.info("Writing patched files...")
                 XmlSurrogateSanitizer.sanitize(tempDir.resolve("apk"), logger)
                 ManifestDecimalResourceReferenceSanitizer.sanitize(tempDir.resolve("apk"), logger)
@@ -303,18 +283,12 @@ class AmpleSession private constructor(
                 )
                 checkCancelled()
                 val result = runCancellableBlockingIo(checkCancelled) { requirePatcher().get() }
-                val updatedDexNames = mergeDexNames(initialDexNames, result)
-                if (updatedDexNames != initialDexNames) {
-                    onEvent(
-                        ProgressEvent.Progress(
-                            stepId = StepId.WriteAPK,
-                            subSteps = buildWriteApkSubSteps(
-                                updatedDexNames.map { "Compiling $it" },
-                                shouldStripNativeLibs
-                            )
-                        )
+                onEvent(
+                    ProgressEvent.Progress(
+                        stepId = StepId.WriteAPK,
+                        message = "Copying base APK"
                     )
-                }
+                )
 
                 val patched = tempDir.resolve("result.apk")
                 runCancellableBlockingIo(checkCancelled) {
@@ -327,14 +301,8 @@ class AmpleSession private constructor(
                         message = "Applying patched changes"
                     )
                 )
-                onEvent(
-                    ProgressEvent.Progress(
-                        stepId = StepId.WriteAPK,
-                        message = "Compiling modified resources"
-                    )
-                )
                 runCancellableBlockingIo(checkCancelled) {
-                    result.applyTo(patched)
+                    applyResultToApk(patched, result)
                 }
                 checkCancelled()
                 runCancellableBlockingIo(checkCancelled) {
@@ -391,12 +359,11 @@ class AmpleSession private constructor(
     }
 
     private fun buildWriteApkSubSteps(
-        compileSteps: List<String> = emptyList(),
         includeStripNativeLibs: Boolean = false
     ): List<String> = buildList {
         add("Copying base APK")
         add("Applying patched changes")
-        addAll(compileSteps)
+        add("Compiling DEX files")
         add("Compiling modified resources")
         add("Writing output APK")
         add("Finalizing output")
@@ -405,11 +372,106 @@ class AmpleSession private constructor(
         }
     }
 
+    private fun applyResultToApk(apkFile: File, result: PatcherResult) {
+        ZFile.openReadWrite(apkFile, zFileOptions).use { apk ->
+            result.dexFiles.forEach { dex ->
+                checkCancelled()
+                val entryName = dex.name
+                if (isDexEntryName(entryName)) {
+                    onEvent(
+                        ProgressEvent.Progress(
+                            stepId = StepId.WriteAPK,
+                            message = "Compiling $entryName"
+                        )
+                    )
+                }
+                dex.stream.use { stream ->
+                    apk.add(entryName, stream)
+                }
+            }
+
+            result.resources?.let { resources ->
+                onEvent(
+                    ProgressEvent.Progress(
+                        stepId = StepId.WriteAPK,
+                        message = "Compiling modified resources"
+                    )
+                )
+                resources.resourcesApk?.let { resourcesApkFile ->
+                    ZFile.openReadOnly(resourcesApkFile).use { resourcesApk ->
+                        apk.entries()
+                            .filter { it.centralDirectoryHeader.name.startsWith("res/") }
+                            .toList()
+                            .forEach { it.delete() }
+                        apk.mergeFrom(resourcesApk, Predicate { false })
+                    }
+                }
+
+                resources.otherResources?.let { resourcesDir ->
+                    if (resourcesDir.exists()) {
+                        val noCompress = resources.doNotCompress
+                        apk.addAllRecursively(resourcesDir, Predicate { file ->
+                            val relative = file.relativeTo(resourcesDir).path.replace(File.separatorChar, '/')
+                            relative !in noCompress
+                        })
+                    }
+                }
+
+                if (resources.deleteResources.isNotEmpty()) {
+                    val deleteResources = resources.deleteResources
+                    apk.entries()
+                        .filter { it.centralDirectoryHeader.name in deleteResources }
+                        .toList()
+                        .forEach { it.delete() }
+                }
+            }
+
+            logger.info("Aligning APK")
+            apk.realign()
+        }
+    }
+
+    private fun isDexEntryName(name: String): Boolean =
+        name.startsWith("classes") && name.endsWith(".dex", ignoreCase = true)
+
     private fun dexSortKey(name: String): Int {
         val base = name.removeSuffix(".dex")
         if (base == "classes") return 1
         val suffix = base.removePrefix("classes")
         return suffix.toIntOrNull() ?: Int.MAX_VALUE
+    }
+
+    private suspend fun listWritePreloadDexNames(apkDir: File, inputFile: File): List<String> {
+        val decodedDexNames = listDexNamesFromDecodedApkDir(apkDir)
+        val inputDexNames = listDexNames(inputFile)
+        return (inputDexNames + decodedDexNames)
+            .distinct()
+            .sortedWith(compareBy(::dexSortKey))
+    }
+
+    private suspend fun listDexNamesFromDecodedApkDir(apkDir: File): List<String> =
+        runInterruptible(Dispatchers.IO) {
+            if (!apkDir.isDirectory) return@runInterruptible emptyList<String>()
+            val dexNames = mutableSetOf<String>()
+            apkDir.walkTopDown().forEach { entry ->
+                when {
+                    entry.isDirectory -> decodedDexDirectoryToDexName(entry.name)?.let(dexNames::add)
+                    entry.isFile &&
+                        entry.name.startsWith("classes") &&
+                        entry.name.endsWith(".dex", ignoreCase = true) -> dexNames.add(entry.name)
+                }
+            }
+            dexNames.sortedWith(compareBy { dexSortKey(it) })
+        }
+
+    private fun decodedDexDirectoryToDexName(name: String): String? = when {
+        name.equals("smali", ignoreCase = true) -> "classes.dex"
+        name.startsWith("smali_classes", ignoreCase = true) -> {
+            val suffix = name.substring("smali_classes".length)
+            suffix.takeIf { it.isNotEmpty() && it.all(Char::isDigit) }?.let { "classes${it}.dex" }
+        }
+
+        else -> null
     }
 
     private fun fastCopy(source: File, target: File) {
@@ -694,6 +756,14 @@ class AmpleSession private constructor(
         private const val FRAMEWORK_APK_NAME = "1.apk"
         private const val FRAMEWORK_RESOURCES_TABLE = "resources.arsc"
         private const val PATCHER_INIT_TIMEOUT_MS = 90_000L
+        private val zFileOptions = ZFileOptions().apply {
+            setAlignmentRule(
+                AlignmentRules.compose(
+                    AlignmentRules.constantForSuffix(".so", 4096),
+                    AlignmentRules.constant(4)
+                )
+            )
+        }
 
         suspend fun open(
             cacheDir: String,

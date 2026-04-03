@@ -57,9 +57,11 @@ object MorpheRuntimeEntry {
             Regex("(Compiling|Compiled)\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
         val dexWritePattern =
             Regex("Write\\s+\\[[^\\]]+\\]\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
+        val dexAnyPattern = Regex("(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
         val seenDexCompiles = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
         val seenResourceCompile = AtomicBoolean(false)
         val writeApkActive = AtomicBoolean(false)
+        val writeApkSubStepsReady = AtomicBoolean(false)
         fun throwIfCancelled() {
             if (callback.isCancelled()) {
                 throw CancellationException("Patching cancelled")
@@ -71,19 +73,29 @@ object MorpheRuntimeEntry {
                 StepId.WriteAPK -> when (event) {
                     is ProgressEvent.Started -> {
                         writeApkActive.set(true)
+                        writeApkSubStepsReady.set(!event.subSteps.isNullOrEmpty())
                         seenDexCompiles.clear()
                         seenResourceCompile.set(false)
                     }
 
-                    is ProgressEvent.Progress -> writeApkActive.set(true)
+                    is ProgressEvent.Progress -> {
+                        writeApkActive.set(true)
+                        if (!event.subSteps.isNullOrEmpty()) {
+                            writeApkSubStepsReady.set(true)
+                            seenDexCompiles.clear()
+                            seenResourceCompile.set(false)
+                        }
+                    }
                     is ProgressEvent.Completed,
                     is ProgressEvent.Failed -> {
                         writeApkActive.set(false)
+                        writeApkSubStepsReady.set(false)
                     }
                 }
 
                 StepId.SignAPK -> if (event is ProgressEvent.Started) {
                     writeApkActive.set(false)
+                    writeApkSubStepsReady.set(false)
                 }
                 else -> Unit
             }
@@ -91,7 +103,7 @@ object MorpheRuntimeEntry {
         }
 
         fun handleWriteProgressLine(rawLine: String) {
-            if (!writeApkActive.get()) return
+            if (!writeApkActive.get() || !writeApkSubStepsReady.get()) return
             val line = rawLine.trim()
             if (line.isEmpty()) return
             if (line.contains("Compiling modified resources", ignoreCase = true) ||
@@ -109,6 +121,7 @@ object MorpheRuntimeEntry {
             }
             val match = dexCompilePattern.find(line)
                 ?: dexWritePattern.find(line)
+                ?: dexAnyPattern.find(line)
                 ?: return
             val dexName = match.groupValues.lastOrNull()?.takeIf { it.endsWith(".dex") } ?: return
             if (!seenDexCompiles.add(dexName)) return
@@ -370,7 +383,8 @@ object MorpheRuntimeEntry {
     private fun ProgressEvent.toMap(): Map<String, Any?> = when (this) {
         is ProgressEvent.Started -> mapOf(
             "type" to "Started",
-            "stepId" to stepId.toMap()
+            "stepId" to stepId.toMap(),
+            "subSteps" to subSteps
         )
         is ProgressEvent.Progress -> mapOf(
             "type" to "Progress",

@@ -77,6 +77,8 @@ dependencies {
         exclude(group = "xmlpull", module = "xmlpull")
         exclude(group = "xpp3", module = "xpp3")
     }
+    implementation("com.android.tools.build:apkzlib:8.5.2")
+    compileOnly("com.google.guava:guava:33.2.1-jre")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     compileOnly(libs.hidden.api.stub)

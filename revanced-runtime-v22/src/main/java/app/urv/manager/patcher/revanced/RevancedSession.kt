@@ -266,46 +266,23 @@ class RevancedSession(
             onEvent(ProgressEvent.Completed(StepId.ExecutePatch(index)))
         }
 
-        checkCancelled()
-        onEvent(
-            ProgressEvent.Progress(
-                stepId = StepId.WriteAPK,
-                message = "Preparing output APK"
-            )
-        )
-
         suspend fun writePatchedApkStep() {
-            runStep(StepId.WriteAPK, onEvent, checkCancelled) {
+            runStep(
+                StepId.WriteAPK,
+                onEvent,
+                checkCancelled,
+                startedSubSteps = buildWriteApkSubSteps(
+                    includeStripNativeLibs = shouldStripNativeLibs
+                )
+            ) {
                 checkCancelled()
+                logger.info("Writing patched files...")
                 onEvent(
                     ProgressEvent.Progress(
                         stepId = StepId.WriteAPK,
                         message = "Copying base APK"
                     )
                 )
-                val initialDexNames = listDexNames(input)
-                onEvent(
-                    ProgressEvent.Progress(
-                        stepId = StepId.WriteAPK,
-                        subSteps = buildWriteApkSubSteps(
-                            initialDexNames.map { "Compiling $it" },
-                            shouldStripNativeLibs
-                        )
-                    )
-                )
-                logger.info("Writing patched files...")
-                val updatedDexNames = mergeDexNames(initialDexNames, patchResult)
-                if (updatedDexNames != initialDexNames) {
-                    onEvent(
-                        ProgressEvent.Progress(
-                            stepId = StepId.WriteAPK,
-                            subSteps = buildWriteApkSubSteps(
-                                updatedDexNames.map { "Compiling $it" },
-                                shouldStripNativeLibs
-                            )
-                        )
-                    )
-                }
 
                 val patched = tempDir.resolve("result.apk")
                 runCancellableBlockingIo(checkCancelled) {
@@ -450,12 +427,11 @@ class RevancedSession(
     private fun String.toFileSystemPath(): String = replace('/', File.separatorChar)
 
     private fun buildWriteApkSubSteps(
-        compileSteps: List<String> = emptyList(),
         includeStripNativeLibs: Boolean = false
     ): List<String> = buildList {
         add("Copying base APK")
         add("Applying patched changes")
-        addAll(compileSteps)
+        add("Compiling DEX files")
         add("Compiling modified resources")
         add("Writing output APK")
         add("Finalizing output")
@@ -469,6 +445,37 @@ class RevancedSession(
         if (base == "classes") return 1
         val suffix = base.removePrefix("classes")
         return suffix.toIntOrNull() ?: Int.MAX_VALUE
+    }
+
+    private suspend fun listWritePreloadDexNames(apkDir: File, inputFile: File): List<String> {
+        val decodedDexNames = listDexNamesFromDecodedApkDir(apkDir)
+        val inputDexNames = listDexNames(inputFile)
+        return (inputDexNames + decodedDexNames)
+            .distinct()
+            .sortedWith(compareBy(::dexSortKey))
+    }
+
+    private suspend fun listDexNamesFromDecodedApkDir(apkDir: File): List<String> =
+        runInterruptible(Dispatchers.IO) {
+            if (!apkDir.isDirectory) return@runInterruptible emptyList<String>()
+            val dexNames = mutableSetOf<String>()
+            apkDir.walkTopDown().forEach { entry ->
+                when {
+                    entry.isDirectory -> decodedDexDirectoryToDexName(entry.name)?.let(dexNames::add)
+                    entry.isFile && isDexEntryName(entry.name) -> dexNames.add(entry.name)
+                }
+            }
+            dexNames.sortedWith(compareBy { dexSortKey(it) })
+        }
+
+    private fun decodedDexDirectoryToDexName(name: String): String? = when {
+        name.equals("smali", ignoreCase = true) -> "classes.dex"
+        name.startsWith("smali_classes", ignoreCase = true) -> {
+            val suffix = name.substring("smali_classes".length)
+            suffix.takeIf { it.isNotEmpty() && it.all(Char::isDigit) }?.let { "classes${it}.dex" }
+        }
+
+        else -> null
     }
 
     private fun fastCopy(source: File, target: File) {

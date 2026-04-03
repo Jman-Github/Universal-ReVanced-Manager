@@ -120,6 +120,7 @@ class PatcherWorker(
     private var progressPersistenceClosed: Boolean = false
     private var lastPersistedProgressSequence: Long = Long.MIN_VALUE
     private val cachedExpandableSubSteps = ConcurrentHashMap<StepId, List<String>>()
+    private val notificationExpandableSubSteps = ConcurrentHashMap<StepId, List<String>>()
     private val dexCompilePattern =
         Regex("(Compiling|Compiled)\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
     private val dexWritePattern =
@@ -510,16 +511,25 @@ class PatcherWorker(
             is ProgressEvent.Started -> {
                 if (isExpandableStep(event.stepId)) {
                     cachedExpandableSubSteps.remove(event.stepId)
+                    notificationExpandableSubSteps.remove(event.stepId)
+                    if (!event.subSteps.isNullOrEmpty()) {
+                        cachedExpandableSubSteps[event.stepId] = event.subSteps
+                        notificationExpandableSubSteps[event.stepId] = event.subSteps
+                    }
                 }
             }
             is ProgressEvent.Progress -> {
                 if (isExpandableStep(event.stepId) && !event.subSteps.isNullOrEmpty()) {
                     cachedExpandableSubSteps[event.stepId] = event.subSteps
+                    notificationExpandableSubSteps[event.stepId] = event.subSteps
                 }
             }
             is ProgressEvent.Completed,
             is ProgressEvent.Failed -> {
-                event.stepId?.takeIf(::isExpandableStep)?.let(cachedExpandableSubSteps::remove)
+                event.stepId?.takeIf(::isExpandableStep)?.let {
+                    cachedExpandableSubSteps.remove(it)
+                    notificationExpandableSubSteps.remove(it)
+                }
             }
         }
     }
@@ -527,7 +537,6 @@ class PatcherWorker(
     private fun handleWorkerLogProgress(message: String, totalPatchCount: Int) {
         if (shouldSkipForegroundUpdates()) return
         val event = buildWriteApkLogEvent(message) ?: return
-        persistProgressSnapshot(event)
         updateForegroundNotification(event, totalPatchCount)
     }
 
@@ -573,7 +582,7 @@ class PatcherWorker(
         return ProgressEvent.Progress(
             stepId = StepId.WriteAPK,
             message = detail,
-            subSteps = cachedExpandableSubSteps[StepId.WriteAPK]
+            subSteps = notificationExpandableSubSteps[StepId.WriteAPK]
         )
     }
 
@@ -581,7 +590,7 @@ class PatcherWorker(
         val normalized = normalizeWriteApkNotificationCacheTitle(detail)
         if (normalized.isBlank()) return
 
-        val existing = cachedExpandableSubSteps[StepId.WriteAPK].orEmpty()
+        val existing = notificationExpandableSubSteps[StepId.WriteAPK].orEmpty()
         val updated = existing.toMutableList()
         if (updated.isEmpty()) {
             updated += defaultWriteApkNotificationSubSteps()
@@ -594,7 +603,7 @@ class PatcherWorker(
         }
 
         if (updated != existing) {
-            cachedExpandableSubSteps[StepId.WriteAPK] = updated
+            notificationExpandableSubSteps[StepId.WriteAPK] = updated
         }
     }
 
@@ -681,7 +690,7 @@ class PatcherWorker(
     }
 
     private fun nextWriteApkNotificationDetailAfter(currentTitle: String): String? {
-        val subSteps = cachedExpandableSubSteps[StepId.WriteAPK].orEmpty()
+        val subSteps = notificationExpandableSubSteps[StepId.WriteAPK].orEmpty()
         if (subSteps.isEmpty()) return null
 
         val currentIndex = subSteps.indexOfFirst { title ->

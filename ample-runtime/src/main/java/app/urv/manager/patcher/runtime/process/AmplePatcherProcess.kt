@@ -81,7 +81,28 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
     }
 
     override fun start(parameters: AmpleParameters, events: IPatcherEvents) {
+        var writeApkSubStepsReady = false
+        val seenDexCompiles = mutableSetOf<String>()
         fun safeEvent(event: ProgressEvent) {
+            if (event.stepId == StepId.WriteAPK) {
+                when (event) {
+                    is ProgressEvent.Started -> {
+                        writeApkSubStepsReady = !event.subSteps.isNullOrEmpty()
+                        seenDexCompiles.clear()
+                    }
+                    is ProgressEvent.Progress -> {
+                        if (!event.subSteps.isNullOrEmpty()) {
+                            writeApkSubStepsReady = true
+                            seenDexCompiles.clear()
+                        }
+                    }
+                    is ProgressEvent.Completed,
+                    is ProgressEvent.Failed -> {
+                        writeApkSubStepsReady = false
+                        seenDexCompiles.clear()
+                    }
+                }
+            }
             if (!eventsEnabled.get()) return
             try {
                 events.event(event.toParcel())
@@ -114,12 +135,14 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
                 Regex("(Compiling|Compiled)\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
             val dexWritePattern =
                 Regex("Write\\s+\\[[^\\]]+\\]\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
-            val seenDexCompiles = mutableSetOf<String>()
+            val dexAnyPattern = Regex("(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
             fun handleDexCompileLine(rawLine: String) {
+                if (!writeApkSubStepsReady) return
                 val line = rawLine.trim()
                 if (line.isEmpty()) return
                 val match = dexCompilePattern.find(line)
                     ?: dexWritePattern.find(line)
+                    ?: dexAnyPattern.find(line)
                     ?: return
                 val dexName = match.groupValues.lastOrNull()?.takeIf { it.endsWith(".dex") } ?: return
                 if (!seenDexCompiles.add(dexName)) return
@@ -130,10 +153,8 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
                     )
                 )
             }
-
             val logger = object : Logger() {
                 override fun log(level: LogLevel, message: String) {
-                    handleDexCompileLine(message)
                     safeLog(level.name, message)
                 }
             }

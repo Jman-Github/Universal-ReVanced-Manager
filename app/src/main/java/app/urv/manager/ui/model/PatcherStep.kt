@@ -32,7 +32,9 @@ data class StepDetail(
     val state: State = State.WAITING,
     val message: String? = null,
     val progress: Pair<Long, Long?>? = null,
-    val skipped: Boolean = false
+    val skipped: Boolean = false,
+    val expandable: Boolean = false,
+    val children: List<StepDetail> = emptyList()
 )
 
 fun Step.withState(

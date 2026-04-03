@@ -112,7 +112,6 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.time.withTimeout
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
-import java.util.zip.ZipFile
 import kotlin.coroutines.resume
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
@@ -128,7 +127,6 @@ import ru.solrudev.ackpine.uninstaller.UninstallFailure
 import ru.solrudev.ackpine.uninstaller.createSession
 import java.io.File
 import java.io.IOException
-import java.io.BufferedInputStream
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -136,7 +134,6 @@ import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.time.Duration
 import java.util.UUID
-import java.util.zip.ZipInputStream
 
 @OptIn(SavedStateHandleSaveableApi::class, PluginHostApi::class)
 class PatcherViewModel(
@@ -872,7 +869,6 @@ fun proceedAfterMissingPatchWarning() {
         override fun log(level: LogLevel, message: String) {
             level.androidLog(message)
             if (level == LogLevel.TRACE) return
-            handleDexCompileLine(message)
             if (message.startsWith("Memory limit:")) {
                 parseMemoryLimitMb(
                     message.removePrefix("Memory limit:").trim()
@@ -881,6 +877,7 @@ fun proceedAfterMissingPatchWarning() {
 
             viewModelScope.launch {
                 appendBoundedLog(level, message)
+                handleDexCompileLine(message)
             }
         }
     }
@@ -1004,7 +1001,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     val stepSubSteps = mutableStateMapOf<StepId, SnapshotStateList<StepDetail>>()
     private var dexSubStepsReady = false
     private val pendingDexCompileLines = mutableListOf<String>()
-    private val seenDexCompiles = mutableSetOf<String>()
     private var writeApkStepStarted = false
     private var deferLoadPatchesUntilSplitComplete = false
     private val deferredLoadPatchesEvents = mutableListOf<ProgressEvent>()
@@ -2586,12 +2582,17 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     if (eventStepId == StepId.WriteAPK) {
                         resetDexCompileState()
                         writeApkStepStarted = true
-                        if (stepSubSteps[eventStepId].isNullOrEmpty()) {
+                        if (!event.subSteps.isNullOrEmpty()) {
+                            prepareSubSteps(eventStepId, event.subSteps)
+                        } else {
                             stepSubSteps.remove(eventStepId)
                         }
-                        ensureWriteApkFallbackSubSteps()
                     } else {
-                        stepSubSteps.remove(eventStepId)
+                        if (!event.subSteps.isNullOrEmpty()) {
+                            prepareSubSteps(eventStepId, event.subSteps)
+                        } else {
+                            stepSubSteps.remove(eventStepId)
+                        }
                     }
                 }
                 is ProgressEvent.Progress -> {
@@ -2599,12 +2600,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     event.subSteps?.let { prepareSubSteps(eventStepId, it) }
                     if (!event.message.isNullOrBlank() || progress != null) {
                         updateSubStep(eventStepId, event.message, progress)
-                        if (eventStepId == StepId.WriteAPK &&
-                            selectionBundleType == PatchBundleType.MORPHE &&
-                            event.message.equals("Applying patched changes", ignoreCase = true)
-                        ) {
-                            flushPendingDexCompileLines(force = true)
-                        }
                     }
                 }
                 is ProgressEvent.Completed -> {
@@ -2676,6 +2671,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             if (updatedStep != null) {
                 steps[stepIndex] = updatedStep
                 if (event is ProgressEvent.Completed && updatedStep.state == State.COMPLETED) {
+                    promoteImmediateSignStepIfNeeded(stepIndex)
                     promoteNextSectionStepIfNeeded(stepIndex)
                 }
             }
@@ -2830,16 +2826,18 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         } else {
             normalized
         }
-        val list = buildSubStepList(effectiveTitles, existing)
+        val list = buildSubStepList(effectiveTitles, existing, stepId)
         stepSubSteps[stepId] = list
         if (stepId == StepId.WriteAPK) {
-            markDexSubStepsReady()
+            dexSubStepsReady = list.isNotEmpty()
+            flushPendingDexCompileLines(force = true)
         }
     }
 
     private fun buildSubStepList(
         titles: List<String>,
-        existing: List<StepDetail>?
+        existing: List<StepDetail>?,
+        stepId: StepId
     ): SnapshotStateList<StepDetail> {
         val list = mutableStateListOf<StepDetail>()
         titles.forEach { rawTitle ->
@@ -2851,10 +2849,29 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 previous != null -> previous.state
                 else -> State.WAITING
             }
+            val expandable = when {
+                previous != null -> previous.expandable
+                stepId == StepId.WriteAPK && isDexCompileGroupTitle(title) -> true
+                else -> false
+            }
             list.add(
-                previous?.copy(title = title, state = state, skipped = effectiveSkipped)
-                    ?: StepDetail(title = title, state = state, skipped = effectiveSkipped)
+                previous?.copy(
+                    title = title,
+                    state = state,
+                    skipped = effectiveSkipped,
+                    expandable = expandable
+                ) ?: StepDetail(
+                    title = title,
+                    state = state,
+                    skipped = effectiveSkipped,
+                    expandable = expandable
+                )
             )
+        }
+        if (stepId == StepId.PrepareSplitApk && list.isNotEmpty()) {
+            val ordered = list.filter { it.skipped } + list.filter { !it.skipped }
+            list.clear()
+            list.addAll(ordered)
         }
         return list
     }
@@ -2871,37 +2888,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             .map { it.title }
             .filter(::isDexCompileTitle)
             .distinctBy { it.lowercase() }
-        val incomingDexTitles = incoming
-            .filter(::isDexCompileTitle)
-            .distinctBy { it.lowercase() }
-        val seededDexTitles = when {
-            incomingDexTitles.isNotEmpty() -> incomingDexTitles
-            existingDexTitles.isNotEmpty() -> existingDexTitles
-            else -> buildFallbackDexTitles()
-        }.distinctBy { it.lowercase() }
-
-        val merged = mutableListOf<String>()
-        val phaseIndex = incoming.indexOfFirst(::isDexCompilePhaseTitle)
-        if (phaseIndex != -1 && incomingDexTitles.isEmpty() && seededDexTitles.isNotEmpty()) {
-            merged.addAll(incoming.take(phaseIndex))
-            merged.addAll(seededDexTitles)
-            merged.addAll(incoming.drop(phaseIndex + 1))
-        } else {
-            merged.addAll(incoming)
-            if (incomingDexTitles.isEmpty() && seededDexTitles.isNotEmpty()) {
-                merged.addAll(writeApkDexInsertIndex(merged), seededDexTitles)
-            }
+        val merged = incoming.toMutableList()
+        if (existingDexTitles.isNotEmpty() && merged.none(::isDexCompileGroupTitle)) {
+            merged.add(writeApkDexInsertIndex(merged), WRITE_APK_DEX_GROUP_TITLE)
         }
-
-        if (existingDexTitles.isNotEmpty()) {
-            val missingExisting = existingDexTitles.filter { existingTitle ->
-                merged.none { it.equals(existingTitle, ignoreCase = true) }
-            }
-            if (missingExisting.isNotEmpty()) {
-                merged.addAll(writeApkDexInsertIndex(merged), missingExisting)
-            }
-        }
-
         return merged.distinctBy { it.lowercase() }
     }
 
@@ -2937,9 +2927,30 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             title
         }
         val normalized = normalizeWriteApkTitle(stepId, splitNormalized)
-        val explicitCompletion = isExplicitSubStepCompletion(stepId, title)
-        if (stepId == StepId.WriteAPK && isDexCompileTitle(normalized) && !explicitCompletion) {
-            seenDexCompiles.add(normalized)
+        if (stepId == StepId.WriteAPK) {
+            when {
+                isDexCompileTitle(normalized) -> {
+                    updateWriteApkDexChildSubStep(list, normalized)
+                    return
+                }
+
+                isDexCompilePhaseTitle(normalized) || isDexCompileGroupTitle(normalized) -> {
+                    activateWriteApkDexGroup(list)
+                    return
+                }
+
+                isResourceCompileTitle(normalized) -> {
+                    activateResourceCompileStep(list, progress)
+                    return
+                }
+
+                normalized.equals("Writing output APK", ignoreCase = true) ||
+                    normalized.equals("Finalizing output", ignoreCase = true) ||
+                    normalized.equals("Stripping native libraries", ignoreCase = true) -> {
+                    activateKnownWriteApkSubStep(list, normalized, progress)
+                    return
+                }
+            }
         }
         var existingIndex = list.indexOfFirst { it.title == normalized }
         val runningIndex = list.indexOfFirst { !it.skipped && it.state == State.RUNNING }
@@ -2961,36 +2972,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 completePrepareSplitApkPriorSteps(list, existingIndex)
             }
         }
-        if (stepId == StepId.WriteAPK && isDexCompilePhaseTitle(normalized)) {
-            completeWriteApkApplyChanges(list)
-            val firstCompile = list.indexOfFirst { isDexCompileTitle(it.title) }
-            if (firstCompile != -1) {
-                completeWriteApkPriorSteps(list, firstCompile)
-                if (runningIndex != -1 && runningIndex < firstCompile) {
-                    val running = list[runningIndex]
-                    list[runningIndex] = running.copy(state = State.COMPLETED, progress = null)
-                }
-                val target = list[firstCompile]
-                list[firstCompile] = target.copy(state = State.RUNNING, progress = progress)
-                return
-            }
-            if (runningIndex != -1) {
-                val running = list[runningIndex]
-                list[runningIndex] = running.copy(state = State.COMPLETED, progress = null)
-                return
-            }
-        }
-        if (stepId == StepId.WriteAPK && isResourceCompileTitle(normalized)) {
-            activateResourceCompileStep(list, progress)
-            return
-        }
-        if (stepId == StepId.WriteAPK &&
-            (normalized.equals("Writing output APK", ignoreCase = true)
-                || normalized.equals("Finalizing output", ignoreCase = true)
-                || normalized.equals("Stripping native libraries", ignoreCase = true))
-        ) {
-            completeResourceCompileIfPending(list)
-        }
         if (stepId == StepId.PrepareSplitApk &&
             (normalized.equals("Writing merged APK", ignoreCase = true)
                 || normalized.equals("Finalizing merged APK", ignoreCase = true)
@@ -3006,46 +2987,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         if (existingIndex == -1 && list.isNotEmpty()) {
             existingIndex = findBestSubStepIndex(list, normalized)
         }
-        if (existingIndex == -1 && stepId == StepId.WriteAPK && isDexCompileTitle(normalized)) {
-            val resourcesIndex = list.indexOfFirst {
-                it.title.equals("Compiling modified resources", ignoreCase = true)
-            }.takeIf { it != -1 }
-            val insertIndex = resourcesIndex
-                ?: list.indexOfFirst { it.title == "Writing output APK" }
-                    .takeIf { it != -1 }
-                ?: list.size
-            list.add(insertIndex, StepDetail(title = normalized, state = State.WAITING))
-            existingIndex = insertIndex
-        }
-        if (stepId == StepId.WriteAPK && isDexCompileTitle(normalized)) {
-            completeWriteApkApplyChanges(list)
-        }
-        if (explicitCompletion) {
-            if (existingIndex == -1 && list.isNotEmpty()) {
-                existingIndex = findBestSubStepIndex(list, normalized)
-            }
-            if (existingIndex != -1) {
-                val existing = list[existingIndex]
-                if (!existing.skipped && existing.state != State.COMPLETED) {
-                    if (stepId == StepId.WriteAPK && existingIndex > 0) {
-                        completeWriteApkPriorSteps(list, existingIndex)
-                    }
-                    list[existingIndex] = existing.copy(state = State.COMPLETED, progress = null)
-                    if (stepId == StepId.WriteAPK) {
-                        promoteNextWriteApkSubStep(list, existingIndex)
-                    }
-                }
-                return
-            }
-        }
         if (existingIndex != -1) {
             if (list[existingIndex].skipped) return
-            if (stepId == StepId.WriteAPK &&
-                isDexCompileTitle(normalized) &&
-                list[existingIndex].state == State.COMPLETED
-            ) {
-                return
-            }
             if (stepId == StepId.WriteAPK && existingIndex > 0 && (runningIndex == -1 || existingIndex >= runningIndex)) {
                 completeWriteApkPriorSteps(list, existingIndex)
             }
@@ -3064,7 +3007,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 list[runningIndex] = running.copy(state = State.COMPLETED, progress = null)
             }
             val existing = list[existingIndex]
-            list[existingIndex] = existing.copy(state = State.RUNNING, progress = progress)
+            list[existingIndex] = existing.copy(
+                state = if (existing.state == State.COMPLETED) State.COMPLETED else State.RUNNING,
+                progress = progress
+            )
             return
         }
 
@@ -3077,17 +3023,14 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             list[runningIndex] = running.copy(state = State.COMPLETED, progress = null)
         }
 
-        list.add(StepDetail(title = title, state = State.RUNNING, progress = progress))
-    }
-
-    private fun isExplicitSubStepCompletion(stepId: StepId, rawTitle: String): Boolean {
-        if (stepId != StepId.WriteAPK) return false
-        val title = rawTitle.trim()
-        return title.startsWith("Compiled ", ignoreCase = true)
+        list.add(StepDetail(title = normalized, state = State.RUNNING, progress = progress))
     }
 
     private fun normalizeWriteApkTitle(stepId: StepId, title: String): String {
         if (stepId != StepId.WriteAPK) return title
+        if (title.equals("Compiling patched dex files", ignoreCase = true)) {
+            return WRITE_APK_DEX_GROUP_TITLE
+        }
         if (title.equals("Compiling patched resources", ignoreCase = true) ||
             title.equals("Compiled patched resources", ignoreCase = true)
         ) {
@@ -3121,7 +3064,12 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
 
     private fun isDexCompilePhaseTitle(title: String): Boolean =
-        title.equals("Compiling patched dex files", ignoreCase = true)
+        title.equals("Compiling patched dex files", ignoreCase = true) ||
+            title.equals(WRITE_APK_DEX_GROUP_TITLE, ignoreCase = true)
+
+    private fun isDexCompileGroupTitle(title: String): Boolean =
+        title.equals(WRITE_APK_DEX_GROUP_TITLE, ignoreCase = true)
+
     private fun isResourceCompileTitle(title: String): Boolean =
         title.equals("Compiling modified resources", ignoreCase = true) ||
             title.equals("Compiling patched resources", ignoreCase = true)
@@ -3129,7 +3077,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private fun resetDexCompileState() {
         dexSubStepsReady = false
         pendingDexCompileLines.clear()
-        seenDexCompiles.clear()
         writeApkStepStarted = false
     }
 
@@ -3145,19 +3092,13 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
         stepSubSteps.forEach { (_, list) ->
             list.forEachIndexed { index, detail ->
-                list[index] = detail.copy(
+                list[index] = detail.withRecursiveState(
                     state = State.COMPLETED,
                     message = null,
                     progress = null
                 )
             }
         }
-    }
-
-    private fun markDexSubStepsReady() {
-        if (dexSubStepsReady) return
-        dexSubStepsReady = true
-        flushPendingDexCompileLines(force = true)
     }
 
     private fun flushPendingDexCompileLines(force: Boolean = false) {
@@ -3238,6 +3179,109 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         list[nextIndex] = next.copy(state = State.RUNNING, progress = null)
     }
 
+    private fun ensureWriteApkDexGroupIndex(list: SnapshotStateList<StepDetail>): Int {
+        val existingIndex = list.indexOfFirst(::matchesWriteApkDexGroup)
+        if (existingIndex != -1) return existingIndex
+
+        val insertIndex = writeApkDexInsertIndex(list.map { it.title })
+        list.add(
+            insertIndex,
+            StepDetail(
+                title = WRITE_APK_DEX_GROUP_TITLE,
+                state = State.WAITING,
+                expandable = true
+            )
+        )
+        return insertIndex
+    }
+
+    private fun matchesWriteApkDexGroup(detail: StepDetail): Boolean =
+        isDexCompileGroupTitle(detail.title)
+
+    private fun activateWriteApkDexGroup(list: SnapshotStateList<StepDetail>) {
+        val groupIndex = ensureWriteApkDexGroupIndex(list)
+        completeWriteApkApplyChanges(list)
+        completeWriteApkPriorSteps(list, groupIndex)
+
+        val runningIndex = list.indexOfFirst { !it.skipped && it.state == State.RUNNING }
+        if (runningIndex != -1 && runningIndex != groupIndex) {
+            val running = list[runningIndex]
+            list[runningIndex] = running.copy(state = State.COMPLETED, progress = null)
+        }
+
+        val group = list[groupIndex]
+        if (group.state != State.COMPLETED) {
+            list[groupIndex] = group.copy(state = State.RUNNING, progress = null, expandable = true)
+        }
+    }
+
+    private fun updateWriteApkDexChildSubStep(
+        list: SnapshotStateList<StepDetail>,
+        normalizedTitle: String
+    ) {
+        val groupIndex = ensureWriteApkDexGroupIndex(list)
+        val group = list[groupIndex]
+        val initialChildren = group.children
+        val initialRunningChildIndex = initialChildren.indexOfFirst { !it.skipped && it.state == State.RUNNING }
+        val initialExistingIndex = initialChildren.indexOfFirst { it.title.equals(normalizedTitle, ignoreCase = true) }
+
+        if (initialExistingIndex != -1 && initialChildren[initialExistingIndex].state == State.COMPLETED) {
+            return
+        }
+
+        if (initialRunningChildIndex != -1 &&
+            initialChildren[initialRunningChildIndex].title.equals(normalizedTitle, ignoreCase = true)
+        ) {
+            return
+        }
+
+        activateWriteApkDexGroup(list)
+        val activatedGroup = list[groupIndex]
+        val children = activatedGroup.children.toMutableList()
+        val runningChildIndex = children.indexOfFirst { !it.skipped && it.state == State.RUNNING }
+        val existingIndex = children.indexOfFirst { it.title.equals(normalizedTitle, ignoreCase = true) }
+
+        if (runningChildIndex != -1) {
+            val runningChild = children[runningChildIndex]
+            children[runningChildIndex] = runningChild.copy(state = State.COMPLETED, progress = null)
+        }
+
+        if (existingIndex != -1) {
+            val existingChild = children[existingIndex]
+            children[existingIndex] = existingChild.copy(state = State.RUNNING, progress = null)
+        } else {
+            children.add(StepDetail(title = normalizedTitle, state = State.RUNNING))
+        }
+
+        list[groupIndex] = list[groupIndex].copy(
+            state = State.RUNNING,
+            progress = null,
+            expandable = true,
+            children = children
+        )
+    }
+
+    private fun completeWriteApkDexGroup(list: SnapshotStateList<StepDetail>) {
+        val groupIndex = list.indexOfFirst(::matchesWriteApkDexGroup)
+        if (groupIndex == -1) return
+
+        val group = list[groupIndex]
+        val children = group.children.toMutableList()
+        val runningChildIndex = children.indexOfFirst { !it.skipped && it.state == State.RUNNING }
+        if (runningChildIndex != -1) {
+            val runningChild = children[runningChildIndex]
+            children[runningChildIndex] = runningChild.copy(state = State.COMPLETED, progress = null)
+        }
+
+        val finalState = if (group.state == State.WAITING && children.isEmpty()) State.WAITING else State.COMPLETED
+        list[groupIndex] = group.copy(
+            state = finalState,
+            progress = null,
+            expandable = true,
+            children = children
+        )
+    }
+
     private fun activateResourceCompileStep(
         list: SnapshotStateList<StepDetail>,
         progress: Pair<Long, Long?>?
@@ -3252,14 +3296,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             insertIndex
         }
         completeWriteApkPriorSteps(list, resourceIndex)
-
-        list.forEachIndexed { index, detail ->
-            if (detail.title.startsWith("Compiling ", ignoreCase = true) &&
-                detail.title.endsWith(".dex", ignoreCase = true)
-            ) {
-                list[index] = detail.copy(state = State.COMPLETED, progress = null)
-            }
-        }
+        completeWriteApkDexGroup(list)
 
         val runningIndex = list.indexOfFirst { it.state == State.RUNNING }
         if (runningIndex != -1 && runningIndex != resourceIndex) {
@@ -3268,7 +3305,32 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
 
         val resourceStep = list[resourceIndex]
+        if (resourceStep.state == State.COMPLETED) return
         list[resourceIndex] = resourceStep.copy(state = State.RUNNING, progress = progress)
+    }
+
+    private fun activateKnownWriteApkSubStep(
+        list: SnapshotStateList<StepDetail>,
+        normalizedTitle: String,
+        progress: Pair<Long, Long?>?
+    ) {
+        val existingIndex = list.indexOfFirst { it.title.equals(normalizedTitle, ignoreCase = true) }
+        if (existingIndex == -1) return
+
+        completeWriteApkDexGroup(list)
+        completeWriteApkPriorSteps(list, existingIndex)
+
+        val runningIndex = list.indexOfFirst { !it.skipped && it.state == State.RUNNING }
+        if (runningIndex != -1 && runningIndex != existingIndex) {
+            val running = list[runningIndex]
+            list[runningIndex] = running.copy(state = State.COMPLETED, progress = null)
+        }
+
+        val existing = list[existingIndex]
+        list[existingIndex] = existing.copy(
+            state = if (existing.state == State.COMPLETED) State.COMPLETED else State.RUNNING,
+            progress = progress
+        )
     }
 
     private fun handleDexCompileLine(rawLine: String) {
@@ -3276,32 +3338,28 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         if (line.isEmpty()) return
         if (line.startsWith("[STDIO]:", ignoreCase = true)) return
         if (!writeApkStepStarted && shouldStartWriteApkFromLog(line)) {
-            startWriteApkFromLogFallback(line)
+            startWriteApkFromLogFallback()
         }
         if (!writeApkStepStarted) return
         if (line.contains("Compiling modified resources", ignoreCase = true) ||
-            line.contains("Compiling patched resources", ignoreCase = true) ||
-            line.contains("Compiled modified resources", ignoreCase = true) ||
-            line.contains("Compiled patched resources", ignoreCase = true)
+            line.contains("Compiling patched resources", ignoreCase = true)
         ) {
             viewModelScope.launch {
-                if (shouldBufferMorpheWriteApkLogProgress()) {
+                if (shouldBufferWriteApkLogProgress()) {
                     pendingDexCompileLines += "Compiling modified resources"
                     return@launch
                 }
                 updateSubStep(StepId.WriteAPK, line, null)
-                markDexSubStepsReady()
             }
             return
         }
         if (isDexCompilePhaseTitle(line)) {
             viewModelScope.launch {
-                if (shouldBufferMorpheWriteApkLogProgress()) {
+                if (shouldBufferWriteApkLogProgress()) {
                     pendingDexCompileLines += line
                     return@launch
                 }
                 updateSubStep(StepId.WriteAPK, line, null)
-                markDexSubStepsReady()
             }
             return
         }
@@ -3311,8 +3369,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         viewModelScope.launch {
             val isCompletion = completionKeyword.equals("Compiled", ignoreCase = true)
             val title = if (isCompletion) "Compiled $dexName" else "Compiling $dexName"
-            if (!isCompletion && !seenDexCompiles.add("Compiling $dexName")) return@launch
-            if (shouldBufferMorpheWriteApkLogProgress()) {
+            if (shouldBufferWriteApkLogProgress()) {
                 pendingDexCompileLines += title
                 return@launch
             }
@@ -3320,8 +3377,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
     }
 
-    private fun shouldBufferMorpheWriteApkLogProgress(): Boolean {
-        if (selectionBundleType != PatchBundleType.MORPHE) return false
+    private fun shouldBufferWriteApkLogProgress(): Boolean {
         val list = stepSubSteps[StepId.WriteAPK] ?: return true
         return list.isEmpty()
     }
@@ -3340,9 +3396,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         return false
     }
 
-    private fun startWriteApkFromLogFallback(line: String) {
+    private fun startWriteApkFromLogFallback() {
         writeApkStepStarted = true
-        ensureWriteApkFallbackSubSteps()
         val writeIndex = steps.indexOfFirst { it.id == StepId.WriteAPK }
         if (writeIndex == -1) return
 
@@ -3356,9 +3411,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         if (writeStep.state == State.WAITING) {
             steps[writeIndex] = writeStep.withState(State.RUNNING)
         }
-
-        // Drive the seeded list with the same log line that triggered fallback start.
-        updateSubStep(StepId.WriteAPK, line, null)
     }
 
     private fun promoteNextSectionStepIfNeeded(completedIndex: Int) {
@@ -3385,100 +3437,37 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         )
     }
 
+    private fun promoteImmediateSignStepIfNeeded(completedIndex: Int) {
+        val completedStep = steps.getOrNull(completedIndex) ?: return
+        if (completedStep.id != StepId.WriteAPK || completedStep.hide) return
+
+        val signIndex = ((completedIndex + 1) until steps.size)
+            .firstOrNull { index ->
+                val step = steps[index]
+                !step.hide && step.id == StepId.SignAPK
+            }
+            ?: return
+
+        val signStep = steps[signIndex]
+        if (signStep.state != State.WAITING) return
+
+        val anotherVisibleRunning = steps.indices.any { index ->
+            index != signIndex && !steps[index].hide && steps[index].state == State.RUNNING
+        }
+        if (anotherVisibleRunning) return
+
+        steps[signIndex] = signStep.withState(
+            state = State.RUNNING,
+            message = null,
+            progress = null
+        )
+    }
+
     private fun isLastVisibleStepInSection(stepIndex: Int): Boolean {
         val step = steps.getOrNull(stepIndex) ?: return false
         return ((stepIndex + 1) until steps.size).none { index ->
             !steps[index].hide && steps[index].category == step.category
         }
-    }
-
-    private fun ensureWriteApkFallbackSubSteps() {
-        val existing = stepSubSteps[StepId.WriteAPK]
-        if (!existing.isNullOrEmpty()) {
-            val mergedTitles = mergeWriteApkSubStepTitles(existing.map { it.title }, existing)
-            val identical = mergedTitles.size == existing.size &&
-                mergedTitles.zip(existing).all { (title, detail) ->
-                    title.equals(detail.title, ignoreCase = true)
-                }
-            if (identical) return
-            stepSubSteps[StepId.WriteAPK] = buildSubStepList(mergedTitles, existing)
-            return
-        }
-
-        val dexSteps = buildFallbackDexTitles()
-        val fallback = mutableStateListOf<StepDetail>().apply {
-            add(StepDetail(title = "Copying base APK"))
-            add(StepDetail(title = "Applying patched changes"))
-            if (dexSteps.isNotEmpty()) {
-                addAll(dexSteps.map { StepDetail(title = it) })
-            } else {
-                add(StepDetail(title = "Compiling patched dex files"))
-            }
-            add(StepDetail(title = "Compiling modified resources"))
-            add(StepDetail(title = "Writing output APK"))
-            add(StepDetail(title = "Finalizing output"))
-        }
-        stepSubSteps[StepId.WriteAPK] = fallback
-    }
-
-    private fun buildFallbackDexTitles(): List<String> {
-        val file = inputFile ?: return emptyList()
-        return runCatching {
-            val names = if (SplitApkPreparer.isSplitArchive(file)) {
-                listDexNamesFromSplitArchive(file)
-            } else {
-                listDexNamesFromApk(file)
-            }
-            names.map { "Compiling $it" }
-        }.getOrDefault(emptyList())
-    }
-
-    private fun listDexNamesFromApk(file: File): List<String> {
-        if (!file.exists()) return emptyList()
-        return ZipFile(file).use { zip ->
-            zip.entries().asSequence()
-                .filterNot { it.isDirectory }
-                .map { it.name }
-                .filter { it.startsWith("classes") && it.endsWith(".dex", ignoreCase = true) }
-                .distinct()
-                .sortedWith(compareBy { dexSortKey(it) })
-                .toList()
-        }
-    }
-
-    private fun listDexNamesFromSplitArchive(file: File): List<String> {
-        if (!file.exists()) return emptyList()
-        val dexNames = LinkedHashSet<String>()
-        val splitEntryNames = SplitApkPreparer.splitApkEntryNames(file)
-        ZipFile(file).use { outer ->
-            val entries = outer.entries().asSequence()
-                .filterNot { it.isDirectory }
-                .filter { it.name in splitEntryNames }
-                .toList()
-            entries.forEach { entry ->
-                outer.getInputStream(entry).use { raw ->
-                    ZipInputStream(BufferedInputStream(raw)).use { inner ->
-                        while (true) {
-                            val innerEntry = inner.nextEntry ?: break
-                            if (!innerEntry.isDirectory &&
-                                innerEntry.name.startsWith("classes") &&
-                                innerEntry.name.endsWith(".dex", ignoreCase = true)
-                            ) {
-                                dexNames.add(innerEntry.name)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        return dexNames.sortedWith(compareBy { dexSortKey(it) })
-    }
-
-    private fun dexSortKey(name: String): Int {
-        val base = name.removeSuffix(".dex")
-        if (base == "classes") return 1
-        val suffix = base.removePrefix("classes")
-        return suffix.toIntOrNull() ?: Int.MAX_VALUE
     }
 
     private fun findBestSubStepIndex(
@@ -3503,7 +3492,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         if (list.isEmpty()) return
         if (!failed) {
             list.forEachIndexed { index, detail ->
-                list[index] = detail.copy(state = State.COMPLETED, progress = null)
+                list[index] = detail.withRecursiveState(state = State.COMPLETED, progress = null)
             }
             return
         }
@@ -3520,17 +3509,34 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 return@forEachIndexed
             }
             val updated = when {
-                index == failedIndex -> detail.copy(
+                index == failedIndex -> detail.withRecursiveState(
                     state = State.FAILED,
                     message = errorMessage,
                     progress = null
                 )
-                detail.state == State.RUNNING -> detail.copy(state = State.WAITING, progress = null)
-                else -> detail.copy(progress = null)
+                detail.state == State.RUNNING -> detail.withRecursiveState(state = State.WAITING, progress = null)
+                else -> detail.withRecursiveState(progress = null)
             }
             list[index] = updated
         }
     }
+
+    private fun StepDetail.withRecursiveState(
+        state: State = this.state,
+        message: String? = this.message,
+        progress: Pair<Long, Long?>? = this.progress
+    ): StepDetail = copy(
+        state = state,
+        message = message,
+        progress = progress,
+        children = children.map { child ->
+            child.withRecursiveState(
+                state = state,
+                message = if (state == State.FAILED) message else child.message,
+                progress = null
+            )
+        }
+    )
 
     private fun parseSubStepTitle(rawTitle: String): Pair<String, Boolean> {
         val trimmed = rawTitle.trim()
@@ -3719,8 +3725,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             stepSubSteps.keys.any { it in resettableIds } ||
             writeApkStepStarted ||
             dexSubStepsReady ||
-            pendingDexCompileLines.isNotEmpty() ||
-            seenDexCompiles.isNotEmpty()
+            pendingDexCompileLines.isNotEmpty()
     }
 
     private fun resetProgressStateForAutomaticRetry() {
@@ -3927,6 +3932,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private companion object {
         const val TAG = "ReVanced Patcher"
         const val SKIPPED_SUBSTEP_PREFIX = "[skipped]"
+        private const val WRITE_APK_DEX_GROUP_TITLE = "Compiling DEX files"
         private const val DOWNLOADER_DIALOG_SETTLE_MS = 32L
         private const val DOWNLOADER_ACTIVITY_RESULT_GRACE_MS = 750L
         private const val SYSTEM_INSTALL_TIMEOUT_MS = 60_000L

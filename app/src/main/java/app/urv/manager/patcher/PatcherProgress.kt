@@ -16,7 +16,10 @@ import kotlinx.parcelize.Parcelize
 sealed class ProgressEvent : Parcelable {
     abstract val stepId: StepId?
 
-    data class Started(override val stepId: StepId) : ProgressEvent()
+    data class Started(
+        override val stepId: StepId,
+        val subSteps: List<String>? = null,
+    ) : ProgressEvent()
 
     data class Progress(
         override val stepId: StepId,
@@ -77,12 +80,13 @@ inline fun <T> runStep(
     stepId: StepId,
     onEvent: (ProgressEvent) -> Unit,
     checkCancelled: () -> Unit = {},
+    startedSubSteps: List<String>? = null,
     block: () -> T,
 ): T = try {
     val startTimeNs = System.nanoTime()
     val startMemMb = usedMemoryMb()
     checkCancelled()
-    onEvent(ProgressEvent.Started(stepId))
+    onEvent(ProgressEvent.Started(stepId, startedSubSteps))
     checkCancelled()
     val value = block()
     val elapsedMs = (System.nanoTime() - startTimeNs) / 1_000_000

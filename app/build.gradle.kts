@@ -108,6 +108,8 @@ dependencies {
     implementation(libs.revanced.library) {
         exclude(group = "xpp3", module = "xpp3")
     }
+    implementation("com.android.tools.build:apkzlib:8.5.2")
+    compileOnly("com.google.guava:guava:33.2.1-jre")
     implementation(libs.xpp3)
     apkEditorLib(files("$rootDir/libs/APKEditor-1.4.7.jar"))
     implementation(files(strippedApkEditorLib))

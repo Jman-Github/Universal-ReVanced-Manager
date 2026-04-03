@@ -251,23 +251,185 @@ private fun ExpandableSubStep(
                 modifier = Modifier.padding(start = 16.dp)
             ) {
                 subSteps.forEachIndexed { index, detail ->
-                    val (subProgress, subProgressText) = detail.progress?.let { (current, total) ->
-                        if (total != null) current.toFloat() / total.toFloat() to "${current.megaBytes}/${total.megaBytes} MB"
-                        else null to "${current.megaBytes} MB"
-                    } ?: (null to null)
+                    if (detail.expandable || detail.children.isNotEmpty()) {
+                        ExpandableDetailSubStep(
+                            detail = detail,
+                            autoExpandSubSteps = autoExpandSubSteps,
+                            autoCollapseCompleted = autoCollapseCompleted,
+                            isFirst = index == 0,
+                            isLast = index == subSteps.lastIndex,
+                        )
+                    } else {
+                        val (subProgress, subProgressText) = detail.progress.asDisplayProgress()
 
-                    SubStep(
-                        name = detail.title,
-                        state = detail.state,
-                        message = detail.message,
-                        progress = subProgress,
-                        progressText = subProgressText,
-                        skipped = detail.skipped,
-                        isFirst = index == 0,
-                        isLast = index == subSteps.lastIndex,
+                        SubStep(
+                            name = detail.title,
+                            state = detail.state,
+                            message = detail.message,
+                            progress = subProgress,
+                            progressText = subProgressText,
+                            skipped = detail.skipped,
+                            isFirst = index == 0,
+                            isLast = index == subSteps.lastIndex,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExpandableDetailSubStep(
+    detail: StepDetail,
+    autoExpandSubSteps: Boolean,
+    autoCollapseCompleted: Boolean,
+    isFirst: Boolean,
+    isLast: Boolean,
+) {
+    val hasChildren = detail.children.isNotEmpty()
+    var expanded by rememberSaveable(detail.title) { mutableStateOf(false) }
+    var autoCollapsed by rememberSaveable("${detail.title}-auto") { mutableStateOf(false) }
+    val completedChildren = detail.children.count { it.state == State.COMPLETED || it.skipped }
+    val (progress, progressText) = detail.progress.asDisplayProgress()
+
+    LaunchedEffect(detail.state, detail.children.size) {
+        if (detail.state != State.COMPLETED) {
+            autoCollapsed = false
+        }
+        if (autoExpandSubSteps &&
+            hasChildren &&
+            detail.expandable &&
+            (detail.state == State.RUNNING || detail.state == State.FAILED || hasChildren)
+        ) {
+            expanded = true
+        }
+    }
+
+    LaunchedEffect(autoCollapseCompleted, detail.state, expanded) {
+        if (autoCollapseCompleted && detail.state == State.COMPLETED && !autoCollapsed && expanded) {
+            expanded = false
+            autoCollapsed = true
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .clickable(enabled = hasChildren) { expanded = !expanded }
+            .padding(top = if (isFirst) 10.dp else 8.dp, bottom = if (isLast) 20.dp else 8.dp)
+            .padding(horizontal = 20.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            StepIcon(
+                size = 18.dp,
+                state = detail.state,
+                progress = progress,
+            )
+
+            Text(
+                text = detail.title,
+                style = MaterialTheme.typography.labelLarge.copy(
+                    textDecoration = if (detail.skipped) TextDecoration.LineThrough else null
+                ),
+                color = if (detail.skipped) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, true),
+            )
+
+            if (detail.children.isNotEmpty()) {
+                Text(
+                    text = "$completedChildren/${detail.children.size}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            if (progressText != null) {
+                Text(
+                    progressText,
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+
+            if (hasChildren) {
+                Box(
+                    modifier = Modifier.size(24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    ArrowButton(
+                        modifier = Modifier.size(20.dp),
+                        expanded = expanded,
+                        onClick = null
                     )
                 }
             }
+        }
+
+        AnimatedVisibility(visible = hasChildren && expanded) {
+            Column(
+                modifier = Modifier.padding(start = 18.dp, top = 4.dp)
+            ) {
+                detail.children.forEachIndexed { index, child ->
+                    val (childProgress, childProgressText) = child.progress.asDisplayProgress()
+                    MiniSubStep(
+                        name = child.title,
+                        state = child.state,
+                        progress = childProgress,
+                        progressText = childProgressText,
+                        skipped = child.skipped,
+                        isFirst = index == 0,
+                        isLast = index == detail.children.lastIndex,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MiniSubStep(
+    name: String,
+    state: State,
+    progress: Float? = null,
+    progressText: String? = null,
+    skipped: Boolean = false,
+    isFirst: Boolean = false,
+    isLast: Boolean = false,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier
+            .padding(top = if (isFirst) 6.dp else 4.dp, bottom = if (isLast) 10.dp else 4.dp)
+            .padding(start = 8.dp, end = 4.dp)
+    ) {
+        StepIcon(
+            size = 14.dp,
+            state = state,
+            progress = progress,
+        )
+
+        Text(
+            text = name,
+            style = MaterialTheme.typography.labelMedium.copy(
+                textDecoration = if (skipped) TextDecoration.LineThrough else null
+            ),
+            color = if (skipped) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, true),
+        )
+
+        if (progressText != null) {
+            Text(
+                text = progressText,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -391,3 +553,9 @@ fun StepIcon(state: State, progress: Float? = null, size: Dp) {
 }
 
 private val Long.megaBytes get() = "%.1f".format(locale = Locale.ROOT, toDouble() / 1_000_000)
+
+private fun Pair<Long, Long?>?.asDisplayProgress(): Pair<Float?, String?> =
+    this?.let { (current, total) ->
+        if (total != null) current.toFloat() / total.toFloat() to "${current.megaBytes}/${total.megaBytes} MB"
+        else null to "${current.megaBytes} MB"
+    } ?: (null to null)

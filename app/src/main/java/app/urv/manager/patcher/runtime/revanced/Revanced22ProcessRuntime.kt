@@ -184,42 +184,7 @@ class Revanced22ProcessRuntime(
             Log.d(tag, "ReVanced v22 process runtime started without memory override")
         }
 
-        val fallbackWriteSubStepsEmitted = AtomicBoolean(false)
-        val includeStripNativeLibs = stripNativeLibs
-        val fallbackWriteSubSteps = runCatching {
-            buildWriteApkSubSteps(
-                listDexNames(runtimeInputFile).map { "Compiling $it" },
-                includeStripNativeLibs
-            )
-        }.getOrNull()
-
-        fun handleProgressEvent(event: ProgressEvent) {
-            when (event.stepId) {
-                StepId.WriteAPK -> when (event) {
-                    is ProgressEvent.Started -> {
-                        if (fallbackWriteSubStepsEmitted.compareAndSet(false, true)) {
-                            fallbackWriteSubSteps?.let { subSteps ->
-                                eventQueue.trySend(
-                                    ProgressEvent.Progress(
-                                        stepId = StepId.WriteAPK,
-                                        subSteps = subSteps
-                                    )
-                                )
-                            }
-                        }
-                    }
-
-                    is ProgressEvent.Progress -> if (!event.subSteps.isNullOrEmpty()) {
-                        fallbackWriteSubStepsEmitted.set(true)
-                    }
-
-                    is ProgressEvent.Completed,
-                    is ProgressEvent.Failed -> Unit
-                }
-
-                else -> Unit
-            }
-        }
+        fun handleProgressEvent(event: ProgressEvent) = Unit
 
         val patching = CompletableDeferred<Unit>()
         val finishedReported = AtomicBoolean(false)
