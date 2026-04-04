@@ -3,6 +3,8 @@
 
 # Features
 
+- After importing settings, URV now requests any required runtime permissions for enabled features when they are not already granted
+
 
 # Bug fixes
 

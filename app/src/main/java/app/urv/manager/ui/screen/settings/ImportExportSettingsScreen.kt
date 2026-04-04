@@ -1,8 +1,10 @@
 package app.urv.manager.ui.screen.settings
 
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.net.Uri
+import android.os.Build
 import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -99,6 +101,7 @@ import app.urv.manager.ui.screen.settings.SettingsSearchState
 import app.urv.manager.util.FilenameUtils
 import app.urv.manager.util.toast
 import app.urv.manager.util.uiSafe
+import app.urv.manager.util.permission.hasNotificationPermission
 import app.urv.manager.domain.repository.PatchBundleRepository.BundleImportPhase
 import app.urv.manager.domain.manager.PreferencesManager
 import kotlinx.coroutines.delay
@@ -149,6 +152,14 @@ fun ImportExportSettingsScreen(
         }
         pendingImportPicker = null
         pendingExportPicker = null
+    }
+    val importedStoragePermissionLauncher = rememberLauncherForActivityResult(permissionContract) {
+        vm.onImportedStoragePermissionResult(it)
+    }
+    val importedNotificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) {
+        vm.onImportedNotificationPermissionResult(it)
     }
     val importDocumentLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -285,6 +296,7 @@ fun ImportExportSettingsScreen(
     val packagesWithOptions by vm.packagesWithOptions.collectAsStateWithLifecycle(initialValue = emptySet())
     val importProgress by vm.bundleImportProgress.collectAsStateWithLifecycle(initialValue = null)
     val keystoreDiagnostics = vm.keystoreDiagnostics
+    val importedPermissionRequest = vm.importedPermissionRequest
 
     LaunchedEffect(Unit) {
         vm.refreshKeystoreDiagnostics()
@@ -308,6 +320,28 @@ fun ImportExportSettingsScreen(
         } else {
             pendingDocumentImportPicker = null
             pendingDocumentExportPicker = null
+        }
+    }
+    LaunchedEffect(importedPermissionRequest) {
+        val request = importedPermissionRequest ?: return@LaunchedEffect
+        if (request.needsStoragePermission) {
+            if (!fs.hasStoragePermission()) {
+                importedStoragePermissionLauncher.launch(permissionName)
+                return@LaunchedEffect
+            }
+            vm.onImportedStoragePermissionResult(granted = true)
+            return@LaunchedEffect
+        }
+
+        if (request.needsNotificationPermission) {
+            if (
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                !context.hasNotificationPermission()
+            ) {
+                importedNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                return@LaunchedEffect
+            }
+            vm.onImportedNotificationPermissionResult(granted = true)
         }
     }
 

@@ -14,6 +14,8 @@ import androidx.lifecycle.viewModelScope
 import app.universal.revanced.manager.R
 import app.urv.manager.domain.manager.KeystoreManager
 import app.urv.manager.domain.manager.PreferencesManager
+import app.urv.manager.domain.manager.SearchForUpdatesBackgroundInterval
+import app.urv.manager.domain.manager.BundleUpdateDeliveryMode
 import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.domain.repository.PatchOptionsRepository
 import app.urv.manager.domain.repository.PatchProfileExportEntry
@@ -190,6 +192,22 @@ class ImportExportViewModel(
     private val patchProfileRepository: PatchProfileRepository,
     private val preferencesManager: PreferencesManager
 ) : ViewModel() {
+    data class ImportedNotificationRollback(
+        val bundleInterval: SearchForUpdatesBackgroundInterval,
+        val managerInterval: SearchForUpdatesBackgroundInterval,
+        val announcementInterval: SearchForUpdatesBackgroundInterval,
+        val deliveryMode: BundleUpdateDeliveryMode
+    )
+
+    data class ImportedPermissionRequest(
+        val needsStoragePermission: Boolean = false,
+        val needsNotificationPermission: Boolean = false,
+        val notificationRollback: ImportedNotificationRollback? = null
+    ) {
+        val isEmpty: Boolean
+            get() = !needsStoragePermission && !needsNotificationPermission
+    }
+
     enum class SelectionAction {
         ImportBundle,
         ImportAllBundles,
@@ -211,6 +229,8 @@ class ImportExportViewModel(
         private set
 
     var resetDialogState by mutableStateOf<ResetDialogState?>(null)
+    var importedPermissionRequest by mutableStateOf<ImportedPermissionRequest?>(null)
+        private set
 
     val packagesWithOptions = optionsRepository.getPackagesWithSavedOptions()
     val packagesWithSelection = selectionRepository.getPackagesWithSavedSelection()
@@ -236,6 +256,26 @@ class ImportExportViewModel(
     fun resetOptions() = viewModelScope.launch {
         optionsRepository.reset()
         app.toast(app.getString(R.string.patch_options_reset_toast))
+    }
+
+    fun onImportedStoragePermissionResult(granted: Boolean) {
+        val request = importedPermissionRequest ?: return
+        importedPermissionRequest = request
+            .copy(needsStoragePermission = false)
+            .takeUnless(ImportedPermissionRequest::isEmpty)
+    }
+
+    fun onImportedNotificationPermissionResult(granted: Boolean) {
+        val request = importedPermissionRequest ?: return
+        importedPermissionRequest = request
+            .copy(needsNotificationPermission = false)
+            .takeUnless(ImportedPermissionRequest::isEmpty)
+
+        if (!granted) {
+            viewModelScope.launch {
+                rollbackImportedNotificationSettings(request.notificationRollback)
+            }
+        }
     }
 
     fun startKeystoreImport(content: Uri) = viewModelScope.launch {
@@ -1189,6 +1229,7 @@ class ImportExportViewModel(
 
     fun importManagerSettings(source: Uri) = viewModelScope.launch {
         uiSafe(app, R.string.import_manager_settings_fail, "Failed to import manager settings") {
+            val previousSettings = preferencesManager.exportSettings()
             val exportFile = withContext(Dispatchers.IO) {
                 contentResolver.openInputStream(source)!!.use {
                     tolerantJson.decodeFromStream<ManagerSettingsExportFile>(it)
@@ -1196,6 +1237,7 @@ class ImportExportViewModel(
             }
 
             preferencesManager.importSettings(exportFile.settings)
+            importedPermissionRequest = buildImportedPermissionRequest(previousSettings)
             app.toast(app.getString(R.string.import_manager_settings_success))
         }
     }
@@ -1260,6 +1302,62 @@ class ImportExportViewModel(
 
             app.toast(app.getString(R.string.export_everything_success))
         }
+    }
+
+    private suspend fun rollbackImportedNotificationSettings(
+        rollback: ImportedNotificationRollback?
+    ) {
+        if (rollback == null) return
+
+        preferencesManager.importSettings(
+            PreferencesManager.SettingsSnapshot(
+                announcementPushNotificationInterval = rollback.announcementInterval,
+                searchForUpdatesBackgroundInterval = rollback.bundleInterval,
+                searchForManagerUpdatesBackgroundInterval = rollback.managerInterval,
+                bundleUpdateDeliveryMode = rollback.deliveryMode
+            )
+        )
+    }
+
+    private suspend fun buildImportedPermissionRequest(
+        previousSettings: PreferencesManager.SettingsSnapshot
+    ): ImportedPermissionRequest? {
+        val needsStoragePermission = preferencesManager.useCustomFilePicker.get()
+        val bundleInterval = preferencesManager.searchForUpdatesBackgroundInterval.get()
+        val managerInterval = preferencesManager.searchForManagerUpdatesBackgroundInterval.get()
+        val announcementInterval = preferencesManager.announcementPushNotificationInterval.get()
+        val deliveryMode = preferencesManager.bundleUpdateDeliveryMode.get()
+
+        val backgroundNotificationsEnabled =
+            bundleInterval != SearchForUpdatesBackgroundInterval.NEVER ||
+                managerInterval != SearchForUpdatesBackgroundInterval.NEVER ||
+                announcementInterval != SearchForUpdatesBackgroundInterval.NEVER ||
+                (
+                    deliveryMode == BundleUpdateDeliveryMode.WEBSOCKET_PREFERRED &&
+                        (
+                            bundleInterval != SearchForUpdatesBackgroundInterval.NEVER ||
+                                managerInterval != SearchForUpdatesBackgroundInterval.NEVER
+                            )
+                    )
+
+        return ImportedPermissionRequest(
+            needsStoragePermission = needsStoragePermission,
+            needsNotificationPermission = backgroundNotificationsEnabled,
+            notificationRollback = if (backgroundNotificationsEnabled) {
+                ImportedNotificationRollback(
+                    bundleInterval = previousSettings.searchForUpdatesBackgroundInterval
+                        ?: SearchForUpdatesBackgroundInterval.NEVER,
+                    managerInterval = previousSettings.searchForManagerUpdatesBackgroundInterval
+                        ?: SearchForUpdatesBackgroundInterval.NEVER,
+                    announcementInterval = previousSettings.announcementPushNotificationInterval
+                        ?: SearchForUpdatesBackgroundInterval.NEVER,
+                    deliveryMode = previousSettings.bundleUpdateDeliveryMode
+                        ?: BundleUpdateDeliveryMode.AUTO
+                )
+            } else {
+                null
+            }
+        ).takeUnless(ImportedPermissionRequest::isEmpty)
     }
 
     fun exportEverything(target: Uri) = viewModelScope.launch {
