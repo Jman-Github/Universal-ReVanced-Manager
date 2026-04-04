@@ -174,6 +174,8 @@
 - Reworked patcher progress handling across all runtimes so `Write patched APK` uses structured grouped progress instead of inconsistent fallback row creation
 - Fixed the patch selector action popup collapsing after toggling patches even when Collapse actions after toggling patches is disabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/338
 - Fixed patch selector action popup behavior so patch toggles no longer dismiss it as an outside click when auto-collapse is turned off https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/338
+- Fixed patch bundle update notifications showing the default bundle name instead of the user’s custom bundle name after a successful update https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/364
+- Fixed bundle auto-update progress text so custom bundle names remain consistent throughout checking, downloading, and finalizing stages https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/364
 
 
 # Refactors

@@ -2804,9 +2804,10 @@ class PatchBundleRepository(
                     } else {
                         null
                     }
+                    val displayLabel = progressLabelFor(bundle)
                     if (downloadedName != null && showProgress) {
                         bundleUpdateProgressFlow.update { progress ->
-                            progress?.copy(currentBundleName = downloadedName)
+                            progress?.copy(currentBundleName = displayLabel)
                         }
                     }
 
@@ -2816,7 +2817,7 @@ class PatchBundleRepository(
                         bundleUpdateProgressFlow.update { progress ->
                             progress?.copy(
                                 completed = completed,
-                                currentBundleName = downloadedName ?: progressLabelFor(bundle),
+                                currentBundleName = displayLabel,
                                 phase = BundleUpdatePhase.Finalizing,
                                 bytesRead = 0L,
                                 bytesTotal = null,
@@ -2827,7 +2828,7 @@ class PatchBundleRepository(
                     if (result != null) {
                         results[bundle] = result
                         runCatching { recordChangelog(bundle, bundle.fetchLatestReleaseInfo()) }
-                        onBundleUpdated?.invoke(bundle, downloadedName)
+                        onBundleUpdated?.invoke(bundle, downloadedName ?: displayLabel)
                     }
                 }
 
