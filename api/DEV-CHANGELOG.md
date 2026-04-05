@@ -20,6 +20,7 @@
 - Fixed merge split tools progress grouping so skipped split rows remain grouped separately from non-skipped rows
 - Fixed the native library stripping toggle handler on the choose-splits dialog to use a stable explicit toggled state path
 - Fixed merge split APK filter switching so selecting `Remove extra native libraries` resets previous preset exclusions first, instead of carrying over exclusions from filters like `Exclude unused languages` or `Recommended for this device` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/361
+- Fixed Settings and Update action buttons wrapping awkwardly under Android screen zoom https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/379
 
 
 # v1.8.1-dev.11 (2026-04-01)

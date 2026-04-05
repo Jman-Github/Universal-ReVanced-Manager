@@ -1,5 +1,7 @@
 package app.urv.manager.ui.component.settings
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -25,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.urv.manager.ui.component.haptics.HapticSwitch
 import androidx.compose.ui.unit.Dp
@@ -137,6 +140,7 @@ fun ExpressiveSettingsItem(
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ExpressiveSettingsConfigurableItem(
     headlineContent: String,
@@ -175,14 +179,28 @@ fun ExpressiveSettingsConfigurableItem(
                 enabled = secondaryActionEnabled,
                 modifier = Modifier.weight(1f)
             ) {
-                Text(secondaryActionLabel)
+                Text(
+                    text = secondaryActionLabel,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .basicMarquee(),
+                    textAlign = TextAlign.Center
+                )
             }
             FilledTonalButton(
                 onClick = onPrimaryAction,
                 enabled = primaryActionEnabled,
                 modifier = Modifier.weight(1f)
             ) {
-                Text(primaryActionLabel)
+                Text(
+                    text = primaryActionLabel,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .basicMarquee(),
+                    textAlign = TextAlign.Center
+                )
             }
         }
     }

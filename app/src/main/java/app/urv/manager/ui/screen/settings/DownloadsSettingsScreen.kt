@@ -5,6 +5,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import android.content.ClipData
 import android.content.ClipboardManager
 import androidx.annotation.StringRes
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
@@ -873,6 +875,7 @@ private enum class DownloaderPluginType(@StringRes val labelRes: Int) {
     Remote(R.string.downloader_plugin_type_modern)
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DownloaderPluginCard(
     title: String,
@@ -939,7 +942,14 @@ private fun DownloaderPluginCard(
                 enabled = secondaryActionEnabled,
                 modifier = Modifier.weight(1f)
             ) {
-                Text(secondaryActionLabel)
+                Text(
+                    text = secondaryActionLabel,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .basicMarquee(),
+                    textAlign = TextAlign.Center
+                )
             }
             if (middleActionLabel != null && onMiddleAction != null) {
                 OutlinedButton(
@@ -947,7 +957,14 @@ private fun DownloaderPluginCard(
                     enabled = middleActionEnabled,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text(middleActionLabel)
+                    Text(
+                        text = middleActionLabel,
+                        maxLines = 1,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .basicMarquee(),
+                        textAlign = TextAlign.Center
+                    )
                 }
             }
             FilledTonalButton(
@@ -955,7 +972,14 @@ private fun DownloaderPluginCard(
                 enabled = primaryActionEnabled,
                 modifier = Modifier.weight(1f)
             ) {
-                Text(primaryActionLabel)
+                Text(
+                    text = primaryActionLabel,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .basicMarquee(),
+                    textAlign = TextAlign.Center
+                )
             }
         }
         if (footerActionLabel != null && onFooterAction != null) {
