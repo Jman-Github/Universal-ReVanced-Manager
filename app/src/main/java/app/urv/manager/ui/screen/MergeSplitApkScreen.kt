@@ -405,14 +405,22 @@ private data class MergeSubStep(
     val skipped: Boolean
 )
 
-private fun parseMergeSubSteps(state: SplitMergeState): List<MergeSubStep> =
-    state.mergeSubSteps.map { raw ->
+private fun parseMergeSubSteps(state: SplitMergeState): List<MergeSubStep> {
+    val entries = state.mergeSubSteps.map { raw ->
         val skipped = raw.startsWith("[skipped]")
         MergeSubStep(
             title = raw.removePrefix("[skipped]").trim(),
             skipped = skipped
         )
     }
+    val extraction = entries.filter {
+        it.title.equals("Extracting split APKs", ignoreCase = true)
+    }
+    val remaining = entries.filterNot {
+        it.title.equals("Extracting split APKs", ignoreCase = true)
+    }
+    return extraction + remaining.filter { it.skipped } + remaining.filter { !it.skipped }
+}
 
 private fun findCurrentSubStepIndex(entries: List<MergeSubStep>, currentMessage: String?): Int {
     if (currentMessage.isNullOrBlank()) return -1
@@ -667,9 +675,10 @@ private fun SplitMergeSelectionDialog(
                         CheckedFilterChip(
                             selected = stripNativeLibs,
                             onClick = {
+                                val toggledStripNativeLibs = !stripNativeLibs
                                 updateSelection(
-                                    modules = selectedModules,
-                                    stripUnusedNativeLibs = !stripNativeLibs
+                                    modules = if (toggledStripNativeLibs) allModules else selectedModules,
+                                    stripUnusedNativeLibs = toggledStripNativeLibs
                                 )
                             },
                             colors = chipColors,

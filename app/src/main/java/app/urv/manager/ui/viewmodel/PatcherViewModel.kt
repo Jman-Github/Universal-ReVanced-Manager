@@ -2869,7 +2869,13 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             )
         }
         if (stepId == StepId.PrepareSplitApk && list.isNotEmpty()) {
-            val ordered = list.filter { it.skipped } + list.filter { !it.skipped }
+            val extraction = list.filter {
+                it.title.equals("Extracting split APKs", ignoreCase = true)
+            }
+            val remaining = list.filterNot {
+                it.title.equals("Extracting split APKs", ignoreCase = true)
+            }
+            val ordered = extraction + remaining.filter { it.skipped } + remaining.filter { !it.skipped }
             list.clear()
             list.addAll(ordered)
         }

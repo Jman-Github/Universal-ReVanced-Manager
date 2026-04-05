@@ -15,6 +15,10 @@
 - Fixed patch selector action popup behavior so patch toggles no longer dismiss it as an outside click when auto-collapse is turned off https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/338
 - Fixed patch bundle update notifications showing the default bundle name instead of the user’s custom bundle name after a successful update https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/364
 - Fixed bundle auto-update progress text so custom bundle names remain consistent throughout checking, downloading, and finalizing stages https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/364
+- Fixed the `Recommended for this device` merge split APK preset including extra ABI splits by preferring the device’s primary ABI 
+- Fixed merge split tools progress grouping so skipped split rows remain grouped separately from non-skipped rows
+- Fixed the native library stripping toggle handler on the choose-splits dialog to use a stable explicit toggled state path
+- Fixed merge split APK filter switching so selecting `Remove extra native libraries` resets previous preset exclusions first, instead of carrying over exclusions from filters like `Exclude unused languages` or `Recommended for this device` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/361
 
 
 # v1.8.1-dev.11 (2026-04-01)

@@ -435,12 +435,18 @@ object SplitApkPreparer {
     }
 
     private fun supportedAbiTokens(): Set<String> =
-        Build.SUPPORTED_ABIS
-            .asSequence()
-            .filter { it.isNotBlank() }
-            .flatMap { abi -> buildAbiTokens(abi).asSequence() }
-            .map { it.lowercase(Locale.ROOT) }
-            .toSet()
+        selectPrimaryAbi(Build.SUPPORTED_ABIS.toList())
+            ?.let { primary ->
+                buildAbiTokens(primary)
+                    .map { it.lowercase(Locale.ROOT) }
+                    .toSet()
+            }
+            ?: Build.SUPPORTED_ABIS
+                .asSequence()
+                .filter { it.isNotBlank() }
+                .flatMap { abi -> buildAbiTokens(abi).asSequence() }
+                .map { it.lowercase(Locale.ROOT) }
+                .toSet()
 
     private fun buildAbiTokens(abi: String): Set<String> {
         val normalized = abi.lowercase(Locale.ROOT)
@@ -450,6 +456,9 @@ object SplitApkPreparer {
             normalized.replace('_', '-')
         )
     }
+
+    private fun selectPrimaryAbi(supportedAbis: List<String>): String? =
+        supportedAbis.firstOrNull { it.isNotBlank() }
 
     private fun normalizeModuleSelectionName(name: String): String =
         name.lowercase(Locale.ROOT).removeSuffix(".apk")
