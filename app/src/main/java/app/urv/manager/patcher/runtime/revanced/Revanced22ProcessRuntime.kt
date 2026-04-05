@@ -321,8 +321,7 @@ class Revanced22ProcessRuntime(
             }
 
             val parameters = Parameters(
-                aaptPath = aaptPrimaryPath,
-                aaptFallbackPath = aaptFallbackPath,
+                aaptPath = aaptPath,
                 frameworkDir = frameworkPath,
                 cacheDir = cacheDir,
                 packageName = packageName,

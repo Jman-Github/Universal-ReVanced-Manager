@@ -114,8 +114,7 @@ class AmpleBridgeRuntime(context: Context) : AmpleRuntime(context) {
 
         try {
             val params = mapOf(
-                "aaptPath" to aaptPrimaryPath,
-                "aaptFallbackPath" to aaptFallbackPath,
+                "aaptPath" to aaptPath,
                 "frameworkDir" to frameworkPath,
                 "cacheDir" to cacheDir,
                 "apkEditorJarPath" to apkEditorJarPath,

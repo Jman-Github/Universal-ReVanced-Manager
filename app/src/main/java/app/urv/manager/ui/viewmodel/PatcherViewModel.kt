@@ -1655,8 +1655,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             ?.takeIf { SplitApkPreparer.isSplitArchive(it) }
             ?.let { file -> SplitApkPreparer.splitApkEntryNames(file).size }
 
-        val aapt2Selected = findLogValue("AAPT2 selected:") ?: "unknown"
-
         val appVersion = input.selectedApp.version
             ?.takeUnless { it.isBlank() }
             ?: "unspecified"
@@ -1665,15 +1663,12 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
         val logLines = logSnapshot
             .filterNot { (_, msg) ->
-                msg.startsWith("Battery optimization:") ||
+                    msg.startsWith("Battery optimization:") ||
                     msg.startsWith("Patching started at ") ||
                     msg.startsWith("Patcher runtime:") ||
                     msg.startsWith("Memory limit:") ||
                     msg.startsWith("Runtime mode:") ||
-                    msg.startsWith("Memory override:") ||
-                    msg.startsWith("AAPT2 selected:") ||
-                    msg.startsWith("AAPT2 sha256:") ||
-                    msg.startsWith("AAPT2 version:")
+                    msg.startsWith("Memory override:")
             }
             .map { (level, msg) -> "[${level.name}]: $msg" }
 
@@ -1700,7 +1695,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             appendLine("Strip native libs: ${if (stripNativeLibs) "on" else "off"}")
             appendLine("Skip unused splits: ${if (skipUnusedSplits) "on" else "off"}")
             appendLine("Battery optimization: $batteryOptimization")
-            appendLine("AAPT2 selected: $aapt2Selected")
             appendLine("App package: ${input.selectedApp.packageName}")
             appendLine("App version: $appVersion")
             appendLine("App size: $sizeMb")

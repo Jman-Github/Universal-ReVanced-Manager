@@ -8,7 +8,6 @@ import kotlinx.parcelize.RawValue
 data class AmpleParameters(
     val cacheDir: String,
     val aaptPath: String,
-    val aaptFallbackPath: String?,
     val frameworkDir: String,
     val runtimeClassPath: String?,
     val apkEditorJarPath: String?,

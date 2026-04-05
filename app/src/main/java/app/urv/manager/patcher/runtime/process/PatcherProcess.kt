@@ -12,7 +12,6 @@ import app.urv.manager.patcher.PatchList
 import app.urv.manager.patcher.ProgressEvent
 import app.urv.manager.patcher.Session
 import app.urv.manager.patcher.StepId
-import app.urv.manager.patcher.aapt.AaptSelector
 import app.urv.manager.patcher.logger.LogLevel
 import app.urv.manager.patcher.logger.Logger
 import app.urv.manager.patcher.patch.PatchBundle
@@ -30,10 +29,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
-import java.io.FileInputStream
 import java.io.OutputStream
 import java.io.PrintStream
-import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.logging.Handler
 import java.util.logging.Level
@@ -240,14 +237,7 @@ class PatcherProcess : IPatcherProcess.Stub() {
                         )
                         sanitizedInput = sanitized
                         val patcherInput = sanitized.file
-                        val selectedAaptPath = AaptSelector.select(
-                            parameters.aaptPath,
-                            parameters.aaptFallbackPath,
-                            patcherInput,
-                            logger,
-                            additionalArchives = relatedBundleArchives
-                        )
-                        logAapt2Info(selectedAaptPath, logger)
+                        val selectedAaptPath = parameters.aaptPath
                         val frameworkDir = FrameworkCacheResolver.resolve(
                             baseFrameworkDir = parameters.frameworkDir,
                             runtimeTag = "revanced",
@@ -470,44 +460,4 @@ class PatcherProcess : IPatcherProcess.Stub() {
         }
     }
 
-    private fun logAapt2Info(aaptPath: String, logger: Logger) {
-        val aaptFile = File(aaptPath)
-        if (!aaptFile.exists()) {
-            logger.warn("AAPT2 binary missing at $aaptPath")
-            return
-        }
-        logger.info("AAPT2 selected: ${aaptFile.name}")
-        val digest = sha256(aaptFile)
-        if (digest != null) {
-            logger.info("AAPT2 sha256: $digest")
-        }
-        val version = runCatching {
-            val process = ProcessBuilder(aaptPath, "version")
-                .redirectErrorStream(true)
-                .start()
-            val output = process.inputStream.bufferedReader().readText().trim()
-            process.waitFor()
-            output.takeIf { it.isNotBlank() }
-        }.getOrNull()
-        if (!version.isNullOrBlank()) {
-            logger.info("AAPT2 version: $version")
-        }
-    }
-
-    private fun sha256(file: File): String? = runCatching {
-        val digest = MessageDigest.getInstance("SHA-256")
-        FileInputStream(file).use { input ->
-            val buffer = ByteArray(8192)
-            while (true) {
-                val read = input.read(buffer)
-                if (read <= 0) break
-                digest.update(buffer, 0, read)
-            }
-        }
-        val hex = StringBuilder()
-        digest.digest().forEach { byte ->
-            hex.append(String.format("%02x", byte))
-        }
-        hex.toString()
-    }.getOrNull()
 }

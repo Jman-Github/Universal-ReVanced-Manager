@@ -272,8 +272,7 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
             }
 
             val parameters = Parameters(
-                aaptPath = aaptPrimaryPath,
-                aaptFallbackPath = aaptFallbackPath,
+                aaptPath = aaptPath,
                 frameworkDir = frameworkPath,
                 cacheDir = cacheDir,
                 packageName = packageName,

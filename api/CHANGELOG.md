@@ -84,6 +84,7 @@
 - Bumped Morphe Patcher to `1.3.3`
 - Bumped ReVanced Patcher to `22.0.1`
 - After importing settings, URV now requests any required runtime permissions for enabled features when they are not already granted
+- Removed now unneeded extra `libaapt2.so`'s and aapt2 selector system
 
 
 # Bug fixes

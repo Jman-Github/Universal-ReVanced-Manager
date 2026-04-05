@@ -5,7 +5,6 @@ import app.revanced.patcher.patch.Patch
 import app.urv.manager.patcher.ProgressEvent
 import app.urv.manager.patcher.RemoteError
 import app.urv.manager.patcher.StepId
-import app.urv.manager.patcher.aapt.AaptSelector
 import app.urv.manager.patcher.logger.LogLevel
 import app.urv.manager.patcher.logger.Logger
 import app.urv.manager.patcher.revanced.RevancedPatchBundleLoader
@@ -18,10 +17,8 @@ import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.patcher.toRemoteError
 import app.urv.manager.patcher.util.MislabeledImageResourceSanitizer
 import java.io.File
-import java.io.FileInputStream
 import java.io.OutputStream
 import java.io.PrintStream
-import java.security.MessageDigest
 import java.util.ArrayDeque
 import java.util.Collections
 import java.util.LinkedHashMap
@@ -144,7 +141,6 @@ object RevancedRuntimeEntry {
 
         val aaptPath = params["aaptPath"] as? String
             ?: return "Missing aaptPath parameter."
-        val aaptFallbackPath = params["aaptFallbackPath"] as? String
         val frameworkDir = params["frameworkDir"] as? String
             ?: return "Missing frameworkDir parameter."
         val cacheDir = params["cacheDir"] as? String
@@ -306,14 +302,7 @@ object RevancedRuntimeEntry {
                         )
                         sanitizedInput = sanitized
                         val patcherInput = sanitized.file
-                        val selectedAaptPath = AaptSelector.select(
-                            aaptPath,
-                            aaptFallbackPath,
-                            patcherInput,
-                            logger,
-                            additionalArchives = relatedBundleArchives
-                        )
-                        logAapt2Info(selectedAaptPath, logger)
+                        val selectedAaptPath = aaptPath
                         val frameworkCacheDir = FrameworkCacheResolver.resolve(
                             baseFrameworkDir = frameworkDir,
                             runtimeTag = "revanced22",
@@ -580,47 +569,6 @@ object RevancedRuntimeEntry {
             }
         }
     }
-
-    private fun logAapt2Info(aaptPath: String, logger: Logger) {
-        val aaptFile = File(aaptPath)
-        if (!aaptFile.exists()) {
-            logger.warn("AAPT2 binary missing at $aaptPath")
-            return
-        }
-        logger.info("AAPT2 selected: ${aaptFile.name}")
-        val digest = sha256(aaptFile)
-        if (digest != null) {
-            logger.info("AAPT2 sha256: $digest")
-        }
-        val version = runCatching {
-            val process = ProcessBuilder(aaptPath, "version")
-                .redirectErrorStream(true)
-                .start()
-            val output = process.inputStream.bufferedReader().readText().trim()
-            process.waitFor()
-            output.takeIf { it.isNotBlank() }
-        }.getOrNull()
-        if (!version.isNullOrBlank()) {
-            logger.info("AAPT2 version: $version")
-        }
-    }
-
-    private fun sha256(file: File): String? = runCatching {
-        val digest = MessageDigest.getInstance("SHA-256")
-        FileInputStream(file).use { input ->
-            val buffer = ByteArray(8192)
-            while (true) {
-                val read = input.read(buffer)
-                if (read <= 0) break
-                digest.update(buffer, 0, read)
-            }
-        }
-        val hex = StringBuilder()
-        digest.digest().forEach { byte ->
-            hex.append(String.format("%02x", byte))
-        }
-        hex.toString()
-    }.getOrNull()
 
     private fun resolveRuntimeClassPath(explicitPath: String?): String? {
         val explicit = explicitPath
