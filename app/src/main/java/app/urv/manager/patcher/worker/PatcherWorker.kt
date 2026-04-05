@@ -36,6 +36,7 @@ import app.urv.manager.network.downloader.LoadedDownloaderPlugin
 import app.urv.manager.patcher.ProgressEvent
 import app.urv.manager.patcher.RemoteError
 import app.urv.manager.patcher.StepId
+import app.urv.manager.patcher.toSafeRemoteError
 import app.urv.manager.patcher.logger.Logger
 import app.urv.manager.patcher.logger.LogLevel
 import app.urv.manager.patcher.split.SplitApkPreparer
@@ -1319,6 +1320,15 @@ class PatcherWorker(
                     PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(
                         e.message ?: "Downloader interaction cancelled by user"
                     )
+                )
+            )
+        } catch (e: OutOfMemoryError) {
+            Log.e(tag, "Patching ran out of memory".logFmt(), e)
+            val safeError = e.toSafeRemoteError()
+            eventDispatcher(ProgressEvent.Failed(null, safeError))
+            Result.failure(
+                workDataOf(
+                    PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(safeError.stackTrace)
                 )
             )
         } catch (e: Exception) {

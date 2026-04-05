@@ -5,6 +5,8 @@ import app.urv.manager.patcher.StepId
 import app.urv.manager.patcher.logger.Logger
 import app.urv.manager.patcher.runCancellableBlockingIo
 import app.urv.manager.patcher.runStep
+import app.urv.manager.patcher.toSafeRemoteError
+import app.urv.manager.patcher.toSafeStackTraceString
 import app.urv.manager.patcher.toRemoteError
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.patcher.util.ManifestDecimalResourceReferenceSanitizer
@@ -100,9 +102,9 @@ class RevancedSession(
 
                 if (exception != null) {
                     if (index < nextIndex) {
-                        onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), exception.toRemoteError()))
+                        onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), exception.toSafeRemoteError()))
                         logger.error("${patch.name ?: patchNameAt(index)} failed:")
-                        logger.error(exception.stackTraceToString())
+                        logger.error(exception.toSafeStackTraceString())
                         throw exception
                     }
                     while (nextIndex < index) {
@@ -112,9 +114,9 @@ class RevancedSession(
                         nextIndex += 1
                     }
                     startPatch(index)
-                    onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), exception.toRemoteError()))
+                    onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), exception.toSafeRemoteError()))
                     logger.error("${patch.name ?: patchNameAt(index)} failed:")
-                    logger.error(exception.stackTraceToString())
+                    logger.error(exception.toSafeStackTraceString())
                     throw exception
                 }
 

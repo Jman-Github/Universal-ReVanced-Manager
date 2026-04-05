@@ -131,11 +131,10 @@ class Session private constructor(
             checkCancelled()
             val index = indexByPatch[patch] ?: return@collect
             if (exception != null) {
-                val error = exception as? Exception ?: Exception(exception)
                 if (index < nextIndex) {
-                    onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), error.toRemoteError()))
+                    onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), exception.toSafeRemoteError()))
                     logger.error("${patch.name} failed:")
-                    logger.error(exception.stackTraceToString())
+                    logger.error(exception.toSafeStackTraceString())
                     throw exception
                 }
                 while (nextIndex < index) {
@@ -145,9 +144,9 @@ class Session private constructor(
                     nextIndex += 1
                 }
                 startPatch(index)
-                onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), error.toRemoteError()))
+                onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), exception.toSafeRemoteError()))
                 logger.error("${patch.name} failed:")
-                logger.error(exception.stackTraceToString())
+                logger.error(exception.toSafeStackTraceString())
                 throw exception
             }
 

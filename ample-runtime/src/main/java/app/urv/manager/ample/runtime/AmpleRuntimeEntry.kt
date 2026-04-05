@@ -5,6 +5,7 @@ import app.revanced.patcher.patch.Patch
 import app.urv.manager.patcher.ProgressEvent
 import app.urv.manager.patcher.RemoteError
 import app.urv.manager.patcher.StepId
+import app.urv.manager.patcher.toSafeStackTraceString
 import app.urv.manager.patcher.logger.LogLevel
 import app.urv.manager.patcher.logger.Logger
 import app.urv.manager.patcher.ample.AmplePatchBundleLoader
@@ -347,8 +348,8 @@ object AmpleRuntimeEntry {
             CANCELLATION_SENTINEL
         } catch (throwable: Throwable) {
             val extra = aaptLogs.dump()
-            val stack = throwable.stackTraceToString()
-            if (extra.isNotBlank()) {
+            val stack = throwable.toSafeStackTraceString()
+            if (throwable !is OutOfMemoryError && extra.isNotBlank()) {
                 "$stack\n\nAAPT2 output:\n$extra"
             } else {
                 stack

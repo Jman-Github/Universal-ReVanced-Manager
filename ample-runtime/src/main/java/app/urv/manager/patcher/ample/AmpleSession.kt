@@ -8,6 +8,8 @@ import app.urv.manager.patcher.logger.Logger
 import app.urv.manager.patcher.runStep
 import app.urv.manager.patcher.runCancellableBlockingIo
 import app.urv.manager.patcher.toRemoteError
+import app.urv.manager.patcher.toSafeRemoteError
+import app.urv.manager.patcher.toSafeStackTraceString
 import app.urv.manager.patcher.util.ManifestDecimalResourceReferenceSanitizer
 import app.urv.manager.patcher.util.MislabeledImageResourceSanitizer
 import app.urv.manager.patcher.util.NativeLibStripper
@@ -139,11 +141,10 @@ class AmpleSession private constructor(
             val index = indexByPatch[patch] ?: return@collect
 
             if (exception != null) {
-                val error = exception as? Exception ?: Exception(exception)
                 if (index < nextIndex) {
-                    onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), error.toRemoteError()))
+                    onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), exception.toSafeRemoteError()))
                     logger.error("${patch.name} failed:")
-                    logger.error(exception.stackTraceToString())
+                    logger.error(exception.toSafeStackTraceString())
                     throw exception
                 }
                 while (nextIndex < index) {
@@ -153,9 +154,9 @@ class AmpleSession private constructor(
                     nextIndex += 1
                 }
                 startPatch(index)
-                onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), error.toRemoteError()))
+                onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), exception.toSafeRemoteError()))
                 logger.error("${patch.name} failed:")
-                logger.error(exception.stackTraceToString())
+                logger.error(exception.toSafeStackTraceString())
                 throw exception
             }
 

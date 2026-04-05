@@ -64,6 +64,16 @@ data class RemoteError(
     val stackTrace: String,
 ) : Parcelable
 
+private const val OOM_FAILURE_MESSAGE = "Patching ran out of memory"
+
+fun Throwable.toSafeStackTraceString(): String {
+    if (this is OutOfMemoryError) {
+        val summary = message?.takeIf { it.isNotBlank() } ?: OOM_FAILURE_MESSAGE
+        return "${this::class.java.name}: $summary"
+    }
+    return this.stackTraceToString()
+}
+
 fun Exception.toRemoteError() = RemoteError(
     type = this::class.java.name,
     message = this.message,
@@ -74,6 +84,12 @@ fun Throwable.toRemoteError() = RemoteError(
     type = this::class.java.name,
     message = this.message,
     stackTrace = this.stackTraceToString(),
+)
+
+fun Throwable.toSafeRemoteError() = RemoteError(
+    type = this::class.java.name,
+    message = this.message ?: if (this is OutOfMemoryError) OOM_FAILURE_MESSAGE else null,
+    stackTrace = this.toSafeStackTraceString(),
 )
 
 inline fun <T> runStep(
@@ -101,7 +117,7 @@ inline fun <T> runStep(
     value
 } catch (error: Throwable) {
     if (error is CancellationException) throw error
-    onEvent(ProgressEvent.Failed(stepId, error.toRemoteError()))
+    onEvent(ProgressEvent.Failed(stepId, error.toSafeRemoteError()))
     throw error
 }
 
