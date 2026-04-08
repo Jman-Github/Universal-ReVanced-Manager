@@ -88,6 +88,7 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -1158,7 +1159,6 @@ private fun AdaptiveColorWheelDialog(
     var redInput by remember(initialColor) { mutableStateOf(AndroidColor.red(initialColor.toArgb()).toString()) }
     var greenInput by remember(initialColor) { mutableStateOf(AndroidColor.green(initialColor.toArgb()).toString()) }
     var blueInput by remember(initialColor) { mutableStateOf(AndroidColor.blue(initialColor.toArgb()).toString()) }
-    val rgbTextStyle = LocalTextStyle.current.copy(color = MaterialTheme.colorScheme.onSurface)
     val rgbFieldColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor = MaterialTheme.colorScheme.onSurface,
         unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
@@ -1254,41 +1254,26 @@ private fun AdaptiveColorWheelDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    OutlinedTextField(
+                    RgbChannelField(
+                        label = stringResource(R.string.color_channel_red),
                         value = redInput,
                         onValueChange = { redInput = it.filter(Char::isDigit).take(3) },
-                        label = { Text(stringResource(R.string.color_channel_red)) },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        textStyle = rgbTextStyle,
                         colors = rgbFieldColors,
-                        modifier = Modifier
-                            .weight(1f)
-                            .widthIn(min = 84.dp)
+                        modifier = Modifier.weight(1f)
                     )
-                    OutlinedTextField(
+                    RgbChannelField(
+                        label = stringResource(R.string.color_channel_green),
                         value = greenInput,
                         onValueChange = { greenInput = it.filter(Char::isDigit).take(3) },
-                        label = { Text(stringResource(R.string.color_channel_green)) },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        textStyle = rgbTextStyle,
                         colors = rgbFieldColors,
-                        modifier = Modifier
-                            .weight(1f)
-                            .widthIn(min = 84.dp)
+                        modifier = Modifier.weight(1f)
                     )
-                    OutlinedTextField(
+                    RgbChannelField(
+                        label = stringResource(R.string.color_channel_blue),
                         value = blueInput,
                         onValueChange = { blueInput = it.filter(Char::isDigit).take(3) },
-                        label = { Text(stringResource(R.string.color_channel_blue)) },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        textStyle = rgbTextStyle,
                         colors = rgbFieldColors,
-                        modifier = Modifier
-                            .weight(1f)
-                            .widthIn(min = 84.dp)
+                        modifier = Modifier.weight(1f)
                     )
                 }
                 Text(
@@ -1341,6 +1326,38 @@ private fun AdaptiveColorWheelDialog(
             }
         }
     )
+}
+
+@Composable
+private fun RgbChannelField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    colors: androidx.compose.material3.TextFieldColors,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.widthIn(min = 72.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            textStyle = LocalTextStyle.current.copy(
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center
+            ),
+            colors = colors,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
 }
 
 @Composable

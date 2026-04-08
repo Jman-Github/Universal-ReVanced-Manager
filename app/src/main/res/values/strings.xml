@@ -930,6 +930,7 @@ Patch profiles are not affected.</string>
     <string name="patch_profile_apk_select">Select package</string>
     <string name="patch_profile_apk_clear">Clear</string>
     <string name="patch_profile_apk_not_set">No package selected</string>
+    <string name="patch_profile_downloaded_apps_empty">No APK for this package</string>
     <string name="patch_profile_apk_missing">Selected package missing</string>
     <string name="patch_profile_apk_saved_toast">Saved package for "%1$s"</string>
     <string name="patch_profile_apk_cleared_toast">Cleared saved package for "%1$s"</string>

@@ -571,6 +571,9 @@ class InstalledAppsViewModel(
         withContext(Dispatchers.IO) { installedAppsRepository.getAppliedPatches(packageName) }
 
     private suspend fun normalizeDuplicateSavedEntries(installedApps: List<InstalledApp>): Boolean {
+        // When overwrite protection is enabled, duplicate saved entries for the
+        // currently installed variant are intentional and should remain visible.
+        if (prefs.disableSavedAppOverwrite.get()) return false
         if (normalizingSavedEntries || installedApps.isEmpty()) return false
         val duplicateSavedEntries = withContext(Dispatchers.IO) {
             val duplicates = mutableListOf<InstalledApp>()

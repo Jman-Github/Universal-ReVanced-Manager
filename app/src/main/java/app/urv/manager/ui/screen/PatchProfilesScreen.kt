@@ -329,7 +329,7 @@ fun PatchProfilesScreen(
             text = {
                 if (matchingDownloadedApps.isEmpty()) {
                     Text(
-                        text = stringResource(R.string.patch_profile_apk_not_set),
+                        text = stringResource(R.string.patch_profile_downloaded_apps_empty),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

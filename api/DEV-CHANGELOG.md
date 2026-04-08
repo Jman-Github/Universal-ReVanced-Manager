@@ -23,6 +23,7 @@
 - Fixed Settings and Update action buttons wrapping awkwardly under Android screen zoom https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/379
 - Fixed URV sometimes crashing when patching ran out of memory with the experimental patcher disabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/349
 - Fixed patcher progress sometimes lagging behind the foreground notification during the early Write patched APK phase https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/390
+- Fixed a few UI edge cases, including hidden RGB values in the custom YouTube asset color picker, clearer patch-profile empty-state wording for downloaded apps, and duplicate saved-entry normalization when overwrite protection is enabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/291 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
 
 
 # v1.8.1-dev.11 (2026-04-01)
