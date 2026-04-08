@@ -22,6 +22,7 @@
 - Fixed merge split APK filter switching so selecting `Remove extra native libraries` resets previous preset exclusions first, instead of carrying over exclusions from filters like `Exclude unused languages` or `Recommended for this device` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/361
 - Fixed Settings and Update action buttons wrapping awkwardly under Android screen zoom https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/379
 - Fixed URV sometimes crashing when patching ran out of memory with the experimental patcher disabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/349
+- Fixed patcher progress sometimes lagging behind the foreground notification during the early Write patched APK phase https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/390
 
 
 # v1.8.1-dev.11 (2026-04-01)

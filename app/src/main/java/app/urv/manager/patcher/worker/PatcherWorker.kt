@@ -115,6 +115,15 @@ class PatcherWorker(
     private var patchNotificationSteps: List<String> = emptyList()
     @Volatile
     private var foregroundStarted: Boolean = false
+    @Volatile
+    private var lastNotificationProgressCurrent: Int = 0
+    @Volatile
+    private var notificationSplitPreparationSeen: Boolean = false
+    @Volatile
+    private var lastWriteApkNotificationPhaseIndex: Int = -1
+    @Volatile
+    private var lastWriteApkNotificationDetail: String? = null
+    private val notificationStateLock = Any()
     private val workerProgressScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val workerProgressMutex = Mutex()
     private val progressSequence = AtomicLong(0L)
@@ -181,7 +190,7 @@ class PatcherWorker(
         channel.description =
             applicationContext.getString(R.string.notification_channel_patching_description)
         notificationManager.createNotificationChannel(channel)
-        val progress = notificationProgress(event, totalPatchCount)
+        val progress = normalizeNotificationProgress(notificationProgress(event, totalPatchCount))
         val contentText = notificationContentText(event, totalPatchCount)
         return Notification.Builder(applicationContext, channel.id)
             .setContentTitle(applicationContext.getText(R.string.patcher_notification_title))
@@ -296,6 +305,17 @@ class PatcherWorker(
         }
     }
 
+    private fun normalizeNotificationProgress(progress: NotificationProgress?): NotificationProgress? {
+        if (progress == null) return null
+        if (progress.indeterminate || progress.max <= 0) return progress
+
+        val current = progress.current
+            .coerceAtLeast(lastNotificationProgressCurrent)
+            .coerceAtMost(progress.max)
+        lastNotificationProgressCurrent = current
+        return if (current == progress.current) progress else progress.copy(current = current)
+    }
+
     private fun notificationStageProgress(
         stepId: StepId,
         totalPatchCount: Int,
@@ -304,9 +324,14 @@ class PatcherWorker(
         val normalized = fraction.coerceIn(0f, 1f)
         val current = when (stepId) {
             StepId.DownloadAPK -> 0
-            StepId.LoadPatches -> progressInRange(LOAD_PATCHES_START, LOAD_PATCHES_END, normalized)
-            StepId.PrepareSplitApk ->
-                progressInRange(PREPARE_SPLIT_START, PREPARE_SPLIT_END, normalized)
+            StepId.LoadPatches -> {
+                val (start, end) = loadPatchesNotificationRange()
+                progressInRange(start, end, normalized)
+            }
+            StepId.PrepareSplitApk -> {
+                val (start, end) = prepareSplitNotificationRange()
+                progressInRange(start, end, normalized)
+            }
             StepId.ReadAPK -> progressInRange(READ_APK_START, READ_APK_END, normalized)
             StepId.ExecutePatches -> progressInRange(
                 EXECUTE_PATCHES_START,
@@ -322,6 +347,22 @@ class PatcherWorker(
             current = current,
             indeterminate = false
         )
+    }
+
+    private fun loadPatchesNotificationRange(): Pair<Int, Int> {
+        return if (notificationSplitPreparationSeen) {
+            LOAD_PATCHES_WITH_SPLIT_START to LOAD_PATCHES_WITH_SPLIT_END
+        } else {
+            LOAD_PATCHES_START to LOAD_PATCHES_END
+        }
+    }
+
+    private fun prepareSplitNotificationRange(): Pair<Int, Int> {
+        return if (notificationSplitPreparationSeen) {
+            PREPARE_SPLIT_WITH_SPLIT_START to PREPARE_SPLIT_WITH_SPLIT_END
+        } else {
+            PREPARE_SPLIT_START to PREPARE_SPLIT_END
+        }
     }
 
     private fun notificationExecutePatchProgress(
@@ -347,9 +388,9 @@ class PatcherWorker(
             detail.equals("Copying base APK", ignoreCase = true) -> 0.15f
             detail.equals("Applying patched changes", ignoreCase = true) -> 0.28f
             detail.equals("Compiling patched dex files", ignoreCase = true) -> 0.4f
+            detail.equals("Compiling modified resources", ignoreCase = true) -> 0.65f
             detail.startsWith("Compiling ", ignoreCase = true) -> 0.4f
             detail.startsWith("Compiled ", ignoreCase = true) -> 0.4f
-            detail.equals("Compiling modified resources", ignoreCase = true) -> 0.65f
             detail.equals("Writing output APK", ignoreCase = true) -> 0.82f
             detail.equals("Finalizing output", ignoreCase = true) -> 0.92f
             detail.equals("Stripping native libraries", ignoreCase = true) -> 0.97f
@@ -390,8 +431,11 @@ class PatcherWorker(
 
     private fun stopForegroundUpdates() {
         cancelActiveRuntimes()
-        patchNotificationSteps = emptyList()
-        foregroundStarted = false
+        synchronized(notificationStateLock) {
+            patchNotificationSteps = emptyList()
+            resetNotificationProgressTrackingLocked()
+            foregroundStarted = false
+        }
         clearForegroundNotificationIfOwned()
     }
 
@@ -403,23 +447,156 @@ class PatcherWorker(
 
     private fun updateForegroundNotification(event: ProgressEvent?, totalPatchCount: Int) {
         if (shouldSkipForegroundUpdates()) return
-        val notification = createNotification(event, totalPatchCount)
-        try {
-            if (!foregroundStarted) {
-                runBlocking {
-                    setForeground(createForegroundInfo(notification))
+        synchronized(notificationStateLock) {
+            val notificationEvent = normalizeNotificationEvent(event)
+            val notification = createNotification(notificationEvent, totalPatchCount)
+            try {
+                if (!foregroundStarted) {
+                    runBlocking {
+                        setForeground(createForegroundInfo(notification))
+                    }
+                    foregroundStarted = true
                 }
-                foregroundStarted = true
+            } catch (e: Exception) {
+                Log.d(tag, "Failed to set foreground notification:", e)
             }
-        } catch (e: Exception) {
-            Log.d(tag, "Failed to set foreground notification:", e)
-        }
 
-        try {
-            notificationManager.notify(NOTIFICATION_ID, notification)
-        } catch (e: Exception) {
-            Log.d(tag, "Failed to refresh foreground notification:", e)
+            try {
+                notificationManager.notify(NOTIFICATION_ID, notification)
+            } catch (e: Exception) {
+                Log.d(tag, "Failed to refresh foreground notification:", e)
+            }
         }
+    }
+
+    private fun normalizeNotificationEvent(event: ProgressEvent?): ProgressEvent? {
+        when (event?.stepId) {
+            StepId.PrepareSplitApk -> notificationSplitPreparationSeen = true
+            null,
+            StepId.DownloadAPK,
+            StepId.LoadPatches,
+            StepId.ReadAPK,
+            StepId.ExecutePatches,
+            StepId.WriteAPK,
+            StepId.SignAPK -> Unit
+            is StepId.ExecutePatch -> Unit
+        }
+        return when (event) {
+            is ProgressEvent.Started -> {
+                if (event.stepId == StepId.LoadPatches) {
+                    lastNotificationProgressCurrent = 0
+                    resetWriteApkNotificationPhase()
+                }
+                if (event.stepId == StepId.WriteAPK || event.stepId == StepId.SignAPK) {
+                    resetWriteApkNotificationPhase()
+                }
+                event
+            }
+            is ProgressEvent.Progress -> normalizeWriteApkNotificationPhase(event)
+            is ProgressEvent.Completed -> {
+                if (event.stepId == StepId.WriteAPK || event.stepId == StepId.SignAPK) {
+                    resetWriteApkNotificationPhase()
+                }
+                event
+            }
+            is ProgressEvent.Failed -> {
+                if (event.stepId == StepId.WriteAPK || event.stepId == StepId.SignAPK) {
+                    resetWriteApkNotificationPhase()
+                }
+                event
+            }
+            null -> null
+        }
+    }
+
+    private fun normalizeWriteApkNotificationPhase(
+        event: ProgressEvent.Progress
+    ): ProgressEvent.Progress {
+        if (event.stepId != StepId.WriteAPK) return event
+        val detail = normalizeNotificationDetail(event.stepId, event.message)
+            ?.trim()
+            ?.let(::normalizeWriteApkNotificationProgressDetail)
+            ?: return lastWriteApkNotificationDetail?.let { detail ->
+                event.copy(message = detail)
+            } ?: event
+        val phaseIndex = writeApkNotificationPhaseIndex(detail)
+        if (phaseIndex == -1) {
+            return lastWriteApkNotificationDetail?.let { lastDetail ->
+                event.copy(message = lastDetail)
+            } ?: event
+        }
+        if (phaseIndex < lastWriteApkNotificationPhaseIndex) {
+            return event.copy(message = lastWriteApkNotificationDetail)
+        }
+        if (shouldRetainWriteApkNotificationDetail(detail, phaseIndex)) {
+            return event.copy(message = lastWriteApkNotificationDetail)
+        }
+        lastWriteApkNotificationPhaseIndex = phaseIndex
+        lastWriteApkNotificationDetail = detail
+        return event.copy(message = detail)
+    }
+
+    private fun resetWriteApkNotificationPhase() {
+        lastWriteApkNotificationPhaseIndex = -1
+        lastWriteApkNotificationDetail = null
+    }
+
+    private fun resetNotificationProgressTracking() {
+        synchronized(notificationStateLock) {
+            resetNotificationProgressTrackingLocked()
+        }
+    }
+
+    private fun resetNotificationProgressTrackingLocked() {
+        lastNotificationProgressCurrent = 0
+        notificationSplitPreparationSeen = false
+        resetWriteApkNotificationPhase()
+    }
+
+    private fun primeNotificationSplitFlow(input: SelectedApp) {
+        if (input !is SelectedApp.Local) return
+        if (!SplitApkPreparer.isSplitArchive(input.file)) return
+        synchronized(notificationStateLock) {
+            notificationSplitPreparationSeen = true
+        }
+    }
+
+    private fun writeApkNotificationPhaseIndex(detail: String): Int = when {
+        detail.equals("Preparing output APK", ignoreCase = true) -> 0
+        detail.equals("Copying base APK", ignoreCase = true) -> 1
+        detail.equals("Applying patched changes", ignoreCase = true) -> 2
+        detail.equals("Compiling patched dex files", ignoreCase = true) -> 3
+        detail.equals("Compiling modified resources", ignoreCase = true) -> 4
+        detail.startsWith("Compiling ", ignoreCase = true) -> 3
+        detail.startsWith("Compiled ", ignoreCase = true) -> 3
+        detail.equals("Writing output APK", ignoreCase = true) -> 5
+        detail.equals("Finalizing output", ignoreCase = true) -> 6
+        detail.equals("Stripping native libraries", ignoreCase = true) -> 7
+        else -> -1
+    }
+
+    private fun normalizeWriteApkNotificationProgressDetail(detail: String): String {
+        val trimmed = detail.trim()
+        return if (trimmed.startsWith("Compiled ", ignoreCase = true)) {
+            "Compiling ${trimmed.removePrefix("Compiled ").trim()}"
+        } else {
+            trimmed
+        }
+    }
+
+    private fun shouldRetainWriteApkNotificationDetail(detail: String, phaseIndex: Int): Boolean {
+        val lastDetail = lastWriteApkNotificationDetail ?: return false
+        if (phaseIndex != lastWriteApkNotificationPhaseIndex) return false
+        if (phaseIndex != 3) return false
+
+        val lastIsDexChild = isWriteApkDexNotificationTitle(lastDetail)
+        val nextIsDexChild = isWriteApkDexNotificationTitle(detail)
+        if (lastIsDexChild && !nextIsDexChild) return true
+        if (!lastIsDexChild || !nextIsDexChild) return false
+
+        val lastDexName = lastDetail.removePrefix("Compiling ").trim()
+        val nextDexName = detail.removePrefix("Compiling ").trim()
+        return writeApkDexSortKey(nextDexName) < writeApkDexSortKey(lastDexName)
     }
 
     private fun clearForegroundNotification() {
@@ -535,10 +712,56 @@ class PatcherWorker(
         }
     }
 
-    private fun handleWorkerLogProgress(message: String, totalPatchCount: Int) {
+    private fun handleWorkerLogProgress(
+        message: String,
+        totalPatchCount: Int,
+        onEvent: (ProgressEvent) -> Unit
+    ) {
         if (shouldSkipForegroundUpdates()) return
         val event = buildWriteApkLogEvent(message) ?: return
-        updateForegroundNotification(event, totalPatchCount)
+        forwardWriteApkLogProgressForUi(event, onEvent)
+        val notificationEvent = normalizeWriteApkNotificationEvent(event)
+        updateForegroundNotification(notificationEvent, totalPatchCount)
+    }
+
+    private fun normalizeWriteApkNotificationEvent(
+        event: ProgressEvent.Progress
+    ): ProgressEvent.Progress {
+        if (event.stepId != StepId.WriteAPK) return event
+        return event.copy(subSteps = null)
+    }
+
+    private fun forwardWriteApkLogProgressForUi(
+        event: ProgressEvent.Progress,
+        onEvent: (ProgressEvent) -> Unit
+    ) {
+        if (event.stepId != StepId.WriteAPK) return
+
+        val uiEvent = normalizeEarlyWriteApkUiEvent(event)
+        runCatching {
+            onEvent(uiEvent)
+        }.onFailure { error ->
+            Log.d(tag, "Failed to forward write APK log progress to UI", error)
+        }
+        val snapshotEvent = normalizeEarlyWriteApkUiEvent(event).copy(
+            subSteps = cachedExpandableSubSteps[StepId.WriteAPK] ?: event.subSteps
+        )
+        val snapshot = PatcherWorkerProgressSnapshot(
+            sequence = progressSequence.incrementAndGet(),
+            event = snapshotEvent
+        )
+
+        workerProgressScope.launch {
+            persistWorkerProgressSnapshot(snapshot)
+        }
+    }
+
+    private fun normalizeEarlyWriteApkUiEvent(event: ProgressEvent.Progress): ProgressEvent.Progress {
+        if (event.stepId != StepId.WriteAPK) return event
+        if (event.message.equals("Applying patched changes", ignoreCase = true)) {
+            return event.copy(message = null, subSteps = null)
+        }
+        return event.copy(subSteps = null)
     }
 
     private fun buildWriteApkLogEvent(rawMessage: String): ProgressEvent.Progress? {
@@ -573,12 +796,7 @@ class PatcherWorker(
         }
 
         updateCachedWriteApkNotificationSubSteps(rawDetail)
-        val detail = if (rawDetail.startsWith("Compiled ", ignoreCase = true)) {
-            val currentTitle = "Compiling ${rawDetail.removePrefix("Compiled ").trim()}"
-            nextWriteApkNotificationDetailAfter(currentTitle) ?: rawDetail
-        } else {
-            rawDetail
-        }
+        val detail = rawDetail
 
         return ProgressEvent.Progress(
             stepId = StepId.WriteAPK,
@@ -690,21 +908,6 @@ class PatcherWorker(
         return suffix.toIntOrNull() ?: Int.MAX_VALUE
     }
 
-    private fun nextWriteApkNotificationDetailAfter(currentTitle: String): String? {
-        val subSteps = notificationExpandableSubSteps[StepId.WriteAPK].orEmpty()
-        if (subSteps.isEmpty()) return null
-
-        val currentIndex = subSteps.indexOfFirst { title ->
-            title.equals(currentTitle, ignoreCase = true)
-        }
-        if (currentIndex == -1) return null
-
-        return ((currentIndex + 1) until subSteps.size)
-            .asSequence()
-            .map { subSteps[it].trim() }
-            .firstOrNull { it.isNotBlank() }
-    }
-
     private fun isDexCompilePhaseTitle(message: String): Boolean {
         return message.equals("Compiling patched dex files", ignoreCase = true) ||
             message.equals("Applying patched changes", ignoreCase = true)
@@ -717,6 +920,7 @@ class PatcherWorker(
     }
 
     override suspend fun doWork(): Result {
+        resetNotificationProgressTracking()
         val workerFinished = AtomicBoolean(false)
         val stopMonitor = CoroutineScope(Dispatchers.Default + SupervisorJob()).launch {
             var missingTaskSamples = 0
@@ -760,6 +964,7 @@ class PatcherWorker(
         return try {
             val args = workerRepository.claimInput(this)
             val totalPatchCount = args.selectedPatches.values.sumOf { it.size }
+            primeNotificationSplitFlow(args.input)
 
             try {
                 updateForegroundNotification(event = null, totalPatchCount = totalPatchCount)
@@ -801,7 +1006,7 @@ class PatcherWorker(
         val workerLogger = object : Logger() {
             override fun log(level: LogLevel, message: String) {
                 args.logger.log(level, message)
-                handleWorkerLogProgress(message, totalPatchCount)
+                handleWorkerLogProgress(message, totalPatchCount, args.onEvent)
             }
         }
         val eventDispatcher: (ProgressEvent) -> Unit = eventDispatcher@{ event ->
@@ -1364,9 +1569,13 @@ class PatcherWorker(
         private const val DOWNLOAD_PROGRESS_MIN_BYTES = 256 * 1024L
         private const val NOTIFICATION_PROGRESS_MAX = 1000
         private const val LOAD_PATCHES_START = 0
-        private const val LOAD_PATCHES_END = 120
-        private const val PREPARE_SPLIT_START = LOAD_PATCHES_END
-        private const val PREPARE_SPLIT_END = 220
+        private const val LOAD_PATCHES_END = 220
+        private const val PREPARE_SPLIT_START = LOAD_PATCHES_START
+        private const val PREPARE_SPLIT_END = LOAD_PATCHES_END
+        private const val PREPARE_SPLIT_WITH_SPLIT_START = 0
+        private const val PREPARE_SPLIT_WITH_SPLIT_END = 120
+        private const val LOAD_PATCHES_WITH_SPLIT_START = PREPARE_SPLIT_WITH_SPLIT_END
+        private const val LOAD_PATCHES_WITH_SPLIT_END = 220
         private const val READ_APK_START = PREPARE_SPLIT_END
         private const val READ_APK_END = 320
         private const val EXECUTE_PATCHES_START = READ_APK_END

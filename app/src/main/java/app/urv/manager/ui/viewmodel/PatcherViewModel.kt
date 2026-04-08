@@ -22,6 +22,7 @@ import android.widget.Toast
 import androidx.activity.result.ActivityResult
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -877,7 +878,9 @@ fun proceedAfterMissingPatchWarning() {
 
             viewModelScope.launch {
                 appendBoundedLog(level, message)
-                handleDexCompileLine(message)
+                if (_isPatchingActive.value != true) {
+                    handleDexCompileLine(message)
+                }
             }
         }
     }
@@ -1006,12 +1009,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private val deferredLoadPatchesEvents = mutableListOf<ProgressEvent>()
     private var deferredLoadPatchesStepSnapshot: Step? = null
 
-    val progress by derivedStateOf {
-        val current = steps.count { it.state == State.COMPLETED }
-        val total = steps.size
-
-        current.toFloat() / total.toFloat()
-    }
+    var progress by mutableFloatStateOf(0f)
+        private set
 
     private val workManager = WorkManager.getInstance(app)
     private val notificationManager by lazy {
@@ -1081,6 +1080,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         runtimeReportedMemoryLimitMb = null
         replayWorkerProgressSnapshots = false
         lastReplayedWorkerProgressSequence = Long.MIN_VALUE
+        resetVisualProgress()
         markInitialStepRunning()
         _isPatchingActive.value = true
         startPatchingTaskMonitor()
@@ -2558,6 +2558,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             }
         }
         enforceSplitPreparationVisualPriority()
+        refreshVisualProgress()
     }
 
     private fun applyProgressEvent(event: ProgressEvent) {
@@ -2821,6 +2822,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             normalized
         }
         val list = buildSubStepList(effectiveTitles, existing, stepId)
+        if (stepId == StepId.WriteAPK) {
+            reconcilePreparedWriteApkSubSteps(list)
+        }
         stepSubSteps[stepId] = list
         if (stepId == StepId.WriteAPK) {
             dexSubStepsReady = list.isNotEmpty()
@@ -3099,6 +3103,32 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 )
             }
         }
+        progress = 1f
+    }
+
+    private fun resetVisualProgress() {
+        progress = 0f
+    }
+
+    private fun refreshVisualProgress() {
+        val total = steps.size
+        if (total <= 0) {
+            progress = 0f
+            return
+        }
+
+        val completedUnits = steps.count { it.state == State.COMPLETED }.toFloat()
+        val runningUnits = steps.sumOf { step ->
+            if (step.state != State.RUNNING) return@sumOf 0.0
+            val stepProgress = step.progress ?: return@sumOf 0.0
+            val current = stepProgress.first
+            val max = stepProgress.second?.takeIf { it > 0L } ?: return@sumOf 0.0
+            (current.toDouble() / max.toDouble()).coerceIn(0.0, 1.0)
+        }.toFloat()
+        val candidate = ((completedUnits + runningUnits) / total.toFloat()).coerceIn(0f, 1f)
+        if (candidate > progress) {
+            progress = candidate
+        }
     }
 
     private fun flushPendingDexCompileLines(force: Boolean = false) {
@@ -3146,6 +3176,30 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             if (detail.skipped || detail.state == State.COMPLETED) continue
             list[index] = detail.copy(state = State.COMPLETED, progress = null)
         }
+    }
+
+    private fun reconcilePreparedWriteApkSubSteps(list: SnapshotStateList<StepDetail>) {
+        val activeIndex = list.indexOfLast { detail ->
+            !detail.skipped && (
+                detail.state == State.RUNNING ||
+                    detail.state == State.COMPLETED ||
+                    detail.children.any { child ->
+                        !child.skipped &&
+                            (child.state == State.RUNNING || child.state == State.COMPLETED)
+                    }
+                )
+        }
+        if (activeIndex == -1) return
+
+        val activeDetail = list[activeIndex]
+        if (activeDetail.state == State.WAITING && activeDetail.children.isNotEmpty()) {
+            list[activeIndex] = activeDetail.copy(
+                state = State.RUNNING,
+                progress = null,
+                expandable = true
+            )
+        }
+        completeWriteApkPriorSteps(list, activeIndex)
     }
 
     private fun completePrepareSplitApkPriorSteps(
@@ -3226,12 +3280,14 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         val initialExistingIndex = initialChildren.indexOfFirst { it.title.equals(normalizedTitle, ignoreCase = true) }
 
         if (initialExistingIndex != -1 && initialChildren[initialExistingIndex].state == State.COMPLETED) {
+            reconcilePreparedWriteApkSubSteps(list)
             return
         }
 
         if (initialRunningChildIndex != -1 &&
             initialChildren[initialRunningChildIndex].title.equals(normalizedTitle, ignoreCase = true)
         ) {
+            reconcilePreparedWriteApkSubSteps(list)
             return
         }
 
@@ -3349,6 +3405,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     pendingDexCompileLines += "Compiling modified resources"
                     return@launch
                 }
+                if (!hasWriteApkApplyPhaseStarted()) return@launch
                 updateSubStep(StepId.WriteAPK, line, null)
             }
             return
@@ -3359,6 +3416,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     pendingDexCompileLines += line
                     return@launch
                 }
+                if (!hasWriteApkApplyPhaseStarted()) return@launch
                 updateSubStep(StepId.WriteAPK, line, null)
             }
             return
@@ -3373,6 +3431,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 pendingDexCompileLines += title
                 return@launch
             }
+            if (!hasWriteApkApplyPhaseStarted()) return@launch
             updateSubStep(StepId.WriteAPK, title, null)
         }
     }
@@ -3380,6 +3439,14 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private fun shouldBufferWriteApkLogProgress(): Boolean {
         val list = stepSubSteps[StepId.WriteAPK] ?: return true
         return list.isEmpty()
+    }
+
+    private fun hasWriteApkApplyPhaseStarted(): Boolean {
+        val list = stepSubSteps[StepId.WriteAPK] ?: return false
+        val applyStep = list.firstOrNull {
+            it.title.equals("Applying patched changes", ignoreCase = true)
+        } ?: return false
+        return applyStep.state == State.RUNNING || applyStep.state == State.COMPLETED
     }
 
     private fun shouldStartWriteApkFromLog(line: String): Boolean {
@@ -3703,6 +3770,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         steps.clear()
         resetDexCompileState()
         resetFailureLogState()
+        resetVisualProgress()
         steps.addAll(newSteps)
         stepSubSteps.clear()
         _patcherSucceeded.value = null
@@ -3738,6 +3806,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         resetDexCompileState()
         resetFailureLogState()
         runtimeReportedMemoryLimitMb = null
+        resetVisualProgress()
 
         steps.forEachIndexed { index, step ->
             if (index < loadIndex) {
