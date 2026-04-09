@@ -1427,11 +1427,13 @@ class PatchBundleRepository(
             val allowIncompatiblePatches = prefs.disablePatchVersionCompatCheck.get()
             val requireSuggestedVersion = prefs.suggestedVersionSafeguard.get()
             val usesUniversalFallback = match?.usesUniversalFallback == true
+            val enforceSuggestedVersionSafeguards =
+                requireSuggestedVersion && !allowIncompatiblePatches
             val requiresUniversalPatchesEnabled =
-                usesUniversalFallback && !allowUniversalPatches
+                usesUniversalFallback &&
+                    !allowUniversalPatches
             val canContinueWithUniversalFallback =
-                requireSuggestedVersion &&
-                    !allowIncompatiblePatches &&
+                enforceSuggestedVersionSafeguards &&
                     allowUniversalPatches &&
                     usesUniversalFallback
 

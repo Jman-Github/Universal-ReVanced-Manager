@@ -188,6 +188,7 @@
 - Fixed patcher progress sometimes lagging behind the foreground notification during the early Write patched APK phase https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/390
 - Fixed a few UI edge cases, including hidden RGB values in the custom YouTube asset color picker, clearer patch-profile empty-state wording for downloaded apps, and duplicate saved-entry normalization when overwrite protection is enabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/291 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
 - Hardened remote patch bundle updating, API fallback handling, and bundle refresh state management https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/372
+- Fixed version assessment so universal-fallback APKs still respect the universal patches safeguard even when suggested-version enforcement is relaxed
 
 
 # Refactors
