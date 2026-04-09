@@ -27,8 +27,9 @@ class BundleListViewModel : ViewModel(), KoinComponent {
     var isRefreshing by mutableStateOf(false)
         private set
 
-    val sources = patchBundleRepository.sources.onEach {
+    val sources = patchBundleRepository.sources.onEach { currentSources ->
         isRefreshing = false
+        selectedSources.retainAll(currentSources.map(PatchBundleSource::uid).toSet())
     }
     val manualUpdateInfo = patchBundleRepository.manualUpdateInfo
 
@@ -84,7 +85,10 @@ class BundleListViewModel : ViewModel(), KoinComponent {
     }
 
     fun delete(src: PatchBundleSource) =
-        viewModelScope.launch { patchBundleRepository.remove(src) }
+        viewModelScope.launch {
+            selectedSources.remove(src.uid)
+            patchBundleRepository.remove(src)
+        }
 
     fun update(src: PatchBundleSource) = viewModelScope.launch {
         if (src !is RemotePatchBundle) return@launch

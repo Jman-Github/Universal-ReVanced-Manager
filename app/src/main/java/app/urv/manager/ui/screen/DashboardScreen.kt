@@ -325,7 +325,6 @@ fun DashboardScreen(
     }
     val bundleUpdateProgress by vm.bundleUpdateProgress.collectAsStateWithLifecycle(null)
     val bundleImportProgress by vm.bundleImportProgress.collectAsStateWithLifecycle(null)
-    val bundleDownloadError by vm.bundleDownloadError.collectAsStateWithLifecycle(null)
     val storageSuggestedVersions by storageVm.suggestedAppVersions.collectAsStateWithLifecycle(emptyMap())
     val androidContext = LocalContext.current
     val composableScope = rememberCoroutineScope()
@@ -846,6 +845,8 @@ fun DashboardScreen(
                         progress.total == 0 -> 0f
                         progress.phase == BundleUpdatePhase.Downloading && perBundleFraction != null ->
                             ((progress.completed.toFloat() + perBundleFraction) / progress.total).coerceIn(0f, 1f)
+                        progress.phase == BundleUpdatePhase.Downloading ->
+                            null
 
                         else -> (progress.completed.toFloat() / progress.total).coerceIn(0f, 1f)
                     }
@@ -2139,17 +2140,6 @@ fun DashboardScreen(
                                     Text(stringResource(R.string.view_announcement))
                                 }
                             }
-                        )
-                    }
-                } else null,
-                if (bundleDownloadError != null) {
-                    {
-                        NotificationCard(
-                            isWarning = true,
-                            icon = Icons.Outlined.WarningAmber,
-                            title = stringResource(R.string.api_not_working_title),
-                            text = stringResource(R.string.api_not_working_description),
-                            onClick = onSettingsClick
                         )
                     }
                 } else null

@@ -126,24 +126,24 @@ class ManagerApplication : Application() {
                 prefs.appLanguage.update(storedLanguage)
             }
             applyAppLanguage(storedLanguage)
-        }
-        scope.launch(Dispatchers.Default) {
-            runCatching {
-                with(downloaderPluginRepository) {
+            scope.launch(Dispatchers.Default) {
+                runCatching {
+                    with(downloaderPluginRepository) {
+                        reload()
+                        updateCheck()
+                    }
+                }.onFailure {
+                    Log.e(tag, "Failed to initialize downloader plugins", it)
+                }
+            }
+            scope.launch(Dispatchers.Default) {
+                PatchListCatalog.refreshIfNeeded(httpService)
+            }
+            scope.launch(Dispatchers.Default) {
+                with(patchBundleRepository) {
                     reload()
                     updateCheck()
                 }
-            }.onFailure {
-                Log.e(tag, "Failed to initialize downloader plugins", it)
-            }
-        }
-        scope.launch(Dispatchers.Default) {
-            PatchListCatalog.refreshIfNeeded(httpService)
-        }
-        scope.launch(Dispatchers.Default) {
-            with(patchBundleRepository) {
-                reload()
-                updateCheck()
             }
         }
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {

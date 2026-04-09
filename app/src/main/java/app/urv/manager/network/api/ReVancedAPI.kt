@@ -90,6 +90,23 @@ class ReVancedAPI(
         }
     }
 
+    private suspend inline fun <reified T> apiRequestWithFallback(
+        vararg attempts: suspend () -> APIResponse<T>
+    ): APIResponse<T> {
+        var lastResponse: APIResponse<T>? = null
+        attempts.forEach { attempt ->
+            val response = attempt()
+            if (response is APIResponse.Success) {
+                return response
+            }
+            lastResponse = response
+        }
+
+        return lastResponse ?: APIResponse.Failure(
+            APIFailure(IllegalStateException("No API request attempts were configured"), null)
+        )
+    }
+
     private suspend fun fetchReleaseAsset(
         config: RepoConfig,
         includePrerelease: Boolean,
@@ -232,8 +249,16 @@ class ReVancedAPI(
             ?.takeIf { it.version.removePrefix("v") != BuildConfig.VERSION_NAME }
     }
 
-    suspend fun getPatchesUpdate(prerelease: Boolean): APIResponse<ReVancedAsset> =
-        apiRequest("patches?prerelease=$prerelease")
+    suspend fun getPatchesUpdate(prerelease: Boolean): APIResponse<ReVancedAsset> {
+        val currentRoute = if (prerelease) "patches/prerelease" else "patches"
+        val legacyRoute = "patches?prerelease=$prerelease"
+
+        return apiRequestWithFallback(
+            { apiRequest(currentRoute, version = "v5") },
+            { apiRequest(legacyRoute, version = "v5") },
+            { apiRequest(legacyRoute, version = "v4") }
+        )
+    }
 
     suspend fun getPatchesUpdate(): APIResponse<ReVancedAsset> =
         getPatchesUpdate(prefs.usePatchesPrereleases.get())

@@ -194,8 +194,14 @@ class HttpService(
             totalSize >= MIN_MULTIPART_SIZE
 
         if (!canParallelize) {
+            val fallbackProgress: ((bytesRead: Long, contentLength: Long?) -> Unit)? =
+                onProgress?.let { progress ->
+                    { bytesRead, contentLength ->
+                        progress(bytesRead, contentLength ?: totalSize)
+                    }
+                }
             FileOutputStream(saveLocation, false).use { outputStream ->
-                streamTo(outputStream, builder, onProgress)
+                streamTo(outputStream, builder, fallbackProgress)
             }
             return
         }

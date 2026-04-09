@@ -222,9 +222,6 @@ class PatchBundleRepository(
 
     private val bundleUpdateProgressFlow = MutableStateFlow<BundleUpdateProgress?>(null)
     val bundleUpdateProgress: StateFlow<BundleUpdateProgress?> = bundleUpdateProgressFlow.asStateFlow()
-    private val updateErrorFlow = MutableStateFlow<Throwable?>(null)
-    val updateError: StateFlow<Throwable?> = updateErrorFlow.asStateFlow()
-
     private val bundleImportProgressFlow = MutableStateFlow<ImportProgress?>(null)
     val bundleImportProgress: StateFlow<ImportProgress?> = bundleImportProgressFlow.asStateFlow()
     private val discoveryImportProgressFlow =
@@ -1744,11 +1741,25 @@ class PatchBundleRepository(
     }
 
     suspend fun disable(vararg bundles: PatchBundleSource) =
-        dispatchAction("Disable (${bundles.map { it.uid }.joinToString(",")})") {
+        dispatchAction("Disable (${bundles.map { it.uid }.joinToString(",")})") { state ->
             bundles.forEach { bundle ->
                 updateDb(bundle.uid) { it.copy(enabled = !it.enabled) }
             }
-            doReload()
+
+            val toggledUids = bundles.map(PatchBundleSource::uid).toSet()
+            val sources = state.sources.mutate { map ->
+                toggledUids.forEach { uid ->
+                    map[uid] = map[uid]?.let { src -> src.copy(enabled = !src.enabled) } ?: return@forEach
+                }
+            }
+            val info = state.info.mutate { map ->
+                toggledUids.forEach { uid ->
+                    val enabled = sources[uid]?.enabled ?: return@forEach
+                    map[uid] = map[uid]?.copy(enabled = enabled) ?: return@forEach
+                }
+            }
+
+            state.copy(sources = sources, info = info)
         }
 
     suspend fun setEnabledStates(states: Map<Int, Boolean>) =
@@ -1778,8 +1789,7 @@ class PatchBundleRepository(
 
     suspend fun remove(vararg bundles: PatchBundleSource) =
         dispatchAction("Remove (${bundles.map { it.uid }.joinToString(",")})") { state ->
-            val sources = state.sources.toMutableMap()
-            val info = state.info.toMutableMap()
+            val removedUids = bundles.map(PatchBundleSource::uid).toSet()
             bundles.forEach {
                 if (it.isDefault) {
                     prefs.officialBundleRemoved.update(true)
@@ -1789,14 +1799,21 @@ class PatchBundleRepository(
 
                 dao.remove(it.uid)
                 directoryOf(it.uid).deleteRecursively()
-                sources.remove(it.uid)
-                info.remove(it.uid)
             }
 
-            val (affectedCount, remaining) = cancelRemoteUpdates(bundles.map { it.uid }.toSet())
+            manualUpdateInfoFlow.update { current -> current - removedUids }
+
+            val (affectedCount, remaining) = cancelRemoteUpdates(removedUids)
             updateProgressAfterRemoval(affectedCount, remaining)
 
-            State(sources.toPersistentMap(), info.toPersistentMap())
+            val sources = state.sources.mutate { map ->
+                removedUids.forEach(map::remove)
+            }
+            val info = state.info.mutate { map ->
+                removedUids.forEach(map::remove)
+            }
+
+            state.copy(sources = sources, info = info)
         }
 
     suspend fun restoreDefaultBundle() = dispatchAction("Restore default bundle") {
@@ -2388,13 +2405,17 @@ class PatchBundleRepository(
         return "https://$host$normalizedPath$query"
     }
 
-    suspend fun reloadApiBundles() = dispatchAction("Reload API bundles") {
-        this@PatchBundleRepository.sources.first().filterIsInstance<APIPatchBundle>().forEach {
-            with(it) { deleteLocalFile() }
-            updateDb(it.uid) { it.copy(versionHash = null) }
+    suspend fun reloadApiBundles() {
+        dispatchAction("Reload API bundles") {
+            this@PatchBundleRepository.sources.first().filterIsInstance<APIPatchBundle>().forEach {
+                with(it) { deleteLocalFile() }
+                updateDb(it.uid) { it.copy(versionHash = null) }
+            }
+
+            doReload()
         }
 
-        doReload()
+        updateNow(force = true) { it is APIPatchBundle && it.enabled }
     }
 
     suspend fun RemotePatchBundle.setAutoUpdate(value: Boolean) {
@@ -2611,7 +2632,6 @@ class PatchBundleRepository(
 
         override suspend fun catch(exception: Exception) {
             Log.e(tag, "Failed to update patches", exception)
-            updateErrorFlow.value = exception
             toast(R.string.patches_download_fail, exception.simpleMessage())
         }
     }
@@ -2827,7 +2847,9 @@ class PatchBundleRepository(
 
                     if (result != null) {
                         results[bundle] = result
-                        runCatching { recordChangelog(bundle, bundle.fetchLatestReleaseInfo()) }
+                        result.changelogAsset?.let { asset ->
+                            runCatching { recordChangelog(bundle, asset) }
+                        } ?: runCatching { recordChangelog(bundle, bundle.fetchLatestReleaseInfo()) }
                         onBundleUpdated?.invoke(bundle, downloadedName ?: displayLabel)
                     }
                 }
@@ -2835,7 +2857,6 @@ class PatchBundleRepository(
                 results
             } catch (e: Exception) {
                 Log.e(tag, "Failed to update patches", e)
-                updateErrorFlow.value = e
                 toast(R.string.patches_download_fail, e.simpleMessage())
                 emptyMap()
             } finally {
@@ -2845,11 +2866,6 @@ class PatchBundleRepository(
             }
 
             if (updated.isEmpty()) {
-                if (hadBundleFailures) {
-                    updateErrorFlow.value = lastUpdateError ?: IllegalStateException("Some bundles failed to update")
-                } else {
-                    updateErrorFlow.value = null
-                }
                 if (showToast) {
                     if (hadBundleFailures) {
                         toast(R.string.patches_download_fail, "Some bundles failed to update")
@@ -2884,7 +2900,6 @@ class PatchBundleRepository(
 
             val updatedUids = updated.keys.map(RemotePatchBundle::uid).toSet()
             manualUpdateInfoFlow.update { currentMap -> currentMap - updatedUids }
-            updateErrorFlow.value = null
             if (showToast) toast(R.string.patches_update_success)
             true
         } finally {

@@ -9,6 +9,7 @@ import app.urv.manager.network.dto.ReVancedAsset
 import app.urv.manager.network.service.HttpService
 import app.urv.manager.network.utils.getOrNull
 import app.urv.manager.network.utils.getOrThrow
+import app.urv.manager.patcher.patch.PatchBundle
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
@@ -32,12 +33,16 @@ import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.io.File
 import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.util.jar.JarFile
 import java.util.zip.ZipInputStream
 import okhttp3.Protocol
 
 data class PatchBundleDownloadResult(
     val versionSignature: String,
-    val assetCreatedAtMillis: Long?
+    val assetCreatedAtMillis: Long?,
+    val changelogAsset: ReVancedAsset? = null
 )
 
 typealias PatchBundleDownloadProgress = (bytesRead: Long, bytesTotal: Long?) -> Unit
@@ -95,19 +100,27 @@ sealed class RemotePatchBundle(
     // PR #35: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35
     protected open suspend fun download(info: ReVancedAsset, onProgress: PatchBundleDownloadProgress? = null) =
         withContext(Dispatchers.IO) {
+            val tempFile = directory.resolve("${patchesFile.name}.download")
             try {
-                patchesFile.parentFile?.mkdirs()
-                patchesFile.setWritable(true, true)
+                tempFile.parentFile?.mkdirs()
+                runCatching { tempFile.setWritable(true, true) }
+                runCatching { tempFile.delete() }
                 http.downloadToFile(
-                    saveLocation = patchesFile,
+                    saveLocation = tempFile,
                     builder = { url(info.downloadUrl) },
                     onProgress = onProgress
                 )
-                patchesFile.setReadOnly()
-                requireNonEmptyPatchesFile("Downloading patch bundle")
-            } catch (t: Throwable) {
+                validateDownloadedPatchBundle(tempFile)
                 runCatching { patchesFile.setWritable(true, true) }
-                runCatching { patchesFile.delete() }
+                Files.move(
+                    tempFile.toPath(),
+                    patchesFile.toPath(),
+                    StandardCopyOption.REPLACE_EXISTING
+                )
+                patchesFile.setReadOnly()
+            } catch (t: Throwable) {
+                runCatching { tempFile.setWritable(true, true) }
+                runCatching { tempFile.delete() }
                 throw t
             }
 
@@ -115,17 +128,18 @@ sealed class RemotePatchBundle(
                 versionSignature = info.version,
                 assetCreatedAtMillis = runCatching {
                     info.createdAt.toInstant(TimeZone.UTC).toEpochMilliseconds()
-                }.getOrNull()
+                }.getOrNull(),
+                changelogAsset = info
             )
         }
 
     /**
      * Downloads the latest version regardless if there is a new update available.
      */
-    suspend fun downloadLatest(onProgress: PatchBundleDownloadProgress? = null): PatchBundleDownloadResult =
+    open suspend fun downloadLatest(onProgress: PatchBundleDownloadProgress? = null): PatchBundleDownloadResult =
         download(fetchLatestReleaseInfo(), onProgress)
 
-    suspend fun update(onProgress: PatchBundleDownloadProgress? = null): PatchBundleDownloadResult? =
+    open suspend fun update(onProgress: PatchBundleDownloadProgress? = null): PatchBundleDownloadResult? =
         withContext(Dispatchers.IO) {
         val info = fetchLatestReleaseInfo()
         val latestSignature = normalizeVersionForCompare(info.version)
@@ -153,6 +167,12 @@ sealed class RemotePatchBundle(
         }
         if (cached != null) return cached.asset
 
+        return refreshLatestReleaseInfo()
+    }
+
+    protected suspend fun refreshLatestReleaseInfo(): ReVancedAsset {
+        val key = "$uid|${latestInfoCacheIdentity()}"
+        val now = System.currentTimeMillis()
         val asset = getLatestInfo()
         changelogCacheMutex.withLock {
             changelogCache[key] = CachedChangelog(asset, now)
@@ -253,12 +273,43 @@ sealed class RemotePatchBundle(
 
     val installedVersionSignature: String? get() = installedVersionSignatureInternal
 
-    private fun normalizeVersionForCompare(raw: String?): String? {
+    protected fun normalizeVersionForCompare(raw: String?): String? {
         val trimmed = raw?.trim().orEmpty()
         if (trimmed.isEmpty()) return null
         val noPrefix = trimmed.removePrefix("v").removePrefix("V")
         val noBuild = noPrefix.substringBefore('+')
         return noBuild.ifBlank { null }
+    }
+
+    private fun validateDownloadedPatchBundle(file: File) {
+        val length = runCatching { file.length() }.getOrDefault(0L)
+        if (length < 8L) {
+            runCatching { file.delete() }
+            throw IOException("Downloading patch bundle produced an empty or truncated patch bundle (size=$length)")
+        }
+
+        val manifestAttributes = runCatching {
+            PatchBundle(file.absolutePath).manifestAttributes
+        }.getOrNull()
+        if (manifestAttributes == null) {
+            throw IOException("Downloaded file is not a valid patch bundle archive")
+        }
+
+        JarFile(file).use { jar ->
+            val entries = jar.entries()
+            var hasDexEntry = false
+            while (entries.hasMoreElements()) {
+                val entry = entries.nextElement()
+                if (!entry.name.endsWith(".dex", ignoreCase = true)) continue
+                hasDexEntry = true
+                if (entry.size <= 0L) {
+                    throw IOException("Downloaded patch bundle contains empty dex entries")
+                }
+            }
+            if (!hasDexEntry) {
+                throw IOException("Downloaded patch bundle is missing dex entries")
+            }
+        }
     }
 }
 
@@ -369,6 +420,34 @@ class APIPatchBundle(
         api.getPatchesUpdate(prerelease = includePrerelease).getOrThrow()
     }
 
+    override suspend fun downloadLatest(onProgress: PatchBundleDownloadProgress?): PatchBundleDownloadResult {
+        return download(refreshLatestReleaseInfo(), onProgress)
+    }
+
+    override suspend fun update(onProgress: PatchBundleDownloadProgress?): PatchBundleDownloadResult? =
+        withContext(Dispatchers.IO) {
+            if (!hasInstalled()) {
+                return@withContext downloadLatest(onProgress)
+            }
+            val latest = fetchLatestReleaseInfo()
+
+            val latestSignature = normalizeVersionForCompare(latest.version)
+            val installedSignature = normalizeVersionForCompare(installedVersionSignature)
+            val manifestSignature = normalizeVersionForCompare(version)
+
+            if (
+                latestSignature != null &&
+                (
+                    (installedSignature != null && latestSignature == installedSignature) ||
+                        (manifestSignature != null && latestSignature == manifestSignature)
+                    )
+            ) {
+                return@withContext null
+            }
+
+            download(latest, onProgress)
+        }
+
     override suspend fun getHistoricalChangelogEntries(limit: Int) = withContext(Dispatchers.IO) {
         val includePrerelease = prefs.usePatchesPrereleases.get()
         val latest = runCatching { fetchLatestReleaseInfo() }.getOrNull()
@@ -383,12 +462,14 @@ class APIPatchBundle(
 
     override suspend fun latestInfoCacheIdentity(): String {
         val includePrerelease = prefs.usePatchesPrereleases.get()
-        return "$endpoint|prerelease=$includePrerelease"
+        val apiBase = prefs.api.get().trim().removeSuffix("/")
+        return "$endpoint|api=$apiBase|prerelease=$includePrerelease"
     }
 
     override suspend fun historicalInfoCacheIdentity(): String {
         val includePrerelease = prefs.usePatchesPrereleases.get()
-        return "$endpoint|history|prerelease=$includePrerelease"
+        val apiBase = prefs.api.get().trim().removeSuffix("/")
+        return "$endpoint|history|api=$apiBase|prerelease=$includePrerelease"
     }
 
     override fun copy(
@@ -540,7 +621,8 @@ class GitHubPullRequestBundle(
             versionSignature = info.version,
             assetCreatedAtMillis = runCatching {
                 info.createdAt.toInstant(TimeZone.UTC).toEpochMilliseconds()
-            }.getOrNull()
+            }.getOrNull(),
+            changelogAsset = info
         )
     }
 

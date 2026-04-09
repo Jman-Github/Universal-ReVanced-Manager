@@ -5,6 +5,7 @@
 
 - After importing settings, URV now requests any required runtime permissions for enabled features when they are not already granted
 - Removed now unneeded extra `libaapt2.so`'s and aapt2 selector system
+- Removed API status banner https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/372
 
 
 # Bug fixes
@@ -24,6 +25,7 @@
 - Fixed URV sometimes crashing when patching ran out of memory with the experimental patcher disabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/349
 - Fixed patcher progress sometimes lagging behind the foreground notification during the early Write patched APK phase https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/390
 - Fixed a few UI edge cases, including hidden RGB values in the custom YouTube asset color picker, clearer patch-profile empty-state wording for downloaded apps, and duplicate saved-entry normalization when overwrite protection is enabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/291 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
+- Hardened remote patch bundle updating, API fallback handling, and bundle refresh state management https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/372
 
 
 # v1.8.1-dev.11 (2026-04-01)
