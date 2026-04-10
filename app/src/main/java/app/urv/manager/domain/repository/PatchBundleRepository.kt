@@ -41,6 +41,9 @@ import app.urv.manager.patcher.patch.PatchInfo
 import app.urv.manager.patcher.patch.PatchBundle
 import app.urv.manager.patcher.patch.PatchBundleInfo
 import app.urv.manager.patcher.patch.PatchBundleType
+import app.urv.manager.patcher.runtime.ample.AmpleRuntimeAssets
+import app.urv.manager.patcher.runtime.morphe.MorpheRuntimeAssets
+import app.urv.manager.patcher.runtime.revanced.Revanced22RuntimeAssets
 import app.urv.manager.util.PatchSelection
 import app.urv.manager.util.Options
 import app.urv.manager.util.simpleMessage
@@ -1043,11 +1046,13 @@ class PatchBundleRepository(
             ?.let { bundleLooksAmple(bundlePath, it.uid) } == true
 
         val isAmpleCandidate = ampleHint || ampleEndpointHint || localAmpleHint
-        if (isAmpleCandidate) {
+        if (isAmpleCandidate && AmpleRuntimeAssets.isAvailable(app)) {
             val amplePreferred = runCatching { AmpleRuntimeBridge.loadMetadata(bundlePath) }
             if (amplePreferred.isSuccess) {
                 return PatchBundleType.AMPLE to amplePreferred.getOrThrow()
             }
+        } else if (isAmpleCandidate && declaredType == PatchBundleType.AMPLE) {
+            throw missingRuntimeException("Ample")
         }
 
         val preferredRevancedVersion = source?.uid
@@ -1100,12 +1105,20 @@ class PatchBundleRepository(
             throw error
         }
 
-        val morpheResult = runCatching { MorpheRuntimeBridge.loadMetadata(bundlePath) }
+        val morpheResult = if (MorpheRuntimeAssets.isAvailable(app)) {
+            runCatching { MorpheRuntimeBridge.loadMetadata(bundlePath) }
+        } else {
+            Result.failure(missingRuntimeException("Morphe"))
+        }
         if (morpheResult.isSuccess) {
             return PatchBundleType.MORPHE to morpheResult.getOrThrow()
         }
 
-        val ampleResult = runCatching { AmpleRuntimeBridge.loadMetadata(bundlePath) }
+        val ampleResult = if (AmpleRuntimeAssets.isAvailable(app)) {
+            runCatching { AmpleRuntimeBridge.loadMetadata(bundlePath) }
+        } else {
+            Result.failure(missingRuntimeException("Ample"))
+        }
         if (ampleResult.isSuccess) {
             return PatchBundleType.AMPLE to ampleResult.getOrThrow()
         }
@@ -1126,8 +1139,16 @@ class PatchBundleRepository(
         version: RevancedPatcherVersion
     ): List<PatchInfo> = when (version) {
         RevancedPatcherVersion.V21 -> PatchBundle.Loader.metadata(bundle)
-        RevancedPatcherVersion.V22 -> Revanced22RuntimeBridge.loadMetadata(bundlePath)
+        RevancedPatcherVersion.V22 -> {
+            if (!Revanced22RuntimeAssets.isAvailable(app)) {
+                throw missingRuntimeException("ReVanced v22")
+            }
+            Revanced22RuntimeBridge.loadMetadata(bundlePath)
+        }
     }
+
+    private fun missingRuntimeException(runtimeName: String): IllegalStateException =
+        IllegalStateException("$runtimeName runtime is not included in this build.")
 
     private fun persistRevancedPatcherHint(uid: Int, version: RevancedPatcherVersion) {
         when (version) {

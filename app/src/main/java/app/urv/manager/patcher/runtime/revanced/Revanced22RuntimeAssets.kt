@@ -16,8 +16,14 @@ object Revanced22RuntimeAssets {
     private const val APKEDITOR_JAR_ENTRY = "assets/apkeditor/APKEditor-1.4.7.jar"
     private const val APKEDITOR_MERGE_ENTRY = "assets/apkeditor/apkeditor-merge.jar"
 
+    fun isAvailable(context: Context): Boolean {
+        if (!BuildConfig.HAS_REVANCED_V22_RUNTIME) return false
+        return hasAsset(context.applicationContext, RUNTIME_ASSET_NAME)
+    }
+
     fun ensureRuntimeApk(context: Context): File {
         val appContext = context.applicationContext ?: context
+        requireRuntime(appContext)
         val outputDir = File(appContext.codeCacheDir, OUTPUT_PREFIX).apply { mkdirs() }
         val assetHash = runtimeAssetHash(appContext)
         val output = File(
@@ -177,5 +183,15 @@ object Revanced22RuntimeAssets {
                 entry.name.startsWith("classes") && entry.name.endsWith(".dex")
             }
         }
+    }.getOrDefault(false)
+
+    private fun requireRuntime(context: Context) {
+        if (isAvailable(context)) return
+        throw IOException("ReVanced v22 runtime is not included in this ${BuildConfig.URV_BUILD_PROFILE} build.")
+    }
+
+    private fun hasAsset(context: Context, name: String): Boolean = runCatching {
+        context.assets.open(name).close()
+        true
     }.getOrDefault(false)
 }

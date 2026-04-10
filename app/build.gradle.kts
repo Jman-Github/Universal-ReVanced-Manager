@@ -4,8 +4,20 @@ import io.github.z4kn4fein.semver.toVersion
 import kotlin.random.Random
 import org.gradle.api.file.DuplicatesStrategy
 import org.gradle.api.tasks.Copy
+import org.gradle.api.tasks.Sync
 import org.gradle.jvm.tasks.Jar
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+enum class UrvBuildProfile {
+    LITE,
+    MEDIUM,
+    FULL;
+
+    companion object {
+        fun from(value: String?): UrvBuildProfile =
+            values().firstOrNull { it.name.equals(value?.trim(), ignoreCase = true) } ?: FULL
+    }
+}
 
 plugins {
     alias(libs.plugins.android.application)
@@ -18,16 +30,28 @@ plugins {
     signing
 }
 
+val urvBuildProfile = UrvBuildProfile.from(providers.gradleProperty("urvBuildProfile").orNull)
+val urvBuildProfileName = urvBuildProfile.name
 val resolvedProjectVersion = if (version == "unspecified") "1.8.1" else version.toString()
-val outputApkFileName = "universal-revanced-manager-v$resolvedProjectVersion-all.apk"
+val outputApkFileName = "$urvBuildProfileName-universal-revanced-manager-v$resolvedProjectVersion-all.apk"
 val morpheRuntimeAssetsDir = layout.buildDirectory.dir("generated/morphe-runtime")
 val ampleRuntimeAssetsDir = layout.buildDirectory.dir("generated/ample-runtime")
+val revancedRuntimeAssetsDir = layout.buildDirectory.dir("generated/revanced-runtime")
 val legalResourcesDir = layout.buildDirectory.dir("generated/legal-res")
 val devVersionSuffix = providers.gradleProperty("devVersionSuffix")
     .orNull
     ?.trim()
     ?.takeIf { it.isNotEmpty() }
     ?: "dev"
+val includedMorpheRuntime = rootProject.findProject(":morphe-runtime") != null
+val includedAmpleRuntime = rootProject.findProject(":ample-runtime") != null
+val includedRevanced22Runtime = rootProject.findProject(":revanced-runtime-v22") != null
+val releaseProfileSuffix = "-$urvBuildProfileName"
+val devProfileSuffix = "-$devVersionSuffix-$urvBuildProfileName"
+
+fun artifactVersionName(versionName: String): String =
+    versionName.removeSuffix(releaseProfileSuffix)
+        .removeSuffix("-$urvBuildProfileName")
 
 val apkEditorLib by configurations.creating
 
@@ -212,6 +236,10 @@ android {
                     (preRelease?.substringAfterLast('.')?.toInt() ?: 0)
         }
         vectorDrawables.useSupportLibrary = true
+        buildConfigField("String", "URV_BUILD_PROFILE", "\"$urvBuildProfileName\"")
+        buildConfigField("boolean", "HAS_MORPHE_RUNTIME", includedMorpheRuntime.toString())
+        buildConfigField("boolean", "HAS_AMPLE_RUNTIME", includedAmpleRuntime.toString())
+        buildConfigField("boolean", "HAS_REVANCED_V22_RUNTIME", includedRevanced22Runtime.toString())
         ndk {
             // Include x86 now that the NDK is pinned to a version that still supports it.
             abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
@@ -233,14 +261,14 @@ android {
     buildTypes {
         debug {
             isPseudoLocalesEnabled = true
-            versionNameSuffix = "-$devVersionSuffix"
+            versionNameSuffix = devProfileSuffix
             signingConfig = releaseSigningConfig
             buildConfigField("long", "BUILD_ID", "${Random.nextLong()}L")
         }
 
         create("dev") {
             initWith(getByName("release"))
-            versionNameSuffix = "-$devVersionSuffix"
+            versionNameSuffix = devProfileSuffix
             signingConfig = releaseSigningConfig
             isMinifyEnabled = true
             isShrinkResources = true
@@ -249,6 +277,7 @@ android {
         }
 
         release {
+            versionNameSuffix = releaseProfileSuffix
             if (!project.hasProperty("noProguard")) {
                 isMinifyEnabled = true
                 isShrinkResources = true
@@ -285,7 +314,8 @@ android {
                 null -> "all"
                 else -> abi.replace('-', '_')
             }
-            outputFileName = "universal-revanced-manager-v$resolvedVersionName-$abiSuffix.apk"
+            outputFileName =
+                "$urvBuildProfileName-universal-revanced-manager-v${artifactVersionName(resolvedVersionName)}-$abiSuffix.apk"
         }
     }
 
@@ -335,6 +365,7 @@ android {
     sourceSets {
         getByName("main").assets.srcDir(morpheRuntimeAssetsDir)
         getByName("main").assets.srcDir(ampleRuntimeAssetsDir)
+        getByName("main").assets.srcDir(revancedRuntimeAssetsDir)
         getByName("main").res.srcDir(legalResourcesDir)
     }
 
@@ -392,38 +423,49 @@ tasks {
         }
     }
 
-    val copyMorpheRuntimeApk by registering(Copy::class) {
-        val runtimeProject = project(":morphe-runtime")
-        val runtimeApk = runtimeProject.layout.buildDirectory.file(
-            "outputs/apk/release/morphe-runtime-release.apk"
-        )
-        dependsOn("${runtimeProject.path}:assembleRelease")
-        from(runtimeApk)
+    val copyRuntimeTasks = mutableListOf<TaskProvider<out org.gradle.api.Task>>()
+
+    val copyMorpheRuntimeApk by registering(Sync::class) {
         into(morpheRuntimeAssetsDir)
-        rename { "morphe-runtime.apk" }
+        if (includedMorpheRuntime) {
+            val runtimeProject = project(":morphe-runtime")
+            val runtimeApk = runtimeProject.layout.buildDirectory.file(
+                "outputs/apk/release/morphe-runtime-release.apk"
+            )
+            dependsOn("${runtimeProject.path}:assembleRelease")
+            from(runtimeApk)
+            rename { "morphe-runtime.apk" }
+        }
     }
+    copyRuntimeTasks += copyMorpheRuntimeApk
 
-    val copyAmpleRuntimeApk by registering(Copy::class) {
-        val runtimeProject = project(":ample-runtime")
-        val runtimeApk = runtimeProject.layout.buildDirectory.file(
-            "outputs/apk/release/ample-runtime-release.apk"
-        )
-        dependsOn("${runtimeProject.path}:assembleRelease")
-        from(runtimeApk)
+    val copyAmpleRuntimeApk by registering(Sync::class) {
         into(ampleRuntimeAssetsDir)
-        rename { "ample-runtime.apk" }
+        if (includedAmpleRuntime) {
+            val runtimeProject = project(":ample-runtime")
+            val runtimeApk = runtimeProject.layout.buildDirectory.file(
+                "outputs/apk/release/ample-runtime-release.apk"
+            )
+            dependsOn("${runtimeProject.path}:assembleRelease")
+            from(runtimeApk)
+            rename { "ample-runtime.apk" }
+        }
     }
+    copyRuntimeTasks += copyAmpleRuntimeApk
 
-    val copyRevancedRuntimeV22Apk by registering(Copy::class) {
-        val runtimeProject = project(":revanced-runtime-v22")
-        val runtimeApk = runtimeProject.layout.buildDirectory.file(
-            "outputs/apk/release/revanced-runtime-v22-release.apk"
-        )
-        dependsOn("${runtimeProject.path}:assembleRelease")
-        from(runtimeApk)
-        into(ampleRuntimeAssetsDir)
-        rename { "revanced-runtime-v22.apk" }
+    val copyRevancedRuntimeV22Apk by registering(Sync::class) {
+        into(revancedRuntimeAssetsDir)
+        if (includedRevanced22Runtime) {
+            val runtimeProject = project(":revanced-runtime-v22")
+            val runtimeApk = runtimeProject.layout.buildDirectory.file(
+                "outputs/apk/release/revanced-runtime-v22-release.apk"
+            )
+            dependsOn("${runtimeProject.path}:assembleRelease")
+            from(runtimeApk)
+            rename { "revanced-runtime-v22.apk" }
+        }
     }
+    copyRuntimeTasks += copyRevancedRuntimeV22Apk
 
     val copyNoticeFile by registering(Copy::class) {
         from(rootProject.file("third-party/NOTICE.txt"))
@@ -439,7 +481,8 @@ tasks {
     }
 
     named("preBuild") {
-        dependsOn(copyNoticeFile, copyAboutLibrariesJson, copyMorpheRuntimeApk, copyAmpleRuntimeApk, copyRevancedRuntimeV22Apk)
+        dependsOn(copyNoticeFile, copyAboutLibrariesJson)
+        copyRuntimeTasks.forEach(::dependsOn)
     }
 
 }

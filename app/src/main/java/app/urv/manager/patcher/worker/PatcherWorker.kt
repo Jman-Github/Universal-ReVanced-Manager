@@ -48,10 +48,13 @@ import app.urv.manager.patcher.morphe.MorpheBridgeFailureException
 import app.urv.manager.patcher.revanced.Revanced22BridgeFailureException
 import app.urv.manager.patcher.runtime.ample.AmpleBridgeRuntime
 import app.urv.manager.patcher.runtime.ample.AmpleProcessRuntime
+import app.urv.manager.patcher.runtime.ample.AmpleRuntimeAssets
 import app.urv.manager.patcher.runtime.morphe.MorpheBridgeRuntime
 import app.urv.manager.patcher.runtime.morphe.MorpheProcessRuntime
+import app.urv.manager.patcher.runtime.morphe.MorpheRuntimeAssets
 import app.urv.manager.patcher.runtime.Revanced22BridgeRuntime
 import app.urv.manager.patcher.runtime.Revanced22ProcessRuntime
+import app.urv.manager.patcher.runtime.revanced.Revanced22RuntimeAssets
 import app.urv.manager.patcher.runCancellableBlockingIo
 import app.urv.manager.patcher.runStep
 import app.urv.manager.patcher.toRemoteError
@@ -1228,6 +1231,9 @@ class PatcherWorker(
             workerLogger.info("Memory override: ${if (memoryOverrideActive) "enabled" else "disabled"}")
             when (bundleType) {
                 PatchBundleType.MORPHE -> {
+                    check(MorpheRuntimeAssets.isAvailable(applicationContext)) {
+                        "Morphe runtime is not included in this build."
+                    }
                     val runtime = if (useProcessRuntime) {
                         MorpheProcessRuntime(applicationContext, useMemoryOverride = memoryOverrideActive)
                     } else {
@@ -1247,6 +1253,9 @@ class PatcherWorker(
                     )
                 }
                 PatchBundleType.AMPLE -> {
+                    check(AmpleRuntimeAssets.isAvailable(applicationContext)) {
+                        "Ample runtime is not included in this build."
+                    }
                     val runtime = if (useProcessRuntime) {
                         AmpleProcessRuntime(applicationContext, useMemoryOverride = memoryOverrideActive)
                     } else {
@@ -1266,6 +1275,11 @@ class PatcherWorker(
                     )
                 }
                 PatchBundleType.REVANCED -> {
+                    if (useRevancedPatcher22) {
+                        check(Revanced22RuntimeAssets.isAvailable(applicationContext)) {
+                            "ReVanced v22 runtime is not included in this build."
+                        }
+                    }
                     val runtime: app.urv.manager.patcher.runtime.Runtime =
                         if (useRevancedPatcher22) {
                             if (useProcessRuntime) {

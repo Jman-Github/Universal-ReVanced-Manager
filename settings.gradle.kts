@@ -5,6 +5,17 @@ val localProps = Properties().apply {
     if (file.exists()) file.inputStream().use(::load)
 }
 
+enum class UrvBuildProfile {
+    LITE,
+    MEDIUM,
+    FULL;
+
+    companion object {
+        fun from(value: String?): UrvBuildProfile =
+            values().firstOrNull { it.name.equals(value?.trim(), ignoreCase = true) } ?: FULL
+    }
+}
+
 fun githubUser(): String? =
     localProps.getProperty("gpr.user")
         ?: providers.gradleProperty("gpr.user").orNull
@@ -112,5 +123,28 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "universal-revanced-manager"
-include(":app", ":api", ":morphe-runtime", ":ample-runtime", ":revanced-runtime-v22")
+
+val urvBuildProfile = UrvBuildProfile.from(
+    gradle.startParameter.projectProperties["urvBuildProfile"]
+        ?: System.getenv("URV_BUILD_PROFILE")
+)
+
+fun moduleExists(path: String): Boolean {
+    val relativePath = path.removePrefix(":").replace(':', '/')
+    val projectDir = rootDir.resolve(relativePath)
+    return projectDir.isDirectory && (
+        projectDir.resolve("build.gradle.kts").exists() ||
+            projectDir.resolve("build.gradle").exists()
+        )
+}
+
+fun includeIfAvailable(path: String, minimumProfile: UrvBuildProfile = UrvBuildProfile.LITE) {
+    if (urvBuildProfile.ordinal < minimumProfile.ordinal) return
+    if (moduleExists(path)) include(path)
+}
+
+include(":app", ":api")
+includeIfAvailable(":morphe-runtime")
+includeIfAvailable(":revanced-runtime-v22")
+includeIfAvailable(":ample-runtime", UrvBuildProfile.MEDIUM)
 

@@ -13,8 +13,14 @@ object MorpheRuntimeAssets {
     private const val OUTPUT_PREFIX = "morphe-runtime"
     private const val DEX_JAR_ENTRY = "assets/main.jar"
 
+    fun isAvailable(context: Context): Boolean {
+        if (!BuildConfig.HAS_MORPHE_RUNTIME) return false
+        return hasAsset(context.applicationContext, RUNTIME_ASSET_NAME)
+    }
+
     fun ensureRuntimeApk(context: Context): File {
         val appContext = context.applicationContext
+        requireRuntime(appContext)
         val outputDir = File(appContext.codeCacheDir, OUTPUT_PREFIX).apply { mkdirs() }
         val output = File(
             outputDir,
@@ -121,5 +127,15 @@ object MorpheRuntimeAssets {
                 entry.name.startsWith("classes") && entry.name.endsWith(".dex")
             }
         }
+    }.getOrDefault(false)
+
+    private fun requireRuntime(context: Context) {
+        if (isAvailable(context)) return
+        throw IOException("Morphe runtime is not included in this ${BuildConfig.URV_BUILD_PROFILE} build.")
+    }
+
+    private fun hasAsset(context: Context, name: String): Boolean = runCatching {
+        context.assets.open(name).close()
+        true
     }.getOrDefault(false)
 }
