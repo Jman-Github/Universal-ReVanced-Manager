@@ -330,6 +330,14 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.reset_patch_bundles, R.string.reset_patch_bundles_description, R.string.developer_options, Settings.Developer),
             SearchEntry(R.string.patch_profile_bundle_override_title, R.string.patch_profile_bundle_override_description, R.string.developer_options, Settings.Developer),
             SearchEntry(R.string.about_revanced_manager, null, R.string.about, Settings.About),
+            SearchEntry(R.string.github, null, R.string.about, Settings.About),
+            SearchEntry(R.string.patch_bundle_urls, null, R.string.about, Settings.About),
+            SearchEntry(R.string.credits, null, R.string.about, Settings.About),
+            SearchEntry(R.string.revanced_manager_credit, R.string.revanced_manager_credit_subtext, R.string.about, Settings.About),
+            SearchEntry(R.string.morphe_manager_credit, R.string.morphe_manager_credit_prefix, R.string.about, Settings.About),
+            SearchEntry(R.string.licensing, null, R.string.about, Settings.About),
+            SearchEntry(R.string.notice, R.string.notice_description, R.string.about, Settings.About),
+            SearchEntry(R.string.open_source_licenses, R.string.open_source_licenses_description, R.string.about, Settings.About),
         )
     }
     var searchQuery by rememberSaveable { mutableStateOf("") }

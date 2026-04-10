@@ -1,3 +1,5 @@
+import com.mikepenz.aboutlibraries.plugin.DuplicateMode
+import com.mikepenz.aboutlibraries.plugin.DuplicateRule
 import io.github.z4kn4fein.semver.toVersion
 import kotlin.random.Random
 import org.gradle.api.file.DuplicatesStrategy
@@ -20,6 +22,7 @@ val resolvedProjectVersion = if (version == "unspecified") "1.8.1" else version.
 val outputApkFileName = "universal-revanced-manager-v$resolvedProjectVersion-all.apk"
 val morpheRuntimeAssetsDir = layout.buildDirectory.dir("generated/morphe-runtime")
 val ampleRuntimeAssetsDir = layout.buildDirectory.dir("generated/ample-runtime")
+val legalResourcesDir = layout.buildDirectory.dir("generated/legal-res")
 val devVersionSuffix = providers.gradleProperty("devVersionSuffix")
     .orNull
     ?.trim()
@@ -332,6 +335,7 @@ android {
     sourceSets {
         getByName("main").assets.srcDir(morpheRuntimeAssetsDir)
         getByName("main").assets.srcDir(ampleRuntimeAssetsDir)
+        getByName("main").res.srcDir(legalResourcesDir)
     }
 
     externalNativeBuild {
@@ -339,6 +343,16 @@ android {
             path = file("src/main/cpp/CMakeLists.txt")
             version = "3.22.1"
         }
+    }
+}
+
+aboutLibraries {
+    collect {
+        configPath = file("aboutlibraries")
+    }
+    library {
+        duplicationMode = DuplicateMode.MERGE
+        duplicationRule = DuplicateRule.EXACT
     }
 }
 
@@ -411,8 +425,21 @@ tasks {
         rename { "revanced-runtime-v22.apk" }
     }
 
+    val copyNoticeFile by registering(Copy::class) {
+        from(rootProject.file("third-party/NOTICE.txt"))
+        into(legalResourcesDir.map { it.dir("raw") })
+        rename { "notice.txt" }
+    }
+
+    val copyAboutLibrariesJson by registering(Copy::class) {
+        dependsOn("prepareLibraryDefinitionsRelease")
+        from(layout.buildDirectory.file("generated/aboutLibraries/release/res/raw/aboutlibraries.json"))
+        into(legalResourcesDir.map { it.dir("raw") })
+        rename { "licenses_index.json" }
+    }
+
     named("preBuild") {
-        dependsOn(copyMorpheRuntimeApk, copyAmpleRuntimeApk, copyRevancedRuntimeV22Apk)
+        dependsOn(copyNoticeFile, copyAboutLibrariesJson, copyMorpheRuntimeApk, copyAmpleRuntimeApk, copyRevancedRuntimeV22Apk)
     }
 
 }

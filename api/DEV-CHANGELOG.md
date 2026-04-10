@@ -1,4 +1,4 @@
-# v1.8.1-dev.12 (2026-4-09)
+# v1.8.1-dev.12 (2026-4-10)
 
 
 # Features
@@ -6,6 +6,8 @@
 - After importing settings, URV now requests any required runtime permissions for enabled features when they are not already granted
 - Removed now unneeded extra `libaapt2.so`'s and aapt2 selector system
 - Removed API status banner https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/372
+- Added About credits and in-app licensing viewers
+- Improved root service mount reliability and safety https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/370
 
 
 # Bug fixes
