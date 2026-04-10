@@ -88,6 +88,7 @@
 - Removed API status banner https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/372
 - Added About credits and in-app licensing viewers
 - Improved root service mount reliability and safety https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/370
+- Added LITE, MEDIUM, and FULL build variants with matching profile-aware updater behavior
 
 
 # Bug fixes
