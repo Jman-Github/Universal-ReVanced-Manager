@@ -1,4 +1,3 @@
-<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="patcher">Patcher</string>
     <string name="patches">Patches</string>
@@ -86,15 +85,6 @@
     <string name="bundle_updates_notification_completed_named_with_available">Updated: %1$s. %2$d updates available.</string>
     <string name="bundle_updates_notification_available">%1$d updates available.</string>
     <string name="bundle_updates_notification_failed">Update failed</string>
-    <string name="failed_to_check_announcements">Failed to check for announcements: %s</string>
-    <string name="announcements">Announcements</string>
-    <string name="revanced_announcements">ReVanced Announcements</string>
-    <string name="announcements_filter_tag">Filter by tag</string>
-    <string name="announcements_show_archived">Show archived</string>
-    <string name="no_announcements_found">No announcements found.</string>
-    <string name="view_announcement">View announcement</string>
-    <string name="new_announcement">New announcement:\n%1$s</string>
-    <string name="archived">Archived</string>
     <string name="bundle_search_update">Search for updates</string>
     <string name="bundle_search_update_description">Check this bundle for updates in the background</string>
     <string name="bundle_reorder">Organize bundles</string>
@@ -216,23 +206,47 @@
     <string name="minutes_15">Every 15 minutes</string>
     <string name="hourly">Hourly</string>
     <string name="daily">Daily</string>
-    <string name="general">General</string>
-    <string name="general_description">Theme, dynamic color and appearance</string>
+    <string name="general">Appearance &amp; UI</string>
+    <string name="general_description">How the app looks and how users interact with it</string>
     <string name="updates">Updates</string>
-    <string name="updates_description">Check for updates and view changelog</string>
+    <string name="updates_description">Update behavior and background update flow</string>
     <string name="downloads">Downloads</string>
-    <string name="downloads_description">Downloader plugins and downloaded apps</string>
+    <string name="downloads_description">Download handling and exports</string>
     <string name="plugins_help_title">What is a downloader?</string>
     <string name="plugins_help_description">A downloader is a plugin which allows URV to download stock APKs from various sources. The downloaded APKs will be shown in the bottom section. During the patching process, you can choose an already downloaded APKs or you can download it via a plugin.\n\nThe list of supported downloader plugins can be found</string>
     <string name="import_export">Import &amp; Export</string>
-    <string name="import_export_description">Keystore, patch options and selection</string>
+    <string name="import_export_description">Backup, restore, keystore, and reset tools</string>
     <string name="changelog">View changelogs</string>
     <string name="changelog_open_github">View changelogs on GitHub</string>
     <string name="changelog_loading">Loading changelog</string>
     <string name="changelog_download_fail">Failed to download changelog: %s</string>
     <string name="changelog_description">Check out the latest changes in this update</string>
-    <string name="advanced">Advanced</string>
-    <string name="advanced_description">API URL, memory limit, debugging</string>
+    <string name="advanced">App &amp; Manager</string>
+    <string name="advanced_description">General app behavior, language, and integrations</string>
+    <string name="patcher_category">Patcher</string>
+    <string name="patcher_category_description">Patching logic, performance, and workflow</string>
+    <string name="advanced_system">Advanced &amp; System</string>
+    <string name="advanced_system_description">Safety, debug, and system controls</string>
+    <string name="theme_section">Theme</string>
+    <string name="background_section">Background</string>
+    <string name="navigation_tabs_section">Navigation &amp; Tabs</string>
+    <string name="action_buttons_patch_list_section">Action Buttons &amp; Patch List Display</string>
+    <string name="app_behavior_section">App Behavior</string>
+    <string name="network_integrations_section">Network &amp; Integrations</string>
+    <string name="installer_section">Installer</string>
+    <string name="patching_engine_section">Patching Engine</string>
+    <string name="patching_flow_section">Patching Flow</string>
+    <string name="saved_apps_section">Saved Apps</string>
+    <string name="safeguards_compatibility_section">Safeguards &amp; Compatibility</string>
+    <string name="bundle_system_recovery_section">Bundle/System Recovery</string>
+    <string name="diagnostics_output_section">Diagnostics &amp; Output</string>
+    <string name="update_checks_section">Update Checks</string>
+    <string name="network_delivery_section">Network &amp; Delivery</string>
+    <string name="background_updates_section">Background Updates</string>
+    <string name="download_behavior_section">Download Behavior</string>
+    <string name="download_export_section">Saved Unpatched Apps</string>
+    <string name="settings_selections_bundles_section">Settings, Selections &amp; Bundles</string>
+    <string name="stability_update_controls_section">Stability &amp; Update Controls</string>
     <string name="about">About</string>
     <string name="contributors">Contributors</string>
     <string name="dynamic_color">Dynamic color</string>
@@ -535,9 +549,9 @@ Patch profiles are not affected.</string>
     <string name="downloader_plugin_trust_dialog_signature">Signature:\n\n%s</string>
     <string name="downloader_plugin_trust_dialog_plugin">Plugin:\n%s</string>
     <string name="downloader_plugin_view_error">View error details</string>
-    <string name="downloader_plugin_failed_dialog_body">Failed to load \"%1$s\". You can view the error details or uninstall the plugin.</string>
+    <string name="downloader_plugin_failed_dialog_body">Failed to load "%1$s". You can view the error details or uninstall the plugin.</string>
     <string name="downloader_plugin_uninstall_title">Uninstall plugin?</string>
-    <string name="downloader_plugin_uninstall_description">Are you sure you want to uninstall \"%1$s\"?</string>
+    <string name="downloader_plugin_uninstall_description">Are you sure you want to uninstall "%1$s"?</string>
     <string name="downloader_settings_no_apps">No downloaded apps found.</string>
     <string name="search_apps">Search apps…</string>
     <string name="options">Options</string>
@@ -705,8 +719,8 @@ Patch profiles are not affected.</string>
     <string name="tools_youtube_assets_light_header">Light header</string>
     <string name="tools_youtube_assets_dark_header">Dark header</string>
     <string name="tools_youtube_assets_sync_header_transforms">Sync light/dark size and position</string>
-    <string name="tools_youtube_assets_copy_light_to_dark">Copy light -&gt; dark</string>
-    <string name="tools_youtube_assets_copy_dark_to_light">Copy dark -&gt; light</string>
+    <string name="tools_youtube_assets_copy_light_to_dark">Copy light -> dark</string>
+    <string name="tools_youtube_assets_copy_dark_to_light">Copy dark -> light</string>
     <string name="tools_youtube_assets_select_light_header">Select light header image</string>
     <string name="tools_youtube_assets_select_dark_header">Select dark header image</string>
     <string name="tools_youtube_assets_light_header_name">Light header file name</string>
@@ -736,6 +750,7 @@ Patch profiles are not affected.</string>
     <string name="tools_youtube_assets_name_conflict_adaptive">Adaptive foreground and background file names must be different.</string>
     <string name="tools_youtube_assets_name_conflict_headers">Light and dark header file names must be different.</string>
     <string name="tools_merge_split_title">Merge split APKs</string>
+    <string name="merge_split_apk_log_header_title">Merge split APKs tool</string>
     <string name="tools_merge_split_description">Merge split APK archives (.xapk, .apkm, .apks, .zip) into a single installable APK.</string>
     <string name="tools_split_installer_title">Split APK installer</string>
     <string name="tools_split_installer_description">Install split APK archives (.xapk, .apkm, .apks, .zip) directly without merging.</string>
@@ -838,6 +853,16 @@ Patch profiles are not affected.</string>
     <string name="merge_split_apk_process_killed_low_memory">Split merge process was killed by the system (exit code 137), likely due to low memory. Close background apps and try again.</string>
     <string name="merge_split_apk_stopping">Stopping split merge…</string>
     <string name="merge_split_apk_cancelled">Split merge cancelled.</string>
+    <string name="merge_split_apk_log_dialog_title">Merge log</string>
+    <string name="merge_split_apk_log_dialog_description">Choose how you want to share or save the merge log.</string>
+    <string name="merge_split_apk_log_dialog_copy">Copy to clipboard</string>
+    <string name="merge_split_apk_log_dialog_copy_description">Copy the full merge log so you can paste it anywhere.</string>
+    <string name="merge_split_apk_log_dialog_export">Export as TXT</string>
+    <string name="merge_split_apk_log_dialog_export_description">Save the merge log to storage using the custom file picker.</string>
+    <string name="merge_split_apk_log_exporting_title">Save merge log</string>
+    <string name="merge_split_apk_log_exporting">Saving merge log…</string>
+    <string name="merge_split_apk_log_export_success">Merge log exported.</string>
+    <string name="merge_split_apk_log_export_failed">Failed to export merge log.</string>
     <string name="merge_split_apk_installed_not_split">This installed app is not using split APKs.</string>
     <string name="merge_split_apk_selection_title">Choose splits to merge</string>
     <string name="merge_split_apk_selection_description">Choose which split modules to include for this merge. All splits are selected by default.</string>
@@ -902,9 +927,9 @@ Patch profiles are not affected.</string>
     <string name="patch_profile_update_existing_title">Update existing profile</string>
     <string name="patch_profile_update_existing_description">Tap a saved profile to overwrite it, or leave everything unselected to create a new profile.</string>
     <string name="patch_profile_name_hint">Profile name</string>
-    <string name="patch_profile_saved_toast">Patch profile \"%1$s\" saved</string>
-    <string name="patch_profile_duplicate_toast">Patch profile \"%1$s\" already exists for this app</string>
-    <string name="patch_profile_updated_toast">Patch profile \"%1$s\" updated</string>
+    <string name="patch_profile_saved_toast">Patch profile "%1$s" saved</string>
+    <string name="patch_profile_duplicate_toast">Patch profile "%1$s" already exists for this app</string>
+    <string name="patch_profile_updated_toast">Patch profile "%1$s" updated</string>
     <string name="patch_profile_save_failed_toast">Failed to save patch profile</string>
     <string name="patch_profile_rename">Rename</string>
     <string name="patch_profile_rename_title">Rename patch profile</string>
@@ -914,17 +939,17 @@ Patch profiles are not affected.</string>
     <string name="patch_profile_apk_not_set">No package selected</string>
     <string name="patch_profile_downloaded_apps_empty">No APK for this package</string>
     <string name="patch_profile_apk_missing">Selected package missing</string>
-    <string name="patch_profile_apk_saved_toast">Saved package for \"%1$s\"</string>
-    <string name="patch_profile_apk_cleared_toast">Cleared saved package for \"%1$s\"</string>
+    <string name="patch_profile_apk_saved_toast">Saved package for "%1$s"</string>
+    <string name="patch_profile_apk_cleared_toast">Cleared saved package for "%1$s"</string>
     <string name="patch_profile_apk_invalid_toast">Invalid package file</string>
     <string name="patch_profile_apk_mismatch_toast">Selected package does not match this profile</string>
     <string name="patch_profile_apk_failed_toast">Failed to save package</string>
-    <string name="patch_profile_settings_title">Settings for \"%1$s\"</string>
+    <string name="patch_profile_settings_title">Settings for "%1$s"</string>
     <string name="patch_profile_auto_patch_label">Start patching immediately</string>
     <string name="patch_profile_auto_patch_description">When enabled and an APK is saved, tapping this profile starts patching instead of opening patch selection.</string>
     <string name="apk_file_type">APK</string>
     <string name="patch_profile_version_override_action">Patch profile version settings</string>
-    <string name="patch_profile_version_override_title">Version settings for \"%1$s\"</string>
+    <string name="patch_profile_version_override_title">Version settings for "%1$s"</string>
     <string name="patch_profile_version_override_message">Set a specific app version to store with this profile, or target all versions.</string>
     <string name="patch_profile_version_override_label">App version</string>
     <string name="patch_profile_version_override_hint">e.g. 18.27.35</string>
@@ -932,7 +957,7 @@ Patch profiles are not affected.</string>
     <string name="patch_profile_version_override_all_versions">Use all versions</string>
     <string name="patch_profile_version_override_saved_toast">Profile version updated</string>
     <string name="patch_profile_version_override_failed_toast">Failed to update profile version</string>
-    <string name="patch_profile_version_override_set_to_all">No version entered, saved as \"%1$s\"</string>
+    <string name="patch_profile_version_override_set_to_all">No version entered, saved as "%1$s"</string>
     <string name="patch_profile_version_conflict_title">Keep version override?</string>
     <string name="patch_profile_version_conflict_message">Current version: %1$s\nIncoming version: %2$s\nWhich should be saved to this profile?</string>
     <string name="patch_profile_version_conflict_use_new">Use incoming version</string>
@@ -990,11 +1015,11 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <plurals name="patch_profile_bundle_patch_count">
         <item quantity="one">%d patch</item>
         <item quantity="other">%d patches</item>
-    </plurals>
+        </plurals>
     <plurals name="patch_profile_bundle_count">
         <item quantity="one">%d bundle</item>
         <item quantity="other">%d bundles</item>
-    </plurals>
+        </plurals>
     <string name="this_version">This version</string>
     <string name="universal">Any app</string>
     <string name="non_universal">Non-universal</string>
@@ -1280,7 +1305,7 @@ Details: %2$s</string>
     <string name="search_engine_host_label">Search domain</string>
     <string name="version">Version</string>
     <string name="developer_options">Developer options</string>
-    <string name="developer_options_description">Options for debugging issues</string>
+    <string name="developer_options_description">Developer/debug toggles</string>
     <string name="patches_update_success">Update successful</string>
     <string name="patches_update_unavailable">No update available</string>
     <string name="view_patches">View patches</string>
@@ -1333,6 +1358,15 @@ Details: %2$s</string>
     <string name="option_required">This option is required</string>
     <string name="required_options_screen">Required options</string>
     <string name="failed_to_check_updates">Failed to check for updates: %s</string>
+    <string name="failed_to_check_announcements">Failed to check for announcements: %s</string>
+    <string name="announcements">Announcements</string>
+    <string name="revanced_announcements">ReVanced Announcements</string>
+    <string name="announcements_filter_tag">Filter by tag</string>
+    <string name="announcements_show_archived">Show archived</string>
+    <string name="no_announcements_found">No announcements found.</string>
+    <string name="view_announcement">View announcement</string>
+    <string name="new_announcement">New announcement:\n%1$s</string>
+    <string name="archived">Archived</string>
     <string name="no_update_available">No update available</string>
     <string name="update_check">Checking for updates…</string>
     <string name="bundle_import_phase_copying">Copying bundle</string>
@@ -1475,31 +1509,8 @@ Details: %2$s</string>
     <string name="keystore_diagnostics_present_size">Present (%1$s)</string>
     <string name="export">Export</string>
     <string name="confirm">Confirm</string>
-    <string name="action_buttons_patch_list_section">Action Buttons &amp; Patch List Display</string>
-    <string name="advanced_system">Advanced &amp; System</string>
-    <string name="advanced_system_description">Safety, debug, and system controls</string>
-    <string name="app_behavior_section">App Behavior</string>
-    <string name="app_name">Universal ReVanced Manager</string>
-    <string name="background_section">Background</string>
-    <string name="background_updates_section">Background Updates</string>
-    <string name="bundle_system_recovery_section">Bundle/System Recovery</string>
-    <string name="diagnostics_output_section">Diagnostics &amp; Output</string>
-    <string name="download_behavior_section">Download Behavior</string>
-    <string name="download_export_section">Saved Unpatched Apps</string>
-    <string name="installer_section">Installer</string>
-    <string name="main_top_title">URV Manager</string>
-    <string name="navigation_tabs_section">Navigation &amp; Tabs</string>
-    <string name="network_delivery_section">Network &amp; Delivery</string>
-    <string name="network_integrations_section">Network &amp; Integrations</string>
-    <string name="patcher_category">Patcher</string>
-    <string name="patcher_category_description">Patching logic, performance, and workflow</string>
-    <string name="patching_engine_section">Patching Engine</string>
-    <string name="patching_flow_section">Patching Flow</string>
-    <string name="safeguards_compatibility_section">Safeguards &amp; Compatibility</string>
-    <string name="saved_apps_section">Saved Apps</string>
-    <string name="settings_selections_bundles_section">Settings, Selections &amp; Bundles</string>
-    <string name="stability_update_controls_section">Stability &amp; Update Controls</string>
-    <string name="theme_section">Theme</string>
-    <string name="update_checks_section">Update Checks</string>
-</resources>
+    </resources>
+
+
+
 

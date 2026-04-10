@@ -9,6 +9,7 @@
 - Added About credits and in-app licensing viewers
 - Improved root service mount reliability and safety https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/370
 - Added LITE, MEDIUM, and FULL build variants with matching profile-aware updater behavior
+- Added patcher-style progress tracking and merge log copy/export support to the Merge split APKs tool, including excluded split details in exported logs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/388
 
 
 # Bug fixes

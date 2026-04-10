@@ -46,8 +46,13 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.StandardOpenOption
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.util.Date
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -62,6 +67,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -645,6 +651,12 @@ class DashboardViewModel(
         stripNativeLibs: Boolean
     ) {
         val pendingSource = pendingSplitMergeSource ?: return
+        val excludedModules = splitMergeStateFlow.value.selection
+            ?.modules
+            ?.map { it.name }
+            ?.filterNot { it in includedModules }
+            ?.toSet()
+            .orEmpty()
         pendingSplitMergeSource = null
         splitMergeJob?.cancel()
         splitMergeJob = viewModelScope.launch {
@@ -654,7 +666,8 @@ class DashboardViewModel(
                 sourceCleanup = pendingSource.cleanup,
                 showDownloadStep = pendingSource.showDownloadStep,
                 includedModules = includedModules,
-                stripNativeLibs = stripNativeLibs
+                stripNativeLibs = stripNativeLibs,
+                excludedModules = excludedModules
             )
         }
     }
@@ -740,6 +753,11 @@ class DashboardViewModel(
                 message = preparingMessage
             )
         )
+        appendSplitMergeLog(
+            inputName?.takeIf { it.isNotBlank() }?.let { "Selected split archive: $it" }
+                ?: "Selected split archive."
+        )
+        appendSplitMergeLog(preparingMessage)
     }
 
     private suspend fun prepareSplitMergeSelection(
@@ -799,6 +817,7 @@ class DashboardViewModel(
             selectionIncludedModules = defaultIncludedModules,
             selectionStripNativeLibs = defaultStripNativeLibs
         )
+        appendSplitMergeLog(app.getString(R.string.merge_split_apk_selection_ready))
         if (openScreen) {
             openSplitMergeScreenChannel.send(Unit)
         }
@@ -888,6 +907,7 @@ class DashboardViewModel(
             cleanupLegacySplitMergeArtifacts()
             splitMergePlugin = null
             splitMergeStateFlow.value = cancelledSplitMergeState(splitMergeStateFlow.value)
+            appendSplitMergeLog(app.getString(R.string.merge_split_apk_cancelled))
             return
         }
         val stoppingMessage = app.getString(R.string.merge_split_apk_stopping)
@@ -946,6 +966,7 @@ class DashboardViewModel(
                 activeSplitMergeRunWorkspace = null
                 cleanupLegacySplitMergeArtifacts()
                 splitMergeStateFlow.value = cancelledSplitMergeState(splitMergeStateFlow.value)
+                appendSplitMergeLog(app.getString(R.string.merge_split_apk_cancelled))
                 splitMergeCancellationJob = null
             }
         }
@@ -1006,7 +1027,8 @@ class DashboardViewModel(
         sourceCleanup: () -> Unit = {},
         showDownloadStep: Boolean = false,
         includedModules: Set<String>? = null,
-        stripNativeLibs: Boolean = false
+        stripNativeLibs: Boolean = false,
+        excludedModules: Set<String> = emptySet()
     ) {
         val ownerJob = coroutineContext[Job]
         val runWorkspace = newSplitMergeRunWorkspace()
@@ -1048,8 +1070,14 @@ class DashboardViewModel(
             outputName = defaultMergedOutputName(inputDisplayName),
             currentMessage = app.getString(R.string.merge_split_apk_preparing),
             inputName = inputDisplayName,
-            selection = null
+            selection = null,
+            logEntries = splitMergeStateFlow.value.logEntries,
+            selectionIncludedModules = includedModules.orEmpty(),
+            selectionStripNativeLibs = stripNativeLibs,
+            excludedModules = excludedModules
         )
+        appendSplitMergeLog("Starting split merge: $inputDisplayName")
+        appendSplitMergeLog(app.getString(R.string.merge_split_apk_preparing))
 
         runCatching {
             withContext(Dispatchers.IO) {
@@ -1068,6 +1096,9 @@ class DashboardViewModel(
                         skipUnneededSplits = false,
                         includedModules = includedModules,
                         onProgress = { message ->
+                            if (isCurrentSplitMergeOwner(ownerJob)) {
+                                appendSplitMergeLog(message)
+                            }
                             updateSplitMergeStateIfCurrent(ownerJob) { current ->
                                 current.copy(
                                     currentMessage = message,
@@ -1095,6 +1126,7 @@ class DashboardViewModel(
                             message = app.getString(R.string.merge_split_apk_retrying_fallback)
                         )
                     )
+                    appendSplitMergeLog(app.getString(R.string.merge_split_apk_retrying_fallback))
 
                     val fallbackPreparation = SplitApkPreparer.prepareIfNeeded(
                         source = inputFile,
@@ -1103,6 +1135,9 @@ class DashboardViewModel(
                         skipUnneededSplits = false,
                         includedModules = includedModules,
                         onProgress = { message ->
+                            if (isCurrentSplitMergeOwner(ownerJob)) {
+                                appendSplitMergeLog(message)
+                            }
                             updateSplitMergeStateIfCurrent(ownerJob) { current ->
                                 current.copy(
                                     currentMessage = message,
@@ -1139,6 +1174,7 @@ class DashboardViewModel(
                     ),
                     currentMessage = app.getString(R.string.merge_split_apk_merged)
                 )
+                appendSplitMergeLog(app.getString(R.string.merge_split_apk_merged))
 
                 val signedCopy = runWorkspace.resolve("last-merged.apk")
                 signedCopy.parentFile?.mkdirs()
@@ -1151,6 +1187,7 @@ class DashboardViewModel(
                         message = app.getString(R.string.merge_split_apk_signing)
                     )
                 )
+                appendSplitMergeLog(app.getString(R.string.merge_split_apk_signing))
                 ensureCurrentSplitMergeOwner(ownerJob)
                 keystoreManager.sign(unsignedCopy, signedCopy)
                 runCatching { unsignedCopy.delete() }
@@ -1184,6 +1221,7 @@ class DashboardViewModel(
                     ),
                     currentMessage = app.getString(R.string.merge_split_apk_signed)
                 )
+                appendSplitMergeLog(app.getString(R.string.merge_split_apk_signed))
             }
         }.onFailure { error ->
             if (error is CancellationException) {
@@ -1235,6 +1273,7 @@ class DashboardViewModel(
                     currentMessage = resolvedErrorMessage
                 )
             }
+            appendSplitMergeLog(resolvedErrorMessage)
         }
         runCatching { sourceCleanup() }
         if (activeSplitMergeRunWorkspace == runWorkspace) {
@@ -1333,9 +1372,11 @@ class DashboardViewModel(
             currentMessage = message,
             error = null
         )
+        appendSplitMergeLog(message)
     }
 
     private fun updateDownloadStepRunning(downloaded: Long, total: Long?) {
+        val previousStatus = splitMergeStateFlow.value.downloadStep.status
         splitMergeStateFlow.value = splitMergeStateFlow.value.copy(
             inProgress = true,
             showDownloadStep = true,
@@ -1348,6 +1389,9 @@ class DashboardViewModel(
                 progressTotal = total
             )
         )
+        if (previousStatus != SplitMergeStepStatus.RUNNING) {
+            appendSplitMergeLog(app.getString(R.string.merge_split_apk_downloading))
+        }
     }
 
     private fun updateDownloadStepCompleted() {
@@ -1358,6 +1402,7 @@ class DashboardViewModel(
                 message = app.getString(R.string.merge_split_apk_downloaded)
             )
         )
+        appendSplitMergeLog(app.getString(R.string.merge_split_apk_downloaded))
     }
 
     private fun updateSaveStepCompleted(outputName: String) {
@@ -1372,17 +1417,120 @@ class DashboardViewModel(
             ),
             currentMessage = app.getString(R.string.merge_split_apk_saved)
         )
+        appendSplitMergeLog("${app.getString(R.string.merge_split_apk_saved)} ($outputName)")
     }
 
     private fun updateSaveStepFailed(error: Throwable) {
+        val resolvedMessage = error.message ?: app.getString(R.string.merge_split_apk_failed)
         splitMergeStateFlow.value = splitMergeStateFlow.value.copy(
-            error = error.message ?: app.getString(R.string.merge_split_apk_failed),
+            error = resolvedMessage,
             saveStep = splitMergeStateFlow.value.saveStep.copy(
                 status = SplitMergeStepStatus.FAILED,
-                message = error.message ?: app.getString(R.string.merge_split_apk_failed)
+                message = resolvedMessage
             ),
-            currentMessage = error.message ?: app.getString(R.string.merge_split_apk_failed)
+            currentMessage = resolvedMessage
         )
+        appendSplitMergeLog(resolvedMessage)
+    }
+
+    private fun appendSplitMergeLog(message: String) {
+        val trimmed = message.trim()
+        if (trimmed.isEmpty()) return
+        splitMergeStateFlow.update { current ->
+            val lastMessage = current.logEntries.lastOrNull()?.substringAfter("] ", "")
+            if (lastMessage == trimmed) {
+                current
+            } else {
+                val timestamp = "%1\$tH:%1\$tM:%1\$tS".format(Date())
+                current.copy(logEntries = current.logEntries + "[$timestamp] $trimmed")
+            }
+        }
+    }
+
+    private fun buildSplitMergeLogContent(): String {
+        val state = splitMergeStateFlow.value
+        val excludedModulesLabel = state.excludedModules
+            .takeIf { it.isNotEmpty() }
+            ?.joinToString(", ")
+            ?: "None"
+        return buildString {
+            appendLine("------------")
+            appendLine(app.getString(R.string.merge_split_apk_log_header_title))
+            appendLine("------------")
+            appendLine("Generated at: ${Date()}")
+            appendLine("Input: ${state.inputName ?: "n/a"}")
+            appendLine("Output: ${state.outputName ?: "n/a"}")
+            appendLine("Excluded splits: $excludedModulesLabel")
+            appendLine()
+            appendLine("------------")
+            appendLine("Merge Log:")
+            appendLine("------------")
+            if (state.logEntries.isEmpty()) {
+                appendLine("No log messages recorded.")
+            } else {
+                state.logEntries.forEach { appendLine(it) }
+            }
+        }
+    }
+
+    fun getSplitMergeLogContent(): String = buildSplitMergeLogContent()
+
+    fun exportSplitMergeLogsToPath(
+        target: Path,
+        onResult: (Boolean) -> Unit = {}
+    ) = viewModelScope.launch {
+        val exportSucceeded = runCatching {
+            withContext(Dispatchers.IO) {
+                target.parent?.let { Files.createDirectories(it) }
+                Files.newBufferedWriter(
+                    target,
+                    StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING
+                ).use { writer ->
+                    writer.write(buildSplitMergeLogContent())
+                }
+            }
+        }.isSuccess
+
+        if (!exportSucceeded) {
+            app.toast(app.getString(R.string.merge_split_apk_log_export_failed))
+            onResult(false)
+            return@launch
+        }
+
+        app.toast(app.getString(R.string.merge_split_apk_log_export_success))
+        onResult(true)
+    }
+
+    fun exportSplitMergeLogsToUri(
+        target: Uri?,
+        onResult: (Boolean) -> Unit = {}
+    ) = viewModelScope.launch {
+        if (target == null) {
+            onResult(false)
+            return@launch
+        }
+
+        val exportSucceeded = runCatching {
+            withContext(Dispatchers.IO) {
+                app.contentResolver.openOutputStream(target, "wt")
+                    ?.bufferedWriter(StandardCharsets.UTF_8)
+                    ?.use { writer ->
+                        writer.write(buildSplitMergeLogContent())
+                    }
+                    ?: throw IOException("Could not open output stream for split merge log export")
+            }
+        }.isSuccess
+
+        if (!exportSucceeded) {
+            app.toast(app.getString(R.string.merge_split_apk_log_export_failed))
+            onResult(false)
+            return@launch
+        }
+
+        app.toast(app.getString(R.string.merge_split_apk_log_export_success))
+        onResult(true)
     }
 
     private fun defaultMergedOutputName(sourceName: String?): String {
@@ -1437,6 +1585,8 @@ data class SplitMergeState(
     val currentMessage: String? = null,
     val error: String? = null,
     val mergeSubSteps: List<String> = emptyList(),
+    val logEntries: List<String> = emptyList(),
+    val excludedModules: Set<String> = emptySet(),
     val selection: SplitApkPreparer.SplitArchiveInspection? = null,
     val selectionIncludedModules: Set<String> = emptySet(),
     val selectionStripNativeLibs: Boolean = false,

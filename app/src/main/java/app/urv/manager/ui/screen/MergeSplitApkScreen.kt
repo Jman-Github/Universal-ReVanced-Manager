@@ -1,10 +1,13 @@
 package app.urv.manager.ui.screen
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.net.Uri
 import androidx.annotation.StringRes
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,11 +27,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Cancel
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.PostAdd
 import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -68,9 +79,11 @@ import app.urv.manager.ui.model.StepCategory
 import app.urv.manager.ui.model.StepDetail
 import app.urv.manager.ui.viewmodel.DashboardViewModel
 import app.urv.manager.ui.viewmodel.SplitMergeState
+import app.urv.manager.ui.viewmodel.SplitMergeStepState
 import app.urv.manager.ui.viewmodel.SplitMergeStepStatus
 import app.urv.manager.util.mutableStateSetOf
 import app.urv.manager.util.saver.snapshotStateSetSaver
+import app.urv.manager.util.toast
 import app.universal.revanced.manager.R
 import java.nio.file.Files
 import java.nio.file.Path
@@ -96,14 +109,31 @@ fun MergeSplitApkScreen(
 
     var showOutputPicker by rememberSaveable { mutableStateOf(false) }
     var outputFileDialogState by remember { mutableStateOf<OutputFileDialogState?>(null) }
+    var showLogActionsDialog by rememberSaveable { mutableStateOf(false) }
+    var showLogExportPicker by rememberSaveable { mutableStateOf(false) }
+    var logExportFileDialogState by remember { mutableStateOf<OutputFileDialogState?>(null) }
+    var logExportInProgress by rememberSaveable { mutableStateOf(false) }
     var showDismissConfirmationDialog by rememberSaveable { mutableStateOf(false) }
     var pendingPermissionRequest by rememberSaveable {
         mutableStateOf<PermissionRequest?>(null)
     }
+    val logFileName = remember(state.inputName) {
+        val base = state.inputName
+            ?.substringAfterLast('/')
+            ?.substringAfterLast('\\')
+            ?.substringBeforeLast('.', "")
+            ?.takeIf { it.isNotBlank() }
+            ?: "split-merge"
+        "merge-log-$base.txt"
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(permissionContract) { granted ->
-        if (granted && pendingPermissionRequest == PermissionRequest.OUTPUT) {
-            showOutputPicker = true
+        if (granted) {
+            when (pendingPermissionRequest) {
+                PermissionRequest.OUTPUT -> showOutputPicker = true
+                PermissionRequest.LOG_EXPORT -> showLogExportPicker = true
+                null -> Unit
+            }
         }
         pendingPermissionRequest = null
     }
@@ -116,6 +146,12 @@ fun MergeSplitApkScreen(
             outputUri = uri,
             outputDisplayName = preferredMergedOutputName(state.outputName, state.inputName)
         )
+    }
+    val logExportDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/plain")
+    ) { uri: Uri? ->
+        vm.exportSplitMergeLogsToUri(uri)
+        showLogExportPicker = false
     }
 
     val canSaveNow = state.canSaveAgain &&
@@ -137,10 +173,25 @@ fun MergeSplitApkScreen(
         }
     }
 
+    fun openLogExportPicker() {
+        if (useCustomFilePicker) {
+            if (fs.hasStoragePermission()) {
+                showLogExportPicker = true
+            } else {
+                pendingPermissionRequest = PermissionRequest.LOG_EXPORT
+                permissionLauncher.launch(permissionName)
+            }
+        } else {
+            logExportDocumentLauncher.launch(logFileName)
+        }
+    }
+
     LaunchedEffect(useCustomFilePicker) {
         if (!useCustomFilePicker) {
             showOutputPicker = false
             outputFileDialogState = null
+            showLogExportPicker = false
+            logExportFileDialogState = null
             pendingPermissionRequest = null
         }
     }
@@ -196,6 +247,26 @@ fun MergeSplitApkScreen(
         )
     }
 
+    if (showLogActionsDialog) {
+        MergeLogActionsDialog(
+            onDismiss = { showLogActionsDialog = false },
+            onCopy = {
+                val clipboard = context.getSystemService(ClipboardManager::class.java)
+                if (clipboard != null) {
+                    clipboard.setPrimaryClip(
+                        ClipData.newPlainText("Merge log", vm.getSplitMergeLogContent())
+                    )
+                    context.toast(context.getString(R.string.toast_copied_to_clipboard))
+                }
+                showLogActionsDialog = false
+            },
+            onExport = {
+                showLogActionsDialog = false
+                openLogExportPicker()
+            }
+        )
+    }
+
     if (showOutputPicker && useCustomFilePicker) {
         PathSelectorDialog(
             roots = storageRoots,
@@ -220,6 +291,36 @@ fun MergeSplitApkScreen(
             }
         )
     }
+    if (showLogExportPicker && useCustomFilePicker) {
+        PathSelectorDialog(
+            roots = storageRoots,
+            onSelect = { path ->
+                if (path == null) {
+                    showLogExportPicker = false
+                }
+            },
+            fileFilter = { false },
+            allowDirectorySelection = true,
+            fileTypeLabel = ".txt",
+            confirmButtonText = stringResource(R.string.save),
+            onConfirm = { selection ->
+                val exportDirectory = if (Files.isDirectory(selection)) {
+                    selection
+                } else {
+                    selection.parent ?: selection
+                }
+                logExportFileDialogState = OutputFileDialogState(
+                    directory = exportDirectory,
+                    fileName = logFileName
+                )
+            }
+        )
+    }
+    LaunchedEffect(showLogExportPicker, useCustomFilePicker, logFileName) {
+        if (showLogExportPicker && !useCustomFilePicker) {
+            logExportDocumentLauncher.launch(logFileName)
+        }
+    }
 
     outputFileDialogState?.let { dialogState ->
         ExportSavedApkFileNameDialog(
@@ -232,6 +333,47 @@ fun MergeSplitApkScreen(
                 showOutputPicker = false
                 val target = dialogState.directory.resolve(trimmed).toString()
                 vm.saveLastMergedToPath(target)
+            }
+        )
+    }
+    logExportFileDialogState?.let { dialogState ->
+        ExportSavedApkFileNameDialog(
+            initialName = dialogState.fileName,
+            onDismiss = { logExportFileDialogState = null },
+            onConfirm = { fileName ->
+                val trimmed = fileName.trim()
+                if (trimmed.isBlank()) return@ExportSavedApkFileNameDialog
+                logExportFileDialogState = null
+                logExportInProgress = true
+                vm.exportSplitMergeLogsToPath(dialogState.directory.resolve(trimmed)) { success ->
+                    logExportInProgress = false
+                    if (success) {
+                        showLogExportPicker = false
+                    }
+                }
+            }
+        )
+    }
+    if (logExportInProgress) {
+        AlertDialog(
+            onDismissRequest = {},
+            confirmButton = {},
+            title = { Text(stringResource(R.string.merge_split_apk_log_exporting_title)) },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        stringResource(R.string.merge_split_apk_log_exporting),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth(0.75f)
+                            .height(4.dp)
+                    )
+                }
             }
         )
     }
@@ -306,6 +448,14 @@ fun MergeSplitApkScreen(
             }
         }
     }
+    val mergeProgress by remember(state, currentSubStepIndex) {
+        derivedStateOf {
+            calculateSplitMergeProgress(
+                state = state,
+                currentSubStepIndex = currentSubStepIndex
+            )
+        }
+    }
 
     val subStepsById by remember(state, currentSubStepIndex) {
         derivedStateOf {
@@ -346,46 +496,67 @@ fun MergeSplitApkScreen(
                 onBackClick = ::onPageBack
             )
         },
-        floatingActionButton = {
-            AnimatedVisibility(visible = canSaveNow) {
-                HapticExtendedFloatingActionButton(
-                    text = { Text(stringResource(R.string.save)) },
-                    icon = { Icon(Icons.Outlined.Save, null) },
-                    onClick = ::requestSave
-                )
-            }
+        bottomBar = {
+            BottomAppBar(
+                actions = {
+                    IconButton(
+                        onClick = { showLogActionsDialog = true },
+                        enabled = state.logEntries.isNotEmpty()
+                    ) {
+                        Icon(Icons.Outlined.PostAdd, stringResource(R.string.save_logs))
+                    }
+                },
+                floatingActionButton = {
+                    AnimatedVisibility(visible = canSaveNow) {
+                        HapticExtendedFloatingActionButton(
+                            text = { Text(stringResource(R.string.save)) },
+                            icon = { Icon(Icons.Outlined.Save, null) },
+                            onClick = ::requestSave
+                        )
+                    }
+                }
+            )
         }
     ) { paddingValues ->
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .padding(paddingValues)
-                .fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .fillMaxSize()
         ) {
-            items(stepsByCategory.toList(), key = { it.first }) { (category, steps) ->
-                Steps(
-                    category = category,
-                    steps = steps,
-                    subStepsById = subStepsById,
-                    isExpanded = expandedCategories.contains(category),
-                    autoExpandRunning = autoExpandRunningSteps,
-                    autoExpandRunningMainOnly = useExclusiveAutoExpand,
-                    autoCollapseCompleted = autoCollapsePatcherSteps,
-                    onExpand = {
-                        if (useExclusiveAutoExpand) {
-                            expandedCategories.clear()
-                        }
-                        expandedCategories.add(category)
-                    },
-                    onClick = {
-                        if (expandedCategories.contains(category)) {
-                            expandedCategories.remove(category)
-                        } else {
+            LinearProgressIndicator(
+                progress = { mergeProgress },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(stepsByCategory.toList(), key = { it.first }) { (category, steps) ->
+                    Steps(
+                        category = category,
+                        steps = steps,
+                        subStepsById = subStepsById,
+                        isExpanded = expandedCategories.contains(category),
+                        autoExpandRunning = autoExpandRunningSteps,
+                        autoExpandRunningMainOnly = useExclusiveAutoExpand,
+                        autoCollapseCompleted = autoCollapsePatcherSteps,
+                        onExpand = {
+                            if (useExclusiveAutoExpand) {
+                                expandedCategories.clear()
+                            }
                             expandedCategories.add(category)
+                        },
+                        onClick = {
+                            if (expandedCategories.contains(category)) {
+                                expandedCategories.remove(category)
+                            } else {
+                                expandedCategories.add(category)
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
         }
     }
@@ -397,7 +568,8 @@ private data class OutputFileDialogState(
 )
 
 private enum class PermissionRequest {
-    OUTPUT
+    OUTPUT,
+    LOG_EXPORT
 }
 
 private data class MergeSubStep(
@@ -453,6 +625,162 @@ private fun resolveSubStepState(
             else -> State.WAITING
         }
     }
+}
+
+private fun calculateSplitMergeProgress(
+    state: SplitMergeState,
+    currentSubStepIndex: Int
+): Float {
+    if (
+        !state.showDownloadStep &&
+        state.mergeStep.status == SplitMergeStepStatus.WAITING &&
+        state.signStep.status == SplitMergeStepStatus.WAITING
+    ) {
+        return 0f
+    }
+
+    var completedUnits = 0f
+    var totalUnits = 0f
+
+    if (state.showDownloadStep) {
+        totalUnits += 1f
+        completedUnits += state.downloadStep.progressFraction(defaultRunningFraction = 0.2f)
+    }
+
+    totalUnits += 1f
+    completedUnits += calculateMergePhaseFraction(state, currentSubStepIndex)
+
+    totalUnits += 1f
+    completedUnits += state.signStep.progressFraction(defaultRunningFraction = 0.5f)
+
+    return if (totalUnits <= 0f) 0f else (completedUnits / totalUnits).coerceIn(0f, 1f)
+}
+
+private fun calculateMergePhaseFraction(
+    state: SplitMergeState,
+    currentSubStepIndex: Int
+): Float {
+    return when (state.mergeStep.status) {
+        SplitMergeStepStatus.WAITING -> 0f
+        SplitMergeStepStatus.COMPLETED -> 1f
+        SplitMergeStepStatus.RUNNING,
+        SplitMergeStepStatus.FAILED -> {
+            val entries = parseMergeSubSteps(state)
+            if (entries.isEmpty()) {
+                if (state.mergeStep.status == SplitMergeStepStatus.RUNNING) 0.1f else 0f
+            } else {
+                val completedEntries = entries
+                    .take(currentSubStepIndex.coerceAtLeast(0))
+                    .count { !it.skipped }
+                    .toFloat()
+                val currentEntryRunning = currentSubStepIndex in entries.indices &&
+                    !entries[currentSubStepIndex].skipped &&
+                    state.mergeStep.status == SplitMergeStepStatus.RUNNING
+                val totalEntries = entries.count { !it.skipped }.coerceAtLeast(1).toFloat()
+                ((completedEntries + if (currentEntryRunning) 0.5f else 0f) / totalEntries)
+                    .coerceIn(0f, 1f)
+            }
+        }
+    }
+}
+
+private fun SplitMergeStepState.progressFraction(defaultRunningFraction: Float): Float = when (status) {
+    SplitMergeStepStatus.WAITING -> 0f
+    SplitMergeStepStatus.COMPLETED -> 1f
+    SplitMergeStepStatus.RUNNING,
+    SplitMergeStepStatus.FAILED -> {
+        if (progressCurrent != null && progressTotal != null && progressTotal > 0L) {
+            (progressCurrent.toFloat() / progressTotal.toFloat()).coerceIn(0f, 1f)
+        } else if (status == SplitMergeStepStatus.RUNNING) {
+            defaultRunningFraction
+        } else {
+            0f
+        }
+    }
+}
+
+@Composable
+private fun MergeLogActionsDialog(
+    onDismiss: () -> Unit,
+    onCopy: () -> Unit,
+    onExport: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Outlined.PostAdd, null) },
+        title = { Text(stringResource(R.string.merge_split_apk_log_dialog_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = stringResource(R.string.merge_split_apk_log_dialog_description),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                ElevatedCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onCopy)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.ContentCopy,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = stringResource(R.string.merge_split_apk_log_dialog_copy),
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                text = stringResource(R.string.merge_split_apk_log_dialog_copy_description),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+                ElevatedCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onExport)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Description,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = stringResource(R.string.merge_split_apk_log_dialog_export),
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                text = stringResource(R.string.merge_split_apk_log_dialog_export_description),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+        dismissButton = {}
+    )
 }
 
 private data class SplitMergePresetOption(
