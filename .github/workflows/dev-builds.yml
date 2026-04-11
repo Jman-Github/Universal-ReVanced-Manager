@@ -148,6 +148,8 @@ jobs:
     needs: [prepare, build]
     permissions:
       contents: write
+    env:
+      GH_REPO: ${{ github.repository }}
     steps:
       - name: Download dev APK artifacts
         uses: actions/download-artifact@v4

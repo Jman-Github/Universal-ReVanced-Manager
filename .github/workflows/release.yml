@@ -151,6 +151,8 @@ jobs:
       packages: write
       id-token: write
       attestations: write
+    env:
+      GH_REPO: ${{ github.repository }}
     steps:
       - name: Download release APK artifacts
         uses: actions/download-artifact@v4
