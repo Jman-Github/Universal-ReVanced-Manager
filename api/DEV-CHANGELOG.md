@@ -32,6 +32,7 @@
 - Fixed a few UI edge cases, including hidden RGB values in the custom YouTube asset color picker, clearer patch-profile empty-state wording for downloaded apps, and duplicate saved-entry normalization when overwrite protection is enabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/291 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
 - Hardened remote patch bundle updating, API fallback handling, and bundle refresh state management https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/372
 - Fixed version assessment so universal-fallback APKs still respect the universal patches safeguard even when suggested-version enforcement is relaxed
+- Fixed bundle and profile count text so selected, enabled/disabled, and import/export messages use the correct singular or plural wording https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/385 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/384
 
 
 # v1.8.1-dev.11 (2026-04-01)

@@ -127,6 +127,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.res.stringResource
@@ -1688,7 +1689,11 @@ fun DashboardScreen(
 
                 bundlesSelectable -> {
                     BundleTopBar(
-                        title = stringResource(R.string.patches_selected, selectedSourceCount),
+                        title = pluralStringResource(
+                            R.plurals.patches_selected_quantity,
+                            selectedSourceCount,
+                            selectedSourceCount
+                        ),
                         onBackClick = vm::cancelSourceSelection,
                         backIcon = {
                             Icon(
@@ -1732,7 +1737,11 @@ fun DashboardScreen(
 
                 profilesSelectable -> {
                     BundleTopBar(
-                        title = stringResource(R.string.patch_profiles_selected, selectedProfileCount),
+                        title = pluralStringResource(
+                            R.plurals.patch_profiles_selected_quantity,
+                            selectedProfileCount,
+                            selectedProfileCount
+                        ),
                         onBackClick = { patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL) },
                         backIcon = {
                             Icon(

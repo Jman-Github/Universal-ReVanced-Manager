@@ -343,6 +343,14 @@
     <string name="import_patch_bundles_description">Restore remote patch bundles from a JSON file</string>
     <string name="import_patch_bundles_fail">Could not import patch bundles: %s</string>
     <string name="import_patch_bundles_in_progress">Importing...</string>
+    <plurals name="import_patch_bundles_success_quantity">
+        <item quantity="one">Imported %d patch bundle</item>
+        <item quantity="other">Imported %d patch bundles</item>
+    </plurals>
+    <plurals name="import_patch_bundles_updated_quantity">
+        <item quantity="one">Updated %d patch bundle</item>
+        <item quantity="other">Updated %d patch bundles</item>
+    </plurals>
     <string name="import_patch_bundles_success">Imported %d patch bundles</string>
     <string name="import_patch_bundles_updated">Updated %d patch bundles</string>
     <string name="import_patch_bundles_none">No new patch bundles were imported</string>
@@ -355,6 +363,18 @@
     <string name="import_patch_profiles">Import patch profiles</string>
     <string name="import_patch_profiles_description">Import saved patch profiles from a JSON file</string>
     <string name="import_patch_profiles_fail">Could not import patch profiles: %s</string>
+    <plurals name="import_patch_profiles_success_quantity">
+        <item quantity="one">Imported %d patch profile</item>
+        <item quantity="other">Imported %d patch profiles</item>
+    </plurals>
+    <plurals name="import_patch_profiles_partial_quantity">
+        <item quantity="one">Imported %1$d patch profile with %2$d skipped</item>
+        <item quantity="other">Imported %1$d patch profiles with %2$d skipped</item>
+    </plurals>
+    <plurals name="import_patch_profiles_skipped_quantity">
+        <item quantity="one">Skipped %d duplicate patch profile</item>
+        <item quantity="other">Skipped %d duplicate patch profiles</item>
+    </plurals>
     <string name="import_patch_profiles_success">Imported %d patch profiles</string>
     <string name="import_patch_profiles_partial">Imported %1$d patch profiles with %2$d skipped</string>
     <string name="import_patch_profiles_skipped">Skipped %d duplicate patch profiles</string>
@@ -377,6 +397,14 @@
     <string name="export_patch_bundles">Export patch bundles</string>
     <string name="export_patch_bundles_description">Save imported remote patch bundles to a JSON file</string>
     <string name="export_patch_bundles_fail">Could not export patch bundles: %s</string>
+    <plurals name="export_patch_bundles_success_quantity">
+        <item quantity="one">Exported %d patch bundle</item>
+        <item quantity="other">Exported %d patch bundles</item>
+    </plurals>
+    <plurals name="export_patch_bundles_partial_quantity">
+        <item quantity="one">Exported %1$d patch bundle. Some bundles could not be exported because they were added locally.</item>
+        <item quantity="other">Exported %1$d patch bundles. Some bundles could not be exported because they were added locally.</item>
+    </plurals>
     <string name="export_patch_bundles_success">Exported %d patch bundles</string>
     <string name="export_patch_bundles_partial">Exported %1$d patch bundles. Some bundles could not be exported because they were added locally.</string>
     <string name="bundle_type_remote">Remote</string>
@@ -397,6 +425,10 @@
     <string name="export_patch_profiles">Export patch profiles</string>
     <string name="export_patch_profiles_description">Export all patch profiles to a JSON file</string>
     <string name="export_patch_profiles_fail">Could not export patch profiles: %s</string>
+    <plurals name="export_patch_profiles_success_quantity">
+        <item quantity="one">Exported %d patch profile</item>
+        <item quantity="other">Exported %d patch profiles</item>
+    </plurals>
     <string name="export_patch_profiles_success">Exported %d patch profiles</string>
     <string name="export_patch_profiles_empty">There are no patch profiles to export</string>
     <string name="export_manager_settings">Export manager settings</string>
@@ -895,6 +927,14 @@ Patch profiles are not affected.</string>
     <string name="delete">Delete</string>
     <string name="disable">Disable</string>
     <string name="enable">Enable</string>
+    <plurals name="patch_bundle_disabled_toast_quantity">
+        <item quantity="one">Disabled %d bundle</item>
+        <item quantity="other">Disabled %d bundles</item>
+    </plurals>
+    <plurals name="patch_bundle_enabled_toast_quantity">
+        <item quantity="one">Enabled %d bundle</item>
+        <item quantity="other">Enabled %d bundles</item>
+    </plurals>
     <string name="patch_bundle_disabled_toast">Disabled %d bundle(s)</string>
     <string name="patch_bundle_enabled_toast">Enabled %d bundle(s)</string>
     <string name="patches_disable_single_dialog_description">Disable \"%s\"?</string>
@@ -904,6 +944,14 @@ Patch profiles are not affected.</string>
     <string name="patches_download_fail">Failed to download patches: %s</string>
     <string name="patches_replace_fail">Failed to import patches: %s</string>
     <string name="no_patched_apps_found">No patched apps found</string>
+    <plurals name="patches_selected_quantity">
+        <item quantity="one">%d patch bundle selected</item>
+        <item quantity="other">%d patch bundles selected</item>
+    </plurals>
+    <plurals name="patch_profiles_selected_quantity">
+        <item quantity="one">%d patch profile selected</item>
+        <item quantity="other">%d patch profiles selected</item>
+    </plurals>
     <string name="patches_selected">%s patch bundle(s) selected</string>
     <string name="patch_profiles_selected">%1$d patch profile(s) selected</string>
     <string name="selected_apps_count">%1$d app(s) selected</string>

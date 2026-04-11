@@ -1014,8 +1014,20 @@ class ImportExportViewModel(
                     val totalUpdated = summary.updated + if (!officialCreated && officialUpdated) 1 else 0
 
                     when {
-                        totalCreated > 0 -> app.toast(app.getString(R.string.import_patch_bundles_success, totalCreated))
-                        totalUpdated > 0 -> app.toast(app.getString(R.string.import_patch_bundles_updated, totalUpdated))
+                        totalCreated > 0 -> app.toast(
+                            app.resources.getQuantityString(
+                                R.plurals.import_patch_bundles_success_quantity,
+                                totalCreated,
+                                totalCreated
+                            )
+                        )
+                        totalUpdated > 0 -> app.toast(
+                            app.resources.getQuantityString(
+                                R.plurals.import_patch_bundles_updated_quantity,
+                                totalUpdated,
+                                totalUpdated
+                            )
+                        )
                         else -> app.toast(app.getString(R.string.import_patch_bundles_none))
                     }
                     patchBundleRepository.enforceOfficialOrderPreference()
@@ -1098,12 +1110,12 @@ class ImportExportViewModel(
             }
 
             val message = if (result.hasLocalSources) {
-                R.string.export_patch_bundles_partial
+                R.plurals.export_patch_bundles_partial_quantity
             } else {
-                R.string.export_patch_bundles_success
+                R.plurals.export_patch_bundles_success_quantity
             }
 
-            app.toast(app.getString(message, result.exportedCount))
+            app.toast(app.resources.getQuantityString(message, result.exportedCount, result.exportedCount))
         }
     }
 
@@ -1119,12 +1131,12 @@ class ImportExportViewModel(
             }
 
             val message = if (result.hasLocalSources) {
-                R.string.export_patch_bundles_partial
+                R.plurals.export_patch_bundles_partial_quantity
             } else {
-                R.string.export_patch_bundles_success
+                R.plurals.export_patch_bundles_success_quantity
             }
 
-            app.toast(app.getString(message, result.exportedCount))
+            app.toast(app.resources.getQuantityString(message, result.exportedCount, result.exportedCount))
         }
     }
 
@@ -1158,8 +1170,9 @@ class ImportExportViewModel(
                 when {
                     result.imported > 0 && result.skipped > 0 -> {
                         app.toast(
-                            app.getString(
-                                R.string.import_patch_profiles_partial,
+                            app.resources.getQuantityString(
+                                R.plurals.import_patch_profiles_partial_quantity,
+                                result.imported,
                                 result.imported,
                                 result.skipped
                             )
@@ -1167,16 +1180,18 @@ class ImportExportViewModel(
                     }
                     result.imported > 0 -> {
                         app.toast(
-                            app.getString(
-                                R.string.import_patch_profiles_success,
+                            app.resources.getQuantityString(
+                                R.plurals.import_patch_profiles_success_quantity,
+                                result.imported,
                                 result.imported
                             )
                         )
                     }
                     result.skipped > 0 -> {
                         app.toast(
-                            app.getString(
-                                R.string.import_patch_profiles_skipped,
+                            app.resources.getQuantityString(
+                                R.plurals.import_patch_profiles_skipped_quantity,
+                                result.skipped,
                                 result.skipped
                             )
                         )
@@ -1204,7 +1219,13 @@ class ImportExportViewModel(
                 }
             }
 
-            app.toast(app.getString(R.string.export_patch_profiles_success, profiles.size))
+            app.toast(
+                app.resources.getQuantityString(
+                    R.plurals.export_patch_profiles_success_quantity,
+                    profiles.size,
+                    profiles.size
+                )
+            )
         }
     }
 
@@ -1223,7 +1244,13 @@ class ImportExportViewModel(
                 }
             }
 
-            app.toast(app.getString(R.string.export_patch_profiles_success, profiles.size))
+            app.toast(
+                app.resources.getQuantityString(
+                    R.plurals.export_patch_profiles_success_quantity,
+                    profiles.size,
+                    profiles.size
+                )
+            )
         }
     }
 
