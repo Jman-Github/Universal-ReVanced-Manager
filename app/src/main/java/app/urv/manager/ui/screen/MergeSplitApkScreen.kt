@@ -491,7 +491,7 @@ fun MergeSplitApkScreen(
     AppScaffold(
         topBar = { scrollBehavior ->
             AppTopBar(
-                title = stringResource(R.string.tools_merge_split_title),
+                title = stringResource(R.string.tools_merge_split_screen_title),
                 scrollBehavior = scrollBehavior,
                 onBackClick = ::onPageBack
             )

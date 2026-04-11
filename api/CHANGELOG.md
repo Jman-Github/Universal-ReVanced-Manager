@@ -94,6 +94,7 @@
 - Improved update dialog and changelog readability by reducing changelog heading/body sizes and tightening the update prompt text layout https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/381
 - Removed the `MEDIUM` build profile as it included the same runtimes as `FULL`
 - Improved the About screen layout and added version display copy behavior https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/399 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/400
+- Updated English UI wording for merge tool titles, selected app counts, patch bundle empty-state text, and APK saved casing https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/396 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/398 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/293 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/319
 
 
 # Bug fixes

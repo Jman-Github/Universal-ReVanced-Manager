@@ -646,7 +646,7 @@ private class ListOptionEditor<T : Serializable>(private val elementEditor: Opti
                     topBar = {
                         AppTopBar(
                             title = if (deleteMode) pluralStringResource(
-                                R.plurals.selected_count,
+                                R.plurals.selected_apps_count,
                             deletionTargets.size,
                             deletionTargets.size
                             ) else scope.option.title,

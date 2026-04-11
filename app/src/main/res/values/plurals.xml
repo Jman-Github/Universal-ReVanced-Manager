@@ -7,4 +7,8 @@
     <plurals name="selected_count">
         <item quantity="other">%d selected</item>
         </plurals>
+    <plurals name="selected_apps_count">
+        <item quantity="one">%d app selected</item>
+        <item quantity="other">%d apps selected</item>
+        </plurals>
     </resources>
