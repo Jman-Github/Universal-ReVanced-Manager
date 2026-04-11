@@ -1,3 +1,14 @@
+# v1.8.1-dev.13 (TBD)
+
+
+# Features
+
+
+# Bug fixes
+
+- Renamed the split merge native-libraries filter to `Exclude extra native libraries` and fixed patch bundle update banner grammar for singular vs plural counts https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/363 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/359
+
+
 # v1.8.1-dev.12 (2026-4-10)
 
 

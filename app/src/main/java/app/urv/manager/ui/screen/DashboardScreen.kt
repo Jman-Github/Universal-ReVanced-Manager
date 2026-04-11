@@ -854,8 +854,9 @@ fun DashboardScreen(
 
                     val subtitleParts = buildList {
                         add(
-                            stringResource(
-                                R.string.bundle_update_progress,
+                            pluralStringResource(
+                                R.plurals.bundle_update_progress_quantity,
+                                progress.total,
                                 progress.completed,
                                 progress.total
                             )
@@ -887,11 +888,15 @@ fun DashboardScreen(
                         add(detail)
                     }
                     DownloadProgressBanner(
-                        title = stringResource(R.string.bundle_update_banner_title),
+                        title = pluralStringResource(
+                            R.plurals.bundle_update_banner_title_quantity,
+                            progress.total,
+                        ),
                         subtitle = subtitleParts.joinToString(" - "),
                         progress = progressFraction,
-                        collapsedLabel = stringResource(
-                            R.string.bundle_update_banner_collapsed,
+                        collapsedLabel = pluralStringResource(
+                            R.plurals.bundle_update_banner_collapsed_quantity,
+                            progress.total,
                             progress.completed.coerceAtMost(progress.total),
                             progress.total
                         ),

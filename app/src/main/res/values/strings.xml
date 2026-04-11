@@ -65,9 +65,18 @@
     <string name="bundle_update_manual_available_with_version">Update available: %1$s</string>
     <string name="patch_bundle_force_redownload_title">Force redownload</string>
     <string name="patch_bundle_force_redownload_description">Redownload %1$s and overwrite the local copy?</string>
-    <string name="bundle_update_progress">%1$d/%2$d bundles processed</string>
-    <string name="bundle_update_banner_title">Updating patch bundles</string>
-    <string name="bundle_update_banner_collapsed">Updating patch bundles • %1$d out of %2$d</string>
+    <plurals name="bundle_update_progress_quantity">
+        <item quantity="one">%1$d/%2$d bundle processed</item>
+        <item quantity="other">%1$d/%2$d bundles processed</item>
+    </plurals>
+    <plurals name="bundle_update_banner_title_quantity">
+        <item quantity="one">Updating patch bundle</item>
+        <item quantity="other">Updating patch bundles</item>
+    </plurals>
+    <plurals name="bundle_update_banner_collapsed_quantity">
+        <item quantity="one">Updating patch bundle • %1$d out of %2$d</item>
+        <item quantity="other">Updating patch bundles • %1$d out of %2$d</item>
+    </plurals>
     <string name="bundle_updates_notification_progress">Updating %1$d of %2$d: %3$s</string>
     <string name="bundle_updates_notification_completed">Update completed</string>
     <plurals name="bundle_updates_notification_completed_with_available_quantity">
@@ -901,7 +910,7 @@ Patch profiles are not affected.</string>
     <string name="merge_split_apk_selection_title">Choose splits to merge</string>
     <string name="merge_split_apk_selection_description">Choose which split modules to include for this merge. All splits are selected by default.</string>
     <string name="merge_split_apk_selection_preset_all">All</string>
-    <string name="merge_split_apk_selection_strip_native_libs_title">Remove extra native libraries</string>
+    <string name="merge_split_apk_selection_strip_native_libs_title">Exclude extra native libraries</string>
     <string name="merge_split_apk_selection_confirm">Start merge</string>
     <string name="merge_split_apk_selection_ready">Review split selection before merging.</string>
     <string name="merge_split_apk_selection_preset_none">None</string>
