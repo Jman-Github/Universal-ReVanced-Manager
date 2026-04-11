@@ -93,6 +93,7 @@
 - Updated the “No updates available” message https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/389
 - Improved update dialog and changelog readability by reducing changelog heading/body sizes and tightening the update prompt text layout https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/381
 - Removed the `MEDIUM` build profile as it included the same runtimes as `FULL`
+- Improved the About screen layout and added version display copy behavior https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/399 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/400
 
 
 # Bug fixes

@@ -4,6 +4,7 @@
 # Features
 
 - Removed the `MEDIUM` build profile as it included the same runtimes as `FULL`
+- Improved the About screen layout and added version display copy behavior https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/399 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/400
 
 
 # Bug fixes

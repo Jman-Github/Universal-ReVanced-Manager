@@ -1,8 +1,11 @@
 package app.urv.manager.ui.screen.settings
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,6 +49,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.core.content.getSystemService
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.urv.manager.ui.component.AnnotatedLinkText
 import app.urv.manager.ui.component.AppTopBar
@@ -56,6 +60,7 @@ import app.urv.manager.ui.component.settings.SettingsSearchHighlight
 import app.urv.manager.ui.model.navigation.Settings
 import app.urv.manager.ui.viewmodel.AboutViewModel.Companion.getSocialIcon
 import app.urv.manager.util.openUrl
+import app.urv.manager.util.toast
 import app.universal.revanced.manager.BuildConfig
 import app.universal.revanced.manager.R
 import com.google.accompanist.drawablepainter.rememberDrawablePainter
@@ -67,10 +72,18 @@ fun AboutSettingsScreen(
     navigate: (Settings.Destination) -> Unit,
 ) {
     val context = LocalContext.current
+    val clipboard = remember(context) { context.getSystemService<ClipboardManager>() }
     val searchTarget by SettingsSearchState.target.collectAsStateWithLifecycle()
     var highlightTarget by rememberSaveable { mutableStateOf<Int?>(null) }
     var showNoticeDialog by rememberSaveable { mutableStateOf(false) }
     var showLicensesDialog by rememberSaveable { mutableStateOf(false) }
+    val managerVersion = remember { BuildConfig.VERSION_NAME }
+    val managerVersionWithCode = remember(managerVersion) {
+        "$managerVersion (${BuildConfig.VERSION_CODE})"
+    }
+    val versionLabel = remember(managerVersion) {
+        "${context.getString(R.string.version)} $managerVersion (${BuildConfig.VERSION_CODE})"
+    }
     // painterResource() is broken on release builds for some reason.
     val icon = rememberDrawablePainter(drawable = remember {
         AppCompatResources.getDrawable(context, R.mipmap.ic_launcher)
@@ -171,8 +184,6 @@ fun AboutSettingsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .then(highlightModifier),
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                    shadowElevation = 1.dp,
                     contentPadding = PaddingValues(0.dp)
                 ) {
                     Column(
@@ -204,16 +215,30 @@ fun AboutSettingsScreen(
                             }
                         )
                         Text(
-                            text = stringResource(R.string.version) + " " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")",
+                            text = versionLabel,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.combinedClickable(
+                                onClick = {},
+                                onLongClickLabel = stringResource(R.string.copy_to_clipboard),
+                                onLongClick = {
+                                    clipboard?.setPrimaryClip(
+                                        ClipData.newPlainText("Manager version", managerVersionWithCode)
+                                    )
+                                    context.toast(context.getString(R.string.toast_copied_to_clipboard))
+                                }
+                            )
                         )
                         AnnotatedLinkText(
                             text = stringResource(R.string.revanced_manager_description),
                             linkLabel = stringResource(R.string.here),
                             url = "https://github.com/Jman-Github/Universal-ReVanced-Manager#-unique-features",
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
                         )
                     }
                 }
