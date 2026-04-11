@@ -49,6 +49,8 @@ fun Changelog(
     }
     Markdown(
         markdown,
+        textStyle = MaterialTheme.typography.bodySmall,
+        compactHeadings = true,
     )
 }
 

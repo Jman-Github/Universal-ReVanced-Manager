@@ -198,7 +198,11 @@ private fun UpdateInfoSummary(
         )
 
         if (releaseInfo.description.isNotBlank()) {
-            Markdown(releaseInfo.description.replace("`", ""))
+            Markdown(
+                releaseInfo.description.replace("`", ""),
+                textStyle = MaterialTheme.typography.bodySmall,
+                compactHeadings = true
+            )
         }
 
         releaseInfo.pageUrl?.let { url ->

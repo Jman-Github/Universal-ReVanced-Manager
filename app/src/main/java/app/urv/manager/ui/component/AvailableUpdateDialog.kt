@@ -59,7 +59,10 @@ fun AvailableUpdateDialog(
             Icon(imageVector = Icons.Outlined.Update, contentDescription = null)
         },
         title = {
-            Text(stringResource(R.string.update_available))
+            Text(
+                text = stringResource(R.string.update_available),
+                style = MaterialTheme.typography.headlineSmall
+            )
         },
         text = {
             Column(
@@ -68,7 +71,8 @@ fun AvailableUpdateDialog(
             ) {
                 Text(
                     modifier = Modifier.padding(horizontal = 16.dp),
-                    text = stringResource(R.string.update_available_dialog_description, releaseInfo.version)
+                    text = stringResource(R.string.update_available_dialog_description, releaseInfo.version),
+                    style = MaterialTheme.typography.bodySmall
                 )
                 if (releaseInfo.description.isNotBlank()) {
                     Surface(
@@ -85,14 +89,21 @@ fun AvailableUpdateDialog(
                                 .verticalScroll(rememberScrollState())
                                 .padding(horizontal = 16.dp, vertical = 12.dp),
                         ) {
-                            Markdown(releaseInfo.description.replace("`", ""))
+                            Markdown(
+                                releaseInfo.description.replace("`", ""),
+                                textStyle = MaterialTheme.typography.bodySmall,
+                                compactHeadings = true
+                            )
                         }
                     }
                 }
                 ListItem(
                     modifier = Modifier.clickable { dontShowAgain = !dontShowAgain },
                     headlineContent = {
-                        Text(stringResource(R.string.never_show_again))
+                        Text(
+                            text = stringResource(R.string.never_show_again),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
                     },
                     leadingContent = {
                         CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
