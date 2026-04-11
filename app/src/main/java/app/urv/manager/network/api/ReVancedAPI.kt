@@ -419,7 +419,7 @@ fun <T> APIResponse<T>.successOrThrow(context: String): T {
 
 private const val MANAGER_REPO_URL = "https://github.com/Jman-Github/Universal-ReVanced-Manager"
 private const val MANAGER_ASSET_NAME_PREFIX = "universal-revanced-manager-"
-private val MANAGER_BUILD_PROFILES = listOf("LITE", "MEDIUM", "FULL")
+private val MANAGER_BUILD_PROFILES = listOf("LITE", "FULL")
 private val MANAGER_ASSET_VERSION_REGEX = Regex(
     pattern = "^v?\\d+\\.\\d+\\.\\d+(?:[-.][a-z0-9]+)*$",
     option = RegexOption.IGNORE_CASE

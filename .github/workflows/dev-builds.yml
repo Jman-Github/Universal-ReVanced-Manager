@@ -67,7 +67,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        profile: [LITE, MEDIUM, FULL]
+        profile: [LITE, FULL]
 
     steps:
       - name: Checkout

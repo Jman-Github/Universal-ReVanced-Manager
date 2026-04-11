@@ -3,6 +3,8 @@
 
 # Features
 
+- Removed the `MEDIUM` build profile as it included the same runtimes as `FULL`
+
 
 # Bug fixes
 

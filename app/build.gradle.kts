@@ -10,7 +10,6 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 enum class UrvBuildProfile {
     LITE,
-    MEDIUM,
     FULL;
 
     companion object {

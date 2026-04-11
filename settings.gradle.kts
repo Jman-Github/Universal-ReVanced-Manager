@@ -7,7 +7,6 @@ val localProps = Properties().apply {
 
 enum class UrvBuildProfile {
     LITE,
-    MEDIUM,
     FULL;
 
     companion object {
@@ -146,5 +145,5 @@ fun includeIfAvailable(path: String, minimumProfile: UrvBuildProfile = UrvBuildP
 include(":app", ":api")
 includeIfAvailable(":morphe-runtime")
 includeIfAvailable(":revanced-runtime-v22")
-includeIfAvailable(":ample-runtime", UrvBuildProfile.MEDIUM)
+includeIfAvailable(":ample-runtime", UrvBuildProfile.FULL)
 

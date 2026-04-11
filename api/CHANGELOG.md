@@ -92,6 +92,7 @@
 - Added patcher-style progress tracking and merge log copy/export support to the Merge split APKs tool, including excluded split details in exported logs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/388
 - Updated the “No updates available” message https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/389
 - Improved update dialog and changelog readability by reducing changelog heading/body sizes and tightening the update prompt text layout https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/381
+- Removed the `MEDIUM` build profile as it included the same runtimes as `FULL`
 
 
 # Bug fixes
