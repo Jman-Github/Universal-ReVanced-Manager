@@ -173,6 +173,7 @@ import app.urv.manager.ui.component.AppTopBar
 import app.urv.manager.ui.component.ColumnWithScrollbar
 import app.urv.manager.ui.component.GroupHeader
 import app.urv.manager.ui.component.SettingsSectionIcons
+import app.urv.manager.ui.component.splitTrailingPunctuation
 import app.urv.manager.ui.component.settings.BooleanItem
 import app.urv.manager.patcher.runtime.MemoryLimitConfig
 import app.urv.manager.ui.component.settings.IntegerItem
@@ -737,6 +738,10 @@ fun AdvancedSettingsScreen(
                         fallbackToken.takeUnless { tokensEqual(it, InstallerManager.Token.None) }
                     else
                         primaryToken,
+                    blockedStatusLabel = stringResource(
+                        if (isPrimary) R.string.installer_status_fallback_installer
+                        else R.string.installer_status_primary_installer
+                    ),
                     onDismiss = { installerDialogTarget = null },
                     onConfirm = { selection ->
                         if (isPrimary) {
@@ -3174,6 +3179,7 @@ private fun InstallerSelectionDialog(
     options: List<InstallerManager.Entry>,
     selected: InstallerManager.Token,
     blockedToken: InstallerManager.Token?,
+    blockedStatusLabel: String? = null,
     onDismiss: () -> Unit,
     onConfirm: (InstallerManager.Token) -> Unit,
     onOpenShizuku: (() -> Boolean)? = null,
@@ -3234,7 +3240,8 @@ private fun InstallerSelectionDialog(
                 modifier = Modifier.verticalScroll(scrollState)
             ) {
                 options.forEach { option ->
-                    val enabled = option.availability.available
+                    val blocked = blockedToken != null && tokensEqual(option.token, blockedToken)
+                    val enabled = option.availability.available && !blocked
                     val selectedOption = currentSelection == option.token
                     val showShizukuAction = option.token == InstallerManager.Token.Shizuku &&
                         option.availability.reason in shizukuPromptReasons &&
@@ -3276,25 +3283,27 @@ private fun InstallerSelectionDialog(
                             )
                         },
                         supportingContent = {
-                            val lines = buildList {
-                                val desc = option.description?.let { text ->
-                                    if (stripRootNote && option.token == InstallerManager.Token.AutoSaved) {
-                                        val stripped = text.substringBefore(" (root required", text)
-                                        stripped.trimEnd('.', ' ')
-                                    } else text
-                                }
-                                desc?.takeIf { it.isNotBlank() }?.let { add(it) }
+                            val desc = option.description?.let { text ->
+                                if (stripRootNote && option.token == InstallerManager.Token.AutoSaved) {
+                                    val stripped = text.substringBefore(" (root required", text)
+                                    stripped.trimEnd('.', ' ')
+                                } else text
+                            }?.takeIf { it.isNotBlank() }
+                            val statusBadges = buildList {
                                 option.availability.reason?.let { add(stringResource(it)) }
+                                if (blocked) {
+                                    blockedStatusLabel?.takeIf { it.isNotBlank() }?.let { add(it) }
+                                }
                             }
-                            if (lines.isNotEmpty() || showShizukuAction) {
+                            if (desc != null || statusBadges.isNotEmpty() || showShizukuAction) {
                                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    lines.firstOrNull()?.let { desc ->
+                                    desc?.let {
                                         Text(
-                                            desc,
+                                            it,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
-                                    lines.getOrNull(1)?.let { status ->
+                                    statusBadges.forEach { status ->
                                         Surface(
                                             shape = RoundedCornerShape(8.dp),
                                             color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
@@ -3454,6 +3463,7 @@ private fun GitHubPatDialog(
     val generatePatLink = "https://github.com/settings/tokens/new?scopes=public_repo&description=urv-manager-github-integration"
     val linkHighlightColor = MaterialTheme.colorScheme.primary
     val annotatedDescription = remember(description, hereLabel, linkHighlightColor) {
+        val (clickableHereLabel, trailingHereLabel) = splitTrailingPunctuation(hereLabel)
         buildAnnotatedString {
             append(description)
             append(" ")
@@ -3465,9 +3475,10 @@ private fun GitHubPatDialog(
                     textDecoration = TextDecoration.Underline
                 )
             ) {
-                append(hereLabel)
+                append(clickableHereLabel)
             }
             pop()
+            append(trailingHereLabel)
         }
     }
 

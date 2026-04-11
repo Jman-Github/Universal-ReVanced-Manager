@@ -60,7 +60,7 @@ fun AnnotatedLinkText(
     )
 }
 
-private fun splitTrailingPunctuation(label: String): Pair<String, String> {
+internal fun splitTrailingPunctuation(label: String): Pair<String, String> {
     if (label.isEmpty()) return label to ""
 
     val trimmedEnd = label.trimEnd()

@@ -197,6 +197,7 @@
 - Fixed version assessment so universal-fallback APKs still respect the universal patches safeguard even when suggested-version enforcement is relaxed
 - Fixed bundle and profile count text so selected, enabled/disabled, and import/export messages use the correct singular or plural wording https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/385 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/384
 - Renamed the split merge native-libraries filter to `Exclude extra native libraries` and fixed patch bundle update banner grammar for singular vs plural counts https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/363 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/359
+- Improved installer settings consistency by adding blocked-installer notes, fixing PAT dialog link punctuation, fixed thw remaining issues with missing patch bundle update plural strings, and cleaning up installer wording/status labels https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/378 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/375 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/377 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/395
 
 
 # Refactors
