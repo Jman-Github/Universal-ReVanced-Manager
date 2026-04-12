@@ -157,6 +157,11 @@ fun MergeSplitApkScreen(
     val canSaveNow = state.canSaveAgain &&
         !state.inProgress &&
         state.saveStep.status != SplitMergeStepStatus.RUNNING
+    val mergeCancelledMessage = stringResource(R.string.merge_split_apk_cancelled)
+    val canOpenLogActions = state.logEntries.isNotEmpty() &&
+        !state.preparingSelection &&
+        !state.inProgress &&
+        (state.canSaveAgain || (state.error != null && state.error != mergeCancelledMessage))
 
     fun requestSave() {
         if (!canSaveNow) return
@@ -256,7 +261,7 @@ fun MergeSplitApkScreen(
                     clipboard.setPrimaryClip(
                         ClipData.newPlainText("Merge log", vm.getSplitMergeLogContent())
                     )
-                    context.toast(context.getString(R.string.toast_copied_to_clipboard))
+                    context.toast(context.getString(R.string.merge_split_apk_log_copy_success))
                 }
                 showLogActionsDialog = false
             },
@@ -501,7 +506,7 @@ fun MergeSplitApkScreen(
                 actions = {
                     IconButton(
                         onClick = { showLogActionsDialog = true },
-                        enabled = state.logEntries.isNotEmpty()
+                        enabled = canOpenLogActions
                     ) {
                         Icon(Icons.Outlined.PostAdd, stringResource(R.string.save_logs))
                     }

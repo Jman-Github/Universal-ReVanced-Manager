@@ -362,7 +362,7 @@
     </plurals>
     <string name="import_patch_bundles_success">Imported %d patch bundles</string>
     <string name="import_patch_bundles_updated">Updated %d patch bundles</string>
-    <string name="import_patch_bundles_none">No new patch bundles were imported</string>
+    <string name="import_patch_bundles_none">No patch bundles were imported</string>
     <string name="import_patch_bundles_banner_title">Importing patch bundles</string>
     <string name="import_patch_bundles_banner_collapsed">Importing patch bundles • %1$d out of %2$d</string>
     <string name="import_patch_bundles_banner_subtitle">%1$d of %2$d processed</string>
@@ -903,6 +903,7 @@ Patch profiles are not affected.</string>
     <string name="merge_split_apk_log_dialog_export_description">Save the merge log to storage using the custom file picker.</string>
     <string name="merge_split_apk_log_exporting_title">Save merge log</string>
     <string name="merge_split_apk_log_exporting">Saving merge log…</string>
+    <string name="merge_split_apk_log_copy_success">Merge log copied</string>
     <string name="merge_split_apk_log_export_success">Merge log exported.</string>
     <string name="merge_split_apk_log_export_failed">Failed to export merge log.</string>
     <string name="merge_split_apk_installed_not_split">This installed app is not using split APKs.</string>
@@ -965,7 +966,7 @@ Patch profiles are not affected.</string>
     <string name="patches_selected">%s patch bundle(s) selected</string>
     <string name="patch_profiles_selected">%1$d patch profile(s) selected</string>
     <string name="selected_apps_count">%1$d app(s) selected</string>
-    <string name="selected_apps_delete_dialog_description">Remove the selected apps from the manager? Installed apps on your device will stay untouched.</string>
+    <string name="selected_apps_delete_dialog_description">Are you sure you want to delete the selected apps?\nInstalled apps on your device will stay untouched.</string>
     <string name="incompatible_patches">Incompatible patches</string>
     <string name="universal_patches">Universal patches</string>
     <string name="regular_patches">Regular patches</string>
@@ -1069,7 +1070,7 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="patch_selector_missing_patch_message">These patches need to be reselected:
 %1$s
 Enable them again (or pick alternatives) and then try patching once more.</string>
-    <string name="patch_profile_delete_multiple_dialog_description">Delete the selected patch profiles?</string>
+    <string name="patch_profile_delete_multiple_dialog_description">Are you sure you want to delete the selected patch profiles?</string>
     <plurals name="patch_profile_bundle_patch_count">
         <item quantity="one">%d patch</item>
         <item quantity="other">%d patches</item>
@@ -1299,6 +1300,7 @@ Details: %2$s</string>
     <string name="patcher_log_dialog_copy_description">Copy the full patch log so you can paste it anywhere.</string>
     <string name="patcher_log_dialog_export">Export as TXT</string>
     <string name="patcher_log_dialog_export_description">Save the patch log to storage using the custom file picker.</string>
+    <string name="patcher_log_copy_success">Patch log copied</string>
     <string name="patcher_log_export_success">Patch log exported</string>
     <string name="patcher_log_export_failed">Failed to export patch log</string>
     <string name="patcher_log_exporting">Exporting patch log</string>

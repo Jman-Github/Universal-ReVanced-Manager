@@ -344,7 +344,7 @@ fun PatcherScreen(
                 if (clipboard != null) {
                     val content = viewModel.getLogContent(context)
                     clipboard.setPrimaryClip(ClipData.newPlainText("Patch log", content))
-                    context.toast(context.getString(R.string.toast_copied_to_clipboard))
+                    context.toast(context.getString(R.string.patcher_log_copy_success))
                 }
                 showLogActionsDialog = false
             },
