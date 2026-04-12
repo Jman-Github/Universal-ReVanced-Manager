@@ -17,6 +17,7 @@ import app.urv.manager.util.withHapticFeedback
 fun HapticFloatingActionButton (
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     shape: Shape = FloatingActionButtonDefaults.shape,
     containerColor: Color = FloatingActionButtonDefaults.containerColor,
     contentColor: Color = contentColorFor(containerColor),
@@ -24,8 +25,14 @@ fun HapticFloatingActionButton (
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
     content: @Composable () -> Unit,
 ) {
+    val clickHandler: () -> Unit = if (enabled) {
+        onClick.withHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+    } else {
+        {}
+    }
+
     FloatingActionButton(
-        onClick = onClick.withHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY),
+        onClick = clickHandler,
         modifier = modifier,
         shape = shape,
         containerColor = containerColor,

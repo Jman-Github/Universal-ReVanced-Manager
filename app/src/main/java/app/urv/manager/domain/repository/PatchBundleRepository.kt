@@ -86,6 +86,7 @@ import java.security.MessageDigest
 import java.net.URI
 import java.net.URISyntaxException
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.jar.JarFile
 import kotlin.collections.LinkedHashSet
 import kotlin.collections.joinToString
@@ -227,6 +228,9 @@ class PatchBundleRepository(
     val bundleUpdateProgress: StateFlow<BundleUpdateProgress?> = bundleUpdateProgressFlow.asStateFlow()
     private val bundleImportProgressFlow = MutableStateFlow<ImportProgress?>(null)
     val bundleImportProgress: StateFlow<ImportProgress?> = bundleImportProgressFlow.asStateFlow()
+    private val reloadInProgressFlow = MutableStateFlow(true)
+    val reloadInProgress: StateFlow<Boolean> = reloadInProgressFlow.asStateFlow()
+    private val reloadInProgressCount = AtomicInteger(0)
     private val discoveryImportProgressFlow =
         MutableStateFlow<Map<String, DiscoveryImportProgress>>(emptyMap())
     val discoveryImportProgress: StateFlow<Map<String, DiscoveryImportProgress>> =
@@ -689,22 +693,24 @@ class PatchBundleRepository(
         }
     }
 
-    suspend fun enforceOfficialOrderPreference() = dispatchAction("Enforce official order preference") { state ->
-        val storedOrder = prefs.officialBundleSortOrder.get()
-        if (storedOrder < 0) return@dispatchAction state
-        val entities = dao.all().sortedBy { entity -> entity.sortOrder }
-        val currentIndex = entities.indexOfFirst { entity -> entity.uid == DEFAULT_SOURCE_UID }
-        if (currentIndex == -1) return@dispatchAction state
-        val targetIndex = storedOrder.coerceIn(0, entities.lastIndex)
-        if (currentIndex == targetIndex) return@dispatchAction state
+    suspend fun enforceOfficialOrderPreference() = withTrackedReload {
+        dispatchAction("Enforce official order preference") { state ->
+            val storedOrder = prefs.officialBundleSortOrder.get()
+            if (storedOrder < 0) return@dispatchAction state
+            val entities = dao.all().sortedBy { entity -> entity.sortOrder }
+            val currentIndex = entities.indexOfFirst { entity -> entity.uid == DEFAULT_SOURCE_UID }
+            if (currentIndex == -1) return@dispatchAction state
+            val targetIndex = storedOrder.coerceIn(0, entities.lastIndex)
+            if (currentIndex == targetIndex) return@dispatchAction state
 
-        val adjusted = entities.toMutableList()
-        val defaultEntity = adjusted.removeAt(currentIndex)
-        adjusted.add(targetIndex, defaultEntity)
-        adjusted.forEachIndexed { index, entity ->
-            dao.updateSortOrder(entity.uid, index)
+            val adjusted = entities.toMutableList()
+            val defaultEntity = adjusted.removeAt(currentIndex)
+            adjusted.add(targetIndex, defaultEntity)
+            adjusted.forEachIndexed { index, entity ->
+                dao.updateSortOrder(entity.uid, index)
+            }
+            doReload()
         }
-        doReload()
     }
 
     suspend fun getOfficialBundleSortOrder(): Int? =
@@ -729,6 +735,18 @@ class PatchBundleRepository(
             override suspend fun ActionContext.execute(current: State) = block(current)
             override fun toString() = name
         })
+    }
+
+    private suspend inline fun <T> withTrackedReload(crossinline block: suspend () -> T): T {
+        reloadInProgressCount.incrementAndGet()
+        reloadInProgressFlow.value = true
+        return try {
+            block()
+        } finally {
+            if (reloadInProgressCount.decrementAndGet() <= 0) {
+                reloadInProgressFlow.value = false
+            }
+        }
     }
 
     /**
@@ -821,8 +839,10 @@ class PatchBundleRepository(
         return State(sources.toPersistentMap(), info.toPersistentMap())
     }
 
-    suspend fun reload() = dispatchAction("Full reload") {
-        doReload()
+    suspend fun reload() = withTrackedReload {
+        dispatchAction("Full reload") {
+            doReload()
+        }
     }
 
     private suspend fun loadFromDb(): List<PatchBundleEntity> {
@@ -1712,11 +1732,13 @@ class PatchBundleRepository(
         )
     }
 
-    suspend fun reset() = dispatchAction("Reset") { state ->
-        dao.reset()
-        prefs.officialBundleRemoved.update(false)
-        state.sources.keys.forEach { directoryOf(it).deleteRecursively() }
-        doReload()
+    suspend fun reset() = withTrackedReload {
+        dispatchAction("Reset") { state ->
+            dao.reset()
+            prefs.officialBundleRemoved.update(false)
+            state.sources.keys.forEach { directoryOf(it).deleteRecursively() }
+            doReload()
+        }
     }
 
     private suspend fun toast(@StringRes id: Int, vararg args: Any?) =
@@ -1839,10 +1861,12 @@ class PatchBundleRepository(
             state.copy(sources = sources, info = info)
         }
 
-    suspend fun restoreDefaultBundle() = dispatchAction("Restore default bundle") {
-        prefs.officialBundleRemoved.update(false)
-        dao.upsert(createDefaultEntityWithStoredOrder())
-        doReload()
+    suspend fun restoreDefaultBundle() = withTrackedReload {
+        dispatchAction("Restore default bundle") {
+            prefs.officialBundleRemoved.update(false)
+            dao.upsert(createDefaultEntityWithStoredOrder())
+            doReload()
+        }
     }
 
     suspend fun refreshDefaultBundle() = store.dispatch(Update(force = true) { it.uid == DEFAULT_SOURCE_UID })
@@ -2154,7 +2178,9 @@ class PatchBundleRepository(
                     bytesRead = 0L,
                     bytesTotal = null,
                 )
-                dispatchAction("Add bundle") { doReload() }
+                withTrackedReload {
+                    dispatchAction("Add bundle") { doReload() }
+                }
                 setLocalImportProgress(
                     baseProcessed = baseProcessed,
                     offset = LOCAL_IMPORT_STEPS,
@@ -2429,13 +2455,15 @@ class PatchBundleRepository(
     }
 
     suspend fun reloadApiBundles() {
-        dispatchAction("Reload API bundles") {
-            this@PatchBundleRepository.sources.first().filterIsInstance<APIPatchBundle>().forEach {
-                with(it) { deleteLocalFile() }
-                updateDb(it.uid) { it.copy(versionHash = null) }
-            }
+        withTrackedReload {
+            dispatchAction("Reload API bundles") {
+                this@PatchBundleRepository.sources.first().filterIsInstance<APIPatchBundle>().forEach {
+                    with(it) { deleteLocalFile() }
+                    updateDb(it.uid) { it.copy(versionHash = null) }
+                }
 
-            doReload()
+                doReload()
+            }
         }
 
         updateNow(force = true) { it is APIPatchBundle && it.enabled }
@@ -2602,31 +2630,33 @@ class PatchBundleRepository(
     suspend fun checkManualUpdates(vararg bundleUids: Int) =
         store.dispatch(ManualUpdateCheck(bundleUids.toSet().takeIf { it.isNotEmpty() }))
 
-    suspend fun reorderBundles(prioritizedUids: List<Int>) = dispatchAction("Reorder bundles") { state ->
-        val currentOrder = state.sources.keys.toList()
-        if (currentOrder.isEmpty()) return@dispatchAction state
+    suspend fun reorderBundles(prioritizedUids: List<Int>) = withTrackedReload {
+        dispatchAction("Reorder bundles") { state ->
+            val currentOrder = state.sources.keys.toList()
+            if (currentOrder.isEmpty()) return@dispatchAction state
 
-        val sanitized = LinkedHashSet(prioritizedUids.filter { it in currentOrder })
-        if (sanitized.isEmpty()) return@dispatchAction state
+            val sanitized = LinkedHashSet(prioritizedUids.filter { it in currentOrder })
+            if (sanitized.isEmpty()) return@dispatchAction state
 
-        val finalOrder = buildList {
-            addAll(sanitized)
-            currentOrder.filterNotTo(this) { it in sanitized }
+            val finalOrder = buildList {
+                addAll(sanitized)
+                currentOrder.filterNotTo(this) { it in sanitized }
+            }
+
+            if (finalOrder == currentOrder) {
+                return@dispatchAction state
+            }
+
+            finalOrder.forEachIndexed { index, uid ->
+                dao.updateSortOrder(uid, index)
+            }
+            val defaultIndex = finalOrder.indexOf(DEFAULT_SOURCE_UID)
+            if (defaultIndex != -1) {
+                prefs.officialBundleSortOrder.update(defaultIndex)
+            }
+
+            doReload()
         }
-
-        if (finalOrder == currentOrder) {
-            return@dispatchAction state
-        }
-
-        finalOrder.forEachIndexed { index, uid ->
-            dao.updateSortOrder(uid, index)
-        }
-        val defaultIndex = finalOrder.indexOf(DEFAULT_SOURCE_UID)
-        if (defaultIndex != -1) {
-            prefs.officialBundleSortOrder.update(defaultIndex)
-        }
-
-        doReload()
     }
 
     private inner class Update(
@@ -2899,26 +2929,28 @@ class PatchBundleRepository(
                 return@coroutineScope false
             }
 
-            dispatchAction("Apply updated bundles") {
-                updated.forEach { (src, downloadResult) ->
-                    if (dao.getProps(src.uid) == null) return@forEach
-                    val rawName = runCatching {
-                        PatchBundle(src.patchesJarFile.absolutePath).manifestAttributes?.name
-                    }.getOrNull()?.trim().takeUnless { it.isNullOrBlank() } ?: src.name
-                    val name = if (src.uid == DEFAULT_SOURCE_UID) rawName else ensureUniqueName(rawName, src.uid)
-                    val now = System.currentTimeMillis()
+            withTrackedReload {
+                dispatchAction("Apply updated bundles") {
+                    updated.forEach { (src, downloadResult) ->
+                        if (dao.getProps(src.uid) == null) return@forEach
+                        val rawName = runCatching {
+                            PatchBundle(src.patchesJarFile.absolutePath).manifestAttributes?.name
+                        }.getOrNull()?.trim().takeUnless { it.isNullOrBlank() } ?: src.name
+                        val name = if (src.uid == DEFAULT_SOURCE_UID) rawName else ensureUniqueName(rawName, src.uid)
+                        val now = System.currentTimeMillis()
 
-                    updateDb(src.uid) {
-                        it.copy(
-                            versionHash = downloadResult.versionSignature,
-                            name = name,
-                            createdAt = downloadResult.assetCreatedAtMillis ?: it.createdAt,
-                            updatedAt = now
-                        )
+                        updateDb(src.uid) {
+                            it.copy(
+                                versionHash = downloadResult.versionSignature,
+                                name = name,
+                                createdAt = downloadResult.assetCreatedAtMillis ?: it.createdAt,
+                                updatedAt = now
+                            )
+                        }
                     }
-                }
 
-                doReload()
+                    doReload()
+                }
             }
 
             val updatedUids = updated.keys.map(RemotePatchBundle::uid).toSet()

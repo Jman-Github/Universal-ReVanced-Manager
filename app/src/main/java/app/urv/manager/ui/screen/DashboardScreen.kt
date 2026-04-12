@@ -94,6 +94,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -123,6 +124,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -278,12 +280,16 @@ fun DashboardScreen(
     val selectedProfileCount by remember { derivedStateOf { patchProfilesViewModel.selectedProfiles.size } }
     val profilesSelectable = showPatchProfilesTab && selectedProfileCount > 0
     val availablePatches by vm.availablePatches.collectAsStateWithLifecycle(0)
+    val patchBundlesLoading by vm.patchBundlesLoading.collectAsStateWithLifecycle()
     val splitMergeState by vm.splitMergeState.collectAsStateWithLifecycle()
     val showNewDownloaderPluginsNotification by vm.newDownloaderPluginsAvailable.collectAsStateWithLifecycle(
         false
     )
     val downloaderPlugins by vm.loadedDownloaderPlugins.collectAsStateWithLifecycle(emptyList())
     val storageRoots = remember { fs.storageRoots() }
+    val appInputEnabled = !patchBundlesLoading
+    val disabledAppInputFabColor =
+        lerp(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.primary, 0.08f)
     EventEffect(flow = storageVm.storageSelectionFlow) { selected ->
         storageVm.consumeStorageSelectionResult()
         onStorageSelect(selected)
@@ -2020,12 +2026,24 @@ fun DashboardScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 HapticFloatingActionButton(
-                                    onClick = { attemptAppInput(openStoragePicker) }
+                                    onClick = { attemptAppInput(openStoragePicker) },
+                                    enabled = appInputEnabled,
+                                    containerColor = if (appInputEnabled) {
+                                        FloatingActionButtonDefaults.containerColor
+                                    } else {
+                                        disabledAppInputFabColor
+                                    }
                                 ) {
                                     Icon(Icons.Default.Storage, stringResource(R.string.select_from_storage))
                                 }
                                 HapticFloatingActionButton(
-                                    onClick = { attemptAppInput(onAppSelectorClick) }
+                                    onClick = { attemptAppInput(onAppSelectorClick) },
+                                    enabled = appInputEnabled,
+                                    containerColor = if (appInputEnabled) {
+                                        FloatingActionButtonDefaults.containerColor
+                                    } else {
+                                        disabledAppInputFabColor
+                                    }
                                 ) { Icon(Icons.Default.Add, stringResource(R.string.add)) }
                             }
                         }
