@@ -1390,26 +1390,16 @@ private fun ExportBundleFileNameDialog(
             }
         },
         confirmButton = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
+            TextButton(
+                onClick = { onConfirm(trimmedName) },
+                enabled = trimmedName.isNotEmpty()
             ) {
-                TextButton(
-                    onClick = { onConfirm(trimmedName) },
-                    enabled = trimmedName.isNotEmpty()
-                ) {
-                    Text(stringResource(R.string.save))
-                }
+                Text(stringResource(R.string.save))
             }
         },
         dismissButton = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
-            ) {
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.cancel))
-                }
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
             }
         }
     )

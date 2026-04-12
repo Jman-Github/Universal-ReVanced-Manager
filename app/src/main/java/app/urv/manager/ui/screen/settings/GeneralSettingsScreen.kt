@@ -79,6 +79,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
 import app.urv.manager.data.platform.Filesystem
+import app.urv.manager.ui.component.AlertDialogExtended
 import app.urv.manager.ui.component.AppTopBar
 import app.urv.manager.ui.component.ColumnWithScrollbar
 import app.urv.manager.ui.component.GroupHeader
@@ -900,7 +901,7 @@ private fun ColorPickerDialog(
         hexInput = rgbToColor(r, g, b).toHexString().uppercase()
     }
 
-    AlertDialog(
+    AlertDialogExtended(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(titleRes)) },
         text = {
@@ -971,70 +972,63 @@ private fun ColorPickerDialog(
                         updateHexFromRgb(red, green, it)
                     }
                 )
-                Spacer(Modifier.height(8.dp))
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.CenterEnd
-                ) {
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        maxItemsInEachRow = 2
-                    ) {
-                        if (allowReset) {
-                            OutlinedButton(
-                                modifier = Modifier.defaultMinSize(
-                                    minWidth = ButtonDefaults.MinWidth,
-                                    minHeight = ButtonDefaults.MinHeight
-                                ),
-                                onClick = {
-                                    onReset()
-                                    onDismiss()
-                                }
-                            ) {
-                                Text(
-                                    text = stringResource(resetLabelRes),
-                                    maxLines = 1,
-                                    softWrap = false
-                                )
-                            }
-                        }
-                        TextButton(
-                            modifier = Modifier.defaultMinSize(
-                                minWidth = ButtonDefaults.MinWidth,
-                                minHeight = ButtonDefaults.MinHeight
-                            ),
-                            onClick = onDismiss
-                        ) {
-                            Text(
-                                text = stringResource(R.string.cancel),
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
-                        FilledTonalButton(
-                            modifier = Modifier.defaultMinSize(
-                                minWidth = ButtonDefaults.MinWidth,
-                                minHeight = ButtonDefaults.MinHeight
-                            ),
-                            onClick = {
-                                onConfirm(previewColor)
-                                onDismiss()
-                            }
-                        ) {
-                            Text(
-                                text = stringResource(R.string.apply),
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
-                    }
-                }
             }
         },
-        confirmButton = {},
-        dismissButton = {}
+        tertiaryButton = if (allowReset) {
+            {
+                OutlinedButton(
+                    modifier = Modifier.defaultMinSize(
+                        minWidth = ButtonDefaults.MinWidth,
+                        minHeight = ButtonDefaults.MinHeight
+                    ),
+                    onClick = {
+                        onReset()
+                        onDismiss()
+                    }
+                ) {
+                    Text(
+                        text = stringResource(resetLabelRes),
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
+            }
+        } else {
+            null
+        },
+        dismissButton = {
+            TextButton(
+                modifier = Modifier.defaultMinSize(
+                    minWidth = ButtonDefaults.MinWidth,
+                    minHeight = ButtonDefaults.MinHeight
+                ),
+                onClick = onDismiss
+            ) {
+                Text(
+                    text = stringResource(R.string.cancel),
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
+        },
+        confirmButton = {
+            FilledTonalButton(
+                modifier = Modifier.defaultMinSize(
+                    minWidth = ButtonDefaults.MinWidth,
+                    minHeight = ButtonDefaults.MinHeight
+                ),
+                onClick = {
+                    onConfirm(previewColor)
+                    onDismiss()
+                }
+            ) {
+                Text(
+                    text = stringResource(R.string.apply),
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
+        }
     )
 }
 

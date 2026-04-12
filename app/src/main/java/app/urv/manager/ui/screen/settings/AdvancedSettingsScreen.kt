@@ -1614,7 +1614,7 @@ fun AdvancedSettingsScreen(
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 TextButton(
@@ -1739,7 +1739,7 @@ fun AdvancedSettingsScreen(
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             TextButton(
@@ -1852,7 +1852,7 @@ fun AdvancedSettingsScreen(
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         TextButton(

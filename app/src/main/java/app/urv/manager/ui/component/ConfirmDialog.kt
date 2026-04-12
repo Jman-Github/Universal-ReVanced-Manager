@@ -1,7 +1,5 @@
 package app.urv.manager.ui.component
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -25,23 +23,13 @@ fun ConfirmDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         dismissButton = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
-            ) {
-                TextButton(onDismiss) {
-                    Text(stringResource(R.string.cancel))
-                }
+            TextButton(onDismiss) {
+                Text(stringResource(R.string.cancel))
             }
         },
         confirmButton = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
-            ) {
-                TextButton(onClick = onConfirm) {
-                    Text(stringResource(R.string.confirm))
-                }
+            TextButton(onClick = onConfirm) {
+                Text(stringResource(R.string.confirm))
             }
         },
         title = { Text(title, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },

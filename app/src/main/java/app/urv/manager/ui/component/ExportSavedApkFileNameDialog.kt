@@ -2,7 +2,6 @@ package app.urv.manager.ui.component
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -48,26 +47,16 @@ fun ExportSavedApkFileNameDialog(
             )
         },
         confirmButton = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
+            TextButton(
+                onClick = { onConfirm(trimmedName) },
+                enabled = trimmedName.isNotEmpty()
             ) {
-                TextButton(
-                    onClick = { onConfirm(trimmedName) },
-                    enabled = trimmedName.isNotEmpty()
-                ) {
-                    Text(androidx.compose.ui.res.stringResource(R.string.save))
-                }
+                Text(androidx.compose.ui.res.stringResource(R.string.save))
             }
         },
         dismissButton = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
-            ) {
-                TextButton(onClick = onDismiss) {
-                    Text(androidx.compose.ui.res.stringResource(R.string.cancel))
-                }
+            TextButton(onClick = onDismiss) {
+                Text(androidx.compose.ui.res.stringResource(R.string.cancel))
             }
         },
         text = {
