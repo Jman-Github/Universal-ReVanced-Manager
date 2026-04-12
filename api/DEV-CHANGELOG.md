@@ -12,6 +12,7 @@
 
 - Renamed the split merge native-libraries filter to `Exclude extra native libraries` and fixed patch bundle update banner grammar for singular vs plural counts https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/363 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/359
 - Improved installer settings consistency by adding blocked-installer notes, fixing PAT dialog link punctuation, fixed thw remaining issues with missing patch bundle update plural strings, and cleaning up installer wording/status labels https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/378 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/375 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/377 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/395
+- Fixed rooted mount installs creating a second visible saved-app entry for the same patched app https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
 
 
 # v1.8.1-dev.12 (2026-4-10)

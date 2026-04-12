@@ -1219,6 +1219,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             }
             val matchingSavedEntry = if (disableSavedAppOverwrite) null else matchingSavedEntries.firstOrNull()
             val persistedInstallType = installType
+            val shouldCreateVisibleSavedEntry = persistedInstallType != InstallType.MOUNT
             val existingFinalPackageEntry = installedAppRepository.get(finalPackageName)
             val existingInstalledEntry = existingFinalPackageEntry?.takeIf {
                 it.installType != InstallType.SAVED
@@ -1232,6 +1233,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 disableSavedAppOverwrite &&
                 effectiveShouldSaveForLater &&
                 persistedInstallType != InstallType.SAVED &&
+                shouldCreateVisibleSavedEntry &&
                 existingInstalledEntry != null &&
                 existingInstalledIdentity != null &&
                 existingInstalledIdentity != newVariantIdentity &&
@@ -1277,7 +1279,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             val separateSavedEntryPackageName = if (
                 persistedInstallType != InstallType.SAVED &&
                 effectiveShouldSaveForLater &&
-                disableSavedAppOverwrite
+                disableSavedAppOverwrite &&
+                shouldCreateVisibleSavedEntry
             ) {
                 buildUniqueSavedAppEntryKey(finalPackageName, newVariantIdentity)
             } else {
@@ -1334,16 +1337,17 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 )
             }
             if (persistedInstallType != InstallType.SAVED) {
-                if (!disableSavedAppOverwrite) {
-                    matchingSavedEntries
-                        .filter { it.currentPackageName != finalPackageName }
-                        .forEach { savedEntry ->
-                            installedAppRepository.delete(savedEntry)
-                            fs.getPatchedAppFile(
-                                savedEntry.currentPackageName,
-                                savedEntry.version
-                            ).takeIf { it.exists() }?.delete()
-                        }
+                val duplicateSavedEntriesToRemove = if (!disableSavedAppOverwrite) {
+                    matchingSavedEntries.filter { it.currentPackageName != finalPackageName }
+                } else {
+                    emptyList()
+                }
+                duplicateSavedEntriesToRemove.forEach { savedEntry ->
+                    installedAppRepository.delete(savedEntry)
+                    fs.getPatchedAppFile(
+                        savedEntry.currentPackageName,
+                        savedEntry.version
+                    ).takeIf { it.exists() }?.delete()
                 }
             }
 
