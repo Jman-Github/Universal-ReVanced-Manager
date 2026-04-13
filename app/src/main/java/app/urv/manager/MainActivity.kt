@@ -510,8 +510,20 @@ private fun ReVancedManager(
 
         composable<Patcher> {
             val params = it.getComplexArg<Patcher.ViewModelParams>()
+            val previousEntry = remember(it) { requireNotNull(navController.previousBackStackEntry) }
+            val selectedAppInfoEntry = navController.navGraphEntry(previousEntry)
+            val selectedAppInfoArgs =
+                selectedAppInfoEntry.getComplexArg<SelectedApplicationInfo.ViewModelParams>()
+            val selectedAppInfoVm = koinNavViewModel<SelectedAppInfoViewModel>(
+                viewModelStoreOwner = selectedAppInfoEntry
+            ) {
+                parametersOf(selectedAppInfoArgs)
+            }
             PatcherScreen(
-                onBackClick = navController::popBackStack,
+                onBackClick = { app ->
+                    selectedAppInfoVm.updateSelectedApp(app)
+                    navController.popBackStack()
+                },
                 onBackToDashboard = {
                     navController.navigate(Dashboard) {
                         popUpTo<Dashboard> { inclusive = true }

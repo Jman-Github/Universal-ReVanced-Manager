@@ -137,6 +137,7 @@ class SelectedAppInfoViewModel(
     private val storageInputDir = filesystem.uiTempDir
     private val splitWorkspace = filesystem.tempDir
     private var preparedApkCleanup: (() -> Unit)? = null
+    private val temporaryLocalCleanupPaths = linkedSetOf<String>()
     private val storageSelectionChannel = Channel<Unit>(Channel.CONFLATED)
     val requestStorageSelection = storageSelectionChannel.receiveAsFlow()
     private val _profileLaunchState = MutableStateFlow<ProfileLaunchState?>(null)
@@ -283,6 +284,7 @@ class SelectedAppInfoViewModel(
         set(value) {
             _selectedApp = value
             selectedAppState.value = value
+            trackTemporaryLocalCleanup(value)
             invalidateSelectedAppInfo()
         }
 
@@ -1216,10 +1218,29 @@ class SelectedAppInfoViewModel(
             optionsForPatch = { bundle, patch -> options[bundle.uid]?.get(patch.name) },
         )
 
+    init {
+        trackTemporaryLocalCleanup(_selectedApp)
+    }
+
+    private fun trackTemporaryLocalCleanup(app: SelectedApp) {
+        val local = app as? SelectedApp.Local ?: return
+        if (!local.temporary) return
+        temporaryLocalCleanupPaths += local.file.absolutePath
+    }
+
     override fun onCleared() {
         super.onCleared()
         preparedApkCleanup?.invoke()
         preparedApkCleanup = null
+        temporaryLocalCleanupPaths
+            .asSequence()
+            .map(::File)
+            .forEach { file ->
+                runCatching {
+                    if (file.exists()) file.delete()
+                }
+            }
+        temporaryLocalCleanupPaths.clear()
     }
 
     suspend fun getPatcherParams(): Patcher.ViewModelParams {
@@ -1273,6 +1294,11 @@ class SelectedAppInfoViewModel(
 
             optionsRepository.saveOptions(packageName, filteredOptions)
         }
+    }
+
+    fun updateSelectedApp(app: SelectedApp) {
+        if (selectedApp == app) return
+        selectedApp = app
     }
 
     fun shouldAutoLaunchProfile() = autoLaunchProfilePatcher

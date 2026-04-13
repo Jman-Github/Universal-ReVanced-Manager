@@ -98,7 +98,7 @@ import java.nio.file.Path
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PatcherScreen(
-    onBackClick: () -> Unit,
+    onBackClick: (SelectedApp) -> Unit,
     onBackToDashboard: () -> Unit,
     onReviewSelection: (SelectedApp, PatchSelection, Options, List<String>) -> Unit,
     viewModel: PatcherViewModel
@@ -192,12 +192,12 @@ fun PatcherScreen(
 
     fun leaveCurrentScreen() {
         viewModel.suppressInstallProgressToasts()
-        viewModel.onBack()
+        viewModel.onBack(cleanupLocalInput = leaveToDashboardRequested)
         if (leaveToDashboardRequested) {
             leaveToDashboardRequested = false
             onBackToDashboard()
         } else {
-            onBackClick()
+            onBackClick(viewModel.currentSelectedApp)
         }
     }
 
@@ -700,7 +700,7 @@ fun PatcherScreen(
                                 options,
                                 patches
                             )
-                            onBackClick()
+                            onBackClick(viewModel.currentSelectedApp)
                         }
                     ) {
                         Text(stringResource(R.string.patcher_missing_patch_review))

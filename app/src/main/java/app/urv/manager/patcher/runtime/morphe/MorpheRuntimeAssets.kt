@@ -15,11 +15,11 @@ object MorpheRuntimeAssets {
 
     fun isAvailable(context: Context): Boolean {
         if (!BuildConfig.HAS_MORPHE_RUNTIME) return false
-        return hasAsset(context.applicationContext, RUNTIME_ASSET_NAME)
+        return hasAsset(normalizeContext(context), RUNTIME_ASSET_NAME)
     }
 
     fun ensureRuntimeApk(context: Context): File {
-        val appContext = context.applicationContext
+        val appContext = normalizeContext(context)
         requireRuntime(appContext)
         val outputDir = File(appContext.codeCacheDir, OUTPUT_PREFIX).apply { mkdirs() }
         val output = File(
@@ -133,6 +133,8 @@ object MorpheRuntimeAssets {
         if (isAvailable(context)) return
         throw IOException("Morphe runtime is not included in this ${BuildConfig.URV_BUILD_PROFILE} build.")
     }
+
+    private fun normalizeContext(context: Context): Context = context.applicationContext ?: context
 
     private fun hasAsset(context: Context, name: String): Boolean = runCatching {
         context.assets.open(name).close()

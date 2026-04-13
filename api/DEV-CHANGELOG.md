@@ -16,6 +16,16 @@
 - Improved installer settings consistency by adding blocked-installer notes, fixing PAT dialog link punctuation, fixed thw remaining issues with missing patch bundle update plural strings, and cleaning up installer wording/status labels https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/378 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/375 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/377 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/395
 - Fixed rooted mount installs creating a second visible saved-app entry for the same patched app https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
 - Fixed inconsistent dialog button alignment so export, patcher, color picker, and related settings dialogs now place actions on the right like the rest of the app https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/376
+- Fixed local APK source handling so returning from the patcher preserves the selected file correctly
+
+
+## Build types
+
+**LITE**: ReVanced v22 and Morphe patcher runtimes included, AmpleReVanced and ReVanced v21 runtimes excluded.   
+**FULL**: Everything (ReVanced v22, v21, Morphe and AmpleReVanced patcher runtimes)
+
+> [!TIP]
+> Excluding patcher runtimes reduces the app size. If you only use the latest ReVanced and Morphe patches, you should install the **LITE** build. If you use more than just the latest ReVanced and Morphe patches, consider installing the **FULL** build instead. Keep in mind that the in-app updater will only download the same build type you currently have installed. If you want to switch build types later, you’ll need to go to the GitHub releases page and download that build manually.
 
 
 # v1.8.1-dev.12 (2026-4-10)

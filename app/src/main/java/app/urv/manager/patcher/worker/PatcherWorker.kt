@@ -978,10 +978,6 @@ class PatcherWorker(
             updateWorkerProgressState(active = true)
             val result = runPatcher(args, totalPatchCount)
 
-            if (result is Result.Success && args.input is SelectedApp.Local && args.input.temporary) {
-                args.input.file.delete()
-            }
-
             result
         } finally {
             workerFinished.set(true)

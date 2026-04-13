@@ -270,7 +270,11 @@ class PatcherViewModel(
         private set
     private var appliedSelection: PatchSelection = input.selectedPatches.mapValues { it.value.toSet() }
     private var appliedOptions: Options = input.options
-    val currentSelectedApp: SelectedApp get() = selectedApp
+    val currentSelectedApp: SelectedApp
+        get() = when (val current = selectedApp) {
+            is SelectedApp.Local -> inputFile?.let { current.copy(file = it) } ?: current
+            else -> current
+        }
 
     fun currentSelectionSnapshot(): PatchSelection =
         appliedSelection.mapValues { (_, patches) -> patches.toSet() }
@@ -1117,6 +1121,15 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private fun hasTemporaryLocalInput() =
         input.selectedApp is SelectedApp.Local && input.selectedApp.temporary
 
+    private fun originalTemporaryLocalInputFile(): File? =
+        (input.selectedApp as? SelectedApp.Local)?.takeIf { it.temporary }?.file
+
+    private fun redundantTemporaryLocalInputSourceFile(): File? {
+        val original = originalTemporaryLocalInputFile() ?: return null
+        val preserved = inputFile
+        return original.takeUnless { preserved?.absolutePath == original.absolutePath }
+    }
+
     private fun clearTemporaryLocalInputState() {
         inputFile = null
     }
@@ -1127,9 +1140,11 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private fun cleanupTemporaryLocalInput() {
         if (!hasTemporaryLocalInput()) return
-        val fileToDelete = inputFile
+        val preservedFileToDelete = inputFile
+        val originalFileToDelete = redundantTemporaryLocalInputSourceFile()
         clearTemporaryLocalInputState()
-        deleteTemporaryLocalInput(fileToDelete)
+        deleteTemporaryLocalInput(preservedFileToDelete)
+        deleteTemporaryLocalInput(originalFileToDelete)
     }
 
     private suspend fun awaitWorkToFinish(workId: UUID) = suspendCancellableCoroutine<Unit> { continuation ->
@@ -1149,7 +1164,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private fun cleanupTemporaryLocalInputAfterWorkStops(workId: UUID?) {
         if (!hasTemporaryLocalInput()) return
-        val fileToDelete = inputFile ?: return
+        val preservedFileToDelete = inputFile
+        val originalFileToDelete = redundantTemporaryLocalInputSourceFile()
+        if (preservedFileToDelete == null && originalFileToDelete == null) return
         clearTemporaryLocalInputState()
         CoroutineScope(Dispatchers.IO).launch {
             workId?.let { activeWorkId ->
@@ -1157,7 +1174,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     awaitWorkToFinish(activeWorkId)
                 }
             }
-            deleteTemporaryLocalInput(fileToDelete)
+            deleteTemporaryLocalInput(preservedFileToDelete)
+            deleteTemporaryLocalInput(originalFileToDelete)
         }
     }
 
@@ -1439,18 +1457,19 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             }
         }
 
-        if (_patcherSucceeded.value != null) {
-            cleanupTemporaryLocalInput()
-        }
     }
 
-    fun onBack() {
+    fun onBack(cleanupLocalInput: Boolean) {
         // tempDir cannot be deleted inside onCleared because it gets called on system-initiated process death.
         if (_isPatchingActive.value == true) {
             val workId = patcherWorkerId?.uuid
             workId?.let(workManager::cancelWorkById)
             stopPatchingTaskMonitor()
-            cleanupTemporaryLocalInputAfterWorkStops(workId)
+            if (cleanupLocalInput) {
+                cleanupTemporaryLocalInputAfterWorkStops(workId)
+            }
+        } else if (cleanupLocalInput) {
+            cleanupTemporaryLocalInput()
         }
         tempDir.deleteRecursively()
     }
@@ -3651,7 +3670,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     clearPendingActivityInteractions()
                     clearPatchingNotification()
                     forceKeepLocalInput = false
-                    cleanupTemporaryLocalInput()
                     if (requiresSplitPreparation) {
                         updateSplitStepRequirement(
                             file = null,
