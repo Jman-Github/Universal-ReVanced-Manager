@@ -35,7 +35,8 @@ val resolvedProjectVersion = if (version == "unspecified") "1.8.1" else version.
 val outputApkFileName = "$urvBuildProfileName-universal-revanced-manager-v$resolvedProjectVersion-all.apk"
 val morpheRuntimeAssetsDir = layout.buildDirectory.dir("generated/morphe-runtime")
 val ampleRuntimeAssetsDir = layout.buildDirectory.dir("generated/ample-runtime")
-val revancedRuntimeAssetsDir = layout.buildDirectory.dir("generated/revanced-runtime")
+val revanced21RuntimeAssetsDir = layout.buildDirectory.dir("generated/revanced-runtime-v21")
+val revanced22RuntimeAssetsDir = layout.buildDirectory.dir("generated/revanced-runtime-v22")
 val legalResourcesDir = layout.buildDirectory.dir("generated/legal-res")
 val devVersionSuffix = providers.gradleProperty("devVersionSuffix")
     .orNull
@@ -44,7 +45,7 @@ val devVersionSuffix = providers.gradleProperty("devVersionSuffix")
     ?: "dev"
 val includedMorpheRuntime = rootProject.findProject(":morphe-runtime") != null
 val includedAmpleRuntime = rootProject.findProject(":ample-runtime") != null
-val includedRevanced22Runtime = rootProject.findProject(":revanced-runtime-v22") != null
+val includedRevanced21Runtime = rootProject.findProject(":revanced-runtime-v21") != null
 val releaseProfileSuffix = "-$urvBuildProfileName"
 val devProfileSuffix = "-$devVersionSuffix-$urvBuildProfileName"
 
@@ -57,6 +58,12 @@ val apkEditorLib by configurations.creating
 configurations.all {
     exclude(group = "xmlpull", module = "xmlpull")
     exclude(group = "org.bouncycastle", module = "bcprov-jdk18on")
+    resolutionStrategy.force(
+        "com.android.tools.smali:smali-dexlib2:3.0.9",
+        "com.android.tools.smali:smali-util:3.0.9",
+        "com.android.tools.smali:smali:3.0.9",
+        "com.android.tools.smali:smali-baksmali:3.0.9"
+    )
 }
 val strippedApkEditorLib by tasks.registering(Jar::class) {
     archiveFileName.set("APKEditor-android.jar")
@@ -66,6 +73,7 @@ val strippedApkEditorLib by tasks.registering(Jar::class) {
     }
     exclude(
         "android/**",
+        "com/android/tools/smali/**",
         "org/xmlpull/**",
         "antlr/**",
         "org/antlr/**",
@@ -74,6 +82,15 @@ val strippedApkEditorLib by tasks.registering(Jar::class) {
         "smali.properties",
         "baksmali.properties"
     )
+}
+
+val apkEditorMergeJar by tasks.registering(Jar::class) {
+    archiveFileName.set("apkeditor-merge.jar")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    dependsOn("compileReleaseJavaWithJavac")
+    from("$buildDir/intermediates/javac/release/classes") {
+        include("app/urv/manager/patcher/split/ApkEditorMergeProcess*.class")
+    }
 }
 
 dependencies {
@@ -128,17 +145,20 @@ dependencies {
     ksp(libs.room.compiler)
 
     // ReVanced (PR #39: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/39)
-    implementation(libs.revanced.patcher) {
+    implementation(libs.revanced.patcher.v22) {
+        exclude(group = "xmlpull", module = "xmlpull")
         exclude(group = "xpp3", module = "xpp3")
     }
     implementation(libs.revanced.library) {
         exclude(group = "xpp3", module = "xpp3")
+        exclude(group = "app.revanced", module = "revanced-patcher")
     }
     implementation("com.android.tools.build:apkzlib:8.5.2")
     compileOnly("com.google.guava:guava:33.2.1-jre")
     implementation(libs.xpp3)
     apkEditorLib(files("$rootDir/libs/APKEditor-1.4.7.jar"))
     implementation(files(strippedApkEditorLib))
+    implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("androidx.documentfile:documentfile:1.0.1")
 
     // Downloader plugins
@@ -216,7 +236,7 @@ buildscript {
 
 android {
     namespace = "app.universal.revanced.manager"
-    compileSdk = 35
+    compileSdk = 36
     buildToolsVersion = "35.0.1"
     // Pin to NDK r25c to restore 32-bit x86 support (NDK r27 dropped it).
     ndkVersion = "25.2.9519653"
@@ -238,7 +258,7 @@ android {
         buildConfigField("String", "URV_BUILD_PROFILE", "\"$urvBuildProfileName\"")
         buildConfigField("boolean", "HAS_MORPHE_RUNTIME", includedMorpheRuntime.toString())
         buildConfigField("boolean", "HAS_AMPLE_RUNTIME", includedAmpleRuntime.toString())
-        buildConfigField("boolean", "HAS_REVANCED_V22_RUNTIME", includedRevanced22Runtime.toString())
+        buildConfigField("boolean", "HAS_REVANCED_V21_RUNTIME", includedRevanced21Runtime.toString())
         ndk {
             // Include x86 now that the NDK is pinned to a version that still supports it.
             abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
@@ -364,7 +384,8 @@ android {
     sourceSets {
         getByName("main").assets.srcDir(morpheRuntimeAssetsDir)
         getByName("main").assets.srcDir(ampleRuntimeAssetsDir)
-        getByName("main").assets.srcDir(revancedRuntimeAssetsDir)
+        getByName("main").assets.srcDir(revanced21RuntimeAssetsDir)
+        getByName("main").assets.srcDir(revanced22RuntimeAssetsDir)
         getByName("main").res.srcDir(legalResourcesDir)
     }
 
@@ -390,6 +411,7 @@ kotlin {
     jvmToolchain(17)
     compilerOptions {
         jvmTarget = JvmTarget.JVM_17
+        freeCompilerArgs.add("-Xskip-metadata-version-check")
     }
 }
 
@@ -452,19 +474,31 @@ tasks {
     }
     copyRuntimeTasks += copyAmpleRuntimeApk
 
-    val copyRevancedRuntimeV22Apk by registering(Sync::class) {
-        into(revancedRuntimeAssetsDir)
-        if (includedRevanced22Runtime) {
-            val runtimeProject = project(":revanced-runtime-v22")
+    val copyRevancedRuntimeV21Apk by registering(Sync::class) {
+        into(revanced21RuntimeAssetsDir)
+        if (includedRevanced21Runtime) {
+            val runtimeProject = project(":revanced-runtime-v21")
             val runtimeApk = runtimeProject.layout.buildDirectory.file(
-                "outputs/apk/release/revanced-runtime-v22-release.apk"
+                "outputs/apk/release/revanced-runtime-v21-release.apk"
             )
             dependsOn("${runtimeProject.path}:assembleRelease")
             from(runtimeApk)
-            rename { "revanced-runtime-v22.apk" }
+            rename { "revanced-runtime-v21.apk" }
         }
     }
-    copyRuntimeTasks += copyRevancedRuntimeV22Apk
+    copyRuntimeTasks += copyRevancedRuntimeV21Apk
+
+    val copyRevanced22RuntimeAssets by registering(Sync::class) {
+        dependsOn(apkEditorMergeJar)
+        into(revanced22RuntimeAssetsDir)
+        from(apkEditorLib) {
+            into("apkeditor")
+            rename { "APKEditor-1.4.7.jar" }
+        }
+        from(apkEditorMergeJar) {
+            into("apkeditor")
+        }
+    }
 
     val copyNoticeFile by registering(Copy::class) {
         from(rootProject.file("third-party/NOTICE.txt"))
@@ -482,6 +516,14 @@ tasks {
     named("preBuild") {
         dependsOn(copyNoticeFile, copyAboutLibrariesJson)
         copyRuntimeTasks.forEach(::dependsOn)
+    }
+
+    matching { it.name.endsWith("Assets") && it.name.startsWith("merge") }.configureEach {
+        dependsOn(copyRevanced22RuntimeAssets)
+    }
+
+    matching { it.name.contains("lintVital", ignoreCase = true) }.configureEach {
+        dependsOn(copyRevanced22RuntimeAssets)
     }
 
 }

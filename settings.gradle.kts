@@ -144,6 +144,6 @@ fun includeIfAvailable(path: String, minimumProfile: UrvBuildProfile = UrvBuildP
 
 include(":app", ":api")
 includeIfAvailable(":morphe-runtime")
-includeIfAvailable(":revanced-runtime-v22")
+includeIfAvailable(":revanced-runtime-v21", UrvBuildProfile.FULL)
 includeIfAvailable(":ample-runtime", UrvBuildProfile.FULL)
 

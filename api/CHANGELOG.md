@@ -97,6 +97,7 @@
 - Updated English UI wording for merge tool titles, selected app counts, patch bundle empty-state text, and APK saved casing https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/396 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/398 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/293 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/319
 - Updated patch/merge log copy messages, aligned delete/import wording, and made the merge log button follow patcher-style availability https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/404 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/403 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/405 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/406
 - Added loading-aware dashboard app input gating so app selection actions stay disabled until patch bundles are ready, with a clearer inactive button state https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/402
+- Updated the `LITE` build type to only exclude the ReVanced v21 runtime, and only include the ReVanced v22 and Morphe patcher runtimes
 
 
 # Bug fixes

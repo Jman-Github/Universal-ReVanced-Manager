@@ -36,6 +36,7 @@ import app.urv.manager.network.dto.ExternalBundleSnapshot
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.patcher.ample.AmpleRuntimeBridge
 import app.urv.manager.patcher.morphe.MorpheRuntimeBridge
+import app.urv.manager.patcher.revanced.Revanced21RuntimeBridge
 import app.urv.manager.patcher.revanced.Revanced22RuntimeBridge
 import app.urv.manager.patcher.patch.PatchInfo
 import app.urv.manager.patcher.patch.PatchBundle
@@ -43,6 +44,7 @@ import app.urv.manager.patcher.patch.PatchBundleInfo
 import app.urv.manager.patcher.patch.PatchBundleType
 import app.urv.manager.patcher.runtime.ample.AmpleRuntimeAssets
 import app.urv.manager.patcher.runtime.morphe.MorpheRuntimeAssets
+import app.urv.manager.patcher.runtime.revanced.Revanced21RuntimeAssets
 import app.urv.manager.patcher.runtime.revanced.Revanced22RuntimeAssets
 import app.urv.manager.util.PatchSelection
 import app.urv.manager.util.Options
@@ -155,7 +157,7 @@ class PatchBundleRepository(
 
         activeSelection.keys.forEach { uid ->
             if (info[uid]?.bundleType != PatchBundleType.REVANCED) return@forEach
-            when (readRevancedPatcherHint(uid)) {
+            when (resolvedRevancedPatcherVersion(uid)) {
                 RevancedPatcherVersion.V22 -> hasV22 = true
                 else -> hasV21 = true
             }
@@ -171,7 +173,7 @@ class PatchBundleRepository(
         val info = allBundlesInfoFlow.first()
         return activeSelection.keys.any { uid ->
             info[uid]?.bundleType == PatchBundleType.REVANCED &&
-                readRevancedPatcherHint(uid) == RevancedPatcherVersion.V22
+                resolvedRevancedPatcherVersion(uid) == RevancedPatcherVersion.V22
         }
     }
 
@@ -1076,8 +1078,8 @@ class PatchBundleRepository(
         }
 
         val preferredRevancedVersion = source?.uid
-            ?.let(::readRevancedPatcherHint)
-            ?: RevancedPatcherVersion.V21
+            ?.let(::resolvedRevancedPatcherVersion)
+            ?: RevancedPatcherVersion.V22
         val revancedVersionsToTry = buildList {
             add(preferredRevancedVersion)
             add(
@@ -1158,13 +1160,13 @@ class PatchBundleRepository(
         bundlePath: String,
         version: RevancedPatcherVersion
     ): List<PatchInfo> = when (version) {
-        RevancedPatcherVersion.V21 -> PatchBundle.Loader.metadata(bundle)
-        RevancedPatcherVersion.V22 -> {
-            if (!Revanced22RuntimeAssets.isAvailable(app)) {
-                throw missingRuntimeException("ReVanced v22")
+        RevancedPatcherVersion.V21 -> {
+            if (!Revanced21RuntimeAssets.isAvailable(app)) {
+                throw missingRuntimeException("ReVanced v21")
             }
-            Revanced22RuntimeBridge.loadMetadata(bundlePath)
+            Revanced21RuntimeBridge.loadMetadata(bundlePath)
         }
+        RevancedPatcherVersion.V22 -> Revanced22RuntimeBridge.loadMetadata(bundlePath)
     }
 
     private fun missingRuntimeException(runtimeName: String): IllegalStateException =
@@ -1172,8 +1174,8 @@ class PatchBundleRepository(
 
     private fun persistRevancedPatcherHint(uid: Int, version: RevancedPatcherVersion) {
         when (version) {
-            RevancedPatcherVersion.V22 -> writeRevancedPatcherHint(uid, version)
             RevancedPatcherVersion.V21 -> clearRevancedPatcherHint(uid)
+            RevancedPatcherVersion.V22 -> writeRevancedPatcherHint(uid, version)
         }
     }
 
@@ -1312,6 +1314,9 @@ class PatchBundleRepository(
         val raw = runCatching { file.readText().trim() }.getOrNull().orEmpty()
         return RevancedPatcherVersion.fromStorage(raw)
     }
+
+    private fun resolvedRevancedPatcherVersion(uid: Int): RevancedPatcherVersion =
+        readRevancedPatcherHint(uid) ?: RevancedPatcherVersion.V21
 
     private fun writeRevancedPatcherHint(uid: Int, version: RevancedPatcherVersion) {
         val file = directoryOf(uid).resolve(REVANCED_PATCHER_HINT_FILE)
@@ -3033,7 +3038,7 @@ class PatchBundleRepository(
         }
     }
 
-    private fun suggestedVersionsForRevanced(patches: Set<RevancedPatch<*>>): Map<String, String?> {
+    private fun suggestedVersionsForRevanced(patches: Set<RevancedPatch>): Map<String, String?> {
         val versionCounts = patches.revancedMostCommonCompatibleVersions(countUnusedPatches = true)
 
         return versionCounts.mapValues { (_, versions) ->

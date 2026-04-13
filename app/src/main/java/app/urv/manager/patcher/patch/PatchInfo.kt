@@ -2,7 +2,6 @@ package app.urv.manager.patcher.patch
 
 import androidx.compose.runtime.Immutable
 import app.revanced.patcher.patch.Patch
-import app.revanced.patcher.patch.Option as RevancedPatchOption
 import app.revanced.patcher.patch.resourcePatch as revancedResourcePatch
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableSet
@@ -19,18 +18,6 @@ data class PatchInfo(
     val compatiblePackages: ImmutableList<CompatiblePackage>?,
     val options: ImmutableList<Option<*>>?
 ) {
-    constructor(patch: Patch<*>) : this(
-        patch.name.orEmpty(),
-        patch.description,
-        patch.use,
-        patch.compatiblePackages?.map { (pkgName, versions) ->
-            CompatiblePackage(
-                pkgName,
-                versions?.toImmutableSet()
-            )
-        }?.toImmutableList(),
-        patch.options.map { (_, option) -> Option(option) }.ifEmpty { null }?.toImmutableList()
-    )
 
     fun compatibleWith(packageName: String) =
         compatiblePackages?.any { it.packageName == packageName } ?: true
@@ -51,7 +38,7 @@ data class PatchInfo(
      * The resulting patch cannot be executed.
      * This is necessary because some functions in ReVanced Library only accept full [Patch] objects.
      */
-    fun toPatcherPatch(): Patch<*> =
+    fun toPatcherPatch(): Patch =
         revancedResourcePatch(name = name, description = description, use = include) {
             compatiblePackages?.let { pkgs ->
                 compatibleWith(*pkgs.map { it.packageName to it.versions }.toTypedArray())
@@ -106,17 +93,6 @@ data class Option<T>(
     val presets: Map<String, T?>?,
     val validator: (T?) -> Boolean,
 ) {
-    constructor(option: RevancedPatchOption<T>) : this(
-        option.title ?: option.key,
-        option.key,
-        option.description.orEmpty(),
-        option.required,
-        option.type,
-        option.default,
-        option.values,
-        { option.validator(option, it) },
-    )
-
     companion object {
         private val scalarTypes = mapOf(
             "boolean" to typeOf<Boolean>(),

@@ -1,7 +1,6 @@
 import kotlin.random.Random
-import org.gradle.api.tasks.Copy
-import org.gradle.jvm.tasks.Jar
 import org.gradle.api.file.DuplicatesStrategy
+import org.gradle.jvm.tasks.Jar
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -11,7 +10,6 @@ plugins {
 }
 
 val apkEditorLib by configurations.creating
-val apkEditorAssetsDir = layout.buildDirectory.dir("generated/apkeditor-assets")
 
 val strippedApkEditorLib by tasks.registering(Jar::class) {
     archiveFileName.set("APKEditor-android.jar")
@@ -31,32 +29,13 @@ val strippedApkEditorLib by tasks.registering(Jar::class) {
     )
 }
 
-val apkEditorMergeJar by tasks.registering(Jar::class) {
-    archiveFileName.set("apkeditor-merge.jar")
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    dependsOn("compileReleaseJavaWithJavac")
-    from("$buildDir/intermediates/javac/release/classes") {
-        include("app/revanced/manager/patcher/split/ApkEditorMergeProcess*.class")
-    }
-}
-
-val copyApkEditorAssets by tasks.registering(Copy::class) {
-    dependsOn(apkEditorMergeJar)
-    val targetDir = apkEditorAssetsDir.map { it.dir("apkeditor") }
-    from(apkEditorLib) {
-        rename { "APKEditor-1.4.7.jar" }
-    }
-    from(apkEditorMergeJar)
-    into(targetDir)
-}
-
 android {
-    namespace = "app.universal.revanced.manager.revanced.runtime"
+    namespace = "app.universal.revanced.manager.revanced.v21.runtime"
     compileSdk = 36
     buildToolsVersion = "35.0.1"
 
     defaultConfig {
-        applicationId = "app.universal.revanced.manager.revanced.runtime"
+        applicationId = "app.universal.revanced.manager.revanced.v21.runtime"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
@@ -64,7 +43,6 @@ android {
     }
 
     val releaseSigningConfig = signingConfigs.maybeCreate("release").apply {
-        // Use debug signing if no keystore is provided.
         storeFile = rootProject.file("app/keystore.jks").takeIf { it.exists() }
         if (storeFile == null) {
             val debug = signingConfigs.getByName("debug")
@@ -101,30 +79,21 @@ android {
         aidl = true
         buildConfig = true
     }
-
-    sourceSets["main"].assets.srcDir(apkEditorAssetsDir)
 }
 
 dependencies {
-    implementation(libs.revanced.patcher.v22) {
+    implementation(libs.revanced.patcher) {
         exclude(group = "xmlpull", module = "xmlpull")
         exclude(group = "xpp3", module = "xpp3")
     }
     implementation("com.android.tools.build:apkzlib:8.5.2")
-    compileOnly("com.google.guava:guava:33.3.1-jre")
+    compileOnly("com.google.guava:guava:32.1.2-jre")
+    implementation(libs.xpp3)
     apkEditorLib(files("$rootDir/libs/APKEditor-1.4.7.jar"))
     implementation(files(strippedApkEditorLib))
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     compileOnly(libs.hidden.api.stub)
-}
-
-tasks.matching { it.name.endsWith("Assets") && it.name.startsWith("merge") }.configureEach {
-    dependsOn(copyApkEditorAssets)
-}
-
-tasks.matching { it.name.contains("lintVital", ignoreCase = true) }.configureEach {
-    dependsOn(copyApkEditorAssets)
 }
 
 kotlin {
@@ -134,4 +103,3 @@ kotlin {
         freeCompilerArgs.add("-Xskip-metadata-version-check")
     }
 }
-

@@ -60,7 +60,7 @@ import app.urv.manager.patcher.StepId
 import app.urv.manager.patcher.logger.LogLevel
 import app.urv.manager.patcher.logger.Logger
 import app.urv.manager.patcher.runtime.MemoryLimitConfig
-import app.urv.manager.patcher.runtime.ProcessRuntime
+import app.urv.manager.patcher.runtime.Revanced22ProcessRuntime
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.patcher.worker.PatcherWorker
 import app.urv.manager.patcher.worker.PatcherWorkerProgressState
@@ -3752,7 +3752,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         if (!handledFailureIds.add(workInfo.id)) return
         reconcileFailureState(workInfo.outputData.getString(PatcherWorker.PROCESS_FAILURE_MESSAGE_KEY))
         val exitCode = workInfo.outputData.getInt(PatcherWorker.PROCESS_EXIT_CODE_KEY, Int.MIN_VALUE)
-        if (exitCode == ProcessRuntime.OOM_EXIT_CODE) {
+        if (exitCode == Revanced22ProcessRuntime.OOM_EXIT_CODE) {
             viewModelScope.launch {
                 if (!prefs.useProcessRuntime.get()) return@launch
                 forceKeepLocalInput = true

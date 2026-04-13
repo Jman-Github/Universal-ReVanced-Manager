@@ -8,8 +8,8 @@ import app.urv.manager.domain.bundles.RemotePatchBundle
 import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.urv.manager.patcher.ample.AmpleRuntimeBridge
 import app.urv.manager.patcher.morphe.MorpheRuntimeBridge
+import app.urv.manager.patcher.revanced.Revanced21RuntimeBridge
 import app.urv.manager.patcher.revanced.Revanced22RuntimeBridge
-import app.urv.manager.patcher.patch.PatchBundle
 import app.urv.manager.patcher.patch.PatchBundleInfo
 import app.urv.manager.util.Options
 import app.urv.manager.util.PatchSelection
@@ -221,18 +221,18 @@ fun PatchProfilePayload.remapLocalBundles(
     localSources.forEach { source ->
         if (resolvedSignatures.containsKey(source.uid)) return@forEach
         val bundle = source.patchBundle ?: return@forEach
-        val revancedNames = runCatching { PatchBundle.Loader.metadata(bundle) }
+        val revanced22Names = runCatching { Revanced22RuntimeBridge.loadMetadata(bundle.patchesJar) }
             .getOrNull()
-        val revanced22Names = if (revancedNames == null) {
-            runCatching { Revanced22RuntimeBridge.loadMetadata(bundle.patchesJar) }.getOrNull()
+        val revanced21Names = if (revanced22Names == null) {
+            runCatching { Revanced21RuntimeBridge.loadMetadata(bundle.patchesJar) }.getOrNull()
         } else null
-        val morpheNames = if (revancedNames == null && revanced22Names == null) {
+        val morpheNames = if (revanced22Names == null && revanced21Names == null) {
             runCatching { MorpheRuntimeBridge.loadMetadata(bundle.patchesJar) }.getOrNull()
         } else null
-        val ampleNames = if (revancedNames == null && revanced22Names == null && morpheNames == null) {
+        val ampleNames = if (revanced22Names == null && revanced21Names == null && morpheNames == null) {
             runCatching { AmpleRuntimeBridge.loadMetadata(bundle.patchesJar) }.getOrNull()
         } else null
-        val names = (revancedNames ?: revanced22Names ?: morpheNames ?: ampleNames)
+        val names = (revanced22Names ?: revanced21Names ?: morpheNames ?: ampleNames)
             ?.map { it.name.trim().lowercase() }
             ?.toSet()
         if (!names.isNullOrEmpty()) resolvedSignatures[source.uid] = names

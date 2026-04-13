@@ -11,6 +11,8 @@
 -keep class app.revanced.patcher.** { *; }
 -keep class app.revanced.library.** { *; }
 
+-keep class com.android.tools.smali.** { *; }
+
 -keep class app.urv.manager.patcher.runtime.process.* { *; }
 -keep class app.revanced.manager.plugin.downloader.** { *; }
 -keep class app.revanced.manager.downloader.** { *; }
@@ -20,6 +22,9 @@
 -keepnames class org.xmlpull.** { *; }
 
 -dontwarn com.google.j2objc.annotations.*
+-dontwarn app.revanced.patcher.PatcherResult
+-dontwarn app.revanced.patcher.PatcherResult$PatchedDexFile
+-dontwarn app.revanced.patcher.PatcherResult$PatchedResources
 -dontwarn java.awt.**
 -dontwarn javax.**
 -dontwarn org.slf4j.**

@@ -12,11 +12,11 @@ import app.urv.manager.patcher.LibraryResolver
 import app.urv.manager.patcher.ProgressEvent
 import app.urv.manager.patcher.ProgressEventParcel
 import app.urv.manager.patcher.logger.Logger
-import app.urv.manager.patcher.runtime.process.Parameters
-import app.urv.manager.patcher.runtime.process.PatchConfiguration
 import app.urv.manager.patcher.runtime.process.IPatcherEvents
 import app.urv.manager.patcher.runtime.process.IPatcherProcess
-import app.urv.manager.patcher.runtime.process.PatcherProcess
+import app.urv.manager.patcher.runtime.process.Parameters
+import app.urv.manager.patcher.runtime.process.PatchConfiguration
+import app.urv.manager.patcher.runtime.process.Revanced21PatcherProcess
 import app.urv.manager.patcher.toEvent
 import app.urv.manager.util.Options
 import app.urv.manager.util.PM
@@ -24,6 +24,9 @@ import app.urv.manager.util.PatchSelection
 import app.urv.manager.util.tag
 import com.github.pgreze.process.Redirect
 import com.github.pgreze.process.process
+import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -35,15 +38,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
-import java.util.concurrent.atomic.AtomicReference
-import java.util.concurrent.atomic.AtomicBoolean
-import java.io.File
 import org.koin.core.component.inject
 
-/**
- * Runs the patcher in another process by using the app_process binary and IPC.
- */
-class ProcessRuntime(private val context: Context) : Runtime(context) {
+class Revanced21ProcessRuntime(
+    private val context: Context,
+    private val useMemoryOverride: Boolean = true
+) : Runtime(context) {
     private val pm: PM by inject()
     private val binderRef = AtomicReference<IPatcherProcess?>()
     private val eventHandlerRef = AtomicReference<IPatcherEvents?>()
@@ -66,9 +66,12 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
             }
         }
 
-        ContextCompat.registerReceiver(context, receiver, IntentFilter().apply {
-            addAction(CONNECT_TO_APP_ACTION)
-        }, ContextCompat.RECEIVER_NOT_EXPORTED)
+        ContextCompat.registerReceiver(
+            context,
+            receiver,
+            IntentFilter().apply { addAction(CONNECT_TO_APP_ACTION) },
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
 
         return try {
             withTimeout(10000L) {
@@ -108,29 +111,26 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
                 runCatching { onEvent(event) }
             }
         }
-        // Get the location of our own Apk.
+
         val managerBaseApk = pm.getPackageInfo(context.packageName)!!.applicationInfo!!.sourceDir
-
-        val requestedLimit = prefs.patcherProcessMemoryLimit.get()
-        val aggressiveLimit = prefs.patcherProcessMemoryAggressive.get()
-        val runtimeLimit = MemoryLimitConfig.clampLimitMb(
-            context,
-            if (aggressiveLimit) MemoryLimitConfig.maxLimitMb(context) else requestedLimit
-        )
-        val limit = "${runtimeLimit}M"
-        val usePropOverride = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
-        val propOverride = if (usePropOverride) {
-            resolvePropOverride(context)?.absolutePath
-                ?: throw Exception("Couldn't find prop override library")
-        } else {
-            null
-        }
-
-        val env =
-            System.getenv().toMutableMap().apply {
-                put("CLASSPATH", managerBaseApk)
+        val appProcessBin = resolveAppProcessBin(context)
+        val env = System.getenv().toMutableMap().apply {
+            put("CLASSPATH", managerBaseApk)
+            if (useMemoryOverride) {
+                val requestedLimit = prefs.patcherProcessMemoryLimit.get()
+                val aggressiveLimit = prefs.patcherProcessMemoryAggressive.get()
+                val runtimeLimit = MemoryLimitConfig.clampLimitMb(
+                    context,
+                    if (aggressiveLimit) MemoryLimitConfig.maxLimitMb(context) else requestedLimit
+                )
+                val limit = "${runtimeLimit}M"
+                val propOverride = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    resolvePropOverride(context)?.absolutePath
+                        ?: throw Exception("Couldn't find prop override library")
+                } else {
+                    null
+                }
                 if (propOverride != null) {
-                    // Override the props used by ART to set the memory limit.
                     put("LD_PRELOAD", propOverride)
                     put("PROP_dalvik.vm.heapgrowthlimit", limit)
                     put("PROP_dalvik.vm.heapsize", limit)
@@ -138,8 +138,7 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
                     Log.w(tag, "Skipping prop override on Android ${Build.VERSION.SDK_INT}")
                 }
             }
-
-        val appProcessBin = resolveAppProcessBin(context)
+        }
 
         val patching = CompletableDeferred<Unit>()
         val finishedReported = AtomicBoolean(false)
@@ -175,24 +174,22 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
                 val result = try {
                     process(
                         appProcessBin,
-                        "-Djava.io.tmpdir=$cacheDir", // The process will use /tmp if this isn't set, which is a problem because that folder is not accessible on Android.
-                        "/", // The unused cmd-dir parameter
-                        "--nice-name=${context.packageName}:Patcher",
-                        PatcherProcess::class.java.name, // The class with the main function.
+                        "-Djava.io.tmpdir=$cacheDir",
+                        "/",
+                        "--nice-name=${context.packageName}:Revanced21Patcher",
+                        Revanced21PatcherProcess::class.java.name,
                         context.packageName,
                         env = env,
                         stdout = Redirect.CAPTURE,
                         stderr = Redirect.CAPTURE,
                     ) { line ->
-                        // Collapse stack traces into a single warning entry so OEM stderr noise
-                        // does not flood the UI with per-line log updates.
                         stdioWarnings.onLine(line)
                     }
                 } finally {
                     stdioWarnings.flush()
                 }
 
-                Log.d(tag, "Process finished with exit code ${result.resultCode}")
+                Log.d(tag, "ReVanced v21 process finished with exit code ${result.resultCode}")
 
                 if (result.resultCode == 0) {
                     if (cancellationRequested.get()) {
@@ -213,7 +210,7 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
                                 return@launch
                             }
                             logger.warn(
-                                "Patcher process exited without finished callback; using process exit fallback."
+                                "ReVanced v21 process exited without finished callback; using process exit fallback."
                             )
                             completeSuccess()
                         }
@@ -230,10 +227,11 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
             val binder = awaitBinderConnection()
             binderRef.set(binder)
 
-            // Android Studio's fast deployment feature causes an issue where the other process will be running older code compared to the main process.
-            // The patcher process is running outdated code if the randomly generated BUILD_ID numbers don't match.
-            // To fix it, clear the cache in the Android settings or disable fast deployment (Run configurations -> Edit Configurations -> app -> Enable "always deploy with package manager").
-            if (binder.buildId() != BuildConfig.BUILD_ID) throw Exception("app_process is running outdated code. Clear the app cache or disable disable Android 11 deployment optimizations in your IDE")
+            if (binder.buildId() != BuildConfig.BUILD_ID) {
+                throw Exception(
+                    "app_process is running outdated code. Clear the app cache or disable Android 11 deployment optimizations in your IDE"
+                )
+            }
 
             val eventHandler = object : IPatcherEvents.Stub() {
                 override fun log(level: String, msg: String) {
@@ -292,7 +290,6 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
             binder.start(parameters, eventHandler)
         }
 
-        // Wait until patching finishes.
         try {
             patching.await()
             if (cancellationRequested.get()) {
@@ -318,12 +315,13 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
         private const val APP_PROCESS_BIN_PATH_32 = "/system/bin/app_process32"
         const val OOM_EXIT_CODE = 134
 
-        const val CONNECT_TO_APP_ACTION = "CONNECT_TO_APP_ACTION"
+        const val CONNECT_TO_APP_ACTION = "CONNECT_TO_REVANCED21_APP_ACTION"
         const val INTENT_BUNDLE_KEY = "BUNDLE"
         const val BUNDLE_BINDER_KEY = "BINDER"
         private const val FINISHED_CALLBACK_GRACE_PERIOD_MS = 1_500L
 
         private fun resolvePropOverride(context: Context) = findLibrary(context, "prop_override")
+
         private fun resolveAppProcessBin(context: Context): String {
             val is64Bit = context.applicationInfo.nativeLibraryDir.contains("64")
             val preferred = if (is64Bit) APP_PROCESS_BIN_PATH_64 else APP_PROCESS_BIN_PATH_32
@@ -331,11 +329,6 @@ class ProcessRuntime(private val context: Context) : Runtime(context) {
         }
     }
 
-    /**
-     * An [Exception] occurred in the remote process while patching.
-     *
-     * @param originalStackTrace The stack trace of the original [Exception].
-     */
     class RemoteFailureException(val originalStackTrace: String) : Exception()
 
     class ProcessExitException(val exitCode: Int) :

@@ -18,6 +18,7 @@ import app.urv.manager.domain.worker.WorkerRepository
 import app.urv.manager.patcher.worker.PatcherWorker
 import app.urv.manager.patcher.ample.AmpleRuntimeBridge
 import app.urv.manager.patcher.morphe.MorpheRuntimeBridge
+import app.urv.manager.patcher.revanced.Revanced21RuntimeBridge
 import app.urv.manager.patcher.revanced.Revanced22RuntimeBridge
 import app.urv.manager.network.service.HttpService
 import app.urv.manager.util.AppForeground
@@ -78,6 +79,7 @@ class ManagerApplication : Application() {
         PatchListCatalog.initialize(this)
         MorpheRuntimeBridge.initialize(this)
         AmpleRuntimeBridge.initialize(this)
+        Revanced21RuntimeBridge.initialize(this)
         Revanced22RuntimeBridge.initialize(this)
 
         val pixels = 512

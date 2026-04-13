@@ -84,37 +84,35 @@ object MislabeledImageResourceSanitizer {
         val unsupportedFormats = mutableListOf<Pair<String, ImageType>>()
         val invalidImages = mutableListOf<String>()
 
-        targetDecodedResourceDirs(resourcesDir).forEach { directory ->
-            directory.walkTopDown()
-                .filter { it.isFile }
-                .forEach { file ->
-                    val relativeName = file.relativeTo(resourceRoot)
-                        .path
-                        .replace(File.separatorChar, '/')
-                    if (!isSanitizableResourceEntry(relativeName)) return@forEach
-                    val declaredType = declaredImageType(relativeName) ?: return@forEach
-                    val actualType = file.inputStream().buffered().use(::detectImageType)
-                    when {
-                        actualType == null -> invalidImages += relativeName
-                        declaredType == actualType -> Unit
-                        !actualType.resourceSafe -> unsupportedFormats += relativeName to actualType
-                        else -> {
-                            val renamedRelativeName = renamedEntryName(relativeName, actualType)
-                            if (renamedRelativeName == relativeName) return@forEach
-                            val renamedFile = resourceRoot.resolve(
-                                renamedRelativeName.replace('/', File.separatorChar)
-                            )
-                            if (renamedFile.exists()) {
-                                collisions += relativeName to renamedRelativeName
-                                return@forEach
-                            }
-                            renamedFile.parentFile?.mkdirs()
-                            Files.move(file.toPath(), renamedFile.toPath())
-                            rewrites[relativeName] = renamedRelativeName
+        resourcesDir.walkTopDown()
+            .filter { it.isFile }
+            .forEach { file ->
+                val relativeName = file.relativeTo(resourceRoot)
+                    .path
+                    .replace(File.separatorChar, '/')
+                if (!isSanitizableResourceEntry(relativeName)) return@forEach
+                val declaredType = declaredImageType(relativeName) ?: return@forEach
+                val actualType = file.inputStream().buffered().use(::detectImageType)
+                when {
+                    actualType == null -> invalidImages += relativeName
+                    declaredType == actualType -> Unit
+                    !actualType.resourceSafe -> unsupportedFormats += relativeName to actualType
+                    else -> {
+                        val renamedRelativeName = renamedEntryName(relativeName, actualType)
+                        if (renamedRelativeName == relativeName) return@forEach
+                        val renamedFile = resourceRoot.resolve(
+                            renamedRelativeName.replace('/', File.separatorChar)
+                        )
+                        if (renamedFile.exists()) {
+                            collisions += relativeName to renamedRelativeName
+                            return@forEach
                         }
+                        renamedFile.parentFile?.mkdirs()
+                        Files.move(file.toPath(), renamedFile.toPath())
+                        rewrites[relativeName] = renamedRelativeName
                     }
                 }
-        }
+            }
 
         logDirectoryOutcome(
             resourcesDir = resourcesDir,
@@ -126,16 +124,6 @@ object MislabeledImageResourceSanitizer {
         )
 
     }
-
-    private fun targetDecodedResourceDirs(resourcesDir: File): Sequence<File> =
-        resourcesDir.listFiles()
-            ?.asSequence()
-            ?.filter { it.isDirectory }
-            ?.filter { dir ->
-                dir.name.startsWith("drawable", ignoreCase = true) ||
-                    dir.name.startsWith("mipmap", ignoreCase = true)
-            }
-            ?: emptySequence()
 
     private fun planRenames(zip: ZipFile): RenamePlan {
         val entries = zip.entries().asSequence()
