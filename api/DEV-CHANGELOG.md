@@ -19,6 +19,7 @@
 - Fixed inconsistent dialog button alignment so export, patcher, color picker, and related settings dialogs now place actions on the right like the rest of the app https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/376
 - Fixed local APK source handling so returning from the patcher preserves the selected file correctly
 - Fixed patching notification timing and cancellation behavior so it appears immediately and clears correctly on cancel/close https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/401 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/409 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/292
+- Fixed downloader plugin edge cases by improving failed-source recovery, accepting valid plugin results without a reported version, showing download progress for size-less plugins, and expanding the downloader import URL field correctly on larger screens
 
 
 ## Build types

@@ -1096,7 +1096,9 @@ class PatcherWorker(
                                     selectedApp.version
                                 )
                             }?.takeIf { (_, version) ->
-                                selectedApp.version == null || version == selectedApp.version
+                                selectedApp.version == null ||
+                                    version == null ||
+                                    version == selectedApp.version
                             }
                             if (result != null) {
                                 val (data, _) = result

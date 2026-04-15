@@ -107,8 +107,9 @@ class DownloadedAppRepository(
                 fun emitProgress(bytes: Long) {
                     val newValue = downloadedBytes.addAndGet(bytes)
                     val totalSize = downloadSize.get()
-                    if (totalSize < 1) return
-                    trySend(newValue to totalSize).getOrThrow()
+                    trySend(
+                        newValue to totalSize.takeIf { it > 0L }
+                    ).getOrThrow()
                 }
 
                 targetFile.outputStream(StandardOpenOption.CREATE_NEW).buffered().use {

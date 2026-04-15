@@ -1192,13 +1192,17 @@ private fun ImportDownloaderSourceDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.downloader_import_url)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 Text(
                     text = stringResource(R.string.downloader_import_url_description),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
                     value = url,
                     onValueChange = { url = it },
                     placeholder = { Text(stringResource(R.string.downloader_import_url_hint)) },
