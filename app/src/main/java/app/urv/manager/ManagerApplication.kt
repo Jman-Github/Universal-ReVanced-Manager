@@ -2,7 +2,6 @@ package app.urv.manager
 
 import android.app.Activity
 import android.app.Application
-import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
 import android.os.Bundle
@@ -215,11 +214,7 @@ class ManagerApplication : Application() {
 
     private fun cancelActivePatchingOnAppClose() {
         workerRepository.cancelUniqueWork(PatcherWorker.UNIQUE_WORK_NAME)
-        runCatching {
-            getSystemService(NotificationManager::class.java)?.cancel(PatcherWorker.NOTIFICATION_ID)
-        }.onFailure { error ->
-            Log.d(tag, "Failed to clear patching notification on app close", error)
-        }
+        PatcherWorker.clearNotification(this)
     }
 
     private companion object {

@@ -3,7 +3,6 @@ package app.urv.manager.ui.viewmodel
 import android.app.Activity
 
 import android.app.Application
-import android.app.NotificationManager
 import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -1017,9 +1016,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         private set
 
     private val workManager = WorkManager.getInstance(app)
-    private val notificationManager by lazy {
-        app.getSystemService(NotificationManager::class.java)
-    }
     private val _patcherSucceeded = MediatorLiveData<Boolean?>()
     val patcherSucceeded: LiveData<Boolean?> get() = _patcherSucceeded
     private val _isPatchingActive = MediatorLiveData<Boolean>().apply { value = patcherWorkerId?.uuid != null }
@@ -1091,15 +1087,12 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         logBatteryOptimizationStatus()
         val workId = launchWorker()
         patcherWorkerId = ParcelUuid(workId)
+        PatcherWorker.showInitialNotification(app)
         observeWorker(workId)
     }
 
     private fun clearPatchingNotification() {
-        runCatching {
-            notificationManager.cancel(PatcherWorker.NOTIFICATION_ID)
-        }.onFailure { error ->
-            Log.d(TAG, "Failed to clear patching notification", error)
-        }
+        PatcherWorker.clearNotification(app)
     }
 
     private fun startPatchingTaskMonitor() {
@@ -1464,6 +1457,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         if (_isPatchingActive.value == true) {
             val workId = patcherWorkerId?.uuid
             workId?.let(workManager::cancelWorkById)
+            clearPatchingNotification()
             stopPatchingTaskMonitor()
             if (cleanupLocalInput) {
                 cleanupTemporaryLocalInputAfterWorkStops(workId)

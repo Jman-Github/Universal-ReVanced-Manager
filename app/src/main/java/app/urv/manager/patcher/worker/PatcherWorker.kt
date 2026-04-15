@@ -180,30 +180,10 @@ class PatcherWorker(
         event: ProgressEvent?,
         totalPatchCount: Int
     ): Notification {
-        val notificationIntent = Intent(applicationContext, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        val pendingIntent = PendingIntent.getActivity(
-            applicationContext, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE
-        )
-        val channel = NotificationChannel(
-            PATCHING_NOTIFICATION_CHANNEL_ID,
-            applicationContext.getString(R.string.notification_channel_patching_name),
-            NotificationManager.IMPORTANCE_LOW
-        )
-        channel.description =
-            applicationContext.getString(R.string.notification_channel_patching_description)
-        notificationManager.createNotificationChannel(channel)
         val progress = normalizeNotificationProgress(notificationProgress(event, totalPatchCount))
         val contentText = notificationContentText(event, totalPatchCount)
-        return Notification.Builder(applicationContext, channel.id)
-            .setContentTitle(applicationContext.getText(R.string.patcher_notification_title))
+        return createNotificationBuilder(applicationContext)
             .setContentText(contentText)
-            .setSmallIcon(Icon.createWithResource(applicationContext, R.drawable.ic_notification_status))
-            .setContentIntent(pendingIntent)
-            .setCategory(Notification.CATEGORY_SERVICE)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
             .apply {
                 if (progress != null) {
                     setProgress(progress.max, progress.current, progress.indeterminate)
@@ -1618,6 +1598,60 @@ class PatcherWorker(
         private const val WRITE_APK_END = 970
         private const val SIGN_APK_START = WRITE_APK_END
         private const val SIGN_APK_END = NOTIFICATION_PROGRESS_MAX
+
+        private fun ensureNotificationChannel(context: Context): String {
+            val manager = context.getSystemService(NotificationManager::class.java)
+                ?: error("NotificationManager unavailable")
+            val channel = NotificationChannel(
+                PATCHING_NOTIFICATION_CHANNEL_ID,
+                context.getString(R.string.notification_channel_patching_name),
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = context.getString(R.string.notification_channel_patching_description)
+            }
+            manager.createNotificationChannel(channel)
+            return channel.id
+        }
+
+        private fun createNotificationBuilder(context: Context): Notification.Builder {
+            val notificationIntent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val pendingIntent = PendingIntent.getActivity(
+                context,
+                0,
+                notificationIntent,
+                PendingIntent.FLAG_IMMUTABLE
+            )
+            return Notification.Builder(context, ensureNotificationChannel(context))
+                .setContentTitle(context.getText(R.string.patcher_notification_title))
+                .setSmallIcon(Icon.createWithResource(context, R.drawable.ic_notification_status))
+                .setContentIntent(pendingIntent)
+                .setCategory(Notification.CATEGORY_SERVICE)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+        }
+
+        fun showInitialNotification(context: Context) {
+            val manager = context.getSystemService(NotificationManager::class.java) ?: return
+            runCatching {
+                val notification = createNotificationBuilder(context)
+                    .setContentText(context.getText(R.string.patcher_notification_text))
+                    .setProgress(0, 0, true)
+                    .build()
+                manager.notify(NOTIFICATION_ID, notification)
+            }.onFailure { error ->
+                Log.d("PatcherWorker", "Failed to publish initial patching notification", error)
+            }
+        }
+
+        fun clearNotification(context: Context) {
+            runCatching {
+                context.getSystemService(NotificationManager::class.java)?.cancel(NOTIFICATION_ID)
+            }.onFailure { error ->
+                Log.d("PatcherWorker", "Failed to clear patching notification", error)
+            }
+        }
     }
 
     private fun trimForWorkData(message: String?): String? {
