@@ -1669,7 +1669,11 @@ fun DashboardScreen(
             when {
                 appsSelectionActive && uiPage == DashboardPage.DASHBOARD -> {
                     BundleTopBar(
-                        title = stringResource(R.string.selected_apps_count, selectedAppCount),
+                        title = pluralStringResource(
+                            R.plurals.selected_apps_count,
+                            selectedAppCount,
+                            selectedAppCount
+                        ),
                         onBackClick = installedAppsViewModel::clearSelection,
                         backIcon = {
                             Icon(

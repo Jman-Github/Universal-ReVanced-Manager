@@ -1,3 +1,23 @@
+# v1.8.1-dev.14 (TBD)
+
+
+# Features
+
+
+# Bug fixes
+
+- Fixed the Export & Import settings flow by moving export actions before import, cleaning up wording and punctuation, correcting app count pluralization, and updating the manager version copy toast https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/418 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/425 https://github.com/ Jman-Github/Universal-ReVanced-Manager/issues/416 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/413 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/415
+
+
+## Build types
+
+**LITE**: ReVanced v22 and Morphe patcher runtimes included, AmpleReVanced and ReVanced v21 runtimes excluded.   
+**FULL**: Everything (ReVanced v22, v21, Morphe and AmpleReVanced patcher runtimes)
+
+> [!TIP]
+> Excluding patcher runtimes reduces the app size. If you only use the latest ReVanced and Morphe patches, you should install the **LITE** build. If you use more than just the latest ReVanced and Morphe patches, consider installing the **FULL** build instead. Keep in mind that the in-app updater will only download the same build type you currently have installed. If you want to switch build types later, you’ll need to go to the GitHub releases page and download that build manually.
+
+
 # v1.8.1-dev.13 (2026-04-14)
 
 

@@ -671,6 +671,22 @@ fun ImportExportSettingsScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
                 SettingsSearchHighlight(
+                    targetKey = R.string.export_keystore,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    GroupItem(
+                        modifier = highlightModifier,
+                        onClick = {
+                            openExportPicker(ExportPicker.Keystore)
+                        },
+                        headline = R.string.export_keystore,
+                        description = R.string.export_keystore_description
+                    )
+                }
+                ExpressiveSettingsDivider()
+
+                SettingsSearchHighlight(
                     targetKey = R.string.import_keystore,
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }
@@ -685,7 +701,6 @@ fun ImportExportSettingsScreen(
                     )
                 }
                 ExpressiveSettingsDivider()
-
                 SettingsSearchHighlight(
                     targetKey = R.string.keystore_diagnostics,
                     activeKey = highlightTarget,
@@ -701,21 +716,6 @@ fun ImportExportSettingsScreen(
                                 onRefresh = vm::refreshKeystoreDiagnostics
                             )
                         }
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.export_keystore,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    GroupItem(
-                        modifier = highlightModifier,
-                        onClick = {
-                            openExportPicker(ExportPicker.Keystore)
-                        },
-                        headline = R.string.export_keystore,
-                        description = R.string.export_keystore_description
                     )
                 }
                 ExpressiveSettingsDivider()
@@ -741,93 +741,6 @@ fun ImportExportSettingsScreen(
                 stringResource(R.string.settings_selections_bundles_section),
                 icon = SettingsSectionIcons.SettingsSelectionsBundles
             )
-            ExpressiveSettingsCard(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-            ) {
-                SettingsSearchHighlight(
-                    targetKey = R.string.import_everything,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    GroupItem(
-                        modifier = highlightModifier,
-                        onClick = {
-                            openImportPicker(ImportPicker.Everything)
-                        },
-                        headline = R.string.import_everything,
-                        description = R.string.import_everything_description
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.import_patch_selection,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    ExpandableSettingListItem(
-                        headlineContent = stringResource(R.string.import_patch_selection),
-                        supportingContent = stringResource(R.string.import_patch_selection_description),
-                        modifier = highlightModifier,
-                        expandableContent = {
-                            GroupItem(
-                                onClick = vm::importSelectionForBundle,
-                                headline = R.string.import_patch_selection_bundle,
-                                description = R.string.import_patch_selection_bundle_description
-                            )
-                            GroupItem(
-                                onClick = vm::importSelectionAllBundles,
-                                headline = R.string.import_patch_selection_all,
-                                description = R.string.import_patch_selection_all_description
-                            )
-                        }
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.import_patch_bundles,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    GroupItem(
-                        modifier = highlightModifier,
-                        onClick = {
-                            openImportPicker(ImportPicker.PatchBundles)
-                        },
-                        headline = R.string.import_patch_bundles,
-                        description = R.string.import_patch_bundles_description
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.import_patch_profiles,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    GroupItem(
-                        modifier = highlightModifier,
-                        onClick = {
-                            openImportPicker(ImportPicker.PatchProfiles)
-                        },
-                        headline = R.string.import_patch_profiles,
-                        description = R.string.import_patch_profiles_description
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.import_manager_settings,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    GroupItem(
-                        modifier = highlightModifier,
-                        onClick = {
-                            openImportPicker(ImportPicker.ManagerSettings)
-                        },
-                        headline = R.string.import_manager_settings,
-                        description = R.string.import_manager_settings_description
-                    )
-                }
-            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
@@ -913,6 +826,93 @@ fun ImportExportSettingsScreen(
                         },
                         headline = R.string.export_manager_settings,
                         description = R.string.export_manager_settings_description
+                    )
+                }
+            }
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                SettingsSearchHighlight(
+                    targetKey = R.string.import_everything,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    GroupItem(
+                        modifier = highlightModifier,
+                        onClick = {
+                            openImportPicker(ImportPicker.Everything)
+                        },
+                        headline = R.string.import_everything,
+                        description = R.string.import_everything_description
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.import_patch_selection,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpandableSettingListItem(
+                        headlineContent = stringResource(R.string.import_patch_selection),
+                        supportingContent = stringResource(R.string.import_patch_selection_description),
+                        modifier = highlightModifier,
+                        expandableContent = {
+                            GroupItem(
+                                onClick = vm::importSelectionForBundle,
+                                headline = R.string.import_patch_selection_bundle,
+                                description = R.string.import_patch_selection_bundle_description
+                            )
+                            GroupItem(
+                                onClick = vm::importSelectionAllBundles,
+                                headline = R.string.import_patch_selection_all,
+                                description = R.string.import_patch_selection_all_description
+                            )
+                        }
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.import_patch_bundles,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    GroupItem(
+                        modifier = highlightModifier,
+                        onClick = {
+                            openImportPicker(ImportPicker.PatchBundles)
+                        },
+                        headline = R.string.import_patch_bundles,
+                        description = R.string.import_patch_bundles_description
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.import_patch_profiles,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    GroupItem(
+                        modifier = highlightModifier,
+                        onClick = {
+                            openImportPicker(ImportPicker.PatchProfiles)
+                        },
+                        headline = R.string.import_patch_profiles,
+                        description = R.string.import_patch_profiles_description
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.import_manager_settings,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    GroupItem(
+                        modifier = highlightModifier,
+                        onClick = {
+                            openImportPicker(ImportPicker.ManagerSettings)
+                        },
+                        headline = R.string.import_manager_settings,
+                        description = R.string.import_manager_settings_description
                     )
                 }
             }

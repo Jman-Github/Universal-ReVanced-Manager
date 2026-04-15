@@ -226,7 +226,7 @@ fun AboutSettingsScreen(
                                     clipboard?.setPrimaryClip(
                                         ClipData.newPlainText("Manager version", managerVersionWithCode)
                                     )
-                                    context.toast(context.getString(R.string.toast_copied_to_clipboard))
+                                    context.toast(context.getString(R.string.manager_version_copied))
                                 }
                             )
                         )
