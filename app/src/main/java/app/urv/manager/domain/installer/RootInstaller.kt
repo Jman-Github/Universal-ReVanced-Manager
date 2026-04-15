@@ -152,7 +152,6 @@ class RootInstaller(
         val remoteFS = awaitRemoteFS()
         val assets = app.assets
         val modulePath = "$modulesPath/$packageName-revanced"
-        val revancedDir = "$revancedPath/$packageName"
         val serviceScriptPath = "$serviceDirPath/urv-$packageName.sh"
 
         unmount(packageName)
@@ -171,11 +170,11 @@ class RootInstaller(
             execute("pm install \"${stockApp.absolutePath}\"").assertSuccess("Failed to install stock app")
         }
 
+        // Fresh rooted-mount installs now store everything in the Magisk module
+        // directory. Keep /data/adb/revanced only as a legacy fallback path.
         execute(
-            "mkdir -p \"$revancedPath\"",
-            "mkdir -p \"$serviceDirPath\"",
-            "mkdir -p \"$revancedDir\""
-        ).assertSuccess("Failed to prepare root mount directories")
+            "mkdir -p \"$serviceDirPath\""
+        ).assertSuccess("Failed to prepare root mount service directory")
 
         execute(
             "for f in \"$serviceDirPath\"/urv-*.sh; do " +

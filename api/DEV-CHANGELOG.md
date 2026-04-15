@@ -20,6 +20,7 @@
 - Fixed local APK source handling so returning from the patcher preserves the selected file correctly
 - Fixed patching notification timing and cancellation behavior so it appears immediately and clears correctly on cancel/close https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/401 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/409 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/292
 - Fixed downloader plugin edge cases by improving failed-source recovery, accepting valid plugin results without a reported version, showing download progress for size-less plugins, and expanding the downloader import URL field correctly on larger screens
+- Fixed rooted mount installs creating an unused empty legacy directory under `/data/adb/revanced/<package>` for newly mounted apps https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/411
 
 
 ## Build types
