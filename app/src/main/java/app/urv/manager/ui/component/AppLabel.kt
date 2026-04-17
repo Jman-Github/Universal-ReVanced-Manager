@@ -81,6 +81,9 @@ fun AppLabel(
 
 private fun cleanWeirdLabel(raw: String, packageName: String?): String {
     val trimmed = raw.trim()
+    if (shouldFallbackUnderscoreLabel(trimmed, packageName)) {
+        packageName?.let(::fallbackLabelFromPackageName)?.let { return it }
+    }
     val pkg = packageName.orEmpty()
     if (pkg.isNotEmpty() && (trimmed.startsWith(pkg) || trimmed.contains(pkg))) {
         val candidate = trimmed.substringAfterLast('.')
@@ -92,6 +95,39 @@ private fun cleanWeirdLabel(raw: String, packageName: String?): String {
         return withoutSuffix.substringAfterLast('.').ifBlank { withoutSuffix }
     }
     return trimmed
+}
+
+private fun shouldFallbackUnderscoreLabel(label: String, packageName: String?): Boolean {
+    if ('_' !in label) return false
+    val normalizedPackageName = packageName.orEmpty()
+    if (normalizedPackageName.isNotBlank() && label.contains(normalizedPackageName, ignoreCase = true)) {
+        return true
+    }
+    if (!looksLikePackageLabel(label)) return false
+    return true
+}
+
+private fun looksLikePackageLabel(label: String): Boolean {
+    val segments = label.split('.')
+    if (segments.size < 3) return false
+    return segments.all { segment ->
+        segment.isNotBlank() && segment.all { it.isLetterOrDigit() || it == '_' }
+    }
+}
+
+private fun fallbackLabelFromPackageName(packageName: String): String {
+    val tail = packageName.substringAfterLast('.')
+        .replace('_', ' ')
+        .replace('-', ' ')
+        .trim()
+    if (tail.isBlank()) return packageName
+    return tail.split(Regex("\\s+"))
+        .filter { it.isNotBlank() }
+        .joinToString(" ") { segment ->
+            segment.replaceFirstChar { ch ->
+                if (ch.isLowerCase()) ch.titlecase() else ch.toString()
+            }
+        }
 }
 
 @Suppress("DEPRECATION")

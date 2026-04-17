@@ -10,13 +10,19 @@ import app.urv.manager.patcher.toEvent
 import app.urv.manager.patcher.toParcel
 
 data class PatcherWorkerProgressSnapshot(
+    val generation: Long,
     val sequence: Long,
-    val event: ProgressEvent
+    val event: ProgressEvent,
+    val notificationProgressCurrent: Int? = null,
+    val notificationProgressMax: Int? = null
 )
 
 object PatcherWorkerProgressState {
+    private const val PROGRESS_GENERATION_KEY = "patching_progress_generation"
     private const val PROGRESS_SEQUENCE_KEY = "patching_progress_sequence"
     private const val PROGRESS_EVENT_KEY = "patching_progress_event"
+    private const val PROGRESS_NOTIFICATION_CURRENT_KEY = "patching_progress_notification_current"
+    private const val PROGRESS_NOTIFICATION_MAX_KEY = "patching_progress_notification_max"
 
     fun toWorkData(
         active: Boolean,
@@ -26,9 +32,16 @@ object PatcherWorkerProgressState {
             .putBoolean(PatcherWorker.PATCHING_ACTIVE_KEY, active)
 
         if (snapshot != null) {
+            builder.putLong(PROGRESS_GENERATION_KEY, snapshot.generation)
             builder.putLong(PROGRESS_SEQUENCE_KEY, snapshot.sequence)
             marshal(snapshot.event)?.let { payload ->
                 builder.putByteArray(PROGRESS_EVENT_KEY, payload)
+            }
+            snapshot.notificationProgressCurrent?.let { current ->
+                builder.putInt(PROGRESS_NOTIFICATION_CURRENT_KEY, current)
+            }
+            snapshot.notificationProgressMax?.let { max ->
+                builder.putInt(PROGRESS_NOTIFICATION_MAX_KEY, max)
             }
         }
 
@@ -38,8 +51,25 @@ object PatcherWorkerProgressState {
     fun fromWorkData(data: Data): PatcherWorkerProgressSnapshot? {
         val payload = data.getByteArray(PROGRESS_EVENT_KEY) ?: return null
         val event = unmarshal(payload) ?: return null
+        val generation = data.getLong(PROGRESS_GENERATION_KEY, Long.MIN_VALUE)
         val sequence = data.getLong(PROGRESS_SEQUENCE_KEY, Long.MIN_VALUE)
-        return PatcherWorkerProgressSnapshot(sequence = sequence, event = event)
+        val notificationCurrent = if (data.keyValueMap.containsKey(PROGRESS_NOTIFICATION_CURRENT_KEY)) {
+            data.getInt(PROGRESS_NOTIFICATION_CURRENT_KEY, Int.MIN_VALUE).takeUnless { it == Int.MIN_VALUE }
+        } else {
+            null
+        }
+        val notificationMax = if (data.keyValueMap.containsKey(PROGRESS_NOTIFICATION_MAX_KEY)) {
+            data.getInt(PROGRESS_NOTIFICATION_MAX_KEY, Int.MIN_VALUE).takeUnless { it == Int.MIN_VALUE }
+        } else {
+            null
+        }
+        return PatcherWorkerProgressSnapshot(
+            generation = generation,
+            sequence = sequence,
+            event = event,
+            notificationProgressCurrent = notificationCurrent,
+            notificationProgressMax = notificationMax
+        )
     }
 
     private fun marshal(event: ProgressEvent): ByteArray? {

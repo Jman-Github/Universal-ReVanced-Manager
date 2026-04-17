@@ -21,6 +21,10 @@ object AppForeground {
     var isMainTaskClosed: Boolean = false
         private set
 
+    @Volatile
+    var resumeGeneration: Long = 0L
+        private set
+
     fun onMainTaskOpened() {
         isMainTaskClosed = false
     }
@@ -32,6 +36,7 @@ object AppForeground {
     fun onResumed() {
         isResumed = true
         isMainTaskClosed = false
+        resumeGeneration++
         resumeEvents.tryEmit(Unit)
     }
 
@@ -48,6 +53,12 @@ object AppForeground {
     suspend fun awaitResume() {
         if (isResumed) return
         resumeEvents.first()
+    }
+
+    suspend fun awaitNextResume(afterGeneration: Long): Long {
+        if (resumeGeneration != afterGeneration) return resumeGeneration
+        resumeEvents.first()
+        return resumeGeneration
     }
 
     suspend fun awaitPause(timeoutMs: Long): Boolean =

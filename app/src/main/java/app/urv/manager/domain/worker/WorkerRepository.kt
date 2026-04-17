@@ -20,6 +20,7 @@ import app.urv.manager.domain.manager.SearchForUpdatesBackgroundInterval
 import app.urv.manager.patcher.worker.AnnouncementNotificationWorker
 import app.urv.manager.patcher.worker.BundleUpdateNotificationWorker
 import app.urv.manager.patcher.worker.ManagerUpdateNotificationWorker
+import app.urv.manager.patcher.worker.PatcherWorkerProgressSnapshot
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -43,6 +44,8 @@ class WorkerRepository(app: Application) {
     val workerInputs = mutableMapOf<UUID, Any>()
     @PublishedApi
     internal val activeUniqueWorkIds = ConcurrentHashMap<String, UUID>()
+    @PublishedApi
+    internal val activeWorkerProgressSnapshots = ConcurrentHashMap<UUID, PatcherWorkerProgressSnapshot>()
 
     @Suppress("UNCHECKED_CAST")
     fun <A : Any, W : Worker<A>> claimInput(worker: W): A {
@@ -58,7 +61,7 @@ class WorkerRepository(app: Application) {
                 .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                 .build()
         workerInputs[request.id] = input
-        activeUniqueWorkIds[name] = request.id
+        activeUniqueWorkIds.put(name, request.id)?.let(activeWorkerProgressSnapshots::remove)
         workManager.enqueueUniqueWork(name, ExistingWorkPolicy.REPLACE, request)
         return request.id
     }
@@ -69,11 +72,41 @@ class WorkerRepository(app: Application) {
 
     fun clearActiveUniqueWork(name: String, id: UUID) {
         activeUniqueWorkIds.remove(name, id)
+        activeWorkerProgressSnapshots.remove(id)
     }
 
     fun cancelUniqueWork(name: String) {
-        activeUniqueWorkIds.remove(name)?.let(workerInputs::remove)
+        activeUniqueWorkIds.remove(name)?.let { id ->
+            workerInputs.remove(id)
+            activeWorkerProgressSnapshots.remove(id)
+        }
         workManager.cancelUniqueWork(name)
+    }
+
+    fun updateActiveProgressSnapshot(id: UUID, snapshot: PatcherWorkerProgressSnapshot) {
+        activeWorkerProgressSnapshots.compute(id) { _, existing ->
+            if (existing == null || isNewerProgressSnapshot(snapshot, existing)) {
+                snapshot
+            } else {
+                existing
+            }
+        }
+    }
+
+    fun activeProgressSnapshot(id: UUID): PatcherWorkerProgressSnapshot? =
+        activeWorkerProgressSnapshots[id]
+
+    fun clearActiveProgressSnapshot(id: UUID) {
+        activeWorkerProgressSnapshots.remove(id)
+    }
+
+    private fun isNewerProgressSnapshot(
+        candidate: PatcherWorkerProgressSnapshot,
+        existing: PatcherWorkerProgressSnapshot
+    ): Boolean = when {
+        candidate.generation > existing.generation -> true
+        candidate.generation < existing.generation -> false
+        else -> candidate.sequence > existing.sequence
     }
 
     inline fun <reified T> createNotification(

@@ -9,9 +9,9 @@ import androidx.compose.material.icons.filled.Android
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
@@ -27,7 +27,12 @@ fun AppIcon(
     modifier: Modifier = Modifier,
     iconOverride: Drawable? = null
 ) {
-    var showPlaceHolder by rememberSaveable { mutableStateOf(true) }
+    val iconKey = iconOverride?.constantState?.hashCode()?.toString()
+        ?: packageInfo?.packageName
+        ?: "android-fallback"
+    var showPlaceHolder by remember(iconKey) {
+        mutableStateOf(iconOverride == null && packageInfo != null)
+    }
 
     if (iconOverride != null) {
         Image(
@@ -46,11 +51,26 @@ fun AppIcon(
             colorFilter = colorFilter
         )
     } else {
+        val fallbackPainter = rememberVectorPainter(Icons.Default.Android)
         AsyncImage(
-            packageInfo,
-            contentDescription,
-            Modifier.placeholder(visible = showPlaceHolder, color = MaterialTheme.colorScheme.inverseOnSurface, shape = RoundedCornerShape(100)).then(modifier),
-            onSuccess = { showPlaceHolder = false }
+            model = packageInfo,
+            contentDescription = contentDescription,
+            modifier = Modifier.placeholder(
+                visible = showPlaceHolder,
+                color = MaterialTheme.colorScheme.inverseOnSurface,
+                shape = RoundedCornerShape(100)
+            ).then(modifier),
+            error = fallbackPainter,
+            fallback = fallbackPainter,
+            onLoading = {
+                showPlaceHolder = true
+            },
+            onSuccess = {
+                showPlaceHolder = false
+            },
+            onError = {
+                showPlaceHolder = false
+            }
         )
     }
 }

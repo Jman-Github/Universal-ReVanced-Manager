@@ -13,6 +13,7 @@ import android.graphics.drawable.Icon
 import android.os.Build
 import android.os.Parcelable
 import android.os.PowerManager
+import android.os.SystemClock
 import android.util.Log
 import androidx.activity.result.ActivityResult
 import androidx.work.ForegroundInfo
@@ -131,6 +132,7 @@ class PatcherWorker(
     private val workerProgressScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val workerProgressMutex = Mutex()
     private val progressSequence = AtomicLong(0L)
+    private val progressGeneration = SystemClock.elapsedRealtimeNanos()
     private var progressPersistenceClosed: Boolean = false
     private var lastPersistedProgressSequence: Long = Long.MIN_VALUE
     private val cachedExpandableSubSteps = ConcurrentHashMap<StepId, List<String>>()
@@ -158,7 +160,7 @@ class PatcherWorker(
         val logger: Logger,
         val handleStartActivityRequest: suspend (LoadedDownloaderPlugin, Intent) -> ActivityResult,
         val setInputFile: suspend (File, Boolean, Boolean) -> Unit,
-        val onEvent: (ProgressEvent) -> Unit
+        val onEvent: (PatcherWorkerProgressUpdate) -> Unit
     ) {
         val packageName get() = input.packageName
     }
@@ -467,8 +469,10 @@ class PatcherWorker(
         }
         return when (event) {
             is ProgressEvent.Started -> {
-                if (event.stepId == StepId.LoadPatches) {
+                if (event.stepId == StepId.DownloadAPK || event.stepId == StepId.LoadPatches) {
                     lastNotificationProgressCurrent = 0
+                }
+                if (event.stepId == StepId.LoadPatches) {
                     resetWriteApkNotificationPhase()
                 }
                 if (event.stepId == StepId.WriteAPK || event.stepId == StepId.SignAPK) {
@@ -478,6 +482,9 @@ class PatcherWorker(
             }
             is ProgressEvent.Progress -> normalizeWriteApkNotificationPhase(event)
             is ProgressEvent.Completed -> {
+                if (event.stepId == StepId.DownloadAPK) {
+                    lastNotificationProgressCurrent = 0
+                }
                 if (event.stepId == StepId.WriteAPK || event.stepId == StepId.SignAPK) {
                     resetWriteApkNotificationPhase()
                 }
@@ -639,11 +646,16 @@ class PatcherWorker(
     private suspend fun deactivateWorkerProgressState() {
         workerProgressMutex.withLock {
             progressPersistenceClosed = true
+            workerRepository.clearActiveProgressSnapshot(id)
             updateWorkerProgressState(active = false)
         }
     }
 
-    private fun persistProgressSnapshot(event: ProgressEvent) {
+    private fun persistProgressSnapshot(
+        sequence: Long,
+        event: ProgressEvent,
+        totalPatchCount: Int
+    ) {
         if (event is ProgressEvent.Failed) return
 
         cacheExpandableSubSteps(event)
@@ -658,11 +670,16 @@ class PatcherWorker(
             }
             else -> event
         }
+        val persistedNotificationProgress = persistedNotificationProgress(event, totalPatchCount)
         val snapshot = PatcherWorkerProgressSnapshot(
-            sequence = progressSequence.incrementAndGet(),
-            event = snapshotEvent
+            generation = progressGeneration,
+            sequence = sequence,
+            event = snapshotEvent,
+            notificationProgressCurrent = persistedNotificationProgress?.current,
+            notificationProgressMax = persistedNotificationProgress?.max
         )
 
+        workerRepository.updateActiveProgressSnapshot(id, snapshot)
         workerProgressScope.launch {
             persistWorkerProgressSnapshot(snapshot)
         }
@@ -699,13 +716,16 @@ class PatcherWorker(
     private fun handleWorkerLogProgress(
         message: String,
         totalPatchCount: Int,
-        onEvent: (ProgressEvent) -> Unit
+        onEvent: (PatcherWorkerProgressUpdate) -> Unit
     ) {
         if (shouldSkipForegroundUpdates()) return
         val event = buildWriteApkLogEvent(message) ?: return
-        forwardWriteApkLogProgressForUi(event, onEvent)
+        val liveSequence = progressSequence.incrementAndGet()
+        forwardWriteApkLogProgressForUi(liveSequence, event, totalPatchCount, onEvent)
         val notificationEvent = normalizeWriteApkNotificationEvent(event)
         updateForegroundNotification(notificationEvent, totalPatchCount)
+        val snapshotSequence = progressSequence.incrementAndGet()
+        persistWriteApkLogProgressSnapshot(snapshotSequence, event, totalPatchCount)
     }
 
     private fun normalizeWriteApkNotificationEvent(
@@ -716,27 +736,24 @@ class PatcherWorker(
     }
 
     private fun forwardWriteApkLogProgressForUi(
+        sequence: Long,
         event: ProgressEvent.Progress,
-        onEvent: (ProgressEvent) -> Unit
+        totalPatchCount: Int,
+        onEvent: (PatcherWorkerProgressUpdate) -> Unit
     ) {
         if (event.stepId != StepId.WriteAPK) return
 
         val uiEvent = normalizeEarlyWriteApkUiEvent(event)
         runCatching {
-            onEvent(uiEvent)
+            onEvent(
+                buildWorkerProgressUpdate(
+                    sequence = sequence,
+                    event = uiEvent,
+                    notificationProgress = persistedNotificationProgress(event, totalPatchCount)
+                )
+            )
         }.onFailure { error ->
             Log.d(tag, "Failed to forward write APK log progress to UI", error)
-        }
-        val snapshotEvent = normalizeEarlyWriteApkUiEvent(event).copy(
-            subSteps = cachedExpandableSubSteps[StepId.WriteAPK] ?: event.subSteps
-        )
-        val snapshot = PatcherWorkerProgressSnapshot(
-            sequence = progressSequence.incrementAndGet(),
-            event = snapshotEvent
-        )
-
-        workerProgressScope.launch {
-            persistWorkerProgressSnapshot(snapshot)
         }
     }
 
@@ -747,6 +764,53 @@ class PatcherWorker(
         }
         return event.copy(subSteps = null)
     }
+
+    private fun persistedNotificationProgress(
+        event: ProgressEvent,
+        totalPatchCount: Int
+    ): NotificationProgress? {
+        if (event.stepId == StepId.DownloadAPK) return null
+        val progress = notificationProgress(event, totalPatchCount) ?: return null
+        if (progress.indeterminate || progress.max <= 0) return null
+        return normalizeNotificationProgress(progress)
+    }
+
+    private fun persistWriteApkLogProgressSnapshot(
+        sequence: Long,
+        event: ProgressEvent.Progress,
+        totalPatchCount: Int
+    ) {
+        val snapshotEvent = normalizeEarlyWriteApkUiEvent(event).copy(
+            subSteps = event.subSteps
+                ?: notificationExpandableSubSteps[StepId.WriteAPK]
+                ?: cachedExpandableSubSteps[StepId.WriteAPK]
+        )
+        val persistedNotificationProgress = persistedNotificationProgress(event, totalPatchCount)
+        val snapshot = PatcherWorkerProgressSnapshot(
+            generation = progressGeneration,
+            sequence = sequence,
+            event = snapshotEvent,
+            notificationProgressCurrent = persistedNotificationProgress?.current,
+            notificationProgressMax = persistedNotificationProgress?.max
+        )
+
+        workerRepository.updateActiveProgressSnapshot(id, snapshot)
+        workerProgressScope.launch {
+            persistWorkerProgressSnapshot(snapshot)
+        }
+    }
+
+    private fun buildWorkerProgressUpdate(
+        sequence: Long,
+        event: ProgressEvent,
+        notificationProgress: NotificationProgress?
+    ) = PatcherWorkerProgressUpdate(
+        generation = progressGeneration,
+        sequence = sequence,
+        event = event,
+        notificationProgressCurrent = notificationProgress?.current,
+        notificationProgressMax = notificationProgress?.max
+    )
 
     private fun buildWriteApkLogEvent(rawMessage: String): ProgressEvent.Progress? {
         val message = rawMessage.trim()
@@ -991,9 +1055,16 @@ class PatcherWorker(
         }
         val eventDispatcher: (ProgressEvent) -> Unit = eventDispatcher@{ event ->
             if (shouldSkipForegroundUpdates()) return@eventDispatcher
-            args.onEvent(event)
-            persistProgressSnapshot(event)
+            val sequence = progressSequence.incrementAndGet()
+            args.onEvent(
+                buildWorkerProgressUpdate(
+                    sequence = sequence,
+                    event = event,
+                    notificationProgress = persistedNotificationProgress(event, totalPatchCount)
+                )
+            )
             updateForegroundNotification(event, totalPatchCount)
+            persistProgressSnapshot(sequence, event, totalPatchCount)
         }
 
         return try {

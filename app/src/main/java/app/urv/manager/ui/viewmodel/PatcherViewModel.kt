@@ -63,6 +63,7 @@ import app.urv.manager.patcher.runtime.Revanced22ProcessRuntime
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.patcher.worker.PatcherWorker
 import app.urv.manager.patcher.worker.PatcherWorkerProgressState
+import app.urv.manager.patcher.worker.PatcherWorkerProgressUpdate
 import app.urv.manager.plugin.downloader.PluginHostApi
 import app.urv.manager.plugin.downloader.UserInteractionException
 import app.urv.manager.ui.model.InstallerModel
@@ -82,6 +83,7 @@ import app.urv.manager.util.Options
 import app.urv.manager.util.PatchSelection
 import app.urv.manager.patcher.patch.PatchBundleInfo
 import app.urv.manager.patcher.patch.PatchBundleType
+import app.urv.manager.util.AppForeground
 import app.urv.manager.util.buildSavedAppEntryKey
 import app.urv.manager.util.buildSavedAppVariantIdentity
 import app.urv.manager.util.isSavedAppEntryForPackage
@@ -1023,7 +1025,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private var currentWorkSource: LiveData<WorkInfo?>? = null
     private val handledFailureIds = mutableSetOf<UUID>()
     private var replayWorkerProgressSnapshots = false
-    private var lastReplayedWorkerProgressSequence = Long.MIN_VALUE
+    private var lastAppliedWorkerProgressGeneration = Long.MIN_VALUE
+    private var lastAppliedWorkerProgressSequence = Long.MIN_VALUE
     private var forceKeepLocalInput = false
     private var lastLoggedErrorSignature: String? = null
 
@@ -1038,6 +1041,13 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
 
     init {
+        viewModelScope.launch {
+            var observedResumeGeneration = AppForeground.resumeGeneration
+            while (true) {
+                observedResumeGeneration = AppForeground.awaitNextResume(observedResumeGeneration)
+                syncWorkerProgressFromCurrentSnapshot()
+            }
+        }
         val existingId = patcherWorkerId?.uuid
         if (existingId != null) {
             replayWorkerProgressSnapshots = true
@@ -1079,7 +1089,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         resetFailureLogState()
         runtimeReportedMemoryLimitMb = null
         replayWorkerProgressSnapshots = false
-        lastReplayedWorkerProgressSequence = Long.MIN_VALUE
+        lastAppliedWorkerProgressGeneration = Long.MIN_VALUE
+        lastAppliedWorkerProgressSequence = Long.MIN_VALUE
         resetVisualProgress()
         markInitialStepRunning()
         _isPatchingActive.value = true
@@ -2546,8 +2557,35 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         )
     }
 
-    private fun handleProgressEvent(event: ProgressEvent) {
-        enqueueProgressEvent(event)
+    private fun handleProgressEvent(update: PatcherWorkerProgressUpdate) =
+        enqueueWorkerProgressEvent(
+            generation = update.generation,
+            sequence = update.sequence,
+            event = update.event,
+            notificationProgressCurrent = update.notificationProgressCurrent,
+            notificationProgressMax = update.notificationProgressMax
+        )
+
+    private fun enqueueWorkerProgressEvent(
+        generation: Long,
+        sequence: Long,
+        event: ProgressEvent,
+        notificationProgressCurrent: Int?,
+        notificationProgressMax: Int?,
+        seedFromWorkerSnapshot: Boolean = false
+    ) = viewModelScope.launch {
+        progressEventMutex.withLock {
+            if (!shouldApplyWorkerProgress(generation, sequence)) return@withLock
+            recordAppliedWorkerProgress(generation, sequence)
+            seedVisualProgressFromWorkerProgress(
+                current = notificationProgressCurrent,
+                max = notificationProgressMax
+            )
+            if (seedFromWorkerSnapshot) {
+                seedProgressStateFromWorkerSnapshot(event)
+            }
+            processProgressEventLocked(event)
+        }
     }
 
     private fun enqueueProgressEvent(
@@ -2840,6 +2878,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
         val list = buildSubStepList(effectiveTitles, existing, stepId)
         if (stepId == StepId.WriteAPK) {
+            collapsePreparedWriteApkDexChildren(list)
             reconcilePreparedWriteApkSubSteps(list)
         }
         stepSubSteps[stepId] = list
@@ -2904,13 +2943,18 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         val incoming = incomingTitles
             .map { normalizeWriteApkTitle(StepId.WriteAPK, it) }
             .filter { it.isNotBlank() }
+        val incomingDexTitles = incoming
+            .filter(::isDexCompileTitle)
+            .distinctBy { it.lowercase() }
 
         val existingDexTitles = existing.orEmpty()
             .map { it.title }
             .filter(::isDexCompileTitle)
             .distinctBy { it.lowercase() }
         val merged = incoming.toMutableList()
-        if (existingDexTitles.isNotEmpty() && merged.none(::isDexCompileGroupTitle)) {
+        if ((incomingDexTitles.isNotEmpty() || existingDexTitles.isNotEmpty()) &&
+            merged.none(::isDexCompileGroupTitle)
+        ) {
             merged.add(writeApkDexInsertIndex(merged), WRITE_APK_DEX_GROUP_TITLE)
         }
         return merged.distinctBy { it.lowercase() }
@@ -3084,6 +3128,13 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         return suffix.startsWith("classes") && suffix.endsWith(".dex")
     }
 
+    private fun writeApkDexSortKey(name: String): Int {
+        val base = name.removeSuffix(".dex")
+        if (base.equals("classes", ignoreCase = true)) return 1
+        val suffix = base.removePrefix("classes")
+        return suffix.toIntOrNull() ?: Int.MAX_VALUE
+    }
+
     private fun isDexCompilePhaseTitle(title: String): Boolean =
         title.equals("Compiling patched dex files", ignoreCase = true) ||
             title.equals(WRITE_APK_DEX_GROUP_TITLE, ignoreCase = true)
@@ -3219,6 +3270,37 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         completeWriteApkPriorSteps(list, activeIndex)
     }
 
+    private fun collapsePreparedWriteApkDexChildren(list: SnapshotStateList<StepDetail>) {
+        val flatDexEntries = list
+            .filter(::isPreparedWriteApkDexChild)
+            .sortedBy { writeApkDexSortKey(it.title.removePrefix("Compiling ").trim()) }
+        if (flatDexEntries.isEmpty()) return
+
+        val groupIndex = ensureWriteApkDexGroupIndex(list)
+        val group = list[groupIndex]
+        val mergedChildren = (group.children + flatDexEntries)
+            .distinctBy { it.title.lowercase() }
+            .sortedBy { writeApkDexSortKey(it.title.removePrefix("Compiling ").trim()) }
+
+        for (index in list.lastIndex downTo 0) {
+            if (index == groupIndex) continue
+            if (isPreparedWriteApkDexChild(list[index])) {
+                list.removeAt(index)
+            }
+        }
+
+        val updatedGroupIndex = list.indexOfFirst(::matchesWriteApkDexGroup)
+        if (updatedGroupIndex == -1) return
+        val updatedGroup = list[updatedGroupIndex]
+        list[updatedGroupIndex] = updatedGroup.copy(
+            expandable = true,
+            children = mergedChildren
+        )
+    }
+
+    private fun isPreparedWriteApkDexChild(detail: StepDetail): Boolean =
+        isDexCompileTitle(detail.title)
+
     private fun completePrepareSplitApkPriorSteps(
         list: SnapshotStateList<StepDetail>,
         untilExclusive: Int
@@ -3319,6 +3401,14 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             children[runningChildIndex] = runningChild.copy(state = State.COMPLETED, progress = null)
         }
 
+        val targetIndex = if (existingIndex != -1) existingIndex else children.size
+        for (index in 0 until targetIndex) {
+            val child = children[index]
+            if (!child.skipped && child.state != State.COMPLETED) {
+                children[index] = child.copy(state = State.COMPLETED, progress = null)
+            }
+        }
+
         if (existingIndex != -1) {
             val existingChild = children[existingIndex]
             children[existingIndex] = existingChild.copy(state = State.RUNNING, progress = null)
@@ -3340,10 +3430,11 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
         val group = list[groupIndex]
         val children = group.children.toMutableList()
-        val runningChildIndex = children.indexOfFirst { !it.skipped && it.state == State.RUNNING }
-        if (runningChildIndex != -1) {
-            val runningChild = children[runningChildIndex]
-            children[runningChildIndex] = runningChild.copy(state = State.COMPLETED, progress = null)
+        for (index in children.indices) {
+            val child = children[index]
+            if (!child.skipped && child.state != State.COMPLETED) {
+                children[index] = child.copy(state = State.COMPLETED, progress = null)
+            }
         }
 
         val finalState = if (group.state == State.WAITING && children.isEmpty()) State.WAITING else State.COMPLETED
@@ -3642,7 +3733,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             when (workInfo?.state) {
                 WorkInfo.State.RUNNING,
                 WorkInfo.State.ENQUEUED,
-                WorkInfo.State.BLOCKED -> replayWorkerProgressSnapshot(workInfo)
+                WorkInfo.State.BLOCKED -> replayWorkerProgressSnapshot(
+                    workInfo,
+                    enabled = replayWorkerProgressSnapshots
+                )
                 else -> Unit
             }
             val progressActive =
@@ -3659,6 +3753,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             when (workInfo?.state) {
                 WorkInfo.State.SUCCEEDED -> {
                     replayWorkerProgressSnapshots = false
+                    workerRepository.clearActiveProgressSnapshot(id)
                     patcherWorkerId = null
                     stopPatchingTaskMonitor()
                     clearPendingActivityInteractions()
@@ -3678,6 +3773,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
                 WorkInfo.State.FAILED -> {
                     replayWorkerProgressSnapshots = false
+                    workerRepository.clearActiveProgressSnapshot(id)
                     patcherWorkerId = null
                     stopPatchingTaskMonitor()
                     clearPendingActivityInteractions()
@@ -3691,6 +3787,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 WorkInfo.State.BLOCKED -> _patcherSucceeded.value = null
                 WorkInfo.State.CANCELLED -> {
                     replayWorkerProgressSnapshots = false
+                    workerRepository.clearActiveProgressSnapshot(id)
                     patcherWorkerId = null
                     stopPatchingTaskMonitor()
                     clearPendingActivityInteractions()
@@ -3706,14 +3803,74 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
     }
 
-    private fun replayWorkerProgressSnapshot(workInfo: WorkInfo) {
-        if (!replayWorkerProgressSnapshots) return
+    private suspend fun syncWorkerProgressFromCurrentSnapshot() {
+        val workerId = patcherWorkerId?.uuid ?: return
+        val workInfo = withContext(Dispatchers.IO) {
+            runCatching { workManager.getWorkInfoById(workerId).get() }.getOrNull()
+        } ?: currentWorkSource?.value ?: return
 
-        val snapshot = PatcherWorkerProgressState.fromWorkData(workInfo.progress) ?: return
-        if (snapshot.sequence <= lastReplayedWorkerProgressSequence) return
+        when (workInfo.state) {
+            WorkInfo.State.RUNNING,
+            WorkInfo.State.ENQUEUED,
+            WorkInfo.State.BLOCKED -> replayWorkerProgressSnapshot(workInfo, enabled = true)
+            else -> Unit
+        }
+    }
 
-        lastReplayedWorkerProgressSequence = snapshot.sequence
-        enqueueProgressEvent(snapshot.event, seedFromWorkerSnapshot = true)
+    private fun replayWorkerProgressSnapshot(workInfo: WorkInfo, enabled: Boolean) {
+        if (!enabled) return
+
+        val workerId = patcherWorkerId?.uuid
+        val persistedSnapshot = PatcherWorkerProgressState.fromWorkData(workInfo.progress)
+        val snapshot = when {
+            workerId == null -> persistedSnapshot
+            persistedSnapshot == null -> workerRepository.activeProgressSnapshot(workerId)
+            else -> {
+                val inMemorySnapshot = workerRepository.activeProgressSnapshot(workerId)
+                when {
+                    inMemorySnapshot == null -> persistedSnapshot
+                    isNewerWorkerSnapshot(inMemorySnapshot, persistedSnapshot) -> inMemorySnapshot
+                    else -> persistedSnapshot
+                }
+            }
+        } ?: return
+        enqueueWorkerProgressEvent(
+            generation = snapshot.generation,
+            sequence = snapshot.sequence,
+            event = snapshot.event,
+            notificationProgressCurrent = snapshot.notificationProgressCurrent,
+            notificationProgressMax = snapshot.notificationProgressMax,
+            seedFromWorkerSnapshot = true
+        )
+    }
+
+    private fun shouldApplyWorkerProgress(generation: Long, sequence: Long): Boolean = when {
+        generation > lastAppliedWorkerProgressGeneration -> true
+        generation < lastAppliedWorkerProgressGeneration -> false
+        else -> sequence > lastAppliedWorkerProgressSequence
+    }
+
+    private fun recordAppliedWorkerProgress(generation: Long, sequence: Long) {
+        lastAppliedWorkerProgressGeneration = generation
+        lastAppliedWorkerProgressSequence = sequence
+    }
+
+    private fun isNewerWorkerSnapshot(
+        candidate: app.urv.manager.patcher.worker.PatcherWorkerProgressSnapshot,
+        existing: app.urv.manager.patcher.worker.PatcherWorkerProgressSnapshot
+    ): Boolean = when {
+        candidate.generation > existing.generation -> true
+        candidate.generation < existing.generation -> false
+        else -> candidate.sequence > existing.sequence
+    }
+
+    private fun seedVisualProgressFromWorkerProgress(current: Int?, max: Int?) {
+        val safeCurrent = current ?: return
+        val safeMax = max?.takeIf { it > 0 } ?: return
+        val candidate = (safeCurrent.toFloat() / safeMax.toFloat()).coerceIn(0f, 1f)
+        if (candidate > progress) {
+            progress = candidate
+        }
     }
 
     private fun seedProgressStateFromWorkerSnapshot(event: ProgressEvent) {
