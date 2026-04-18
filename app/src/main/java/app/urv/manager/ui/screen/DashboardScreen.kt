@@ -156,6 +156,7 @@ import app.urv.manager.ui.component.CheckedFilterChip
 import app.urv.manager.ui.component.DownloadProgressBanner
 import app.urv.manager.ui.component.FullscreenDialog
 import app.urv.manager.ui.component.InterceptBackHandler
+import app.urv.manager.ui.component.LoadingIndicator
 import app.urv.manager.ui.component.NotificationCard
 import app.urv.manager.ui.component.ConfirmDialog
 import app.urv.manager.ui.component.ExportSavedApkFileNameDialog
@@ -2371,6 +2372,22 @@ fun DashboardScreen(
                         }
                     }
                 }
+            )
+        }
+    }
+
+    if (storageVm.storageSelectionInProgress) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.45f)),
+            contentAlignment = Alignment.Center
+        ) {
+            LoadingIndicator(
+                modifier = Modifier.size(56.dp),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.35f),
+                strokeWidth = 4.dp
             )
         }
     }

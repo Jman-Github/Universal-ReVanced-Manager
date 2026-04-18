@@ -8,6 +8,7 @@
 
 - Fixed the Export & Import settings flow by moving export actions before import, cleaning up wording and punctuation, correcting app count pluralization, and updating the manager version copy toast https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/418 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/425 https://github.com/ Jman-Github/Universal-ReVanced-Manager/issues/416 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/413 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/415
 - Fixed patcher progress resume/replay syncing with notifications, improved Write APK DEX substep restoration, and improved app icon/label fallback handling https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/419
+- Fixed the dashboard "Select from storage" flow briefly showing the wrong page while the selected APK is being loaded https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/421
 
 
 ## Build types
