@@ -181,6 +181,7 @@ import app.urv.manager.ui.viewmodel.InstalledAppsViewModel
 import app.urv.manager.data.room.apps.installed.InstalledApp
 import app.urv.manager.network.downloader.LoadedDownloaderPlugin
 import app.urv.manager.ui.viewmodel.AppSelectorViewModel
+import app.urv.manager.ui.viewmodel.BundleListViewModel
 import app.urv.manager.ui.model.InstalledAppAction
 import app.urv.manager.ui.viewmodel.InstallResult
 import app.urv.manager.ui.viewmodel.MountWarningAction
@@ -262,6 +263,7 @@ fun DashboardScreen(
     var selectedSourceCount by rememberSaveable { mutableIntStateOf(0) }
     var selectedSourcesHasEnabled by rememberSaveable { mutableStateOf(true) }
     val storageVm: AppSelectorViewModel = koinViewModel()
+    val bundleListViewModel: BundleListViewModel = koinViewModel()
     val fs = koinInject<Filesystem>()
     val prefs: PreferencesManager = koinInject()
     val savedAppsEnabled by prefs.enableSavedApps.getAsState()
@@ -383,9 +385,38 @@ fun DashboardScreen(
             pagerState.scrollToPage(targetIndex)
         }
     }
+
     var highlightBundleUid by rememberSaveable { mutableStateOf<Int?>(null) }
     val appsSelectionActive = installedAppsViewModel.selectedApps.isNotEmpty()
     val selectedAppCount = installedAppsViewModel.selectedApps.size
+    var suppressAppsSelectionTopBar by remember { mutableStateOf(false) }
+    var suppressBundlesSelectionTopBar by remember { mutableStateOf(false) }
+    var suppressProfilesSelectionTopBar by remember { mutableStateOf(false) }
+    fun clearSelectionForPage(page: DashboardPage) {
+        when (page) {
+            DashboardPage.DASHBOARD -> {
+                installedAppsViewModel.clearSelection()
+                showAppsOrderDialog = false
+                suppressAppsSelectionTopBar = false
+            }
+
+            DashboardPage.BUNDLES -> {
+                bundleListViewModel.handleEvent(BundleListViewModel.Event.CANCEL)
+                selectedSourceCount = 0
+                selectedSourcesHasEnabled = true
+                showBundleOrderDialog = false
+                suppressBundlesSelectionTopBar = false
+            }
+
+            DashboardPage.PROFILES -> {
+                patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
+                showProfilesOrderDialog = false
+                suppressProfilesSelectionTopBar = false
+            }
+
+            DashboardPage.TOOLS -> Unit
+        }
+    }
     var quickActionPackage by remember { mutableStateOf<String?>(null) }
     var pendingQuickAction by remember { mutableStateOf<InstalledAppAction?>(null) }
     var showQuickExportPicker by remember { mutableStateOf(false) }
@@ -409,6 +440,7 @@ fun DashboardScreen(
     LaunchedEffect(pagerState.settledPage, visibleTabs) {
         visibleTabs.getOrNull(pagerState.settledPage)?.let { page ->
             if (activeDashboardPage != page) {
+                clearSelectionForPage(activeDashboardPage)
                 activeDashboardPage = page
             }
         }
@@ -416,8 +448,32 @@ fun DashboardScreen(
 
     LaunchedEffect(visibleTabs) {
         if (activeDashboardPage !in visibleTabs) {
+            clearSelectionForPage(activeDashboardPage)
             activeDashboardPage = DashboardPage.DASHBOARD
             scrollToVisiblePage(DashboardPage.DASHBOARD, animated = false)
+        }
+    }
+
+    LaunchedEffect(uiPage) {
+        if (uiPage != DashboardPage.DASHBOARD && appsSelectionActive) {
+            suppressAppsSelectionTopBar = true
+        }
+        if (uiPage != DashboardPage.BUNDLES && bundlesSelectable) {
+            suppressBundlesSelectionTopBar = true
+        }
+        if (uiPage != DashboardPage.PROFILES && profilesSelectable) {
+            suppressProfilesSelectionTopBar = true
+        }
+    }
+
+    LaunchedEffect(pagerState.isScrollInProgress, currentPage, uiPage) {
+        if (!pagerState.isScrollInProgress && currentPage == uiPage) {
+            when (currentPage) {
+                DashboardPage.DASHBOARD -> suppressAppsSelectionTopBar = false
+                DashboardPage.BUNDLES -> suppressBundlesSelectionTopBar = false
+                DashboardPage.PROFILES -> suppressProfilesSelectionTopBar = false
+                DashboardPage.TOOLS -> Unit
+            }
         }
     }
 
@@ -919,21 +975,6 @@ fun DashboardScreen(
                     )
                 }
             }
-        }
-    }
-
-    LaunchedEffect(currentPage) {
-        if (currentPage != DashboardPage.DASHBOARD) {
-            installedAppsViewModel.clearSelection()
-            showAppsOrderDialog = false
-        }
-        if (currentPage != DashboardPage.BUNDLES) {
-            vm.cancelSourceSelection()
-            showBundleOrderDialog = false
-        }
-        if (currentPage != DashboardPage.PROFILES) {
-            patchProfilesViewModel.handleEvent(PatchProfilesViewModel.Event.CANCEL)
-            showProfilesOrderDialog = false
         }
     }
 
@@ -1668,7 +1709,9 @@ fun DashboardScreen(
     Scaffold(
         topBar = {
             when {
-                appsSelectionActive && uiPage == DashboardPage.DASHBOARD -> {
+                appsSelectionActive &&
+                    uiPage == DashboardPage.DASHBOARD &&
+                    !suppressAppsSelectionTopBar -> {
                     BundleTopBar(
                         title = pluralStringResource(
                             R.plurals.selected_apps_count,
@@ -1703,7 +1746,9 @@ fun DashboardScreen(
                     )
                 }
 
-                bundlesSelectable -> {
+                bundlesSelectable &&
+                    uiPage == DashboardPage.BUNDLES &&
+                    !suppressBundlesSelectionTopBar -> {
                     BundleTopBar(
                         title = pluralStringResource(
                             R.plurals.patches_selected_quantity,
@@ -1751,7 +1796,9 @@ fun DashboardScreen(
                     )
                 }
 
-                profilesSelectable -> {
+                profilesSelectable &&
+                    uiPage == DashboardPage.PROFILES &&
+                    !suppressProfilesSelectionTopBar -> {
                     BundleTopBar(
                         title = pluralStringResource(
                             R.plurals.patch_profiles_selected_quantity,
@@ -2095,7 +2142,14 @@ fun DashboardScreen(
                     )
                     HapticTab(
                         selected = selected,
-                        onClick = { composableScope.launch { scrollToVisiblePage(page, animated = true) } },
+                        onClick = {
+                            composableScope.launch {
+                                if (page != uiPage) {
+                                    clearSelectionForPage(uiPage)
+                                }
+                                scrollToVisiblePage(page, animated = true)
+                            }
+                        },
                         modifier = Modifier
                             .graphicsLayer {
                                 scaleX = tabScale
@@ -2338,6 +2392,7 @@ fun DashboardScreen(
 
                         DashboardPage.BUNDLES -> {
                             BundleListScreen(
+                                viewModel = bundleListViewModel,
                                 eventsFlow = vm.bundleListEventsFlow,
                                 setSelectedSourceCount = { selectedSourceCount = it },
                                 setSelectedSourceHasEnabled = { selectedSourcesHasEnabled = it },
