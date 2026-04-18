@@ -10,6 +10,7 @@
 - Fixed patcher progress resume/replay syncing with notifications, improved Write APK DEX substep restoration, and improved app icon/label fallback handling https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/419
 - Fixed the dashboard "Select from storage" flow briefly showing the wrong page while the selected APK is being loaded https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/421
 - Fixed dashboard selection toolbars and selection state not clearing cleanly when switching between Apps, Bundles, and Profiles tabs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/423 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/422
+- Fixed incorrect gesture-back preview behavior on screens that intercept back for in-app UI state changes instead of real navigation https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/280
 
 
 ## Build types
