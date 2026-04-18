@@ -1,5 +1,6 @@
 package app.urv.manager.ample.runtime
 
+import android.os.Build
 import app.revanced.patcher.patch.Option
 import app.revanced.patcher.patch.Patch
 import app.urv.manager.patcher.ProgressEvent
@@ -20,9 +21,11 @@ import app.urv.manager.patcher.util.MislabeledImageResourceSanitizer
 import java.io.File
 import java.io.OutputStream
 import java.io.PrintStream
+import java.security.MessageDigest
 import java.util.ArrayDeque
 import java.util.Collections
 import java.util.LinkedHashMap
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.logging.Handler
@@ -304,7 +307,7 @@ object AmpleRuntimeEntry {
                         val selectedAaptPath = aaptPath
                         val frameworkCacheDir = FrameworkCacheResolver.resolve(
                             baseFrameworkDir = frameworkDir,
-                            runtimeTag = "ample",
+                            runtimeTag = ampleFrameworkRuntimeTag(),
                             apkFile = patcherInput,
                             aaptPath = selectedAaptPath,
                             logger = logger
@@ -405,6 +408,15 @@ object AmpleRuntimeEntry {
         val patches: List<String>,
         val options: Map<*, *>,
     )
+
+    private fun ampleFrameworkRuntimeTag(): String {
+        val fingerprint = Build.FINGERPRINT.takeUnless { it.isNullOrBlank() } ?: "unknown"
+        val fingerprintHash = MessageDigest.getInstance("SHA-256")
+            .digest(fingerprint.toByteArray())
+            .joinToString("") { byte -> "%02x".format(Locale.ROOT, byte.toInt() and 0xff) }
+            .take(12)
+        return "ample_device${Build.VERSION.SDK_INT}_$fingerprintHash"
+    }
 
     private fun ProgressEvent.toMap(): Map<String, Any?> = when (this) {
         is ProgressEvent.Started -> mapOf(

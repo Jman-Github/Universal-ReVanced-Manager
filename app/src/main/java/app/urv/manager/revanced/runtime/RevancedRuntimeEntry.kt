@@ -1,5 +1,6 @@
 package app.urv.manager.revanced.runtime
 
+import android.os.Build
 import app.revanced.patcher.patch.Option
 import app.revanced.patcher.patch.Patch
 import app.urv.manager.patcher.ProgressEvent
@@ -20,9 +21,11 @@ import app.urv.manager.patcher.util.MislabeledImageResourceSanitizer
 import java.io.File
 import java.io.OutputStream
 import java.io.PrintStream
+import java.security.MessageDigest
 import java.util.ArrayDeque
 import java.util.Collections
 import java.util.LinkedHashMap
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.logging.Handler
@@ -306,7 +309,7 @@ object RevancedRuntimeEntry {
                         val selectedAaptPath = aaptPath
                         val frameworkCacheDir = FrameworkCacheResolver.resolve(
                             baseFrameworkDir = frameworkDir,
-                            runtimeTag = "revanced22",
+                            runtimeTag = revanced22FrameworkRuntimeTag(),
                             apkFile = patcherInput,
                             aaptPath = selectedAaptPath,
                             logger = logger
@@ -408,6 +411,15 @@ object RevancedRuntimeEntry {
         val patches: List<String>,
         val options: Map<*, *>,
     )
+
+    private fun revanced22FrameworkRuntimeTag(): String {
+        val fingerprint = Build.FINGERPRINT.takeUnless { it.isNullOrBlank() } ?: "unknown"
+        val fingerprintHash = MessageDigest.getInstance("SHA-256")
+            .digest(fingerprint.toByteArray())
+            .joinToString("") { byte -> "%02x".format(Locale.ROOT, byte.toInt() and 0xff) }
+            .take(12)
+        return "revanced22_device${Build.VERSION.SDK_INT}_$fingerprintHash"
+    }
 
     private fun ProgressEvent.toMap(): Map<String, Any?> = when (this) {
         is ProgressEvent.Started -> mapOf(

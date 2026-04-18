@@ -1,5 +1,6 @@
 package app.urv.manager.revanced.runtime
 
+import android.os.Build
 import app.revanced.patcher.patch.Option
 import app.revanced.patcher.patch.Patch
 import app.urv.manager.patcher.PatchList
@@ -20,6 +21,8 @@ import java.io.OutputStream
 import java.io.PrintStream
 import java.util.ArrayDeque
 import java.util.LinkedHashMap
+import java.security.MessageDigest
+import java.util.Locale
 import java.util.logging.Handler
 import java.util.logging.Level
 import java.util.logging.LogRecord
@@ -186,7 +189,7 @@ object RevancedRuntimeEntry {
                             val selectedAaptPath = aaptPath
                             val resolvedFrameworkDir = FrameworkCacheResolver.resolve(
                                 baseFrameworkDir = frameworkDir,
-                                runtimeTag = "revanced21",
+                                runtimeTag = revanced21FrameworkRuntimeTag(),
                                 apkFile = patcherInput,
                                 aaptPath = selectedAaptPath,
                                 logger = logger
@@ -288,6 +291,15 @@ object RevancedRuntimeEntry {
         val patches: List<String>,
         val options: Map<*, *>,
     )
+
+    private fun revanced21FrameworkRuntimeTag(): String {
+        val fingerprint = Build.FINGERPRINT.takeUnless { it.isNullOrBlank() } ?: "unknown"
+        val fingerprintHash = MessageDigest.getInstance("SHA-256")
+            .digest(fingerprint.toByteArray())
+            .joinToString("") { byte -> "%02x".format(Locale.ROOT, byte.toInt() and 0xff) }
+            .take(12)
+        return "revanced21_device${Build.VERSION.SDK_INT}_$fingerprintHash"
+    }
 
     private fun ProgressEvent.toMap(): Map<String, Any?> = when (this) {
         is ProgressEvent.Started -> mapOf(

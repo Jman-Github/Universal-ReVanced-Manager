@@ -351,7 +351,6 @@ android {
     packaging {
         resources.excludes.addAll(
             listOf(
-                "/prebuilt/**",
                 "META-INF/DEPENDENCIES",
                 "META-INF/**.version",
                 "DebugProbesKt.bin",

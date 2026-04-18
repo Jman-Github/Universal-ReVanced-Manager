@@ -1,5 +1,6 @@
 package app.urv.manager.patcher.revanced
 
+import android.os.Build
 import app.urv.manager.patcher.ProgressEvent
 import app.urv.manager.patcher.StepId
 import app.urv.manager.patcher.logger.Logger
@@ -31,6 +32,7 @@ import java.util.LinkedHashSet
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
@@ -194,16 +196,34 @@ class RevancedSession(
 
     private suspend fun executePatchesWithFrameworkRecovery(orderedPatches: RevancedPatchList): PatchesResult {
         ensureFrameworkCacheIsValid()
-        return executePatchesOnce(orderedPatches)
+        return try {
+            executePatchesOnce(orderedPatches)
+        } catch (error: Throwable) {
+            if (error is CancellationException || !isLikelyFrameworkDecodeFailure(error)) {
+                throw error
+            }
+
+            logger.warn(
+                "Framework decode failed, clearing framework cache and retrying once: " +
+                    "${error::class.java.simpleName}: ${error.message ?: "unknown error"}"
+            )
+            clearFrameworkCache("framework decode failure retry")
+            ensureFrameworkCacheIsValid()
+            executePatchesOnce(orderedPatches)
+        }
     }
 
     private fun ensureFrameworkCacheIsValid() {
         val frameworkApk = frameworkDirFile.resolve(FRAMEWORK_APK_NAME)
-        if (!frameworkApk.exists()) return
+        if (!frameworkApk.exists()) {
+            seedBundledFrameworkCache(frameworkApk)
+            return
+        }
 
         val issue = frameworkApkValidationIssue(frameworkApk) ?: return
         logger.warn("Invalid framework cache at ${frameworkApk.absolutePath}: $issue")
         clearFrameworkCache("preflight validation failed")
+        seedBundledFrameworkCache(frameworkApk)
     }
 
     private fun frameworkApkValidationIssue(file: File): String? {
@@ -241,6 +261,77 @@ class RevancedSession(
             logger.warn("Cleared framework cache ($reason) with $failedDeletes undeleted entr${if (failedDeletes == 1) "y" else "ies"}")
         }
     }
+
+    private fun seedBundledFrameworkCache(frameworkApk: File): Boolean {
+        if (hasEmbeddedPrebuiltFramework()) {
+            return false
+        }
+
+        val loader = javaClass.classLoader
+        if (loader == null) {
+            logger.warn("Could not seed framework cache because the runtime class loader is unavailable")
+            return false
+        }
+
+        for (sdk in bundledFrameworkSdkCandidates()) {
+            val resourcePath = "frameworks/android/android-$sdk.apk"
+            val input = loader.getResourceAsStream(resourcePath)
+                ?: javaClass.getResourceAsStream("/$resourcePath")
+                ?: continue
+
+            val seeded = runCatching {
+                frameworkApk.parentFile?.mkdirs()
+                input.use { bundled ->
+                    FileOutputStream(frameworkApk).use { output ->
+                        bundled.copyTo(output)
+                    }
+                }
+
+                val issue = frameworkApkValidationIssue(frameworkApk)
+                if (issue != null) {
+                    frameworkApk.delete()
+                    logger.warn("Bundled framework resource $resourcePath is invalid: $issue")
+                    false
+                } else {
+                    logger.info("Seeded framework cache from bundled resource: $resourcePath")
+                    true
+                }
+            }.getOrElse { error ->
+                frameworkApk.delete()
+                logger.warn(
+                    "Failed to seed framework cache from bundled resource $resourcePath: " +
+                        "${error::class.java.simpleName}: ${error.message ?: "unknown error"}"
+                )
+                false
+            }
+
+            if (seeded) {
+                return true
+            }
+        }
+
+        logger.warn("No bundled Android framework resource was found for SDK ${Build.VERSION.SDK_INT} or lower")
+        return false
+    }
+
+    private fun hasEmbeddedPrebuiltFramework(): Boolean =
+        javaClass.getResource("/prebuilt/android-framework.jar") != null ||
+            javaClass.classLoader?.getResource("prebuilt/android-framework.jar") != null
+
+    private fun bundledFrameworkSdkCandidates(): IntProgression {
+        val maxSdk = Build.VERSION.SDK_INT.coerceAtLeast(MIN_BUNDLED_FRAMEWORK_SDK)
+        return maxSdk downTo MIN_BUNDLED_FRAMEWORK_SDK
+    }
+
+    private fun isLikelyFrameworkDecodeFailure(error: Throwable): Boolean =
+        generateSequence(error) { it.cause }.any { cause ->
+            cause.stackTrace.any { frame ->
+                frame.className == "brut.androlib.res.Framework" ||
+                    frame.className.startsWith("brut.androlib.res.Framework$") ||
+                    frame.className.startsWith("brut.androlib.res.data.ResTable") ||
+                    frame.className.startsWith("brut.androlib.res.decoder.AXmlResourceParser")
+            }
+        }
 
     suspend fun run(
         output: File,
@@ -563,6 +654,7 @@ class RevancedSession(
     companion object {
         private const val FRAMEWORK_APK_NAME = "1.apk"
         private const val FRAMEWORK_RESOURCES_TABLE = "resources.arsc"
+        private const val MIN_BUNDLED_FRAMEWORK_SDK = 23
         private const val DECODED_SANITIZER_INTERVAL_MS = 200L
         private val zFileOptions = ZFileOptions().apply {
             setAlignmentRule(
