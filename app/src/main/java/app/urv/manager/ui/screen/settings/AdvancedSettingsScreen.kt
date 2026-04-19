@@ -185,6 +185,7 @@ import app.urv.manager.ui.component.settings.ExpressiveSettingsItem
 import app.urv.manager.ui.component.settings.ExpressiveSettingsSwitch
 import app.urv.manager.ui.component.settings.SettingsSearchHighlight
 import app.urv.manager.domain.installer.InstallerManager
+import app.urv.manager.patcher.runtime.morphe.MorpheBytecodeMode
 import app.urv.manager.ui.viewmodel.AdvancedSettingsViewModel
 import app.urv.manager.util.ExportNameFormatter
 import app.urv.manager.util.applyAppLanguage
@@ -880,6 +881,18 @@ fun AdvancedSettingsScreen(
             }
 
             if (mode == AdvancedSettingsMode.PATCHER) {
+            var showMorpheBytecodeModeDialog by rememberSaveable { mutableStateOf(false) }
+            val morpheBytecodeMode by viewModel.prefs.morpheBytecodeMode.getAsState()
+            if (showMorpheBytecodeModeDialog) {
+                MorpheBytecodeModeDialog(
+                    current = morpheBytecodeMode,
+                    onDismiss = { showMorpheBytecodeModeDialog = false },
+                    onSelect = { modeValue ->
+                        viewModel.setMorpheBytecodeMode(modeValue)
+                        showMorpheBytecodeModeDialog = false
+                    }
+                )
+            }
             GroupHeader(
                 stringResource(R.string.patching_engine_section),
                 icon = SettingsSectionIcons.PatchingEngine
@@ -1028,6 +1041,31 @@ fun AdvancedSettingsScreen(
                         headline = R.string.process_runtime_memory_aggressive,
                         description = R.string.process_runtime_memory_aggressive_description,
                         enabled = aggressiveControlEnabled
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.morphe_bytecode_mode,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsConfigurableItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(R.string.morphe_bytecode_mode),
+                        supportingContentSlot = {
+                            Text(
+                                text = stringResource(R.string.morphe_bytecode_mode_description),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        },
+                        secondaryActionLabel = stringResource(R.string.reset),
+                        onSecondaryAction = {
+                            viewModel.setMorpheBytecodeMode(viewModel.prefs.morpheBytecodeMode.default)
+                        },
+                        secondaryActionEnabled = morpheBytecodeMode != viewModel.prefs.morpheBytecodeMode.default,
+                        primaryActionLabel = stringResource(R.string.edit),
+                        onPrimaryAction = { showMorpheBytecodeModeDialog = true }
                     )
                 }
             }
@@ -3384,6 +3422,75 @@ private fun tokensEqual(a: InstallerManager.Token?, b: InstallerManager.Token?):
     a is InstallerManager.Token.Component && b is InstallerManager.Token.Component ->
         a.componentName == b.componentName
     else -> false
+}
+
+@Composable
+private fun MorpheBytecodeModeDialog(
+    current: MorpheBytecodeMode,
+    onDismiss: () -> Unit,
+    onSelect: (MorpheBytecodeMode) -> Unit
+) {
+    var selected by rememberSaveable(current) { mutableStateOf(current) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = { onSelect(selected) }) {
+                Text(stringResource(R.string.save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+        title = { Text(stringResource(R.string.morphe_bytecode_mode)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = stringResource(R.string.morphe_bytecode_mode_dialog_description),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                MorpheBytecodeMode.entries.forEachIndexed { index, option ->
+                    if (index > 0) {
+                        ExpressiveSettingsDivider(modifier = Modifier.padding(horizontal = 0.dp))
+                    }
+                    ListItem(
+                        modifier = Modifier.clickable { selected = option },
+                        colors = transparentListItemColors,
+                        headlineContent = {
+                            Text(stringResource(option.titleRes()))
+                        },
+                        supportingContent = {
+                            Text(
+                                text = stringResource(option.descriptionRes()),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        },
+                        leadingContent = {
+                            RadioButton(
+                                selected = selected == option,
+                                onClick = { selected = option }
+                            )
+                        }
+                    )
+                }
+            }
+        }
+    )
+}
+
+@StringRes
+private fun MorpheBytecodeMode.titleRes(): Int = when (this) {
+    MorpheBytecodeMode.FAST -> R.string.morphe_bytecode_mode_fast
+    MorpheBytecodeMode.FULL -> R.string.morphe_bytecode_mode_full
+}
+
+@StringRes
+private fun MorpheBytecodeMode.descriptionRes(): Int = when (this) {
+    MorpheBytecodeMode.FAST -> R.string.morphe_bytecode_mode_fast_description
+    MorpheBytecodeMode.FULL -> R.string.morphe_bytecode_mode_full_description
 }
 
 @Composable

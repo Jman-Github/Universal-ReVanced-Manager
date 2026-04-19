@@ -275,6 +275,7 @@ class MorpheProcessRuntime(
             val parameters = MorpheParameters(
                 aaptPath = aaptPath,
                 frameworkDir = frameworkPath,
+                bytecodeMode = prefs.morpheBytecodeMode.get().runtimeValue,
                 cacheDir = cacheDir,
                 packageName = packageName,
                 inputFile = inputFile,

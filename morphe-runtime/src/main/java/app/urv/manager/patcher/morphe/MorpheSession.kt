@@ -3,6 +3,7 @@ package app.urv.manager.patcher.morphe
 import android.os.Build
 import app.morphe.patcher.Patcher
 import app.morphe.patcher.PatcherConfig
+import app.morphe.patcher.dex.BytecodeMode
 import app.morphe.patcher.patch.Patch
 import app.morphe.patcher.patch.PatchResult
 import app.morphe.patcher.PatcherResult
@@ -47,6 +48,7 @@ class MorpheSession(
     cacheDir: String,
     frameworkDir: String,
     aaptPath: String,
+    private val bytecodeMode: BytecodeMode = BytecodeMode.STRIP_FAST,
     private val logger: Logger,
     private val input: File,
     private val onEvent: (ProgressEvent) -> Unit,
@@ -62,7 +64,8 @@ class MorpheSession(
             apkFile = input,
             temporaryFilesPath = tempDir,
             frameworkFileDirectory = frameworkDirFile.absolutePath,
-            aaptBinaryPath = resolvedAaptPath
+            aaptBinaryPath = resolvedAaptPath,
+            useBytecodeMode = bytecodeMode
         )
     )
 
@@ -324,17 +327,16 @@ class MorpheSession(
 
                 checkCancelled()
                 val patched = tempDir.resolve("result.apk")
+                emitWriteApkProgress("Copy base APK")
                 logger.info("Writing patched files...")
                 XmlSurrogateSanitizer.sanitize(tempDir.resolve("apk"), logger)
                 ensureMissingDrawables()
                 validateMissingResourceReferences()
                 checkCancelled()
                 val result = runCancellableBlockingIo(checkCancelled) { patcher.get() }
-                emitWriteApkProgress("Copying base APK")
                 runCancellableBlockingIo(checkCancelled) {
                     fastCopy(input, patched)
                 }
-                emitWriteApkProgress("Applying patched changes")
                 runCancellableBlockingIo(checkCancelled) {
                     applyResultToApk(patched, result)
                 }
@@ -376,15 +378,20 @@ class MorpheSession(
     private fun buildWriteApkSubSteps(
         includeStripNativeLibs: Boolean = false
     ): List<String> = buildList {
-        add("Copying base APK")
+        add("Copy base APK")
         add("Applying patched changes")
-        add("Compiling DEX files")
+        add(writeApkDexGroupTitle())
         add("Compiling modified resources")
         add("Writing output APK")
         add("Finalizing output")
         if (includeStripNativeLibs) {
             add("Stripping native libraries")
         }
+    }
+
+    private fun writeApkDexGroupTitle(): String = when (bytecodeMode) {
+        BytecodeMode.FULL -> "Compiling DEX files: FULL"
+        else -> "Compiling DEX files: FAST"
     }
 
     private fun applyResultToApk(apkFile: File, result: PatcherResult) {

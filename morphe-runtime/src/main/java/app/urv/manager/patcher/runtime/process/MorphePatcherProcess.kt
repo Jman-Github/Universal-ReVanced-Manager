@@ -7,6 +7,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.os.Looper
+import app.morphe.patcher.dex.BytecodeMode
 import app.universal.revanced.manager.morphe.runtime.BuildConfig
 import app.urv.manager.patcher.ProgressEvent
 import app.urv.manager.patcher.StepId
@@ -29,6 +30,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.io.OutputStream
 import java.io.PrintStream
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.logging.Handler
 import java.util.logging.Level
@@ -78,34 +80,29 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
 
     override fun start(parameters: MorpheParameters, events: IPatcherEvents) {
         var writeApkSubStepsReady = false
-        val seenDexCompiles = mutableSetOf<String>()
-        val seenResourceCompile = AtomicBoolean(false)
+        val seenWriteApkDetails = mutableSetOf<String>()
         fun safeEvent(event: ProgressEvent) {
             when (event.stepId) {
                 StepId.WriteAPK -> when (event) {
                     is ProgressEvent.Started -> {
                         writeApkSubStepsReady = !event.subSteps.isNullOrEmpty()
-                        seenDexCompiles.clear()
-                        seenResourceCompile.set(false)
+                        seenWriteApkDetails.clear()
                     }
                     is ProgressEvent.Progress -> {
                         if (!event.subSteps.isNullOrEmpty()) {
                             writeApkSubStepsReady = true
-                            seenDexCompiles.clear()
-                            seenResourceCompile.set(false)
+                            seenWriteApkDetails.clear()
                         }
                     }
                     is ProgressEvent.Completed,
                     is ProgressEvent.Failed -> {
                         writeApkSubStepsReady = false
-                        seenDexCompiles.clear()
-                        seenResourceCompile.set(false)
+                        seenWriteApkDetails.clear()
                     }
                 }
                 StepId.SignAPK -> if (event is ProgressEvent.Started) {
                     writeApkSubStepsReady = false
-                    seenDexCompiles.clear()
-                    seenResourceCompile.set(false)
+                    seenWriteApkDetails.clear()
                 }
                 else -> Unit
             }
@@ -139,11 +136,15 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
         exitRequested.set(false)
 
         runningJob = scope.launch {
-            val dexCompilePattern =
-                Regex("(Compiling|Compiled)\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
-            val dexWritePattern =
-                Regex("Write\\s+\\[[^\\]]+\\]\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
-            val dexAnyPattern = Regex("(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
+            val processingClassesPattern =
+                Regex("Processing\\s+(\\d+)\\s+classes\\s+in\\s+parallel", RegexOption.IGNORE_CASE)
+            val wroteDexFilesPattern =
+                Regex("Wrote\\s+(\\d+)\\s+dex\\s+files\\b", RegexOption.IGNORE_CASE)
+            val strippedDexPattern =
+                Regex(
+                    "Stripped\\s+\\d+\\s+class_def\\s+entries\\s+from\\s+(classes\\d*\\.dex)",
+                    RegexOption.IGNORE_CASE
+                )
             fun onEvent(event: ProgressEvent) {
                 safeEvent(event)
             }
@@ -152,29 +153,27 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
                 if (!writeApkSubStepsReady) return
                 val line = rawLine.trim()
                 if (line.isEmpty()) return
-                if (line.contains("Compiling modified resources", ignoreCase = true) ||
-                    line.contains("Compiling patched resources", ignoreCase = true)
-                ) {
-                    if (seenResourceCompile.compareAndSet(false, true)) {
-                        onEvent(
-                            ProgressEvent.Progress(
-                                stepId = StepId.WriteAPK,
-                                message = "Compiling modified resources"
-                            )
-                        )
+                val detail = when {
+                    line.contains("Writing patched files", ignoreCase = true) ->
+                        "Writing patched files..."
+                    line.contains("Compiling modified resources", ignoreCase = true) ||
+                        line.contains("Compiling patched resources", ignoreCase = true) ->
+                        "Compiling modified resources"
+                    processingClassesPattern.containsMatchIn(line) ->
+                        "Processing ${processingClassesPattern.find(line)?.groupValues?.get(1)} classes"
+                    wroteDexFilesPattern.containsMatchIn(line) ->
+                        "Wrote ${wroteDexFilesPattern.find(line)?.groupValues?.get(1)} dex files"
+                    strippedDexPattern.containsMatchIn(line) -> {
+                        val dexName = strippedDexPattern.find(line)?.groupValues?.get(1) ?: return
+                        "Modified $dexName"
                     }
-                    return
+                    else -> return
                 }
-                val match = dexCompilePattern.find(line)
-                    ?: dexWritePattern.find(line)
-                    ?: dexAnyPattern.find(line)
-                    ?: return
-                val dexName = match.groupValues.lastOrNull()?.takeIf { it.endsWith(".dex") } ?: return
-                if (!seenDexCompiles.add(dexName)) return
+                if (!seenWriteApkDetails.add(detail)) return
                 onEvent(
                     ProgressEvent.Progress(
                         stepId = StepId.WriteAPK,
-                        message = "Compiling $dexName"
+                        message = detail
                     )
                 )
             }
@@ -193,6 +192,9 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
 
             try {
                 val input = File(parameters.inputFile)
+                val bytecodeMode = runCatching {
+                    BytecodeMode.valueOf(parameters.bytecodeMode.uppercase(Locale.ROOT))
+                }.getOrDefault(BytecodeMode.STRIP_FAST)
                 suspend fun prepareInput() = SplitApkPreparer.prepareIfNeeded(
                     input,
                     File(parameters.cacheDir),
@@ -266,6 +268,7 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
                             cacheDir = parameters.cacheDir,
                             frameworkDir = frameworkDir,
                             aaptPath = selectedAaptPath,
+                            bytecodeMode = bytecodeMode,
                             logger = logger,
                             input = preparedInput.file,
                             onEvent = ::onEvent,

@@ -66,6 +66,7 @@ class MorpheBridgeRuntime(context: Context) : MorpheRuntime(context) {
             "outputFile" to outputFile,
             "stripNativeLibs" to stripNativeLibs,
             "skipUnneededSplits" to skipUnneededSplits,
+            "bytecodeMode" to prefs.morpheBytecodeMode.get().runtimeValue,
             "configurations" to configs
         )
 

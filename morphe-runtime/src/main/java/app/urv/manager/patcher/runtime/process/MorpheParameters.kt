@@ -9,6 +9,7 @@ data class MorpheParameters(
     val cacheDir: String,
     val aaptPath: String,
     val frameworkDir: String,
+    val bytecodeMode: String,
     val packageName: String,
     val inputFile: String,
     val outputFile: String,

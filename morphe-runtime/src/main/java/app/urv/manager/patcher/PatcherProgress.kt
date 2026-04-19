@@ -80,13 +80,19 @@ fun Exception.toRemoteError() = RemoteError(
     stackTrace = this.stackTraceToString(),
 )
 
+fun Throwable.toRemoteError() = RemoteError(
+    type = this::class.java.name,
+    message = this.message,
+    stackTrace = this.stackTraceToString(),
+)
+
 fun Throwable.toSafeRemoteError() = RemoteError(
     type = this::class.java.name,
     message = this.message ?: if (this is OutOfMemoryError) OOM_FAILURE_MESSAGE else null,
     stackTrace = this.toSafeStackTraceString(),
 )
 
-inline fun <T> runStep(
+suspend inline fun <T> runStep(
     stepId: StepId,
     onEvent: (ProgressEvent) -> Unit,
     checkCancelled: () -> Unit = {},

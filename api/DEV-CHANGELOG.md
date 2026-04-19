@@ -3,6 +3,9 @@
 
 # Features
 
+- Bumped Morphe Patcher to `1.4.1`
+- Added a Morphe bytecode processing mode setting https://github.com/MorpheApp/morphe-manager/pull/403
+
 
 # Bug fixes
 

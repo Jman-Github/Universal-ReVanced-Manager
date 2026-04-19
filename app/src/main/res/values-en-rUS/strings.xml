@@ -633,6 +633,13 @@ Patch profiles are not affected.</string>
     <string name="process_runtime_memory_limit_description">The max amount of memory that the separate patcher process can use (in megabytes). This applies on Android 11+ when process runtime is enabled.</string>
     <string name="process_runtime_memory_aggressive">Aggressive patcher memory limit</string>
     <string name="process_runtime_memory_aggressive_description">Use the highest memory limit allowed by your device for the experimental patcher</string>
+    <string name="morphe_bytecode_mode">Morphe bytecode processing mode</string>
+    <string name="morphe_bytecode_mode_description">Controls how the Morphe runtime processes bytecode during patching. Only applies to the Morphe runtime.</string>
+    <string name="morphe_bytecode_mode_dialog_description">Choose how Morphe processes DEX files when applying Morphe patches. This only affects the Morphe runtime.</string>
+    <string name="morphe_bytecode_mode_fast">Fast (Recommended)</string>
+    <string name="morphe_bytecode_mode_fast_description">Faster Morphe patching with lower memory use, but patched APKs can be larger.</string>
+    <string name="morphe_bytecode_mode_full">Full</string>
+    <string name="morphe_bytecode_mode_full_description">Uses the legacy full bytecode pipeline. Slower and more memory intensive, but useful if fast mode causes issues.</string>
     <string name="reset_to_recommended">Reset to recommended</string>
     <string name="reset_to_default">Reset to default</string>
     <string name="patcher_auto_collapse_steps">Auto-collapse completed patcher steps</string>

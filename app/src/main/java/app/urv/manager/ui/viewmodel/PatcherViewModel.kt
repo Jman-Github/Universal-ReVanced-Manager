@@ -159,6 +159,13 @@ class PatcherViewModel(
     private val selectionBundleType by lazy(LazyThreadSafetyMode.NONE) {
         runBlocking { patchBundleRepository.selectionBundleType(input.selectedPatches) }
     }
+    private val selectionMorpheBytecodeMode by lazy(LazyThreadSafetyMode.NONE) {
+        if (selectionBundleType == PatchBundleType.MORPHE) {
+            runBlocking { prefs.morpheBytecodeMode.get().runtimeValue }
+        } else {
+            null
+        }
+    }
 
     private var pendingExternalInstall: InstallerManager.InstallPlan.External? = null
     private var externalInstallBaseline: Pair<Long?, Long?>? = null
@@ -840,6 +847,15 @@ fun proceedAfterMissingPatchWarning() {
         Regex("(Compiling|Compiled)\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
     private val dexWritePattern =
         Regex("Write\\s+\\[[^\\]]+\\]\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
+    private val morpheProcessingClassesPattern =
+        Regex("Processing\\s+(\\d+)\\s+classes\\s+in\\s+parallel", RegexOption.IGNORE_CASE)
+    private val morpheWroteDexFilesPattern =
+        Regex("Wrote\\s+(\\d+)\\s+dex\\s+files\\b", RegexOption.IGNORE_CASE)
+    private val morpheStrippedDexPattern =
+        Regex(
+            "Stripped\\s+\\d+\\s+class_def\\s+entries\\s+from\\s+(classes\\d*\\.dex)",
+            RegexOption.IGNORE_CASE
+        )
     private fun parseMemoryLimitMb(raw: String?): Int? {
         val value = raw?.trim() ?: return null
         val match = Regex("""(\d+)\s*(?:m|mb|mib)?""", RegexOption.IGNORE_CASE)
@@ -1595,6 +1611,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             val aggressiveLimit: Boolean,
             val experimental: Boolean,
             val bundleType: String,
+            val morpheBytecodeMode: String?,
             val revancedPatcherVersion: String?,
             val stripNativeLibs: Boolean,
             val skipUnusedSplits: Boolean,
@@ -1607,6 +1624,11 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             val experimentalEnabled = prefs.useProcessRuntime.get()
             val bundleType = patchBundleRepository.selectionBundleType(input.selectedPatches)
             val bundle = bundleType?.name ?: "UNKNOWN"
+            val morpheBytecodeMode = if (bundleType == PatchBundleType.MORPHE) {
+                prefs.morpheBytecodeMode.get().runtimeValue
+            } else {
+                null
+            }
             val revancedPatcherVersion = when (bundleType) {
                 PatchBundleType.REVANCED ->
                     if (patchBundleRepository.selectionUsesRevancedPatcher22(input.selectedPatches)) {
@@ -1631,6 +1653,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 aggressive,
                 experimentalEnabled,
                 bundle,
+                morpheBytecodeMode,
                 revancedPatcherVersion,
                 stripNative,
                 skipSplits,
@@ -1642,6 +1665,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         val aggressiveLimit = prefsSnapshot.aggressiveLimit
         val experimental = prefsSnapshot.experimental
         val bundleType = prefsSnapshot.bundleType
+        val morpheBytecodeMode = prefsSnapshot.morpheBytecodeMode
         val revancedPatcherVersion = prefsSnapshot.revancedPatcherVersion
         val stripNativeLibs = prefsSnapshot.stripNativeLibs
         val skipUnusedSplits = prefsSnapshot.skipUnusedSplits
@@ -1713,6 +1737,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             appendLine("Requested memory limit: ${requestedLimit}MB")
             appendLine("Effective memory limit: ${effectiveLimit}MB")
             appendLine("Bundle type: $bundleType")
+            morpheBytecodeMode?.let {
+                appendLine("Morphe bytecode mode: $it")
+            }
             revancedPatcherVersion?.let {
                 appendLine("ReVanced Patcher version: $it")
             }
@@ -2944,18 +2971,18 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             .map { normalizeWriteApkTitle(StepId.WriteAPK, it) }
             .filter { it.isNotBlank() }
         val incomingDexTitles = incoming
-            .filter(::isDexCompileTitle)
+            .filter(::isWriteApkDexChildTitle)
             .distinctBy { it.lowercase() }
 
         val existingDexTitles = existing.orEmpty()
             .map { it.title }
-            .filter(::isDexCompileTitle)
+            .filter(::isWriteApkDexChildTitle)
             .distinctBy { it.lowercase() }
         val merged = incoming.toMutableList()
         if ((incomingDexTitles.isNotEmpty() || existingDexTitles.isNotEmpty()) &&
             merged.none(::isDexCompileGroupTitle)
         ) {
-            merged.add(writeApkDexInsertIndex(merged), WRITE_APK_DEX_GROUP_TITLE)
+            merged.add(writeApkDexInsertIndex(merged), currentWriteApkDexGroupTitle())
         }
         return merged.distinctBy { it.lowercase() }
     }
@@ -2994,7 +3021,12 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         val normalized = normalizeWriteApkTitle(stepId, splitNormalized)
         if (stepId == StepId.WriteAPK) {
             when {
-                isDexCompileTitle(normalized) -> {
+                normalized.equals("Writing patched files...", ignoreCase = true) -> {
+                    activateWriteApkFromWritingPatchedFiles(list)
+                    return
+                }
+
+                isWriteApkDexChildTitle(normalized) -> {
                     updateWriteApkDexChildSubStep(list, normalized)
                     return
                 }
@@ -3093,8 +3125,25 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private fun normalizeWriteApkTitle(stepId: StepId, title: String): String {
         if (stepId != StepId.WriteAPK) return title
+        if (isMorpheSelection()) {
+            when {
+                title.equals("Copying base APK", ignoreCase = true) -> return "Copy base APK"
+                title.equals("Compiling patched dex files", ignoreCase = true) ->
+                    return currentWriteApkDexGroupTitle()
+                dexCompilePattern.containsMatchIn(title) || dexWritePattern.containsMatchIn(title) ->
+                    return ""
+                morpheProcessingClassesPattern.containsMatchIn(title) ->
+                    return "Processing ${morpheProcessingClassesPattern.find(title)?.groupValues?.get(1)} classes"
+                morpheWroteDexFilesPattern.containsMatchIn(title) ->
+                    return "Wrote ${morpheWroteDexFilesPattern.find(title)?.groupValues?.get(1)} dex files"
+                morpheStrippedDexPattern.containsMatchIn(title) -> {
+                    val dexName = morpheStrippedDexPattern.find(title)?.groupValues?.get(1) ?: return title
+                    return "Modified $dexName"
+                }
+            }
+        }
         if (title.equals("Compiling patched dex files", ignoreCase = true)) {
-            return WRITE_APK_DEX_GROUP_TITLE
+            return currentWriteApkDexGroupTitle()
         }
         if (title.equals("Compiling patched resources", ignoreCase = true) ||
             title.equals("Compiled patched resources", ignoreCase = true)
@@ -3128,6 +3177,22 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         return suffix.startsWith("classes") && suffix.endsWith(".dex")
     }
 
+    private fun isMorpheWriteApkDexChildTitle(title: String): Boolean {
+        return title.startsWith("Processing ", ignoreCase = true) &&
+            title.endsWith(" classes", ignoreCase = true) ||
+            title.startsWith("Wrote ", ignoreCase = true) &&
+            title.contains(" dex files", ignoreCase = true) ||
+            title.startsWith("Modified classes", ignoreCase = true) &&
+            title.endsWith(".dex", ignoreCase = true)
+    }
+
+    private fun isWriteApkDexChildTitle(title: String): Boolean =
+        if (isMorpheSelection()) {
+            isMorpheWriteApkDexChildTitle(title)
+        } else {
+            isDexCompileTitle(title)
+        }
+
     private fun writeApkDexSortKey(name: String): Int {
         val base = name.removeSuffix(".dex")
         if (base.equals("classes", ignoreCase = true)) return 1
@@ -3137,14 +3202,26 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private fun isDexCompilePhaseTitle(title: String): Boolean =
         title.equals("Compiling patched dex files", ignoreCase = true) ||
-            title.equals(WRITE_APK_DEX_GROUP_TITLE, ignoreCase = true)
+            isDexCompileGroupTitle(title)
 
     private fun isDexCompileGroupTitle(title: String): Boolean =
-        title.equals(WRITE_APK_DEX_GROUP_TITLE, ignoreCase = true)
+        title.equals(WRITE_APK_DEX_GROUP_TITLE, ignoreCase = true) ||
+            title.startsWith("$WRITE_APK_DEX_GROUP_TITLE:", ignoreCase = true)
 
     private fun isResourceCompileTitle(title: String): Boolean =
         title.equals("Compiling modified resources", ignoreCase = true) ||
             title.equals("Compiling patched resources", ignoreCase = true)
+
+    private fun isMorpheSelection(): Boolean = selectionBundleType == PatchBundleType.MORPHE
+
+    private fun currentWriteApkDexGroupTitle(): String {
+        if (!isMorpheSelection()) return WRITE_APK_DEX_GROUP_TITLE
+        return if (selectionMorpheBytecodeMode.equals("FULL", ignoreCase = true)) {
+            "Compiling DEX files: FULL"
+        } else {
+            "Compiling DEX files: FAST"
+        }
+    }
 
     private fun resetDexCompileState() {
         dexSubStepsReady = false
@@ -3268,19 +3345,27 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             )
         }
         completeWriteApkPriorSteps(list, activeIndex)
+        if (isMorpheSelection()) {
+            promoteNextWriteApkSubStep(list, activeIndex)
+        }
     }
 
     private fun collapsePreparedWriteApkDexChildren(list: SnapshotStateList<StepDetail>) {
         val flatDexEntries = list
             .filter(::isPreparedWriteApkDexChild)
-            .sortedBy { writeApkDexSortKey(it.title.removePrefix("Compiling ").trim()) }
         if (flatDexEntries.isEmpty()) return
 
         val groupIndex = ensureWriteApkDexGroupIndex(list)
         val group = list[groupIndex]
         val mergedChildren = (group.children + flatDexEntries)
             .distinctBy { it.title.lowercase() }
-            .sortedBy { writeApkDexSortKey(it.title.removePrefix("Compiling ").trim()) }
+            .let { children ->
+                if (isMorpheSelection()) {
+                    children
+                } else {
+                    children.sortedBy { writeApkDexSortKey(it.title.removePrefix("Compiling ").trim()) }
+                }
+            }
 
         for (index in list.lastIndex downTo 0) {
             if (index == groupIndex) continue
@@ -3299,7 +3384,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
 
     private fun isPreparedWriteApkDexChild(detail: StepDetail): Boolean =
-        isDexCompileTitle(detail.title)
+        isWriteApkDexChildTitle(detail.title)
 
     private fun completePrepareSplitApkPriorSteps(
         list: SnapshotStateList<StepDetail>,
@@ -3340,7 +3425,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         list.add(
             insertIndex,
             StepDetail(
-                title = WRITE_APK_DEX_GROUP_TITLE,
+                title = currentWriteApkDexGroupTitle(),
                 state = State.WAITING,
                 expandable = true
             )
@@ -3368,10 +3453,42 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
     }
 
+    private fun activateWriteApkFromWritingPatchedFiles(list: SnapshotStateList<StepDetail>) {
+        val applyIndex = list.indexOfFirst {
+            it.title.equals("Applying patched changes", ignoreCase = true)
+        }
+        if (applyIndex != -1) {
+            completeWriteApkPriorSteps(list, applyIndex + 1)
+            val apply = list[applyIndex]
+            if (apply.state != State.COMPLETED) {
+                list[applyIndex] = apply.copy(state = State.COMPLETED, progress = null)
+            }
+            if (isMorpheSelection()) {
+                promoteNextWriteApkSubStep(list, applyIndex)
+            }
+            return
+        }
+
+        val copyIndex = list.indexOfFirst {
+            it.title.equals("Copy base APK", ignoreCase = true)
+        }
+        if (copyIndex != -1) {
+            completeWriteApkPriorSteps(list, copyIndex + 1)
+            if (isMorpheSelection()) {
+                promoteNextWriteApkSubStep(list, copyIndex)
+            }
+        }
+    }
+
     private fun updateWriteApkDexChildSubStep(
         list: SnapshotStateList<StepDetail>,
         normalizedTitle: String
     ) {
+        if (isMorpheSelection() && isMorpheWriteApkDexChildTitle(normalizedTitle)) {
+            updateMorpheWriteApkDexChildSubStep(list, normalizedTitle)
+            return
+        }
+
         val groupIndex = ensureWriteApkDexGroupIndex(list)
         val group = list[groupIndex]
         val initialChildren = group.children
@@ -3424,6 +3541,54 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         )
     }
 
+    private fun updateMorpheWriteApkDexChildSubStep(
+        list: SnapshotStateList<StepDetail>,
+        normalizedTitle: String
+    ) {
+        val groupIndex = ensureWriteApkDexGroupIndex(list)
+        val group = list[groupIndex]
+        val initialChildren = group.children
+        val initialRunningChildIndex = initialChildren.indexOfFirst { !it.skipped && it.state == State.RUNNING }
+        val initialExistingIndex = initialChildren.indexOfFirst { it.title.equals(normalizedTitle, ignoreCase = true) }
+
+        if (initialExistingIndex != -1 && initialChildren[initialExistingIndex].state == State.COMPLETED) {
+            reconcilePreparedWriteApkSubSteps(list)
+            return
+        }
+
+        if (initialRunningChildIndex != -1 &&
+            initialChildren[initialRunningChildIndex].title.equals(normalizedTitle, ignoreCase = true)
+        ) {
+            reconcilePreparedWriteApkSubSteps(list)
+            return
+        }
+
+        activateWriteApkDexGroup(list)
+        val activatedGroup = list[groupIndex]
+        val children = activatedGroup.children.toMutableList()
+        val runningChildIndex = children.indexOfFirst { !it.skipped && it.state == State.RUNNING }
+        val existingIndex = children.indexOfFirst { it.title.equals(normalizedTitle, ignoreCase = true) }
+
+        if (runningChildIndex != -1) {
+            val runningChild = children[runningChildIndex]
+            children[runningChildIndex] = runningChild.copy(state = State.COMPLETED, progress = null)
+        }
+
+        if (existingIndex != -1) {
+            val existingChild = children[existingIndex]
+            children[existingIndex] = existingChild.copy(state = State.RUNNING, progress = null)
+        } else {
+            children.add(StepDetail(title = normalizedTitle, state = State.RUNNING))
+        }
+
+        list[groupIndex] = list[groupIndex].copy(
+            state = State.RUNNING,
+            progress = null,
+            expandable = true,
+            children = children
+        )
+    }
+
     private fun completeWriteApkDexGroup(list: SnapshotStateList<StepDetail>) {
         val groupIndex = list.indexOfFirst(::matchesWriteApkDexGroup)
         if (groupIndex == -1) return
@@ -3444,6 +3609,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             expandable = true,
             children = children
         )
+        if (isMorpheSelection()) {
+            promoteNextWriteApkSubStep(list, groupIndex)
+        }
     }
 
     private fun activateResourceCompileStep(
@@ -3505,6 +3673,16 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             startWriteApkFromLogFallback()
         }
         if (!writeApkStepStarted) return
+        if (line.contains("Writing patched files", ignoreCase = true)) {
+            viewModelScope.launch {
+                if (shouldBufferWriteApkLogProgress()) {
+                    pendingDexCompileLines += "Writing patched files..."
+                    return@launch
+                }
+                updateSubStep(StepId.WriteAPK, "Writing patched files...", null)
+            }
+            return
+        }
         if (line.contains("Compiling modified resources", ignoreCase = true) ||
             line.contains("Compiling patched resources", ignoreCase = true)
         ) {
@@ -3529,6 +3707,43 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             }
             return
         }
+        morpheProcessingClassesPattern.find(line)?.let { match ->
+            val title = "Processing ${match.groupValues[1]} classes"
+            viewModelScope.launch {
+                if (shouldBufferWriteApkLogProgress()) {
+                    pendingDexCompileLines += title
+                    return@launch
+                }
+                if (!hasWriteApkApplyPhaseStarted()) return@launch
+                updateSubStep(StepId.WriteAPK, title, null)
+            }
+            return
+        }
+        morpheWroteDexFilesPattern.find(line)?.let { match ->
+            val title = "Wrote ${match.groupValues[1]} dex files"
+            viewModelScope.launch {
+                if (shouldBufferWriteApkLogProgress()) {
+                    pendingDexCompileLines += title
+                    return@launch
+                }
+                if (!hasWriteApkApplyPhaseStarted()) return@launch
+                updateSubStep(StepId.WriteAPK, title, null)
+            }
+            return
+        }
+        morpheStrippedDexPattern.find(line)?.let { match ->
+            val title = "Modified ${match.groupValues[1]}"
+            viewModelScope.launch {
+                if (shouldBufferWriteApkLogProgress()) {
+                    pendingDexCompileLines += title
+                    return@launch
+                }
+                if (!hasWriteApkApplyPhaseStarted()) return@launch
+                updateSubStep(StepId.WriteAPK, title, null)
+            }
+            return
+        }
+        if (isMorpheSelection()) return
         val match = dexCompilePattern.find(line) ?: dexWritePattern.find(line) ?: return
         val completionKeyword = match.groupValues.getOrNull(1)
         val dexName = match.groupValues.lastOrNull()?.takeIf { it.endsWith(".dex") } ?: return
@@ -3563,9 +3778,13 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         if (line.contains("Applying patched changes", ignoreCase = true)) return true
         if (line.contains("Compiled modified resources", ignoreCase = true)) return true
         if (line.contains("Compiled patched resources", ignoreCase = true)) return true
+        if (line.contains("Compiling modified resources", ignoreCase = true)) return true
         if (line.contains("Writing output APK", ignoreCase = true)) return true
         if (line.contains("Finalizing output", ignoreCase = true)) return true
         if (line.contains("Patched apk saved to", ignoreCase = true)) return true
+        if (morpheProcessingClassesPattern.containsMatchIn(line)) return true
+        if (morpheWroteDexFilesPattern.containsMatchIn(line)) return true
+        if (morpheStrippedDexPattern.containsMatchIn(line)) return true
         if (dexCompilePattern.containsMatchIn(line)) return true
         if (dexWritePattern.containsMatchIn(line)) return true
         return false

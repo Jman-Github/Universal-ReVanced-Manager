@@ -128,6 +128,8 @@ class PatcherWorker(
     private var lastWriteApkNotificationPhaseIndex: Int = -1
     @Volatile
     private var lastWriteApkNotificationDetail: String? = null
+    @Volatile
+    private var lastForegroundNotificationSequence: Long = Long.MIN_VALUE
     private val notificationStateLock = Any()
     private val workerProgressScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val workerProgressMutex = Mutex()
@@ -137,10 +139,25 @@ class PatcherWorker(
     private var lastPersistedProgressSequence: Long = Long.MIN_VALUE
     private val cachedExpandableSubSteps = ConcurrentHashMap<StepId, List<String>>()
     private val notificationExpandableSubSteps = ConcurrentHashMap<StepId, List<String>>()
+    @Volatile
+    private var activePatchBundleType: PatchBundleType? = null
+    @Volatile
+    private var activeMorpheDexGroupTitle: String? = null
+    @Volatile
+    private var activeMorpheDexChildTitle: String? = null
     private val dexCompilePattern =
         Regex("(Compiling|Compiled)\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
     private val dexWritePattern =
         Regex("Write\\s+\\[[^\\]]+\\]\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
+    private val morpheProcessingClassesPattern =
+        Regex("Processing\\s+(\\d+)\\s+classes\\s+in\\s+parallel", RegexOption.IGNORE_CASE)
+    private val morpheWroteDexFilesPattern =
+        Regex("Wrote\\s+(\\d+)\\s+dex\\s+files\\b", RegexOption.IGNORE_CASE)
+    private val morpheStrippedDexPattern =
+        Regex(
+            "Stripped\\s+\\d+\\s+class_def\\s+entries\\s+from\\s+(classes\\d*\\.dex)",
+            RegexOption.IGNORE_CASE
+        )
     private val notificationManager by lazy {
         applicationContext.getSystemService(NotificationManager::class.java)
     }
@@ -217,7 +234,59 @@ class PatcherWorker(
     private fun normalizeNotificationDetail(stepId: StepId?, message: String?): String? {
         val detail = message?.takeIf { it.isNotBlank() } ?: return null
         if (stepId != StepId.WriteAPK) return detail
-        return detail.trim()
+        return normalizeWriteApkNotificationDisplayDetail(detail.trim())
+    }
+
+    private fun normalizeWriteApkNotificationDisplayDetail(detail: String): String? {
+        val trimmed = detail.trim()
+        if (!isActiveMorpheWriteApkUi()) return trimmed
+
+        val normalized = when {
+            trimmed.equals("Copying base APK", ignoreCase = true) -> "Copy base APK"
+            trimmed.equals("Copy base APK", ignoreCase = true) -> "Copy base APK"
+            trimmed.equals("Applying patched changes", ignoreCase = true) -> "Applying patched changes"
+            trimmed.contains("Writing patched files", ignoreCase = true) -> currentWriteApkNotificationDexDisplayDetail()
+            trimmed.equals("Compiling patched dex files", ignoreCase = true) ||
+                trimmed.startsWith("Compiling patched dex files (mode:", ignoreCase = true) ->
+                currentWriteApkNotificationDexDisplayDetail()
+            trimmed.equals("Compiling modified resources", ignoreCase = true) ||
+                trimmed.equals("Compiled modified resources", ignoreCase = true) ||
+                trimmed.equals("Compiling patched resources", ignoreCase = true) ||
+                trimmed.equals("Compiled patched resources", ignoreCase = true) ->
+                "Compiling modified resources"
+            trimmed.equals("Writing output APK", ignoreCase = true) ||
+                trimmed.contains("Patched apk saved to", ignoreCase = true) ->
+                "Writing output APK"
+            trimmed.equals("Finalizing output", ignoreCase = true) -> "Finalizing output"
+            trimmed.equals("Stripping native libraries", ignoreCase = true) -> "Stripping native libraries"
+            isWriteApkDexNotificationTitle(trimmed) ->
+                currentWriteApkNotificationDexDisplayDetail(trimmed)
+            morpheProcessingClassesPattern.containsMatchIn(trimmed) ->
+                currentWriteApkNotificationDexDisplayDetail(
+                    "Processing ${morpheProcessingClassesPattern.find(trimmed)?.groupValues?.get(1)} classes"
+                )
+            morpheWroteDexFilesPattern.containsMatchIn(trimmed) ->
+                currentWriteApkNotificationDexDisplayDetail(
+                    "Wrote ${morpheWroteDexFilesPattern.find(trimmed)?.groupValues?.get(1)} dex files"
+                )
+            morpheStrippedDexPattern.containsMatchIn(trimmed) ->
+                currentWriteApkNotificationDexDisplayDetail(
+                    "Modified ${morpheStrippedDexPattern.find(trimmed)?.groupValues?.get(1)}"
+                )
+            dexCompilePattern.containsMatchIn(trimmed) || dexWritePattern.containsMatchIn(trimmed) -> null
+            else -> trimmed
+        }
+
+        val lastDetail = lastWriteApkNotificationDetail ?: return normalized
+        val normalizedPhase = normalized
+            ?.let(::normalizeWriteApkNotificationProgressDetail)
+            ?.let(::writeApkNotificationPhaseIndex)
+            ?: -1
+        return if (normalizedPhase != -1 && normalizedPhase < lastWriteApkNotificationPhaseIndex) {
+            lastDetail
+        } else {
+            normalized
+        }
     }
 
     private fun notificationStepTitle(step: StepId, totalPatchCount: Int): String = when (step) {
@@ -372,9 +441,13 @@ class PatcherWorker(
             detail == null -> 0.5f
             detail.equals("Preparing output APK", ignoreCase = true) -> 0.05f
             detail.equals("Copying base APK", ignoreCase = true) -> 0.15f
+            detail.equals("Copy base APK", ignoreCase = true) -> 0.15f
             detail.equals("Applying patched changes", ignoreCase = true) -> 0.28f
             detail.equals("Compiling patched dex files", ignoreCase = true) -> 0.4f
+            detail.equals(currentWriteApkNotificationDexGroupTitle(), ignoreCase = true) -> 0.4f
+            detail.startsWith("${currentWriteApkNotificationDexGroupTitle()}:", ignoreCase = true) -> 0.4f
             detail.equals("Compiling modified resources", ignoreCase = true) -> 0.65f
+            isWriteApkDexNotificationTitle(detail) -> 0.4f
             detail.startsWith("Compiling ", ignoreCase = true) -> 0.4f
             detail.startsWith("Compiled ", ignoreCase = true) -> 0.4f
             detail.equals("Writing output APK", ignoreCase = true) -> 0.82f
@@ -431,9 +504,19 @@ class PatcherWorker(
         return true
     }
 
-    private fun updateForegroundNotification(event: ProgressEvent?, totalPatchCount: Int) {
+    private fun updateForegroundNotification(
+        event: ProgressEvent?,
+        totalPatchCount: Int,
+        sequence: Long? = null
+    ) {
         if (shouldSkipForegroundUpdates()) return
         synchronized(notificationStateLock) {
+            if (sequence != null && sequence < lastForegroundNotificationSequence) {
+                return
+            }
+            if (sequence != null) {
+                lastForegroundNotificationSequence = sequence
+            }
             val notificationEvent = normalizeNotificationEvent(event)
             val notification = createNotification(notificationEvent, totalPatchCount)
             try {
@@ -504,6 +587,7 @@ class PatcherWorker(
         event: ProgressEvent.Progress
     ): ProgressEvent.Progress {
         if (event.stepId != StepId.WriteAPK) return event
+        syncMorpheDexNotificationChild(event.message)
         val detail = normalizeNotificationDetail(event.stepId, event.message)
             ?.trim()
             ?.let(::normalizeWriteApkNotificationProgressDetail)
@@ -530,6 +614,7 @@ class PatcherWorker(
     private fun resetWriteApkNotificationPhase() {
         lastWriteApkNotificationPhaseIndex = -1
         lastWriteApkNotificationDetail = null
+        activeMorpheDexChildTitle = null
     }
 
     private fun resetNotificationProgressTracking() {
@@ -541,6 +626,7 @@ class PatcherWorker(
     private fun resetNotificationProgressTrackingLocked() {
         lastNotificationProgressCurrent = 0
         notificationSplitPreparationSeen = false
+        lastForegroundNotificationSequence = Long.MIN_VALUE
         resetWriteApkNotificationPhase()
     }
 
@@ -554,10 +640,14 @@ class PatcherWorker(
 
     private fun writeApkNotificationPhaseIndex(detail: String): Int = when {
         detail.equals("Preparing output APK", ignoreCase = true) -> 0
-        detail.equals("Copying base APK", ignoreCase = true) -> 1
+        detail.equals("Copying base APK", ignoreCase = true) ||
+            detail.equals("Copy base APK", ignoreCase = true) -> 1
         detail.equals("Applying patched changes", ignoreCase = true) -> 2
-        detail.equals("Compiling patched dex files", ignoreCase = true) -> 3
+        detail.equals("Compiling patched dex files", ignoreCase = true) ||
+            detail.equals(currentWriteApkNotificationDexGroupTitle(), ignoreCase = true) ||
+            detail.startsWith("${currentWriteApkNotificationDexGroupTitle()}:", ignoreCase = true) -> 3
         detail.equals("Compiling modified resources", ignoreCase = true) -> 4
+        isWriteApkDexNotificationTitle(detail) -> 3
         detail.startsWith("Compiling ", ignoreCase = true) -> 3
         detail.startsWith("Compiled ", ignoreCase = true) -> 3
         detail.equals("Writing output APK", ignoreCase = true) -> 5
@@ -585,9 +675,9 @@ class PatcherWorker(
         if (lastIsDexChild && !nextIsDexChild) return true
         if (!lastIsDexChild || !nextIsDexChild) return false
 
-        val lastDexName = lastDetail.removePrefix("Compiling ").trim()
-        val nextDexName = detail.removePrefix("Compiling ").trim()
-        return writeApkDexSortKey(nextDexName) < writeApkDexSortKey(lastDexName)
+        val lastDexSortKey = notificationDexDetailSortKey(lastDetail) ?: return false
+        val nextDexSortKey = notificationDexDetailSortKey(detail) ?: return false
+        return nextDexSortKey < lastDexSortKey
     }
 
     private fun clearForegroundNotification() {
@@ -693,14 +783,16 @@ class PatcherWorker(
                     notificationExpandableSubSteps.remove(event.stepId)
                     if (!event.subSteps.isNullOrEmpty()) {
                         cachedExpandableSubSteps[event.stepId] = event.subSteps
-                        notificationExpandableSubSteps[event.stepId] = event.subSteps
+                        notificationExpandableSubSteps[event.stepId] =
+                            normalizeNotificationExpandableSubSteps(event.stepId, event.subSteps)
                     }
                 }
             }
             is ProgressEvent.Progress -> {
                 if (isExpandableStep(event.stepId) && !event.subSteps.isNullOrEmpty()) {
                     cachedExpandableSubSteps[event.stepId] = event.subSteps
-                    notificationExpandableSubSteps[event.stepId] = event.subSteps
+                    notificationExpandableSubSteps[event.stepId] =
+                        normalizeNotificationExpandableSubSteps(event.stepId, event.subSteps)
                 }
             }
             is ProgressEvent.Completed,
@@ -722,10 +814,42 @@ class PatcherWorker(
         val event = buildWriteApkLogEvent(message) ?: return
         val liveSequence = progressSequence.incrementAndGet()
         forwardWriteApkLogProgressForUi(liveSequence, event, totalPatchCount, onEvent)
-        val notificationEvent = normalizeWriteApkNotificationEvent(event)
-        updateForegroundNotification(notificationEvent, totalPatchCount)
+        val notificationEvent = notificationDisplayEventForWriteApkLog(event)
+        updateForegroundNotification(notificationEvent, totalPatchCount, sequence = liveSequence)
         val snapshotSequence = progressSequence.incrementAndGet()
         persistWriteApkLogProgressSnapshot(snapshotSequence, event, totalPatchCount)
+    }
+
+    private fun notificationDisplayEventForWriteApkLog(
+        event: ProgressEvent.Progress
+    ): ProgressEvent.Progress {
+        if (event.stepId != StepId.WriteAPK || !isActiveMorpheWriteApkUi()) {
+            return normalizeWriteApkNotificationEvent(event)
+        }
+
+        syncMorpheDexNotificationChild(event.message)
+        val normalizedDetail = normalizeNotificationDetail(event.stepId, event.message)
+        val normalizedPhaseIndex = normalizedDetail
+            ?.trim()
+            ?.let(::normalizeWriteApkNotificationProgressDetail)
+            ?.let(::writeApkNotificationPhaseIndex)
+            ?: -1
+
+        val displayDetail = when {
+            normalizedPhaseIndex >= 4 ->
+                normalizedDetail ?: lastWriteApkNotificationDetail ?: "Compiling modified resources"
+            lastWriteApkNotificationPhaseIndex >= 5 ->
+                lastWriteApkNotificationDetail ?: "Writing output APK"
+            lastWriteApkNotificationPhaseIndex == 4 ->
+                lastWriteApkNotificationDetail ?: "Compiling modified resources"
+            else ->
+                currentWriteApkNotificationDexDisplayDetail()
+        }
+
+        return event.copy(
+            message = displayDetail,
+            subSteps = null
+        )
     }
 
     private fun normalizeWriteApkNotificationEvent(
@@ -755,6 +879,16 @@ class PatcherWorker(
         }.onFailure { error ->
             Log.d(tag, "Failed to forward write APK log progress to UI", error)
         }
+    }
+
+    private fun normalizeNotificationExpandableSubSteps(
+        stepId: StepId,
+        subSteps: List<String>
+    ): List<String> {
+        if (stepId != StepId.WriteAPK || !isActiveMorpheWriteApkUi()) return subSteps
+        return subSteps
+            .mapNotNull { normalizeWriteApkNotificationCacheTitle(it).takeIf(String::isNotBlank) }
+            .distinctBy { it.lowercase() }
     }
 
     private fun normalizeEarlyWriteApkUiEvent(event: ProgressEvent.Progress): ProgressEvent.Progress {
@@ -814,31 +948,58 @@ class PatcherWorker(
 
     private fun buildWriteApkLogEvent(rawMessage: String): ProgressEvent.Progress? {
         val message = rawMessage.trim()
-        val rawDetail = when {
-            message.contains("Writing patched files", ignoreCase = true) ->
-                "Applying patched changes"
-            message.contains("Compiling modified resources", ignoreCase = true) ||
-                message.contains("Compiling patched resources", ignoreCase = true) ||
-                message.contains("Compiled modified resources", ignoreCase = true) ||
-                message.contains("Compiled patched resources", ignoreCase = true) ->
-                "Compiling modified resources"
-            message.contains("Writing output APK", ignoreCase = true) ->
-                "Writing output APK"
-            message.contains("Finalizing output", ignoreCase = true) ->
-                "Finalizing output"
-            message.contains("Patched apk saved to", ignoreCase = true) ->
-                "Writing output APK"
-            isDexCompilePhaseTitle(message) -> message
-            else -> {
-                val match = dexCompilePattern.find(message) ?: dexWritePattern.find(message)
-                val dexName =
-                    match?.groupValues?.lastOrNull()?.takeIf { it.endsWith(".dex", ignoreCase = true) }
-                        ?: return null
-                val completionKeyword = match.groupValues.getOrNull(1)
-                if (completionKeyword.equals("Compiled", ignoreCase = true)) {
-                    "Compiled $dexName"
-                } else {
-                    "Compiling $dexName"
+        val rawDetail = if (isActiveMorpheWriteApkUi()) {
+            when {
+                message.contains("Writing patched files", ignoreCase = true) ->
+                    "Writing patched files..."
+                message.contains("Compiling modified resources", ignoreCase = true) ||
+                    message.contains("Compiling patched resources", ignoreCase = true) ||
+                    message.contains("Compiled modified resources", ignoreCase = true) ||
+                    message.contains("Compiled patched resources", ignoreCase = true) ->
+                    "Compiling modified resources"
+                message.contains("Writing output APK", ignoreCase = true) ->
+                    "Writing output APK"
+                message.contains("Finalizing output", ignoreCase = true) ->
+                    "Finalizing output"
+                message.contains("Patched apk saved to", ignoreCase = true) ->
+                    "Writing output APK"
+                morpheProcessingClassesPattern.containsMatchIn(message) ->
+                    "Processing ${morpheProcessingClassesPattern.find(message)?.groupValues?.get(1)} classes"
+                morpheWroteDexFilesPattern.containsMatchIn(message) ->
+                    "Wrote ${morpheWroteDexFilesPattern.find(message)?.groupValues?.get(1)} dex files"
+                morpheStrippedDexPattern.containsMatchIn(message) -> {
+                    val dexName = morpheStrippedDexPattern.find(message)?.groupValues?.get(1) ?: return null
+                    "Modified $dexName"
+                }
+                else -> return null
+            }
+        } else {
+            when {
+                message.contains("Writing patched files", ignoreCase = true) ->
+                    "Applying patched changes"
+                message.contains("Compiling modified resources", ignoreCase = true) ||
+                    message.contains("Compiling patched resources", ignoreCase = true) ||
+                    message.contains("Compiled modified resources", ignoreCase = true) ||
+                    message.contains("Compiled patched resources", ignoreCase = true) ->
+                    "Compiling modified resources"
+                message.contains("Writing output APK", ignoreCase = true) ->
+                    "Writing output APK"
+                message.contains("Finalizing output", ignoreCase = true) ->
+                    "Finalizing output"
+                message.contains("Patched apk saved to", ignoreCase = true) ->
+                    "Writing output APK"
+                isDexCompilePhaseTitle(message) -> message
+                else -> {
+                    val match = dexCompilePattern.find(message) ?: dexWritePattern.find(message)
+                    val dexName =
+                        match?.groupValues?.lastOrNull()?.takeIf { it.endsWith(".dex", ignoreCase = true) }
+                            ?: return null
+                    val completionKeyword = match.groupValues.getOrNull(1)
+                    if (completionKeyword.equals("Compiled", ignoreCase = true)) {
+                        "Compiled $dexName"
+                    } else {
+                        "Compiling $dexName"
+                    }
                 }
             }
         }
@@ -876,13 +1037,63 @@ class PatcherWorker(
 
     private fun normalizeWriteApkNotificationCacheTitle(detail: String): String {
         val trimmed = detail.trim()
+        if (isActiveMorpheWriteApkUi() && trimmed.equals("Writing patched files...", ignoreCase = true)) {
+            return ""
+        }
+        if (isActiveMorpheWriteApkUi() &&
+            trimmed.startsWith("Compiling patched dex files (mode:", ignoreCase = true)
+        ) {
+            return currentWriteApkNotificationDexGroupTitle()
+        }
+        if (isActiveMorpheWriteApkUi() && trimmed.equals("Copying base APK", ignoreCase = true)) {
+            return "Copy base APK"
+        }
+        if (isActiveMorpheWriteApkUi() &&
+            (dexCompilePattern.containsMatchIn(trimmed) || dexWritePattern.containsMatchIn(trimmed))
+        ) {
+            return ""
+        }
         if (trimmed.startsWith("Compiled ", ignoreCase = true)) {
             return "Compiling ${trimmed.removePrefix("Compiled ").trim()}"
         }
         return trimmed
     }
 
+    private fun syncMorpheDexNotificationChild(detail: String?) {
+        if (!isActiveMorpheWriteApkUi()) return
+        val trimmed = detail?.trim().orEmpty()
+        when {
+            trimmed.isEmpty() -> Unit
+            trimmed.equals("Compiling modified resources", ignoreCase = true) ||
+                trimmed.equals("Compiled modified resources", ignoreCase = true) ||
+                trimmed.equals("Compiling patched resources", ignoreCase = true) ||
+                trimmed.equals("Compiled patched resources", ignoreCase = true) ||
+                trimmed.equals("Writing output APK", ignoreCase = true) ||
+                trimmed.contains("Patched apk saved to", ignoreCase = true) ||
+                trimmed.equals("Finalizing output", ignoreCase = true) ||
+                trimmed.equals("Stripping native libraries", ignoreCase = true) -> {
+                activeMorpheDexChildTitle = null
+            }
+            isWriteApkDexNotificationTitle(trimmed) -> {
+                activeMorpheDexChildTitle = trimmed
+            }
+        }
+    }
+
+    private fun currentWriteApkNotificationDexDisplayDetail(activeChild: String? = activeMorpheDexChildTitle): String {
+        return activeChild?.trim().takeUnless { it.isNullOrBlank() }
+            ?: currentWriteApkNotificationDexGroupTitle()
+    }
+
     private fun isWriteApkDexNotificationTitle(title: String): Boolean {
+        if (isActiveMorpheWriteApkUi()) {
+            return title.startsWith("Processing ", ignoreCase = true) &&
+                title.endsWith(" classes", ignoreCase = true) ||
+                title.startsWith("Wrote ", ignoreCase = true) &&
+                title.contains(" dex files", ignoreCase = true) ||
+                title.startsWith("Modified classes", ignoreCase = true) &&
+                title.endsWith(".dex", ignoreCase = true)
+        }
         if (!title.startsWith("Compiling ", ignoreCase = true)) return false
         return title.removePrefix("Compiling ").trim().endsWith(".dex", ignoreCase = true)
     }
@@ -892,6 +1103,22 @@ class PatcherWorker(
         title: String
     ) {
         if (subSteps.any { it.equals(title, ignoreCase = true) }) return
+
+        if (isActiveMorpheWriteApkUi()) {
+            val dexGroupTitle = currentWriteApkNotificationDexGroupTitle()
+            if (subSteps.none { it.equals(dexGroupTitle, ignoreCase = true) }) {
+                ensureWriteApkPhaseNotificationTitle(subSteps, dexGroupTitle)
+            }
+            val resourceIndex = subSteps.indexOfFirst {
+                it.equals("Compiling modified resources", ignoreCase = true)
+            }.takeIf { it != -1 }
+                ?: subSteps.indexOfFirst {
+                    it.equals("Writing output APK", ignoreCase = true)
+                }.takeIf { it != -1 }
+                ?: subSteps.size
+            subSteps.add(resourceIndex, title)
+            return
+        }
 
         val resourceIndex = subSteps.indexOfFirst {
             it.equals("Compiling modified resources", ignoreCase = true)
@@ -919,15 +1146,27 @@ class PatcherWorker(
     ) {
         if (subSteps.any { it.equals(title, ignoreCase = true) }) return
 
-        val phaseOrder = listOf(
-            "Copying base APK",
-            "Applying patched changes",
-            "Compiling patched dex files",
-            "Compiling modified resources",
-            "Writing output APK",
-            "Finalizing output",
-            "Stripping native libraries"
-        )
+        val phaseOrder = if (isActiveMorpheWriteApkUi()) {
+            listOf(
+                "Copy base APK",
+                "Applying patched changes",
+                currentWriteApkNotificationDexGroupTitle(),
+                "Compiling modified resources",
+                "Writing output APK",
+                "Finalizing output",
+                "Stripping native libraries"
+            )
+        } else {
+            listOf(
+                "Copying base APK",
+                "Applying patched changes",
+                "Compiling patched dex files",
+                "Compiling modified resources",
+                "Writing output APK",
+                "Finalizing output",
+                "Stripping native libraries"
+            )
+        }
         val targetOrder = phaseOrder.indexOfFirst { it.equals(title, ignoreCase = true) }
         if (targetOrder == -1) {
             subSteps += title
@@ -941,19 +1180,66 @@ class PatcherWorker(
         subSteps.add(insertIndex, title)
     }
 
-    private fun defaultWriteApkNotificationSubSteps(): List<String> = listOf(
-        "Copying base APK",
-        "Applying patched changes",
-        "Compiling modified resources",
-        "Writing output APK",
-        "Finalizing output"
-    )
+    private fun defaultWriteApkNotificationSubSteps(): List<String> {
+        return if (isActiveMorpheWriteApkUi()) {
+            listOf(
+                "Copy base APK",
+                "Applying patched changes",
+                currentWriteApkNotificationDexGroupTitle(),
+                "Compiling modified resources",
+                "Writing output APK",
+                "Finalizing output"
+            )
+        } else {
+            listOf(
+                "Copying base APK",
+                "Applying patched changes",
+                "Compiling modified resources",
+                "Writing output APK",
+                "Finalizing output"
+            )
+        }
+    }
+
+    private fun isActiveMorpheWriteApkUi(): Boolean = activePatchBundleType == PatchBundleType.MORPHE
+
+    private fun currentWriteApkNotificationDexGroupTitle(): String =
+        if (isActiveMorpheWriteApkUi()) {
+            activeMorpheDexGroupTitle ?: "Compiling DEX files: FAST"
+        } else {
+            "Compiling patched dex files"
+        }
 
     private fun writeApkDexSortKey(name: String): Int {
         val base = name.removeSuffix(".dex")
         if (base == "classes") return 1
         val suffix = base.removePrefix("classes")
         return suffix.toIntOrNull() ?: Int.MAX_VALUE
+    }
+
+    private fun notificationDexDetailSortKey(detail: String): Int? {
+        val trimmed = detail.trim()
+        if (isActiveMorpheWriteApkUi()) {
+            return when {
+                trimmed.startsWith("Processing ", ignoreCase = true) &&
+                    trimmed.endsWith(" classes", ignoreCase = true) -> 0
+                morpheWroteDexFilesPattern.matches(trimmed) -> 1
+                morpheStrippedDexPattern.matches(trimmed) -> {
+                    val dexName = morpheStrippedDexPattern.find(trimmed)?.groupValues?.get(1) ?: return null
+                    100 + writeApkDexSortKey(dexName)
+                }
+                trimmed.startsWith("Modified classes", ignoreCase = true) &&
+                    trimmed.endsWith(".dex", ignoreCase = true) -> {
+                    val dexName = trimmed.removePrefix("Modified ").trim()
+                    100 + writeApkDexSortKey(dexName)
+                }
+                else -> null
+            }
+        }
+
+        if (!trimmed.startsWith("Compiling ", ignoreCase = true)) return null
+        val dexName = trimmed.removePrefix("Compiling ").trim()
+        return writeApkDexSortKey(dexName)
     }
 
     private fun isDexCompilePhaseTitle(message: String): Boolean {
@@ -1063,7 +1349,7 @@ class PatcherWorker(
                     notificationProgress = persistedNotificationProgress(event, totalPatchCount)
                 )
             )
-            updateForegroundNotification(event, totalPatchCount)
+            updateForegroundNotification(event, totalPatchCount, sequence = sequence)
             persistProgressSnapshot(sequence, event, totalPatchCount)
         }
 
@@ -1201,6 +1487,16 @@ class PatcherWorker(
 
             val bundleType = patchBundleRepository.selectionBundleType(args.selectedPatches)
                 ?: throw IllegalStateException("Cannot patch with mixed ReVanced, Morphe, or Ample bundles.")
+            activePatchBundleType = bundleType
+            activeMorpheDexGroupTitle = if (bundleType == PatchBundleType.MORPHE) {
+                if (prefs.morpheBytecodeMode.get().runtimeValue.equals("FULL", ignoreCase = true)) {
+                    "Compiling DEX files: FULL"
+                } else {
+                    "Compiling DEX files: FAST"
+                }
+            } else {
+                null
+            }
             if (
                 bundleType == PatchBundleType.REVANCED &&
                 patchBundleRepository.selectionHasMixedRevancedPatcherVersions(args.selectedPatches)
