@@ -25,9 +25,11 @@ object FrameworkCacheResolver {
         aaptPath: String,
         logger: Logger? = null
     ): String {
-        val targetSdk = resolveTargetSdk(apkFile, aaptPath, logger) ?: 0
+        val baseDir = File(baseFrameworkDir).also { it.mkdirs() }
+        val probeDir = baseDir.resolve("probe").also { it.mkdirs() }
+        val targetSdk = resolveTargetSdk(apkFile, aaptPath, probeDir, logger) ?: 0
         val aaptHashPart = sha256(File(aaptPath))?.take(12) ?: "nohash"
-        val aaptVersionPart = runAaptVersion(aaptPath)?.let(::sha256Text)?.take(8) ?: "noversion"
+        val aaptVersionPart = runAaptVersion(aaptPath, probeDir)?.let(::sha256Text)?.take(8) ?: "noversion"
         val key = buildString {
             append("framework_")
             append(sanitize(runtimeTag))
@@ -39,14 +41,15 @@ object FrameworkCacheResolver {
             append(aaptVersionPart)
         }
 
-        val resolvedDir = File(baseFrameworkDir).resolve(key).also { it.mkdirs() }
+        val resolvedDir = baseDir.resolve(key).also { it.mkdirs() }
         logger?.info("Framework cache key: $key")
         return resolvedDir.absolutePath
     }
 
-    private fun resolveTargetSdk(apkFile: File, aaptPath: String, logger: Logger?): Int? {
+    private fun resolveTargetSdk(apkFile: File, aaptPath: String, probeDir: File, logger: Logger?): Int? {
         val fromBadging = runAapt(
             aaptPath,
+            probeDir,
             "dump",
             "badging",
             apkFile.absolutePath,
@@ -59,6 +62,7 @@ object FrameworkCacheResolver {
 
         return runAapt(
             aaptPath,
+            probeDir,
             "dump",
             "xmltree",
             apkFile.absolutePath,
@@ -71,35 +75,49 @@ object FrameworkCacheResolver {
             }
     }
 
-    private fun runAapt(aaptPath: String, vararg args: String, logger: Logger?): String? =
+    private fun runAapt(aaptPath: String, probeDir: File, vararg args: String, logger: Logger?): String? =
         runCatching {
-            val process = ProcessBuilder(listOf(aaptPath) + args)
-                .redirectErrorStream(true)
-                .start()
+            probeDir.mkdirs()
+            val outputFile = File.createTempFile("framework-cache-probe-", ".log", probeDir)
+            try {
+                val process = ProcessBuilder(listOf(aaptPath) + args)
+                    .redirectErrorStream(true)
+                    .redirectOutput(outputFile)
+                    .start()
 
-            val completed = process.waitFor(20, TimeUnit.SECONDS)
-            if (!completed) {
-                process.destroyForcibly()
-                logger?.warn("Framework cache probe timed out for command: ${args.joinToString(" ")}")
-                return@runCatching null
+                val completed = process.waitFor(20, TimeUnit.SECONDS)
+                if (!completed) {
+                    process.destroyForcibly()
+                    logger?.warn("Framework cache probe timed out for command: ${args.joinToString(" ")}")
+                    return@runCatching null
+                }
+
+                outputFile.readText()
+            } finally {
+                outputFile.delete()
             }
-
-            process.inputStream.bufferedReader().use { it.readText() }
         }.onFailure {
             logger?.warn("Framework cache probe failed: ${it.message}")
         }.getOrNull()
 
-    private fun runAaptVersion(aaptPath: String): String? =
+    private fun runAaptVersion(aaptPath: String, probeDir: File): String? =
         runCatching {
-            val process = ProcessBuilder(aaptPath, "version")
-                .redirectErrorStream(true)
-                .start()
-            val completed = process.waitFor(10, TimeUnit.SECONDS)
-            if (!completed) {
-                process.destroyForcibly()
-                return@runCatching null
+            probeDir.mkdirs()
+            val outputFile = File.createTempFile("framework-cache-version-", ".log", probeDir)
+            try {
+                val process = ProcessBuilder(aaptPath, "version")
+                    .redirectErrorStream(true)
+                    .redirectOutput(outputFile)
+                    .start()
+                val completed = process.waitFor(10, TimeUnit.SECONDS)
+                if (!completed) {
+                    process.destroyForcibly()
+                    return@runCatching null
+                }
+                outputFile.readText().trim().takeIf { it.isNotBlank() }
+            } finally {
+                outputFile.delete()
             }
-            process.inputStream.bufferedReader().use { it.readText().trim() }.takeIf { it.isNotBlank() }
         }.getOrNull()
 
     private fun sha256(file: File): String? = runCatching {

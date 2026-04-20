@@ -32,6 +32,7 @@ import java.nio.file.StandardCopyOption
 import java.io.BufferedInputStream
 import java.util.Enumeration
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
@@ -215,7 +216,7 @@ class Session private constructor(
         if (!file.isFile) return "not a regular file"
         if (file.length() <= 0L) return "file is empty"
 
-        return runCatching {
+        val zipIssue = runCatching {
             ZipFile(file).use { zip ->
                 if (zip.getEntry(FRAMEWORK_RESOURCES_TABLE) == null) {
                     "missing $FRAMEWORK_RESOURCES_TABLE"
@@ -226,6 +227,45 @@ class Session private constructor(
         }.getOrElse { error ->
             "${error::class.java.simpleName}: ${error.message ?: "failed to parse zip"}"
         }
+        if (zipIssue != null) return zipIssue
+
+        return frameworkIncludePathValidationIssue(file)
+    }
+
+    private fun frameworkIncludePathValidationIssue(file: File): String? = runCatching {
+        tempDir.mkdirs()
+        val outputFile = File.createTempFile("framework-include-check-", ".log", tempDir)
+        try {
+            val process = ProcessBuilder(
+                resolvedAaptPath,
+                "dump",
+                "resources",
+                file.absolutePath
+            )
+                .redirectErrorStream(true)
+                .redirectOutput(outputFile)
+                .start()
+
+            val completed = process.waitFor(20, TimeUnit.SECONDS)
+            if (!completed) {
+                process.destroyForcibly()
+                return@runCatching "aapt2 validation timed out"
+            }
+
+            if (process.exitValue() == 0) {
+                null
+            } else {
+                val detail = outputFile.useLines { lines ->
+                    lines.map(String::trim).firstOrNull { it.isNotEmpty() }
+                }
+                detail?.let { "aapt2 rejected framework: $it" }
+                    ?: "aapt2 rejected framework (exit code ${process.exitValue()})"
+            }
+        } finally {
+            outputFile.delete()
+        }
+    }.getOrElse { error ->
+        "aapt2 validation failed: ${error::class.java.simpleName}: ${error.message ?: "unknown error"}"
     }
 
     private fun clearFrameworkCache(reason: String) {
