@@ -13,7 +13,9 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.LaunchedEffect
@@ -80,9 +82,6 @@ fun AboutSettingsScreen(
     val managerVersion = remember { BuildConfig.VERSION_NAME }
     val managerVersionWithCode = remember(managerVersion) {
         "$managerVersion (${BuildConfig.VERSION_CODE})"
-    }
-    val versionLabel = remember(managerVersion) {
-        "${context.getString(R.string.version)} $managerVersion (${BuildConfig.VERSION_CODE})"
     }
     // painterResource() is broken on release builds for some reason.
     val icon = rememberDrawablePainter(drawable = remember {
@@ -214,22 +213,35 @@ fun AboutSettingsScreen(
                                 hideFromAccessibility()
                             }
                         )
-                        Text(
-                            text = versionLabel,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.combinedClickable(
-                                onClick = {},
-                                onLongClickLabel = stringResource(R.string.copy_to_clipboard),
-                                onLongClick = {
-                                    clipboard?.setPrimaryClip(
-                                        ClipData.newPlainText("Manager version", managerVersionWithCode)
-                                    )
-                                    context.toast(context.getString(R.string.manager_version_copied))
-                                }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .wrapContentWidth(Alignment.CenterHorizontally),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "${stringResource(R.string.version)} ",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
                             )
-                        )
+                            Text(
+                                text = managerVersionWithCode,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.combinedClickable(
+                                    onClick = {},
+                                    onLongClickLabel = stringResource(R.string.copy_to_clipboard),
+                                    onLongClick = {
+                                        clipboard?.setPrimaryClip(
+                                            ClipData.newPlainText("Manager version", managerVersionWithCode)
+                                        )
+                                        context.toast(context.getString(R.string.manager_version_copied))
+                                    }
+                                )
+                            )
+                        }
                         AnnotatedLinkText(
                             text = stringResource(R.string.revanced_manager_description),
                             linkLabel = stringResource(R.string.here),
