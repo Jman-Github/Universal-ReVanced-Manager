@@ -25,6 +25,7 @@ import app.universal.revanced.manager.R
 import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.data.room.apps.installed.InstallType
 import app.urv.manager.data.room.apps.installed.InstalledApp
+import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.domain.installer.RootInstaller
 import app.urv.manager.domain.installer.ShizukuInstaller
@@ -85,6 +86,7 @@ class InstalledAppInfoViewModel(
     private val pm: PM by inject()
     private val installedAppRepository: InstalledAppRepository by inject()
     private val patchBundleRepository: PatchBundleRepository by inject()
+    private val prefs: PreferencesManager by inject()
     val rootInstaller: RootInstaller by inject()
     private val installerManager: InstallerManager by inject()
     private val ackpineInstaller: AckpinePackageInstaller = get()
@@ -320,6 +322,13 @@ class InstalledAppInfoViewModel(
         if (sourceInstallType == InstallType.SAVED && sourceEntryKey != targetPackage) {
             installedAppRepository.delete(app)
         }
+        if (installType != InstallType.SAVED && !prefs.disableSavedAppOverwrite.get()) {
+            collapseMatchingSavedEntriesForInstalledVariant(
+                packageName = targetPackage,
+                installedPackageName = targetPackage,
+                variantIdentity = newVariantIdentity
+            )
+        }
 
         val updatedApp = installedAppRepository.get(targetPackage) ?: app.copy(
             currentPackageName = targetPackage,
@@ -406,6 +415,26 @@ class InstalledAppInfoViewModel(
             selectionPayload = sourceApp.selectionPayload,
             createdAtOverride = sourceApp.createdAt
         )
+    }
+
+    private suspend fun collapseMatchingSavedEntriesForInstalledVariant(
+        packageName: String,
+        installedPackageName: String,
+        variantIdentity: String
+    ) {
+        installedAppRepository.getByInstallType(InstallType.SAVED)
+            .filter { savedEntry ->
+                savedEntry.currentPackageName != installedPackageName &&
+                    isSavedAppEntryForPackage(savedEntry.currentPackageName, packageName)
+            }
+            .forEach { savedEntry ->
+                if (savedVariantIdentity(savedEntry) != variantIdentity) return@forEach
+                installedAppRepository.delete(savedEntry)
+                filesystem.getPatchedAppFile(
+                    savedEntry.currentPackageName,
+                    savedEntry.version
+                ).takeIf { it.exists() }?.delete()
+            }
     }
 
     private fun exactSavedApkFile(app: InstalledApp): File? {

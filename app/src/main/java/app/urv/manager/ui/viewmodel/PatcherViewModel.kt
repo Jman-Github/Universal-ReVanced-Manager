@@ -1358,6 +1358,13 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     selectionPayload,
                     resetCreatedAt = true
                 )
+                if (!disableSavedAppOverwrite) {
+                    collapseMatchingSavedEntriesForInstalledVariant(
+                        packageName = finalPackageName,
+                        installedPackageName = persistedPackageName,
+                        variantIdentity = newVariantIdentity
+                    )
+                }
             }
             if (
                 effectiveShouldSaveForLater &&
@@ -1373,20 +1380,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     selectionPayload,
                     resetCreatedAt = true
                 )
-            }
-            if (persistedInstallType != InstallType.SAVED) {
-                val duplicateSavedEntriesToRemove = if (!disableSavedAppOverwrite) {
-                    matchingSavedEntries.filter { it.currentPackageName != finalPackageName }
-                } else {
-                    emptyList()
-                }
-                duplicateSavedEntriesToRemove.forEach { savedEntry ->
-                    installedAppRepository.delete(savedEntry)
-                    fs.getPatchedAppFile(
-                        savedEntry.currentPackageName,
-                        savedEntry.version
-                    ).takeIf { it.exists() }?.delete()
-                }
             }
 
             if (finalPackageName != packageName) {
@@ -4382,6 +4375,26 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             selectionPayload = sourceApp.selectionPayload,
             createdAtOverride = sourceApp.createdAt
         )
+    }
+
+    private suspend fun collapseMatchingSavedEntriesForInstalledVariant(
+        packageName: String,
+        installedPackageName: String,
+        variantIdentity: String
+    ) {
+        installedAppRepository.getByInstallType(InstallType.SAVED)
+            .filter { savedEntry ->
+                savedEntry.currentPackageName != installedPackageName &&
+                    isSavedAppEntryForPackage(savedEntry.currentPackageName, packageName)
+            }
+            .forEach { savedEntry ->
+                if (savedEntryIdentity(savedEntry) != variantIdentity) return@forEach
+                installedAppRepository.delete(savedEntry)
+                fs.getPatchedAppFile(
+                    savedEntry.currentPackageName,
+                    savedEntry.version
+                ).takeIf { it.exists() }?.delete()
+            }
     }
 
     private fun buildUniqueSavedAppEntryKey(packageName: String, variantIdentity: String): String {
