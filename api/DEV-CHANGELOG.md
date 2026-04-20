@@ -19,6 +19,11 @@
 - Fixed duplicate Saved/Installed entries by collapsing matching saved variants after install when saved app overwrite is enabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
 
 
+# CI
+
+- Updated manager release APK filenames to use canonical ABI labels such as arm64-v8a, armeabi-v7a, and universal, and updated the in-app updater/workflows to match the new asset names while preserving compatibility with older releases https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/428
+
+
 ## Build types
 
 **LITE**: ReVanced v22 and Morphe patcher runtimes included, AmpleReVanced and ReVanced v21 runtimes excluded.   

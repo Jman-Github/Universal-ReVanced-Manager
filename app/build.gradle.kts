@@ -32,7 +32,7 @@ plugins {
 val urvBuildProfile = UrvBuildProfile.from(providers.gradleProperty("urvBuildProfile").orNull)
 val urvBuildProfileName = urvBuildProfile.name
 val resolvedProjectVersion = if (version == "unspecified") "1.8.1" else version.toString()
-val outputApkFileName = "$urvBuildProfileName-universal-revanced-manager-v$resolvedProjectVersion-all.apk"
+val outputApkFileName = "$urvBuildProfileName-universal-revanced-manager-v$resolvedProjectVersion-universal.apk"
 val morpheRuntimeAssetsDir = layout.buildDirectory.dir("generated/morphe-runtime")
 val ampleRuntimeAssetsDir = layout.buildDirectory.dir("generated/ample-runtime")
 val revanced21RuntimeAssetsDir = layout.buildDirectory.dir("generated/revanced-runtime-v21")
@@ -326,12 +326,12 @@ android {
 
             val abi = getFilter(com.android.build.OutputFile.ABI)
             val abiSuffix = when (abi) {
-                "arm64-v8a" -> "arm64_v8"
-                "armeabi-v7a" -> "armeabi_v7a"
+                "arm64-v8a" -> "arm64-v8a"
+                "armeabi-v7a" -> "armeabi-v7a"
                 "x86" -> "x86"
                 "x86_64" -> "x86_64"
-                null -> "all"
-                else -> abi.replace('-', '_')
+                null -> "universal"
+                else -> abi
             }
             outputFileName =
                 "$urvBuildProfileName-universal-revanced-manager-v${artifactVersionName(resolvedVersionName)}-$abiSuffix.apk"

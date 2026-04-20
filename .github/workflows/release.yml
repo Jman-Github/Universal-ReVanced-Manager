@@ -111,9 +111,9 @@ jobs:
         run: |
           APK_DIR="app/build/outputs/apk/release"
           EXPECTED=(
-            "${PROFILE}-universal-revanced-manager-${VERSION}-all.apk"
-            "${PROFILE}-universal-revanced-manager-${VERSION}-arm64_v8.apk"
-            "${PROFILE}-universal-revanced-manager-${VERSION}-armeabi_v7a.apk"
+            "${PROFILE}-universal-revanced-manager-${VERSION}-universal.apk"
+            "${PROFILE}-universal-revanced-manager-${VERSION}-arm64-v8a.apk"
+            "${PROFILE}-universal-revanced-manager-${VERSION}-armeabi-v7a.apk"
             "${PROFILE}-universal-revanced-manager-${VERSION}-x86.apk"
             "${PROFILE}-universal-revanced-manager-${VERSION}-x86_64.apk"
           )
@@ -134,9 +134,9 @@ jobs:
           retention-days: 14
           if-no-files-found: error
           path: |
-            ${{ steps.artifact.outputs.apk_dir }}/${{ matrix.profile }}-universal-revanced-manager-${{ needs.prepare.outputs.version }}-all.apk
-            ${{ steps.artifact.outputs.apk_dir }}/${{ matrix.profile }}-universal-revanced-manager-${{ needs.prepare.outputs.version }}-arm64_v8.apk
-            ${{ steps.artifact.outputs.apk_dir }}/${{ matrix.profile }}-universal-revanced-manager-${{ needs.prepare.outputs.version }}-armeabi_v7a.apk
+            ${{ steps.artifact.outputs.apk_dir }}/${{ matrix.profile }}-universal-revanced-manager-${{ needs.prepare.outputs.version }}-universal.apk
+            ${{ steps.artifact.outputs.apk_dir }}/${{ matrix.profile }}-universal-revanced-manager-${{ needs.prepare.outputs.version }}-arm64-v8a.apk
+            ${{ steps.artifact.outputs.apk_dir }}/${{ matrix.profile }}-universal-revanced-manager-${{ needs.prepare.outputs.version }}-armeabi-v7a.apk
             ${{ steps.artifact.outputs.apk_dir }}/${{ matrix.profile }}-universal-revanced-manager-${{ needs.prepare.outputs.version }}-x86.apk
             ${{ steps.artifact.outputs.apk_dir }}/${{ matrix.profile }}-universal-revanced-manager-${{ needs.prepare.outputs.version }}-x86_64.apk
             app/build/outputs/apk/release/output-metadata.json

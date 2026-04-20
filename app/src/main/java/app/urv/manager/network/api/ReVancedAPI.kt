@@ -183,8 +183,8 @@ class ReVancedAPI(
         return Build.SUPPORTED_ABIS
             .mapNotNull { abi ->
                 when (abi.lowercase()) {
-                    "arm64-v8a" -> "arm64_v8"
-                    "armeabi-v7a" -> "armeabi_v7a"
+                    "arm64-v8a" -> "arm64-v8a"
+                    "armeabi-v7a" -> "armeabi-v7a"
                     "x86" -> "x86"
                     "x86_64" -> "x86_64"
                     else -> null
@@ -249,8 +249,12 @@ class ReVancedAPI(
 
     private fun normalizeManagerAbiSuffix(suffix: String): String {
         return when (suffix.lowercase()) {
-            "arm64-v8a" -> "arm64_v8"
-            "armeabi-v7a" -> "armeabi_v7a"
+            "arm64_v8" -> "arm64-v8a"
+            "arm64-v8a" -> "arm64-v8a"
+            "armeabi_v7a" -> "armeabi-v7a"
+            "armeabi-v7a" -> "armeabi-v7a"
+            "all" -> "universal"
+            "universal" -> "universal"
             else -> suffix.lowercase()
         }
     }
