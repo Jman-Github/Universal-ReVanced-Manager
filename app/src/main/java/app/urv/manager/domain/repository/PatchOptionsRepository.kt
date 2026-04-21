@@ -78,6 +78,37 @@ class PatchOptionsRepository(db: AppDatabase) {
             }
         })
 
+    suspend fun export(bundleUid: Int): SerializedOptions =
+        buildMap {
+            dao.exportOptions(bundleUid).forEach { (packageName, packageOptions) ->
+                val serialized = packageOptions.fold(mutableMapOf<String, MutableMap<String, Option.SerializedValue>>()) { patches, option ->
+                    patches.getOrPut(option.patchName, ::mutableMapOf)[option.key] = option.value
+                    patches
+                }.mapValues { it.value.toMap() }
+
+                if (serialized.isNotEmpty()) {
+                    put(packageName, serialized)
+                }
+            }
+        }
+
+    suspend fun import(bundleUid: Int, options: SerializedOptions) {
+        dao.resetOptionsForPatchBundle(bundleUid)
+
+        if (options.isNotEmpty()) {
+            dao.updateOptions(options.entries.associate { (packageName, packageOptions) ->
+                val groupId = getOrCreateGroup(bundleUid, packageName)
+                groupId to packageOptions.flatMap { (patchName, patchOptions) ->
+                    patchOptions.map { (key, value) ->
+                        Option(groupId, patchName, key, value)
+                    }
+                }
+            })
+        }
+
+        resetEventsFlow.emit(ResetEvent.Bundle(bundleUid))
+    }
+
     fun getPackagesWithSavedOptions() =
         dao.getPackagesWithOptions().map(Iterable<String>::toSet).distinctUntilChanged()
 
@@ -102,3 +133,8 @@ class PatchOptionsRepository(db: AppDatabase) {
         data class Bundle(val bundleUid: Int) : ResetEvent
     }
 }
+
+/**
+ * A [Map] of package name -> patch name -> option key -> serialized option value.
+ */
+typealias SerializedOptions = Map<String, Map<String, Map<String, Option.SerializedValue>>>

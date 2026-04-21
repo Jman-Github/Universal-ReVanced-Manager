@@ -21,6 +21,7 @@ import app.urv.manager.domain.repository.PatchOptionsRepository
 import app.urv.manager.domain.repository.PatchProfileExportEntry
 import app.urv.manager.domain.repository.PatchProfileRepository
 import app.urv.manager.domain.repository.PatchSelectionRepository
+import app.urv.manager.domain.repository.SerializedOptions
 import app.urv.manager.domain.repository.SerializedSelection
 import app.urv.manager.domain.bundles.PatchBundleSource
 import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
@@ -44,6 +45,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromStream
 import kotlinx.serialization.json.encodeToStream
@@ -169,7 +171,7 @@ data class EverythingExportFile(
 
 @Serializable
 data class PatchSelectionExportFile(
-    val version: Int = 1,
+    val version: Int = 2,
     val bundles: List<PatchSelectionBundleExport>
 )
 
@@ -179,7 +181,13 @@ data class PatchSelectionBundleExport(
     val name: String,
     val displayName: String?,
     val source: String?,
-    val selection: SerializedSelection
+    val selection: SerializedSelection,
+    val options: SerializedOptions? = null
+)
+
+private data class DecodedPatchSelectionBundleImport(
+    val export: PatchSelectionBundleExport,
+    val isLegacySelectionOnly: Boolean
 )
 
 @OptIn(ExperimentalSerializationApi::class)
@@ -398,14 +406,19 @@ class ImportExportViewModel(
         val source = selectedBundle ?: return@launch
         clearSelectionAction()
 
-        uiSafe(app, R.string.import_patch_selection_fail, "Failed to restore patch selection") {
-            val selection = withContext(Dispatchers.IO) {
-                target.inputStream().use {
-                    Json.decodeFromStream<SerializedSelection>(it)
+        uiSafe(app, R.string.import_patch_selection_fail, "Failed to restore patch selections and options") {
+            val decodedImport = withContext(Dispatchers.IO) {
+                target.inputStream().bufferedReader().use { reader ->
+                    decodeSelectionBundleImport(
+                        reader.readText(),
+                        source
+                    )
                 }
             }
 
-            selectionRepository.import(source.uid, selection)
+            validateSelectionBundleImportTarget(decodedImport, source)
+            selectionRepository.import(source.uid, decodedImport.export.selection)
+            decodedImport.export.options?.let { optionsRepository.import(source.uid, it) }
             app.toast(app.getString(R.string.import_patch_selection_success))
         }
     }
@@ -414,14 +427,19 @@ class ImportExportViewModel(
         val source = selectedBundle ?: return@launch
         clearSelectionAction()
 
-        uiSafe(app, R.string.import_patch_selection_fail, "Failed to restore patch selection") {
-            val selection = withContext(Dispatchers.IO) {
-                contentResolver.openInputStream(target)!!.use {
-                    Json.decodeFromStream<SerializedSelection>(it)
+        uiSafe(app, R.string.import_patch_selection_fail, "Failed to restore patch selections and options") {
+            val decodedImport = withContext(Dispatchers.IO) {
+                contentResolver.openInputStream(target)!!.bufferedReader().use { reader ->
+                    decodeSelectionBundleImport(
+                        reader.readText(),
+                        source
+                    )
                 }
             }
 
-            selectionRepository.import(source.uid, selection)
+            validateSelectionBundleImportTarget(decodedImport, source)
+            selectionRepository.import(source.uid, decodedImport.export.selection)
+            decodedImport.export.options?.let { optionsRepository.import(source.uid, it) }
             app.toast(app.getString(R.string.import_patch_selection_success))
         }
     }
@@ -429,10 +447,10 @@ class ImportExportViewModel(
     fun executeSelectionImportAllBundles(target: Path) = viewModelScope.launch {
         clearSelectionAction()
 
-        uiSafe(app, R.string.import_patch_selection_fail, "Failed to restore patch selection") {
+        uiSafe(app, R.string.import_patch_selection_fail, "Failed to restore patch selections and options") {
             val exportFile = withContext(Dispatchers.IO) {
-                target.inputStream().use {
-                    Json.decodeFromStream<PatchSelectionExportFile>(it)
+                target.inputStream().bufferedReader().use { reader ->
+                    tolerantJson.decodeFromString<PatchSelectionExportFile>(reader.readText())
                 }
             }
 
@@ -443,10 +461,10 @@ class ImportExportViewModel(
     fun executeSelectionImportAllBundles(target: Uri) = viewModelScope.launch {
         clearSelectionAction()
 
-        uiSafe(app, R.string.import_patch_selection_fail, "Failed to restore patch selection") {
+        uiSafe(app, R.string.import_patch_selection_fail, "Failed to restore patch selections and options") {
             val exportFile = withContext(Dispatchers.IO) {
-                contentResolver.openInputStream(target)!!.use {
-                    Json.decodeFromStream<PatchSelectionExportFile>(it)
+                contentResolver.openInputStream(target)!!.bufferedReader().use { reader ->
+                    tolerantJson.decodeFromString<PatchSelectionExportFile>(reader.readText())
                 }
             }
 
@@ -458,12 +476,12 @@ class ImportExportViewModel(
         val source = selectedBundle ?: return@launch
         clearSelectionAction()
 
-        uiSafe(app, R.string.export_patch_selection_fail, "Failed to backup patch selection") {
-            val selection = selectionRepository.export(source.uid)
+        uiSafe(app, R.string.export_patch_selection_fail, "Failed to backup patch selections and options") {
+            val selectionExport = buildPatchSelectionBundleExport(source)
 
             withContext(Dispatchers.IO) {
                 contentResolver.openOutputStream(target, "wt")!!.use {
-                    Json.Default.encodeToStream(selection, it)
+                    Json.Default.encodeToStream(selectionExport, it)
                 }
             }
             app.toast(app.getString(R.string.export_patch_selection_success))
@@ -474,13 +492,13 @@ class ImportExportViewModel(
         val source = selectedBundle ?: return@launch
         clearSelectionAction()
 
-        uiSafe(app, R.string.export_patch_selection_fail, "Failed to backup patch selection") {
-            val selection = selectionRepository.export(source.uid)
+        uiSafe(app, R.string.export_patch_selection_fail, "Failed to backup patch selections and options") {
+            val selectionExport = buildPatchSelectionBundleExport(source)
 
             withContext(Dispatchers.IO) {
                 target.parent?.let { Files.createDirectories(it) }
                 Files.newOutputStream(target).use {
-                    Json.Default.encodeToStream(selection, it)
+                    Json.Default.encodeToStream(selectionExport, it)
                 }
             }
             app.toast(app.getString(R.string.export_patch_selection_success))
@@ -490,7 +508,7 @@ class ImportExportViewModel(
     fun executeSelectionExportAllBundles(target: Uri) = viewModelScope.launch {
         clearSelectionAction()
 
-        uiSafe(app, R.string.export_patch_selection_fail, "Failed to backup patch selection") {
+        uiSafe(app, R.string.export_patch_selection_fail, "Failed to backup patch selections and options") {
             val exportFile = buildPatchSelectionExportFile()
 
             withContext(Dispatchers.IO) {
@@ -505,7 +523,7 @@ class ImportExportViewModel(
     fun executeSelectionExportAllBundles(target: Path) = viewModelScope.launch {
         clearSelectionAction()
 
-        uiSafe(app, R.string.export_patch_selection_fail, "Failed to backup patch selection") {
+        uiSafe(app, R.string.export_patch_selection_fail, "Failed to backup patch selections and options") {
             val exportFile = buildPatchSelectionExportFile()
 
             withContext(Dispatchers.IO) {
@@ -533,6 +551,7 @@ class ImportExportViewModel(
                 ?: bundleExport.source?.trim()?.takeIf(String::isNotBlank)?.let { byEndpoint[it] }
                 ?: continue
             selectionRepository.import(source.uid, bundleExport.selection)
+            bundleExport.options?.let { optionsRepository.import(source.uid, it) }
         }
 
         if (showToast) {
@@ -540,22 +559,100 @@ class ImportExportViewModel(
         }
     }
 
+    private suspend fun buildPatchSelectionBundleExport(
+        bundle: PatchBundleSource
+    ): PatchSelectionBundleExport {
+        val selection = selectionRepository.export(bundle.uid)
+        val options = optionsRepository.export(bundle.uid)
+
+        return PatchSelectionBundleExport(
+            bundleUid = bundle.uid,
+            name = bundle.name,
+            displayName = bundle.displayName,
+            source = bundle.asRemoteOrNull?.endpoint,
+            selection = selection,
+            options = options
+        )
+    }
+
     private suspend fun buildPatchSelectionExportFile(): PatchSelectionExportFile {
         val bundles = patchBundleRepository.sources.first()
         val exports = bundles.mapNotNull { bundle ->
-            val selection = selectionRepository.export(bundle.uid)
-            if (selection.isEmpty()) return@mapNotNull null
-            PatchSelectionBundleExport(
-                bundleUid = bundle.uid,
-                name = bundle.name,
-                displayName = bundle.displayName,
-                source = bundle.asRemoteOrNull?.endpoint,
-                selection = selection
-            )
+            buildPatchSelectionBundleExport(bundle).takeIf { export ->
+                export.selection.isNotEmpty()
+            }
         }
 
         return PatchSelectionExportFile(bundles = exports)
     }
+
+    private fun decodeSelectionBundleImport(
+        rawJson: String,
+        source: PatchBundleSource
+    ): DecodedPatchSelectionBundleImport {
+        return runCatching {
+            DecodedPatchSelectionBundleImport(
+                export = tolerantJson.decodeFromString<PatchSelectionBundleExport>(rawJson),
+                isLegacySelectionOnly = false
+            )
+        }.getOrElse { bundleDecodeError ->
+            val selection = runCatching {
+                tolerantJson.decodeFromString<SerializedSelection>(rawJson)
+            }.getOrElse {
+                throw bundleDecodeError
+            }
+
+            DecodedPatchSelectionBundleImport(
+                export = PatchSelectionBundleExport(
+                    bundleUid = source.uid,
+                    name = source.name,
+                    displayName = source.displayName,
+                    source = source.asRemoteOrNull?.endpoint,
+                    selection = selection,
+                    options = null
+                ),
+                isLegacySelectionOnly = true
+            )
+        }
+    }
+
+    private fun validateSelectionBundleImportTarget(
+        decodedImport: DecodedPatchSelectionBundleImport,
+        source: PatchBundleSource
+    ) {
+        if (decodedImport.isLegacySelectionOnly) return
+        if (decodedImport.export.matchesSelectedBundle(source)) return
+
+        throw IllegalArgumentException("Backup file belongs to a different patch bundle")
+    }
+
+    private fun PatchSelectionBundleExport.matchesSelectedBundle(
+        source: PatchBundleSource
+    ): Boolean {
+        val exportEndpoint = this.source?.trim()?.takeIf(String::isNotBlank)
+        val selectedEndpoint = source.asRemoteOrNull?.endpoint?.trim()?.takeIf(String::isNotBlank)
+        if (exportEndpoint != null || selectedEndpoint != null) {
+            return exportEndpoint != null && exportEndpoint == selectedEndpoint
+        }
+
+        if (bundleUid == source.uid) return true
+
+        val exportNames = setOfNotNull(name, displayName)
+            .map { it.normalizedBundleIdentifier() }
+            .toSet()
+        val selectedNames = buildSet {
+            add(source.name.normalizedBundleIdentifier())
+            add(source.displayTitle.normalizedBundleIdentifier())
+            source.patchBundle?.manifestAttributes?.name
+                ?.trim()
+                ?.takeIf(String::isNotBlank)
+                ?.let { add(it.normalizedBundleIdentifier()) }
+        }
+
+        return exportNames.isNotEmpty() && exportNames.any(selectedNames::contains)
+    }
+
+    private fun String.normalizedBundleIdentifier() = trim().lowercase()
 
     fun selectBundle(bundle: PatchBundleSource) {
         selectedBundle = bundle

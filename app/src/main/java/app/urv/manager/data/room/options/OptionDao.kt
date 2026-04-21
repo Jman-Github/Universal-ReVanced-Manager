@@ -17,6 +17,14 @@ abstract class OptionDao {
     )
     abstract suspend fun getOptions(packageName: String): Map<@MapColumn("patch_bundle") Int, List<Option>>
 
+    @Transaction
+    @Query(
+        "SELECT package_name, `group`, patch_name, `key`, value FROM option_groups" +
+                " LEFT JOIN options ON uid = options.`group`" +
+                " WHERE patch_bundle = :bundleUid"
+    )
+    abstract suspend fun exportOptions(bundleUid: Int): Map<@MapColumn("package_name") String, List<Option>>
+
     @Query("SELECT uid FROM option_groups WHERE patch_bundle = :bundleUid AND package_name = :packageName")
     abstract suspend fun getGroupId(bundleUid: Int, packageName: String): Int?
 

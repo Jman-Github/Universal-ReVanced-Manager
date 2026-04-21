@@ -101,6 +101,7 @@
 - Bumped Morphe Patcher to `1.4.1`
 - Added a Morphe bytecode processing mode setting https://github.com/MorpheApp/morphe-manager/pull/403
 - Made the About screen version row so long-press copy only targets the manager version value, not the "Version" label https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/424
+- Added patch option import/export support for patch selection backups https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/417
 
 
 # Bug fixes

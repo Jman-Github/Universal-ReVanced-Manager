@@ -1,3 +1,23 @@
+# v1.8.1-dev.15 (TBD)
+
+
+# Features
+
+- Added patch option import/export support for patch selection backups https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/417
+
+
+# Bug fixes
+
+
+## Build types
+
+**LITE**: ReVanced v22 and Morphe patcher runtimes included, AmpleReVanced and ReVanced v21 runtimes excluded.   
+**FULL**: Everything (ReVanced v22, v21, Morphe and AmpleReVanced patcher runtimes)
+
+> [!TIP]
+> Excluding patcher runtimes reduces the app size. If you only use the latest ReVanced and Morphe patches, you should install the **LITE** build. If you use more than just the latest ReVanced and Morphe patches, consider installing the **FULL** build instead. Keep in mind that the in-app updater will only download the same build type you currently have installed. If you want to switch build types later, you’ll need to go to the GitHub releases page and download that build manually.
+
+
 # v1.8.1-dev.14 (2026-04-19)
 
 
