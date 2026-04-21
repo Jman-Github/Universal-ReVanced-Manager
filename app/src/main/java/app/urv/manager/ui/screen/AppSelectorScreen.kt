@@ -74,9 +74,9 @@ import app.urv.manager.ui.component.AppTopBar
 import app.urv.manager.ui.component.CheckedFilterChip
 import app.urv.manager.ui.component.InterceptBackHandler
 import app.urv.manager.ui.component.LazyColumnWithScrollbar
-import app.urv.manager.ui.component.LoadingIndicator
 import app.urv.manager.ui.component.ShimmerBox
 import app.urv.manager.ui.component.NonSuggestedVersionDialog
+import app.urv.manager.ui.component.TransparentLoadingDialog
 import app.urv.manager.ui.component.UniversalFallbackVersionDialog
 import app.urv.manager.ui.component.patches.PathSelectorDialog
 import app.urv.manager.ui.component.SafeguardHintCard
@@ -510,19 +510,7 @@ fun AppSelectorScreen(
     }
 
     if (vm.storageSelectionInProgress) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.45f)),
-            contentAlignment = Alignment.Center
-        ) {
-            LoadingIndicator(
-                modifier = Modifier.size(56.dp),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.35f),
-                strokeWidth = 4.dp
-            )
-        }
+        TransparentLoadingDialog()
     }
 }
 

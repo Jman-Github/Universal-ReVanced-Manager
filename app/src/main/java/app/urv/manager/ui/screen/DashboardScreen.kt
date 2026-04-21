@@ -1706,9 +1706,10 @@ fun DashboardScreen(
         )
     }
 
-    Scaffold(
-        topBar = {
-            when {
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            topBar = {
+                when {
                 appsSelectionActive &&
                     uiPage == DashboardPage.DASHBOARD &&
                     !suppressAppsSelectionTopBar -> {
@@ -2428,22 +2429,11 @@ fun DashboardScreen(
                     }
                 }
             )
+            }
         }
-    }
 
-    if (storageVm.storageSelectionInProgress) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.45f)),
-            contentAlignment = Alignment.Center
-        ) {
-            LoadingIndicator(
-                modifier = Modifier.size(56.dp),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.35f),
-                strokeWidth = 4.dp
-            )
+        if (storageVm.storageSelectionInProgress) {
+            TransparentLoadingDialog()
         }
     }
 }

@@ -4,6 +4,7 @@
 # Features
 
 - Added patch option import/export support for patch selection backups https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/417
+- Blocked all in-app interaction while app/APK selection loading overlays are shown, including the Apps tab and app picker flow https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/429
 
 
 # Bug fixes
