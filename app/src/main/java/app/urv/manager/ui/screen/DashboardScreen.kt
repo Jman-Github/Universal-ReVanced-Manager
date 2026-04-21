@@ -1401,7 +1401,11 @@ fun DashboardScreen(
                 showDeleteSavedAppsDialog = false
             },
             title = stringResource(R.string.delete),
-            description = stringResource(R.string.selected_apps_delete_dialog_description),
+            description = pluralStringResource(
+                R.plurals.selected_apps_delete_dialog_description_quantity,
+                selectedAppCount,
+                selectedAppCount
+            ),
             icon = Icons.Outlined.Delete
         )
     }
@@ -1413,7 +1417,11 @@ fun DashboardScreen(
                 showDeleteConfirmationDialog = false
             },
             title = stringResource(R.string.delete),
-            description = stringResource(R.string.patches_delete_multiple_dialog_description),
+            description = pluralStringResource(
+                R.plurals.patches_delete_multiple_dialog_description_quantity,
+                selectedSourceCount,
+                selectedSourceCount
+            ),
             icon = Icons.Outlined.Delete
         )
     }
@@ -1425,7 +1433,11 @@ fun DashboardScreen(
                 showDeleteProfilesConfirmationDialog = false
             },
             title = stringResource(R.string.delete),
-            description = stringResource(R.string.patch_profile_delete_multiple_dialog_description),
+            description = pluralStringResource(
+                R.plurals.patch_profile_delete_multiple_dialog_description_quantity,
+                selectedProfileCount,
+                selectedProfileCount
+            ),
             icon = Icons.Outlined.Delete
         )
     }

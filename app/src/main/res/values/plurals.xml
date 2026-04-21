@@ -11,4 +11,16 @@
         <item quantity="one">%d app selected</item>
         <item quantity="other">%d apps selected</item>
         </plurals>
+    <plurals name="selected_apps_delete_dialog_description_quantity">
+        <item quantity="one">Are you sure you want to delete the selected app?\nInstalled apps on your device will stay untouched.</item>
+        <item quantity="other">Are you sure you want to delete the selected apps?\nInstalled apps on your device will stay untouched.</item>
+        </plurals>
+    <plurals name="patches_delete_multiple_dialog_description_quantity">
+        <item quantity="one">Are you sure you want to delete the selected patch bundle?</item>
+        <item quantity="other">Are you sure you want to delete the selected patch bundles?</item>
+        </plurals>
+    <plurals name="patch_profile_delete_multiple_dialog_description_quantity">
+        <item quantity="one">Are you sure you want to delete the selected patch profile?</item>
+        <item quantity="other">Are you sure you want to delete the selected patch profiles?</item>
+        </plurals>
     </resources>
