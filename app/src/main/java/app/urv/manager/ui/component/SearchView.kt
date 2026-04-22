@@ -12,6 +12,7 @@ import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -38,6 +39,7 @@ fun SearchView(
     SearchBar(
         inputField = {
             SearchBarDefaults.InputField(
+                modifier = Modifier.focusRequester(focusRequester),
                 query = query,
                 onQueryChange = onQueryChange,
                 onSearch = {
@@ -59,12 +61,14 @@ fun SearchView(
         },
         expanded = true,
         onExpandedChange = onActiveChange,
-        modifier = Modifier.focusRequester(focusRequester),
+        modifier = Modifier,
         colors = colors,
         content = content
     )
 
     LaunchedEffect(Unit) {
+        withFrameNanos { }
         focusRequester.requestFocus()
+        keyboardController?.show()
     }
 }

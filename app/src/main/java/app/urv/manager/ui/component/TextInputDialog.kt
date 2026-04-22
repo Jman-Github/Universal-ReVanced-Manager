@@ -1,11 +1,13 @@
 package app.urv.manager.ui.component
 
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -15,6 +17,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
@@ -44,6 +48,7 @@ fun TextInputDialog(
     val submitScope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
+    val focusRequester = remember { FocusRequester() }
     val valid = remember(textFieldValue.text, validatorRef) {
         runCatching { validatorRef(textFieldValue.text) }.getOrDefault(false)
     }
@@ -57,7 +62,14 @@ fun TextInputDialog(
         }
     }
 
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        focusRequester.requestFocus()
+        keyboardController?.show()
+    }
+
     AlertDialog(
+        modifier = Modifier.imePadding(),
         onDismissRequest = onDismissRequest,
         confirmButton = {
             TextButton(
@@ -77,7 +89,9 @@ fun TextInputDialog(
         },
         text = {
             TextField(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester),
                 value = textFieldValue,
                 onValueChange = { textFieldValue = it },
                 singleLine = singleLine,

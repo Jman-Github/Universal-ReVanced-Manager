@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -19,7 +20,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
@@ -39,6 +44,8 @@ private inline fun <T> NumberInputDialog(
     var fieldValue by rememberSaveable {
         mutableStateOf(current?.toString().orEmpty())
     }
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
     val numberFieldValue by remember {
         derivedStateOf { fieldValue.toNumberOrNull() }
     }
@@ -52,18 +59,28 @@ private inline fun <T> NumberInputDialog(
         } ?: false
         validatorFailed = failed
     }
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        focusRequester.requestFocus()
+        keyboardController?.show()
+    }
 
     AlertDialog(
+        modifier = Modifier.imePadding(),
         onDismissRequest = { onSubmit(null) },
         title = { Text(name) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester),
                     value = fieldValue,
                     onValueChange = { fieldValue = it },
                     placeholder = {
                         Text(stringResource(R.string.dialog_input_placeholder))
                     },
+                    singleLine = true,
                     isError = validatorFailed,
                     supportingText = {
                         if (validatorFailed) {

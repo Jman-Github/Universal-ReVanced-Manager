@@ -16,9 +16,13 @@ import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
@@ -58,6 +62,7 @@ fun ImportPatchBundleDialog(
         },
         {
             ImportBundleStep(
+                shouldAutofocusRemoteUrl = currentStep == 1,
                 bundleType,
                 selectedLocalPath,
                 remoteUrl,
@@ -173,6 +178,7 @@ private fun SelectBundleTypeStep(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ImportBundleStep(
+    shouldAutofocusRemoteUrl: Boolean,
     bundleType: BundleType,
     patchBundlePath: String?,
     remoteUrl: String,
@@ -184,6 +190,17 @@ private fun ImportBundleStep(
     onSearchUpdateChange: (Boolean) -> Unit
 ) {
     val context = LocalContext.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(shouldAutofocusRemoteUrl, bundleType) {
+        if (shouldAutofocusRemoteUrl && bundleType == BundleType.Remote) {
+            withFrameNanos { }
+            focusRequester.requestFocus()
+            keyboardController?.show()
+        }
+    }
+
     Column {
         when (bundleType) {
             BundleType.Local -> {
@@ -213,6 +230,7 @@ private fun ImportBundleStep(
                     modifier = Modifier.padding(TextHorizontalPadding)
                 ) {
                     OutlinedTextField(
+                        modifier = Modifier.focusRequester(focusRequester),
                         value = remoteUrl,
                         onValueChange = onRemoteUrlChange,
                         label = { Text(stringResource(R.string.patches_url)) }

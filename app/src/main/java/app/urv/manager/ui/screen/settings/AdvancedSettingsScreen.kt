@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -123,11 +124,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
@@ -145,6 +149,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.PlatformTextStyle
@@ -2559,6 +2564,8 @@ private fun ExportNameFormatDialog(
     onDismiss: () -> Unit,
     onSave: (String) -> Unit
 ) {
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
     val textFieldState = rememberTextFieldState(
         initialText = currentValue,
         initialSelection = TextRange.Zero
@@ -2581,8 +2588,14 @@ private fun ExportNameFormatDialog(
                 }
             }
     }
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        focusRequester.requestFocus()
+        keyboardController?.show()
+    }
 
     AlertDialog(
+        modifier = Modifier.imePadding(),
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(onClick = {
@@ -2621,7 +2634,9 @@ private fun ExportNameFormatDialog(
                     supportingText = if (showError && textFieldState.text.isBlank()) {
                         { Text(stringResource(R.string.export_name_format_error_blank)) }
                     } else null,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester)
                 )
                 Surface(
                     tonalElevation = 2.dp,
@@ -3496,8 +3511,17 @@ private fun MorpheBytecodeMode.descriptionRes(): Int = when (this) {
 @Composable
 private fun APIUrlDialog(currentUrl: String, defaultUrl: String, onSubmit: (String?) -> Unit) {
     var url by rememberSaveable(currentUrl) { mutableStateOf(currentUrl) }
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        focusRequester.requestFocus()
+        keyboardController?.show()
+    }
 
     AlertDialog(
+        modifier = Modifier.imePadding(),
         onDismissRequest = { onSubmit(null) },
         confirmButton = {
             TextButton(
@@ -3538,7 +3562,9 @@ private fun APIUrlDialog(currentUrl: String, defaultUrl: String, onSubmit: (Stri
                     color = MaterialTheme.colorScheme.error
                 )
                 OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester),
                     value = url,
                     onValueChange = { url = it },
                     label = { Text(stringResource(R.string.api_url)) },
@@ -3564,6 +3590,8 @@ private fun GitHubPatDialog(
     var pat by rememberSaveable(currentPat) { mutableStateOf(currentPat) }
     var includePatInExport by rememberSaveable(currentIncludeInExport) { mutableStateOf(currentIncludeInExport) }
     var showIncludeWarning by rememberSaveable { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
     val context = LocalContext.current
     val description = stringResource(R.string.set_github_pat_dialog_description)
     val hereLabel = stringResource(R.string.here)
@@ -3589,7 +3617,14 @@ private fun GitHubPatDialog(
         }
     }
 
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        focusRequester.requestFocus()
+        keyboardController?.show()
+    }
+
     AlertDialog(
+        modifier = Modifier.imePadding(),
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(onClick = { onSubmit(pat, includePatInExport) }) {
@@ -3622,7 +3657,9 @@ private fun GitHubPatDialog(
                 )
 
                 OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester),
                     value = pat,
                     onValueChange = { pat = it },
                     label = { Text(stringResource(R.string.github_pat)) },
@@ -3714,8 +3751,17 @@ private fun SearchEngineHostDialog(
     onDismiss: () -> Unit
 ) {
     var host by rememberSaveable(currentHost) { mutableStateOf(currentHost) }
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        focusRequester.requestFocus()
+        keyboardController?.show()
+    }
 
     AlertDialog(
+        modifier = Modifier.imePadding(),
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(onClick = { onSubmit(host) }) {
@@ -3743,7 +3789,9 @@ private fun SearchEngineHostDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester),
                     value = host,
                     onValueChange = { host = it },
                     label = { Text(stringResource(R.string.search_engine_host_label)) },

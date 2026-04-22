@@ -12,9 +12,13 @@ import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.SearchBarValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.material3.SearchBarState
@@ -34,17 +38,39 @@ fun SearchBar(
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         dividerColor = MaterialTheme.colorScheme.outline
     )
+    val expandedFocusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
     LaunchedEffect(searchBarState.currentValue) {
-        if (searchBarState.currentValue != SearchBarValue.Expanded) {
+        if (searchBarState.currentValue == SearchBarValue.Expanded) {
+            withFrameNanos { }
+            expandedFocusRequester.requestFocus()
+            keyboardController?.show()
+        } else {
             keyboardController?.hide()
             focusManager.clearFocus(force = true)
         }
     }
-    val inputField = @Composable {
+    val collapsedInputField = @Composable {
         SearchBarDefaults.InputField(
             modifier = Modifier.fillMaxWidth(),
+            textFieldState = textFieldState,
+            searchBarState = searchBarState,
+            onSearch = { query ->
+                keyboardController?.hide()
+                onSearch(query)
+            },
+            placeholder = placeholder,
+            leadingIcon = leadingIcon,
+            trailingIcon = trailingIcon,
+            colors = colors.inputFieldColors
+        )
+    }
+    val expandedInputField = @Composable {
+        SearchBarDefaults.InputField(
+            modifier = Modifier
+                .fillMaxWidth()
+                .focusRequester(expandedFocusRequester),
             textFieldState = textFieldState,
             searchBarState = searchBarState,
             onSearch = { query ->
@@ -64,12 +90,12 @@ fun SearchBar(
                 .align(Alignment.Center)
                 .statusBarsPadding(),
             state = searchBarState,
-            inputField = inputField,
+            inputField = collapsedInputField,
             colors = colors
         )
         ExpandedFullScreenSearchBar(
             state = searchBarState,
-            inputField = inputField,
+            inputField = expandedInputField,
             colors = colors,
             content = content
         )
