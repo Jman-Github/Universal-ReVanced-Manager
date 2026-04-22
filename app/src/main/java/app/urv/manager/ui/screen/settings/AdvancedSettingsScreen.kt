@@ -539,6 +539,7 @@ fun AdvancedSettingsScreen(
             val installTarget = InstallerManager.InstallTarget.PATCHER
             val primaryPreference by viewModel.prefs.installerPrimary.getAsState()
             val fallbackPreference by viewModel.prefs.installerFallback.getAsState()
+            val chooseInstallerPerInstall by viewModel.prefs.chooseInstallerPerInstall.getAsState()
             val primaryToken = remember(primaryPreference) { installerManager.parseToken(primaryPreference) }
             val fallbackToken = remember(fallbackPreference) { installerManager.parseToken(fallbackPreference) }
             fun ensureSelection(
@@ -665,6 +666,27 @@ fun AdvancedSettingsScreen(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
             ) {
                 SettingsSearchHighlight(
+                    targetKey = R.string.installer_choose_per_install_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(R.string.installer_choose_per_install_title),
+                        supportingContent = stringResource(R.string.installer_choose_per_install_description),
+                        trailingContent = {
+                            ExpressiveSettingsSwitch(
+                                checked = chooseInstallerPerInstall,
+                                onCheckedChange = viewModel::setChooseInstallerPerInstall
+                            )
+                        },
+                        onClick = {
+                            viewModel.setChooseInstallerPerInstall(!chooseInstallerPerInstall)
+                        }
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
                     targetKey = R.string.installer_primary_title,
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }
@@ -674,15 +696,18 @@ fun AdvancedSettingsScreen(
                         headlineContent = stringResource(R.string.installer_primary_title),
                         supportingContent = primarySupporting,
                         leadingContent = primaryLeadingContent,
+                        enabled = !chooseInstallerPerInstall,
                         secondaryActionLabel = stringResource(R.string.reset),
                         onSecondaryAction = {
                             viewModel.setPrimaryInstaller(
                                 installerManager.parseToken(viewModel.prefs.installerPrimary.default)
                             )
                         },
-                        secondaryActionEnabled = primaryPreference != viewModel.prefs.installerPrimary.default,
+                        secondaryActionEnabled = !chooseInstallerPerInstall &&
+                            primaryPreference != viewModel.prefs.installerPrimary.default,
                         primaryActionLabel = stringResource(R.string.settings),
-                        onPrimaryAction = { installerDialogTarget = InstallerDialogTarget.Primary }
+                        onPrimaryAction = { installerDialogTarget = InstallerDialogTarget.Primary },
+                        primaryActionEnabled = !chooseInstallerPerInstall
                     )
                 }
                 ExpressiveSettingsDivider()
@@ -696,15 +721,18 @@ fun AdvancedSettingsScreen(
                         headlineContent = stringResource(R.string.installer_fallback_title),
                         supportingContent = fallbackSupporting,
                         leadingContent = fallbackLeadingContent,
+                        enabled = !chooseInstallerPerInstall,
                         secondaryActionLabel = stringResource(R.string.reset),
                         onSecondaryAction = {
                             viewModel.setFallbackInstaller(
                                 installerManager.parseToken(viewModel.prefs.installerFallback.default)
                             )
                         },
-                        secondaryActionEnabled = fallbackPreference != viewModel.prefs.installerFallback.default,
+                        secondaryActionEnabled = !chooseInstallerPerInstall &&
+                            fallbackPreference != viewModel.prefs.installerFallback.default,
                         primaryActionLabel = stringResource(R.string.settings),
-                        onPrimaryAction = { installerDialogTarget = InstallerDialogTarget.Fallback }
+                        onPrimaryAction = { installerDialogTarget = InstallerDialogTarget.Fallback },
+                        primaryActionEnabled = !chooseInstallerPerInstall
                     )
                 }
                 ExpressiveSettingsDivider()

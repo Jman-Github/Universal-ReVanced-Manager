@@ -109,6 +109,7 @@ class InstalledAppInfoViewModel(
     private var uninstallProgressToast: Toast? = null
     private var deferInstallProgressToasts = false
     private var deferUninstallProgressToasts = false
+    private var pendingInstallToken: InstallerManager.Token? = null
     private var pendingSignatureMismatchPackage: String? = null
     var isInstalling by mutableStateOf(false)
         private set
@@ -165,6 +166,7 @@ class InstalledAppInfoViewModel(
     fun cancelOngoingInstall() {
         pendingExternalInstall?.let(installerManager::cleanup)
         pendingExternalInstall = null
+        pendingInstallToken = null
         pendingSignatureMismatchPackage = null
         signatureMismatchPackage = null
         externalInstallTimeoutJob?.cancel()
@@ -557,7 +559,7 @@ class InstalledAppInfoViewModel(
         launchedActivity?.complete(result)
     }
 
-    fun installSavedApp() = viewModelScope.launch {
+    fun installSavedApp(token: InstallerManager.Token? = null) = viewModelScope.launch {
         val app = installedApp ?: return@launch
 
         val apk = savedApkFile(app)
@@ -565,6 +567,7 @@ class InstalledAppInfoViewModel(
             markInstallFailure(context.getString(R.string.saved_app_install_missing))
             return@launch
         }
+        pendingInstallToken = token
 
         pendingExternalInstall?.let(installerManager::cleanup)
         pendingExternalInstall = null
@@ -572,12 +575,26 @@ class InstalledAppInfoViewModel(
         externalInstallBaseline = null
         externalInstallStartTime = null
         val targetPackage = resolveDevicePackageName(app, apk)
-        val plan = installerManager.resolvePlan(
-            InstallerManager.InstallTarget.SAVED_APP,
-            apk,
-            targetPackage,
-            appInfo?.applicationInfo?.loadLabel(context.packageManager)?.toString()
-        )
+        val sourceLabel = appInfo?.applicationInfo?.loadLabel(context.packageManager)?.toString()
+        val plan = if (token != null) {
+            installerManager.resolvePlanForToken(
+                token = token,
+                target = InstallerManager.InstallTarget.SAVED_APP,
+                sourceFile = apk,
+                expectedPackage = targetPackage,
+                sourceLabel = sourceLabel
+            ) ?: run {
+                markInstallFailure(context.getString(R.string.install_app_fail, context.getString(R.string.installer_status_not_supported)))
+                return@launch
+            }
+        } else {
+            installerManager.resolvePlan(
+                InstallerManager.InstallTarget.SAVED_APP,
+                apk,
+                targetPackage,
+                sourceLabel
+            )
+        }
         if (plan !is InstallerManager.InstallPlan.Mount &&
             isInstalledOnDevice &&
             hasSignatureMismatch(targetPackage, apk)
@@ -1424,12 +1441,15 @@ class InstalledAppInfoViewModel(
     fun dismissSignatureMismatchPrompt() {
         signatureMismatchPackage = null
         pendingSignatureMismatchPackage = null
+        pendingInstallToken = null
     }
 
     fun confirmSignatureMismatchInstall() {
         val targetPackage = pendingSignatureMismatchPackage ?: return
+        val retryToken = pendingInstallToken
         signatureMismatchPackage = null
         pendingSignatureMismatchPackage = null
+        pendingInstallToken = null
         stopInstallProgressToasts()
         deferUninstallProgressToasts = true
         startUninstallProgressToasts()
@@ -1448,7 +1468,7 @@ class InstalledAppInfoViewModel(
 
                 Session.State.Succeeded -> {
                     stopUninstallProgressToasts()
-                    installSavedApp()
+                    installSavedApp(retryToken)
                 }
             }
         }

@@ -146,6 +146,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.universal.revanced.manager.R
 import app.urv.manager.data.platform.Filesystem
+import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.patcher.aapt.Aapt
 import app.urv.manager.ui.model.navigation.Announcement
@@ -171,6 +172,9 @@ import app.urv.manager.ui.component.bundle.ImportPatchBundleDialog
 import app.urv.manager.ui.component.haptics.HapticFloatingActionButton
 import app.urv.manager.ui.component.haptics.HapticTab
 import app.urv.manager.ui.component.patches.PathSelectorDialog
+import app.urv.manager.ui.component.patcher.InstallerPickerDialog
+import app.urv.manager.ui.component.patcher.SavedAppMountPromptDialog
+import app.urv.manager.ui.component.patcher.SavedAppMountPromptMode
 import app.urv.manager.ui.viewmodel.DashboardViewModel
 import app.urv.manager.ui.viewmodel.InstalledAppInfoViewModel
 import app.urv.manager.ui.viewmodel.MainViewModel
@@ -279,9 +283,11 @@ fun DashboardScreen(
     val showToolsTab by prefs.showToolsTab.getAsState()
     val announcementSystemEnabled by prefs.announcementSystemEnabled.getAsState()
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
+    val chooseInstallerPerInstall by prefs.chooseInstallerPerInstall.getAsState()
     val bundlesFabCollapsed by prefs.dashboardBundlesFabCollapsed.getAsState()
     val appsFabCollapsed by prefs.dashboardAppsFabCollapsed.getAsState()
     val progressBannerCollapsed by prefs.dashboardProgressBannerCollapsed.getAsState()
+    val installerManager: InstallerManager = koinInject()
     val bundlesSelectable by remember { derivedStateOf { selectedSourceCount > 0 } }
     val selectedProfileCount by remember { derivedStateOf { patchProfilesViewModel.selectedProfiles.size } }
     val profilesSelectable = showPatchProfilesTab && selectedProfileCount > 0
@@ -431,6 +437,8 @@ fun DashboardScreen(
     var quickDeleteApp by remember { mutableStateOf<InstalledApp?>(null) }
     var showQuickSavedUninstallDialog by remember { mutableStateOf(false) }
     var showQuickUnmountDialog by remember { mutableStateOf(false) }
+    var showQuickInstallerPicker by remember { mutableStateOf(false) }
+    var quickMountPromptMode by remember { mutableStateOf<SavedAppMountPromptMode?>(null) }
     var showQuickMixedBundleDialog by remember { mutableStateOf(false) }
     var showQuickMixedRevancedPatcherDialog by remember { mutableStateOf(false) }
 
@@ -550,6 +558,46 @@ fun DashboardScreen(
     SideEffect {
         quickActionViewModel?.onBackClick = {}
     }
+
+    if (showQuickInstallerPicker && quickActionViewModel != null) {
+        InstallerPickerDialog(
+            title = stringResource(R.string.installer_choose_for_this_install_title),
+            options = installerManager.listEntries(
+                target = InstallerManager.InstallTarget.SAVED_APP,
+                includeNone = false
+            ),
+            onDismiss = { showQuickInstallerPicker = false },
+            onConfirm = quickActionViewModel::installSavedApp,
+            onOpenShizuku = installerManager::openShizukuApp
+        )
+    }
+
+    quickMountPromptMode?.let { mode ->
+        val actionViewModel = quickActionViewModel ?: return@let
+        val hasRoot = actionViewModel.rootInstaller.hasRootAccess()
+        SavedAppMountPromptDialog(
+            mode = mode,
+            canMount = hasRoot,
+            onDismiss = { quickMountPromptMode = null },
+            onMount = {
+                quickMountPromptMode = null
+                actionViewModel.mountOrUnmount()
+            },
+            onChooseDifferentInstaller = {
+                quickMountPromptMode = null
+                showQuickInstallerPicker = true
+            },
+            onRemount = {
+                quickMountPromptMode = null
+                actionViewModel.remountSavedInstallation()
+            },
+            onUnmount = {
+                quickMountPromptMode = null
+                actionViewModel.mountOrUnmount()
+            }
+        )
+    }
+
     LaunchedEffect(
         quickActionViewModel?.installedApp?.currentPackageName,
         quickActionViewModel?.isMounted
@@ -1018,7 +1066,17 @@ fun DashboardScreen(
             }
             InstalledAppAction.INSTALL_OR_UPDATE -> {
                 if (actionApp.installType == InstallType.MOUNT) {
-                    if (!actionViewModel.primaryInstallerIsMount) {
+                    if (chooseInstallerPerInstall) {
+                        if (actionViewModel.isMounted) {
+                            if (!actionViewModel.rootInstaller.hasRootAccess()) {
+                                androidContext.toast(androidContext.getString(R.string.installer_status_requires_root))
+                            } else {
+                                quickMountPromptMode = SavedAppMountPromptMode.REMOUNT
+                            }
+                        } else {
+                            quickMountPromptMode = SavedAppMountPromptMode.MOUNT_OR_INSTALL
+                        }
+                    } else if (!actionViewModel.primaryInstallerIsMount) {
                         val mountAction = if (actionViewModel.isMounted) {
                             MountWarningAction.UPDATE
                         } else {
@@ -1035,6 +1093,8 @@ fun DashboardScreen(
                             actionViewModel.mountOrUnmount()
                         }
                     }
+                } else if (chooseInstallerPerInstall) {
+                    showQuickInstallerPicker = true
                 } else if (actionViewModel.primaryInstallerIsMount) {
                     val mountAction = if (actionViewModel.isInstalledOnDevice) {
                         MountWarningAction.UPDATE
@@ -1052,7 +1112,13 @@ fun DashboardScreen(
             }
             InstalledAppAction.UNINSTALL -> {
                 if (actionApp.installType == InstallType.MOUNT) {
-                    if (!actionViewModel.primaryInstallerIsMount) {
+                    if (chooseInstallerPerInstall) {
+                        if (!actionViewModel.rootInstaller.hasRootAccess()) {
+                            androidContext.toast(androidContext.getString(R.string.installer_status_requires_root))
+                        } else {
+                            quickMountPromptMode = SavedAppMountPromptMode.UNMOUNT
+                        }
+                    } else if (!actionViewModel.primaryInstallerIsMount) {
                         actionViewModel.showMountWarning(
                             MountWarningAction.UNINSTALL,
                             MountWarningReason.PRIMARY_NOT_MOUNT_FOR_MOUNT_APP

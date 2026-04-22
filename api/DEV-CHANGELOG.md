@@ -8,6 +8,7 @@
 - Updated dashboard delete confirmation dialogs to use the correct singular or plural wording for selected apps, patch bundles, and patch profiles https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/430
 - Improved text-entry UX by auto-focusing dialog and search inputs, opening the keyboard automatically, and keeping input dialogs visible above the IME across patch bundle, search, and settings flows https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/373 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/374
 - Updated the split APK merge selection dialog to show the live selected module count in the Start merge action button https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/362
+- Added a per-install installer selection mode that lets users choose the installer each time on the patcher and saved patched app flows https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/208
 
 
 # Bug fixes

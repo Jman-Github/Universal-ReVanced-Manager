@@ -390,6 +390,7 @@ fun proceedAfterMissingPatchWarning() {
     }
 
     private fun buildFallbackPrompt(message: String): FallbackInstallPrompt? {
+        if (prefs.chooseInstallerPerInstall.getBlocking()) return null
         val target = lastInstallTarget ?: return null
         val lastToken = lastInstallToken ?: return null
         val primaryToken = installerManager.getPrimaryToken()
@@ -2298,6 +2299,40 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 executeInstallPlan(plan)
             }.onFailure { error ->
                 Log.e(TAG, "install() failed to start", error)
+                showInstallFailure(
+                    app.getString(
+                        R.string.install_app_fail,
+                        error.simpleMessage() ?: error.javaClass.simpleName.orEmpty()
+                    )
+                )
+            }
+        }
+    }
+
+    fun installWithToken(token: InstallerManager.Token) {
+        if (isInstalling) return
+        viewModelScope.launch {
+            runCatching {
+                val expectedPackage = pm.getPackageInfo(outputFile)?.packageName ?: packageName
+                Log.d(TAG, "installWithToken() requested, token=$token, expected=$expectedPackage, outputExists=${outputFile.exists()}")
+                val plan = installerManager.resolvePlanForToken(
+                    token = token,
+                    target = InstallerManager.InstallTarget.PATCHER,
+                    sourceFile = outputFile,
+                    expectedPackage = expectedPackage,
+                    sourceLabel = null
+                ) ?: throw IllegalStateException("Selected installer is unavailable")
+                Log.d(TAG, "installWithToken() resolved plan=${plan::class.java.simpleName}")
+                if (plan !is InstallerManager.InstallPlan.Mount &&
+                    hasSignatureMismatch(expectedPackage, outputFile)
+                ) {
+                    showSignatureMismatchPrompt(expectedPackage, plan)
+                    return@runCatching
+                }
+                recordInstallPlan(plan, expectedPackage, null)
+                executeInstallPlan(plan)
+            }.onFailure { error ->
+                Log.e(TAG, "installWithToken() failed to start", error)
                 showInstallFailure(
                     app.getString(
                         R.string.install_app_fail,

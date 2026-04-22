@@ -84,6 +84,9 @@ import app.urv.manager.ui.component.SegmentedButton
 import app.urv.manager.ui.component.ConfirmDialog
 import app.urv.manager.ui.component.ExportSavedApkFileNameDialog
 import app.urv.manager.ui.component.patches.PathSelectorDialog
+import app.urv.manager.ui.component.patcher.InstallerPickerDialog
+import app.urv.manager.ui.component.patcher.SavedAppMountPromptDialog
+import app.urv.manager.ui.component.patcher.SavedAppMountPromptMode
 import app.urv.manager.ui.component.settings.SettingsListItem
 import app.urv.manager.ui.model.InstalledAppAction
 import app.urv.manager.ui.viewmodel.InstalledAppInfoViewModel
@@ -131,6 +134,8 @@ fun InstalledAppInfoScreen(
     val savedAppsEnabled by prefs.enableSavedApps.getAsState()
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
+    val chooseInstallerPerInstall by prefs.chooseInstallerPerInstall.getAsState()
+    val installerManager: InstallerManager = koinInject()
     var showAppliedPatchesDialog by rememberSaveable { mutableStateOf(false) }
     var showUniversalBlockedDialog by rememberSaveable { mutableStateOf(false) }
     var showMixedBundleDialog by rememberSaveable { mutableStateOf(false) }
@@ -145,9 +150,12 @@ fun InstalledAppInfoScreen(
     var showSavedAppDeleteDialog by rememberSaveable { mutableStateOf(false) }
     var showSavedUninstallDialog by rememberSaveable { mutableStateOf(false) }
     var showUnmountConfirmation by rememberSaveable { mutableStateOf(false) }
+    var showSavedAppInstallerPicker by rememberSaveable { mutableStateOf(false) }
+    var savedAppMountPromptMode by rememberSaveable { mutableStateOf<SavedAppMountPromptMode?>(null) }
     val appliedSelection = viewModel.appliedPatches
     val isInstalledOnDevice = viewModel.isInstalledOnDevice
     val installedAppState = viewModel.installedApp
+    val hasRoot = viewModel.rootInstaller.hasRootAccess()
     val storageRoots = remember { fs.storageRoots() }
     val (permissionContract, permissionName) = remember { fs.permissionContract() }
     val permissionLauncher =
@@ -323,6 +331,43 @@ fun InstalledAppInfoScreen(
     )
     EventEffect(flow = viewModel.launchActivityFlow) { intent ->
         activityLauncher.launch(intent)
+    }
+
+    if (showSavedAppInstallerPicker) {
+        InstallerPickerDialog(
+            title = stringResource(R.string.installer_choose_for_this_install_title),
+            options = installerManager.listEntries(
+                target = InstallerManager.InstallTarget.SAVED_APP,
+                includeNone = false
+            ),
+            onDismiss = { showSavedAppInstallerPicker = false },
+            onConfirm = viewModel::installSavedApp,
+            onOpenShizuku = installerManager::openShizukuApp
+        )
+    }
+
+    savedAppMountPromptMode?.let { mode ->
+        SavedAppMountPromptDialog(
+            mode = mode,
+            canMount = hasRoot,
+            onDismiss = { savedAppMountPromptMode = null },
+            onMount = {
+                savedAppMountPromptMode = null
+                viewModel.mountOrUnmount()
+            },
+            onChooseDifferentInstaller = {
+                savedAppMountPromptMode = null
+                showSavedAppInstallerPicker = true
+            },
+            onRemount = {
+                savedAppMountPromptMode = null
+                viewModel.remountSavedInstallation()
+            },
+            onUnmount = {
+                savedAppMountPromptMode = null
+                viewModel.mountOrUnmount()
+            }
+        )
     }
 
     LaunchedEffect(initialAction) {
@@ -903,9 +948,13 @@ fun InstalledAppInfoScreen(
             .padding(horizontal = 16.dp)
             .clip(RoundedCornerShape(24.dp))
     ) {
-        val hasRoot = viewModel.rootInstaller.hasRootAccess()
-        val installType = remember(installedApp.installType, viewModel.primaryInstallerIsMount, hasRoot) {
-            if (installedApp.installType == InstallType.SAVED && viewModel.primaryInstallerIsMount && hasRoot) {
+        val installType = remember(installedApp.installType, viewModel.primaryInstallerIsMount, chooseInstallerPerInstall, hasRoot) {
+            if (
+                !chooseInstallerPerInstall &&
+                installedApp.installType == InstallType.SAVED &&
+                viewModel.primaryInstallerIsMount &&
+                hasRoot
+            ) {
                 InstallType.MOUNT
             } else {
                 installedApp.installType
@@ -915,10 +964,33 @@ fun InstalledAppInfoScreen(
         val primaryInstallerIsMount = viewModel.primaryInstallerIsMount
         val isMounted = viewModel.isMounted
 
+        fun triggerSavedAppInstall() {
+            if (chooseInstallerPerInstall) {
+                showSavedAppInstallerPicker = true
+            } else if (primaryInstallerIsMount && installType != InstallType.MOUNT) {
+                val action = if (isInstalledOnDevice) MountWarningAction.UPDATE else MountWarningAction.INSTALL
+                viewModel.showMountWarning(action, MountWarningReason.PRIMARY_IS_MOUNT_FOR_NON_MOUNT_APP)
+            } else {
+                viewModel.installSavedApp()
+            }
+        }
+
         fun handleInstallOrUpdate() {
             when (installType) {
                 InstallType.MOUNT -> {
-                    if (!primaryInstallerIsMount) {
+                    if (chooseInstallerPerInstall) {
+                        if (viewModel.isMounted) {
+                            if (!hasRoot) {
+                                Toast
+                                    .makeText(context, rootRequiredText, Toast.LENGTH_SHORT)
+                                    .show()
+                            } else {
+                                savedAppMountPromptMode = SavedAppMountPromptMode.REMOUNT
+                            }
+                        } else {
+                            savedAppMountPromptMode = SavedAppMountPromptMode.MOUNT_OR_INSTALL
+                        }
+                    } else if (!primaryInstallerIsMount) {
                         val action = if (isMounted) MountWarningAction.UPDATE else MountWarningAction.INSTALL
                         viewModel.showMountWarning(action, MountWarningReason.PRIMARY_NOT_MOUNT_FOR_MOUNT_APP)
                     } else {
@@ -926,12 +998,7 @@ fun InstalledAppInfoScreen(
                     }
                 }
                 else -> {
-                    if (primaryInstallerIsMount && installType != InstallType.MOUNT) {
-                        val action = if (isInstalledOnDevice) MountWarningAction.UPDATE else MountWarningAction.INSTALL
-                        viewModel.showMountWarning(action, MountWarningReason.PRIMARY_IS_MOUNT_FOR_NON_MOUNT_APP)
-                    } else {
-                        viewModel.installSavedApp()
-                    }
+                    triggerSavedAppInstall()
                 }
             }
         }
@@ -940,7 +1007,15 @@ fun InstalledAppInfoScreen(
             when (installType) {
                 InstallType.MOUNT -> {
                     if (isMounted) {
-                        if (!primaryInstallerIsMount) {
+                        if (chooseInstallerPerInstall) {
+                            if (!hasRoot) {
+                                Toast
+                                    .makeText(context, rootRequiredText, Toast.LENGTH_SHORT)
+                                    .show()
+                            } else {
+                                savedAppMountPromptMode = SavedAppMountPromptMode.UNMOUNT
+                            }
+                        } else if (!primaryInstallerIsMount) {
                             viewModel.showMountWarning(
                                 MountWarningAction.UNINSTALL,
                                 MountWarningReason.PRIMARY_NOT_MOUNT_FOR_MOUNT_APP
@@ -1030,14 +1105,7 @@ fun InstalledAppInfoScreen(
             InstallType.CUSTOM,
             InstallType.SHIZUKU -> {
                 if (viewModel.hasSavedCopy) {
-                    val installAction: () -> Unit = {
-                        if (viewModel.primaryInstallerIsMount && installType != InstallType.MOUNT) {
-                            val action = if (isInstalledOnDevice) MountWarningAction.UPDATE else MountWarningAction.INSTALL
-                            viewModel.showMountWarning(action, MountWarningReason.PRIMARY_IS_MOUNT_FOR_NON_MOUNT_APP)
-                        } else {
-                            viewModel.installSavedApp()
-                        }
-                    }
+                    val installAction: () -> Unit = ::triggerSavedAppInstall
 
                     key("export") {
                         SegmentedButton(
@@ -1113,6 +1181,20 @@ fun InstalledAppInfoScreen(
                     icon = Icons.Outlined.SettingsBackupRestore,
                     text = if (viewModel.isMounted) stringResource(R.string.remount_saved_app) else stringResource(R.string.mount),
                     onClick = {
+                        if (chooseInstallerPerInstall) {
+                            if (viewModel.isMounted) {
+                                if (!hasRoot) {
+                                    Toast
+                                        .makeText(context, rootRequiredText, Toast.LENGTH_SHORT)
+                                        .show()
+                                } else {
+                                    savedAppMountPromptMode = SavedAppMountPromptMode.REMOUNT
+                                }
+                            } else {
+                                savedAppMountPromptMode = SavedAppMountPromptMode.MOUNT_OR_INSTALL
+                            }
+                            return@SegmentedButton
+                        }
                         if (!hasRoot) {
                             Toast
                                 .makeText(context, rootRequiredText, Toast.LENGTH_SHORT)
@@ -1128,7 +1210,15 @@ fun InstalledAppInfoScreen(
                     },
                     onLongClick = if (viewModel.isMounted) {
                         {
-                            if (!hasRoot) {
+                            if (chooseInstallerPerInstall) {
+                                if (!hasRoot) {
+                                    Toast
+                                        .makeText(context, rootRequiredText, Toast.LENGTH_SHORT)
+                                        .show()
+                                } else {
+                                    savedAppMountPromptMode = SavedAppMountPromptMode.UNMOUNT
+                                }
+                            } else if (!hasRoot) {
                                 Toast
                                     .makeText(context, rootRequiredText, Toast.LENGTH_SHORT)
                                     .show()
@@ -1206,14 +1296,7 @@ fun InstalledAppInfoScreen(
                     SegmentedButton(
                         icon = Icons.Outlined.InstallMobile,
                         text = installText,
-                        onClick = {
-                            if (viewModel.primaryInstallerIsMount) {
-                                val action = if (isInstalledOnDevice) MountWarningAction.UPDATE else MountWarningAction.INSTALL
-                                viewModel.showMountWarning(action, MountWarningReason.PRIMARY_IS_MOUNT_FOR_NON_MOUNT_APP)
-                            } else {
-                                viewModel.installSavedApp()
-                            }
-                        },
+                        onClick = ::triggerSavedAppInstall,
                         onLongClick = if (isInstalledOnDevice) {
                             {
                                 if (viewModel.primaryInstallerIsMount) {
@@ -1304,18 +1387,7 @@ fun InstalledAppInfoScreen(
 
                 SettingsListItem(
                     headlineContent = stringResource(R.string.install_type),
-                    supportingContent = when (installedApp.installType) {
-            InstallType.MOUNT -> stringResource(R.string.install_type_mount_label)
-            InstallType.SHIZUKU -> stringResource(R.string.install_type_shizuku_label)
-            InstallType.DEFAULT, InstallType.CUSTOM -> when (viewModel.primaryInstallerToken) {
-                InstallerManager.Token.Internal -> stringResource(R.string.install_type_system_installer)
-                InstallerManager.Token.AutoSaved -> stringResource(R.string.install_type_mount_label)
-                is InstallerManager.Token.Component,
-                InstallerManager.Token.Shizuku,
-                InstallerManager.Token.None -> stringResource(R.string.install_type_custom_installer)
-                        }
-                        InstallType.SAVED -> stringResource(installedApp.installType.stringResource)
-                    }
+                    supportingContent = stringResource(installedApp.installType.stringResource)
                 )
 
                 val bundleSummaryText = when {

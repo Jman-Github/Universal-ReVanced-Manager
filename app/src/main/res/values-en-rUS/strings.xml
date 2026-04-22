@@ -1186,6 +1186,9 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="hide_password_field">Hide password</string>
     <string name="installer_primary_title">Primary installer</string>
     <string name="installer_fallback_title">Fallback installer</string>
+    <string name="installer_choose_per_install_title">Choose installer per install</string>
+    <string name="installer_choose_per_install_description">When enabled, the patcher screen and saved patched app screen will ask which installer to use each time. Primary and fallback installer settings below are disabled while this is on.</string>
+    <string name="installer_choose_for_this_install_title">Choose installer for this install</string>
     <string name="installer_fallback_prompt_title">Try fallback installer?</string>
     <string name="installer_fallback_prompt_failure_label">Primary installer failed</string>
     <string name="installer_fallback_prompt_fallback_label">Try fallback installer: %1$s</string>
@@ -1214,6 +1217,10 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="installer_mount_mismatch_update">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, then remount.</string>
     <string name="installer_mount_mismatch_uninstall">This app was installed using the rooted mount installer. Switch your primary installer back to use mount actions, then unmount.</string>
     <string name="mount_version_mismatch_title">Mount failed</string>
+    <string name="saved_app_mount_choice_description">This saved app is currently not mounted. You can mount it again with the rooted mount installer, or install it with a different installer instead.</string>
+    <string name="saved_app_remount_choice_description">This app is currently mounted. If you want to use a different installer, unmount it first. You can continue with remount, or unmount it now.</string>
+    <string name="saved_app_unmount_choice_description">This app is currently mounted. If you want to use a different installer, unmount it first. Do you want to unmount it now?</string>
+    <string name="install_with_different_installer">Install with different installer</string>
     <string name="installer_status_shizuku_unsupported">The installed Shizuku version is not supported.</string>
     <string name="installer_action_open_shizuku">Open Shizuku</string>
     <string name="installer_shizuku_launch_failed">Unable to open Shizuku. Launch it manually and try again.</string>

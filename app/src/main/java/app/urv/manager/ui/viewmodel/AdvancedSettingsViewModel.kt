@@ -151,6 +151,10 @@ class AdvancedSettingsViewModel(
         installerManager.updateFallbackToken(target)
     }
 
+    fun setChooseInstallerPerInstall(enabled: Boolean) = viewModelScope.launch(Dispatchers.Default) {
+        prefs.chooseInstallerPerInstall.update(enabled)
+    }
+
     fun setPatchedAppExportFormat(value: String) = viewModelScope.launch(Dispatchers.Default) {
         prefs.patchedAppExportFormat.update(value)
     }

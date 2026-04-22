@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
 import app.urv.manager.MainActivity
 import app.urv.manager.data.platform.Filesystem
+import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.ui.component.AppScaffold
 import app.urv.manager.ui.component.AppTopBar
 import app.urv.manager.ui.component.ConfirmDialog
@@ -76,6 +77,7 @@ import app.urv.manager.ui.component.InterceptBackHandler
 import app.urv.manager.ui.component.InstallerStatusDialog
 import app.urv.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.urv.manager.ui.component.patches.PathSelectorDialog
+import app.urv.manager.ui.component.patcher.InstallerPickerDialog
 import app.urv.manager.ui.component.patcher.Steps
 import app.urv.manager.ui.model.StepCategory
 import app.urv.manager.ui.model.SelectedApp
@@ -111,8 +113,10 @@ fun PatcherScreen(
     val autoCollapsePatcherSteps by prefs.autoCollapsePatcherSteps.getAsState()
     val autoExpandRunningSteps by prefs.autoExpandRunningSteps.getAsState()
     val autoExpandRunningStepsExclusive by prefs.autoExpandRunningStepsExclusive.getAsState()
+    val chooseInstallerPerInstall by prefs.chooseInstallerPerInstall.getAsState()
     val useExclusiveAutoExpand = autoExpandRunningSteps && autoExpandRunningStepsExclusive
     val savedAppsEnabled by prefs.enableSavedApps.getAsState()
+    val installerManager: InstallerManager = koinInject()
     val exportMetadata = viewModel.exportMetadata
     val fallbackExportMetadata = remember(viewModel.packageName, viewModel.version) {
         PatchedAppExportData(
@@ -137,6 +141,7 @@ fun PatcherScreen(
     var showLogActionsDialog by rememberSaveable { mutableStateOf(false) }
     var showLogExportPicker by rememberSaveable { mutableStateOf(false) }
     var logExportInProgress by rememberSaveable { mutableStateOf(false) }
+    var showInstallerPicker by rememberSaveable { mutableStateOf(false) }
     val fs: Filesystem = koinInject()
     val storageRoots = remember { fs.storageRoots() }
     val (permissionContract, permissionName) = remember { fs.permissionContract() }
@@ -813,6 +818,19 @@ fun PatcherScreen(
         }
     }
 
+    if (showInstallerPicker) {
+        InstallerPickerDialog(
+            title = stringResource(R.string.installer_choose_for_this_install_title),
+            options = installerManager.listEntries(
+                target = InstallerManager.InstallTarget.PATCHER,
+                includeNone = false
+            ),
+            onDismiss = { showInstallerPicker = false },
+            onConfirm = viewModel::installWithToken,
+            onOpenShizuku = installerManager::openShizukuApp
+        )
+    }
+
     AppScaffold(
         topBar = { scrollBehavior ->
             AppTopBar(
@@ -859,7 +877,11 @@ fun PatcherScreen(
                             },
                             onClick = {
                                 if (viewModel.installedPackageName == null) {
-                                    viewModel.install()
+                                    if (chooseInstallerPerInstall) {
+                                        showInstallerPicker = true
+                                    } else {
+                                        viewModel.install()
+                                    }
                                 } else {
                                     viewModel.open()
                                 }

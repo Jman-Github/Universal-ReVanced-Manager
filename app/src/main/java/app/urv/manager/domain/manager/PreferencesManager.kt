@@ -100,6 +100,7 @@ class PreferencesManager(
     val disableSavedAppOverwrite = booleanPreference("disable_saved_app_overwrite", false)
 
     val allowMeteredUpdates = booleanPreference("allow_metered_updates", true)
+    val chooseInstallerPerInstall = booleanPreference("choose_installer_per_install", false)
     val installerPrimary = stringPreference("installer_primary", InstallerPreferenceTokens.INTERNAL)
     val installerFallback = stringPreference("installer_fallback", InstallerPreferenceTokens.NONE)
     val installerCustomComponents = stringSetPreference("installer_custom_components", emptySet())
@@ -237,6 +238,7 @@ class PreferencesManager(
         val dashboardAppsFabCollapsed: Boolean? = null,
         val dashboardProgressBannerCollapsed: Boolean? = null,
         val allowMeteredUpdates: Boolean? = null,
+        val chooseInstallerPerInstall: Boolean? = null,
         val installerPrimary: String? = null,
         val installerFallback: String? = null,
         val installerCustomComponents: Set<String>? = null,
@@ -385,6 +387,7 @@ class PreferencesManager(
             enableSavedApps = enableSavedApps.get(),
             disableSavedAppOverwrite = disableSavedAppOverwrite.get(),
             patchedAppExportFormat = patchedAppExportFormat.get(),
+            chooseInstallerPerInstall = chooseInstallerPerInstall.get(),
             installerPrimary = installerPrimary.get(),
             installerFallback = installerFallback.get(),
             installerCustomComponents = installerCustomComponents.get(),
@@ -517,6 +520,7 @@ class PreferencesManager(
         snapshot.enableSavedApps?.let { enableSavedApps.value = it }
         snapshot.disableSavedAppOverwrite?.let { disableSavedAppOverwrite.value = it }
         snapshot.patchedAppExportFormat?.let { patchedAppExportFormat.value = it }
+        snapshot.chooseInstallerPerInstall?.let { chooseInstallerPerInstall.value = it }
         snapshot.installerPrimary?.let { installerPrimary.value = it }
         snapshot.installerFallback?.let { installerFallback.value = it }
         snapshot.installerCustomComponents?.let { installerCustomComponents.value = it }
