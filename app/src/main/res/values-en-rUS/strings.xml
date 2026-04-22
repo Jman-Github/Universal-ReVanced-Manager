@@ -919,6 +919,7 @@ Patch profiles are not affected.</string>
     <string name="merge_split_apk_selection_preset_all">All</string>
     <string name="merge_split_apk_selection_strip_native_libs_title">Exclude extra native libraries</string>
     <string name="merge_split_apk_selection_confirm">Start merge</string>
+    <string name="merge_split_apk_selection_confirm_with_count">Start merge (%1$d)</string>
     <string name="merge_split_apk_selection_ready">Review split selection before merging.</string>
     <string name="merge_split_apk_selection_preset_none">None</string>
     <string name="merge_split_apk_selection_preset_recommended">Recommended for this device</string>

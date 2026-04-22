@@ -928,6 +928,9 @@ private fun SplitMergeSelectionDialog(
         }
     }
     var selectedPresetKey by remember(selection, initialPresetKey) { mutableStateOf<String?>(initialPresetKey) }
+    val selectedModuleCount by remember(selectedModules, requiredModules) {
+        derivedStateOf { (selectedModules + requiredModules).size }
+    }
 
     fun updateSelection(
         modules: Set<String>,
@@ -1050,9 +1053,18 @@ private fun SplitMergeSelectionDialog(
                             Text(stringResource(R.string.cancel))
                         }
                         Spacer(modifier = Modifier.weight(1f))
-                        TextButton(onClick = { onConfirm(selectedModules + requiredModules, stripNativeLibs) }) {
-                            Text(stringResource(R.string.merge_split_apk_selection_confirm))
-                        }
+                        HapticExtendedFloatingActionButton(
+                            text = {
+                                Text(
+                                    stringResource(
+                                        R.string.merge_split_apk_selection_confirm_with_count,
+                                        selectedModuleCount
+                                    )
+                                )
+                            },
+                            icon = { Icon(Icons.Outlined.Save, null) },
+                            onClick = { onConfirm(selectedModules + requiredModules, stripNativeLibs) }
+                        )
                     }
                 }
             }
