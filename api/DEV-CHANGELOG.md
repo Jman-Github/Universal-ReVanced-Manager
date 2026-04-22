@@ -13,6 +13,8 @@
 
 # Bug fixes
 
+- Fixed split archive metadata resolution to use stricter device-matching split selection for app labels and icons
+
 
 ## Build types
 

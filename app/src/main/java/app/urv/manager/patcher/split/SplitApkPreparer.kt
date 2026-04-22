@@ -312,7 +312,7 @@ object SplitApkPreparer {
             .maxByOrNull { entry -> if (entry.size >= 0L) entry.size else Long.MIN_VALUE }
     }
 
-    private fun isExplicitBaseApkEntryName(entryName: String): Boolean {
+    internal fun isExplicitBaseApkEntryName(entryName: String): Boolean {
         val normalized = entryName.replace('\\', '/')
         val fileName = normalized.substringAfterLast('/').lowercase(Locale.ROOT)
         if (!fileName.endsWith(".apk")) return false
@@ -324,6 +324,24 @@ object SplitApkPreparer {
             stem.startsWith("base-") ||
             stem.endsWith("-main") ||
             stem.endsWith("-master")
+    }
+
+    internal fun selectDeviceMatchingConfigEntryNames(entryNames: Collection<String>): Set<String> {
+        if (entryNames.isEmpty()) return emptySet()
+        val localeTokens = deviceLocaleTokens()
+        val allowedDensityQualifiers = supportedDensityQualifiers(
+            mergeOrder = entryNames.toList(),
+            densityQualifier = deviceDensityQualifier()
+        )
+        val preferredAbiTokens = selectPreferredAbiTokens(entryNames)
+        return entryNames.filterTo(linkedSetOf()) { entryName ->
+            matchesDisplayConfigEntry(
+                entryName = entryName,
+                localeTokens = localeTokens,
+                allowedDensityQualifiers = allowedDensityQualifiers,
+                preferredAbiTokens = preferredAbiTokens
+            )
+        }
     }
 
     private fun isVerifiedSplitCandidateSet(
@@ -558,6 +576,11 @@ object SplitApkPreparer {
 
     private fun isDensityQualifier(token: String): Boolean = token in DENSITY_QUALIFIERS
 
+    private fun isAbiQualifier(token: String): Boolean =
+        KNOWN_ABIS.any { abi ->
+            buildAbiTokens(abi).any { candidate -> token == candidate.lowercase(Locale.ROOT) }
+        }
+
     private data class LocaleQualifier(
         val language: String,
         val script: String? = null,
@@ -620,6 +643,43 @@ object SplitApkPreparer {
         }
     }
 
+    private fun matchesDisplayConfigEntry(
+        entryName: String,
+        localeTokens: Set<String>,
+        allowedDensityQualifiers: Set<String>,
+        preferredAbiTokens: Set<String>
+    ): Boolean {
+        val qualifiers = splitConfigQualifiers(entryName)
+        if (qualifiers.isEmpty()) return false
+
+        var hasRelevantQualifier = false
+        qualifiers.forEach { rawQualifier ->
+            val qualifier = rawQualifier.lowercase(Locale.ROOT)
+            when {
+                isDensityQualifier(qualifier) -> {
+                    hasRelevantQualifier = true
+                    if (allowedDensityQualifiers.isNotEmpty() && qualifier !in allowedDensityQualifiers) {
+                        return false
+                    }
+                }
+                parseLocaleQualifier(qualifier)?.let { localeQualifier ->
+                    hasRelevantQualifier = true
+                    if (!matchesLocaleQualifier(localeQualifier, localeTokens)) {
+                        return false
+                    }
+                    true
+                } == true -> Unit
+                isAbiQualifier(qualifier) -> {
+                    hasRelevantQualifier = true
+                    if (preferredAbiTokens.isEmpty() || qualifier !in preferredAbiTokens) {
+                        return false
+                    }
+                }
+            }
+        }
+        return hasRelevantQualifier
+    }
+
     private fun deviceLocaleTokens(): Set<String> {
         val locales = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             val list = Resources.getSystem().configuration.locales
@@ -668,6 +728,22 @@ object SplitApkPreparer {
             density <= DisplayMetrics.DENSITY_XXHIGH -> "xxhdpi"
             else -> "xxxhdpi"
         }
+    }
+
+    private fun selectPreferredAbiTokens(entryNames: Collection<String>): Set<String> {
+        val normalizedEntries = entryNames.map { it.lowercase(Locale.ROOT) }
+        Build.SUPPORTED_ABIS.forEach { abi ->
+            val tokens = buildAbiTokens(abi)
+                .map { it.lowercase(Locale.ROOT) }
+                .toSet()
+            if (normalizedEntries.any { entryName ->
+                    val qualifiers = splitConfigQualifiers(entryName)
+                    qualifiers.any { qualifier -> qualifier.lowercase(Locale.ROOT) in tokens }
+                }) {
+                return tokens
+            }
+        }
+        return emptySet()
     }
 
     private fun classifyModule(moduleName: String): SplitArchiveModuleKind {

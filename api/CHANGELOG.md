@@ -226,6 +226,7 @@
 - Fixed incorrect gesture-back preview behavior on screens that intercept back for in-app UI state changes instead of real navigation https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/280
 - Fixed framework cache recovery and bundled framework handling across all runtimes to prevent missing or corrupted framework cache patching failures
 - Fixed duplicate Saved/Installed entries by collapsing matching saved variants after install when saved app overwrite is enabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
+- Fixed split archive metadata resolution to use stricter device-matching split selection for app labels and icons
 
 
 # Refactors

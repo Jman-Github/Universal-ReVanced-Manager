@@ -19,11 +19,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 object SplitArchiveDisplayResolver {
-    private val densityQualifiers =
-        setOf("ldpi", "mdpi", "tvdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi")
-    private val knownAbis =
-        setOf("armeabi", "armeabi-v7a", "arm64-v8a", "x86", "x86_64")
-
     suspend fun resolve(
         source: File,
         workspace: File,
@@ -42,7 +37,7 @@ object SplitArchiveDisplayResolver {
 
         try {
             val extractedApks = extractRelevantApks(source, extractionDir)
-            val baseApk = extractedApks.firstOrNull { isBaseApkName(it.name) }
+            val baseApk = extractedApks.firstOrNull { SplitApkPreparer.isExplicitBaseApkEntryName(it.name) }
                 ?: extractedApks.firstOrNull()
                 ?: return@withContext null
 
@@ -71,9 +66,6 @@ object SplitArchiveDisplayResolver {
     }
 
     private fun extractRelevantApks(source: File, extractionDir: File): List<File> {
-        val locales = deviceLocaleTokens()
-        val density = deviceDensityQualifier()
-        val abiTokens = deviceAbiTokens()
         val output = mutableListOf<File>()
         val selectedEntryNames = SplitApkPreparer.splitApkEntryNames(source)
 
@@ -84,17 +76,17 @@ object SplitArchiveDisplayResolver {
                 .toList()
             if (entries.isEmpty()) return emptyList()
 
-            val base = entries.firstOrNull { isBaseApkName(it.name) }
+            val base = entries.firstOrNull { SplitApkPreparer.isExplicitBaseApkEntryName(it.name) }
                 ?: entries.filter { !isConfigLikeApkName(it.name) }
                     .maxByOrNull { entry -> entry.size }
             val selected = LinkedHashSet<String>()
             base?.let { selected.add(it.name) }
 
+            val matchingConfigEntries = SplitApkPreparer.selectDeviceMatchingConfigEntryNames(
+                entries.map { it.name }
+            )
             entries.forEach { entry ->
-                if (entry.name in selected) return@forEach
-                val qualifiers = splitConfigQualifiers(entry.name)
-                if (qualifiers.isEmpty()) return@forEach
-                if (qualifiers.any { qualifierMatches(it, locales, density, abiTokens) }) {
+                if (entry.name in matchingConfigEntries) {
                     selected.add(entry.name)
                 }
             }
@@ -208,112 +200,6 @@ object SplitArchiveDisplayResolver {
         return BitmapDrawable(resources, bitmap)
     }
 
-    private fun isBaseApkName(name: String): Boolean {
-        val lower = name.lowercase(Locale.ROOT)
-        return lower.endsWith("/base.apk") ||
-            lower == "base.apk" ||
-            lower.contains("base-master") ||
-            lower.contains("base-main")
-    }
-
-    private fun splitConfigQualifiers(entryName: String): List<String> {
-        val normalized = entryName.lowercase(Locale.ROOT)
-            .substringAfterLast('/')
-            .removeSuffix(".apk")
-        val splitIndex = normalized.indexOf("split_config.")
-        val configIndex = normalized.indexOf("config.")
-        val start = when {
-            splitIndex != -1 -> splitIndex + "split_config.".length
-            configIndex != -1 -> configIndex + "config.".length
-            else -> return emptyList()
-        }
-        return normalized.substring(start)
-            .split('.')
-            .filter { it.isNotBlank() }
-    }
-
-    private fun qualifierMatches(
-        qualifier: String,
-        localeTokens: Set<String>,
-        densityQualifier: String?,
-        abiTokens: Set<String>
-    ): Boolean {
-        val normalized = qualifier.lowercase(Locale.ROOT)
-        if (normalized in densityQualifiers) return densityQualifier == normalized
-
-        val parsedLocale = parseLocaleQualifier(normalized)
-        if (parsedLocale != null) {
-            return localeTokens.contains(parsedLocale)
-        }
-
-        val abiMatched = abiTokens.any { token ->
-            normalized == token || normalized == token.replace('-', '_')
-        }
-        return abiMatched
-    }
-
-    private fun parseLocaleQualifier(raw: String): String? {
-        val token = raw.replace('-', '_')
-        val parts = token.split('_').filter { it.isNotBlank() }
-        if (parts.isEmpty()) return null
-        val language = parts[0]
-        if (language.length !in 2..3 || !language.all { it.isLetter() }) return null
-        val region = parts.getOrNull(1)
-            ?.removePrefix("r")
-            ?.takeIf { it.length in 2..3 && it.all { ch -> ch.isLetterOrDigit() } }
-        return if (region == null) {
-            language
-        } else {
-            "${language}_r${region.lowercase(Locale.ROOT)}"
-        }
-    }
-
-    private fun deviceLocaleTokens(): Set<String> {
-        val locales = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            val list = Resources.getSystem().configuration.locales
-            (0 until list.size()).map { list[it] }
-        } else {
-            listOf(Locale.getDefault())
-        }
-
-        return locales.flatMap { locale ->
-            val language = locale.language.lowercase(Locale.ROOT)
-            if (language.isBlank()) return@flatMap emptyList()
-            val region = locale.country.lowercase(Locale.ROOT)
-            if (region.isBlank()) {
-                listOf(language)
-            } else {
-                listOf(language, "${language}_r$region")
-            }
-        }.toSet()
-    }
-
-    private fun deviceDensityQualifier(): String? {
-        val density = Resources.getSystem().displayMetrics?.densityDpi ?: return null
-        return when {
-            density <= android.util.DisplayMetrics.DENSITY_LOW -> "ldpi"
-            density <= android.util.DisplayMetrics.DENSITY_MEDIUM -> "mdpi"
-            density <= android.util.DisplayMetrics.DENSITY_TV -> "tvdpi"
-            density <= android.util.DisplayMetrics.DENSITY_HIGH -> "hdpi"
-            density <= android.util.DisplayMetrics.DENSITY_XHIGH -> "xhdpi"
-            density <= android.util.DisplayMetrics.DENSITY_XXHIGH -> "xxhdpi"
-            else -> "xxxhdpi"
-        }
-    }
-
-    private fun deviceAbiTokens(): Set<String> {
-        val supported = Build.SUPPORTED_ABIS.flatMap { abi ->
-            val lower = abi.lowercase(Locale.ROOT)
-            listOf(lower, lower.replace('-', '_'), lower.replace('_', '-'))
-        }.toMutableSet()
-        knownAbis.forEach { abi ->
-            val lower = abi.lowercase(Locale.ROOT)
-            supported += lower
-            supported += lower.replace('-', '_')
-            supported += lower.replace('_', '-')
-        }
-        return supported
-    }
 }
 
 data class ResolvedSplitArchiveDisplay(
