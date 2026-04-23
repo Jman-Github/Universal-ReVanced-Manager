@@ -13,6 +13,7 @@ import app.urv.manager.patcher.ProgressEvent
 import app.urv.manager.patcher.ProgressEventParcel
 import app.urv.manager.patcher.StepId
 import app.urv.manager.patcher.logger.Logger
+import app.urv.manager.patcher.logger.filtered
 import app.urv.manager.patcher.runStep
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.patcher.runtime.StdIoWarningAccumulator
@@ -100,6 +101,8 @@ class Revanced22ProcessRuntime(
         stripNativeLibs: Boolean,
         skipUnneededSplits: Boolean,
     ) = coroutineScope {
+        val logMode = prefs.patcherLogMode.get()
+        val runtimeLogger = logger.filtered(logMode)
         currentCoroutineContext()[Job]?.invokeOnCompletion {
             cancellationRequested.set(true)
             runCatching { binderRef.get()?.exit() }
@@ -120,7 +123,7 @@ class Revanced22ProcessRuntime(
                 SplitApkPreparer.prepareIfNeeded(
                     source = sourceInput,
                     workspace = File(cacheDir),
-                    logger = logger,
+                    logger = runtimeLogger,
                     stripNativeLibs = stripNativeLibs,
                     skipUnneededSplits = skipUnneededSplits,
                     onProgress = { message ->
@@ -139,7 +142,7 @@ class Revanced22ProcessRuntime(
         val eventQueue = Channel<ProgressEvent>(Channel.UNLIMITED)
         val logDrainJob = launch(Dispatchers.Default) {
             for ((level, msg) in logQueue) {
-                runCatching { logger.log(enumValueOf(level), msg) }
+                runCatching { runtimeLogger.log(enumValueOf(level), msg) }
             }
         }
         val eventDrainJob = launch(Dispatchers.Default) {
@@ -189,7 +192,7 @@ class Revanced22ProcessRuntime(
         val patching = CompletableDeferred<Unit>()
         val finishedReported = AtomicBoolean(false)
         val stdioWarnings = StdIoWarningAccumulator { message ->
-            logger.warn("[STDIO]: $message")
+            runtimeLogger.warn("[STDIO]: $message")
         }
 
         fun completeSuccess() {
@@ -255,7 +258,7 @@ class Revanced22ProcessRuntime(
                                 completeCancelled()
                                 return@launch
                             }
-                            logger.warn(
+                            runtimeLogger.warn(
                                 "ReVanced v22 process exited without finished callback; using process exit fallback."
                             )
                             completeSuccess()
@@ -312,7 +315,7 @@ class Revanced22ProcessRuntime(
             val selectedBundlesByUid = bundlesByUid.filterKeys { it in selectedBundleIds }
             val staleBundleIds = selectedBundleIds - selectedBundlesByUid.keys
             if (staleBundleIds.isNotEmpty()) {
-                logger.warn("Ignoring missing patch bundle IDs in selection: ${staleBundleIds.joinToString(",")}")
+                runtimeLogger.warn("Ignoring missing patch bundle IDs in selection: ${staleBundleIds.joinToString(",")}")
             }
             if (activeSelectedPatches.isNotEmpty() && selectedBundlesByUid.isEmpty()) {
                 throw IllegalArgumentException(
@@ -335,7 +338,8 @@ class Revanced22ProcessRuntime(
                     )
                 },
                 stripNativeLibs = stripNativeLibs,
-                skipUnneededSplits = skipUnneededSplits
+                skipUnneededSplits = skipUnneededSplits,
+                patcherLogMode = logMode
             )
 
             binder.start(parameters, eventHandler)

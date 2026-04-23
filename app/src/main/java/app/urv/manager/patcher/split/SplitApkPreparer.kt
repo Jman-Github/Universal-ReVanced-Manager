@@ -2,7 +2,6 @@ package app.urv.manager.patcher.split
 
 import android.content.res.Resources
 import android.os.Build
-import android.util.Log
 import android.util.DisplayMetrics
 import app.urv.manager.patcher.logger.LogLevel
 import app.urv.manager.patcher.logger.Logger
@@ -847,8 +846,6 @@ object SplitApkPreparer {
     }
 
     private object defaultLogger : Logger() {
-        override fun log(level: LogLevel, message: String) {
-            Log.d("SplitApkPreparer", "[${level.name}] $message")
-        }
+        override fun log(level: LogLevel, message: String) = Unit
     }
 }

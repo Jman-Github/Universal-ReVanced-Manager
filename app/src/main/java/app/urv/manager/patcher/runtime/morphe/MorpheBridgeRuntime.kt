@@ -3,6 +3,7 @@ package app.urv.manager.patcher.runtime.morphe
 import android.content.Context
 import app.urv.manager.patcher.ProgressEvent
 import app.urv.manager.patcher.logger.Logger
+import app.urv.manager.patcher.logger.filtered
 import app.urv.manager.patcher.morphe.MorpheBridgeFailureException
 import app.urv.manager.patcher.morphe.MorpheRuntimeBridge
 import app.urv.manager.util.Options
@@ -34,6 +35,8 @@ class MorpheBridgeRuntime(context: Context) : MorpheRuntime(context) {
         stripNativeLibs: Boolean,
         skipUnneededSplits: Boolean,
     ) {
+        val logMode = prefs.patcherLogMode.get()
+        val runtimeLogger = logger.filtered(logMode)
         ensureNotCancelled()
         val activeSelectedPatches = selectedPatches.filterValues { it.isNotEmpty() }
         val selectedBundleIds = activeSelectedPatches.keys
@@ -41,7 +44,7 @@ class MorpheBridgeRuntime(context: Context) : MorpheRuntime(context) {
         val selectedBundlesByUid = bundlesByUid.filterKeys { it in selectedBundleIds }
         val staleBundleIds = selectedBundleIds - selectedBundlesByUid.keys
         if (staleBundleIds.isNotEmpty()) {
-            logger.warn("Ignoring missing patch bundle IDs in selection: ${staleBundleIds.joinToString(",")}")
+            runtimeLogger.warn("Ignoring missing patch bundle IDs in selection: ${staleBundleIds.joinToString(",")}")
         }
         if (activeSelectedPatches.isNotEmpty() && selectedBundlesByUid.isEmpty()) {
             throw IllegalArgumentException(
@@ -64,6 +67,7 @@ class MorpheBridgeRuntime(context: Context) : MorpheRuntime(context) {
             "packageName" to packageName,
             "inputFile" to inputFile,
             "outputFile" to outputFile,
+            "patcherLogMode" to logMode.name,
             "stripNativeLibs" to stripNativeLibs,
             "skipUnneededSplits" to skipUnneededSplits,
             "bytecodeMode" to prefs.morpheBytecodeMode.get().runtimeValue,
@@ -71,7 +75,7 @@ class MorpheBridgeRuntime(context: Context) : MorpheRuntime(context) {
         )
 
         ensureNotCancelled()
-        val error = MorpheRuntimeBridge.runPatcher(params, logger, onEvent, cancelRequested::get)
+        val error = MorpheRuntimeBridge.runPatcher(params, runtimeLogger, onEvent, cancelRequested::get)
         if (!error.isNullOrBlank()) {
             throw MorpheBridgeFailureException(error)
         }

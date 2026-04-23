@@ -16,6 +16,7 @@ data class MorpheParameters(
     val configurations: List<MorphePatchConfiguration>,
     val stripNativeLibs: Boolean,
     val skipUnneededSplits: Boolean,
+    val patcherLogMode: String,
 ) : Parcelable
 
 @Parcelize

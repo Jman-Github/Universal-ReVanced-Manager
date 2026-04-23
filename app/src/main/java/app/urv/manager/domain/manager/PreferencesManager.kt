@@ -5,6 +5,7 @@ import android.content.Context
 import app.universal.revanced.manager.R
 import app.urv.manager.domain.manager.base.BasePreferencesManager
 import app.urv.manager.domain.manager.base.EditorContext
+import app.urv.manager.patcher.logger.PatcherLogMode
 import app.urv.manager.patcher.runtime.MemoryLimitConfig
 import app.urv.manager.patcher.runtime.morphe.MorpheBytecodeMode
 import app.urv.manager.ui.theme.Theme
@@ -74,6 +75,7 @@ class PreferencesManager(
     val stripUnusedNativeLibs = booleanPreference("strip_unused_native_libs", false)
     val skipUnneededSplitApks = booleanPreference("skip_unneeded_split_apks", false)
     val morpheBytecodeMode = enumPreference("morphe_bytecode_mode", MorpheBytecodeMode.FAST)
+    val patcherLogMode = enumPreference("patcher_log_mode", PatcherLogMode.DEFAULT)
     val patcherProcessMemoryLimit = intPreference(
         "process_runtime_memory_limit",
         MemoryLimitConfig.recommendedLimitMb(context)
@@ -218,6 +220,7 @@ class PreferencesManager(
         val stripUnusedNativeLibs: Boolean? = null,
         val skipUnneededSplitApks: Boolean? = null,
         val morpheBytecodeMode: String? = null,
+        val patcherLogMode: PatcherLogMode? = null,
         val theme: Theme? = null,
         val appLanguage: String? = null,
         val api: String? = null,
@@ -379,6 +382,7 @@ class PreferencesManager(
             stripUnusedNativeLibs = stripUnusedNativeLibs.get(),
             skipUnneededSplitApks = skipUnneededSplitApks.get(),
             morpheBytecodeMode = morpheBytecodeMode.get().runtimeValue,
+            patcherLogMode = patcherLogMode.get(),
             patcherProcessMemoryLimit = patcherProcessMemoryLimit.get(),
             patcherProcessMemoryAggressive = patcherProcessMemoryAggressive.get(),
             autoCollapsePatcherSteps = autoCollapsePatcherSteps.get(),
@@ -512,6 +516,7 @@ class PreferencesManager(
         snapshot.morpheBytecodeMode?.let {
             morpheBytecodeMode.value = MorpheBytecodeMode.fromRuntimeValue(it)
         }
+        snapshot.patcherLogMode?.let { patcherLogMode.value = it }
         snapshot.patcherProcessMemoryLimit?.let { patcherProcessMemoryLimit.value = it }
         snapshot.patcherProcessMemoryAggressive?.let { patcherProcessMemoryAggressive.value = it }
         snapshot.autoCollapsePatcherSteps?.let { autoCollapsePatcherSteps.value = it }

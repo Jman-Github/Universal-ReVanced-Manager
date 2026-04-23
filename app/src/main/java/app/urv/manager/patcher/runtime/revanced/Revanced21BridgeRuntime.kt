@@ -3,6 +3,7 @@ package app.urv.manager.patcher.runtime
 import android.content.Context
 import app.urv.manager.patcher.ProgressEvent
 import app.urv.manager.patcher.logger.Logger
+import app.urv.manager.patcher.logger.filtered
 import app.urv.manager.patcher.revanced.Revanced21BridgeFailureException
 import app.urv.manager.patcher.revanced.Revanced21RuntimeBridge
 import app.urv.manager.util.Options
@@ -34,6 +35,8 @@ class Revanced21BridgeRuntime(context: Context) : Runtime(context) {
         stripNativeLibs: Boolean,
         skipUnneededSplits: Boolean,
     ) {
+        val logMode = prefs.patcherLogMode.get()
+        val runtimeLogger = logger.filtered(logMode)
         ensureNotCancelled()
         val activeSelectedPatches = selectedPatches.filterValues { it.isNotEmpty() }
         val selectedBundleIds = activeSelectedPatches.keys
@@ -41,7 +44,7 @@ class Revanced21BridgeRuntime(context: Context) : Runtime(context) {
         val selectedBundlesByUid = bundlesByUid.filterKeys { it in selectedBundleIds }
         val staleBundleIds = selectedBundleIds - selectedBundlesByUid.keys
         if (staleBundleIds.isNotEmpty()) {
-            logger.warn("Ignoring missing patch bundle IDs in selection: ${staleBundleIds.joinToString(",")}")
+            runtimeLogger.warn("Ignoring missing patch bundle IDs in selection: ${staleBundleIds.joinToString(",")}")
         }
         if (activeSelectedPatches.isNotEmpty() && selectedBundlesByUid.isEmpty()) {
             throw IllegalArgumentException(
@@ -66,11 +69,12 @@ class Revanced21BridgeRuntime(context: Context) : Runtime(context) {
             "outputFile" to outputFile,
             "stripNativeLibs" to stripNativeLibs,
             "skipUnneededSplits" to skipUnneededSplits,
+            "patcherLogMode" to logMode.name,
             "configurations" to configs
         )
 
         ensureNotCancelled()
-        val error = Revanced21RuntimeBridge.runPatcher(params, logger, onEvent, cancelRequested::get)
+        val error = Revanced21RuntimeBridge.runPatcher(params, runtimeLogger, onEvent, cancelRequested::get)
         if (!error.isNullOrBlank()) {
             throw Revanced21BridgeFailureException(error)
         }

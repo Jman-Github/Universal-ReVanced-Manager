@@ -12,6 +12,7 @@ import app.urv.manager.patcher.LibraryResolver
 import app.urv.manager.patcher.ProgressEvent
 import app.urv.manager.patcher.ProgressEventParcel
 import app.urv.manager.patcher.logger.Logger
+import app.urv.manager.patcher.logger.filtered
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.patcher.runtime.MemoryLimitConfig
 import app.urv.manager.patcher.runtime.StdIoWarningAccumulator
@@ -90,6 +91,8 @@ class MorpheProcessRuntime(
         stripNativeLibs: Boolean,
         skipUnneededSplits: Boolean,
     ) = coroutineScope {
+        val logMode = prefs.patcherLogMode.get()
+        val runtimeLogger = logger.filtered(logMode)
         currentCoroutineContext()[Job]?.invokeOnCompletion {
             cancellationRequested.set(true)
             runCatching { binderRef.get()?.exit() }
@@ -100,7 +103,7 @@ class MorpheProcessRuntime(
         val eventQueue = Channel<ProgressEvent>(Channel.UNLIMITED)
         val logDrainJob = launch(Dispatchers.Default) {
             for ((level, msg) in logQueue) {
-                runCatching { logger.log(enumValueOf(level), msg) }
+                runCatching { runtimeLogger.log(enumValueOf(level), msg) }
             }
         }
         val eventDrainJob = launch(Dispatchers.Default) {
@@ -148,7 +151,7 @@ class MorpheProcessRuntime(
         val patching = CompletableDeferred<Unit>()
         val finishedReported = AtomicBoolean(false)
         val stdioWarnings = StdIoWarningAccumulator { message ->
-            logger.warn("[STDIO]: $message")
+            runtimeLogger.warn("[STDIO]: $message")
         }
 
         fun completeSuccess() {
@@ -214,7 +217,7 @@ class MorpheProcessRuntime(
                                 completeCancelled()
                                 return@launch
                             }
-                            logger.warn(
+                            runtimeLogger.warn(
                                 "Morphe process exited without finished callback; using process exit fallback."
                             )
                             completeSuccess()
@@ -264,7 +267,7 @@ class MorpheProcessRuntime(
             val selectedBundlesByUid = bundlesByUid.filterKeys { it in selectedBundleIds }
             val staleBundleIds = selectedBundleIds - selectedBundlesByUid.keys
             if (staleBundleIds.isNotEmpty()) {
-                logger.warn("Ignoring missing patch bundle IDs in selection: ${staleBundleIds.joinToString(",")}")
+                runtimeLogger.warn("Ignoring missing patch bundle IDs in selection: ${staleBundleIds.joinToString(",")}")
             }
             if (activeSelectedPatches.isNotEmpty() && selectedBundlesByUid.isEmpty()) {
                 throw IllegalArgumentException(
@@ -288,7 +291,8 @@ class MorpheProcessRuntime(
                     )
                 },
                 stripNativeLibs = stripNativeLibs,
-                skipUnneededSplits = skipUnneededSplits
+                skipUnneededSplits = skipUnneededSplits,
+                patcherLogMode = logMode.name
             )
 
             binder.start(parameters, eventHandler)

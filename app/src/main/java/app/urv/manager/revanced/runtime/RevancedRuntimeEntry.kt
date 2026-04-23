@@ -9,6 +9,7 @@ import app.urv.manager.patcher.StepId
 import app.urv.manager.patcher.toSafeStackTraceString
 import app.urv.manager.patcher.logger.LogLevel
 import app.urv.manager.patcher.logger.Logger
+import app.urv.manager.patcher.logger.PatcherLogMode
 import app.urv.manager.patcher.revanced.RevancedPatchBundleLoader
 import app.urv.manager.patcher.revanced.RevancedPatchList
 import app.urv.manager.patcher.revanced.RevancedSession
@@ -163,6 +164,9 @@ object RevancedRuntimeEntry {
             ?: return "Missing outputFile parameter."
         val stripNativeLibs = params["stripNativeLibs"] as? Boolean ?: false
         val skipUnneededSplits = params["skipUnneededSplits"] as? Boolean ?: false
+        val logMode = (params["patcherLogMode"] as? String)
+            ?.let { runCatching { PatcherLogMode.valueOf(it) }.getOrNull() }
+            ?: PatcherLogMode.DEFAULT
         val configurations = params["configurations"] as? List<*> ?: emptyList<Any>()
 
         logger.info(
@@ -181,8 +185,21 @@ object RevancedRuntimeEntry {
             androidDataDir = androidDataDir,
             runtimeClassPath = resolveRuntimeClassPath(runtimeClassPath)
         )
-        val aaptLogs = AaptLogCapture(onLine = ::handleWriteProgressLine).apply { start() }
-        val stdioCapture = StdIoCapture(::handleWriteProgressLine).apply { start() }
+        val aaptLogs = AaptLogCapture(onLine = ::handleWriteProgressLine).apply {
+            start(logMode.javaLogLevel)
+        }
+        val stdioCapture = StdIoCapture(::handleWriteProgressLine).apply {
+            start(
+                captureAll = logMode == PatcherLogMode.VERBOSE,
+                mirrorToOriginal = logMode == PatcherLogMode.VERBOSE
+            ) { line ->
+                line.contains("Compiling modified resources", ignoreCase = true) ||
+                    line.contains("Compiling patched resources", ignoreCase = true) ||
+                    dexCompilePattern.containsMatchIn(line) ||
+                    dexWritePattern.containsMatchIn(line) ||
+                    dexAnyPattern.containsMatchIn(line)
+            }
+        }
 
         return try {
             val configs = configurations.mapNotNull { raw ->
@@ -323,6 +340,7 @@ object RevancedRuntimeEntry {
                             initialPatcherInput = patcherInput,
                             onEvent = ::onEvent,
                             checkCancelled = ::throwIfCancelled,
+                            logMode = logMode,
                         )
                     }
                     val preparedInput = requireNotNull(preparation) {
@@ -486,10 +504,10 @@ object RevancedRuntimeEntry {
             override fun close() {}
         }
 
-        fun start() {
+        fun start(level: Level) {
             originalLevel = logger.level
-            logger.level = Level.ALL
-            handler.level = Level.ALL
+            logger.level = level
+            handler.level = level
             logger.addHandler(handler)
         }
 
@@ -512,10 +530,22 @@ object RevancedRuntimeEntry {
         private val originalErr = System.err
         private val outBuffer = LineBufferOutputStream(onLine)
         private val errBuffer = LineBufferOutputStream(onLine)
-        private val outStream = PrintStream(TeeOutputStream(originalOut, outBuffer), true)
-        private val errStream = PrintStream(TeeOutputStream(originalErr, errBuffer), true)
+        private lateinit var outStream: PrintStream
+        private lateinit var errStream: PrintStream
 
-        fun start() {
+        fun start(
+            captureAll: Boolean = true,
+            mirrorToOriginal: Boolean = true,
+            shouldCaptureLine: ((String) -> Boolean)? = null
+        ) {
+            outBuffer.captureAll = captureAll
+            outBuffer.shouldCaptureLine = shouldCaptureLine
+            errBuffer.captureAll = captureAll
+            errBuffer.shouldCaptureLine = shouldCaptureLine
+            val passthroughOut = if (mirrorToOriginal) originalOut else NullOutputStream
+            val passthroughErr = if (mirrorToOriginal) originalErr else NullOutputStream
+            outStream = PrintStream(TeeOutputStream(passthroughOut, outBuffer), true)
+            errStream = PrintStream(TeeOutputStream(passthroughErr, errBuffer), true)
             System.setOut(outStream)
             System.setErr(errStream)
         }
@@ -526,6 +556,11 @@ object RevancedRuntimeEntry {
             System.setOut(originalOut)
             System.setErr(originalErr)
         }
+    }
+
+    private object NullOutputStream : OutputStream() {
+        override fun write(b: Int) = Unit
+        override fun write(bytes: ByteArray, off: Int, len: Int) = Unit
     }
 
     private class TeeOutputStream(
@@ -552,6 +587,8 @@ object RevancedRuntimeEntry {
         private val onLine: (String) -> Unit
     ) : OutputStream() {
         private val buffer = StringBuilder()
+        var captureAll: Boolean = true
+        var shouldCaptureLine: ((String) -> Boolean)? = null
 
         override fun write(b: Int) {
             appendChar(b.toChar())
@@ -571,7 +608,9 @@ object RevancedRuntimeEntry {
             if (buffer.isEmpty()) return
             val line = buffer.toString()
             buffer.setLength(0)
-            onLine(line)
+            if (captureAll || shouldCaptureLine?.invoke(line) == true) {
+                onLine(line)
+            }
         }
 
         private fun appendChar(ch: Char) {

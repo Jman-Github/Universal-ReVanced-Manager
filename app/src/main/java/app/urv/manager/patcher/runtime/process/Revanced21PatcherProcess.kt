@@ -11,6 +11,8 @@ import app.universal.revanced.manager.BuildConfig
 import app.urv.manager.patcher.ProgressEvent
 import app.urv.manager.patcher.logger.LogLevel
 import app.urv.manager.patcher.logger.Logger
+import app.urv.manager.patcher.logger.PatcherLogMode
+import app.urv.manager.patcher.logger.allows
 import app.urv.manager.patcher.revanced.Revanced21RuntimeBridge
 import app.urv.manager.patcher.runtime.Revanced21ProcessRuntime
 import app.urv.manager.patcher.toParcel
@@ -71,6 +73,8 @@ class Revanced21PatcherProcess(
     }
 
     override fun start(parameters: Parameters, events: IPatcherEvents) {
+        val logMode = parameters.patcherLogMode
+
         fun safeEvent(event: ProgressEvent) {
             if (!eventsEnabled.get()) return
             try {
@@ -104,11 +108,14 @@ class Revanced21PatcherProcess(
         runningJob = scope.launch {
             val logger = object : Logger() {
                 override fun log(level: LogLevel, message: String) {
+                    if (!logMode.allows(level)) return
                     safeLog(level.name, message)
                 }
             }
-            val aaptLogs = AaptLogCapture().apply { start() }
-            val stdioCapture = StdIoCapture().apply { start() }
+            val aaptLogs = AaptLogCapture().apply { start(logMode) }
+            val stdioCapture = StdIoCapture().apply {
+                start(mirrorToOriginal = logMode == PatcherLogMode.VERBOSE)
+            }
             var exitCode = 0
 
             try {
@@ -161,6 +168,7 @@ class Revanced21PatcherProcess(
             put("outputFile", parameters.outputFile)
             put("stripNativeLibs", parameters.stripNativeLibs)
             put("skipUnneededSplits", parameters.skipUnneededSplits)
+            put("patcherLogMode", parameters.patcherLogMode.name)
             put("configurations", configs)
         }
     }
@@ -232,10 +240,10 @@ class Revanced21PatcherProcess(
             override fun close() {}
         }
 
-        fun start() {
+        fun start(logMode: PatcherLogMode) {
             originalLevel = logger.level
-            logger.level = Level.ALL
-            handler.level = Level.ALL
+            logger.level = logMode.javaLogLevel
+            handler.level = logMode.javaLogLevel
             logger.addHandler(handler)
         }
 
@@ -258,10 +266,14 @@ class Revanced21PatcherProcess(
         private val originalErr = System.err
         private val outBuffer = LineBufferOutputStream(onLine)
         private val errBuffer = LineBufferOutputStream(onLine)
-        private val outStream = PrintStream(TeeOutputStream(originalOut, outBuffer), true)
-        private val errStream = PrintStream(TeeOutputStream(originalErr, errBuffer), true)
+        private lateinit var outStream: PrintStream
+        private lateinit var errStream: PrintStream
 
-        fun start() {
+        fun start(mirrorToOriginal: Boolean = true) {
+            val passthroughOut = if (mirrorToOriginal) originalOut else NullOutputStream
+            val passthroughErr = if (mirrorToOriginal) originalErr else NullOutputStream
+            outStream = PrintStream(TeeOutputStream(passthroughOut, outBuffer), true)
+            errStream = PrintStream(TeeOutputStream(passthroughErr, errBuffer), true)
             System.setOut(outStream)
             System.setErr(errStream)
         }
@@ -272,6 +284,11 @@ class Revanced21PatcherProcess(
             System.setOut(originalOut)
             System.setErr(originalErr)
         }
+    }
+
+    private object NullOutputStream : OutputStream() {
+        override fun write(b: Int) = Unit
+        override fun write(bytes: ByteArray, off: Int, len: Int) = Unit
     }
 
     private class TeeOutputStream(

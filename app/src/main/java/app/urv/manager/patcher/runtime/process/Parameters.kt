@@ -1,6 +1,7 @@
 package app.urv.manager.patcher.runtime.process
 
 import android.os.Parcelable
+import app.urv.manager.patcher.logger.PatcherLogMode
 import app.urv.manager.patcher.patch.PatchBundle
 import kotlinx.parcelize.Parcelize
 import kotlinx.parcelize.RawValue
@@ -16,6 +17,7 @@ data class Parameters(
     val configurations: List<PatchConfiguration>,
     val stripNativeLibs: Boolean,
     val skipUnneededSplits: Boolean,
+    val patcherLogMode: PatcherLogMode,
 ) : Parcelable
 
 @Parcelize

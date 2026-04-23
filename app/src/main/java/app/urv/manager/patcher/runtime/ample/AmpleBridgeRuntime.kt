@@ -6,6 +6,7 @@ import app.urv.manager.patcher.LibraryResolver
 import app.urv.manager.patcher.ProgressEvent
 import app.urv.manager.patcher.StepId
 import app.urv.manager.patcher.logger.Logger
+import app.urv.manager.patcher.logger.filtered
 import app.urv.manager.patcher.runStep
 import app.urv.manager.patcher.runtime.MemoryLimitConfig
 import app.urv.manager.patcher.ample.AmpleBridgeFailureException
@@ -42,6 +43,8 @@ class AmpleBridgeRuntime(context: Context) : AmpleRuntime(context) {
         stripNativeLibs: Boolean,
         skipUnneededSplits: Boolean,
     ) {
+        val logMode = prefs.patcherLogMode.get()
+        val runtimeLogger = logger.filtered(logMode)
         ensureNotCancelled()
         val sourceInput = File(inputFile)
         val hostPreparation = if (SplitApkPreparer.isSplitArchive(sourceInput)) {
@@ -53,7 +56,7 @@ class AmpleBridgeRuntime(context: Context) : AmpleRuntime(context) {
                 SplitApkPreparer.prepareIfNeeded(
                     source = sourceInput,
                     workspace = File(cacheDir),
-                    logger = logger,
+                    logger = runtimeLogger,
                     stripNativeLibs = stripNativeLibs,
                     skipUnneededSplits = skipUnneededSplits,
                     onProgress = { message ->
@@ -74,7 +77,7 @@ class AmpleBridgeRuntime(context: Context) : AmpleRuntime(context) {
         val selectedBundlesByUid = bundlesByUid.filterKeys { it in selectedBundleIds }
         val staleBundleIds = selectedBundleIds - selectedBundlesByUid.keys
         if (staleBundleIds.isNotEmpty()) {
-            logger.warn("Ignoring missing patch bundle IDs in selection: ${staleBundleIds.joinToString(",")}")
+            runtimeLogger.warn("Ignoring missing patch bundle IDs in selection: ${staleBundleIds.joinToString(",")}")
         }
         if (activeSelectedPatches.isNotEmpty() && selectedBundlesByUid.isEmpty()) {
             throw IllegalArgumentException(
@@ -126,13 +129,14 @@ class AmpleBridgeRuntime(context: Context) : AmpleRuntime(context) {
                 "packageName" to packageName,
                 "inputFile" to runtimeInputFile,
                 "outputFile" to outputFile,
+                "patcherLogMode" to logMode.name,
                 "stripNativeLibs" to stripNativeLibs,
                 "skipUnneededSplits" to skipUnneededSplits,
                 "configurations" to configs
             )
 
             ensureNotCancelled()
-            val error = AmpleRuntimeBridge.runPatcher(params, logger, onEvent, cancelRequested::get)
+            val error = AmpleRuntimeBridge.runPatcher(params, runtimeLogger, onEvent, cancelRequested::get)
             if (!error.isNullOrBlank()) {
                 throw AmpleBridgeFailureException(error)
             }

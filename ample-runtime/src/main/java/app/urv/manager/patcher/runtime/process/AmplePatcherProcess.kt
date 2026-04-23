@@ -78,6 +78,9 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
     }
 
     override fun start(parameters: AmpleParameters, events: IPatcherEvents) {
+        val isVerboseLogging = parameters.patcherLogMode == "VERBOSE"
+        val minLogLevel = if (isVerboseLogging) LogLevel.TRACE else LogLevel.INFO
+        val javaLogLevel = if (isVerboseLogging) Level.ALL else Level.INFO
         var writeApkSubStepsReady = false
         val seenDexCompiles = mutableSetOf<String>()
         fun safeEvent(event: ProgressEvent) {
@@ -152,6 +155,7 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
             }
             val logger = object : Logger() {
                 override fun log(level: LogLevel, message: String) {
+                    if (level.ordinal < minLogLevel.ordinal) return
                     safeLog(level.name, message)
                 }
             }
@@ -167,8 +171,19 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
                 resolveRuntimeClassPath(parameters.runtimeClassPath)
             )
             logger.info("Memory limit: ${Runtime.getRuntime().maxMemory() / (1024 * 1024)}MB")
-            val aaptLogs = AaptLogCapture(onLine = ::handleDexCompileLine).apply { start() }
-            val stdioCapture = StdIoCapture(onLine = ::handleDexCompileLine).apply { start() }
+            val aaptLogs = AaptLogCapture(onLine = ::handleDexCompileLine).apply { start(javaLogLevel) }
+            val stdioCapture = StdIoCapture(onLine = ::handleDexCompileLine).apply {
+                start(
+                    captureAll = isVerboseLogging,
+                    mirrorToOriginal = isVerboseLogging
+                ) { line ->
+                    line.contains("Compiling modified resources", ignoreCase = true) ||
+                        line.contains("Compiling patched resources", ignoreCase = true) ||
+                        dexCompilePattern.containsMatchIn(line) ||
+                        dexWritePattern.containsMatchIn(line) ||
+                        dexAnyPattern.containsMatchIn(line)
+                }
+            }
             var exitCode = 0
 
             try {
@@ -362,10 +377,10 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
             override fun close() {}
         }
 
-        fun start() {
+        fun start(logLevel: Level) {
             originalLevel = logger.level
-            logger.level = Level.ALL
-            handler.level = Level.ALL
+            logger.level = logLevel
+            handler.level = logLevel
             logger.addHandler(handler)
         }
 
@@ -388,10 +403,22 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
         private val originalErr = System.err
         private val outBuffer = LineBufferOutputStream(onLine)
         private val errBuffer = LineBufferOutputStream(onLine)
-        private val outStream = PrintStream(TeeOutputStream(originalOut, outBuffer), true)
-        private val errStream = PrintStream(TeeOutputStream(originalErr, errBuffer), true)
+        private lateinit var outStream: PrintStream
+        private lateinit var errStream: PrintStream
 
-        fun start() {
+        fun start(
+            captureAll: Boolean = true,
+            mirrorToOriginal: Boolean = true,
+            shouldCaptureLine: ((String) -> Boolean)? = null
+        ) {
+            outBuffer.captureAll = captureAll
+            outBuffer.shouldCaptureLine = shouldCaptureLine
+            errBuffer.captureAll = captureAll
+            errBuffer.shouldCaptureLine = shouldCaptureLine
+            val passthroughOut = if (mirrorToOriginal) originalOut else NullOutputStream
+            val passthroughErr = if (mirrorToOriginal) originalErr else NullOutputStream
+            outStream = PrintStream(TeeOutputStream(passthroughOut, outBuffer), true)
+            errStream = PrintStream(TeeOutputStream(passthroughErr, errBuffer), true)
             System.setOut(outStream)
             System.setErr(errStream)
         }
@@ -402,6 +429,11 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
             System.setOut(originalOut)
             System.setErr(originalErr)
         }
+    }
+
+    private object NullOutputStream : OutputStream() {
+        override fun write(b: Int) = Unit
+        override fun write(bytes: ByteArray, off: Int, len: Int) = Unit
     }
 
     private class TeeOutputStream(
@@ -428,6 +460,8 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
         private val onLine: (String) -> Unit
     ) : OutputStream() {
         private val buffer = StringBuilder()
+        var captureAll: Boolean = true
+        var shouldCaptureLine: ((String) -> Boolean)? = null
 
         override fun write(b: Int) {
             appendChar(b.toChar())
@@ -447,7 +481,9 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
             if (buffer.isEmpty()) return
             val line = buffer.toString()
             buffer.setLength(0)
-            onLine(line)
+            if (captureAll || shouldCaptureLine?.invoke(line) == true) {
+                onLine(line)
+            }
         }
 
         private fun appendChar(ch: Char) {

@@ -20,6 +20,7 @@ import app.urv.manager.domain.worker.WorkerRepository
 import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.data.room.apps.installed.InstallType
 import app.urv.manager.domain.manager.SearchForUpdatesBackgroundInterval
+import app.urv.manager.patcher.logger.PatcherLogMode
 import app.urv.manager.patcher.runtime.morphe.MorpheBytecodeMode
 import app.urv.manager.patcher.worker.AnnouncementNotificationWorker
 import app.urv.manager.util.tag
@@ -161,6 +162,10 @@ class AdvancedSettingsViewModel(
 
     fun setMorpheBytecodeMode(mode: MorpheBytecodeMode) = viewModelScope.launch(Dispatchers.Default) {
         prefs.morpheBytecodeMode.update(mode)
+    }
+
+    fun setPatcherLogMode(mode: PatcherLogMode) = viewModelScope.launch(Dispatchers.Default) {
+        prefs.patcherLogMode.update(mode)
     }
 
     fun resetPatchedAppExportFormat() = viewModelScope.launch(Dispatchers.Default) {

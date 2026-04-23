@@ -1,5 +1,7 @@
 package app.urv.manager.patcher.logger
 
+import androidx.annotation.StringRes
+import app.universal.revanced.manager.R
 import java.util.logging.Handler
 import java.util.logging.Level
 import java.util.logging.LogRecord
@@ -34,4 +36,42 @@ enum class LogLevel {
     INFO,
     WARN,
     ERROR,
+}
+
+enum class PatcherLogMode(
+    @get:StringRes val displayName: Int,
+    val minLogLevel: LogLevel,
+    val javaLogLevel: Level
+) {
+    DEFAULT(R.string.patcher_log_mode_default, LogLevel.INFO, Level.INFO),
+    VERBOSE(R.string.patcher_log_mode_verbose, LogLevel.TRACE, Level.ALL),
+}
+
+fun PatcherLogMode.allows(level: LogLevel): Boolean = level.ordinal >= minLogLevel.ordinal
+
+fun Logger.filtered(mode: PatcherLogMode) = object : Logger() {
+    override fun log(level: LogLevel, message: String) {
+        if (!mode.allows(level)) return
+        this@filtered.log(level, message)
+    }
+}
+
+inline fun <T> Logger.withJavaLogging(mode: PatcherLogMode, block: () -> T): T {
+    val rootLogger = java.util.logging.Logger.getLogger("")
+    val previousLevel = rootLogger.level
+    val oldHandlers = rootLogger.handlers.toList()
+    rootLogger.level = mode.javaLogLevel
+
+    oldHandlers.forEach {
+        rootLogger.removeHandler(it)
+    }
+    rootLogger.addHandler(handler)
+
+    return try {
+        block()
+    } finally {
+        rootLogger.removeHandler(handler)
+        oldHandlers.forEach(rootLogger::addHandler)
+        rootLogger.level = previousLevel
+    }
 }

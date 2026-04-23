@@ -40,6 +40,7 @@ import app.urv.manager.patcher.StepId
 import app.urv.manager.patcher.toSafeRemoteError
 import app.urv.manager.patcher.logger.Logger
 import app.urv.manager.patcher.logger.LogLevel
+import app.urv.manager.patcher.logger.allows
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.patcher.runtime.MemoryLimitConfig
 import app.urv.manager.patcher.ample.AmpleBridgeFailureException
@@ -1333,8 +1334,10 @@ class PatcherWorker(
             .flatten()
             .sorted()
             .toList()
+        val patcherLogMode = prefs.patcherLogMode.get()
         val workerLogger = object : Logger() {
             override fun log(level: LogLevel, message: String) {
+                if (!patcherLogMode.allows(level)) return
                 args.logger.log(level, message)
                 handleWorkerLogProgress(message, totalPatchCount, args.onEvent)
             }

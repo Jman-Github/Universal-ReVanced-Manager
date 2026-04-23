@@ -4,6 +4,8 @@ import android.os.Build
 import app.urv.manager.patcher.ProgressEvent
 import app.urv.manager.patcher.StepId
 import app.urv.manager.patcher.logger.Logger
+import app.urv.manager.patcher.logger.PatcherLogMode
+import app.urv.manager.patcher.logger.withJavaLogging
 import app.urv.manager.patcher.runCancellableBlockingIo
 import app.urv.manager.patcher.runStep
 import app.urv.manager.patcher.toSafeRemoteError
@@ -54,6 +56,7 @@ class RevancedSession(
     private val initialPatcherInput: File = input,
     private val onEvent: (ProgressEvent) -> Unit,
     private val checkCancelled: () -> Unit = {},
+    private val logMode: PatcherLogMode = PatcherLogMode.DEFAULT,
 ) : Closeable {
     private val tempDir = File(cacheDir).resolve("patcher").also { it.mkdirs() }
     private val frameworkDirFile = File(frameworkDir).also { it.mkdirs() }
@@ -383,14 +386,9 @@ class RevancedSession(
         val shouldStripNativeLibs = stripNativeLibs && !inputWasSplit
         val (patchResult, patchCount) = runStep(StepId.ExecutePatches, onEvent, checkCancelled) {
             val orderedPatches = loadSelectedPatches().sortedBy { it.name.orEmpty() }
-            java.util.logging.Logger.getLogger("").apply {
-                handlers.forEach {
-                    it.close()
-                    removeHandler(it)
-                }
-                addHandler(logger.handler)
+            logger.withJavaLogging(logMode) {
+                executePatchesWithFrameworkRecovery(orderedPatches) to orderedPatches.size
             }
-            executePatchesWithFrameworkRecovery(orderedPatches) to orderedPatches.size
         }
 
         // Ensure patch rows are finalized before write/sign steps begin.

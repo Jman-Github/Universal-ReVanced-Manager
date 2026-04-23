@@ -158,13 +158,29 @@ object MorpheRuntimeEntry {
             ?: return "Missing outputFile parameter."
         val stripNativeLibs = params["stripNativeLibs"] as? Boolean ?: false
         val skipUnneededSplits = params["skipUnneededSplits"] as? Boolean ?: false
+        val isVerboseLogging = (params["patcherLogMode"] as? String) == "VERBOSE"
+        val javaLogLevel = if (isVerboseLogging) Level.ALL else Level.INFO
         val bytecodeMode = runCatching {
             BytecodeMode.valueOf((params["bytecodeMode"] as? String)?.uppercase(Locale.ROOT) ?: BytecodeMode.STRIP_FAST.name)
         }.getOrDefault(BytecodeMode.STRIP_FAST)
         val configurations = params["configurations"] as? List<*> ?: emptyList<Any>()
 
-        val aaptLogs = AaptLogCapture(onLine = ::handleWriteProgressLine).apply { start() }
-        val stdioCapture = StdIoCapture(::handleWriteProgressLine).apply { start() }
+        val aaptLogs = AaptLogCapture(onLine = ::handleWriteProgressLine).apply {
+            start(javaLogLevel)
+        }
+        val stdioCapture = StdIoCapture(::handleWriteProgressLine).apply {
+            start(
+                captureAll = isVerboseLogging,
+                mirrorToOriginal = isVerboseLogging
+            ) { line ->
+                line.contains("Writing patched files", ignoreCase = true) ||
+                    line.contains("Compiling modified resources", ignoreCase = true) ||
+                    line.contains("Compiling patched resources", ignoreCase = true) ||
+                    processingClassesPattern.containsMatchIn(line) ||
+                    wroteDexFilesPattern.containsMatchIn(line) ||
+                    strippedDexPattern.containsMatchIn(line)
+            }
+        }
 
         return try {
             val configs = configurations.mapNotNull { raw ->
@@ -453,10 +469,10 @@ object MorpheRuntimeEntry {
             override fun close() {}
         }
 
-        fun start() {
+        fun start(level: Level) {
             originalLevel = logger.level
-            logger.level = Level.ALL
-            handler.level = Level.ALL
+            logger.level = level
+            handler.level = level
             logger.addHandler(handler)
         }
 
@@ -479,10 +495,22 @@ object MorpheRuntimeEntry {
         private val originalErr = System.err
         private val outBuffer = LineBufferOutputStream(onLine)
         private val errBuffer = LineBufferOutputStream(onLine)
-        private val outStream = PrintStream(TeeOutputStream(originalOut, outBuffer), true)
-        private val errStream = PrintStream(TeeOutputStream(originalErr, errBuffer), true)
+        private lateinit var outStream: PrintStream
+        private lateinit var errStream: PrintStream
 
-        fun start() {
+        fun start(
+            captureAll: Boolean = true,
+            mirrorToOriginal: Boolean = true,
+            shouldCaptureLine: ((String) -> Boolean)? = null
+        ) {
+            outBuffer.captureAll = captureAll
+            outBuffer.shouldCaptureLine = shouldCaptureLine
+            errBuffer.captureAll = captureAll
+            errBuffer.shouldCaptureLine = shouldCaptureLine
+            val passthroughOut = if (mirrorToOriginal) originalOut else NullOutputStream
+            val passthroughErr = if (mirrorToOriginal) originalErr else NullOutputStream
+            outStream = PrintStream(TeeOutputStream(passthroughOut, outBuffer), true)
+            errStream = PrintStream(TeeOutputStream(passthroughErr, errBuffer), true)
             System.setOut(outStream)
             System.setErr(errStream)
         }
@@ -493,6 +521,11 @@ object MorpheRuntimeEntry {
             System.setOut(originalOut)
             System.setErr(originalErr)
         }
+    }
+
+    private object NullOutputStream : OutputStream() {
+        override fun write(b: Int) = Unit
+        override fun write(bytes: ByteArray, off: Int, len: Int) = Unit
     }
 
     private class TeeOutputStream(
@@ -519,6 +552,8 @@ object MorpheRuntimeEntry {
         private val onLine: (String) -> Unit
     ) : OutputStream() {
         private val buffer = StringBuilder()
+        var captureAll: Boolean = true
+        var shouldCaptureLine: ((String) -> Boolean)? = null
 
         override fun write(b: Int) {
             appendChar(b.toChar())
@@ -538,7 +573,9 @@ object MorpheRuntimeEntry {
             if (buffer.isEmpty()) return
             val line = buffer.toString()
             buffer.setLength(0)
-            onLine(line)
+            if (captureAll || shouldCaptureLine?.invoke(line) == true) {
+                onLine(line)
+            }
         }
 
         private fun appendChar(ch: Char) {
