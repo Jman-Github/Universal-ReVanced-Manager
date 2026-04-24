@@ -571,8 +571,8 @@ Patch profiles are not affected.</string>
     <string name="downloader_source_prerelease_description">Use pre-release versions from this repository when checking for updates.</string>
     <string name="downloader_source_repo_url">Repository URL</string>
     <string name="downloader_source_settings_title">%1$s settings</string>
-    <string name="downloader_source_delete_title">Delete downloader source</string>
-    <string name="downloader_source_delete_description">Remove "%1$s" and its downloaded plugin file?</string>
+    <string name="downloader_source_delete_title">Delete</string>
+    <string name="downloader_source_delete_description">Are you sure want to delete "%1$s" and its downloaded plugin file?</string>
     <string name="downloader_source_revoke_trust_description">Revoke trust for "%1$s"? You can trust it again later.</string>
     <string name="downloader_source_state_loaded">Loaded</string>
     <string name="downloader_source_state_missing">File missing. Update to download it again.</string>
