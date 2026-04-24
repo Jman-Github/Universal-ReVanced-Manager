@@ -824,9 +824,34 @@ class DashboardViewModel(
         }
     }
 
+    fun rememberSplitMergeSelectionPreset(presetKey: String) {
+        viewModelScope.launch {
+            prefs.splitMergeSelectionPreset.update(presetKey)
+        }
+    }
+
     private fun resolveDefaultSplitSelection(
         inspection: SplitApkPreparer.SplitArchiveInspection
-    ): Set<String> = inspection.modules.mapTo(linkedSetOf()) { it.name }
+    ): Set<String> {
+        val presetKey = prefs.splitMergeSelectionPreset.getBlocking()
+        val allModules = inspection.modules.mapTo(linkedSetOf()) { it.name }
+        val requiredModules = buildSet {
+            inspection.baseModuleName?.let(::add)
+            if (isEmpty()) {
+                inspection.modules.firstOrNull()?.name?.let(::add)
+            }
+        }
+        return when (presetKey) {
+            "none" -> requiredModules
+            "recommended" -> (inspection.recommendedModules + requiredModules)
+                .ifEmpty { requiredModules.ifEmpty { allModules } }
+            "languages" -> (inspection.languageTrimmedModules + requiredModules)
+                .ifEmpty { requiredModules.ifEmpty { allModules } }
+            "density" -> (inspection.densityTrimmedModules + requiredModules)
+                .ifEmpty { requiredModules.ifEmpty { allModules } }
+            else -> allModules
+        }
+    }
 
     fun saveLastMergedToPath(outputPath: String) = viewModelScope.launch {
         if (splitMergeStateFlow.value.saveStep.status == SplitMergeStepStatus.RUNNING) return@launch

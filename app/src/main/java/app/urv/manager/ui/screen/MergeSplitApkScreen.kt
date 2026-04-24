@@ -243,6 +243,7 @@ fun MergeSplitApkScreen(
                 vm.clearSplitMergeState()
                 onBackClick()
             },
+            onPresetSelected = vm::rememberSplitMergeSelectionPreset,
             onConfirm = { includedModules, stripNativeLibs ->
                 vm.confirmSplitMergeSelection(
                     includedModules = includedModules,
@@ -801,6 +802,7 @@ private fun SplitMergeSelectionDialog(
     initialModules: Set<String>,
     initialStripNativeLibs: Boolean,
     onDismissRequest: () -> Unit,
+    onPresetSelected: (String) -> Unit,
     onConfirm: (Set<String>, Boolean) -> Unit
 ) {
     val requiredModules = remember(selection) {
@@ -998,6 +1000,7 @@ private fun SplitMergeSelectionDialog(
                             CheckedFilterChip(
                                 selected = selectedPresetKey == preset.key,
                                 onClick = {
+                                    onPresetSelected(preset.key)
                                     updateSelection(
                                         modules = preset.modules,
                                         stripUnusedNativeLibs = false,

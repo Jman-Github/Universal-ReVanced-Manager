@@ -10,6 +10,7 @@
 - Updated the split APK merge selection dialog to show the live selected module count in the Start merge action button https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/362
 - Added a per-install installer selection mode that lets users choose the installer each time on the patcher and saved patched app flows https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/208
 - Added a new Patcher logging setting with Default and Verbose modes https://github.com/ReVanced/revanced-manager/pull/3287
+- Remember the selected split merge preset across app sessions https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/303
 
 
 # Bug fixes

@@ -187,6 +187,7 @@ class PreferencesManager(
     val pathSelectorSearchQuery = stringPreference("path_selector_search_query", "")
     val appSelectorFilterInstalledOnly = booleanPreference("app_selector_filter_installed_only", false)
     val appSelectorFilterPatchesAvailable = booleanPreference("app_selector_filter_patches_available", false)
+    val splitMergeSelectionPreset = stringPreference("split_merge_selection_preset", "all")
     val useCustomFilePicker = booleanPreference("use_custom_file_picker", true)
     val youtubeAssetsSyncHeaderTransforms = booleanPreference("youtube_assets_sync_header_transforms", false)
     val patchBundleDiscoveryShowRelease = booleanPreference("patch_bundle_discovery_show_release", true)
@@ -288,6 +289,7 @@ class PreferencesManager(
         val pathSelectorLastDirectory: String? = null,
         val appSelectorFilterInstalledOnly: Boolean? = null,
         val appSelectorFilterPatchesAvailable: Boolean? = null,
+        val splitMergeSelectionPreset: String? = null,
         val useCustomFilePicker: Boolean? = null,
         val patchBundleDiscoveryShowRelease: Boolean? = null,
         val patchBundleDiscoveryShowPrerelease: Boolean? = null,
@@ -439,6 +441,7 @@ class PreferencesManager(
             pathSelectorLastDirectory = pathSelectorLastDirectory.get().takeIf { it.isNotBlank() },
             appSelectorFilterInstalledOnly = appSelectorFilterInstalledOnly.get(),
             appSelectorFilterPatchesAvailable = appSelectorFilterPatchesAvailable.get(),
+            splitMergeSelectionPreset = splitMergeSelectionPreset.get().takeIf { it.isNotBlank() },
             useCustomFilePicker = useCustomFilePicker.get(),
             patchBundleDiscoveryShowRelease = patchBundleDiscoveryShowRelease.get(),
             patchBundleDiscoveryShowPrerelease = patchBundleDiscoveryShowPrerelease.get(),
@@ -585,6 +588,9 @@ class PreferencesManager(
         }
         snapshot.appSelectorFilterInstalledOnly?.let { appSelectorFilterInstalledOnly.value = it }
         snapshot.appSelectorFilterPatchesAvailable?.let { appSelectorFilterPatchesAvailable.value = it }
+        snapshot.splitMergeSelectionPreset?.takeIf { it.isNotBlank() }?.let {
+            splitMergeSelectionPreset.value = it
+        }
         snapshot.useCustomFilePicker?.let { useCustomFilePicker.value = it }
         snapshot.patchBundleDiscoveryShowRelease?.let { patchBundleDiscoveryShowRelease.value = it }
         snapshot.patchBundleDiscoveryShowPrerelease?.let { patchBundleDiscoveryShowPrerelease.value = it }
