@@ -228,6 +228,7 @@
 - Fixed framework cache recovery and bundled framework handling across all runtimes to prevent missing or corrupted framework cache patching failures
 - Fixed duplicate Saved/Installed entries by collapsing matching saved variants after install when saved app overwrite is enabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
 - Fixed split archive metadata resolution to use stricter device-matching split selection for app labels and icons
+- Fixed split APK merging so remove-extras and native library cleanup preserve required ABI, language, and DPI splits when only one compatible config is available
 
 
 # Refactors

@@ -35,12 +35,14 @@ object NativeLibStripper {
             checkCancelled()
             if (supportedAbis.isEmpty()) return@withContext false
 
-            val preferredAbi = determinePreferredAbi(apkFile, supportedAbis)
-            val allowedAbis = preferredAbi?.let { setOf(it) } ?: supportedAbis.toSet()
+            val abisInApk = abiDirectoriesInApk(apkFile)
+            if (abisInApk.size <= 1) return@withContext false
 
-            if (preferredAbi != null) {
-                Log.i(TAG, "Preserving native libraries for ABI $preferredAbi")
-            }
+            val preferredAbi = supportedAbis.firstOrNull { it in abisInApk }
+                ?: return@withContext false
+            val allowedAbis = setOf(preferredAbi)
+
+            Log.i(TAG, "Preserving native libraries for ABI $preferredAbi")
 
             val tempFile = File(apkFile.parentFile, "${apkFile.nameWithoutExtension}-abi-stripped.apk")
             var removedEntries = 0
@@ -157,15 +159,13 @@ object NativeLibStripper {
         return name.substring(4, secondSlash)
     }
 
-    private fun determinePreferredAbi(apkFile: File, supportedAbis: List<String>): String? =
+    private fun abiDirectoriesInApk(apkFile: File): Set<String> =
         runCatching {
             ZipFile(apkFile).use { zip ->
-                val abisInApk = zip.entries().asSequence()
+                zip.entries().asSequence()
                     .map { it.name }
                     .mapNotNull(::extractAbiFromEntry)
                     .toSet()
-
-                supportedAbis.firstOrNull { it in abisInApk }
             }
-        }.getOrNull()
+        }.getOrDefault(emptySet())
 }

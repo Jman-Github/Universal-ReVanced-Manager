@@ -1,4 +1,4 @@
-# v1.8.1-dev.15 (2026-04-23)
+# v1.8.1-dev.15 (2026-04-24)
 
 
 # Features
@@ -15,6 +15,7 @@
 # Bug fixes
 
 - Fixed split archive metadata resolution to use stricter device-matching split selection for app labels and icons
+- Fixed split APK merging so remove-extras and native library cleanup preserve required ABI, language, and DPI splits when only one compatible config is available
 
 
 ## Build types

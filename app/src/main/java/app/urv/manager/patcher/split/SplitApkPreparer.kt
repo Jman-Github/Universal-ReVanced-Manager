@@ -215,15 +215,14 @@ object SplitApkPreparer {
     )
 
     private fun inspectMergeOrder(mergeOrder: List<String>): MergeOrderInspection {
-        val supportedTokens = supportedAbiTokens()
         val localeTokens = deviceLocaleTokens()
         val allowedDensityQualifiers = supportedDensityQualifiers(
             mergeOrder = mergeOrder,
             densityQualifier = deviceDensityQualifier()
         )
         return MergeOrderInspection(
-            unusedAbiModules = mergeOrder.filter { shouldSkipModule(it, supportedTokens) }.toSet(),
-            unusedLanguageModules = mergeOrder.filter { shouldSkipLanguageModule(it, localeTokens) }.toSet(),
+            unusedAbiModules = unusedAbiModules(mergeOrder),
+            unusedLanguageModules = unusedLanguageModules(mergeOrder, localeTokens),
             unusedDensityModules = mergeOrder.filter {
                 shouldSkipDensityModule(it, allowedDensityQualifiers)
             }.toSet()
@@ -451,19 +450,14 @@ object SplitApkPreparer {
         return steps
     }
 
-    private fun supportedAbiTokens(): Set<String> =
-        selectPrimaryAbi(Build.SUPPORTED_ABIS.toList())
+    private fun supportedAbiTokens(abiModules: List<String>): Set<String> =
+        selectPrimaryAbi(Build.SUPPORTED_ABIS.toList(), abiModules)
             ?.let { primary ->
                 buildAbiTokens(primary)
                     .map { it.lowercase(Locale.ROOT) }
                     .toSet()
             }
-            ?: Build.SUPPORTED_ABIS
-                .asSequence()
-                .filter { it.isNotBlank() }
-                .flatMap { abi -> buildAbiTokens(abi).asSequence() }
-                .map { it.lowercase(Locale.ROOT) }
-                .toSet()
+            ?: emptySet()
 
     private fun buildAbiTokens(abi: String): Set<String> {
         val normalized = abi.lowercase(Locale.ROOT)
@@ -474,30 +468,63 @@ object SplitApkPreparer {
         )
     }
 
-    private fun selectPrimaryAbi(supportedAbis: List<String>): String? =
-        supportedAbis.firstOrNull { it.isNotBlank() }
+    private fun selectPrimaryAbi(
+        supportedAbis: List<String>,
+        abiModules: List<String>
+    ): String? =
+        supportedAbis.firstOrNull { abi ->
+            abi.isNotBlank() && abiModules.any {
+                matchesAbiTokens(it, buildAbiTokens(abi))
+            }
+        }
 
     private fun normalizeModuleSelectionName(name: String): String =
         name.lowercase(Locale.ROOT).removeSuffix(".apk")
+
+    private fun unusedAbiModules(moduleNames: List<String>): Set<String> {
+        val abiModules = moduleNames.filter(::hasAbiQualifier)
+        if (abiModules.size <= 1) return emptySet()
+        val supportedTokens = supportedAbiTokens(abiModules)
+        if (supportedTokens.isEmpty()) return emptySet()
+        if (abiModules.none { matchesAbiTokens(it, supportedTokens) }) return emptySet()
+        return abiModules.filter { shouldSkipModule(it, supportedTokens) }.toSet()
+    }
+
+    private fun hasAbiQualifier(moduleName: String): Boolean =
+        matchesAbiTokens(
+            moduleName = moduleName,
+            abiTokens = KNOWN_ABIS.flatMap { buildAbiTokens(it) }.toSet()
+        )
+
+    private fun matchesAbiTokens(
+        moduleName: String,
+        abiTokens: Set<String>
+    ): Boolean {
+        val lower = moduleName.lowercase(Locale.ROOT)
+        return abiTokens.any { token -> lower.contains(token.lowercase(Locale.ROOT)) }
+    }
 
     private fun shouldSkipModule(
         moduleName: String,
         supportedTokens: Set<String>
     ): Boolean {
-        if (supportedTokens.isEmpty()) return false
-        val lower = moduleName.lowercase(Locale.ROOT)
-        val knownTokens = KNOWN_ABIS.flatMap { buildAbiTokens(it) }.toSet()
-        if (knownTokens.none { lower.contains(it) }) return false
-        return supportedTokens.none { lower.contains(it) }
+        if (!hasAbiQualifier(moduleName)) return false
+        return !matchesAbiTokens(moduleName, supportedTokens)
     }
 
-    private fun shouldSkipModuleForDevice(
-        moduleName: String,
-        localeTokens: Set<String>,
-        allowedDensityQualifiers: Set<String>
-    ): Boolean =
-        shouldSkipLanguageModule(moduleName, localeTokens) ||
-            shouldSkipDensityModule(moduleName, allowedDensityQualifiers)
+    private fun unusedLanguageModules(
+        mergeOrder: List<String>,
+        localeTokens: Set<String>
+    ): Set<String> {
+        val languageModules = mergeOrder.filter(::hasLanguageQualifier)
+        if (languageModules.size <= 1) return emptySet()
+        return languageModules.filter { shouldSkipLanguageModule(it, localeTokens) }.toSet()
+    }
+
+    private fun hasLanguageQualifier(moduleName: String): Boolean =
+        splitConfigQualifiers(moduleName).any { qualifier ->
+            parseLocaleQualifier(qualifier) != null
+        }
 
     private fun shouldSkipLanguageModule(
         moduleName: String,
@@ -534,6 +561,7 @@ object SplitApkPreparer {
             .filter(::isDensityQualifier)
             .toSet()
         if (availableQualifiers.isEmpty()) return emptySet()
+        if (availableQualifiers.size == 1) return emptySet()
         if (densityQualifier in availableQualifiers) return setOf(densityQualifier)
 
         val targetDensity = DENSITY_DPI_VALUES[densityQualifier] ?: return availableQualifiers
