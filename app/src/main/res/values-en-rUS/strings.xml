@@ -841,8 +841,8 @@ Patch profiles are not affected.</string>
     <string name="split_installer_stop_confirm_description">Leaving this screen will cancel the current split install. Continue?</string>
     <string name="split_installer_log_title">Installer log</string>
     <string name="split_installer_log_empty">No installer logs yet.</string>
-    <string name="split_installer_log_actions_title">Installer log options</string>
-    <string name="split_installer_log_actions_description">Choose how to copy or save the split installer log.</string>
+    <string name="split_installer_log_actions_title">Installer log</string>
+    <string name="split_installer_log_actions_description">Choose how you want to share or save the installer log.</string>
     <string name="split_installer_log_copy">Copy to clipboard</string>
     <string name="split_installer_log_copy_description">Copy the full installer log so you can paste it anywhere.</string>
     <string name="split_installer_log_export">Export as TXT</string>
@@ -920,7 +920,7 @@ Patch profiles are not affected.</string>
     <string name="merge_split_apk_log_exporting_title">Save merge log</string>
     <string name="merge_split_apk_log_exporting">Saving merge log…</string>
     <string name="merge_split_apk_log_copy_success">Merge log copied</string>
-    <string name="merge_split_apk_log_export_success">Merge log exported.</string>
+    <string name="merge_split_apk_log_export_success">Merge log exported</string>
     <string name="merge_split_apk_log_export_failed">Failed to export merge log.</string>
     <string name="merge_split_apk_installed_not_split">This installed app is not using split APKs.</string>
     <string name="merge_split_apk_selection_title">Choose splits to merge</string>
