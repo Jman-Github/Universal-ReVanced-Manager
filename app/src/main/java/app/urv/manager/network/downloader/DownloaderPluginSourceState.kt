@@ -8,6 +8,7 @@ data class DownloaderPluginSourceEntry(
     val repoUrl: String,
     val assetSelector: String,
     val autoUpdate: Boolean = true,
+    val latest: Boolean = false,
     val prerelease: Boolean = false,
     val versionKey: String? = null,
     val trustedSignatureHex: String? = null

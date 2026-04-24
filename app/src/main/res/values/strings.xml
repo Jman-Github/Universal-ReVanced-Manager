@@ -567,6 +567,8 @@ Patch profiles are not affected.</string>
     <string name="downloader_import_url_hint">https://github.com/...</string>
     <string name="downloader_no_url_sources">No URL sources added.</string>
     <string name="downloader_source_auto_update">Auto update</string>
+    <string name="downloader_source_latest">Latest</string>
+    <string name="downloader_source_latest_description">Use the newest release from this repository, whether it is stable or pre-release.</string>
     <string name="downloader_source_prerelease">Prerelease</string>
     <string name="downloader_source_prerelease_description">Use pre-release versions from this repository when checking for updates.</string>
     <string name="downloader_source_repo_url">Repository URL</string>

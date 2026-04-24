@@ -191,6 +191,14 @@ class DownloaderPluginRepository(
         reload()
     }
 
+    suspend fun setSourceLatest(id: String, enabled: Boolean) = withContext(Dispatchers.IO) {
+        val entries = readSourceEntries().map { entry ->
+            if (entry.id == id) entry.copy(latest = enabled) else entry
+        }
+        writeSourceEntries(entries)
+        reload()
+    }
+
     suspend fun setSourcePrerelease(id: String, enabled: Boolean) = withContext(Dispatchers.IO) {
         val entries = readSourceEntries().map { entry ->
             if (entry.id == id) entry.copy(prerelease = enabled) else entry
@@ -565,7 +573,10 @@ class DownloaderPluginRepository(
         entry: DownloaderPluginSourceEntry,
         force: Boolean
     ): DownloaderPluginSourceEntry {
-        val release = latestReleaseFor(entry.repoUrl, prerelease = entry.prerelease)
+        val release = latestReleaseFor(
+            repoUrl = entry.repoUrl,
+            prerelease = if (entry.latest) null else entry.prerelease
+        )
         val asset = release.assets
             .filter(::isSupportedDownloaderAsset)
             .firstOrNull {
@@ -647,7 +658,7 @@ class DownloaderPluginRepository(
         ).firstOrNull()
     }
 
-    private suspend fun latestReleaseFor(repoUrl: String, prerelease: Boolean): GitHubRelease {
+    private suspend fun latestReleaseFor(repoUrl: String, prerelease: Boolean?): GitHubRelease {
         return findLatestReleaseFor(
             repoUrl = repoUrl,
             prerelease = prerelease

@@ -136,6 +136,10 @@ class DownloadsViewModel(
         downloaderPluginRepository.setSourceAutoUpdate(id, enabled)
     }
 
+    fun setPluginSourceLatest(id: String, enabled: Boolean) = viewModelScope.launch {
+        downloaderPluginRepository.setSourceLatest(id, enabled)
+    }
+
     fun setPluginSourcePrerelease(id: String, enabled: Boolean) = viewModelScope.launch {
         downloaderPluginRepository.setSourcePrerelease(id, enabled)
     }

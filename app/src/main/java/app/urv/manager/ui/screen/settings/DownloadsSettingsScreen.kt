@@ -258,6 +258,9 @@ fun DownloadsSettingsScreen(
                 onAutoUpdateChanged = {
                     viewModel.setPluginSourceAutoUpdate(source.entry.id, it)
                 },
+                onLatestChanged = {
+                    viewModel.setPluginSourceLatest(source.entry.id, it)
+                },
                 onPrereleaseChanged = {
                     viewModel.setPluginSourcePrerelease(source.entry.id, it)
                 },
@@ -1063,6 +1066,7 @@ private fun DownloaderSourceSettingsDialog(
     source: DownloaderPluginSourceState,
     onDismiss: () -> Unit,
     onAutoUpdateChanged: (Boolean) -> Unit,
+    onLatestChanged: (Boolean) -> Unit,
     onPrereleaseChanged: (Boolean) -> Unit,
     onCopyRepoUrl: () -> Unit
 ) {
@@ -1118,6 +1122,30 @@ private fun DownloaderSourceSettingsDialog(
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Text(
+                                    text = stringResource(R.string.downloader_source_latest),
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                Text(
+                                    text = stringResource(R.string.downloader_source_latest_description),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            HapticSwitch(
+                                checked = source.entry.latest,
+                                onCheckedChange = onLatestChanged
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
                                     text = stringResource(R.string.downloader_source_prerelease),
                                     style = MaterialTheme.typography.bodyLarge
                                 )
@@ -1130,7 +1158,8 @@ private fun DownloaderSourceSettingsDialog(
                             Spacer(modifier = Modifier.width(12.dp))
                             HapticSwitch(
                                 checked = source.entry.prerelease,
-                                onCheckedChange = onPrereleaseChanged
+                                onCheckedChange = onPrereleaseChanged,
+                                enabled = !source.entry.latest
                             )
                         }
                     }

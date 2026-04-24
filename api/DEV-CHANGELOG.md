@@ -11,6 +11,7 @@
 - Added a per-install installer selection mode that lets users choose the installer each time on the patcher and saved patched app flows https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/208
 - Added a new Patcher logging setting with Default and Verbose modes https://github.com/ReVanced/revanced-manager/pull/3287
 - Remember the selected split merge preset across app sessions https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/303
+- Added a Latest toggle to remote downloader plugin source settings so sources can update from the newest stable or pre-release GitHub release
 
 
 # Bug fixes
