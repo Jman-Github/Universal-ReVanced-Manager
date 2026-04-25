@@ -17,7 +17,7 @@
     <string name="app_filter_title">Filter apps</string>
     <string name="app_filter_installed_only">Installed only</string>
     <string name="app_filter_patches_available">Patches available</string>
-    <string name="app_filter_no_results">No apps found</string>
+    <string name="app_filter_no_results">No apps match your filters.</string>
     <string name="new_downloader_plugins_notification">New downloader plugins available. Click here to configure them.</string>
     <string name="unsupported_architecture_warning">Patching on this device architecture is unsupported and will most likely fail.</string>
     <string name="import_">Import</string>
@@ -103,9 +103,9 @@
     <string name="apps_search_hint">Search by app name</string>
     <string name="bundles_search_hint">Search by bundle name</string>
     <string name="profiles_search_hint">Search by profile name</string>
-    <string name="search_no_results">No results found</string>
-    <string name="bundle_search_no_results">No bundles found</string>
-    <string name="profile_search_no_results">No profiles found</string>
+    <string name="search_no_results">No results found.</string>
+    <string name="bundle_search_no_results">No bundles found.</string>
+    <string name="profile_search_no_results">No profiles found.</string>
     <string name="apps_reorder">Organize apps</string>
     <string name="apps_reorder_title">Organize apps</string>
     <string name="apps_reorder_description">Drag the handle to arrange the order apps appear in the list.</string>
@@ -1040,7 +1040,7 @@ Patch profiles are not affected.</string>
     <string name="patch_profile_version_conflict_message">Current version: %1$s\nIncoming version: %2$s\nWhich should be saved to this profile?</string>
     <string name="patch_profile_version_conflict_use_new">Use incoming version</string>
     <string name="patch_profile_version_conflict_keep_existing">Keep existing version</string>
-    <string name="patch_profile_empty_state">You have not saved any profiles</string>
+    <string name="patch_profile_empty_state">Save a configuration from the patch selection screen to see it here.</string>
     <string name="patch_profile_missing_bundles_toast">Some bundles in this profile are not available and will be skipped.</string>
     <string name="patch_profile_changed_patches_toast">Some patches or options in this profile no longer match the bundle and were skipped.</string>
     <string name="patch_profile_no_available_bundles_toast">No bundles in this profile are available. Update your bundles and try again.</string>
