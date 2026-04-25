@@ -473,7 +473,7 @@ fun PatchProfilesScreen(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = stringResource(R.string.search_no_results),
+                text = stringResource(R.string.profile_search_no_results),
                 style = MaterialTheme.typography.titleLarge,
                 textAlign = TextAlign.Center
             )

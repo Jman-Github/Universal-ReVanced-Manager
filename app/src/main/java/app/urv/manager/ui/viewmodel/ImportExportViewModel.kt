@@ -149,6 +149,13 @@ private data class PatchBundleExportResult(
     val hasLocalSources: Boolean
 )
 
+private enum class EverythingImportToast {
+    PATCH_SELECTION,
+    PATCH_BUNDLES,
+    PATCH_PROFILES,
+    MANAGER_SETTINGS
+}
+
 @Serializable
 data class PatchProfileExportFile(
     val profiles: List<PatchProfileExportEntry>
@@ -444,7 +451,10 @@ class ImportExportViewModel(
         }
     }
 
-    fun executeSelectionImportAllBundles(target: Path) = viewModelScope.launch {
+    fun executeSelectionImportAllBundles(
+        target: Path,
+        onToast: (String) -> Unit = { app.toast(it) }
+    ) = viewModelScope.launch {
         clearSelectionAction()
 
         uiSafe(app, R.string.import_patch_selection_fail, "Failed to restore patch selections and options") {
@@ -454,11 +464,14 @@ class ImportExportViewModel(
                 }
             }
 
-            importPatchSelectionExportFile(exportFile)
+            importPatchSelectionExportFile(exportFile, onToast)
         }
     }
 
-    fun executeSelectionImportAllBundles(target: Uri) = viewModelScope.launch {
+    fun executeSelectionImportAllBundles(
+        target: Uri,
+        onToast: (String) -> Unit = { app.toast(it) }
+    ) = viewModelScope.launch {
         clearSelectionAction()
 
         uiSafe(app, R.string.import_patch_selection_fail, "Failed to restore patch selections and options") {
@@ -468,7 +481,7 @@ class ImportExportViewModel(
                 }
             }
 
-            importPatchSelectionExportFile(exportFile)
+            importPatchSelectionExportFile(exportFile, onToast)
         }
     }
 
@@ -538,7 +551,7 @@ class ImportExportViewModel(
 
     private suspend fun importPatchSelectionExportFile(
         exportFile: PatchSelectionExportFile,
-        showToast: Boolean = true
+        onToast: (String) -> Unit = { app.toast(it) }
     ) {
         val bundles = patchBundleRepository.sources.first()
         val byUid = bundles.associateBy { it.uid }
@@ -554,9 +567,7 @@ class ImportExportViewModel(
             bundleExport.options?.let { optionsRepository.import(source.uid, it) }
         }
 
-        if (showToast) {
-            app.toast(app.getString(R.string.import_patch_selection_success))
-        }
+        onToast(app.getString(R.string.import_patch_selection_success))
     }
 
     private suspend fun buildPatchSelectionBundleExport(
@@ -679,7 +690,10 @@ class ImportExportViewModel(
         selectionAction = SelectionAction.ExportAllBundles
     }
 
-    fun importPatchBundles(source: Uri) = viewModelScope.launch {
+    fun importPatchBundles(
+        source: Uri,
+        onToast: (String) -> Unit = { app.toast(it) }
+    ) = viewModelScope.launch {
         withContext(NonCancellable) {
             uiSafe(app, R.string.import_patch_bundles_fail, "Failed to import patch bundles") {
                 coroutineScope {
@@ -1111,21 +1125,21 @@ class ImportExportViewModel(
                     val totalUpdated = summary.updated + if (!officialCreated && officialUpdated) 1 else 0
 
                     when {
-                        totalCreated > 0 -> app.toast(
+                        totalCreated > 0 -> onToast(
                             app.resources.getQuantityString(
                                 R.plurals.import_patch_bundles_success_quantity,
                                 totalCreated,
                                 totalCreated
                             )
                         )
-                        totalUpdated > 0 -> app.toast(
+                        totalUpdated > 0 -> onToast(
                             app.resources.getQuantityString(
                                 R.plurals.import_patch_bundles_updated_quantity,
                                 totalUpdated,
                                 totalUpdated
                             )
                         )
-                        else -> app.toast(app.getString(R.string.import_patch_bundles_none))
+                        else -> onToast(app.getString(R.string.import_patch_bundles_none))
                     }
                     patchBundleRepository.enforceOfficialOrderPreference()
                 }
@@ -1237,10 +1251,15 @@ class ImportExportViewModel(
         }
     }
 
-    fun importPatchBundles(source: Path) =
-        importPatchBundles(Uri.fromFile(source.toFile()))
+    fun importPatchBundles(
+        source: Path,
+        onToast: (String) -> Unit = { app.toast(it) }
+    ) = importPatchBundles(Uri.fromFile(source.toFile()), onToast)
 
-    fun importPatchProfiles(source: Uri) = viewModelScope.launch {
+    fun importPatchProfiles(
+        source: Uri,
+        onToast: (String) -> Unit = { app.toast(it) }
+    ) = viewModelScope.launch {
         withContext(NonCancellable) {
             uiSafe(app, R.string.import_patch_profiles_fail, "Failed to import patch profiles") {
                 val exportFile = withContext(Dispatchers.IO) {
@@ -1251,7 +1270,7 @@ class ImportExportViewModel(
 
                 val entries = exportFile.profiles.filter { it.name.isNotBlank() && it.packageName.isNotBlank() }
                 if (entries.isEmpty()) {
-                    app.toast(app.getString(R.string.import_patch_profiles_none))
+                    onToast(app.getString(R.string.import_patch_profiles_none))
                     return@uiSafe
                 }
 
@@ -1266,7 +1285,7 @@ class ImportExportViewModel(
                 val result = patchProfileRepository.importProfiles(remappedEntries)
                 when {
                     result.imported > 0 && result.skipped > 0 -> {
-                        app.toast(
+                        onToast(
                             app.resources.getQuantityString(
                                 R.plurals.import_patch_profiles_partial_quantity,
                                 result.imported,
@@ -1276,7 +1295,7 @@ class ImportExportViewModel(
                         )
                     }
                     result.imported > 0 -> {
-                        app.toast(
+                        onToast(
                             app.resources.getQuantityString(
                                 R.plurals.import_patch_profiles_success_quantity,
                                 result.imported,
@@ -1285,7 +1304,7 @@ class ImportExportViewModel(
                         )
                     }
                     result.skipped > 0 -> {
-                        app.toast(
+                        onToast(
                             app.resources.getQuantityString(
                                 R.plurals.import_patch_profiles_skipped_quantity,
                                 result.skipped,
@@ -1293,14 +1312,16 @@ class ImportExportViewModel(
                             )
                         )
                     }
-                    else -> app.toast(app.getString(R.string.import_patch_profiles_none))
+                    else -> onToast(app.getString(R.string.import_patch_profiles_none))
                 }
             }
         }
     }
 
-    fun importPatchProfiles(source: Path) =
-        importPatchProfiles(Uri.fromFile(source.toFile()))
+    fun importPatchProfiles(
+        source: Path,
+        onToast: (String) -> Unit = { app.toast(it) }
+    ) = importPatchProfiles(Uri.fromFile(source.toFile()), onToast)
 
     fun exportPatchProfiles(target: Uri) = viewModelScope.launch {
         uiSafe(app, R.string.export_patch_profiles_fail, "Failed to export patch profiles") {
@@ -1351,7 +1372,10 @@ class ImportExportViewModel(
         }
     }
 
-    fun importManagerSettings(source: Uri) = viewModelScope.launch {
+    fun importManagerSettings(
+        source: Uri,
+        onToast: (String) -> Unit = { app.toast(it) }
+    ) = viewModelScope.launch {
         uiSafe(app, R.string.import_manager_settings_fail, "Failed to import manager settings") {
             val previousSettings = preferencesManager.exportSettings()
             val exportFile = withContext(Dispatchers.IO) {
@@ -1362,12 +1386,14 @@ class ImportExportViewModel(
 
             preferencesManager.importSettings(exportFile.settings)
             importedPermissionRequest = buildImportedPermissionRequest(previousSettings)
-            app.toast(app.getString(R.string.import_manager_settings_success))
+            onToast(app.getString(R.string.import_manager_settings_success))
         }
     }
 
-    fun importManagerSettings(source: Path) =
-        importManagerSettings(Uri.fromFile(source.toFile()))
+    fun importManagerSettings(
+        source: Path,
+        onToast: (String) -> Unit = { app.toast(it) }
+    ) = importManagerSettings(Uri.fromFile(source.toFile()), onToast)
 
     fun exportManagerSettings(target: Uri) = viewModelScope.launch {
         uiSafe(app, R.string.export_manager_settings_fail, "Failed to export manager settings") {
@@ -1541,10 +1567,29 @@ class ImportExportViewModel(
                         }
                     }
 
-                    importPatchBundles(bundlesPath).join()
-                    importPatchProfiles(profilesPath).join()
-                    importManagerSettings(settingsPath).join()
-                    executeSelectionImportAllBundles(selectionPath).join()
+                    val importToasts = mutableMapOf<EverythingImportToast, String>()
+
+                    importPatchBundles(bundlesPath) {
+                        importToasts[EverythingImportToast.PATCH_BUNDLES] = it
+                    }.join()
+                    importPatchProfiles(profilesPath) {
+                        importToasts[EverythingImportToast.PATCH_PROFILES] = it
+                    }.join()
+                    importManagerSettings(settingsPath) {
+                        importToasts[EverythingImportToast.MANAGER_SETTINGS] = it
+                    }.join()
+                    executeSelectionImportAllBundles(selectionPath) {
+                        importToasts[EverythingImportToast.PATCH_SELECTION] = it
+                    }.join()
+
+                    listOf(
+                        EverythingImportToast.PATCH_SELECTION,
+                        EverythingImportToast.PATCH_BUNDLES,
+                        EverythingImportToast.PATCH_PROFILES,
+                        EverythingImportToast.MANAGER_SETTINGS
+                    ).forEach { key ->
+                        importToasts[key]?.let(app::toast)
+                    }
                 } finally {
                     withContext(Dispatchers.IO) {
                         tempDir.toFile().deleteRecursively()
@@ -1588,10 +1633,29 @@ class ImportExportViewModel(
                         }
                     }
 
-                    importPatchBundles(bundlesPath).join()
-                    importPatchProfiles(profilesPath).join()
-                    importManagerSettings(settingsPath).join()
-                    executeSelectionImportAllBundles(selectionPath).join()
+                    val importToasts = mutableMapOf<EverythingImportToast, String>()
+
+                    importPatchBundles(bundlesPath) {
+                        importToasts[EverythingImportToast.PATCH_BUNDLES] = it
+                    }.join()
+                    importPatchProfiles(profilesPath) {
+                        importToasts[EverythingImportToast.PATCH_PROFILES] = it
+                    }.join()
+                    importManagerSettings(settingsPath) {
+                        importToasts[EverythingImportToast.MANAGER_SETTINGS] = it
+                    }.join()
+                    executeSelectionImportAllBundles(selectionPath) {
+                        importToasts[EverythingImportToast.PATCH_SELECTION] = it
+                    }.join()
+
+                    listOf(
+                        EverythingImportToast.PATCH_SELECTION,
+                        EverythingImportToast.PATCH_BUNDLES,
+                        EverythingImportToast.PATCH_PROFILES,
+                        EverythingImportToast.MANAGER_SETTINGS
+                    ).forEach { key ->
+                        importToasts[key]?.let(app::toast)
+                    }
                 } finally {
                     withContext(Dispatchers.IO) {
                         tempDir.toFile().deleteRecursively()

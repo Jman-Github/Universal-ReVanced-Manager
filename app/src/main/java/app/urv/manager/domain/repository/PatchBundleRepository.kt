@@ -2372,7 +2372,7 @@ class PatchBundleRepository(
                 )
         if (!isJson && !isExternalBundlesEndpoint) {
             throw IllegalArgumentException(
-                "Patch bundle URL must point to a .json file or a supported external bundles API URL."
+                app.getString(R.string.patch_bundle_url_invalid_json_or_external)
             )
         }
 
@@ -2394,7 +2394,7 @@ class PatchBundleRepository(
             host == "revanced-external-bundles-dev.brosssh.com"
         if (!isExternalBundlesHost) {
             throw IllegalArgumentException(
-                "Patch bundle URL must point to a supported external bundles API URL."
+                app.getString(R.string.patch_bundle_url_invalid_external)
             )
         }
 
@@ -2451,7 +2451,7 @@ class PatchBundleRepository(
         val isJson = pathNoQuery.endsWith(".json", ignoreCase = true)
         if (!isJson) {
             throw IllegalArgumentException(
-                "Patch bundle URL must point to a .json file or a supported external bundles API URL."
+                app.getString(R.string.patch_bundle_url_invalid_json_or_external)
             )
         }
 

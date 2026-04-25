@@ -451,7 +451,7 @@ private fun AutoLinkLikeText(
 ) {
     androidx.compose.foundation.text.ClickableText(
         text = text,
-        style = MaterialTheme.typography.bodySmall.copy(
+        style = MaterialTheme.typography.bodyMedium.copy(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         ),
         onClick = { offset ->

@@ -1,3 +1,25 @@
+# v1.8.1-dev.16 (TBD)
+
+
+# Features
+
+- Bumped Morphe Patcher to `1.4.2`
+- Improved UI strings, empty/search states, bundle changelog formatting, and import feedback order https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/436 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/437 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/441 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/435 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/434 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/432
+- Improved string consistency https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/433
+
+
+# Bug fixes
+
+
+## Build types
+
+**LITE**: ReVanced v22 and Morphe patcher runtimes included, AmpleReVanced and ReVanced v21 runtimes excluded.   
+**FULL**: Everything (ReVanced v22, v21, Morphe and AmpleReVanced patcher runtimes)
+
+> [!TIP]
+> Excluding patcher runtimes reduces the app size. If you only use the latest ReVanced and Morphe patches, you should install the **LITE** build. If you use more than just the latest ReVanced and Morphe patches, consider installing the **FULL** build instead. Keep in mind that the in-app updater will only download the same build type you currently have installed. If you want to switch build types later, you’ll need to go to the GitHub releases page and download that build manually.
+
+
 # v1.8.1-dev.15 (2026-04-24)
 
 

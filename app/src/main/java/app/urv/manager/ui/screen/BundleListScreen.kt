@@ -144,7 +144,17 @@ fun BundleListScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = stringResource(R.string.search_no_results),
+                    text = stringResource(R.string.bundle_search_no_results),
+                    style = MaterialTheme.typography.titleLarge
+                )
+            }
+        } else if (sources!!.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = stringResource(R.string.patch_bundle_empty_state),
                     style = MaterialTheme.typography.titleLarge
                 )
             }
