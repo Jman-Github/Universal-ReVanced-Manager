@@ -113,6 +113,8 @@
 - Bumped Morphe Patcher to `1.4.2`
 - Improved UI strings, empty/search states, bundle changelog formatting, and import feedback order https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/436 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/437 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/441 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/435 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/434 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/432
 - Improved string consistency https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/433
+- Bumped Morphe Patcher to `1.5.0`
+- Added automatic color code correction, normalization, and a color picker for patch options
 
 
 # Bug fixes

@@ -1,6 +1,7 @@
 package app.urv.manager.ui.component.patches
 
 import android.app.Application
+import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.os.Parcelable
 import android.provider.OpenableColumns
@@ -9,19 +10,27 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
@@ -43,6 +52,8 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -57,10 +68,15 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
 import app.urv.manager.data.platform.Filesystem
@@ -91,6 +107,7 @@ import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import java.io.Serializable
 import java.util.Locale
+import kotlin.math.roundToInt
 import kotlin.random.Random
 import kotlin.reflect.typeOf
 
@@ -233,16 +250,37 @@ fun <T : Any> OptionItem(
 
 private object StringOptionEditor : OptionEditor<String> {
     @Composable
+    override fun ListItemTrailingContent(scope: OptionEditorScope<String>) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (scope.option.isColorOption()) {
+                ColorOptionSwatch(scope.value ?: scope.option.default)
+            }
+            super.ListItemTrailingContent(scope)
+        }
+    }
+
+    @Composable
     override fun Dialog(scope: OptionEditorScope<String>) {
         var showFileDialog by rememberSaveable { mutableStateOf(false) }
+        var showColorPicker by rememberSaveable { mutableStateOf(false) }
+        val isColorOption = remember(scope.option) { scope.option.isColorOption() }
         var fieldValue by rememberSaveable(scope.value) {
             mutableStateOf(scope.value.orEmpty())
         }
         var validatorFailed by remember { mutableStateOf(false) }
         val validatorRef by rememberUpdatedState(scope.option.validator)
-        LaunchedEffect(fieldValue) {
+        LaunchedEffect(fieldValue, isColorOption) {
             val failed = withContext(Dispatchers.Default) {
-                runCatching { !validatorRef(fieldValue) }.getOrDefault(true)
+                val normalizedValue =
+                    if (isColorOption) normalizeColorOptionValue(fieldValue) else fieldValue
+                val invalidColorValue = isColorOption &&
+                    fieldValue.isNotBlank() &&
+                    normalizedValue == null
+                invalidColorValue ||
+                    runCatching { !validatorRef(normalizedValue ?: fieldValue) }.getOrDefault(true)
             }
             validatorFailed = failed
         }
@@ -281,6 +319,17 @@ private object StringOptionEditor : OptionEditor<String> {
                 showFileDialog = false
             }
         }
+        if (showColorPicker) {
+            PatchOptionColorPickerDialog(
+                title = scope.option.title,
+                currentColor = fieldValue,
+                onColorSelected = {
+                    fieldValue = it
+                    showColorPicker = false
+                },
+                onDismiss = { showColorPicker = false }
+            )
+        }
 
         AlertDialog(
             onDismissRequest = scope.dismissDialog,
@@ -290,7 +339,12 @@ private object StringOptionEditor : OptionEditor<String> {
                     value = fieldValue,
                     onValueChange = { fieldValue = it },
                     placeholder = {
-                        Text(stringResource(R.string.dialog_input_placeholder))
+                        Text(
+                            stringResource(
+                                if (isColorOption) R.string.color_option_input_placeholder
+                                else R.string.dialog_input_placeholder
+                            )
+                        )
                     },
                     isError = validatorFailed,
                     supportingText = {
@@ -317,6 +371,20 @@ private object StringOptionEditor : OptionEditor<String> {
                             expanded = showDropdownMenu,
                             onDismissRequest = { showDropdownMenu = false }
                         ) {
+                            if (isColorOption) {
+                                DropdownMenuItem(
+                                    leadingIcon = {
+                                        ColorOptionSwatch(fieldValue)
+                                    },
+                                    text = {
+                                        Text(stringResource(R.string.color_picker))
+                                    },
+                                    onClick = {
+                                        showDropdownMenu = false
+                                        showColorPicker = true
+                                    }
+                                )
+                            }
                             DropdownMenuItem(
                                 leadingIcon = {
                                     Icon(Icons.Outlined.Folder, null)
@@ -344,7 +412,14 @@ private object StringOptionEditor : OptionEditor<String> {
             confirmButton = {
                 TextButton(
                     enabled = !validatorFailed,
-                    onClick = { scope.submitDialog(fieldValue) }) {
+                    onClick = {
+                        val value = if (isColorOption) {
+                            normalizeColorOptionValue(fieldValue) ?: fieldValue.trim()
+                        } else {
+                            fieldValue
+                        }
+                        scope.submitDialog(value)
+                    }) {
                     Text(stringResource(R.string.save))
                 }
             },
@@ -356,6 +431,235 @@ private object StringOptionEditor : OptionEditor<String> {
         )
     }
 }
+
+@Composable
+private fun ColorOptionSwatch(value: String?) {
+    val color = remember(value) { parseColorOption(value) }
+    Box(
+        modifier = Modifier
+            .width(28.dp)
+            .height(28.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(color ?: MaterialTheme.colorScheme.surfaceVariant)
+            .border(
+                1.dp,
+                MaterialTheme.colorScheme.outline,
+                RoundedCornerShape(8.dp)
+            )
+    )
+}
+
+@Composable
+private fun PatchOptionColorPickerDialog(
+    title: String,
+    currentColor: String,
+    onColorSelected: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val initialColor = remember(currentColor) { parseColorOption(currentColor) ?: Color.Black }
+    val initialRed = remember(initialColor) { (initialColor.red * 255).roundToInt() }
+    val initialGreen = remember(initialColor) { (initialColor.green * 255).roundToInt() }
+    val initialBlue = remember(initialColor) { (initialColor.blue * 255).roundToInt() }
+
+    var red by rememberSaveable(initialRed) { mutableStateOf(initialRed) }
+    var green by rememberSaveable(initialGreen) { mutableStateOf(initialGreen) }
+    var blue by rememberSaveable(initialBlue) { mutableStateOf(initialBlue) }
+    var hexInput by rememberSaveable(currentColor) {
+        mutableStateOf(normalizeColorOptionValue(currentColor) ?: rgbToColorHex(initialRed, initialGreen, initialBlue))
+    }
+    val hexInputInvalid = remember(hexInput) {
+        hexInput.isNotBlank() && normalizeColorOptionValue(hexInput) == null
+    }
+    val previewColor = remember(red, green, blue) { rgbToColor(red, green, blue) }
+
+    fun updateFromColor(r: Int = red, g: Int = green, b: Int = blue) {
+        red = r.coerceIn(0, 255)
+        green = g.coerceIn(0, 255)
+        blue = b.coerceIn(0, 255)
+        hexInput = rgbToColorHex(red, green, blue)
+    }
+
+    AlertDialogExtended(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = stringResource(R.string.color_option_preview),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(72.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(previewColor)
+                        .border(
+                            1.dp,
+                            MaterialTheme.colorScheme.outline,
+                            RoundedCornerShape(12.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = rgbToColorHex(red, green, blue),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (previewColor.red + previewColor.green + previewColor.blue > 1.5f) {
+                            Color.Black
+                        } else {
+                            Color.White
+                        }
+                    )
+                }
+                OutlinedTextField(
+                    value = hexInput,
+                    onValueChange = { input ->
+                        hexInput = input
+                        parseColorOption(input)?.let { color ->
+                            red = (color.red * 255).roundToInt()
+                            green = (color.green * 255).roundToInt()
+                            blue = (color.blue * 255).roundToInt()
+                        }
+                    },
+                    singleLine = true,
+                    isError = hexInputInvalid,
+                    placeholder = { Text(stringResource(R.string.color_option_input_placeholder)) },
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(textAlign = TextAlign.Center),
+                    supportingText = {
+                        if (hexInputInvalid) {
+                            Text(
+                                stringResource(R.string.input_dialog_value_invalid),
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                ColorChannelSlider(
+                    label = stringResource(R.string.color_channel_red),
+                    value = red,
+                    trackColor = Color.Red,
+                    onValueChange = { updateFromColor(r = it) }
+                )
+                ColorChannelSlider(
+                    label = stringResource(R.string.color_channel_green),
+                    value = green,
+                    trackColor = Color.Green,
+                    onValueChange = { updateFromColor(g = it) }
+                )
+                ColorChannelSlider(
+                    label = stringResource(R.string.color_channel_blue),
+                    value = blue,
+                    trackColor = Color.Blue,
+                    onValueChange = { updateFromColor(b = it) }
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !hexInputInvalid,
+                onClick = {
+                    onColorSelected(normalizeColorOptionValue(hexInput) ?: rgbToColorHex(red, green, blue))
+                }
+            ) {
+                Text(stringResource(R.string.apply))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
+}
+
+@Composable
+private fun ColorChannelSlider(
+    label: String,
+    value: Int,
+    trackColor: Color,
+    onValueChange: (Int) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(label, style = MaterialTheme.typography.labelLarge)
+            Text(value.toString(), style = MaterialTheme.typography.labelMedium)
+        }
+        Slider(
+            value = value.toFloat(),
+            onValueChange = { onValueChange(it.roundToInt()) },
+            valueRange = 0f..255f,
+            colors = SliderDefaults.colors(
+                activeTrackColor = trackColor,
+                inactiveTrackColor = trackColor.copy(alpha = 0.3f),
+                thumbColor = trackColor
+            )
+        )
+    }
+}
+
+private fun Option<String>.isColorOption(): Boolean {
+    val text = listOf(key, title, description)
+        .joinToString(" ")
+        .lowercase(Locale.US)
+    if ("color" in text || "colour" in text || "hex" in text) return true
+
+    if (default?.trim()?.isColorLikeOptionValue() == true) return true
+    return presets?.values?.any { it?.trim()?.isColorLikeOptionValue() == true } == true
+}
+
+private fun String.isColorLikeOptionValue(): Boolean =
+    startsWith("@android:color/") ||
+        startsWith("@color/") ||
+        normalizeColorOptionValue(this) != null
+
+private fun normalizeColorOptionValue(value: String): String? {
+    val trimmed = value.trim()
+    if (trimmed.isEmpty()) return ""
+    if (trimmed.startsWith("@")) return trimmed
+
+    val hex = trimmed
+        .removePrefix("#")
+        .removePrefix("0x")
+        .removePrefix("0X")
+    if (!hex.matches(Regex("^[0-9a-fA-F]{3,4}$|^[0-9a-fA-F]{6}$|^[0-9a-fA-F]{8}$"))) {
+        return null
+    }
+
+    val expanded = when (hex.length) {
+        3 -> hex.flatMap { listOf(it, it) }.joinToString("")
+        4 -> "${hex[3]}${hex[3]}${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}"
+        else -> hex
+    }.uppercase(Locale.US)
+
+    val normalized = "#$expanded"
+    return if (runCatching { AndroidColor.parseColor(normalized) }.isSuccess) normalized else null
+}
+
+private fun parseColorOption(value: String?): Color? {
+    val normalized = normalizeColorOptionValue(value.orEmpty()) ?: return null
+    if (normalized.startsWith("@") || normalized.isBlank()) return null
+    return runCatching { Color(AndroidColor.parseColor(normalized)) }.getOrNull()
+}
+
+private fun rgbToColor(red: Int, green: Int, blue: Int): Color = Color(
+    red = red.coerceIn(0, 255) / 255f,
+    green = green.coerceIn(0, 255) / 255f,
+    blue = blue.coerceIn(0, 255) / 255f
+)
+
+private fun rgbToColorHex(red: Int, green: Int, blue: Int): String =
+    "#%02X%02X%02X".format(
+        red.coerceIn(0, 255),
+        green.coerceIn(0, 255),
+        blue.coerceIn(0, 255)
+    )
 
 private fun importDocumentUriToLocalPath(fs: Filesystem, uri: Uri): String? {
     val resolver = fs.contentResolver

@@ -309,6 +309,9 @@
     <string name="color_channel_red">Red</string>
     <string name="color_channel_green">Green</string>
     <string name="color_channel_blue">Blue</string>
+    <string name="color_picker">Color picker</string>
+    <string name="color_option_preview">Preview</string>
+    <string name="color_option_input_placeholder">#RRGGBB or @android:color/name</string>
     <string name="safeguards">Safeguards</string>
     <string name="patch_compat_check">Disable version compatibility check</string>
     <string name="patch_compat_check_description">Do not restrict patches to compatible app versions</string>
