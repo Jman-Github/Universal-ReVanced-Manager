@@ -954,8 +954,8 @@ Patch profiles are not affected.</string>
     <string name="merge_split_installed_status_split">Split APK</string>
     <string name="merge_split_installed_status_single">Single APK</string>
     <string name="merge_split_installed_status_system">System app</string>
-    <string name="merge_split_apk_stop_confirm_title">Stop merge</string>
-    <string name="merge_split_apk_stop_confirm_description">Are you sure you want to stop the split merge process?</string>
+    <string name="merge_split_apk_stop_confirm_title">Stop merger</string>
+    <string name="merge_split_apk_stop_confirm_description">Are you sure you want to stop the merging process?</string>
     <string name="delete">Delete</string>
     <string name="disable">Disable</string>
     <string name="enable">Enable</string>
