@@ -12,6 +12,7 @@
 
 - Fixed split APK tool settings so installed-app filters persist/export correctly, installer logs use clearer copy/export labels, and the duplicate GitHub PAT export toggle is removed https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/439 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/440 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/442 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/443
 - Fixed duplicate Apps tab entries being created after installing patched apps with custom installers https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
+- Fixed patch selection action buttons collapsing while scrolling, swiping bundles, or pressing actions when auto-collapse is disabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/448
 
 
 ## Build types

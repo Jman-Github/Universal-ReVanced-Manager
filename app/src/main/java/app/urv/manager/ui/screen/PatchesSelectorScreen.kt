@@ -252,6 +252,7 @@ fun PatchesSelectorScreen(
     val disablePatchSelectionTabSwipe by viewModel.prefs.disablePatchSelectionTabSwipe.getAsState()
     val preventAccidentalTouching by viewModel.prefs.preventAccidentalTouching.getAsState()
     val showPatchProfilesTab by viewModel.prefs.showPatchProfilesTab.getAsState()
+    val collapseActionsOnSelection by viewModel.prefs.collapsePatchActionsOnSelection.getAsState()
     val orderedActionKeys = remember(actionOrderPref) {
         val parsed = actionOrderPref
             .split(',')
@@ -377,18 +378,20 @@ fun PatchesSelectorScreen(
             viewModel.prefs.patchSelectionSortSettingsMode.update(sortSettingsMode)
         }
     }
-    LaunchedEffect(patchLazyListStates) {
+    LaunchedEffect(patchLazyListStates, collapseActionsOnSelection) {
         snapshotFlow { patchLazyListStates.any { it.isScrollInProgress } }
             .collectLatest { scrolling ->
-                if (scrolling && actionsExpanded) {
+                if (collapseActionsOnSelection && scrolling && actionsExpanded) {
                     actionsExpanded = false
                 }
             }
     }
-    LaunchedEffect(pagerState) {
+    LaunchedEffect(pagerState, collapseActionsOnSelection) {
         snapshotFlow { pagerState.settledPage }
             .collectLatest {
-                actionsExpanded = false
+                if (collapseActionsOnSelection) {
+                    actionsExpanded = false
+                }
             }
     }
     InterceptBackHandler(enabled = !dialogsOpen && (searchActive || searchExpanded || query.isNotBlank())) {
@@ -805,7 +808,6 @@ fun PatchesSelectorScreen(
         )
     }
     val disableActionConfirmations by viewModel.prefs.disablePatchSelectionConfirmations.getAsState()
-    val collapseActionsOnSelection by viewModel.prefs.collapsePatchActionsOnSelection.getAsState()
     val actionPopupProperties = remember(collapseActionsOnSelection) {
         PopupProperties(
             focusable = collapseActionsOnSelection,
@@ -1280,7 +1282,9 @@ fun PatchesSelectorScreen(
                                         glowRadiusPx = glowRadiusPx,
                                         onActionClick = { spec ->
                                             spec.onClick()
-                                            actionsExpanded = false
+                                            if (collapseActionsOnSelection) {
+                                                actionsExpanded = false
+                                            }
                                         }
                                     )
                                 }
@@ -1395,7 +1399,9 @@ fun PatchesSelectorScreen(
                                                     glowRadiusPx = glowRadiusPx,
                                                     onActionClick = { spec ->
                                                         spec.onClick()
-                                                        actionsExpanded = false
+                                                        if (collapseActionsOnSelection) {
+                                                            actionsExpanded = false
+                                                        }
                                                     }
                                                 )
                                             }
