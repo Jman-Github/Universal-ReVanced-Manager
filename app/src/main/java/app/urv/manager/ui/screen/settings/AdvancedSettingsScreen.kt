@@ -443,7 +443,6 @@ fun AdvancedSettingsScreen(
 
             val apiUrl by viewModel.prefs.api.getAsState()
             val gitHubPat by viewModel.prefs.gitHubPat.getAsState()
-            val includeGitHubPatInExports by viewModel.prefs.includeGitHubPatInExports.getAsState()
             var showApiUrlDialog by rememberSaveable { mutableStateOf(false) }
             var showGitHubPatDialog by rememberSaveable { mutableStateOf(false) }
 
@@ -460,11 +459,9 @@ fun AdvancedSettingsScreen(
             if (showGitHubPatDialog) {
                 GitHubPatDialog(
                     currentPat = gitHubPat,
-                    currentIncludeInExport = includeGitHubPatInExports,
-                    onSubmit = { pat, includePat ->
+                    onSubmit = { pat ->
                         showGitHubPatDialog = false
                         viewModel.setGitHubPat(pat)
-                        viewModel.setIncludeGitHubPatInExports(includePat)
                     },
                     onDismiss = { showGitHubPatDialog = false }
                 )
@@ -3735,13 +3732,10 @@ private fun APIUrlDialog(currentUrl: String, defaultUrl: String, onSubmit: (Stri
 @Composable
 private fun GitHubPatDialog(
     currentPat: String,
-    currentIncludeInExport: Boolean,
-    onSubmit: (String, Boolean) -> Unit,
+    onSubmit: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     var pat by rememberSaveable(currentPat) { mutableStateOf(currentPat) }
-    var includePatInExport by rememberSaveable(currentIncludeInExport) { mutableStateOf(currentIncludeInExport) }
-    var showIncludeWarning by rememberSaveable { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
     val context = LocalContext.current
@@ -3779,7 +3773,7 @@ private fun GitHubPatDialog(
         modifier = Modifier.imePadding(),
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = { onSubmit(pat, includePatInExport) }) {
+            TextButton(onClick = { onSubmit(pat) }) {
                 Text(stringResource(R.string.save))
             }
         },
@@ -3827,72 +3821,9 @@ private fun GitHubPatDialog(
                         TransformedText(AnnotatedString(masked), OffsetMapping.Identity)
                     }
                 )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.include_github_pat_in_exports_label),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = stringResource(R.string.include_github_pat_in_exports_supporting),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = includePatInExport,
-                        onCheckedChange = { checked ->
-                            if (checked) {
-                                showIncludeWarning = true
-                            } else {
-                                includePatInExport = false
-                            }
-                        }
-                    )
-                }
             }
         }
     )
-
-    if (showIncludeWarning) {
-        AlertDialog(
-            onDismissRequest = { showIncludeWarning = false },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        includePatInExport = true
-                        showIncludeWarning = false
-                    }
-                ) {
-                    Text(stringResource(R.string.confirm))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showIncludeWarning = false }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            },
-            icon = { Icon(Icons.Outlined.Warning, null) },
-            title = { Text(stringResource(R.string.warning)) },
-            text = {
-                Text(
-                    text = stringResource(R.string.include_github_pat_in_exports_warning),
-                    modifier = Modifier.fillMaxWidth(),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-            }
-        )
-    }
 }
 
 @Composable

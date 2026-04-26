@@ -2876,11 +2876,13 @@ private fun MergeSplitInstalledAppsDialog(
     onDismissRequest: () -> Unit,
     onSelectApp: (String) -> Unit
 ) {
+    val prefs: PreferencesManager = koinInject()
+    val coroutineScope = rememberCoroutineScope()
     var filterText by rememberSaveable { mutableStateOf("") }
-    var showUserApps by rememberSaveable { mutableStateOf(false) }
-    var showSystemApps by rememberSaveable { mutableStateOf(false) }
-    var showSplitApks by rememberSaveable { mutableStateOf(false) }
-    var showSingleApks by rememberSaveable { mutableStateOf(false) }
+    val showUserApps by prefs.splitMergeInstalledFilterUserApps.getAsState()
+    val showSystemApps by prefs.splitMergeInstalledFilterSystemApps.getAsState()
+    val showSplitApks by prefs.splitMergeInstalledFilterSplitApks.getAsState()
+    val showSingleApks by prefs.splitMergeInstalledFilterSingleApks.getAsState()
     val filterScrollState = rememberScrollState()
     val chipColors = FilterChipDefaults.filterChipColors(
         containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp),
@@ -2951,25 +2953,41 @@ private fun MergeSplitInstalledAppsDialog(
                     ) {
                         CheckedFilterChip(
                             selected = showUserApps,
-                            onClick = { showUserApps = !showUserApps },
+                            onClick = {
+                                coroutineScope.launch {
+                                    prefs.splitMergeInstalledFilterUserApps.update(!showUserApps)
+                                }
+                            },
                             colors = chipColors,
                             label = { Text(stringResource(R.string.merge_split_installed_filter_user_apps)) }
                         )
                         CheckedFilterChip(
                             selected = showSystemApps,
-                            onClick = { showSystemApps = !showSystemApps },
+                            onClick = {
+                                coroutineScope.launch {
+                                    prefs.splitMergeInstalledFilterSystemApps.update(!showSystemApps)
+                                }
+                            },
                             colors = chipColors,
                             label = { Text(stringResource(R.string.merge_split_installed_filter_system_apps)) }
                         )
                         CheckedFilterChip(
                             selected = showSplitApks,
-                            onClick = { showSplitApks = !showSplitApks },
+                            onClick = {
+                                coroutineScope.launch {
+                                    prefs.splitMergeInstalledFilterSplitApks.update(!showSplitApks)
+                                }
+                            },
                             colors = chipColors,
                             label = { Text(stringResource(R.string.merge_split_installed_filter_split_apks)) }
                         )
                         CheckedFilterChip(
                             selected = showSingleApks,
-                            onClick = { showSingleApks = !showSingleApks },
+                            onClick = {
+                                coroutineScope.launch {
+                                    prefs.splitMergeInstalledFilterSingleApks.update(!showSingleApks)
+                                }
+                            },
                             colors = chipColors,
                             label = { Text(stringResource(R.string.merge_split_installed_filter_single_apks)) }
                         )

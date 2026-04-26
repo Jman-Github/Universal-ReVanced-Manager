@@ -110,6 +110,9 @@
 - Added a new Patcher logging setting with Default and Verbose modes https://github.com/ReVanced/revanced-manager/pull/3287
 - Remember the selected split merge preset across app sessions https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/303
 - Added a Latest toggle to remote downloader plugin source settings so sources can update from the newest stable or pre-release GitHub release
+- Bumped Morphe Patcher to `1.4.2`
+- Improved UI strings, empty/search states, bundle changelog formatting, and import feedback order https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/436 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/437 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/441 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/435 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/434 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/432
+- Improved string consistency https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/433
 
 
 # Bug fixes
@@ -231,6 +234,7 @@
 - Fixed duplicate Saved/Installed entries by collapsing matching saved variants after install when saved app overwrite is enabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
 - Fixed split archive metadata resolution to use stricter device-matching split selection for app labels and icons
 - Fixed split APK merging so remove-extras and native library cleanup preserve required ABI, language, and DPI splits when only one compatible config is available
+- Fixed split APK tool settings so installed-app filters persist/export correctly, installer logs use clearer copy/export labels, and the duplicate GitHub PAT export toggle is removed https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/439 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/440 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/442 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/443
 
 
 # Refactors

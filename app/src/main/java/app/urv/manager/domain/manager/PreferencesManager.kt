@@ -188,6 +188,10 @@ class PreferencesManager(
     val appSelectorFilterInstalledOnly = booleanPreference("app_selector_filter_installed_only", false)
     val appSelectorFilterPatchesAvailable = booleanPreference("app_selector_filter_patches_available", false)
     val splitMergeSelectionPreset = stringPreference("split_merge_selection_preset", "all")
+    val splitMergeInstalledFilterUserApps = booleanPreference("split_merge_installed_filter_user_apps", false)
+    val splitMergeInstalledFilterSystemApps = booleanPreference("split_merge_installed_filter_system_apps", false)
+    val splitMergeInstalledFilterSplitApks = booleanPreference("split_merge_installed_filter_split_apks", false)
+    val splitMergeInstalledFilterSingleApks = booleanPreference("split_merge_installed_filter_single_apks", false)
     val useCustomFilePicker = booleanPreference("use_custom_file_picker", true)
     val youtubeAssetsSyncHeaderTransforms = booleanPreference("youtube_assets_sync_header_transforms", false)
     val patchBundleDiscoveryShowRelease = booleanPreference("patch_bundle_discovery_show_release", true)
@@ -290,6 +294,10 @@ class PreferencesManager(
         val appSelectorFilterInstalledOnly: Boolean? = null,
         val appSelectorFilterPatchesAvailable: Boolean? = null,
         val splitMergeSelectionPreset: String? = null,
+        val splitMergeInstalledFilterUserApps: Boolean? = null,
+        val splitMergeInstalledFilterSystemApps: Boolean? = null,
+        val splitMergeInstalledFilterSplitApks: Boolean? = null,
+        val splitMergeInstalledFilterSingleApks: Boolean? = null,
         val useCustomFilePicker: Boolean? = null,
         val patchBundleDiscoveryShowRelease: Boolean? = null,
         val patchBundleDiscoveryShowPrerelease: Boolean? = null,
@@ -442,6 +450,10 @@ class PreferencesManager(
             appSelectorFilterInstalledOnly = appSelectorFilterInstalledOnly.get(),
             appSelectorFilterPatchesAvailable = appSelectorFilterPatchesAvailable.get(),
             splitMergeSelectionPreset = splitMergeSelectionPreset.get().takeIf { it.isNotBlank() },
+            splitMergeInstalledFilterUserApps = splitMergeInstalledFilterUserApps.get(),
+            splitMergeInstalledFilterSystemApps = splitMergeInstalledFilterSystemApps.get(),
+            splitMergeInstalledFilterSplitApks = splitMergeInstalledFilterSplitApks.get(),
+            splitMergeInstalledFilterSingleApks = splitMergeInstalledFilterSingleApks.get(),
             useCustomFilePicker = useCustomFilePicker.get(),
             patchBundleDiscoveryShowRelease = patchBundleDiscoveryShowRelease.get(),
             patchBundleDiscoveryShowPrerelease = patchBundleDiscoveryShowPrerelease.get(),
@@ -591,6 +603,10 @@ class PreferencesManager(
         snapshot.splitMergeSelectionPreset?.takeIf { it.isNotBlank() }?.let {
             splitMergeSelectionPreset.value = it
         }
+        snapshot.splitMergeInstalledFilterUserApps?.let { splitMergeInstalledFilterUserApps.value = it }
+        snapshot.splitMergeInstalledFilterSystemApps?.let { splitMergeInstalledFilterSystemApps.value = it }
+        snapshot.splitMergeInstalledFilterSplitApks?.let { splitMergeInstalledFilterSplitApks.value = it }
+        snapshot.splitMergeInstalledFilterSingleApks?.let { splitMergeInstalledFilterSingleApks.value = it }
         snapshot.useCustomFilePicker?.let { useCustomFilePicker.value = it }
         snapshot.patchBundleDiscoveryShowRelease?.let { patchBundleDiscoveryShowRelease.value = it }
         snapshot.patchBundleDiscoveryShowPrerelease?.let { patchBundleDiscoveryShowPrerelease.value = it }
