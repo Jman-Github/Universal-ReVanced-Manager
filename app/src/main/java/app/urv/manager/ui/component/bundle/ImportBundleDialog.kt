@@ -25,6 +25,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
@@ -192,6 +194,15 @@ private fun ImportBundleStep(
     val context = LocalContext.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusRequester = remember { FocusRequester() }
+    var remoteUrlFieldValue by rememberSaveable(stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(remoteUrl, selection = TextRange(remoteUrl.length)))
+    }
+
+    LaunchedEffect(remoteUrl) {
+        if (remoteUrl != remoteUrlFieldValue.text) {
+            remoteUrlFieldValue = TextFieldValue(remoteUrl, selection = TextRange(remoteUrl.length))
+        }
+    }
 
     LaunchedEffect(shouldAutofocusRemoteUrl, bundleType) {
         if (shouldAutofocusRemoteUrl && bundleType == BundleType.Remote) {
@@ -231,8 +242,11 @@ private fun ImportBundleStep(
                 ) {
                     OutlinedTextField(
                         modifier = Modifier.focusRequester(focusRequester),
-                        value = remoteUrl,
-                        onValueChange = onRemoteUrlChange,
+                        value = remoteUrlFieldValue,
+                        onValueChange = {
+                            remoteUrlFieldValue = it
+                            onRemoteUrlChange(it.text)
+                        },
                         label = { Text(stringResource(R.string.patches_url)) }
                     )
                     Spacer(modifier = Modifier.height(10.dp))

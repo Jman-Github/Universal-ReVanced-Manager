@@ -115,6 +115,7 @@
 - Improved string consistency https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/433
 - Bumped Morphe Patcher to `1.5.0`
 - Added automatic color code correction, normalization, and a color picker for patch options
+- Moved the cursor to the end of prefilled input fields when dialogs and search fields open automatically https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/444
 
 
 # Bug fixes

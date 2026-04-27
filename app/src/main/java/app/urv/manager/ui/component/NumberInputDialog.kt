@@ -26,6 +26,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
 import kotlinx.coroutines.Dispatchers
@@ -41,13 +43,14 @@ private inline fun <T> NumberInputDialog(
     neutralButtonLabel: String? = null,
     noinline neutralValueProvider: (() -> T?)? = null,
 ) {
-    var fieldValue by rememberSaveable {
-        mutableStateOf(current?.toString().orEmpty())
+    val initialValue = current?.toString().orEmpty()
+    var fieldValue by rememberSaveable(stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(initialValue, selection = TextRange(initialValue.length)))
     }
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
     val numberFieldValue by remember {
-        derivedStateOf { fieldValue.toNumberOrNull() }
+        derivedStateOf { fieldValue.text.toNumberOrNull() }
     }
     var validatorFailed by remember { mutableStateOf(false) }
     val validatorRef by rememberUpdatedState(validator)
@@ -114,7 +117,8 @@ private inline fun <T> NumberInputDialog(
                     TextButton(
                         onClick = {
                             provider()?.let { value ->
-                                fieldValue = value.toString()
+                                val text = value.toString()
+                                fieldValue = TextFieldValue(text, selection = TextRange(text.length))
                             }
                         }
                     ) {

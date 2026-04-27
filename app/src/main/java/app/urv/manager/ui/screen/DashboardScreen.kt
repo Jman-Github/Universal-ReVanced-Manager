@@ -133,6 +133,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.res.stringResource
@@ -3351,6 +3353,15 @@ private fun DashboardSearchField(
 ) {
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
+    var queryFieldValue by rememberSaveable(stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(query, selection = TextRange(query.length)))
+    }
+
+    LaunchedEffect(query) {
+        if (query != queryFieldValue.text) {
+            queryFieldValue = TextFieldValue(query, selection = TextRange(query.length))
+        }
+    }
 
     LaunchedEffect(Unit) {
         withFrameNanos { }
@@ -3369,13 +3380,21 @@ private fun DashboardSearchField(
         modifier = modifier.fillMaxWidth()
     ) {
         TextField(
-            value = query,
-            onValueChange = onQueryChange,
+            value = queryFieldValue,
+            onValueChange = {
+                queryFieldValue = it
+                onQueryChange(it.text)
+            },
             placeholder = { Text(stringResource(placeholderRes)) },
             leadingIcon = { Icon(Icons.Outlined.Search, null) },
             trailingIcon = {
                 if (query.isNotBlank()) {
-                    IconButton(onClick = onClear) {
+                    IconButton(
+                        onClick = {
+                            queryFieldValue = TextFieldValue("")
+                            onClear()
+                        }
+                    ) {
                         Icon(Icons.Outlined.Close, stringResource(R.string.clear))
                     }
                 }

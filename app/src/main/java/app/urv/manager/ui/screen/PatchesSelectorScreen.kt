@@ -115,7 +115,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.text.KeyboardActions
@@ -2492,6 +2494,15 @@ private fun PatchProfileNameDialog(
 ) {
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
+    var nameFieldValue by rememberSaveable(stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(name, selection = TextRange(name.length)))
+    }
+
+    LaunchedEffect(name) {
+        if (name != nameFieldValue.text) {
+            nameFieldValue = TextFieldValue(name, selection = TextRange(name.length))
+        }
+    }
 
     LaunchedEffect(Unit) {
         withFrameNanos { }
@@ -2522,8 +2533,11 @@ private fun PatchProfileNameDialog(
             ) {
                 Text(stringResource(R.string.patch_profile_name_description))
                 TextField(
-                    value = name,
-                    onValueChange = onNameChange,
+                    value = nameFieldValue,
+                    onValueChange = {
+                        nameFieldValue = it
+                        onNameChange(it.text)
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(focusRequester),
@@ -2533,7 +2547,7 @@ private fun PatchProfileNameDialog(
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(
                         onDone = {
-                            if (name.isNotBlank() && !isSaving) onConfirm()
+                            if (nameFieldValue.text.isNotBlank() && !isSaving) onConfirm()
                         }
                     )
                 )
