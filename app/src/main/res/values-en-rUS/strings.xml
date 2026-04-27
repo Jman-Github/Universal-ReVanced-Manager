@@ -834,13 +834,13 @@ Patch profiles are not affected.</string>
     <string name="split_installer_success">Split APK installed successfully.</string>
     <string name="split_installer_success_toast">Installation completed successfully.</string>
     <string name="split_installer_failed">Split APK installation failed.</string>
-    <string name="split_installer_error_toast">Installation failed. Check installer log.</string>
+    <string name="split_installer_error_toast">Installation failed. Check installer log</string>
     <string name="split_installer_cancelled">Split APK installation was cancelled.</string>
     <string name="split_installer_open_failed_toast">Unable to open the installed app.</string>
     <string name="split_installer_no_apk_entries">Selected archive does not contain APK entries.</string>
     <string name="split_installer_no_privileged_access">Shizuku and root are both unavailable.</string>
-    <string name="split_installer_stop_confirm_title">Stop split install</string>
-    <string name="split_installer_stop_confirm_description">Leaving this screen will cancel the current split install. Continue?</string>
+    <string name="split_installer_stop_confirm_title">Stop installer</string>
+    <string name="split_installer_stop_confirm_description">Are you sure you want to stop the installing process?</string>
     <string name="split_installer_log_title">Installer log</string>
     <string name="split_installer_log_empty">No installer logs yet.</string>
     <string name="split_installer_log_actions_title">Installer log</string>
