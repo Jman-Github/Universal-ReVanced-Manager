@@ -755,8 +755,8 @@ Patch profiles are not affected.</string>
     <string name="tab_profiles">Patch Profiles</string>
     <string name="tab_tools">Tools</string>
     <string name="tools_tab_placeholder">Tools coming soon</string>
-    <string name="tools_youtube_assets_title">Create custom YouTube icons &amp; headers</string>
-    <string name="tools_youtube_assets_description">Create adaptive icon and header asset packs with manual image transforms.</string>
+    <string name="tools_youtube_assets_title">Custom YouTube icon &amp; header creator</string>
+    <string name="tools_youtube_assets_description">Create an adaptive icon and header asset pack with manual image transforms.</string>
     <string name="tools_youtube_assets_info">Select images, adjust zoom and placement, then generate a ZIP package with all required DPI variants.</string>
     <string name="tools_youtube_assets_adaptive_section">Adaptive icon</string>
     <string name="tools_youtube_assets_headers_section">Custom headers</string>
@@ -794,9 +794,9 @@ Patch profiles are not affected.</string>
     <string name="tools_youtube_assets_generate_mode_both">Adaptive icon + headers</string>
     <string name="tools_youtube_assets_generate_mode_adaptive">Adaptive icon only</string>
     <string name="tools_youtube_assets_generate_mode_header">Headers only</string>
-    <string name="tools_youtube_assets_generated">Assets package generated.</string>
+    <string name="tools_youtube_assets_generated">Assets package generated</string>
     <string name="tools_youtube_assets_generated_file">Generated: %1$s</string>
-    <string name="tools_youtube_assets_save_success">Assets package saved.</string>
+    <string name="tools_youtube_assets_save_success">Assets package saved</string>
     <string name="tools_youtube_assets_save_failed">Failed to save assets package.</string>
     <string name="tools_youtube_assets_generate_failed">Failed to generate assets package.</string>
     <string name="tools_youtube_assets_missing_images">Select adaptive foreground, light header, and dark header images first.</string>
@@ -808,12 +808,12 @@ Patch profiles are not affected.</string>
     <string name="tools_youtube_assets_image_load_failed">Unable to load the selected image. Choose a supported image file.</string>
     <string name="tools_youtube_assets_name_conflict_adaptive">Adaptive foreground and background file names must be different.</string>
     <string name="tools_youtube_assets_name_conflict_headers">Light and dark header file names must be different.</string>
-    <string name="tools_merge_split_title">Merge split APKs</string>
+    <string name="tools_merge_split_title">Split APK merger</string>
     <string name="tools_merge_split_screen_title">Merger</string>
     <string name="merge_split_apk_log_header_title">Merge split APKs tool</string>
     <string name="tools_merge_split_description">Merge split APK archives (.xapk, .apkm, .apks, .zip) into a single installable APK.</string>
     <string name="tools_split_installer_title">Split APK installer</string>
-    <string name="tools_split_installer_description">Install split APK archives (.xapk, .apkm, .apks, .zip) directly without merging.</string>
+    <string name="tools_split_installer_description">Install a split APK archive (.xapk, .apkm, .apks, .zip) directly without merging.</string>
     <string name="split_installer_info">Choose an install mode, then select a split archive from storage.</string>
     <string name="split_installer_mode_normal_title">Normal install</string>
     <string name="split_installer_mode_normal_description">Use Android Package Installer (rootless), similar to SAI normal mode.</string>
@@ -877,7 +877,7 @@ Patch profiles are not affected.</string>
     <string name="tools_keystore_converter_failed">Failed to convert keystore.</string>
     <string name="tools_keystore_converter_save_failed">Failed to save converted keystore.</string>
     <string name="tools_merge_split_progress_title">Split merge progress</string>
-    <string name="tools_merge_split_idle_hint">Select a split APK source to start merging. Choose where to save it after merge completes.</string>
+    <string name="tools_merge_split_idle_hint">Select a split APK source to start merging. Choose where to save it after merging completes.</string>
     <string name="tools_merge_split_source_title">Select split APK source</string>
     <string name="tools_merge_split_source_storage_title">Storage</string>
     <string name="tools_merge_split_source_storage_description">Pick a split archive from your device storage.</string>
