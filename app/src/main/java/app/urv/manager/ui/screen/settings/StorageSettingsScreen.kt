@@ -1,5 +1,6 @@
 package app.urv.manager.ui.screen.settings
 
+import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -7,12 +8,16 @@ import android.net.Uri
 import android.os.SystemClock
 import android.provider.Settings as AndroidSettings
 import android.text.format.Formatter
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,7 +26,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Settings
@@ -30,6 +37,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -55,21 +63,26 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.revanced.manager.R
 import app.urv.manager.data.room.apps.installed.InstallType
+import app.urv.manager.domain.manager.AutoClearCacheInterval
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.repository.DownloadedAppRepository
 import app.urv.manager.domain.repository.DownloaderPluginRepository
 import app.urv.manager.domain.repository.InstalledAppRepository
 import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.domain.repository.PatchProfileRepository
+import app.urv.manager.domain.storage.clearManagerCache
+import app.urv.manager.domain.worker.WorkerRepository
 import app.urv.manager.ui.component.AppTopBar
 import app.urv.manager.ui.component.ColumnWithScrollbar
 import app.urv.manager.ui.component.GroupHeader
 import app.urv.manager.ui.component.ShimmerBox
 import app.urv.manager.ui.component.settings.ExpressiveSettingsCard
+import app.urv.manager.ui.component.settings.ExpressiveSettingsConfigurableItem
 import app.urv.manager.ui.component.settings.ExpressiveSettingsDivider
 import app.urv.manager.ui.component.settings.ExpressiveSettingsItem
 import app.urv.manager.ui.component.settings.SettingsSearchHighlight
 import app.urv.manager.ui.model.navigation.Settings
+import app.urv.manager.util.permission.hasNotificationPermission
 import app.urv.manager.util.toast
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -89,14 +102,21 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
     val installedAppRepository: InstalledAppRepository = koinInject()
     val patchBundleRepository: PatchBundleRepository = koinInject()
     val patchProfileRepository: PatchProfileRepository = koinInject()
+    val workerRepository: WorkerRepository = koinInject()
     val coroutineScope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
     val searchTarget by SettingsSearchState.target.collectAsStateWithLifecycle()
+    val autoClearCacheInterval by prefs.autoClearCacheInterval.getAsState()
     var highlightTarget by rememberSaveable { mutableStateOf<Int?>(null) }
     var snapshot by remember { mutableStateOf<StorageSnapshot?>(null) }
     var isLoading by rememberSaveable { mutableStateOf(false) }
     var showClearCacheDialog by rememberSaveable { mutableStateOf(false) }
+    var showAutoClearCacheDialog by rememberSaveable { mutableStateOf(false) }
+    var pendingAutoClearCacheInterval by rememberSaveable { mutableStateOf<AutoClearCacheInterval?>(null) }
+    var pendingAutoClearCacheRunNow by rememberSaveable { mutableStateOf(false) }
     var pendingClearTarget by rememberSaveable { mutableStateOf<StorageClearTarget?>(null) }
+    var pendingHighRiskClearTarget by rememberSaveable { mutableStateOf<StorageClearTarget?>(null) }
+    var expandedStorageGroups by rememberSaveable { mutableStateOf(emptyList<String>()) }
 
     fun refreshStorageUsage() {
         coroutineScope.launch {
@@ -119,6 +139,94 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
         refreshStorageUsage()
     }
 
+    fun clearTarget(target: StorageClearTarget) {
+        val areaName = target.title(context)
+        coroutineScope.launch {
+            isLoading = true
+            try {
+                val clearedBytes = clearStorageTarget(
+                    context = context,
+                    target = target,
+                    prefs = prefs,
+                    downloadedAppRepository = downloadedAppRepository,
+                    downloaderPluginRepository = downloaderPluginRepository,
+                    installedAppRepository = installedAppRepository,
+                    patchBundleRepository = patchBundleRepository,
+                    patchProfileRepository = patchProfileRepository
+                )
+                snapshot = loadStorageSnapshot(context)
+                context.toast(
+                    context.getString(
+                        R.string.storage_area_cleared,
+                        areaName,
+                        Formatter.formatShortFileSize(context, clearedBytes)
+                    )
+                )
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    fun updateAutoClearCacheInterval(interval: AutoClearCacheInterval) {
+        coroutineScope.launch {
+            prefs.autoClearCacheInterval.update(interval)
+            workerRepository.scheduleAutoClearCacheWork(interval)
+            context.toast(
+                context.getString(
+                    R.string.storage_auto_clear_cache_updated,
+                    context.getString(interval.displayName)
+                )
+            )
+        }
+    }
+
+    fun runAutoClearCacheNow() {
+        val workId = workerRepository.launchAutoClearCacheNow()
+        context.toast(context.getString(R.string.storage_auto_clear_cache_queued))
+        coroutineScope.launch {
+            isLoading = true
+            try {
+                workerRepository.workManager.getWorkInfoByIdFlow(workId)
+                    .first { workInfo -> workInfo?.state?.isFinished == true }
+                snapshot = loadStorageSnapshot(context)
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            pendingAutoClearCacheInterval?.let(::updateAutoClearCacheInterval)
+            if (pendingAutoClearCacheRunNow) {
+                runAutoClearCacheNow()
+            }
+        }
+        pendingAutoClearCacheInterval = null
+        pendingAutoClearCacheRunNow = false
+    }
+
+    fun requestAutoClearCacheInterval(interval: AutoClearCacheInterval) {
+        if (interval == AutoClearCacheInterval.NEVER || context.hasNotificationPermission()) {
+            updateAutoClearCacheInterval(interval)
+        } else {
+            pendingAutoClearCacheInterval = interval
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    fun requestRunAutoClearCacheNow() {
+        if (context.hasNotificationPermission()) {
+            runAutoClearCacheNow()
+        } else {
+            pendingAutoClearCacheRunNow = true
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
     LaunchedEffect(searchTarget) {
         val target = searchTarget
         if (target?.destination == Settings.Storage) {
@@ -137,7 +245,7 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
                         coroutineScope.launch {
                             isLoading = true
                             try {
-                                val clearedBytes = clearAppCache(context)
+                                val clearedBytes = clearManagerCache(context)
                                 snapshot = loadStorageSnapshot(context)
                                 context.toast(
                                     context.getString(
@@ -164,6 +272,14 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
         )
     }
 
+    if (showAutoClearCacheDialog) {
+        AutoClearCacheIntervalDialog(
+            current = autoClearCacheInterval,
+            onDismiss = { showAutoClearCacheDialog = false },
+            onConfirm = ::requestAutoClearCacheInterval
+        )
+    }
+
     pendingClearTarget?.let { target ->
         val areaName = target.title(context)
         AlertDialog(
@@ -172,30 +288,10 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
                 TextButton(
                     onClick = {
                         pendingClearTarget = null
-                        coroutineScope.launch {
-                            isLoading = true
-                            try {
-                                val clearedBytes = clearStorageTarget(
-                                    context = context,
-                                    target = target,
-                                    prefs = prefs,
-                                    downloadedAppRepository = downloadedAppRepository,
-                                    downloaderPluginRepository = downloaderPluginRepository,
-                                    installedAppRepository = installedAppRepository,
-                                    patchBundleRepository = patchBundleRepository,
-                                    patchProfileRepository = patchProfileRepository
-                                )
-                                snapshot = loadStorageSnapshot(context)
-                                context.toast(
-                                    context.getString(
-                                        R.string.storage_area_cleared,
-                                        areaName,
-                                        Formatter.formatShortFileSize(context, clearedBytes)
-                                    )
-                                )
-                            } finally {
-                                isLoading = false
-                            }
+                        if (target.requiresExtraConfirmation) {
+                            pendingHighRiskClearTarget = target
+                        } else {
+                            clearTarget(target)
                         }
                     }
                 ) {
@@ -209,6 +305,39 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
             },
             title = { Text(stringResource(R.string.storage_clear_area_dialog_title, areaName)) },
             text = { Text(stringResource(R.string.storage_clear_area_dialog_description, areaName)) }
+        )
+    }
+
+    pendingHighRiskClearTarget?.let { target ->
+        val areaName = target.title(context)
+        val warningDescriptionRes = target.warningDescriptionRes
+        AlertDialog(
+            onDismissRequest = { pendingHighRiskClearTarget = null },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingHighRiskClearTarget = null
+                        clearTarget(target)
+                    }
+                ) {
+                    Text(stringResource(R.string.storage_clear_area_warning_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingHighRiskClearTarget = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+            title = { Text(stringResource(R.string.storage_clear_area_warning_title, areaName)) },
+            text = {
+                Text(
+                    if (warningDescriptionRes != null) {
+                        stringResource(warningDescriptionRes)
+                    } else {
+                        stringResource(R.string.storage_clear_area_dialog_description, areaName)
+                    }
+                )
+            }
         )
     }
 
@@ -302,6 +431,10 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
                     )
                 } else {
                     areas.forEachIndexed { index, area ->
+                        val groupKey = area.clearTarget?.name
+                        val expandedBySearch = area.children.any { child -> child.targetKey == highlightTarget }
+                        val groupExpanded = area.children.isNotEmpty() &&
+                                ((groupKey != null && groupKey in expandedStorageGroups) || expandedBySearch)
                         SettingsSearchHighlight(
                             targetKey = area.targetKey,
                             activeKey = highlightTarget,
@@ -318,8 +451,44 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
                                         context.toast(context.getString(R.string.storage_open_app_storage_settings_failed))
                                     }
                                 },
+                                expandable = area.children.isNotEmpty(),
+                                expanded = groupExpanded,
+                                onToggleExpanded = {
+                                    groupKey?.let { key ->
+                                        expandedStorageGroups = if (key in expandedStorageGroups) {
+                                            expandedStorageGroups - key
+                                        } else {
+                                            expandedStorageGroups + key
+                                        }
+                                    }
+                                },
                                 modifier = highlightModifier
                             )
+                        }
+                        if (groupExpanded) {
+                            area.children.forEach { child ->
+                                ExpressiveSettingsDivider()
+                                SettingsSearchHighlight(
+                                    targetKey = child.targetKey,
+                                    activeKey = highlightTarget,
+                                    onHighlightComplete = { highlightTarget = null }
+                                ) { highlightModifier ->
+                                    StorageAreaItem(
+                                        area = child,
+                                        totalBytes = snapshot?.totalBytes ?: 0L,
+                                        isLoading = isLoading,
+                                        formatSize = { Formatter.formatShortFileSize(context, it) },
+                                        onClear = { clearTarget -> pendingClearTarget = clearTarget },
+                                        onManage = {
+                                            if (!context.openAppStorageSettings()) {
+                                                context.toast(context.getString(R.string.storage_open_app_storage_settings_failed))
+                                            }
+                                        },
+                                        child = true,
+                                        modifier = highlightModifier.padding(start = 28.dp)
+                                    )
+                                }
+                            }
                         }
                         if (index != areas.lastIndex) {
                             ExpressiveSettingsDivider()
@@ -355,6 +524,29 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
                         },
                         enabled = !isLoading,
                         onClick = { showClearCacheDialog = true },
+                        modifier = highlightModifier
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.storage_auto_clear_cache,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsConfigurableItem(
+                        headlineContent = stringResource(R.string.storage_auto_clear_cache),
+                        supportingContent = stringResource(
+                            R.string.storage_auto_clear_cache_description_with_current,
+                            stringResource(autoClearCacheInterval.displayName)
+                        ),
+                        leadingContent = {
+                            Icon(Icons.Outlined.Refresh, null)
+                        },
+                        enabled = !isLoading,
+                        secondaryActionLabel = stringResource(R.string.storage_auto_clear_cache_run_now),
+                        onSecondaryAction = ::requestRunAutoClearCacheNow,
+                        primaryActionLabel = stringResource(R.string.settings),
+                        onPrimaryAction = { showAutoClearCacheDialog = true },
                         modifier = highlightModifier
                     )
                 }
@@ -429,6 +621,10 @@ private fun StorageAreaItem(
     formatSize: (Long) -> String,
     onClear: (StorageClearTarget) -> Unit,
     onManage: () -> Unit,
+    expandable: Boolean = false,
+    expanded: Boolean = false,
+    onToggleExpanded: () -> Unit = {},
+    child: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val percent = if (totalBytes > 0L) {
@@ -437,7 +633,12 @@ private fun StorageAreaItem(
         0f
     }
     ExpressiveSettingsItem(
-        headlineContent = area.title,
+        headlineContent = {
+            Text(
+                text = area.title,
+                style = if (child) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium
+            )
+        },
         supportingContentSlot = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
@@ -461,12 +662,29 @@ private fun StorageAreaItem(
             Column(
                 horizontalAlignment = Alignment.End
             ) {
-                Text(
-                    text = if (area.stats.bytes > 0L) formatSize(area.stats.bytes) else stringResource(R.string.storage_empty),
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.End,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (area.stats.bytes > 0L) formatSize(area.stats.bytes) else stringResource(R.string.storage_empty),
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.End,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (expandable) {
+                        Icon(
+                            imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ChevronRight,
+                            contentDescription = stringResource(
+                                if (expanded) R.string.collapse_content else R.string.expand_content
+                            ),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.58f),
+                            modifier = Modifier
+                                .width(18.dp)
+                                .height(18.dp)
+                        )
+                    }
+                }
                 when (val clearTarget = area.clearTarget) {
                     null -> StorageAreaActionButton(
                         text = stringResource(R.string.storage_manage_area),
@@ -479,6 +697,7 @@ private fun StorageAreaItem(
                 }
             }
         },
+        onClick = if (expandable) onToggleExpanded else null,
         modifier = modifier
     )
 }
@@ -524,6 +743,53 @@ private fun StorageAreaActionButton(
 }
 
 @Composable
+private fun AutoClearCacheIntervalDialog(
+    current: AutoClearCacheInterval,
+    onDismiss: () -> Unit,
+    onConfirm: (AutoClearCacheInterval) -> Unit
+) {
+    var selected by rememberSaveable(current) { mutableStateOf(current) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.storage_auto_clear_cache_dialog_title)) },
+        text = {
+            Column {
+                AutoClearCacheInterval.entries.forEach { interval ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { selected = interval }
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = selected == interval,
+                            onClick = { selected = interval }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = stringResource(interval.displayName),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(selected); onDismiss() }) {
+                Text(stringResource(R.string.apply))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
+}
+
+@Composable
 private fun StorageUsageBar(progress: Float) {
     val shape = RoundedCornerShape(999.dp)
     Box(
@@ -558,12 +824,15 @@ private data class StorageAreaUsage(
     val title: String,
     val description: String,
     val stats: DirectoryStats,
-    val clearTarget: StorageClearTarget?
+    val clearTarget: StorageClearTarget?,
+    val children: List<StorageAreaUsage> = emptyList()
 )
 
 private enum class StorageClearTarget {
     InternalCache,
     CodeCache,
+    InternalFiles,
+    NoBackupFiles,
     CustomBackgrounds,
     DownloadedApps,
     PatchBundles,
@@ -573,13 +842,56 @@ private enum class StorageClearTarget {
     PatchProfileInputs,
     TemporaryWorkspace,
     UiTemporaryWorkspace,
+    OtherInternalData,
     ExternalCache,
     ExternalFiles;
+
+    val requiresExtraConfirmation: Boolean
+        get() = when (this) {
+            InternalFiles,
+            NoBackupFiles,
+            PatchBundles,
+            SigningFiles,
+            PatchedApps,
+            PatchProfileInputs,
+            OtherInternalData,
+            ExternalFiles -> true
+            InternalCache,
+            CodeCache,
+            CustomBackgrounds,
+            DownloadedApps,
+            DownloaderPlugins,
+            TemporaryWorkspace,
+            UiTemporaryWorkspace,
+            ExternalCache -> false
+        }
+
+    val warningDescriptionRes: Int?
+        get() = when (this) {
+            InternalFiles -> R.string.storage_clear_internal_files_warning_description
+            NoBackupFiles -> R.string.storage_clear_no_backup_files_warning_description
+            PatchBundles -> R.string.storage_clear_patch_bundles_warning_description
+            SigningFiles -> R.string.storage_clear_signing_files_warning_description
+            PatchedApps -> R.string.storage_clear_patched_apps_warning_description
+            PatchProfileInputs -> R.string.storage_clear_patch_profile_inputs_warning_description
+            OtherInternalData -> R.string.storage_clear_other_internal_data_warning_description
+            ExternalFiles -> R.string.storage_clear_external_files_warning_description
+            InternalCache,
+            CodeCache,
+            CustomBackgrounds,
+            DownloadedApps,
+            DownloaderPlugins,
+            TemporaryWorkspace,
+            UiTemporaryWorkspace,
+            ExternalCache -> null
+        }
 
     fun title(context: Context): String = context.getString(
         when (this) {
             InternalCache -> R.string.storage_internal_cache
             CodeCache -> R.string.storage_code_cache
+            InternalFiles -> R.string.storage_internal_files
+            NoBackupFiles -> R.string.storage_no_backup_files
             CustomBackgrounds -> R.string.storage_custom_backgrounds
             DownloadedApps -> R.string.storage_downloaded_apps
             PatchBundles -> R.string.storage_patch_bundles
@@ -589,6 +901,7 @@ private enum class StorageClearTarget {
             PatchProfileInputs -> R.string.storage_patch_profile_inputs
             TemporaryWorkspace -> R.string.storage_temporary_workspace
             UiTemporaryWorkspace -> R.string.storage_ui_temporary_workspace
+            OtherInternalData -> R.string.storage_other_internal_data
             ExternalCache -> R.string.storage_external_cache
             ExternalFiles -> R.string.storage_external_files
         }
@@ -616,6 +929,8 @@ private data class DirectoryStats(
 private suspend fun loadStorageSnapshot(context: Context): StorageSnapshot = withContext(Dispatchers.IO) {
     val dataRoot = File(context.applicationInfo.dataDir)
     val customBackgroundsDir = context.filesDir.resolve("custom_background")
+    val preferencesDataStoreDir = context.filesDir.resolve("datastore")
+    val databasesDir = dataRoot.resolve("databases")
     val downloadedAppsDir = context.privateAppDir("downloaded-apps")
     val patchBundlesDir = context.privateAppDir("patch_bundles")
     val signingDir = context.privateAppDir("signing")
@@ -628,7 +943,9 @@ private suspend fun loadStorageSnapshot(context: Context): StorageSnapshot = wit
     val internalCacheStats = context.cacheDir.directoryStats()
     val codeCacheStats = context.codeCacheDir.directoryStats()
     val customBackgroundsStats = customBackgroundsDir.directoryStats()
-    val internalFilesStats = context.filesDir.directoryStats() - customBackgroundsStats
+    val preferencesDataStoreStats = preferencesDataStoreDir.directoryStats()
+    val databasesStats = databasesDir.directoryStats()
+    val internalFilesStats = context.filesDir.directoryStats() - customBackgroundsStats - preferencesDataStoreStats
     val noBackupStats = context.noBackupFilesDir.directoryStats()
     val downloadedAppsStats = downloadedAppsDir.directoryStats()
     val patchBundlesStats = patchBundlesDir.directoryStats()
@@ -644,6 +961,8 @@ private suspend fun loadStorageSnapshot(context: Context): StorageSnapshot = wit
         internalCacheStats,
         codeCacheStats,
         internalFilesStats,
+        preferencesDataStoreStats,
+        databasesStats,
         noBackupStats,
         customBackgroundsStats,
         downloadedAppsStats,
@@ -657,34 +976,51 @@ private suspend fun loadStorageSnapshot(context: Context): StorageSnapshot = wit
     ).fold(DirectoryStats()) { total, stats -> total + stats }
     val otherInternalStats = dataRoot.directoryStats() - knownInternalStats
 
+    val codeCacheArea = StorageAreaUsage(
+        targetKey = R.string.storage_code_cache,
+        title = context.getString(R.string.storage_code_cache),
+        description = context.getString(R.string.storage_code_cache_description),
+        stats = codeCacheStats,
+        clearTarget = StorageClearTarget.CodeCache
+    )
+    val customBackgroundsArea = StorageAreaUsage(
+        targetKey = R.string.storage_custom_backgrounds,
+        title = context.getString(R.string.storage_custom_backgrounds),
+        description = context.getString(R.string.storage_custom_backgrounds_description),
+        stats = customBackgroundsStats,
+        clearTarget = StorageClearTarget.CustomBackgrounds
+    )
+    val uiTemporaryWorkspaceArea = StorageAreaUsage(
+        targetKey = R.string.storage_ui_temporary_workspace,
+        title = context.getString(R.string.storage_ui_temporary_workspace),
+        description = context.getString(R.string.storage_ui_temporary_workspace_description),
+        stats = uiTemporaryWorkspaceStats,
+        clearTarget = StorageClearTarget.UiTemporaryWorkspace
+    )
+
     val areas = listOf(
         StorageAreaUsage(
             targetKey = R.string.storage_internal_cache,
             title = context.getString(R.string.storage_internal_cache),
             description = context.getString(R.string.storage_internal_cache_description),
-            stats = internalCacheStats,
-            clearTarget = StorageClearTarget.InternalCache
-        ),
-        StorageAreaUsage(
-            targetKey = R.string.storage_code_cache,
-            title = context.getString(R.string.storage_code_cache),
-            description = context.getString(R.string.storage_code_cache_description),
-            stats = codeCacheStats,
-            clearTarget = StorageClearTarget.CodeCache
+            stats = internalCacheStats + codeCacheStats,
+            clearTarget = StorageClearTarget.InternalCache,
+            children = listOf(codeCacheArea)
         ),
         StorageAreaUsage(
             targetKey = R.string.storage_internal_files,
             title = context.getString(R.string.storage_internal_files),
             description = context.getString(R.string.storage_internal_files_description),
-            stats = internalFilesStats,
-            clearTarget = null
+            stats = internalFilesStats + customBackgroundsStats,
+            clearTarget = StorageClearTarget.InternalFiles,
+            children = listOf(customBackgroundsArea)
         ),
         StorageAreaUsage(
             targetKey = R.string.storage_no_backup_files,
             title = context.getString(R.string.storage_no_backup_files),
             description = context.getString(R.string.storage_no_backup_files_description),
             stats = noBackupStats,
-            clearTarget = null
+            clearTarget = StorageClearTarget.NoBackupFiles
         ),
         StorageAreaUsage(
             targetKey = R.string.storage_downloaded_apps,
@@ -729,32 +1065,19 @@ private suspend fun loadStorageSnapshot(context: Context): StorageSnapshot = wit
             clearTarget = StorageClearTarget.PatchProfileInputs
         ),
         StorageAreaUsage(
-            targetKey = R.string.storage_custom_backgrounds,
-            title = context.getString(R.string.storage_custom_backgrounds),
-            description = context.getString(R.string.storage_custom_backgrounds_description),
-            stats = customBackgroundsStats,
-            clearTarget = StorageClearTarget.CustomBackgrounds
-        ),
-        StorageAreaUsage(
             targetKey = R.string.storage_temporary_workspace,
             title = context.getString(R.string.storage_temporary_workspace),
             description = context.getString(R.string.storage_temporary_workspace_description),
-            stats = temporaryWorkspaceStats,
-            clearTarget = StorageClearTarget.TemporaryWorkspace
-        ),
-        StorageAreaUsage(
-            targetKey = R.string.storage_ui_temporary_workspace,
-            title = context.getString(R.string.storage_ui_temporary_workspace),
-            description = context.getString(R.string.storage_ui_temporary_workspace_description),
-            stats = uiTemporaryWorkspaceStats,
-            clearTarget = StorageClearTarget.UiTemporaryWorkspace
+            stats = temporaryWorkspaceStats + uiTemporaryWorkspaceStats,
+            clearTarget = StorageClearTarget.TemporaryWorkspace,
+            children = listOf(uiTemporaryWorkspaceArea)
         ),
         StorageAreaUsage(
             targetKey = R.string.storage_other_internal_data,
             title = context.getString(R.string.storage_other_internal_data),
             description = context.getString(R.string.storage_other_internal_data_description),
             stats = otherInternalStats,
-            clearTarget = null
+            clearTarget = StorageClearTarget.OtherInternalData
         ),
         StorageAreaUsage(
             targetKey = R.string.storage_external_cache,
@@ -777,12 +1100,6 @@ private suspend fun loadStorageSnapshot(context: Context): StorageSnapshot = wit
     )
 }
 
-private suspend fun clearAppCache(context: Context): Long = withContext(Dispatchers.IO) {
-    listOf(context.cacheDir, context.codeCacheDir)
-        .plus(context.externalCacheDirs.filterNotNull())
-        .sumOf { it.deleteContentsAndReturnBytes() }
-}
-
 private suspend fun clearStorageTarget(
     context: Context,
     target: StorageClearTarget,
@@ -793,8 +1110,15 @@ private suspend fun clearStorageTarget(
     patchBundleRepository: PatchBundleRepository,
     patchProfileRepository: PatchProfileRepository
 ): Long = when (target) {
-    StorageClearTarget.InternalCache -> clearStorageDirectories(context.cacheDir)
+    StorageClearTarget.InternalCache -> clearStorageDirectories(context.cacheDir, context.codeCacheDir)
     StorageClearTarget.CodeCache -> clearStorageDirectories(context.codeCacheDir)
+    StorageClearTarget.InternalFiles -> measureClearedStorage(context.filesDir) {
+        withContext(Dispatchers.IO) {
+            context.filesDir.deleteContentsExcept(context.filesDir.resolve("datastore"))
+        }
+        prefs.customBackgroundImageUri.update("")
+    }
+    StorageClearTarget.NoBackupFiles -> clearStorageDirectories(context.noBackupFilesDir)
     StorageClearTarget.CustomBackgrounds -> measureClearedStorage(context.filesDir.resolve("custom_background")) {
         withContext(Dispatchers.IO) {
             context.filesDir.resolve("custom_background").deleteContentsAndReturnBytes()
@@ -847,8 +1171,16 @@ private suspend fun clearStorageTarget(
             context.privateAppDir("patch-profile-inputs").deleteContentsAndReturnBytes()
         }
     }
-    StorageClearTarget.TemporaryWorkspace -> clearStorageDirectories(context.privateAppDir("ephemeral"))
+    StorageClearTarget.TemporaryWorkspace -> clearStorageDirectories(
+        context.privateAppDir("ephemeral"),
+        context.privateAppDir("ui_ephemeral")
+    )
     StorageClearTarget.UiTemporaryWorkspace -> clearStorageDirectories(context.privateAppDir("ui_ephemeral"))
+    StorageClearTarget.OtherInternalData -> measureClearedStorage(File(context.applicationInfo.dataDir)) {
+        withContext(Dispatchers.IO) {
+            File(context.applicationInfo.dataDir).deleteContentsExcept(context.knownInternalStorageRoots())
+        }
+    }
     StorageClearTarget.ExternalCache -> clearStorageDirectories(context.externalCacheDirs.filterNotNull())
     StorageClearTarget.ExternalFiles -> clearStorageDirectories(context.getExternalFilesDirs(null).filterNotNull())
 }
@@ -872,6 +1204,22 @@ private suspend fun measureClearedStorage(
 
 private fun Context.privateAppDir(name: String): File =
     File(applicationInfo.dataDir, "app_$name")
+
+private fun Context.knownInternalStorageRoots(): List<File> = listOf(
+    cacheDir,
+    codeCacheDir,
+    filesDir,
+    noBackupFilesDir,
+    File(applicationInfo.dataDir, "databases"),
+    privateAppDir("downloaded-apps"),
+    privateAppDir("patch_bundles"),
+    privateAppDir("signing"),
+    privateAppDir("managed_downloader_plugins"),
+    privateAppDir("patched-apps"),
+    privateAppDir("patch-profile-inputs"),
+    privateAppDir("ephemeral"),
+    privateAppDir("ui_ephemeral")
+)
 
 private fun List<File>.combinedStats(): DirectoryStats =
     fold(DirectoryStats()) { total, file -> total + file.directoryStats() }
@@ -910,6 +1258,26 @@ private fun File.deleteContentsAndReturnBytes(): Long {
         if (deleted) bytes else 0L
     }
 }
+
+private fun File.deleteContentsExcept(vararg excludedFiles: File): Long =
+    deleteContentsExcept(excludedFiles.toList())
+
+private fun File.deleteContentsExcept(excludedFiles: Collection<File>): Long {
+    if (!exists() || !isDirectory) return 0L
+    val excludedPaths = excludedFiles.mapTo(mutableSetOf()) { it.canonicalStoragePath() }
+    return listFiles().orEmpty().sumOf { child ->
+        if (child.canonicalStoragePath() in excludedPaths) {
+            0L
+        } else {
+            val bytes = child.directoryStats().bytes
+            val deleted = runCatching { child.deleteRecursively() }.getOrDefault(false)
+            if (deleted) bytes else 0L
+        }
+    }
+}
+
+private fun File.canonicalStoragePath(): String =
+    runCatching { canonicalFile }.getOrDefault(absoluteFile).absolutePath
 
 private fun Context.openAppStorageSettings(): Boolean {
     val uri = Uri.fromParts("package", packageName, null)

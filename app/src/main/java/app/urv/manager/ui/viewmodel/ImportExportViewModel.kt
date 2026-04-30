@@ -12,6 +12,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.universal.revanced.manager.R
+import app.urv.manager.domain.manager.AutoClearCacheInterval
 import app.urv.manager.domain.manager.KeystoreManager
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.manager.SearchForUpdatesBackgroundInterval
@@ -28,6 +29,7 @@ import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNul
 import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
 import app.urv.manager.domain.bundles.PatchBundleChangelogEntry
 import app.urv.manager.domain.repository.remapLocalBundles
+import app.urv.manager.domain.worker.WorkerRepository
 import app.urv.manager.data.room.bundles.Source as SourceInfo
 import app.urv.manager.util.tag
 import app.urv.manager.util.toast
@@ -205,12 +207,14 @@ class ImportExportViewModel(
     private val optionsRepository: PatchOptionsRepository,
     private val patchBundleRepository: PatchBundleRepository,
     private val patchProfileRepository: PatchProfileRepository,
-    private val preferencesManager: PreferencesManager
+    private val preferencesManager: PreferencesManager,
+    private val workerRepository: WorkerRepository
 ) : ViewModel() {
     data class ImportedNotificationRollback(
         val bundleInterval: SearchForUpdatesBackgroundInterval,
         val managerInterval: SearchForUpdatesBackgroundInterval,
         val announcementInterval: SearchForUpdatesBackgroundInterval,
+        val autoClearCacheInterval: AutoClearCacheInterval,
         val deliveryMode: BundleUpdateDeliveryMode
     )
 
@@ -289,6 +293,11 @@ class ImportExportViewModel(
         if (!granted) {
             viewModelScope.launch {
                 rollbackImportedNotificationSettings(request.notificationRollback)
+                scheduleImportedAutoClearCacheWork()
+            }
+        } else {
+            viewModelScope.launch {
+                scheduleImportedAutoClearCacheWork()
             }
         }
     }
@@ -1385,7 +1394,11 @@ class ImportExportViewModel(
             }
 
             preferencesManager.importSettings(exportFile.settings)
-            importedPermissionRequest = buildImportedPermissionRequest(previousSettings)
+            val permissionRequest = buildImportedPermissionRequest(previousSettings)
+            importedPermissionRequest = permissionRequest
+            if (permissionRequest?.needsNotificationPermission != true) {
+                scheduleImportedAutoClearCacheWork()
+            }
             onToast(app.getString(R.string.import_manager_settings_success))
         }
     }
@@ -1462,11 +1475,16 @@ class ImportExportViewModel(
         preferencesManager.importSettings(
             PreferencesManager.SettingsSnapshot(
                 announcementPushNotificationInterval = rollback.announcementInterval,
+                autoClearCacheInterval = rollback.autoClearCacheInterval,
                 searchForUpdatesBackgroundInterval = rollback.bundleInterval,
                 searchForManagerUpdatesBackgroundInterval = rollback.managerInterval,
                 bundleUpdateDeliveryMode = rollback.deliveryMode
             )
         )
+    }
+
+    private suspend fun scheduleImportedAutoClearCacheWork() {
+        workerRepository.scheduleAutoClearCacheWork(preferencesManager.autoClearCacheInterval.get())
     }
 
     private suspend fun buildImportedPermissionRequest(
@@ -1476,12 +1494,14 @@ class ImportExportViewModel(
         val bundleInterval = preferencesManager.searchForUpdatesBackgroundInterval.get()
         val managerInterval = preferencesManager.searchForManagerUpdatesBackgroundInterval.get()
         val announcementInterval = preferencesManager.announcementPushNotificationInterval.get()
+        val autoClearCacheInterval = preferencesManager.autoClearCacheInterval.get()
         val deliveryMode = preferencesManager.bundleUpdateDeliveryMode.get()
 
         val backgroundNotificationsEnabled =
             bundleInterval != SearchForUpdatesBackgroundInterval.NEVER ||
                 managerInterval != SearchForUpdatesBackgroundInterval.NEVER ||
                 announcementInterval != SearchForUpdatesBackgroundInterval.NEVER ||
+                autoClearCacheInterval != AutoClearCacheInterval.NEVER ||
                 (
                     deliveryMode == BundleUpdateDeliveryMode.WEBSOCKET_PREFERRED &&
                         (
@@ -1501,6 +1521,8 @@ class ImportExportViewModel(
                         ?: SearchForUpdatesBackgroundInterval.NEVER,
                     announcementInterval = previousSettings.announcementPushNotificationInterval
                         ?: SearchForUpdatesBackgroundInterval.NEVER,
+                    autoClearCacheInterval = previousSettings.autoClearCacheInterval
+                        ?: AutoClearCacheInterval.NEVER,
                     deliveryMode = previousSettings.bundleUpdateDeliveryMode
                         ?: BundleUpdateDeliveryMode.AUTO
                 )

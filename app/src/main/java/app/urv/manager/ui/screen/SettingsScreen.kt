@@ -222,6 +222,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                     R.string.storage_external_files,
                     R.string.storage_cache_actions_section,
                     R.string.storage_clear_app_cache,
+                    R.string.storage_auto_clear_cache,
                     R.string.storage_open_app_storage_settings,
                     R.string.storage_refresh_usage
                 )
@@ -333,6 +334,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.storage_external_files, R.string.storage_external_files_description, R.string.storage_cache_management, Settings.Storage),
             SearchEntry(R.string.storage_cache_actions_section, null, R.string.storage_cache_management, Settings.Storage),
             SearchEntry(R.string.storage_clear_app_cache, R.string.storage_clear_app_cache_description, R.string.storage_cache_management, Settings.Storage),
+            SearchEntry(R.string.storage_auto_clear_cache, R.string.storage_auto_clear_cache_description, R.string.storage_cache_management, Settings.Storage),
             SearchEntry(R.string.storage_open_app_storage_settings, R.string.storage_open_app_storage_settings_description, R.string.storage_cache_management, Settings.Storage),
             SearchEntry(R.string.import_keystore, R.string.import_keystore_description, R.string.import_export, Settings.ImportExport),
             SearchEntry(R.string.import_everything, R.string.import_everything_description, R.string.import_export, Settings.ImportExport),

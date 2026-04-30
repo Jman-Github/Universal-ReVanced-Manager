@@ -117,6 +117,7 @@
 - Added automatic color code correction, normalization, and a color picker for patch options
 - Moved the cursor to the end of prefilled input fields when dialogs and search fields open automatically https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/444
 - Added a Storage and cache management settings screen with a storage usage breakdown, refreshable size tracking, and clear actions for cache, downloads, patch bundles, saved patched apps, patch profile inputs, signing files, plugin files, temporary workspaces, and external app folders https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/454
+- Added a scheduled auto-clear cache system https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/407
 
 
 # Bug fixes

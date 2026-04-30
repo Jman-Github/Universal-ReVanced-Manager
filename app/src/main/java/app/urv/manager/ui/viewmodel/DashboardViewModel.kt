@@ -26,6 +26,7 @@ import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.repository.AnnouncementRepository
 import app.urv.manager.domain.repository.DownloaderPluginRepository
 import app.urv.manager.domain.repository.PatchBundleRepository
+import app.urv.manager.domain.storage.CacheCleanupGuard
 import app.urv.manager.network.downloader.LoadedDownloaderPlugin
 import app.urv.manager.network.api.ReVancedAPI
 import app.urv.manager.network.dto.ReVancedAnnouncement
@@ -668,7 +669,8 @@ class DashboardViewModel(
                 showDownloadStep = pendingSource.showDownloadStep,
                 includedModules = includedModules,
                 stripNativeLibs = stripNativeLibs,
-                excludedModules = excludedModules
+                excludedModules = excludedModules,
+                pendingCacheUseToken = pendingSource.cacheUseToken
             )
         }
     }
@@ -677,6 +679,7 @@ class DashboardViewModel(
         val pendingSource = pendingSplitMergeSource ?: return
         pendingSplitMergeSource = null
         runCatching { pendingSource.cleanup() }
+        runCatching { pendingSource.cacheUseToken?.close() }
     }
 
     private fun newSplitMergeRunWorkspace(): File =
@@ -768,6 +771,11 @@ class DashboardViewModel(
         showDownloadStep: Boolean = false,
         openScreen: Boolean
     ) {
+        val cacheUseToken = if (inputFile.isInDirectory(app.cacheDir)) {
+            CacheCleanupGuard.begin()
+        } else {
+            null
+        }
         val inspection = try {
             withContext(Dispatchers.IO) {
                 if (!inputFile.exists()) {
@@ -780,10 +788,17 @@ class DashboardViewModel(
             }
         } catch (error: Throwable) {
             runCatching { cleanup() }
+            runCatching { cacheUseToken?.close() }
             throw error
         }
-        ensureCurrentSplitMergeOwner(coroutineContext[Job])
-        cleanupLegacySplitMergeArtifacts()
+        try {
+            ensureCurrentSplitMergeOwner(coroutineContext[Job])
+            cleanupLegacySplitMergeArtifacts()
+        } catch (error: Throwable) {
+            runCatching { cleanup() }
+            runCatching { cacheUseToken?.close() }
+            throw error
+        }
         val defaultStripNativeLibs = false
         val defaultIncludedModules = resolveDefaultSplitSelection(inspection)
 
@@ -792,7 +807,8 @@ class DashboardViewModel(
             inputFile = inputFile,
             inputDisplayName = inputDisplayName,
             showDownloadStep = showDownloadStep,
-            cleanup = cleanup
+            cleanup = cleanup,
+            cacheUseToken = cacheUseToken
         )
         splitMergeStateFlow.value = SplitMergeState(
             inProgress = false,
@@ -1054,9 +1070,11 @@ class DashboardViewModel(
         showDownloadStep: Boolean = false,
         includedModules: Set<String>? = null,
         stripNativeLibs: Boolean = false,
-        excludedModules: Set<String> = emptySet()
+        excludedModules: Set<String> = emptySet(),
+        pendingCacheUseToken: AutoCloseable? = null
     ) {
         val ownerJob = coroutineContext[Job]
+        val runCacheUseToken = CacheCleanupGuard.begin()
         val runWorkspace = newSplitMergeRunWorkspace()
         var keepRunWorkspace = false
         activeSplitMergeRunWorkspace = runWorkspace
@@ -1302,6 +1320,8 @@ class DashboardViewModel(
             appendSplitMergeLog(resolvedErrorMessage)
         }
         runCatching { sourceCleanup() }
+        runCatching { pendingCacheUseToken?.close() }
+        runCatching { runCacheUseToken.close() }
         if (activeSplitMergeRunWorkspace == runWorkspace) {
             activeSplitMergeRunWorkspace = null
         }
@@ -1315,17 +1335,19 @@ class DashboardViewModel(
     }
 
     private suspend fun copyUriToTempFile(uri: Uri, displayName: String?): File =
-        withContext(Dispatchers.IO) {
-            val baseName = displayName?.takeIf { it.isNotBlank() } ?: "split-input.apks"
-            val safeName = baseName.replace(Regex("[^A-Za-z0-9._-]"), "_")
-            val destination = splitMergeWorkspace.resolve("input-$safeName")
-            destination.parentFile?.mkdirs()
-            contentResolver.openInputStream(uri)?.use { input ->
-                FileOutputStream(destination).use { output ->
-                    input.copyTo(output)
-                }
-            } ?: throw FileNotFoundException("Unable to open $uri")
-            destination
+        CacheCleanupGuard.withCacheInUse {
+            withContext(Dispatchers.IO) {
+                val baseName = displayName?.takeIf { it.isNotBlank() } ?: "split-input.apks"
+                val safeName = baseName.replace(Regex("[^A-Za-z0-9._-]"), "_")
+                val destination = splitMergeWorkspace.resolve("input-$safeName")
+                destination.parentFile?.mkdirs()
+                contentResolver.openInputStream(uri)?.use { input ->
+                    FileOutputStream(destination).use { output ->
+                        input.copyTo(output)
+                    }
+                } ?: throw FileNotFoundException("Unable to open $uri")
+                destination
+            }
         }
 
     private suspend fun saveFileToUri(source: File, uri: Uri) {
@@ -1341,51 +1363,61 @@ class DashboardViewModel(
     private suspend fun downloadSplitInputFromPlugin(
         plugin: LoadedDownloaderPlugin,
         data: Parcelable
-    ): File = withContext(Dispatchers.IO) {
-        val tempInput = splitMergeWorkspace.resolve("plugin-input-${System.currentTimeMillis()}.apk")
-        tempInput.parentFile?.mkdirs()
-        tempInput.outputStream().buffered().use { baseOutput ->
-            var downloadedBytes = 0L
-            var totalBytes: Long? = null
-            var lastUpdateAt = 0L
-            fun maybePublishProgress(force: Boolean = false) {
-                val now = System.currentTimeMillis()
-                if (!force && now - lastUpdateAt < 120L) return
-                lastUpdateAt = now
-                updateDownloadStepRunning(downloadedBytes, totalBytes)
-            }
-            val progressOutput = object : java.io.OutputStream() {
-                override fun write(b: Int) {
-                    baseOutput.write(b)
-                    downloadedBytes += 1L
-                    maybePublishProgress()
+    ): File = CacheCleanupGuard.withCacheInUse {
+        withContext(Dispatchers.IO) {
+            val tempInput = splitMergeWorkspace.resolve("plugin-input-${System.currentTimeMillis()}.apk")
+            tempInput.parentFile?.mkdirs()
+            tempInput.outputStream().buffered().use { baseOutput ->
+                var downloadedBytes = 0L
+                var totalBytes: Long? = null
+                var lastUpdateAt = 0L
+                fun maybePublishProgress(force: Boolean = false) {
+                    val now = System.currentTimeMillis()
+                    if (!force && now - lastUpdateAt < 120L) return
+                    lastUpdateAt = now
+                    updateDownloadStepRunning(downloadedBytes, totalBytes)
                 }
+                val progressOutput = object : java.io.OutputStream() {
+                    override fun write(b: Int) {
+                        baseOutput.write(b)
+                        downloadedBytes += 1L
+                        maybePublishProgress()
+                    }
 
-                override fun write(b: ByteArray, off: Int, len: Int) {
-                    baseOutput.write(b, off, len)
-                    downloadedBytes += len.toLong()
-                    maybePublishProgress()
-                }
+                    override fun write(b: ByteArray, off: Int, len: Int) {
+                        baseOutput.write(b, off, len)
+                        downloadedBytes += len.toLong()
+                        maybePublishProgress()
+                    }
 
-                override fun flush() {
-                    baseOutput.flush()
+                    override fun flush() {
+                        baseOutput.flush()
+                    }
                 }
-            }
-            val scope = object : OutputDownloadScope {
-                override val hostPackageName = app.packageName
-                override val pluginPackageName = plugin.packageName
-                override suspend fun reportSize(size: Long) {
-                    totalBytes = size
-                    maybePublishProgress(force = true)
+                val scope = object : OutputDownloadScope {
+                    override val hostPackageName = app.packageName
+                    override val pluginPackageName = plugin.packageName
+                    override suspend fun reportSize(size: Long) {
+                        totalBytes = size
+                        maybePublishProgress(force = true)
+                    }
                 }
+                plugin.download(scope, data, progressOutput)
+                maybePublishProgress(force = true)
             }
-            plugin.download(scope, data, progressOutput)
-            maybePublishProgress(force = true)
+            if (!tempInput.exists() || tempInput.length() <= 0L) {
+                throw IOException("Downloader plugin returned an empty file.")
+            }
+            tempInput
         }
-        if (!tempInput.exists() || tempInput.length() <= 0L) {
-            throw IOException("Downloader plugin returned an empty file.")
-        }
-        tempInput
+    }
+
+    private fun File.isInDirectory(directory: File): Boolean {
+        val basePath = runCatching { directory.canonicalFile.toPath() }
+            .getOrElse { directory.absoluteFile.toPath() }
+        val filePath = runCatching { canonicalFile.toPath() }
+            .getOrElse { absoluteFile.toPath() }
+        return filePath.startsWith(basePath)
     }
 
     private fun updateSaveStepRunning(message: String) {
@@ -1626,7 +1658,8 @@ private data class PendingSplitMergeSource(
     val inputFile: File,
     val inputDisplayName: String,
     val showDownloadStep: Boolean,
-    val cleanup: () -> Unit = {}
+    val cleanup: () -> Unit = {},
+    val cacheUseToken: AutoCloseable? = null
 )
 
 data class SplitMergeStepState(

@@ -9,6 +9,7 @@ import app.urv.manager.data.room.AppDatabase
 import app.urv.manager.data.room.AppDatabase.Companion.generateUid
 import app.urv.manager.data.room.apps.downloaded.DownloadedApp
 import app.urv.manager.domain.manager.PreferencesManager
+import app.urv.manager.domain.storage.CacheCleanupGuard
 import app.urv.manager.network.downloader.LoadedDownloaderPlugin
 import app.urv.manager.plugin.downloader.OutputDownloadScope
 import app.urv.manager.util.PM
@@ -48,23 +49,24 @@ class DownloadedAppRepository(
     fun getApkFileForApp(app: DownloadedApp): File =
         getApkFileForDir(dir.resolve(app.directory))
 
-    suspend fun getPreparedApkFile(app: DownloadedApp, stripNativeLibs: Boolean = false): File {
-        val source = getApkFileForApp(app)
-        val preparation = SplitApkPreparer.prepareIfNeeded(
-            source = source,
-            workspace = splitWorkspace,
-            stripNativeLibs = stripNativeLibs
-        )
-        return try {
-            if (preparation.merged) {
-                // Always persist merged split back to the cached download so exports/selections use the intact APK.
-                preparation.file.copyTo(source, overwrite = true)
+    suspend fun getPreparedApkFile(app: DownloadedApp, stripNativeLibs: Boolean = false): File =
+        CacheCleanupGuard.withCacheInUse {
+            val source = getApkFileForApp(app)
+            val preparation = SplitApkPreparer.prepareIfNeeded(
+                source = source,
+                workspace = splitWorkspace,
+                stripNativeLibs = stripNativeLibs
+            )
+            try {
+                if (preparation.merged) {
+                    // Always persist merged split back to the cached download so exports/selections use the intact APK.
+                    preparation.file.copyTo(source, overwrite = true)
+                }
+                source
+            } finally {
+                preparation.cleanup()
             }
-            source
-        } finally {
-            preparation.cleanup()
         }
-    }
 
     private fun getApkFileForDir(directory: File) = directory.listFiles()!!.first()
 
@@ -77,7 +79,7 @@ class DownloadedAppRepository(
         patchesCompatibilityCheck: Boolean,
         onDownload: suspend (downloadProgress: Pair<Long, Long?>) -> Unit,
         persistDownload: Boolean = true,
-    ): DownloadResult {
+    ): DownloadResult = CacheCleanupGuard.withCacheInUse {
         // Converted integers cannot contain / or .. unlike the package name or version, so they are safer to use here.
         val relativePath = File(generateUid().toString())
         val parentDir = if (persistDownload) dir else tempDir
@@ -182,7 +184,7 @@ class DownloadedAppRepository(
                 }
             }
 
-            return DownloadResult(
+            DownloadResult(
                 file = storedFile,
                 needsSplit = needsSplit,
                 merged = false,

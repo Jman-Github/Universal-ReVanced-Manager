@@ -27,6 +27,13 @@ enum class SearchForUpdatesBackgroundInterval(val displayName: Int, val value: L
     DAY(R.string.daily, 60 * 24)
 }
 
+enum class AutoClearCacheInterval(val displayName: Int, val value: Long) {
+    NEVER(R.string.never, 0),
+    HOUR(R.string.hourly, 60),
+    DAY(R.string.daily, 60 * 24),
+    WEEK(R.string.weekly, 60 * 24 * 7)
+}
+
 enum class BundleUpdateDeliveryMode(val displayName: Int) {
     AUTO(R.string.bundle_update_delivery_mode_auto),
     WEBSOCKET_PREFERRED(R.string.bundle_update_delivery_mode_websocket_preferred),
@@ -123,6 +130,10 @@ class PreferencesManager(
     val announcementPushNotificationInterval = enumPreference(
         "announcement_push_notifications_interval",
         SearchForUpdatesBackgroundInterval.NEVER
+    )
+    val autoClearCacheInterval = enumPreference(
+        "auto_clear_cache_interval",
+        AutoClearCacheInterval.NEVER
     )
     val viewedManagerUpdateVersion = stringPreference("viewed_manager_update_version", "")
     val readAnnouncements = stringSetPreference("read_announcements", emptySet())
@@ -260,6 +271,7 @@ class PreferencesManager(
         val announcementSystemEnabled: Boolean? = null,
         val announcementPushNotifications: Boolean? = null,
         val announcementPushNotificationInterval: SearchForUpdatesBackgroundInterval? = null,
+        val autoClearCacheInterval: AutoClearCacheInterval? = null,
         val useManagerPrereleases: Boolean? = null,
         val showBatteryOptimizationBanner: Boolean? = null,
         val allowPatchProfileBundleOverride: Boolean? = null,
@@ -374,6 +386,7 @@ class PreferencesManager(
             announcementPushNotifications =
                 announcementPushNotificationInterval.get() != SearchForUpdatesBackgroundInterval.NEVER,
             announcementPushNotificationInterval = announcementPushNotificationInterval.get(),
+            autoClearCacheInterval = autoClearCacheInterval.get(),
             useManagerPrereleases = useManagerPrereleases.get(),
             showBatteryOptimizationBanner = showBatteryOptimizationBanner.get(),
             allowPatchProfileBundleOverride = allowPatchProfileBundleOverride.get(),
@@ -503,6 +516,7 @@ class PreferencesManager(
                 announcementSystemEnabled.value = true
             }
         }
+        snapshot.autoClearCacheInterval?.let { autoClearCacheInterval.value = it }
         snapshot.useManagerPrereleases?.let { useManagerPrereleases.value = it }
         snapshot.showBatteryOptimizationBanner?.let { showBatteryOptimizationBanner.value = it }
         snapshot.allowPatchProfileBundleOverride?.let { allowPatchProfileBundleOverride.value = it }
