@@ -1,8 +1,10 @@
 package app.urv.manager.ui.screen
 
+import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.net.Uri
+import android.view.WindowManager
 import androidx.annotation.StringRes
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -46,6 +48,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -220,6 +223,16 @@ fun MergeSplitApkScreen(
         enabled = state.inProgress || state.selection != null || state.cancellationInProgress,
         onBack = ::onPageBack
     )
+
+    if (state.inProgress) {
+        DisposableEffect(context) {
+            val window = (context as? Activity)?.window
+            window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            onDispose {
+                window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
+        }
+    }
 
     if (showDismissConfirmationDialog) {
         ConfirmDialog(
