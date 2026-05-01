@@ -26,6 +26,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Description
@@ -1065,7 +1066,7 @@ private fun SplitMergeSelectionDialog(
                                     )
                                 )
                             },
-                            icon = { Icon(Icons.Outlined.Save, null) },
+                            icon = { Icon(Icons.Default.AutoFixHigh, null) },
                             onClick = { onConfirm(selectedModules + requiredModules, stripNativeLibs) }
                         )
                     }
