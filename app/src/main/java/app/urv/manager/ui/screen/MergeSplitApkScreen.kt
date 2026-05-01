@@ -967,12 +967,7 @@ private fun SplitMergeSelectionDialog(
                 AppTopBar(
                     title = stringResource(R.string.merge_split_apk_selection_title),
                     scrollBehavior = scrollBehavior,
-                    onBackClick = onDismissRequest,
-                    actions = {
-                        TextButton(onClick = onDismissRequest) {
-                            Text(stringResource(R.string.cancel))
-                        }
-                    }
+                    onBackClick = onDismissRequest
                 )
             }
         ) { paddingValues ->

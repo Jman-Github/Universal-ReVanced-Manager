@@ -119,6 +119,7 @@
 - Added a Storage and cache management settings screen with a storage usage breakdown, refreshable size tracking, and clear actions for cache, downloads, patch bundles, saved patched apps, patch profile inputs, signing files, plugin files, temporary workspaces, and external app folders https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/454
 - Added a scheduled auto-clear cache system https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/407
 - Updated the save-file icon on the `Choose splits to merge` screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/456
+- Removed the duplicate top-bar cancel action from the split merge selection screen and renamed Split APK installer to Split installer https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/457 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/455
 
 
 # Bug fixes
