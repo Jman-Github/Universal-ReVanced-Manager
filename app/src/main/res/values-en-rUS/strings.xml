@@ -861,8 +861,8 @@ Patch profiles are not affected.</string>
     <string name="tools_youtube_assets_apply_hex">Apply HEX</string>
     <string name="tools_youtube_assets_apply_rgb">Apply RGB</string>
     <string name="tools_youtube_assets_color_presets">Presets</string>
-    <string name="tools_youtube_assets_guide_safe_zone">Inner guide ring: safest centered area.</string>
-    <string name="tools_youtube_assets_guide_mask_zone">Outer guide ring: may be clipped on some launchers.</string>
+    <string name="tools_youtube_assets_guide_safe_zone">Inner guide ring: safest centered area</string>
+    <string name="tools_youtube_assets_guide_mask_zone">Outer guide ring: may be clipped on some launchers</string>
     <string name="tools_youtube_assets_light_header">Light header</string>
     <string name="tools_youtube_assets_dark_header">Dark header</string>
     <string name="tools_youtube_assets_sync_header_transforms">Sync light/dark size and position</string>
