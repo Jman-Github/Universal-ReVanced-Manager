@@ -1470,7 +1470,7 @@ Details: %2$s</string>
     <string name="github">URV Manager GitHub</string>
     <string name="credits">Credits</string>
     <string name="revanced_manager_credit">ReVanced Manager</string>
-    <string name="revanced_manager_credit_subtext">This app uses code from ReVanced and is a fork of the ReVanced Manager</string>
+    <string name="revanced_manager_credit_subtext">This app uses code from ReVanced and is a fork of ReVanced Manager</string>
     <string name="morphe_manager_credit">Morphe Manager</string>
     <string name="morphe_manager_credit_prefix">This app uses code from Morphe. To learn more, visit </string>
     <string name="morphe_manager_credit_suffix">.</string>
@@ -1496,7 +1496,7 @@ Details: %2$s</string>
     <string name="patches_delete_single_dialog_description">Are you sure you want to delete \"%s\"?</string>
     <string name="patches_delete_multiple_dialog_description">Are you sure you want to delete the selected patch bundles?</string>
     <string name="about_revanced_manager">About URV Manager</string>
-    <string name="revanced_manager_description">The Universal ReVanced (URV) Manager is a fork of the official ReVanced Manager. Both applications use the ReVanced Patcher which allows you to download and patch apps with custom patches and manage the patching process. The unique features included in the URV Manager are patch bundle display names, support for importing any third party patch bundles, and much more. See a full list of unique features the URV Manager has to offer</string>
+    <string name="revanced_manager_description">Universal ReVanced (URV) Manager is a fork of ReVanced Manager. Both applications use the ReVanced Patcher, which allows you to download and patch apps with custom patches and manage the patching process. The unique features included in URV Manager are patch bundle display names, support for importing any third party patch bundles, and much more. See a full list of unique features URV Manager has to offer</string>
     <string name="here">here.</string>
     <string name="update_available">An update is available</string>
     <string name="ready_to_install_update">Ready to install update</string>
