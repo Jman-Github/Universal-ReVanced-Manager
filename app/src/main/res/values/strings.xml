@@ -232,7 +232,7 @@
     <string name="updates_description">Update behavior and background update flow</string>
     <string name="downloads">Downloads</string>
     <string name="downloads_description">Download handling and exports</string>
-    <string name="storage_cache_management">Storage and Cache Management</string>
+    <string name="storage_cache_management">Storage & Cache Management</string>
     <string name="storage_cache_management_description">Review URV Manager storage usage</string>
     <string name="plugins_help_title">What is a downloader?</string>
     <string name="plugins_help_description">A downloader is a plugin which allows URV Manager to download stock APKs from various sources. The downloaded APKs will be shown in the bottom section. During the patching process, you can choose an already downloaded APKs or you can download it via a plugin.\n\nThe list of supported downloader plugins can be found</string>
