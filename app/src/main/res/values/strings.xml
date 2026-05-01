@@ -639,9 +639,9 @@ Patch profiles are not affected.</string>
     <string name="storage_total_app_storage_description">Internal files, cache, and external app folders tracked by URV Manager</string>
     <string name="storage_refresh_usage">Refresh storage usage</string>
     <string name="storage_refresh_usage_description">Recalculate the storage size breakdown</string>
-    <string name="storage_usage_section">Storage usage</string>
+    <string name="storage_usage_section">Storage Usage</string>
     <string name="storage_usage_section_description">Shows what is taking up space in URV Manager app storage</string>
-    <string name="storage_cache_actions_section">Cache actions</string>
+    <string name="storage_cache_actions_section">Cache Actions</string>
     <string name="storage_internal_cache">Internal cache</string>
     <string name="storage_internal_cache_description">Temporary files URV Manager can safely recreate, including code cache</string>
     <string name="storage_code_cache">Code cache</string>
