@@ -28,7 +28,8 @@ fun AvailableUpdateDialog(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
     setShowManagerUpdateDialogOnLaunch: (Boolean) -> Unit,
-    releaseInfo: ReVancedAsset
+    releaseInfo: ReVancedAsset,
+    showFullChangelog: Boolean
 ) {
     var dontShowAgain by rememberSaveable { mutableStateOf(false) }
     val dismissDialog = {
@@ -74,7 +75,7 @@ fun AvailableUpdateDialog(
                     text = stringResource(R.string.update_available_dialog_description, releaseInfo.version),
                     style = MaterialTheme.typography.bodySmall
                 )
-                if (releaseInfo.description.isNotBlank()) {
+                if (showFullChangelog && releaseInfo.description.isNotBlank()) {
                     Surface(
                         modifier = Modifier
                             .padding(horizontal = 16.dp)

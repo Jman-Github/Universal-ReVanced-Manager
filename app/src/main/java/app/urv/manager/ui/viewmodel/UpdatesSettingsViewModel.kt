@@ -25,6 +25,7 @@ class UpdatesSettingsViewModel(
 ) : ViewModel() {
     val managerAutoUpdates = prefs.managerAutoUpdates
     val showManagerUpdateDialogOnLaunch = prefs.showManagerUpdateDialogOnLaunch
+    val showManagerUpdateChangelog = prefs.showManagerUpdateChangelog
     val announcementSystemEnabled = prefs.announcementSystemEnabled
     val announcementPushNotificationInterval = prefs.announcementPushNotificationInterval
     val useManagerPrereleases = prefs.useManagerPrereleases

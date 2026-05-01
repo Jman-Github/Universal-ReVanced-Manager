@@ -122,6 +122,7 @@ class PreferencesManager(
     val firstLaunch = booleanPreference("first_launch", true)
     val managerAutoUpdates = booleanPreference("manager_auto_updates", false)
     val showManagerUpdateDialogOnLaunch = booleanPreference("show_manager_update_dialog_on_launch", true)
+    val showManagerUpdateChangelog = booleanPreference("show_manager_update_changelog", true)
     val announcementSystemEnabled = booleanPreference("announcement_system_enabled", false)
     private val announcementPushNotificationsLegacy =
         booleanPreference("announcement_push_notifications", false)
@@ -268,6 +269,7 @@ class PreferencesManager(
         val firstLaunch: Boolean? = null,
         val managerAutoUpdates: Boolean? = null,
         val showManagerUpdateDialogOnLaunch: Boolean? = null,
+        val showManagerUpdateChangelog: Boolean? = null,
         val announcementSystemEnabled: Boolean? = null,
         val announcementPushNotifications: Boolean? = null,
         val announcementPushNotificationInterval: SearchForUpdatesBackgroundInterval? = null,
@@ -382,6 +384,7 @@ class PreferencesManager(
             firstLaunch = firstLaunch.get(),
             managerAutoUpdates = managerAutoUpdates.get(),
             showManagerUpdateDialogOnLaunch = showManagerUpdateDialogOnLaunch.get(),
+            showManagerUpdateChangelog = showManagerUpdateChangelog.get(),
             announcementSystemEnabled = announcementSystemEnabled.get(),
             announcementPushNotifications =
                 announcementPushNotificationInterval.get() != SearchForUpdatesBackgroundInterval.NEVER,
@@ -503,6 +506,7 @@ class PreferencesManager(
         snapshot.showManagerUpdateDialogOnLaunch?.let {
             showManagerUpdateDialogOnLaunch.value = it
         }
+        snapshot.showManagerUpdateChangelog?.let { showManagerUpdateChangelog.value = it }
         snapshot.announcementSystemEnabled?.let { announcementSystemEnabled.value = it }
         snapshot.announcementPushNotificationInterval?.let {
             announcementPushNotificationInterval.value = it

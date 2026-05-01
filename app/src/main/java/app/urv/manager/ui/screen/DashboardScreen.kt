@@ -277,6 +277,7 @@ fun DashboardScreen(
     val prefs: PreferencesManager = koinInject()
     val savedAppsEnabled by prefs.enableSavedApps.getAsState()
     val viewedManagerUpdateVersion by prefs.viewedManagerUpdateVersion.getAsState()
+    val showManagerUpdateChangelog by prefs.showManagerUpdateChangelog.getAsState()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val hideMainTabLabels by prefs.hideMainTabLabels.getAsState()
     val disableMainTabSwipe by prefs.disableMainTabSwipe.getAsState()
@@ -1414,7 +1415,8 @@ fun DashboardScreen(
             onDismiss = { showUpdateDialog = false },
             setShowManagerUpdateDialogOnLaunch = vm::setShowManagerUpdateDialogOnLaunch,
             onConfirm = onUpdateClick,
-            releaseInfo = releaseInfo
+            releaseInfo = releaseInfo,
+            showFullChangelog = showManagerUpdateChangelog
         )
     }
 

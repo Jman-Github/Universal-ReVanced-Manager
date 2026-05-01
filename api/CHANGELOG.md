@@ -120,6 +120,7 @@
 - Added a scheduled auto-clear cache system https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/407
 - Updated the save-file icon on the `Choose splits to merge` screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/456
 - Removed the duplicate top-bar cancel action from the split merge selection screen and renamed Split APK installer to Split installer https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/457 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/455
+- Added an Updates setting to switch the manager update popup between full release notes and the minimal version-only view https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/420
 
 
 # Bug fixes
