@@ -19,7 +19,7 @@
     <string name="app_filter_title">Filter apps</string>
     <string name="app_filter_installed_only">Installed only</string>
     <string name="app_filter_patches_available">Patches available</string>
-    <string name="app_filter_no_results">No apps match your filters.</string>
+    <string name="app_filter_no_results">No apps match your filters</string>
     <string name="new_downloader_plugins_notification">New downloader plugins available. Click here to configure them.</string>
     <string name="unsupported_architecture_warning">Patching on this device architecture is unsupported and will most likely fail.</string>
     <string name="import_">Import</string>
@@ -105,9 +105,9 @@
     <string name="apps_search_hint">Search apps</string>
     <string name="bundles_search_hint">Search bundles</string>
     <string name="profiles_search_hint">Search profiles</string>
-    <string name="search_no_results">No results found.</string>
-    <string name="bundle_search_no_results">No bundles found.</string>
-    <string name="profile_search_no_results">No profiles found.</string>
+    <string name="search_no_results">No results found</string>
+    <string name="bundle_search_no_results">No bundles found</string>
+    <string name="profile_search_no_results">No profiles found</string>
     <string name="apps_reorder">Organize apps</string>
     <string name="apps_reorder_title">Organize apps</string>
     <string name="apps_reorder_description">Drag the handle to arrange the order apps appear in the list.</string>
@@ -675,10 +675,10 @@ Patch profiles are not affected.</string>
     <string name="storage_external_files">External files</string>
     <string name="storage_external_files_description">Files stored in external app folders</string>
     <string name="storage_clear_app_cache">Clear app cache</string>
-    <string name="storage_clear_app_cache_description">Deletes internal, code, and external cache files. Settings and saved files are kept.</string>
+    <string name="storage_clear_app_cache_description">Deletes internal, code, and external cache files. Settings and saved files are kept</string>
     <string name="storage_auto_clear_cache">Auto-clear cache</string>
-    <string name="storage_auto_clear_cache_description">Automatically clears URV Manager cache on a schedule and notifies you when it runs.</string>
-    <string name="storage_auto_clear_cache_description_with_current">%1$s - Automatically clears URV Manager cache on a schedule and notifies you when it runs.</string>
+    <string name="storage_auto_clear_cache_description">Automatically clears URV Manager cache on a schedule and notifies you when it runs</string>
+    <string name="storage_auto_clear_cache_description_with_current">%1$s - Automatically clears URV Manager cache on a schedule and notifies you when it runs</string>
     <string name="storage_auto_clear_cache_dialog_title">Auto-clear cache</string>
     <string name="storage_auto_clear_cache_run_now">Run cleanup</string>
     <string name="storage_auto_clear_cache_queued">Cache cleanup queued</string>
@@ -704,7 +704,7 @@ Patch profiles are not affected.</string>
     <string name="storage_cache_cleared">Cleared %1$s from cache</string>
     <string name="storage_cache_clear_failed">Could not clear cache</string>
     <string name="storage_open_app_storage_settings">Open Android app storage settings</string>
-    <string name="storage_open_app_storage_settings_description">Use system settings to manage or clear all URV Manager app data.</string>
+    <string name="storage_open_app_storage_settings_description">Use system settings to manage or clear all URV Manager app data</string>
     <string name="storage_open_app_storage_settings_failed">Could not open app storage settings</string>
     <string name="storage_calculating">Calculating...</string>
     <string name="storage_empty">Empty</string>
@@ -854,7 +854,7 @@ Patch profiles are not affected.</string>
     <string name="tools_youtube_assets_adaptive_foreground_name">Adaptive foreground file name</string>
     <string name="tools_youtube_assets_adaptive_background_name">Adaptive background file name</string>
     <string name="tools_youtube_assets_background_color_hex">Adaptive background color (hex)</string>
-    <string name="tools_youtube_assets_background_color_hint">Use RRGGBB or AARRGGBB.</string>
+    <string name="tools_youtube_assets_background_color_hint">Use RRGGBB or AARRGGBB</string>
     <string name="tools_youtube_assets_pick_color_wheel">Pick color</string>
     <string name="tools_youtube_assets_color_picker_title">Choose adaptive background color</string>
     <string name="tools_youtube_assets_color_picker_desc">Drag in the square to set saturation/brightness, then adjust hue.</string>
@@ -877,7 +877,7 @@ Patch profiles are not affected.</string>
     <string name="tools_youtube_assets_presets_title">File name presets</string>
     <string name="tools_youtube_assets_preset_morphe">Morphe defaults</string>
     <string name="tools_youtube_assets_preset_youtube">ReVanced defaults</string>
-    <string name="tools_youtube_assets_output_info">Output includes mdpi, hdpi, xhdpi, xxhdpi, and xxxhdpi PNGs for icon and header assets.</string>
+    <string name="tools_youtube_assets_output_info">Output includes mdpi, hdpi, xhdpi, xxhdpi, and xxxhdpi PNGs for icon and header assets</string>
     <string name="tools_youtube_assets_generate_mode_label">Package output mode</string>
     <string name="tools_youtube_assets_generate">Generate assets package</string>
     <string name="tools_youtube_assets_generate_mode_button">%1$s: %2$s</string>
@@ -1470,7 +1470,7 @@ Details: %2$s</string>
     <string name="github">URV Manager GitHub</string>
     <string name="credits">Credits</string>
     <string name="revanced_manager_credit">ReVanced Manager</string>
-    <string name="revanced_manager_credit_subtext">This app uses code from ReVanced and is a fork of the ReVanced Manager.</string>
+    <string name="revanced_manager_credit_subtext">This app uses code from ReVanced and is a fork of the ReVanced Manager</string>
     <string name="morphe_manager_credit">Morphe Manager</string>
     <string name="morphe_manager_credit_prefix">This app uses code from Morphe. To learn more, visit </string>
     <string name="morphe_manager_credit_suffix">.</string>
