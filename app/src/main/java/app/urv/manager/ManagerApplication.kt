@@ -118,6 +118,7 @@ class ManagerApplication : Application() {
                     SearchForUpdatesBackgroundInterval.NEVER
                 }
             )
+            workerRepository.ensureAutoClearCacheWork(prefs.autoClearCacheInterval.get())
             val currentApi = prefs.api.get()
             if (currentApi == LEGACY_MANAGER_REPO_URL || currentApi == LEGACY_MANAGER_REPO_API_URL) {
                 prefs.api.update(DEFAULT_API_URL)

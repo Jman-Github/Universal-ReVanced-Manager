@@ -243,11 +243,11 @@ fun SplitApkInstallerScreen(
                                 if (clipboard != null) {
                                     clipboard.setPrimaryClip(
                                         ClipData.newPlainText(
-                                            "Split installer log",
+                                            "Installer log",
                                             vm.getLogContent(context)
                                         )
                                     )
-                                    context.toast(context.getString(R.string.toast_copied_to_clipboard))
+                                    context.toast(context.getString(R.string.split_installer_log_copy_success))
                                 }
                                 showLogActionsDialog = false
                             }
@@ -747,10 +747,10 @@ private fun defaultSplitInstallerLogFileName(inputName: String?): String {
         ?.substringAfterLast('\\')
         ?.substringBeforeLast('.')
         ?.takeIf { it.isNotBlank() }
-        ?: "split-installer"
+        ?: "installer"
     val safeSuffix = suffix.replace(Regex("[^A-Za-z0-9._-]"), "_")
     val timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
-    return "split-installer-log-$safeSuffix-$timestamp.txt"
+    return "installer-log-$safeSuffix-$timestamp.txt"
 }
 
 private fun resolveDisplayName(contentResolver: ContentResolver, uri: Uri): String? =

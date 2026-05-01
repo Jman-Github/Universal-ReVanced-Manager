@@ -579,6 +579,19 @@ fun UpdatesSettingsScreen(
                 }
                 ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
+                    targetKey = R.string.show_manager_update_changelog,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = vm.showManagerUpdateChangelog,
+                        headline = R.string.show_manager_update_changelog,
+                        description = R.string.show_manager_update_changelog_description
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
                     targetKey = R.string.manager_prereleases,
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }

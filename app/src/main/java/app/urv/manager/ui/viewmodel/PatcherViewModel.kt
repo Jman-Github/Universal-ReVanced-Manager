@@ -1258,7 +1258,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             }
             val matchingSavedEntry = if (disableSavedAppOverwrite) null else matchingSavedEntries.firstOrNull()
             val persistedInstallType = installType
-            val shouldCreateVisibleSavedEntry = persistedInstallType != InstallType.MOUNT
+            val shouldArchiveExistingVisibleEntry = persistedInstallType != InstallType.SAVED &&
+                persistedInstallType != InstallType.MOUNT
             val existingFinalPackageEntry = installedAppRepository.get(finalPackageName)
             val existingInstalledEntry = existingFinalPackageEntry?.takeIf {
                 it.installType != InstallType.SAVED
@@ -1272,7 +1273,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 disableSavedAppOverwrite &&
                 effectiveShouldSaveForLater &&
                 persistedInstallType != InstallType.SAVED &&
-                shouldCreateVisibleSavedEntry &&
+                shouldArchiveExistingVisibleEntry &&
                 existingInstalledEntry != null &&
                 existingInstalledIdentity != null &&
                 existingInstalledIdentity != newVariantIdentity &&
@@ -1288,6 +1289,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 disableSavedAppOverwrite &&
                 effectiveShouldSaveForLater &&
                 persistedInstallType != InstallType.SAVED &&
+                shouldArchiveExistingVisibleEntry &&
                 existingSavedEntryAtBaseKey != null &&
                 existingSavedEntryIdentity != null &&
                 existingSavedEntryIdentity != newVariantIdentity &&
@@ -1315,20 +1317,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 finalPackageName
             }
 
-            val separateSavedEntryPackageName = if (
-                persistedInstallType != InstallType.SAVED &&
-                effectiveShouldSaveForLater &&
-                disableSavedAppOverwrite &&
-                shouldCreateVisibleSavedEntry
-            ) {
-                buildUniqueSavedAppEntryKey(finalPackageName, newVariantIdentity)
+            val savedCopyPackageName = if (persistedInstallType == InstallType.SAVED) {
+                persistedPackageName
             } else {
-                null
-            }
-            val savedCopyPackageName = when {
-                separateSavedEntryPackageName != null -> separateSavedEntryPackageName
-                persistedInstallType == InstallType.SAVED -> persistedPackageName
-                else -> finalPackageName
+                finalPackageName
             }
             val savedCopy = fs.getPatchedAppFile(savedCopyPackageName, finalVersion)
             val savedCopyWritten = if (effectiveShouldSaveForLater) {
@@ -1359,21 +1351,19 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     selectionPayload,
                     resetCreatedAt = true
                 )
-                if (!disableSavedAppOverwrite) {
-                    collapseMatchingSavedEntriesForInstalledVariant(
-                        packageName = finalPackageName,
-                        installedPackageName = persistedPackageName,
-                        variantIdentity = newVariantIdentity
-                    )
-                }
+                collapseMatchingSavedEntriesForInstalledVariant(
+                    packageName = finalPackageName,
+                    installedPackageName = persistedPackageName,
+                    variantIdentity = newVariantIdentity
+                )
             }
             if (
                 effectiveShouldSaveForLater &&
                 savedCopyWritten &&
-                (persistedInstallType == InstallType.SAVED || separateSavedEntryPackageName != null)
+                persistedInstallType == InstallType.SAVED
             ) {
                 installedAppRepository.addOrUpdate(
-                    separateSavedEntryPackageName ?: persistedPackageName,
+                    persistedPackageName,
                     packageName,
                     finalVersion,
                     InstallType.SAVED,

@@ -27,6 +27,13 @@ enum class SearchForUpdatesBackgroundInterval(val displayName: Int, val value: L
     DAY(R.string.daily, 60 * 24)
 }
 
+enum class AutoClearCacheInterval(val displayName: Int, val value: Long) {
+    NEVER(R.string.never, 0),
+    HOUR(R.string.hourly, 60),
+    DAY(R.string.daily, 60 * 24),
+    WEEK(R.string.weekly, 60 * 24 * 7)
+}
+
 enum class BundleUpdateDeliveryMode(val displayName: Int) {
     AUTO(R.string.bundle_update_delivery_mode_auto),
     WEBSOCKET_PREFERRED(R.string.bundle_update_delivery_mode_websocket_preferred),
@@ -115,6 +122,7 @@ class PreferencesManager(
     val firstLaunch = booleanPreference("first_launch", true)
     val managerAutoUpdates = booleanPreference("manager_auto_updates", false)
     val showManagerUpdateDialogOnLaunch = booleanPreference("show_manager_update_dialog_on_launch", true)
+    val showManagerUpdateChangelog = booleanPreference("show_manager_update_changelog", true)
     val announcementSystemEnabled = booleanPreference("announcement_system_enabled", false)
     private val announcementPushNotificationsLegacy =
         booleanPreference("announcement_push_notifications", false)
@@ -123,6 +131,10 @@ class PreferencesManager(
     val announcementPushNotificationInterval = enumPreference(
         "announcement_push_notifications_interval",
         SearchForUpdatesBackgroundInterval.NEVER
+    )
+    val autoClearCacheInterval = enumPreference(
+        "auto_clear_cache_interval",
+        AutoClearCacheInterval.NEVER
     )
     val viewedManagerUpdateVersion = stringPreference("viewed_manager_update_version", "")
     val readAnnouncements = stringSetPreference("read_announcements", emptySet())
@@ -188,6 +200,10 @@ class PreferencesManager(
     val appSelectorFilterInstalledOnly = booleanPreference("app_selector_filter_installed_only", false)
     val appSelectorFilterPatchesAvailable = booleanPreference("app_selector_filter_patches_available", false)
     val splitMergeSelectionPreset = stringPreference("split_merge_selection_preset", "all")
+    val splitMergeInstalledFilterUserApps = booleanPreference("split_merge_installed_filter_user_apps", false)
+    val splitMergeInstalledFilterSystemApps = booleanPreference("split_merge_installed_filter_system_apps", false)
+    val splitMergeInstalledFilterSplitApks = booleanPreference("split_merge_installed_filter_split_apks", false)
+    val splitMergeInstalledFilterSingleApks = booleanPreference("split_merge_installed_filter_single_apks", false)
     val useCustomFilePicker = booleanPreference("use_custom_file_picker", true)
     val youtubeAssetsSyncHeaderTransforms = booleanPreference("youtube_assets_sync_header_transforms", false)
     val patchBundleDiscoveryShowRelease = booleanPreference("patch_bundle_discovery_show_release", true)
@@ -253,9 +269,11 @@ class PreferencesManager(
         val firstLaunch: Boolean? = null,
         val managerAutoUpdates: Boolean? = null,
         val showManagerUpdateDialogOnLaunch: Boolean? = null,
+        val showManagerUpdateChangelog: Boolean? = null,
         val announcementSystemEnabled: Boolean? = null,
         val announcementPushNotifications: Boolean? = null,
         val announcementPushNotificationInterval: SearchForUpdatesBackgroundInterval? = null,
+        val autoClearCacheInterval: AutoClearCacheInterval? = null,
         val useManagerPrereleases: Boolean? = null,
         val showBatteryOptimizationBanner: Boolean? = null,
         val allowPatchProfileBundleOverride: Boolean? = null,
@@ -290,6 +308,10 @@ class PreferencesManager(
         val appSelectorFilterInstalledOnly: Boolean? = null,
         val appSelectorFilterPatchesAvailable: Boolean? = null,
         val splitMergeSelectionPreset: String? = null,
+        val splitMergeInstalledFilterUserApps: Boolean? = null,
+        val splitMergeInstalledFilterSystemApps: Boolean? = null,
+        val splitMergeInstalledFilterSplitApks: Boolean? = null,
+        val splitMergeInstalledFilterSingleApks: Boolean? = null,
         val useCustomFilePicker: Boolean? = null,
         val patchBundleDiscoveryShowRelease: Boolean? = null,
         val patchBundleDiscoveryShowPrerelease: Boolean? = null,
@@ -362,10 +384,12 @@ class PreferencesManager(
             firstLaunch = firstLaunch.get(),
             managerAutoUpdates = managerAutoUpdates.get(),
             showManagerUpdateDialogOnLaunch = showManagerUpdateDialogOnLaunch.get(),
+            showManagerUpdateChangelog = showManagerUpdateChangelog.get(),
             announcementSystemEnabled = announcementSystemEnabled.get(),
             announcementPushNotifications =
                 announcementPushNotificationInterval.get() != SearchForUpdatesBackgroundInterval.NEVER,
             announcementPushNotificationInterval = announcementPushNotificationInterval.get(),
+            autoClearCacheInterval = autoClearCacheInterval.get(),
             useManagerPrereleases = useManagerPrereleases.get(),
             showBatteryOptimizationBanner = showBatteryOptimizationBanner.get(),
             allowPatchProfileBundleOverride = allowPatchProfileBundleOverride.get(),
@@ -442,6 +466,10 @@ class PreferencesManager(
             appSelectorFilterInstalledOnly = appSelectorFilterInstalledOnly.get(),
             appSelectorFilterPatchesAvailable = appSelectorFilterPatchesAvailable.get(),
             splitMergeSelectionPreset = splitMergeSelectionPreset.get().takeIf { it.isNotBlank() },
+            splitMergeInstalledFilterUserApps = splitMergeInstalledFilterUserApps.get(),
+            splitMergeInstalledFilterSystemApps = splitMergeInstalledFilterSystemApps.get(),
+            splitMergeInstalledFilterSplitApks = splitMergeInstalledFilterSplitApks.get(),
+            splitMergeInstalledFilterSingleApks = splitMergeInstalledFilterSingleApks.get(),
             useCustomFilePicker = useCustomFilePicker.get(),
             patchBundleDiscoveryShowRelease = patchBundleDiscoveryShowRelease.get(),
             patchBundleDiscoveryShowPrerelease = patchBundleDiscoveryShowPrerelease.get(),
@@ -478,6 +506,7 @@ class PreferencesManager(
         snapshot.showManagerUpdateDialogOnLaunch?.let {
             showManagerUpdateDialogOnLaunch.value = it
         }
+        snapshot.showManagerUpdateChangelog?.let { showManagerUpdateChangelog.value = it }
         snapshot.announcementSystemEnabled?.let { announcementSystemEnabled.value = it }
         snapshot.announcementPushNotificationInterval?.let {
             announcementPushNotificationInterval.value = it
@@ -491,6 +520,7 @@ class PreferencesManager(
                 announcementSystemEnabled.value = true
             }
         }
+        snapshot.autoClearCacheInterval?.let { autoClearCacheInterval.value = it }
         snapshot.useManagerPrereleases?.let { useManagerPrereleases.value = it }
         snapshot.showBatteryOptimizationBanner?.let { showBatteryOptimizationBanner.value = it }
         snapshot.allowPatchProfileBundleOverride?.let { allowPatchProfileBundleOverride.value = it }
@@ -591,6 +621,10 @@ class PreferencesManager(
         snapshot.splitMergeSelectionPreset?.takeIf { it.isNotBlank() }?.let {
             splitMergeSelectionPreset.value = it
         }
+        snapshot.splitMergeInstalledFilterUserApps?.let { splitMergeInstalledFilterUserApps.value = it }
+        snapshot.splitMergeInstalledFilterSystemApps?.let { splitMergeInstalledFilterSystemApps.value = it }
+        snapshot.splitMergeInstalledFilterSplitApks?.let { splitMergeInstalledFilterSplitApks.value = it }
+        snapshot.splitMergeInstalledFilterSingleApks?.let { splitMergeInstalledFilterSingleApks.value = it }
         snapshot.useCustomFilePicker?.let { useCustomFilePicker.value = it }
         snapshot.patchBundleDiscoveryShowRelease?.let { patchBundleDiscoveryShowRelease.value = it }
         snapshot.patchBundleDiscoveryShowPrerelease?.let { patchBundleDiscoveryShowPrerelease.value = it }

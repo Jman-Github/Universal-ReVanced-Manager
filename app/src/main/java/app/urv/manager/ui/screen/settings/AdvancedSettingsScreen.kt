@@ -161,6 +161,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -443,7 +444,6 @@ fun AdvancedSettingsScreen(
 
             val apiUrl by viewModel.prefs.api.getAsState()
             val gitHubPat by viewModel.prefs.gitHubPat.getAsState()
-            val includeGitHubPatInExports by viewModel.prefs.includeGitHubPatInExports.getAsState()
             var showApiUrlDialog by rememberSaveable { mutableStateOf(false) }
             var showGitHubPatDialog by rememberSaveable { mutableStateOf(false) }
 
@@ -460,11 +460,9 @@ fun AdvancedSettingsScreen(
             if (showGitHubPatDialog) {
                 GitHubPatDialog(
                     currentPat = gitHubPat,
-                    currentIncludeInExport = includeGitHubPatInExports,
-                    onSubmit = { pat, includePat ->
+                    onSubmit = { pat ->
                         showGitHubPatDialog = false
                         viewModel.setGitHubPat(pat)
-                        viewModel.setIncludeGitHubPatInExports(includePat)
                     },
                     onDismiss = { showGitHubPatDialog = false }
                 )
@@ -2634,7 +2632,7 @@ private fun ExportNameFormatDialog(
     val keyboardController = LocalSoftwareKeyboardController.current
     val textFieldState = rememberTextFieldState(
         initialText = currentValue,
-        initialSelection = TextRange.Zero
+        initialSelection = TextRange(currentValue.length)
     )
     var useAppendInsertionFallback by rememberSaveable(currentValue) { mutableStateOf(true) }
     var showError by rememberSaveable { mutableStateOf(false) }
@@ -2813,9 +2811,9 @@ private fun ExportNameFormatDialog(
                             val defaultTemplate = ExportNameFormatter.DEFAULT_TEMPLATE
                             textFieldState.edit {
                                 replace(0, length, defaultTemplate)
-                                selection = TextRange.Zero
+                                selection = TextRange(defaultTemplate.length)
                             }
-                            useAppendInsertionFallback = true
+                            useAppendInsertionFallback = false
                             showError = false
                         },
                         modifier = Modifier.align(Alignment.Start)
@@ -3662,7 +3660,9 @@ private fun PatcherLogMode.descriptionRes(): Int = when (this) {
 
 @Composable
 private fun APIUrlDialog(currentUrl: String, defaultUrl: String, onSubmit: (String?) -> Unit) {
-    var url by rememberSaveable(currentUrl) { mutableStateOf(currentUrl) }
+    var url by rememberSaveable(currentUrl, stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(currentUrl, selection = TextRange(currentUrl.length)))
+    }
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
 
@@ -3678,7 +3678,7 @@ private fun APIUrlDialog(currentUrl: String, defaultUrl: String, onSubmit: (Stri
         confirmButton = {
             TextButton(
                 onClick = {
-                    onSubmit(url)
+                    onSubmit(url.text)
                 }
             ) {
                 Text(stringResource(R.string.api_url_dialog_save))
@@ -3721,7 +3721,11 @@ private fun APIUrlDialog(currentUrl: String, defaultUrl: String, onSubmit: (Stri
                     onValueChange = { url = it },
                     label = { Text(stringResource(R.string.api_url)) },
                     trailingIcon = {
-                        IconButton(onClick = { url = defaultUrl }) {
+                        IconButton(
+                            onClick = {
+                                url = TextFieldValue(defaultUrl, selection = TextRange(defaultUrl.length))
+                            }
+                        ) {
                             Icon(Icons.Outlined.Restore, stringResource(R.string.api_url_dialog_reset))
                         }
                     }
@@ -3735,13 +3739,12 @@ private fun APIUrlDialog(currentUrl: String, defaultUrl: String, onSubmit: (Stri
 @Composable
 private fun GitHubPatDialog(
     currentPat: String,
-    currentIncludeInExport: Boolean,
-    onSubmit: (String, Boolean) -> Unit,
+    onSubmit: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var pat by rememberSaveable(currentPat) { mutableStateOf(currentPat) }
-    var includePatInExport by rememberSaveable(currentIncludeInExport) { mutableStateOf(currentIncludeInExport) }
-    var showIncludeWarning by rememberSaveable { mutableStateOf(false) }
+    var pat by rememberSaveable(currentPat, stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(currentPat, selection = TextRange(currentPat.length)))
+    }
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
     val context = LocalContext.current
@@ -3779,7 +3782,7 @@ private fun GitHubPatDialog(
         modifier = Modifier.imePadding(),
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = { onSubmit(pat, includePatInExport) }) {
+            TextButton(onClick = { onSubmit(pat.text) }) {
                 Text(stringResource(R.string.save))
             }
         },
@@ -3816,7 +3819,7 @@ private fun GitHubPatDialog(
                     onValueChange = { pat = it },
                     label = { Text(stringResource(R.string.github_pat)) },
                     trailingIcon = {
-                        IconButton(onClick = { pat = "" }) {
+                        IconButton(onClick = { pat = TextFieldValue("") }) {
                             Icon(Icons.Outlined.Delete, null)
                         }
                     },
@@ -3827,72 +3830,9 @@ private fun GitHubPatDialog(
                         TransformedText(AnnotatedString(masked), OffsetMapping.Identity)
                     }
                 )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.include_github_pat_in_exports_label),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = stringResource(R.string.include_github_pat_in_exports_supporting),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = includePatInExport,
-                        onCheckedChange = { checked ->
-                            if (checked) {
-                                showIncludeWarning = true
-                            } else {
-                                includePatInExport = false
-                            }
-                        }
-                    )
-                }
             }
         }
     )
-
-    if (showIncludeWarning) {
-        AlertDialog(
-            onDismissRequest = { showIncludeWarning = false },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        includePatInExport = true
-                        showIncludeWarning = false
-                    }
-                ) {
-                    Text(stringResource(R.string.confirm))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showIncludeWarning = false }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            },
-            icon = { Icon(Icons.Outlined.Warning, null) },
-            title = { Text(stringResource(R.string.warning)) },
-            text = {
-                Text(
-                    text = stringResource(R.string.include_github_pat_in_exports_warning),
-                    modifier = Modifier.fillMaxWidth(),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-            }
-        )
-    }
 }
 
 @Composable
@@ -3902,7 +3842,9 @@ private fun SearchEngineHostDialog(
     onSubmit: (String?) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var host by rememberSaveable(currentHost) { mutableStateOf(currentHost) }
+    var host by rememberSaveable(currentHost, stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(currentHost, selection = TextRange(currentHost.length)))
+    }
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
 
@@ -3916,7 +3858,7 @@ private fun SearchEngineHostDialog(
         modifier = Modifier.imePadding(),
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = { onSubmit(host) }) {
+            TextButton(onClick = { onSubmit(host.text) }) {
                 Text(stringResource(R.string.save))
             }
         },
@@ -3949,7 +3891,11 @@ private fun SearchEngineHostDialog(
                     label = { Text(stringResource(R.string.search_engine_host_label)) },
                     placeholder = { Text(defaultHost) },
                     trailingIcon = {
-                        IconButton(onClick = { host = defaultHost }) {
+                        IconButton(
+                            onClick = {
+                                host = TextFieldValue(defaultHost, selection = TextRange(defaultHost.length))
+                            }
+                        ) {
                             Icon(Icons.Outlined.Restore, stringResource(R.string.api_url_dialog_reset))
                         }
                     }

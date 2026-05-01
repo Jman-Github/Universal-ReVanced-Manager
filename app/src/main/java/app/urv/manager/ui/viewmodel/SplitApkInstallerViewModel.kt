@@ -15,6 +15,7 @@ import android.os.Looper
 import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.urv.manager.domain.storage.CacheCleanupGuard
 import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.domain.installer.RootInstaller
 import app.urv.manager.domain.installer.ShizukuInstaller
@@ -135,6 +136,7 @@ class SplitApkInstallerViewModel(
 
         clearCancelCleanupActions()
         val job = viewModelScope.launch {
+            val cacheUseToken = CacheCleanupGuard.begin()
             clearLogs()
             appendLog("Started split install (${mode.name.lowercase(Locale.ROOT)})")
             inputDisplayName?.takeIf { it.isNotBlank() }?.let { appendLog("Input: $it") }
@@ -252,6 +254,7 @@ class SplitApkInstallerViewModel(
                 closeRootShellSession()
                 runCatching { workspace.deleteRecursively() }
                 refreshAvailability()
+                runCatching { cacheUseToken.close() }
             }
         }
         installJob = job

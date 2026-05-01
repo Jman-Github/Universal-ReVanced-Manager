@@ -1,8 +1,10 @@
 package app.urv.manager.ui.screen
 
+import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.net.Uri
+import android.view.WindowManager
 import androidx.annotation.StringRes
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -26,6 +28,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Description
@@ -45,6 +48,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -219,6 +223,16 @@ fun MergeSplitApkScreen(
         enabled = state.inProgress || state.selection != null || state.cancellationInProgress,
         onBack = ::onPageBack
     )
+
+    if (state.inProgress) {
+        DisposableEffect(context) {
+            val window = (context as? Activity)?.window
+            window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            onDispose {
+                window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
+        }
+    }
 
     if (showDismissConfirmationDialog) {
         ConfirmDialog(
@@ -966,12 +980,7 @@ private fun SplitMergeSelectionDialog(
                 AppTopBar(
                     title = stringResource(R.string.merge_split_apk_selection_title),
                     scrollBehavior = scrollBehavior,
-                    onBackClick = onDismissRequest,
-                    actions = {
-                        TextButton(onClick = onDismissRequest) {
-                            Text(stringResource(R.string.cancel))
-                        }
-                    }
+                    onBackClick = onDismissRequest
                 )
             }
         ) { paddingValues ->
@@ -1065,7 +1074,7 @@ private fun SplitMergeSelectionDialog(
                                     )
                                 )
                             },
-                            icon = { Icon(Icons.Outlined.Save, null) },
+                            icon = { Icon(Icons.Default.AutoFixHigh, null) },
                             onClick = { onConfirm(selectedModules + requiredModules, stripNativeLibs) }
                         )
                     }

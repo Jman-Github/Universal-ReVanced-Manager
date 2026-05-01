@@ -324,7 +324,7 @@ class InstalledAppInfoViewModel(
         if (sourceInstallType == InstallType.SAVED && sourceEntryKey != targetPackage) {
             installedAppRepository.delete(app)
         }
-        if (installType != InstallType.SAVED && !prefs.disableSavedAppOverwrite.get()) {
+        if (installType != InstallType.SAVED) {
             collapseMatchingSavedEntriesForInstalledVariant(
                 packageName = targetPackage,
                 installedPackageName = targetPackage,

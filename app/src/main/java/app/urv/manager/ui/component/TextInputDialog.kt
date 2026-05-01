@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import app.universal.revanced.manager.R
@@ -41,7 +42,7 @@ fun TextInputDialog(
     maxLines: Int = if (singleLine) 1 else 4,
 ) {
     var textFieldValue by rememberSaveable(initial, stateSaver = TextFieldValue.Saver) {
-        mutableStateOf(TextFieldValue(initial))
+        mutableStateOf(TextFieldValue(initial, selection = TextRange(initial.length)))
     }
     val validatorRef by rememberUpdatedState(validator)
     val onConfirmRef by rememberUpdatedState(onConfirm)

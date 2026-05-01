@@ -21,6 +21,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextRange
 import androidx.compose.material3.SearchBarState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -44,6 +45,9 @@ fun SearchBar(
     LaunchedEffect(searchBarState.currentValue) {
         if (searchBarState.currentValue == SearchBarValue.Expanded) {
             withFrameNanos { }
+            textFieldState.edit {
+                selection = TextRange(length)
+            }
             expandedFocusRequester.requestFocus()
             keyboardController?.show()
         } else {

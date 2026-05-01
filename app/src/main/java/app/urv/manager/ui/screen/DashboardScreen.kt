@@ -133,6 +133,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.res.stringResource
@@ -275,6 +277,7 @@ fun DashboardScreen(
     val prefs: PreferencesManager = koinInject()
     val savedAppsEnabled by prefs.enableSavedApps.getAsState()
     val viewedManagerUpdateVersion by prefs.viewedManagerUpdateVersion.getAsState()
+    val showManagerUpdateChangelog by prefs.showManagerUpdateChangelog.getAsState()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val hideMainTabLabels by prefs.hideMainTabLabels.getAsState()
     val disableMainTabSwipe by prefs.disableMainTabSwipe.getAsState()
@@ -1412,7 +1415,8 @@ fun DashboardScreen(
             onDismiss = { showUpdateDialog = false },
             setShowManagerUpdateDialogOnLaunch = vm::setShowManagerUpdateDialogOnLaunch,
             onConfirm = onUpdateClick,
-            releaseInfo = releaseInfo
+            releaseInfo = releaseInfo,
+            showFullChangelog = showManagerUpdateChangelog
         )
     }
 
@@ -2876,11 +2880,13 @@ private fun MergeSplitInstalledAppsDialog(
     onDismissRequest: () -> Unit,
     onSelectApp: (String) -> Unit
 ) {
+    val prefs: PreferencesManager = koinInject()
+    val coroutineScope = rememberCoroutineScope()
     var filterText by rememberSaveable { mutableStateOf("") }
-    var showUserApps by rememberSaveable { mutableStateOf(false) }
-    var showSystemApps by rememberSaveable { mutableStateOf(false) }
-    var showSplitApks by rememberSaveable { mutableStateOf(false) }
-    var showSingleApks by rememberSaveable { mutableStateOf(false) }
+    val showUserApps by prefs.splitMergeInstalledFilterUserApps.getAsState()
+    val showSystemApps by prefs.splitMergeInstalledFilterSystemApps.getAsState()
+    val showSplitApks by prefs.splitMergeInstalledFilterSplitApks.getAsState()
+    val showSingleApks by prefs.splitMergeInstalledFilterSingleApks.getAsState()
     val filterScrollState = rememberScrollState()
     val chipColors = FilterChipDefaults.filterChipColors(
         containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp),
@@ -2951,25 +2957,41 @@ private fun MergeSplitInstalledAppsDialog(
                     ) {
                         CheckedFilterChip(
                             selected = showUserApps,
-                            onClick = { showUserApps = !showUserApps },
+                            onClick = {
+                                coroutineScope.launch {
+                                    prefs.splitMergeInstalledFilterUserApps.update(!showUserApps)
+                                }
+                            },
                             colors = chipColors,
                             label = { Text(stringResource(R.string.merge_split_installed_filter_user_apps)) }
                         )
                         CheckedFilterChip(
                             selected = showSystemApps,
-                            onClick = { showSystemApps = !showSystemApps },
+                            onClick = {
+                                coroutineScope.launch {
+                                    prefs.splitMergeInstalledFilterSystemApps.update(!showSystemApps)
+                                }
+                            },
                             colors = chipColors,
                             label = { Text(stringResource(R.string.merge_split_installed_filter_system_apps)) }
                         )
                         CheckedFilterChip(
                             selected = showSplitApks,
-                            onClick = { showSplitApks = !showSplitApks },
+                            onClick = {
+                                coroutineScope.launch {
+                                    prefs.splitMergeInstalledFilterSplitApks.update(!showSplitApks)
+                                }
+                            },
                             colors = chipColors,
                             label = { Text(stringResource(R.string.merge_split_installed_filter_split_apks)) }
                         )
                         CheckedFilterChip(
                             selected = showSingleApks,
-                            onClick = { showSingleApks = !showSingleApks },
+                            onClick = {
+                                coroutineScope.launch {
+                                    prefs.splitMergeInstalledFilterSingleApks.update(!showSingleApks)
+                                }
+                            },
                             colors = chipColors,
                             label = { Text(stringResource(R.string.merge_split_installed_filter_single_apks)) }
                         )
@@ -3333,6 +3355,15 @@ private fun DashboardSearchField(
 ) {
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
+    var queryFieldValue by rememberSaveable(stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(query, selection = TextRange(query.length)))
+    }
+
+    LaunchedEffect(query) {
+        if (query != queryFieldValue.text) {
+            queryFieldValue = TextFieldValue(query, selection = TextRange(query.length))
+        }
+    }
 
     LaunchedEffect(Unit) {
         withFrameNanos { }
@@ -3351,13 +3382,21 @@ private fun DashboardSearchField(
         modifier = modifier.fillMaxWidth()
     ) {
         TextField(
-            value = query,
-            onValueChange = onQueryChange,
+            value = queryFieldValue,
+            onValueChange = {
+                queryFieldValue = it
+                onQueryChange(it.text)
+            },
             placeholder = { Text(stringResource(placeholderRes)) },
             leadingIcon = { Icon(Icons.Outlined.Search, null) },
             trailingIcon = {
                 if (query.isNotBlank()) {
-                    IconButton(onClick = onClear) {
+                    IconButton(
+                        onClick = {
+                            queryFieldValue = TextFieldValue("")
+                            onClear()
+                        }
+                    ) {
                         Icon(Icons.Outlined.Close, stringResource(R.string.clear))
                     }
                 }

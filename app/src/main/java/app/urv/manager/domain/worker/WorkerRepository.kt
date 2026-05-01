@@ -16,8 +16,10 @@ import androidx.work.OutOfQuotaPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import app.universal.revanced.manager.R
+import app.urv.manager.domain.manager.AutoClearCacheInterval
 import app.urv.manager.domain.manager.SearchForUpdatesBackgroundInterval
 import app.urv.manager.patcher.worker.AnnouncementNotificationWorker
+import app.urv.manager.patcher.worker.AutoClearCacheWorker
 import app.urv.manager.patcher.worker.BundleUpdateNotificationWorker
 import app.urv.manager.patcher.worker.ManagerUpdateNotificationWorker
 import app.urv.manager.patcher.worker.PatcherWorkerProgressSnapshot
@@ -32,9 +34,11 @@ class WorkerRepository(app: Application) {
         private const val BUNDLE_UPDATE_WORK_ID = "BundleUpdateNotificationWork"
         private const val MANAGER_UPDATE_WORK_ID = "ManagerUpdateNotificationWork"
         private const val ANNOUNCEMENT_WORK_ID = "AnnouncementNotificationWork"
+        private const val AUTO_CLEAR_CACHE_WORK_ID = "AutoClearCacheWork"
         private const val BUNDLE_UPDATE_IMMEDIATE_WORK_ID = "BundleUpdateNotificationWorkImmediate"
         private const val MANAGER_UPDATE_IMMEDIATE_WORK_ID = "ManagerUpdateNotificationWorkImmediate"
         private const val ANNOUNCEMENT_IMMEDIATE_WORK_ID = "AnnouncementNotificationWorkImmediate"
+        private const val AUTO_CLEAR_CACHE_IMMEDIATE_WORK_ID = "AutoClearCacheWorkImmediate"
     }
 
     /**
@@ -336,6 +340,62 @@ class WorkerRepository(app: Application) {
             .build()
         workManager.enqueueUniqueWork(
             ANNOUNCEMENT_IMMEDIATE_WORK_ID,
+            ExistingWorkPolicy.REPLACE,
+            request
+        )
+        return request.id
+    }
+
+    fun scheduleAutoClearCacheWork(interval: AutoClearCacheInterval) {
+        val workId = AUTO_CLEAR_CACHE_WORK_ID
+        if (interval == AutoClearCacheInterval.NEVER) {
+            workManager.cancelUniqueWork(workId)
+            Log.d("WorkManager", "Cancelled job with workId $workId.")
+            return
+        }
+
+        val workRequest =
+            PeriodicWorkRequestBuilder<AutoClearCacheWorker>(
+                interval.value,
+                TimeUnit.MINUTES
+            ).build()
+
+        workManager.enqueueUniquePeriodicWork(
+            workId,
+            ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE,
+            workRequest
+        )
+        Log.d("WorkManager", "Periodic work $workId updated with time ${interval.value}.")
+    }
+
+    fun ensureAutoClearCacheWork(interval: AutoClearCacheInterval) {
+        val workId = AUTO_CLEAR_CACHE_WORK_ID
+        if (interval == AutoClearCacheInterval.NEVER) {
+            workManager.cancelUniqueWork(workId)
+            Log.d("WorkManager", "Cancelled job with workId $workId.")
+            return
+        }
+
+        val workRequest =
+            PeriodicWorkRequestBuilder<AutoClearCacheWorker>(
+                interval.value,
+                TimeUnit.MINUTES
+            ).build()
+
+        workManager.enqueueUniquePeriodicWork(
+            workId,
+            ExistingPeriodicWorkPolicy.UPDATE,
+            workRequest
+        )
+        Log.d("WorkManager", "Periodic work $workId reconciled with time ${interval.value}.")
+    }
+
+    fun launchAutoClearCacheNow(): UUID {
+        val request = OneTimeWorkRequest.Builder(AutoClearCacheWorker::class.java)
+            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+            .build()
+        workManager.enqueueUniqueWork(
+            AUTO_CLEAR_CACHE_IMMEDIATE_WORK_ID,
             ExistingWorkPolicy.REPLACE,
             request
         )

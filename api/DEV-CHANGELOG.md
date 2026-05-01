@@ -1,4 +1,4 @@
-# v1.8.1-dev.16 (TBD)
+# v1.8.1-dev.16 (2026-04-30)
 
 
 # Features
@@ -6,9 +6,22 @@
 - Bumped Morphe Patcher to `1.4.2`
 - Improved UI strings, empty/search states, bundle changelog formatting, and import feedback order https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/436 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/437 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/441 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/435 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/434 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/432
 - Improved string consistency https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/433
+- Bumped Morphe Patcher to `1.5.0`
+- Added automatic color code correction, normalization, and a color picker for patch options
+- Moved the cursor to the end of prefilled input fields when dialogs and search fields open automatically https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/444
+- Added a Storage and cache management settings screen with a storage usage breakdown, refreshable size tracking, and clear actions for cache, downloads, patch bundles, saved patched apps, patch profile inputs, signing files, plugin files, temporary workspaces, and external app folders https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/454
+- Added a scheduled auto-clear cache system https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/407
+- Updated the save-file icon on the `Choose splits to merge` screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/456
+- Removed the duplicate top-bar cancel action from the split merge selection screen and renamed Split APK installer to Split installer https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/457 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/455
+- Added an Updates setting to switch the manager update popup between full release notes and the minimal version-only view https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/420
+- Kept the screen awake while the split merge process is running https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/387
 
 
 # Bug fixes
+
+- Fixed split APK tool settings so installed-app filters persist/export correctly, installer logs use clearer copy/export labels, and the duplicate GitHub PAT export toggle is removed https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/439 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/440 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/442 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/443
+- Fixed duplicate Apps tab entries being created after installing patched apps with custom installers https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
+- Fixed patch selection action buttons collapsing while scrolling, swiping bundles, or pressing actions when auto-collapse is disabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/448
 
 
 ## Build types

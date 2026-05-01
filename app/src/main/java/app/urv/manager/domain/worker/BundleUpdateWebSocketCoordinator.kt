@@ -6,6 +6,7 @@ import android.content.Intent
 import android.util.Log
 import androidx.core.content.ContextCompat
 import app.urv.manager.data.platform.NetworkInfo
+import app.urv.manager.domain.manager.AutoClearCacheInterval
 import app.urv.manager.domain.manager.BundleUpdateDeliveryMode
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.manager.SearchForUpdatesBackgroundInterval
@@ -90,19 +91,31 @@ class BundleUpdateWebSocketCoordinator(
                 announcementSystemEnabled &&
                     announcementInterval != SearchForUpdatesBackgroundInterval.NEVER
             }
-            combine(
+            val listenTargetsFlow = combine(
                 prefs.searchForManagerUpdatesBackgroundInterval.flow,
                 prefs.searchForUpdatesBackgroundInterval.flow,
                 announcementListeningFlow,
+                prefs.autoClearCacheInterval.flow
+            ) { managerInterval, bundleInterval, announcementListeningEnabled, autoClearCacheInterval ->
+                ListenTargetsPreferenceState(
+                    managerInterval = managerInterval,
+                    bundleInterval = bundleInterval,
+                    announcementListeningEnabled = announcementListeningEnabled,
+                    cacheCleanupEnabled = autoClearCacheInterval != AutoClearCacheInterval.NEVER
+                )
+            }
+            combine(
+                listenTargetsFlow,
                 prefs.bundleUpdateDeliveryMode.flow,
                 appForeground
-            ) { managerInterval, bundleInterval, announcementListeningEnabled, mode, isForeground ->
+            ) { targets, mode, isForeground ->
                 DesiredState.from(
-                    managerInterval,
-                    bundleInterval,
-                    announcementListeningEnabled,
-                    mode,
-                    isForeground
+                    managerInterval = targets.managerInterval,
+                    bundleInterval = targets.bundleInterval,
+                    announcementListeningEnabled = targets.announcementListeningEnabled,
+                    cacheCleanupEnabled = targets.cacheCleanupEnabled,
+                    mode = mode,
+                    isForeground = isForeground
                 )
             }.distinctUntilChanged()
                 .collect { state ->
@@ -132,7 +145,8 @@ class BundleUpdateWebSocketCoordinator(
             ForegroundListenState(
                 listenForBundle = state.listenForBundle,
                 listenForManager = state.listenForManager,
-                listenForAnnouncements = state.listenForAnnouncements
+                listenForAnnouncements = state.listenForAnnouncements,
+                keepAliveForCacheCleanup = state.keepAliveForCacheCleanup
             )
         } else {
             null
@@ -148,6 +162,7 @@ class BundleUpdateWebSocketCoordinator(
             putExtra(BundleUpdateWebSocketService.EXTRA_LISTEN_BUNDLE_UPDATES, state.listenForBundle)
             putExtra(BundleUpdateWebSocketService.EXTRA_LISTEN_MANAGER_UPDATES, state.listenForManager)
             putExtra(BundleUpdateWebSocketService.EXTRA_LISTEN_ANNOUNCEMENTS, state.listenForAnnouncements)
+            putExtra(BundleUpdateWebSocketService.EXTRA_KEEP_ALIVE_CACHE_CLEANUP, state.keepAliveForCacheCleanup)
         }
         if (shouldRun) {
             runCatching {
@@ -433,6 +448,7 @@ class BundleUpdateWebSocketCoordinator(
         val listenForBundle: Boolean,
         val listenForManager: Boolean,
         val listenForAnnouncements: Boolean,
+        val keepAliveForCacheCleanup: Boolean,
     ) {
         companion object {
             val NONE = DesiredState(
@@ -440,43 +456,62 @@ class BundleUpdateWebSocketCoordinator(
                 requiresForegroundService = false,
                 listenForBundle = false,
                 listenForManager = false,
-                listenForAnnouncements = false
+                listenForAnnouncements = false,
+                keepAliveForCacheCleanup = false
             )
 
             fun from(
                 managerInterval: SearchForUpdatesBackgroundInterval,
                 bundleInterval: SearchForUpdatesBackgroundInterval,
                 announcementListeningEnabled: Boolean,
+                cacheCleanupEnabled: Boolean,
                 mode: BundleUpdateDeliveryMode,
                 isForeground: Boolean
             ): DesiredState {
                 val listenForBundle = bundleInterval != SearchForUpdatesBackgroundInterval.NEVER
                 val listenForManager = managerInterval != SearchForUpdatesBackgroundInterval.NEVER
                 val listenForAnnouncements = announcementListeningEnabled
-                if (!listenForBundle && !listenForManager && !listenForAnnouncements) {
+                val hasWebSocketTargets = listenForBundle || listenForManager || listenForAnnouncements
+                if (!hasWebSocketTargets && !cacheCleanupEnabled) {
                     return NONE
                 }
 
                 return when (mode) {
-                    BundleUpdateDeliveryMode.POLLING_ONLY -> NONE
+                    BundleUpdateDeliveryMode.POLLING_ONLY -> DesiredState(
+                        shouldRunSocket = false,
+                        requiresForegroundService = cacheCleanupEnabled,
+                        listenForBundle = false,
+                        listenForManager = false,
+                        listenForAnnouncements = false,
+                        keepAliveForCacheCleanup = cacheCleanupEnabled
+                    )
                     BundleUpdateDeliveryMode.AUTO -> DesiredState(
-                        shouldRunSocket = isForeground,
-                        requiresForegroundService = false,
-                        listenForBundle = listenForBundle,
-                        listenForManager = listenForManager,
-                        listenForAnnouncements = listenForAnnouncements
+                        shouldRunSocket = isForeground && hasWebSocketTargets,
+                        requiresForegroundService = cacheCleanupEnabled,
+                        listenForBundle = false,
+                        listenForManager = false,
+                        listenForAnnouncements = false,
+                        keepAliveForCacheCleanup = cacheCleanupEnabled
                     )
                     BundleUpdateDeliveryMode.WEBSOCKET_PREFERRED -> DesiredState(
-                        shouldRunSocket = true,
-                        requiresForegroundService = true,
+                        shouldRunSocket = hasWebSocketTargets,
+                        requiresForegroundService = hasWebSocketTargets || cacheCleanupEnabled,
                         listenForBundle = listenForBundle,
                         listenForManager = listenForManager,
-                        listenForAnnouncements = listenForAnnouncements
+                        listenForAnnouncements = listenForAnnouncements,
+                        keepAliveForCacheCleanup = cacheCleanupEnabled
                     )
                 }
             }
         }
     }
+
+    private data class ListenTargetsPreferenceState(
+        val managerInterval: SearchForUpdatesBackgroundInterval,
+        val bundleInterval: SearchForUpdatesBackgroundInterval,
+        val announcementListeningEnabled: Boolean,
+        val cacheCleanupEnabled: Boolean
+    )
 
     private companion object {
         private const val TAG = "BundleUpdateWebSocket"
@@ -508,6 +543,7 @@ class BundleUpdateWebSocketCoordinator(
     private data class ForegroundListenState(
         val listenForBundle: Boolean,
         val listenForManager: Boolean,
-        val listenForAnnouncements: Boolean
+        val listenForAnnouncements: Boolean,
+        val keepAliveForCacheCleanup: Boolean
     )
 }

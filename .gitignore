@@ -52,6 +52,7 @@ hs_err_pid*
 .idea/**/libraries
 .gradle-user-home
 .gradle-codex
+.gradle-tmp
 
 # Gradle and Maven with auto-import
 # When using Gradle or Maven with auto-import, you should exclude module files,
