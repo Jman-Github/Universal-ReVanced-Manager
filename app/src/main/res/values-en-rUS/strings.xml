@@ -523,13 +523,13 @@
     <string name="saved_app_action_visibility_reset">Show all action buttons</string>
     <string name="saved_app_action_install_update">Install/Update/Uninstall/Mount/Remount/Unmount</string>
     <string name="patch_selection_confirm_deselect_bundle_title">Deselect bundle?</string>
-    <string name="patch_selection_confirm_deselect_bundle_message">Deselect all patches selected from %1$s?</string>
+    <string name="patch_selection_confirm_deselect_bundle_message">This clears every selected patch provided by %1$s.</string>
     <string name="patch_selection_confirm_deselect_all_title">Deselect all patches?</string>
     <string name="patch_selection_confirm_deselect_all_message">This clears every selected patch across all bundles.</string>
     <string name="patch_selection_confirm_bundle_defaults_title">Restore bundle defaults?</string>
     <string name="patch_selection_confirm_bundle_defaults_message">This restores the recommended defaults for %1$s.</string>
     <string name="patch_selection_confirm_select_bundle_title">Select bundle?</string>
-    <string name="patch_selection_confirm_select_bundle_message">Select every patch provided by %1$s?</string>
+    <string name="patch_selection_confirm_select_bundle_message">This selects every patch provided by %1$s.</string>
     <string name="patch_selection_confirm_select_all_title">Select all patches?</string>
     <string name="patch_selection_confirm_select_all_message">This selects every patch across all bundles.</string>
     <string name="patch_selection_button_label_reset_bundle">Bundle defaults</string>
@@ -542,7 +542,7 @@
 Patch profiles are not affected.</string>
     <string name="patch_selection_reset_all_description">Resets all patch selections</string>
     <string name="patch_selection_reset_dialog_title">Reset patch defaults?</string>
-    <string name="patch_selection_reset_dialog_message">This will restore your patch selections and options to their recommended defaults.</string>
+    <string name="patch_selection_reset_dialog_message">This restores patch selections and options to their recommended defaults.</string>
     <string name="patch_selection_reset_package">Reset patch selections for app</string>
     <string name="patch_selection_reset_package_dialog_description">You are about to reset the patch selections for the app \"%s\". You will have to manually select each patch again.
 
