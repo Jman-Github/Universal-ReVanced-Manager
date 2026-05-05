@@ -54,6 +54,7 @@ class MorpheSession(
     private val input: File,
     private val onEvent: (ProgressEvent) -> Unit,
     private val checkCancelled: () -> Unit = {},
+    private val continueOnPatchError: Boolean = false,
 ) : Closeable {
     private val tempDir = File(cacheDir).resolve("patcher").also { it.mkdirs() }
     private val frameworkDirFile = File(frameworkDir).also { it.mkdirs() }
@@ -78,6 +79,8 @@ class MorpheSession(
         val indexByPatch = selectedPatches.withIndex().associate { it.value to it.index }
         val started = mutableSetOf<Int>()
         started.addAll(preStarted)
+        val failedPatchIndexes = mutableSetOf<Int>()
+        var firstPatchFailure: Throwable? = null
         var nextIndex = 0
 
         fun startPatch(index: Int) {
@@ -92,10 +95,19 @@ class MorpheSession(
             val index = indexByPatch[patch] ?: return@collect
 
             if (exception != null) {
-                if (index < nextIndex) {
+                fun recordFailure() {
+                    if (firstPatchFailure == null) {
+                        firstPatchFailure = exception
+                    }
+                    failedPatchIndexes += index
                     onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), exception.toSafeRemoteError()))
                     logger.error("${patch.name} failed:")
                     logger.error(exception.toSafeStackTraceString())
+                }
+
+                if (index < nextIndex) {
+                    recordFailure()
+                    if (continueOnPatchError && !isLikelyFrameworkDecodeFailure(exception)) return@collect
                     throw exception
                 }
                 while (nextIndex < index) {
@@ -105,9 +117,14 @@ class MorpheSession(
                     nextIndex += 1
                 }
                 startPatch(index)
-                onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), exception.toSafeRemoteError()))
-                logger.error("${patch.name} failed:")
-                logger.error(exception.toSafeStackTraceString())
+                recordFailure()
+                if (continueOnPatchError && !isLikelyFrameworkDecodeFailure(exception)) {
+                    nextIndex = index + 1
+                    if (nextIndex < selectedPatches.size) {
+                        startPatch(nextIndex)
+                    }
+                    return@collect
+                }
                 throw exception
             }
 
@@ -125,6 +142,9 @@ class MorpheSession(
             if (nextIndex < selectedPatches.size) {
                 startPatch(nextIndex)
             }
+        }
+        if (continueOnPatchError && failedPatchIndexes.size == selectedPatches.size) {
+            throw firstPatchFailure ?: IllegalStateException("All selected patches failed")
         }
     }
 

@@ -339,6 +339,7 @@ class Revanced22ProcessRuntime(
                 },
                 stripNativeLibs = stripNativeLibs,
                 skipUnneededSplits = skipUnneededSplits,
+                continueOnPatchError = prefs.continueOnPatchError.get(),
                 patcherLogMode = logMode
             )
 

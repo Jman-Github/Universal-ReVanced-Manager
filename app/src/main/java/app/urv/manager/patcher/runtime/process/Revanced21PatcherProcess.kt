@@ -168,6 +168,7 @@ class Revanced21PatcherProcess(
             put("outputFile", parameters.outputFile)
             put("stripNativeLibs", parameters.stripNativeLibs)
             put("skipUnneededSplits", parameters.skipUnneededSplits)
+            put("continueOnPatchError", parameters.continueOnPatchError)
             put("patcherLogMode", parameters.patcherLogMode.name)
             put("configurations", configs)
         }

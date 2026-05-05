@@ -292,6 +292,7 @@ class MorpheProcessRuntime(
                 },
                 stripNativeLibs = stripNativeLibs,
                 skipUnneededSplits = skipUnneededSplits,
+                continueOnPatchError = prefs.continueOnPatchError.get(),
                 patcherLogMode = logMode.name
             )
 

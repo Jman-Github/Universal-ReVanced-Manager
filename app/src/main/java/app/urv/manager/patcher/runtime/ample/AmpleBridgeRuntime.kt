@@ -132,6 +132,7 @@ class AmpleBridgeRuntime(context: Context) : AmpleRuntime(context) {
                 "patcherLogMode" to logMode.name,
                 "stripNativeLibs" to stripNativeLibs,
                 "skipUnneededSplits" to skipUnneededSplits,
+                "continueOnPatchError" to prefs.continueOnPatchError.get(),
                 "configurations" to configs
             )
 

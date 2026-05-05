@@ -14,7 +14,8 @@ data class PatcherWorkerProgressSnapshot(
     val sequence: Long,
     val event: ProgressEvent,
     val notificationProgressCurrent: Int? = null,
-    val notificationProgressMax: Int? = null
+    val notificationProgressMax: Int? = null,
+    val failedPatchIndexes: Set<Int> = emptySet()
 )
 
 object PatcherWorkerProgressState {
@@ -23,6 +24,7 @@ object PatcherWorkerProgressState {
     private const val PROGRESS_EVENT_KEY = "patching_progress_event"
     private const val PROGRESS_NOTIFICATION_CURRENT_KEY = "patching_progress_notification_current"
     private const val PROGRESS_NOTIFICATION_MAX_KEY = "patching_progress_notification_max"
+    private const val PROGRESS_FAILED_PATCH_INDEXES_KEY = "patching_progress_failed_patch_indexes"
 
     fun toWorkData(
         active: Boolean,
@@ -42,6 +44,12 @@ object PatcherWorkerProgressState {
             }
             snapshot.notificationProgressMax?.let { max ->
                 builder.putInt(PROGRESS_NOTIFICATION_MAX_KEY, max)
+            }
+            if (snapshot.failedPatchIndexes.isNotEmpty()) {
+                builder.putIntArray(
+                    PROGRESS_FAILED_PATCH_INDEXES_KEY,
+                    snapshot.failedPatchIndexes.sorted().toIntArray()
+                )
             }
         }
 
@@ -68,7 +76,8 @@ object PatcherWorkerProgressState {
             sequence = sequence,
             event = event,
             notificationProgressCurrent = notificationCurrent,
-            notificationProgressMax = notificationMax
+            notificationProgressMax = notificationMax,
+            failedPatchIndexes = data.getIntArray(PROGRESS_FAILED_PATCH_INDEXES_KEY)?.toSet().orEmpty()
         )
     }
 

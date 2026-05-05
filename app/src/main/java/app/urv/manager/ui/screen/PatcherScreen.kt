@@ -114,6 +114,7 @@ fun PatcherScreen(
     val autoExpandRunningSteps by prefs.autoExpandRunningSteps.getAsState()
     val autoExpandRunningStepsExclusive by prefs.autoExpandRunningStepsExclusive.getAsState()
     val chooseInstallerPerInstall by prefs.chooseInstallerPerInstall.getAsState()
+    val continueOnPatchError by prefs.continueOnPatchError.getAsState()
     val useExclusiveAutoExpand = autoExpandRunningSteps && autoExpandRunningStepsExclusive
     val savedAppsEnabled by prefs.enableSavedApps.getAsState()
     val installerManager: InstallerManager = koinInject()
@@ -924,6 +925,7 @@ fun PatcherScreen(
                         isExpanded = expandedCategories.contains(category),
                         autoExpandRunning = autoExpandRunningSteps,
                         autoExpandRunningMainOnly = useExclusiveAutoExpand,
+                        continueOnPatchError = continueOnPatchError,
                         onExpand = {
                             if (useExclusiveAutoExpand) {
                                 expandedCategories.clear()

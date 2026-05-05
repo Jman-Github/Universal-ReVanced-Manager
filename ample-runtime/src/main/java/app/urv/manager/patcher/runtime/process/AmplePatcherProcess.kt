@@ -266,6 +266,7 @@ class AmplePatcherProcess : IAmplePatcherProcess.Stub() {
                             input = preparedInput.file,
                             sanitizeAllEmbeddedApksOnInit = preparedInput.merged,
                             onEvent = ::safeEvent,
+                            continueOnPatchError = parameters.continueOnPatchError,
                         )
                     }
                     val preparedInput = requireNotNull(preparation) {

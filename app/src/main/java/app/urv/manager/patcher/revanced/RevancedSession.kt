@@ -57,15 +57,21 @@ class RevancedSession(
     private val onEvent: (ProgressEvent) -> Unit,
     private val checkCancelled: () -> Unit = {},
     private val logMode: PatcherLogMode = PatcherLogMode.DEFAULT,
+    private val continueOnPatchError: Boolean = false,
 ) : Closeable {
     private val tempDir = File(cacheDir).resolve("patcher").also { it.mkdirs() }
     private val frameworkDirFile = File(frameworkDir).also { it.mkdirs() }
     private val aaptBinaryPath = File(aaptPath)
 
+    private data class PatchExecutionResult(
+        val result: PatchesResult,
+        val failedPatchIndexes: Set<Int>,
+    )
+
     private suspend fun applyPatchesVerbose(
         patches: RevancedPatchList,
         preStarted: Set<Int> = emptySet()
-    ): PatchesResult = coroutineScope {
+    ): PatchExecutionResult = coroutineScope {
         val selectedPatches = LinkedHashSet(patches)
         val runPatcher =
             patcher(
@@ -79,6 +85,8 @@ class RevancedSession(
         val indexByPatch = patches.withIndex().associate { it.value to it.index }
         val started = mutableSetOf<Int>()
         started.addAll(preStarted)
+        val failedPatchIndexes = mutableSetOf<Int>()
+        var firstPatchFailure: Throwable? = null
         var nextIndex = 0
         val decodedResourcesJob =
             launch(Dispatchers.IO) {
@@ -107,10 +115,19 @@ class RevancedSession(
                 val index = indexByPatch[patch] ?: return@runPatcher
 
                 if (exception != null) {
-                    if (index < nextIndex) {
+                    fun recordFailure() {
+                        if (firstPatchFailure == null) {
+                            firstPatchFailure = exception
+                        }
+                        failedPatchIndexes += index
                         onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), exception.toSafeRemoteError()))
                         logger.error("${patch.name ?: patchNameAt(index)} failed:")
                         logger.error(exception.toSafeStackTraceString())
+                    }
+
+                    if (index < nextIndex) {
+                        recordFailure()
+                        if (continueOnPatchError && !isLikelyFrameworkDecodeFailure(exception)) return@runPatcher
                         throw exception
                     }
                     while (nextIndex < index) {
@@ -120,9 +137,14 @@ class RevancedSession(
                         nextIndex += 1
                     }
                     startPatch(index)
-                    onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), exception.toSafeRemoteError()))
-                    logger.error("${patch.name ?: patchNameAt(index)} failed:")
-                    logger.error(exception.toSafeStackTraceString())
+                    recordFailure()
+                    if (continueOnPatchError && !isLikelyFrameworkDecodeFailure(exception)) {
+                        nextIndex = index + 1
+                        if (nextIndex < patches.size) {
+                            startPatch(nextIndex)
+                        }
+                        return@runPatcher
+                    }
                     throw exception
                 }
 
@@ -148,12 +170,15 @@ class RevancedSession(
                 logger.info("${patchNameAt(nextIndex)} succeeded")
                 nextIndex += 1
             }
+            if (continueOnPatchError && patches.isNotEmpty() && failedPatchIndexes.size == patches.size) {
+                throw firstPatchFailure ?: IllegalStateException("All selected patches failed")
+            }
             patcherResult
         } finally {
             decodedResourcesJob.cancelAndJoin()
         }
         sanitizeDecodedResourcesPass()
-        patchResult
+        PatchExecutionResult(patchResult, failedPatchIndexes.toSet())
     }
 
     private suspend fun sanitizeDecodedResourcesWhenReady() {
@@ -185,7 +210,7 @@ class RevancedSession(
         return true
     }
 
-    private suspend fun executePatchesOnce(orderedPatches: RevancedPatchList): PatchesResult {
+    private suspend fun executePatchesOnce(orderedPatches: RevancedPatchList): PatchExecutionResult {
         checkCancelled()
         if (orderedPatches.isNotEmpty()) {
             onEvent(ProgressEvent.Started(StepId.ExecutePatch(0)))
@@ -198,7 +223,7 @@ class RevancedSession(
         )
     }
 
-    private suspend fun executePatchesWithFrameworkRecovery(orderedPatches: RevancedPatchList): PatchesResult {
+    private suspend fun executePatchesWithFrameworkRecovery(orderedPatches: RevancedPatchList): PatchExecutionResult {
         ensureFrameworkCacheIsValid()
         return try {
             executePatchesOnce(orderedPatches)
@@ -384,16 +409,18 @@ class RevancedSession(
     ) {
         checkCancelled()
         val shouldStripNativeLibs = stripNativeLibs && !inputWasSplit
-        val (patchResult, patchCount) = runStep(StepId.ExecutePatches, onEvent, checkCancelled) {
+        val (patchResult, patchCount, failedPatchIndexes) = runStep(StepId.ExecutePatches, onEvent, checkCancelled) {
             val orderedPatches = loadSelectedPatches().sortedBy { it.name.orEmpty() }
             logger.withJavaLogging(logMode) {
-                executePatchesWithFrameworkRecovery(orderedPatches) to orderedPatches.size
+                val execution = executePatchesWithFrameworkRecovery(orderedPatches)
+                Triple(execution.result, orderedPatches.size, execution.failedPatchIndexes)
             }
         }
 
         // Ensure patch rows are finalized before write/sign steps begin.
         repeat(patchCount) { index ->
             checkCancelled()
+            if (index in failedPatchIndexes) return@repeat
             onEvent(ProgressEvent.Completed(StepId.ExecutePatch(index)))
         }
 

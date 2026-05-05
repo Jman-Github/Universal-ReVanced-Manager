@@ -164,6 +164,7 @@ object RevancedRuntimeEntry {
             ?: return "Missing outputFile parameter."
         val stripNativeLibs = params["stripNativeLibs"] as? Boolean ?: false
         val skipUnneededSplits = params["skipUnneededSplits"] as? Boolean ?: false
+        val continueOnPatchError = params["continueOnPatchError"] as? Boolean ?: false
         val logMode = (params["patcherLogMode"] as? String)
             ?.let { runCatching { PatcherLogMode.valueOf(it) }.getOrNull() }
             ?: PatcherLogMode.DEFAULT
@@ -341,6 +342,7 @@ object RevancedRuntimeEntry {
                             onEvent = ::onEvent,
                             checkCancelled = ::throwIfCancelled,
                             logMode = logMode,
+                            continueOnPatchError = continueOnPatchError,
                         )
                     }
                     val preparedInput = requireNotNull(preparation) {
