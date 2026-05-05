@@ -100,9 +100,9 @@
     <string name="bundle_reorder_title">Organize patch bundles</string>
     <string name="bundle_reorder_description">Drag the handle to arrange the order bundles appear in the list and the patch selection menu.</string>
     <string name="bundle_reorder_empty_toast">Add a patch bundle to organize it.</string>
-    <string name="apps_search_hint">Search by app name</string>
-    <string name="bundles_search_hint">Search by bundle name</string>
-    <string name="profiles_search_hint">Search by profile name</string>
+    <string name="apps_search_hint">Search apps</string>
+    <string name="bundles_search_hint">Search bundles</string>
+    <string name="profiles_search_hint">Search profiles</string>
     <string name="search_no_results">No results found</string>
     <string name="bundle_search_no_results">No bundles found</string>
     <string name="profile_search_no_results">No profiles found</string>
@@ -1607,8 +1607,8 @@ Details: %2$s</string>
     <string name="patch_bundle_urls_link">Get patch bundle URLs here</string>
     <string name="patch_bundle_discovery_title">Discover patch bundles</string>
     <string name="patch_bundle_discovery_description">Browse external patch bundles and add them to URV Manager.</string>
-    <string name="patch_bundle_discovery_package_label">Search by package name</string>
-    <string name="patch_bundle_discovery_search_label">Search by bundle name</string>
+    <string name="patch_bundle_discovery_package_label">Search packages</string>
+    <string name="patch_bundle_discovery_search_label">Search bundles</string>
     <string name="patch_bundle_discovery_empty">No patch bundles found.</string>
     <string name="patch_bundle_discovery_searching">Searching for patch bundles…</string>
     <string name="patch_bundle_discovery_loading_more">Loading more patch bundles…</string>
