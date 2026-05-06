@@ -105,6 +105,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                 keywords = listOf(
                     R.string.strip_unused_libs,
                     R.string.skip_unneeded_split_apks,
+                    R.string.continue_on_patch_error,
                     R.string.patcher_log_mode,
                     R.string.process_runtime,
                     R.string.process_runtime_memory_limit,
@@ -370,6 +371,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.restore_official_bundle, null, R.string.advanced_system, Settings.AdvancedSystem),
             SearchEntry(R.string.strip_unused_libs, R.string.strip_unused_libs_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.skip_unneeded_split_apks, R.string.skip_unneeded_split_apks_description, R.string.patcher_category, Settings.Patcher),
+            SearchEntry(R.string.continue_on_patch_error, R.string.continue_on_patch_error_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.patcher_log_mode, R.string.patcher_log_mode_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.process_runtime, R.string.process_runtime_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.process_runtime_memory_limit, R.string.process_runtime_memory_limit_description, R.string.patcher_category, Settings.Patcher),

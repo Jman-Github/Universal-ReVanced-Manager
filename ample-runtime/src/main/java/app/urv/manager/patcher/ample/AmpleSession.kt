@@ -58,6 +58,7 @@ class AmpleSession private constructor(
     private val sanitizeAllEmbeddedApksOnInit: Boolean = false,
     private val onEvent: (ProgressEvent) -> Unit,
     private val checkCancelled: () -> Unit = {},
+    private val continueOnPatchError: Boolean = false,
 ) : Closeable {
     private val tempDir = File(cacheDir).resolve("patcher").also { it.mkdirs() }
     private val patcherInputDir = File(cacheDir).resolve("patcher-inputs").also { it.mkdirs() }
@@ -129,6 +130,8 @@ class AmpleSession private constructor(
         val indexByPatch = selectedPatches.withIndex().associate { it.value to it.index }
         val started = mutableSetOf<Int>()
         started.addAll(preStarted)
+        val failedPatchIndexes = mutableSetOf<Int>()
+        var firstPatchFailure: Throwable? = null
         var nextIndex = 0
 
         fun startPatch(index: Int) {
@@ -143,10 +146,19 @@ class AmpleSession private constructor(
             val index = indexByPatch[patch] ?: return@collect
 
             if (exception != null) {
-                if (index < nextIndex) {
+                fun recordFailure() {
+                    if (firstPatchFailure == null) {
+                        firstPatchFailure = exception
+                    }
+                    failedPatchIndexes += index
                     onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), exception.toSafeRemoteError()))
                     logger.error("${patch.name} failed:")
                     logger.error(exception.toSafeStackTraceString())
+                }
+
+                if (index < nextIndex) {
+                    recordFailure()
+                    if (continueOnPatchError && !isLikelyFrameworkDecodeFailure(exception)) return@collect
                     throw exception
                 }
                 while (nextIndex < index) {
@@ -156,9 +168,14 @@ class AmpleSession private constructor(
                     nextIndex += 1
                 }
                 startPatch(index)
-                onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), exception.toSafeRemoteError()))
-                logger.error("${patch.name} failed:")
-                logger.error(exception.toSafeStackTraceString())
+                recordFailure()
+                if (continueOnPatchError && !isLikelyFrameworkDecodeFailure(exception)) {
+                    nextIndex = index + 1
+                    if (nextIndex < selectedPatches.size) {
+                        startPatch(nextIndex)
+                    }
+                    return@collect
+                }
                 throw exception
             }
 
@@ -176,6 +193,9 @@ class AmpleSession private constructor(
             if (nextIndex < selectedPatches.size) {
                 startPatch(nextIndex)
             }
+        }
+        if (continueOnPatchError && failedPatchIndexes.size == selectedPatches.size) {
+            throw firstPatchFailure ?: IllegalStateException("All selected patches failed")
         }
     }
 
@@ -907,6 +927,7 @@ class AmpleSession private constructor(
             sanitizeAllEmbeddedApksOnInit: Boolean = false,
             onEvent: (ProgressEvent) -> Unit,
             checkCancelled: () -> Unit = {},
+            continueOnPatchError: Boolean = false,
         ): AmpleSession {
             val session = AmpleSession(
                 cacheDir = cacheDir,
@@ -917,7 +938,8 @@ class AmpleSession private constructor(
                 initialPatcherInput = initialPatcherInput,
                 sanitizeAllEmbeddedApksOnInit = sanitizeAllEmbeddedApksOnInit,
                 onEvent = onEvent,
-                checkCancelled = checkCancelled
+                checkCancelled = checkCancelled,
+                continueOnPatchError = continueOnPatchError
             )
             return try {
                 if (sanitizeAllEmbeddedApksOnInit) {

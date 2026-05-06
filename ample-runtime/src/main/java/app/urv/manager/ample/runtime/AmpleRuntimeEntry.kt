@@ -164,6 +164,7 @@ object AmpleRuntimeEntry {
             ?: return "Missing outputFile parameter."
         val stripNativeLibs = params["stripNativeLibs"] as? Boolean ?: false
         val skipUnneededSplits = params["skipUnneededSplits"] as? Boolean ?: false
+        val continueOnPatchError = params["continueOnPatchError"] as? Boolean ?: false
         val isVerboseLogging = (params["patcherLogMode"] as? String) == "VERBOSE"
         val javaLogLevel = if (isVerboseLogging) Level.ALL else Level.INFO
         val configurations = params["configurations"] as? List<*> ?: emptyList<Any>()
@@ -337,6 +338,7 @@ object AmpleRuntimeEntry {
                             sanitizeAllEmbeddedApksOnInit = preparedInput.merged,
                             onEvent = ::onEvent,
                             checkCancelled = ::throwIfCancelled,
+                            continueOnPatchError = continueOnPatchError,
                         )
                     }
                     val preparedInput = requireNotNull(preparation) {

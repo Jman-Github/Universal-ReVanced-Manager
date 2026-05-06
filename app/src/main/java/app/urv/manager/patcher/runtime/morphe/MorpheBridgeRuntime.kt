@@ -70,6 +70,7 @@ class MorpheBridgeRuntime(context: Context) : MorpheRuntime(context) {
             "patcherLogMode" to logMode.name,
             "stripNativeLibs" to stripNativeLibs,
             "skipUnneededSplits" to skipUnneededSplits,
+            "continueOnPatchError" to prefs.continueOnPatchError.get(),
             "bytecodeMode" to prefs.morpheBytecodeMode.get().runtimeValue,
             "configurations" to configs
         )

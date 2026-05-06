@@ -2617,6 +2617,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         event: ProgressEvent,
         notificationProgressCurrent: Int?,
         notificationProgressMax: Int?,
+        failedPatchIndexes: Set<Int> = emptySet(),
         seedFromWorkerSnapshot: Boolean = false
     ) = viewModelScope.launch {
         progressEventMutex.withLock {
@@ -2627,7 +2628,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 max = notificationProgressMax
             )
             if (seedFromWorkerSnapshot) {
-                seedProgressStateFromWorkerSnapshot(event)
+                seedProgressStateFromWorkerSnapshot(event, failedPatchIndexes)
             }
             processProgressEventLocked(event)
         }
@@ -3251,6 +3252,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         resetDexCompileState()
         resetFailureLogState()
         steps.forEachIndexed { index, step ->
+            if (step.state == State.FAILED) return@forEachIndexed
             steps[index] = step.withState(
                 state = State.COMPLETED,
                 message = null,
@@ -3259,6 +3261,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
         stepSubSteps.forEach { (_, list) ->
             list.forEachIndexed { index, detail ->
+                if (detail.state == State.FAILED) return@forEachIndexed
                 list[index] = detail.withRecursiveState(
                     state = State.COMPLETED,
                     message = null,
@@ -4003,6 +4006,11 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                             merged = true
                         )
                     }
+                    applyFailedPatchIndexes(
+                        workInfo.outputData.getIntArray(PatcherWorker.FAILED_PATCH_INDEXES_KEY)
+                            ?.toSet()
+                            .orEmpty()
+                    )
                     reconcileProgressStateAfterSuccess()
                     refreshExportMetadata()
                     _patcherSucceeded.value = true
@@ -4077,6 +4085,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             event = snapshot.event,
             notificationProgressCurrent = snapshot.notificationProgressCurrent,
             notificationProgressMax = snapshot.notificationProgressMax,
+            failedPatchIndexes = snapshot.failedPatchIndexes,
             seedFromWorkerSnapshot = true
         )
     }
@@ -4110,7 +4119,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
     }
 
-    private fun seedProgressStateFromWorkerSnapshot(event: ProgressEvent) {
+    private fun seedProgressStateFromWorkerSnapshot(
+        event: ProgressEvent,
+        failedPatchIndexes: Set<Int> = emptySet()
+    ) {
         if (event.stepId == StepId.PrepareSplitApk && steps.none { it.id == StepId.PrepareSplitApk }) {
             requiresSplitPreparation = true
             val regeneratedSteps = generateSteps(
@@ -4133,6 +4145,21 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             if (step.state == State.WAITING) {
                 steps[index] = step.withState(state = State.COMPLETED, progress = null)
             }
+        }
+        applyFailedPatchIndexes(failedPatchIndexes)
+    }
+
+    private fun applyFailedPatchIndexes(failedPatchIndexes: Set<Int>) {
+        failedPatchIndexes.forEach { patchIndex ->
+            val stepIndex = steps.indexOfFirst { it.id == StepId.ExecutePatch(patchIndex) }
+            if (stepIndex == -1) return@forEach
+            val step = steps[stepIndex]
+            if (step.state == State.FAILED) return@forEach
+            steps[stepIndex] = step.withState(
+                state = State.FAILED,
+                message = step.message,
+                progress = null
+            )
         }
     }
 

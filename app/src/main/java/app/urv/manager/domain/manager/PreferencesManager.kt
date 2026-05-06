@@ -81,6 +81,7 @@ class PreferencesManager(
     val useProcessRuntime = booleanPreference("use_process_runtime", false)
     val stripUnusedNativeLibs = booleanPreference("strip_unused_native_libs", false)
     val skipUnneededSplitApks = booleanPreference("skip_unneeded_split_apks", false)
+    val continueOnPatchError = booleanPreference("continue_on_patch_error", false)
     val morpheBytecodeMode = enumPreference("morphe_bytecode_mode", MorpheBytecodeMode.FAST)
     val patcherLogMode = enumPreference("patcher_log_mode", PatcherLogMode.DEFAULT)
     val patcherProcessMemoryLimit = intPreference(
@@ -236,6 +237,7 @@ class PreferencesManager(
         val themePresetSelectionEnabled: Boolean? = null,
         val stripUnusedNativeLibs: Boolean? = null,
         val skipUnneededSplitApks: Boolean? = null,
+        val continueOnPatchError: Boolean? = null,
         val morpheBytecodeMode: String? = null,
         val patcherLogMode: PatcherLogMode? = null,
         val theme: Theme? = null,
@@ -407,6 +409,7 @@ class PreferencesManager(
             useProcessRuntime = useProcessRuntime.get(),
             stripUnusedNativeLibs = stripUnusedNativeLibs.get(),
             skipUnneededSplitApks = skipUnneededSplitApks.get(),
+            continueOnPatchError = continueOnPatchError.get(),
             morpheBytecodeMode = morpheBytecodeMode.get().runtimeValue,
             patcherLogMode = patcherLogMode.get(),
             patcherProcessMemoryLimit = patcherProcessMemoryLimit.get(),
@@ -546,6 +549,7 @@ class PreferencesManager(
         snapshot.useProcessRuntime?.let { useProcessRuntime.value = it }
         snapshot.stripUnusedNativeLibs?.let { stripUnusedNativeLibs.value = it }
         snapshot.skipUnneededSplitApks?.let { skipUnneededSplitApks.value = it }
+        snapshot.continueOnPatchError?.let { continueOnPatchError.value = it }
         snapshot.morpheBytecodeMode?.let {
             morpheBytecodeMode.value = MorpheBytecodeMode.fromRuntimeValue(it)
         }

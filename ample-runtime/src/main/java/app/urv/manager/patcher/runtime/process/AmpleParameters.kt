@@ -18,6 +18,7 @@ data class AmpleParameters(
     val configurations: List<AmplePatchConfiguration>,
     val stripNativeLibs: Boolean,
     val skipUnneededSplits: Boolean,
+    val continueOnPatchError: Boolean,
     val patcherLogMode: String,
     val propOverridePath: String?,
     val mergeMemoryLimitMb: Int?,

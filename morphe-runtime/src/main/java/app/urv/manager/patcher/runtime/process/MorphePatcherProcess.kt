@@ -288,6 +288,7 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
                             logger = logger,
                             input = preparedInput.file,
                             onEvent = ::onEvent,
+                            continueOnPatchError = parameters.continueOnPatchError,
                         )
                     }
                     val preparedInput = requireNotNull(preparation) {

@@ -723,6 +723,8 @@ Patch profiles are not affected.</string>
     <string name="strip_unused_libs_description">Remove all native libraries except a single supported CPU architecture from patched apps</string>
     <string name="skip_unneeded_split_apks">Skip unneeded split APKs</string>
     <string name="skip_unneeded_split_apks_description">Skip split APK modules that don’t match this device (e.g. language or density)</string>
+    <string name="continue_on_patch_error">Continue after patch errors</string>
+    <string name="continue_on_patch_error_description">Try to keep patching when an individual patch fails. The patched app may be missing that failed patch</string>
     <string name="patcher_log_mode">Patcher logging</string>
     <string name="patcher_log_mode_description">Choose how much patcher log output is processed while patching. Lower logging can reduce overhead and help stability on heavier patch jobs</string>
     <string name="patcher_log_mode_dialog_description">Default reduces logging overhead while keeping the progress logs needed for the patcher screens. Verbose keeps the full logging behavior for troubleshooting, but it can slow patching and increase memory pressure on heavier jobs.</string>
@@ -1460,6 +1462,7 @@ Details: %2$s</string>
     <string name="step_failed">failed</string>
     <string name="step_running">running</string>
     <string name="step_waiting">waiting</string>
+    <string name="step_partial_failure">some patches failed</string>
     <string name="expand_content">expand</string>
     <string name="collapse_content">collapse</string>
     <string name="drag_handle">reorder</string>

@@ -140,6 +140,7 @@ class PatcherWorker(
     private var lastPersistedProgressSequence: Long = Long.MIN_VALUE
     private val cachedExpandableSubSteps = ConcurrentHashMap<StepId, List<String>>()
     private val notificationExpandableSubSteps = ConcurrentHashMap<StepId, List<String>>()
+    private val failedPatchIndexes = ConcurrentHashMap.newKeySet<Int>()
     @Volatile
     private var activePatchBundleType: PatchBundleType? = null
     @Volatile
@@ -747,7 +748,10 @@ class PatcherWorker(
         event: ProgressEvent,
         totalPatchCount: Int
     ) {
-        if (event is ProgressEvent.Failed) return
+        if (event is ProgressEvent.Failed) {
+            val patchStepId = event.stepId as? StepId.ExecutePatch ?: return
+            failedPatchIndexes += patchStepId.index
+        }
 
         cacheExpandableSubSteps(event)
         val snapshotEvent = when (event) {
@@ -767,7 +771,8 @@ class PatcherWorker(
             sequence = sequence,
             event = snapshotEvent,
             notificationProgressCurrent = persistedNotificationProgress?.current,
-            notificationProgressMax = persistedNotificationProgress?.max
+            notificationProgressMax = persistedNotificationProgress?.max,
+            failedPatchIndexes = currentFailedPatchIndexes()
         )
 
         workerRepository.updateActiveProgressSnapshot(id, snapshot)
@@ -775,6 +780,12 @@ class PatcherWorker(
             persistWorkerProgressSnapshot(snapshot)
         }
     }
+
+    private fun currentFailedPatchIndexes(): Set<Int> =
+        failedPatchIndexes.toSet()
+
+    private fun currentFailedPatchIndexArray(): IntArray =
+        failedPatchIndexes.toList().sorted().toIntArray()
 
     private fun cacheExpandableSubSteps(event: ProgressEvent) {
         when (event) {
@@ -926,7 +937,8 @@ class PatcherWorker(
             sequence = sequence,
             event = snapshotEvent,
             notificationProgressCurrent = persistedNotificationProgress?.current,
-            notificationProgressMax = persistedNotificationProgress?.max
+            notificationProgressMax = persistedNotificationProgress?.max,
+            failedPatchIndexes = currentFailedPatchIndexes()
         )
 
         workerRepository.updateActiveProgressSnapshot(id, snapshot)
@@ -1679,7 +1691,7 @@ class PatcherWorker(
             )
 
             Log.i(tag, "Patching succeeded".logFmt())
-            Result.success()
+            Result.success(workDataOf(FAILED_PATCH_INDEXES_KEY to currentFailedPatchIndexArray()))
         } catch (e: CancellationException) {
             Log.i(tag, "Patching cancelled".logFmt())
             throw e
@@ -1950,6 +1962,7 @@ class PatcherWorker(
         const val PROCESS_PREVIOUS_LIMIT_KEY = "process_previous_limit"
         const val PROCESS_FAILURE_MESSAGE_KEY = "process_failure_message"
         const val PATCHING_ACTIVE_KEY = "patching_active"
+        const val FAILED_PATCH_INDEXES_KEY = "failed_patch_indexes"
         private const val WORK_DATA_MAX_BYTES = 9000
         private const val DOWNLOAD_PROGRESS_MIN_INTERVAL_MS = 150L
         private const val DOWNLOAD_PROGRESS_MIN_BYTES = 256 * 1024L

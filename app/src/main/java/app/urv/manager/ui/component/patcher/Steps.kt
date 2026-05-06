@@ -59,15 +59,22 @@ fun Steps(
     autoExpandRunningMainOnly: Boolean = false,
     onExpand: () -> Unit,
     onClick: () -> Unit,
-    autoCollapseCompleted: Boolean = false
+    autoCollapseCompleted: Boolean = false,
+    continueOnPatchError: Boolean = false
 ) {
     var autoCollapsed by rememberSaveable { mutableStateOf(false) }
 
-    val state = remember(steps) {
+    val hasFailedStep = remember(steps) {
+        steps.any { it.state == State.FAILED }
+    }
+    val hasFailedSectionStep = remember(steps) {
+        steps.any { it.id == StepId.ExecutePatches && it.state == State.FAILED }
+    }
+    val state = remember(category, steps, hasFailedStep, hasFailedSectionStep, continueOnPatchError) {
         when {
             steps.all { it.state == State.COMPLETED } -> State.COMPLETED
-            steps.any { it.state == State.FAILED } -> State.FAILED
             steps.any { it.state == State.RUNNING } -> State.RUNNING
+            hasFailedStep && (category != StepCategory.PATCHING || !continueOnPatchError || hasFailedSectionStep) -> State.FAILED
             else -> State.WAITING
         }
     }
@@ -80,17 +87,17 @@ fun Steps(
         }
     }
 
-    LaunchedEffect(state) {
+    LaunchedEffect(state, hasFailedStep) {
         if (state != State.COMPLETED) {
             autoCollapsed = false
         }
-        if ((autoExpandRunning && state == State.RUNNING) || state == State.FAILED) {
+        if ((autoExpandRunning && state == State.RUNNING) || state == State.FAILED || hasFailedStep) {
             onExpand()
         }
     }
 
-    LaunchedEffect(autoCollapseCompleted, state, isExpanded) {
-        if (autoCollapseCompleted && state == State.COMPLETED && !autoCollapsed && isExpanded) {
+    LaunchedEffect(autoCollapseCompleted, state, isExpanded, hasFailedStep) {
+        if (autoCollapseCompleted && state == State.COMPLETED && !hasFailedStep && !autoCollapsed && isExpanded) {
             onClick()
             autoCollapsed = true
         }
@@ -110,7 +117,11 @@ fun Steps(
                 .fillMaxWidth()
                 .padding(20.dp)
         ) {
-            StepIcon(state = state, size = 24.dp)
+            StepIcon(
+                state = state,
+                size = 24.dp,
+                partialFailure = category == StepCategory.PATCHING && continueOnPatchError && hasFailedStep && state == State.WAITING
+            )
 
             Text(stringResource(category.displayName))
 
@@ -509,33 +520,61 @@ fun SubStep(
 }
 
 @Composable
-fun StepIcon(state: State, progress: Float? = null, size: Dp) {
+fun StepIcon(state: State, progress: Float? = null, size: Dp, partialFailure: Boolean = false) {
     val strokeWidth = Dp(floor(size.value / 10) + 1)
+    val partialFailureColor = Color(0xFFE0A72E)
 
-    Crossfade(targetState = state, label = "State CrossFade") { stepState ->
-        when (stepState) {
-            State.COMPLETED -> Icon(
+    Crossfade(targetState = state to partialFailure, label = "State CrossFade") { (stepState, showPartialFailure) ->
+        when {
+            showPartialFailure && stepState == State.WAITING -> {
+                val description = stringResource(R.string.step_partial_failure)
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(size)
+                        .semantics {
+                            contentDescription = description
+                        }
+                ) {
+                    Icon(
+                        Icons.Outlined.Circle,
+                        contentDescription = null,
+                        tint = partialFailureColor.copy(.86f),
+                        modifier = Modifier.size(size)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(
+                                width = Dp(size.value * .52f),
+                                height = Dp(size.value * .12f)
+                            )
+                            .background(partialFailureColor, MaterialTheme.shapes.extraSmall)
+                    )
+                }
+            }
+
+            stepState == State.COMPLETED -> Icon(
                 Icons.Filled.CheckCircle,
                 contentDescription = stringResource(R.string.step_completed),
                 tint = Color(0xFF59B463),
                 modifier = Modifier.size(size)
             )
 
-            State.FAILED -> Icon(
+            stepState == State.FAILED -> Icon(
                 Icons.Filled.Cancel,
                 contentDescription = stringResource(R.string.step_failed),
                 tint = MaterialTheme.colorScheme.error,
                 modifier = Modifier.size(size)
             )
 
-            State.WAITING -> Icon(
+            stepState == State.WAITING -> Icon(
                 Icons.Outlined.Circle,
                 contentDescription = stringResource(R.string.step_waiting),
                 tint = MaterialTheme.colorScheme.onSurface.copy(.2f),
                 modifier = Modifier.size(size)
             )
 
-            State.RUNNING -> {
+            stepState == State.RUNNING -> {
                 LoadingIndicator(
                     modifier = stringResource(R.string.step_running).let { description ->
                         Modifier

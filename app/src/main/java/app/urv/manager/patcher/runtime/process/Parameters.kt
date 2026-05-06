@@ -17,6 +17,7 @@ data class Parameters(
     val configurations: List<PatchConfiguration>,
     val stripNativeLibs: Boolean,
     val skipUnneededSplits: Boolean,
+    val continueOnPatchError: Boolean,
     val patcherLogMode: PatcherLogMode,
 ) : Parcelable
 

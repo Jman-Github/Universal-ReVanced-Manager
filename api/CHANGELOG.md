@@ -122,6 +122,7 @@
 - Removed the duplicate top-bar cancel action from the split merge selection screen and renamed Split APK installer to Split installer https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/457 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/455
 - Added an Updates setting to switch the manager update popup between full release notes and the minimal version-only view https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/420
 - Kept the screen awake while the split merge process is running https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/387
+- Added a patcher setting to continue patching when individual patch errors occur https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/288
 
 
 # Bug fixes

@@ -69,6 +69,7 @@ class Revanced21BridgeRuntime(context: Context) : Runtime(context) {
             "outputFile" to outputFile,
             "stripNativeLibs" to stripNativeLibs,
             "skipUnneededSplits" to skipUnneededSplits,
+            "continueOnPatchError" to prefs.continueOnPatchError.get(),
             "patcherLogMode" to logMode.name,
             "configurations" to configs
         )
