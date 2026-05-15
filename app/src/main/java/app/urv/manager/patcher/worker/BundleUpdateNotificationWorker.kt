@@ -132,10 +132,14 @@ class BundleUpdateNotificationWorker(
 
             data class ManualUpdateEntry(val uid: Int, val name: String, val version: String)
             val manualUpdates = mutableListOf<ManualUpdateEntry>()
+            var previouslyNotifiedManualUpdateStillAvailable = false
             if (canNotify) {
                 patchBundleRepository.fetchUpdatesAndNotify(
                     applicationContext,
-                    predicate = { bundle -> !bundle.autoUpdate }
+                    predicate = { bundle -> !bundle.autoUpdate },
+                    onAlreadyNotified = { _, _ ->
+                        previouslyNotifiedManualUpdateStillAvailable = true
+                    }
                 ) { bundle, bundleVersion ->
                     manualUpdates += ManualUpdateEntry(bundle.uid, bundle.displayTitle, bundleVersion)
                     true
@@ -208,6 +212,7 @@ class BundleUpdateNotificationWorker(
                         )
                         notificationManager.notify(BUNDLE_NOTIFICATION_ID, notification)
                     }
+                    previouslyNotifiedManualUpdateStillAvailable -> Unit
                     else -> notificationManager.cancel(BUNDLE_NOTIFICATION_ID)
                 }
             } else {

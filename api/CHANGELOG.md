@@ -251,6 +251,7 @@
 - Fixed duplicate Apps tab entries being created after installing patched apps with custom installers https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
 - Fixed patch selection action buttons collapsing while scrolling, swiping bundles, or pressing actions when auto-collapse is disabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/448
 - Re-added the legacy/modern AAPT2 selector to resolve AAPT2 based resource compilation errors https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/460
+- Fixed bundle update notifications being cleared after a follow-up background check when the same manual bundle update was still available but had already been reported https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/470
 
 
 # Refactors

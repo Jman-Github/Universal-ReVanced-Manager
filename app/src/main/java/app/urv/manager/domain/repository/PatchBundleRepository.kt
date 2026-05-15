@@ -2467,6 +2467,7 @@ class PatchBundleRepository(
     suspend fun fetchUpdatesAndNotify(
         context: Context,
         predicate: (bundle: RemotePatchBundle) -> Boolean = { true },
+        onAlreadyNotified: ((bundle: RemotePatchBundle, bundleVersion: String) -> Unit)? = null,
         onNotification: (bundle: RemotePatchBundle, bundleVersion: String) -> Boolean
     ): Boolean = coroutineScope {
         val allowMeteredUpdates = prefs.allowMeteredUpdates.get()
@@ -2499,7 +2500,10 @@ class PatchBundleRepository(
                 }
 
                 val versionLabel = latestSignature
-                if (normalizeVersionForCompare(bundle.lastNotifiedVersion) == versionLabel) return@forEach
+                if (normalizeVersionForCompare(bundle.lastNotifiedVersion) == versionLabel) {
+                    onAlreadyNotified?.invoke(bundle, info.version)
+                    return@forEach
+                }
 
                 val notified = onNotification(bundle, info.version)
                 if (notified) {

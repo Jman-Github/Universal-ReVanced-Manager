@@ -12,6 +12,7 @@
 # Bug fixes
 
 - Re-added the legacy/modern AAPT2 selector to resolve AAPT2 based resource compilation errors https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/460
+- Fixed bundle update notifications being cleared after a follow-up background check when the same manual bundle update was still available but had already been reported https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/470
 
 
 # v1.8.1-dev.16 (2026-04-30)
