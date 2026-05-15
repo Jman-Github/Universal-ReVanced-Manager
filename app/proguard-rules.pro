@@ -11,6 +11,10 @@
 -keep class app.revanced.patcher.** { *; }
 -keep class app.revanced.library.** { *; }
 
+# ReVanced v22 remains the built-in default runtime and is reached through
+# Revanced22RuntimeBridge reflection, so release shrinking must keep it.
+-keep class app.urv.manager.revanced.runtime.** { *; }
+
 -keep class com.android.tools.smali.** { *; }
 
 -keep class app.urv.manager.patcher.runtime.process.* { *; }

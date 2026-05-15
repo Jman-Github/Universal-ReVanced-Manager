@@ -21,7 +21,7 @@ class ReVancedAPI(
 ) {
     private data class ManagerAssetInfo(
         val asset: GitHubAsset,
-        val buildProfile: String?,
+        val legacyBuildProfile: String?,
         val abiSuffix: String?,
     )
 
@@ -197,14 +197,12 @@ class ReVancedAPI(
         val managerAssets = assets.mapNotNull(::parseManagerAsset)
         if (managerAssets.isEmpty()) return null
 
-        val currentProfile = BuildConfig.URV_BUILD_PROFILE.uppercase()
-        val explicitProfileMatches = managerAssets.filter { asset ->
-            asset.buildProfile.equals(currentProfile, ignoreCase = true)
-        }
-        val profileCandidates = explicitProfileMatches.ifEmpty {
-            managerAssets.filter { it.buildProfile == null }
-        }
-        if (profileCandidates.isEmpty()) return null
+        val profileCandidates = managerAssets
+            .filter { it.legacyBuildProfile == null }
+            .ifEmpty {
+                managerAssets.filter { it.legacyBuildProfile.equals("FULL", ignoreCase = true) }
+            }
+            .ifEmpty { managerAssets }
 
         val preferredSuffixes = deviceAbiSuffixes()
         preferredSuffixes.forEach { suffix ->
@@ -224,7 +222,7 @@ class ReVancedAPI(
         if (!fileName.endsWith(".apk", ignoreCase = true)) return null
 
         var stem = fileName.substring(0, fileName.length - 4)
-        val buildProfile = MANAGER_BUILD_PROFILES.firstOrNull { profile ->
+        val legacyBuildProfile = LEGACY_MANAGER_BUILD_PROFILES.firstOrNull { profile ->
             stem.startsWith("$profile-", ignoreCase = true)
         }?.also { profile ->
             stem = stem.substring(profile.length + 1)
@@ -242,7 +240,7 @@ class ReVancedAPI(
 
         return ManagerAssetInfo(
             asset = asset,
-            buildProfile = buildProfile?.uppercase(),
+            legacyBuildProfile = legacyBuildProfile?.uppercase(),
             abiSuffix = abiSuffix
         )
     }
@@ -275,7 +273,7 @@ class ReVancedAPI(
 
     private fun normalizeManagerVersion(version: String): String {
         val withoutPrefix = version.removePrefix("v")
-        return MANAGER_BUILD_PROFILES.firstOrNull { profile ->
+        return LEGACY_MANAGER_BUILD_PROFILES.firstOrNull { profile ->
             withoutPrefix.endsWith("-$profile", ignoreCase = true)
         }?.let { profile ->
             withoutPrefix.removeSuffix("-$profile")
@@ -423,7 +421,7 @@ fun <T> APIResponse<T>.successOrThrow(context: String): T {
 
 private const val MANAGER_REPO_URL = "https://github.com/Jman-Github/Universal-ReVanced-Manager"
 private const val MANAGER_ASSET_NAME_PREFIX = "universal-revanced-manager-"
-private val MANAGER_BUILD_PROFILES = listOf("LITE", "FULL")
+private val LEGACY_MANAGER_BUILD_PROFILES = listOf("LITE", "FULL")
 private val MANAGER_ASSET_VERSION_REGEX = Regex(
     pattern = "^v?\\d+\\.\\d+\\.\\d+(?:[-.][a-z0-9]+)*$",
     option = RegexOption.IGNORE_CASE

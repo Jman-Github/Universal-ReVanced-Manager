@@ -6,6 +6,8 @@ import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.patcher.ProgressEvent
 import app.urv.manager.patcher.aapt.Aapt
+import app.urv.manager.patcher.aapt.AaptModern
+import app.urv.manager.patcher.aapt.AaptSelector
 import app.urv.manager.patcher.logger.Logger
 import app.urv.manager.patcher.patch.PatchBundleType
 import app.urv.manager.util.Options
@@ -22,8 +24,9 @@ sealed class Runtime(context: Context) : KoinComponent {
     protected val prefs: PreferencesManager by inject()
 
     protected val cacheDir: String = fs.tempDir.absolutePath
-    protected val aaptPath = Aapt.binary(context)?.absolutePath
-        ?: throw FileNotFoundException("Could not resolve aapt.")
+    protected val aaptModernPath = AaptModern.binary(context)?.absolutePath
+        ?: throw FileNotFoundException("Could not resolve modern aapt.")
+    protected val aaptLegacyPath = Aapt.legacyBinary(context)?.absolutePath
     protected val frameworkPath: String =
         context.cacheDir.resolve("framework").also { it.mkdirs() }.absolutePath
 
@@ -34,7 +37,14 @@ sealed class Runtime(context: Context) : KoinComponent {
         inputFile: File,
         logger: Logger,
         relatedArchives: Collection<File> = emptyList()
-    ): String = aaptPath
+    ): String =
+        AaptSelector.select(
+            legacy = aaptLegacyPath,
+            modern = aaptModernPath,
+            apk = inputFile,
+            logger = logger,
+            additionalArchives = relatedArchives
+        )
 
     abstract suspend fun execute(
         inputFile: String,

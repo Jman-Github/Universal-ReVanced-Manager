@@ -198,6 +198,17 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                 )
             ),
             Section(
+                R.string.patcher_runtime_plugins,
+                R.string.patcher_runtime_plugins_description,
+                Icons.Outlined.Extension,
+                Settings.PatcherRuntimes,
+                keywords = listOf(
+                    R.string.patcher_runtime_import_url,
+                    R.string.patcher_runtime_managed_sources,
+                    R.string.patcher_runtime_installed_plugins
+                )
+            ),
+            Section(
                 R.string.storage_cache_management,
                 R.string.storage_cache_management_description,
                 Icons.Outlined.Storage,
@@ -314,6 +325,10 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.downloader_plugins, null, R.string.downloads, Settings.Downloads),
             SearchEntry(R.string.downloaded_apps, null, R.string.downloads, Settings.Downloads),
             SearchEntry(R.string.downloaded_apps_export, null, R.string.downloads, Settings.Downloads),
+            SearchEntry(R.string.patcher_runtime_plugins, R.string.patcher_runtime_plugins_description, R.string.patcher_runtime_plugins, Settings.PatcherRuntimes),
+            SearchEntry(R.string.patcher_runtime_import_url, R.string.patcher_runtime_import_url_hint, R.string.patcher_runtime_plugins, Settings.PatcherRuntimes),
+            SearchEntry(R.string.patcher_runtime_managed_sources, null, R.string.patcher_runtime_plugins, Settings.PatcherRuntimes),
+            SearchEntry(R.string.patcher_runtime_installed_plugins, null, R.string.patcher_runtime_plugins, Settings.PatcherRuntimes),
             SearchEntry(R.string.storage_cache_management, R.string.storage_cache_management_description, R.string.storage_cache_management, Settings.Storage),
             SearchEntry(R.string.storage_overview_section, null, R.string.storage_cache_management, Settings.Storage),
             SearchEntry(R.string.storage_total_app_storage, R.string.storage_total_app_storage_description, R.string.storage_cache_management, Settings.Storage),

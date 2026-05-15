@@ -131,7 +131,7 @@ object MorpheRuntimeAssets {
 
     private fun requireRuntime(context: Context) {
         if (isAvailable(context)) return
-        throw IOException("Morphe runtime is not included in this ${BuildConfig.URV_BUILD_PROFILE} build.")
+        throw IOException("Morphe runtime is not included in this build.")
     }
 
     private fun normalizeContext(context: Context): Context = context.applicationContext ?: context

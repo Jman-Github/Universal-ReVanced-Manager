@@ -60,6 +60,7 @@ class MorpheBridgeRuntime(context: Context) : MorpheRuntime(context) {
             )
         }
 
+        logAaptChoice(runtimeLogger)
         val params = mapOf(
             "aaptPath" to aaptPath,
             "frameworkDir" to frameworkPath,

@@ -4,18 +4,14 @@
 # Features
 
 - Added a patcher setting to continue patching when individual patch errors occur https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/288
+- Removed the `LITE` and `FULL` URV build system and replaced it with a plugin-based system. ReVanced and Morphe are bundled with URV by default, while support for ReVanced v21 requires installing its plugin
+- Bumped Morphe Patcher to `1.5.1`
+- Removed the AmpleReVanced runtime because Ample now uses the Morphe patcher instead of its own runtime
 
 
 # Bug fixes
 
-
-## Build types
-
-**LITE**: ReVanced v22 and Morphe patcher runtimes included, AmpleReVanced and ReVanced v21 runtimes excluded.   
-**FULL**: Everything (ReVanced v22, v21, Morphe and AmpleReVanced patcher runtimes)
-
-> [!TIP]
-> Excluding patcher runtimes reduces the app size. If you only use the latest ReVanced and Morphe patches, you should install the **LITE** build. If you use more than just the latest ReVanced and Morphe patches, consider installing the **FULL** build instead. Keep in mind that the in-app updater will only download the same build type you currently have installed. If you want to switch build types later, you’ll need to go to the GitHub releases page and download that build manually.
+- Re-added the legacy/modern AAPT2 selector to resolve AAPT2 based resource compilation errors https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/460
 
 
 # v1.8.1-dev.16 (2026-04-30)

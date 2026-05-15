@@ -30,6 +30,7 @@ val repositoryModule = module {
     }
     singleOf(::AnnouncementRepository)
     singleOf(::DownloaderPluginRepository)
+    singleOf(::PatcherRuntimePluginRepository)
     singleOf(::WorkerRepository)
     singleOf(::DownloadedAppRepository)
     singleOf(::InstalledAppRepository)

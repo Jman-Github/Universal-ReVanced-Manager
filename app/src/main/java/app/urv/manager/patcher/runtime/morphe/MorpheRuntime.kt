@@ -29,7 +29,14 @@ sealed class MorpheRuntime(context: Context) : KoinComponent {
 
     protected suspend fun bundles() = patchBundlesRepo.bundlesByType(PatchBundleType.MORPHE).first()
 
-    protected fun resolveAaptPath(inputFile: File, logger: Logger): String = aaptPath
+    protected fun logAaptChoice(logger: Logger) {
+        logger.info("AAPT2: N/A")
+    }
+
+    protected fun resolveAaptPath(inputFile: File, logger: Logger): String {
+        logAaptChoice(logger)
+        return aaptPath
+    }
 
     abstract suspend fun execute(
         inputFile: String,

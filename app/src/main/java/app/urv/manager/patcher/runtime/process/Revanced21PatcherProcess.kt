@@ -119,7 +119,7 @@ class Revanced21PatcherProcess(
             var exitCode = 0
 
             try {
-                Revanced21RuntimeBridge.initialize(appContext)
+                Revanced21RuntimeBridge.initialize(appContext, parameters.runtimeClassPath)
                 val params = buildRuntimeParams(parameters)
                 val error = Revanced21RuntimeBridge.runPatcher(params, logger, ::safeEvent)
                 if (error.isNullOrBlank()) {
@@ -161,6 +161,7 @@ class Revanced21PatcherProcess(
 
         return LinkedHashMap<String, Any?>().apply {
             put("aaptPath", parameters.aaptPath)
+            put("aaptFallbackPath", parameters.aaptFallbackPath)
             put("frameworkDir", parameters.frameworkDir)
             put("cacheDir", parameters.cacheDir)
             put("packageName", parameters.packageName)

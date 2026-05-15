@@ -123,6 +123,9 @@
 - Added an Updates setting to switch the manager update popup between full release notes and the minimal version-only view https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/420
 - Kept the screen awake while the split merge process is running https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/387
 - Added a patcher setting to continue patching when individual patch errors occur https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/288
+- Removed the `LITE` and `FULL` URV build system and replaced it with a plugin-based system. ReVanced and Morphe are bundled with URV by default, while support for ReVanced v21 requires installing its plugin
+- Bumped Morphe Patcher to `1.5.1`
+- Removed the AmpleReVanced runtime because Ample now uses the Morphe patcher instead of its own runtime
 
 
 # Bug fixes
@@ -247,6 +250,7 @@
 - Fixed split APK tool settings so installed-app filters persist/export correctly, installer logs use clearer copy/export labels, and the duplicate GitHub PAT export toggle is removed https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/439 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/440 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/442 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/443
 - Fixed duplicate Apps tab entries being created after installing patched apps with custom installers https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
 - Fixed patch selection action buttons collapsing while scrolling, swiping bundles, or pressing actions when auto-collapse is disabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/448
+- Re-added the legacy/modern AAPT2 selector to resolve AAPT2 based resource compilation errors https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/460
 
 
 # Refactors

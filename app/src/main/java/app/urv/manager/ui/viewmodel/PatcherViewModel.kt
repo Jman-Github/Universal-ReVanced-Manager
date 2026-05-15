@@ -1675,6 +1675,11 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             } else {
                 "disabled"
             }
+        val aapt2 = findLogValue("AAPT2:") ?: when (bundleType) {
+            PatchBundleType.REVANCED.name -> "Modern"
+            PatchBundleType.MORPHE.name -> "N/A"
+            else -> "N/A"
+        }
 
         val isIgnoring = context.getSystemService<PowerManager>()
             ?.isIgnoringBatteryOptimizations(context.packageName) == true
@@ -1704,7 +1709,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     msg.startsWith("Patcher runtime:") ||
                     msg.startsWith("Memory limit:") ||
                     msg.startsWith("Runtime mode:") ||
-                    msg.startsWith("Memory override:")
+                    msg.startsWith("Memory override:") ||
+                    msg.startsWith("AAPT2:")
             }
             .map { (level, msg) -> "[${level.name}]: $msg" }
 
@@ -1730,6 +1736,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             appendLine("Experimental: $experimental")
             appendLine("Runtime mode: $runtimeMode")
             appendLine("Memory override: $memoryOverride")
+            appendLine("AAPT2: $aapt2")
             appendLine("Aggressive: $aggressiveLimit")
             appendLine("Strip native libs: ${if (stripNativeLibs) "on" else "off"}")
             appendLine("Skip unused splits: ${if (skipUnusedSplits) "on" else "off"}")

@@ -12,13 +12,14 @@ import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.manager.SearchForUpdatesBackgroundInterval
 import app.urv.manager.domain.repository.DownloaderPluginRepository
 import app.urv.manager.domain.repository.PatchBundleRepository
+import app.urv.manager.domain.repository.PatcherRuntimePluginRepository
 import app.urv.manager.domain.worker.BundleUpdateWebSocketCoordinator
 import app.urv.manager.domain.worker.WorkerRepository
 import app.urv.manager.patcher.worker.PatcherWorker
-import app.urv.manager.patcher.ample.AmpleRuntimeBridge
 import app.urv.manager.patcher.morphe.MorpheRuntimeBridge
 import app.urv.manager.patcher.revanced.Revanced21RuntimeBridge
 import app.urv.manager.patcher.revanced.Revanced22RuntimeBridge
+import app.urv.manager.patcher.runtime.PatcherRuntimePluginRegistry
 import app.urv.manager.network.service.HttpService
 import app.urv.manager.util.AppForeground
 import app.urv.manager.util.tag
@@ -49,6 +50,7 @@ class ManagerApplication : Application() {
     private val prefs: PreferencesManager by inject()
     private val patchBundleRepository: PatchBundleRepository by inject()
     private val downloaderPluginRepository: DownloaderPluginRepository by inject()
+    private val patcherRuntimePluginRepository: PatcherRuntimePluginRepository by inject()
     private val workerRepository: WorkerRepository by inject()
     private val bundleUpdateWebSocketCoordinator: BundleUpdateWebSocketCoordinator by inject()
     private val fs: Filesystem by inject()
@@ -77,9 +79,18 @@ class ManagerApplication : Application() {
 
         PatchListCatalog.initialize(this)
         MorpheRuntimeBridge.initialize(this)
-        AmpleRuntimeBridge.initialize(this)
         Revanced21RuntimeBridge.initialize(this)
         Revanced22RuntimeBridge.initialize(this)
+        PatcherRuntimePluginRegistry.install {
+            patcherRuntimePluginRepository.loadedRuntimeSnapshot
+        }
+        runCatching {
+            runBlocking(Dispatchers.IO) {
+                patcherRuntimePluginRepository.reload()
+            }
+        }.onFailure {
+            Log.e(tag, "Failed to load patcher runtime plugins", it)
+        }
 
         val pixels = 512
         Coil.setImageLoader(
@@ -136,6 +147,16 @@ class ManagerApplication : Application() {
                     }
                 }.onFailure {
                     Log.e(tag, "Failed to initialize downloader plugins", it)
+                }
+            }
+            scope.launch(Dispatchers.Default) {
+                runCatching {
+                    with(patcherRuntimePluginRepository) {
+                        reload()
+                        updateCheck()
+                    }
+                }.onFailure {
+                    Log.e(tag, "Failed to initialize patcher runtime plugins", it)
                 }
             }
             scope.launch(Dispatchers.Default) {

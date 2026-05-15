@@ -322,9 +322,14 @@ class Revanced22ProcessRuntime(
                     "Selected patches are unavailable. Re-open patch selection and select patches again."
                 )
             }
+            val selectedAaptPath = resolveAaptPath(
+                inputFile = File(runtimeInputFile),
+                logger = runtimeLogger,
+                relatedArchives = selectedBundlesByUid.values.map { File(it.patchesJar) }
+            )
 
             val parameters = Parameters(
-                aaptPath = aaptPath,
+                aaptPath = selectedAaptPath,
                 frameworkDir = frameworkPath,
                 cacheDir = cacheDir,
                 packageName = packageName,

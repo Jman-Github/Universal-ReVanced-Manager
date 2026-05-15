@@ -214,6 +214,12 @@ class PreferencesManager(
 
     val acknowledgedDownloaderPlugins = stringSetPreference("acknowledged_downloader_plugins", emptySet())
     val downloaderPluginSourcesJson = stringPreference("downloader_plugin_sources_json", "")
+    val acknowledgedPatcherRuntimePlugins =
+        stringSetPreference("acknowledged_patcher_runtime_plugins", emptySet())
+    val trustedPatcherRuntimePluginsJson =
+        stringPreference("trusted_patcher_runtime_plugins_json", "")
+    val patcherRuntimePluginSourcesJson =
+        stringPreference("patcher_runtime_plugin_sources_json", "")
     val autoSaveDownloaderApks = booleanPreference("auto_save_downloader_apks", true)
     val autoSaveDownloaderLatestOnly =
         booleanPreference("auto_save_downloader_latest_only", false)
@@ -303,6 +309,9 @@ class PreferencesManager(
         val savedAppHiddenActions: Set<String>? = null,
         val acknowledgedDownloaderPlugins: Set<String>? = null,
         val downloaderPluginSourcesJson: String? = null,
+        val acknowledgedPatcherRuntimePlugins: Set<String>? = null,
+        val trustedPatcherRuntimePluginsJson: String? = null,
+        val patcherRuntimePluginSourcesJson: String? = null,
         val autoSaveDownloaderApks: Boolean? = null,
         val autoSaveDownloaderLatestOnly: Boolean? = null,
         val pathSelectorFavorites: Set<String>? = null,
@@ -462,6 +471,11 @@ class PreferencesManager(
         return snapshot.copy(
             acknowledgedDownloaderPlugins = acknowledgedDownloaderPlugins.get(),
             downloaderPluginSourcesJson = downloaderPluginSourcesJson.get().takeIf { it.isNotBlank() },
+            acknowledgedPatcherRuntimePlugins = acknowledgedPatcherRuntimePlugins.get(),
+            trustedPatcherRuntimePluginsJson =
+                trustedPatcherRuntimePluginsJson.get().takeIf { it.isNotBlank() },
+            patcherRuntimePluginSourcesJson =
+                patcherRuntimePluginSourcesJson.get().takeIf { it.isNotBlank() },
             autoSaveDownloaderApks = autoSaveDownloaderApks.get(),
             autoSaveDownloaderLatestOnly = autoSaveDownloaderLatestOnly.get(),
             pathSelectorFavorites = pathSelectorFavorites.get(),
@@ -600,6 +614,15 @@ class PreferencesManager(
     private fun EditorContext.importDiscoverySettings(snapshot: SettingsSnapshot) {
         snapshot.acknowledgedDownloaderPlugins?.let { acknowledgedDownloaderPlugins.value = it }
         snapshot.downloaderPluginSourcesJson?.let { downloaderPluginSourcesJson.value = it }
+        snapshot.acknowledgedPatcherRuntimePlugins?.let {
+            acknowledgedPatcherRuntimePlugins.value = it
+        }
+        snapshot.trustedPatcherRuntimePluginsJson?.let {
+            trustedPatcherRuntimePluginsJson.value = it
+        }
+        snapshot.patcherRuntimePluginSourcesJson?.let {
+            patcherRuntimePluginSourcesJson.value = it
+        }
         snapshot.autoSaveDownloaderApks?.let { autoSaveDownloaderApks.value = it }
         snapshot.autoSaveDownloaderLatestOnly?.let { autoSaveDownloaderLatestOnly.value = it }
         snapshot.pathSelectorFavorites?.let { favorites ->

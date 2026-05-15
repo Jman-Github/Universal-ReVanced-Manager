@@ -18,6 +18,7 @@ import app.urv.manager.patcher.runtime.process.IPatcherProcess
 import app.urv.manager.patcher.runtime.process.Parameters
 import app.urv.manager.patcher.runtime.process.PatchConfiguration
 import app.urv.manager.patcher.runtime.process.Revanced21PatcherProcess
+import app.urv.manager.patcher.runtime.revanced.Revanced21RuntimeAssets
 import app.urv.manager.patcher.toEvent
 import app.urv.manager.util.Options
 import app.urv.manager.util.PM
@@ -271,9 +272,11 @@ class Revanced21ProcessRuntime(
                     "Selected patches are unavailable. Re-open patch selection and select patches again."
                 )
             }
+            val runtimeClassPath = Revanced21RuntimeAssets.ensureRuntimeClassPath(context).absolutePath
 
             val parameters = Parameters(
-                aaptPath = aaptPath,
+                aaptPath = aaptModernPath,
+                aaptFallbackPath = aaptLegacyPath,
                 frameworkDir = frameworkPath,
                 cacheDir = cacheDir,
                 packageName = packageName,
@@ -289,7 +292,8 @@ class Revanced21ProcessRuntime(
                 stripNativeLibs = stripNativeLibs,
                 skipUnneededSplits = skipUnneededSplits,
                 continueOnPatchError = prefs.continueOnPatchError.get(),
-                patcherLogMode = logMode
+                patcherLogMode = logMode,
+                runtimeClassPath = runtimeClassPath
             )
 
             binder.start(parameters, eventHandler)

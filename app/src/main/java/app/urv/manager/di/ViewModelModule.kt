@@ -25,6 +25,7 @@ val viewModelModule = module {
     viewModelOf(::DeveloperOptionsViewModel)
     viewModelOf(::ContributorViewModel)
     viewModelOf(::DownloadsViewModel)
+    viewModelOf(::PatcherRuntimePluginsViewModel)
     viewModelOf(::AnnouncementsViewModel)
     viewModelOf(::InstalledAppsViewModel)
     viewModelOf(::InstalledAppInfoViewModel)

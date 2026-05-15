@@ -5,16 +5,6 @@ val localProps = Properties().apply {
     if (file.exists()) file.inputStream().use(::load)
 }
 
-enum class UrvBuildProfile {
-    LITE,
-    FULL;
-
-    companion object {
-        fun from(value: String?): UrvBuildProfile =
-            values().firstOrNull { it.name.equals(value?.trim(), ignoreCase = true) } ?: FULL
-    }
-}
-
 fun githubUser(): String? =
     localProps.getProperty("gpr.user")
         ?: providers.gradleProperty("gpr.user").orNull
@@ -40,17 +30,6 @@ dependencyResolutionManagement {
         maven {
             // From PR #39: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/39
             url = uri("https://maven.pkg.github.com/brosssh/registry")
-            credentials {
-                val gprUser: String? = githubUser()
-                val gprKey: String? = githubToken()
-
-                username = gprUser.orEmpty().ifBlank { "anonymous" }
-                password = gprKey.orEmpty()
-            }
-        }
-        maven {
-            // AmpleReVanced packages are published to GitHub Packages.
-            url = uri("https://maven.pkg.github.com/AmpleReVanced/registry")
             credentials {
                 val gprUser: String? = githubUser()
                 val gprKey: String? = githubToken()
@@ -123,11 +102,6 @@ dependencyResolutionManagement {
 
 rootProject.name = "universal-revanced-manager"
 
-val urvBuildProfile = UrvBuildProfile.from(
-    gradle.startParameter.projectProperties["urvBuildProfile"]
-        ?: System.getenv("URV_BUILD_PROFILE")
-)
-
 fun moduleExists(path: String): Boolean {
     val relativePath = path.removePrefix(":").replace(':', '/')
     val projectDir = rootDir.resolve(relativePath)
@@ -137,13 +111,11 @@ fun moduleExists(path: String): Boolean {
         )
 }
 
-fun includeIfAvailable(path: String, minimumProfile: UrvBuildProfile = UrvBuildProfile.LITE) {
-    if (urvBuildProfile.ordinal < minimumProfile.ordinal) return
+fun includeIfAvailable(path: String) {
     if (moduleExists(path)) include(path)
 }
 
 include(":app", ":api")
 includeIfAvailable(":morphe-runtime")
-includeIfAvailable(":revanced-runtime-v21", UrvBuildProfile.FULL)
-includeIfAvailable(":ample-runtime", UrvBuildProfile.FULL)
+includeIfAvailable(":revanced.v21-runtime-plugin")
 

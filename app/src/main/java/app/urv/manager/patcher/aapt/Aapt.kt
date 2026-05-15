@@ -8,5 +8,11 @@ object Aapt : LibraryResolver() {
 
     fun supportsDevice() = (DEVICE_ABIS intersect WORKING_ABIS).isNotEmpty()
 
-    fun binary(context: Context) = findLibraryExact(context, "libaapt2.so")
+    fun binary(context: Context) = modernBinary(context) ?: legacyBinary(context)
+
+    fun legacyBinary(context: Context) =
+        findLibraryExact(context, "libaapt2_legacy.so")
+
+    fun modernBinary(context: Context) =
+        findLibraryExact(context, "libaapt2_modern.so")
 }

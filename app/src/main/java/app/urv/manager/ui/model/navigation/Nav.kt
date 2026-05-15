@@ -148,6 +148,9 @@ object Settings {
     data object Downloads : Destination
 
     @Serializable
+    data object PatcherRuntimes : Destination
+
+    @Serializable
     data object Storage : Destination
 
     @Serializable

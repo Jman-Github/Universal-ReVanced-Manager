@@ -10,6 +10,7 @@ import kotlinx.parcelize.RawValue
 data class Parameters(
     val cacheDir: String,
     val aaptPath: String,
+    val aaptFallbackPath: String? = null,
     val frameworkDir: String,
     val packageName: String,
     val inputFile: String,
@@ -19,6 +20,7 @@ data class Parameters(
     val skipUnneededSplits: Boolean,
     val continueOnPatchError: Boolean,
     val patcherLogMode: PatcherLogMode,
+    val runtimeClassPath: String? = null,
 ) : Parcelable
 
 @Parcelize

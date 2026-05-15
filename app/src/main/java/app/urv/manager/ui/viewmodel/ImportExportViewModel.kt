@@ -21,6 +21,7 @@ import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.domain.repository.PatchOptionsRepository
 import app.urv.manager.domain.repository.PatchProfileExportEntry
 import app.urv.manager.domain.repository.PatchProfileRepository
+import app.urv.manager.domain.repository.PatcherRuntimePluginRepository
 import app.urv.manager.domain.repository.PatchSelectionRepository
 import app.urv.manager.domain.repository.SerializedOptions
 import app.urv.manager.domain.repository.SerializedSelection
@@ -207,6 +208,7 @@ class ImportExportViewModel(
     private val optionsRepository: PatchOptionsRepository,
     private val patchBundleRepository: PatchBundleRepository,
     private val patchProfileRepository: PatchProfileRepository,
+    private val patcherRuntimePluginRepository: PatcherRuntimePluginRepository,
     private val preferencesManager: PreferencesManager,
     private val workerRepository: WorkerRepository
 ) : ViewModel() {
@@ -1394,6 +1396,7 @@ class ImportExportViewModel(
             }
 
             preferencesManager.importSettings(exportFile.settings)
+            refreshImportedPatcherRuntimePlugins(exportFile.settings)
             val permissionRequest = buildImportedPermissionRequest(previousSettings)
             importedPermissionRequest = permissionRequest
             if (permissionRequest?.needsNotificationPermission != true) {
@@ -1485,6 +1488,23 @@ class ImportExportViewModel(
 
     private suspend fun scheduleImportedAutoClearCacheWork() {
         workerRepository.scheduleAutoClearCacheWork(preferencesManager.autoClearCacheInterval.get())
+    }
+
+    private suspend fun refreshImportedPatcherRuntimePlugins(
+        settings: PreferencesManager.SettingsSnapshot
+    ) {
+        val importedRuntimePluginSettings =
+            settings.acknowledgedPatcherRuntimePlugins != null ||
+                settings.trustedPatcherRuntimePluginsJson != null ||
+                settings.patcherRuntimePluginSourcesJson != null
+        if (!importedRuntimePluginSettings) return
+
+        patcherRuntimePluginRepository.reload()
+        runCatching {
+            patcherRuntimePluginRepository.updateCheck()
+        }.onFailure {
+            Log.e(tag, "Failed to update imported patcher runtime plugins", it)
+        }
     }
 
     private suspend fun buildImportedPermissionRequest(

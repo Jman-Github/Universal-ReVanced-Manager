@@ -20,16 +20,12 @@ android {
         versionName = "1"
     }
 
-    val releaseSigningConfig = signingConfigs.maybeCreate("release").apply {
-        // Use debug signing if no keystore is provided.
-        storeFile = rootProject.file("app/keystore.jks").takeIf { it.exists() }
-        if (storeFile == null) {
-            val debug = signingConfigs.getByName("debug")
-            storeFile = debug.storeFile
-            storePassword = debug.storePassword
-            keyAlias = debug.keyAlias
-            keyPassword = debug.keyPassword
-        } else {
+    val keystoreFile = rootProject.file("app/keystore.jks")
+    val releaseSigningConfig = if (project.hasProperty("signAsDebug") || !keystoreFile.exists()) {
+        signingConfigs.getByName("debug")
+    } else {
+        signingConfigs.maybeCreate("release").apply {
+            storeFile = keystoreFile
             storePassword = System.getenv("KEYSTORE_PASSWORD")
             keyAlias = System.getenv("KEYSTORE_ENTRY_ALIAS")
             keyPassword = System.getenv("KEYSTORE_ENTRY_PASSWORD")
@@ -72,10 +68,12 @@ dependencies {
     implementation(libs.morphe.patcher) {
         exclude(group = "xmlpull", module = "xmlpull")
         exclude(group = "xpp3", module = "xpp3")
+        exclude(group = "com.github.REAndroid", module = "arsclib")
     }
     implementation(libs.morphe.library) {
         exclude(group = "xmlpull", module = "xmlpull")
         exclude(group = "xpp3", module = "xpp3")
+        exclude(group = "com.github.REAndroid", module = "arsclib")
     }
     implementation("com.android.tools.build:apkzlib:8.5.2")
     compileOnly("com.google.guava:guava:33.2.1-jre")

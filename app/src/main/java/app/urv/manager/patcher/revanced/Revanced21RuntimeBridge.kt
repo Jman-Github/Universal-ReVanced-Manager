@@ -10,6 +10,7 @@ import app.urv.manager.patcher.logger.Logger
 import app.urv.manager.patcher.runtime.revanced.Revanced21RuntimeAssets
 import dalvik.system.DexClassLoader
 import java.io.File
+import java.io.IOException
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
 import kotlinx.coroutines.CancellationException
@@ -24,6 +25,8 @@ object Revanced21RuntimeBridge {
 
     @Volatile
     private var appContext: Context? = null
+    @Volatile
+    private var runtimeClassPathOverride: String? = null
     @Volatile
     private var runtimeClassPath: String? = null
     @Volatile
@@ -41,9 +44,23 @@ object Revanced21RuntimeBridge {
 
     private val lock = Any()
 
-    fun initialize(context: Context) {
-        if (appContext != null) return
+    fun initialize(context: Context, runtimeClassPath: String? = null) {
         appContext = context.applicationContext ?: context
+        val overridePath = runtimeClassPath?.takeIf { it.isNotBlank() }
+        if (overridePath != null && runtimeClassPathOverride != overridePath) {
+            synchronized(lock) {
+                if (runtimeClassPathOverride != overridePath) {
+                    runtimeClassPathOverride = overridePath
+                    this.runtimeClassPath = null
+                    classLoader = null
+                    entryClass = null
+                    loadMetadataMethod = null
+                    loadMetadataForBundleMethod = null
+                    runPatcherMethod = null
+                    callbackClass = null
+                }
+            }
+        }
     }
 
     fun loadMetadata(bundlePath: String): List<PatchInfo> {
@@ -154,20 +171,27 @@ object Revanced21RuntimeBridge {
 
     private fun ensureClassLoader(): DexClassLoader {
         val context = appContext ?: error("Revanced21RuntimeBridge is not initialized.")
-        val runtimeClassPathFile = Revanced21RuntimeAssets.ensureRuntimeClassPath(context)
+        val runtimeClassPathFile = runtimeClassPathOverride
+            ?.takeIf { it.isNotBlank() }
+            ?.let { path ->
+                File(path).takeIf { it.exists() }
+                    ?: throw IOException("ReVanced v21 runtime classpath does not exist: $path")
+            }
+            ?: Revanced21RuntimeAssets.ensureRuntimeClassPath(context)
         val path = runtimeClassPathFile.absolutePath
+        val cacheKey = "$path:${runtimeClassPathFile.lastModified()}:${runtimeClassPathFile.length()}"
         val existing = classLoader
-        if (existing != null && runtimeClassPath == path) return existing
+        if (existing != null && runtimeClassPath == cacheKey) return existing
 
         synchronized(lock) {
             val current = classLoader
-            if (current != null && runtimeClassPath == path) return current
+            if (current != null && runtimeClassPath == cacheKey) return current
 
             val optimizedDir = File(context.codeCacheDir, "revanced21-runtime-dex").apply { mkdirs() }
             val parent = context.classLoader.parent ?: context.classLoader
             val loader = DexClassLoader(path, optimizedDir.absolutePath, null, parent)
             classLoader = loader
-            runtimeClassPath = path
+            runtimeClassPath = cacheKey
             entryClass = null
             loadMetadataMethod = null
             loadMetadataForBundleMethod = null

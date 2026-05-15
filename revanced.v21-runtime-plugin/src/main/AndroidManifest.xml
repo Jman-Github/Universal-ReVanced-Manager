@@ -1,0 +1,14 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-feature
+        android:name="app.urv.manager.patcher.runtime"
+        android:required="false" />
+
+    <application
+        android:label="ReVanced Runtime 21"
+        android:largeHeap="true">
+        <meta-data
+            android:name="app.urv.manager.patcher.runtime.kind"
+            android:value="revanced-v21" />
+    </application>
+</manifest>
+

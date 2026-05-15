@@ -34,7 +34,6 @@ import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNul
 import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
 import app.urv.manager.network.dto.ExternalBundleSnapshot
 import app.urv.manager.domain.manager.PreferencesManager
-import app.urv.manager.patcher.ample.AmpleRuntimeBridge
 import app.urv.manager.patcher.morphe.MorpheRuntimeBridge
 import app.urv.manager.patcher.revanced.Revanced21RuntimeBridge
 import app.urv.manager.patcher.revanced.Revanced22RuntimeBridge
@@ -42,7 +41,6 @@ import app.urv.manager.patcher.patch.PatchInfo
 import app.urv.manager.patcher.patch.PatchBundle
 import app.urv.manager.patcher.patch.PatchBundleInfo
 import app.urv.manager.patcher.patch.PatchBundleType
-import app.urv.manager.patcher.runtime.ample.AmpleRuntimeAssets
 import app.urv.manager.patcher.runtime.morphe.MorpheRuntimeAssets
 import app.urv.manager.patcher.runtime.revanced.Revanced21RuntimeAssets
 import app.urv.manager.patcher.runtime.revanced.Revanced22RuntimeAssets
@@ -89,7 +87,6 @@ import java.net.URI
 import java.net.URISyntaxException
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.jar.JarFile
 import kotlin.collections.LinkedHashSet
 import kotlin.collections.joinToString
 import kotlin.collections.map
@@ -196,14 +193,9 @@ class PatchBundleRepository(
         val morphePatches = bundleInfos.values
             .filter { it.bundleType == PatchBundleType.MORPHE }
             .flatMap { info -> info.patches }
-        val amplePatches = bundleInfos.values
-            .filter { it.bundleType == PatchBundleType.AMPLE }
-            .flatMap { info -> info.patches }
-
         val morpheSuggested = suggestedVersionsForMorphe(morphePatches)
-        val ampleSuggested = suggestedVersionsForMorphe(amplePatches)
         val revancedSuggested = suggestedVersionsForRevanced(revancedPatches)
-        morpheSuggested + ampleSuggested + revancedSuggested
+        morpheSuggested + revancedSuggested
     }
 
     val suggestedVersionsByBundle = enabledBundlesInfoFlow.map { bundleInfos ->
@@ -216,9 +208,7 @@ class PatchBundleRepository(
                 PatchBundleType.MORPHE -> {
                     suggestedVersionsForMorphe(info.patches)
                 }
-                PatchBundleType.AMPLE -> {
-                    suggestedVersionsForMorphe(info.patches)
-                }
+                PatchBundleType.AMPLE -> emptyMap()
             }
         }
     }
@@ -1048,34 +1038,6 @@ class PatchBundleRepository(
         if (declaredType == PatchBundleType.MORPHE) {
             return PatchBundleType.MORPHE to MorpheRuntimeBridge.loadMetadata(bundlePath)
         }
-        val ampleHint = bundle.manifestAttributes
-            ?.let { attributes ->
-                sequenceOf(
-                    attributes.name,
-                    attributes.source,
-                    attributes.author,
-                    attributes.website
-                )
-                    .filterNotNull()
-                    .any(::looksLikeAmpleMarker)
-            } == true
-        val ampleEndpointHint = source
-            ?.asRemoteOrNull
-            ?.endpoint
-            ?.let(::looksLikeAmpleMarker) == true
-        val localAmpleHint = source
-            ?.takeIf { it.asRemoteOrNull == null }
-            ?.let { bundleLooksAmple(bundlePath, it.uid) } == true
-
-        val isAmpleCandidate = ampleHint || ampleEndpointHint || localAmpleHint
-        if (isAmpleCandidate && AmpleRuntimeAssets.isAvailable(app)) {
-            val amplePreferred = runCatching { AmpleRuntimeBridge.loadMetadata(bundlePath) }
-            if (amplePreferred.isSuccess) {
-                return PatchBundleType.AMPLE to amplePreferred.getOrThrow()
-            }
-        } else if (isAmpleCandidate && declaredType == PatchBundleType.AMPLE) {
-            throw missingRuntimeException("Ample")
-        }
 
         val preferredRevancedVersion = source?.uid
             ?.let(::resolvedRevancedPatcherVersion)
@@ -1136,22 +1098,12 @@ class PatchBundleRepository(
             return PatchBundleType.MORPHE to morpheResult.getOrThrow()
         }
 
-        val ampleResult = if (AmpleRuntimeAssets.isAvailable(app)) {
-            runCatching { AmpleRuntimeBridge.loadMetadata(bundlePath) }
-        } else {
-            Result.failure(missingRuntimeException("Ample"))
-        }
-        if (ampleResult.isSuccess) {
-            return PatchBundleType.AMPLE to ampleResult.getOrThrow()
-        }
-
         val error = IllegalStateException("Failed to load patch bundle metadata")
         revancedFailures.values.forEach(error::addSuppressed)
         if (revancedFailures.isEmpty()) {
             revancedResult.exceptionOrNull()?.let(error::addSuppressed)
         }
         morpheResult.exceptionOrNull()?.let(error::addSuppressed)
-        ampleResult.exceptionOrNull()?.let(error::addSuppressed)
         throw error
     }
 
@@ -1170,7 +1122,7 @@ class PatchBundleRepository(
     }
 
     private fun missingRuntimeException(runtimeName: String): IllegalStateException =
-        IllegalStateException("$runtimeName runtime is not included in this build.")
+        IllegalStateException("$runtimeName runtime plugin is not installed or trusted.")
 
     private fun persistRevancedPatcherHint(uid: Int, version: RevancedPatcherVersion) {
         when (version) {
@@ -1179,57 +1131,12 @@ class PatchBundleRepository(
         }
     }
 
-    private val ampleDetectionTokens = listOf(
-        "amplerevanced",
-        "ample/revanced",
-        "ample.revanced"
-    )
-    private val ampleDetectionRegexes = ampleDetectionTokens.map { token ->
-        Regex("(^|[^a-z0-9])${Regex.escape(token)}([^a-z0-9]|$)")
-    }
-    private val ampleWordRegex = Regex("(^|[^a-z0-9])ample([^a-z0-9]|$)")
-
-    private fun looksLikeAmpleMarker(value: String?): Boolean {
-        val normalized = value
-            ?.trim()
-            ?.lowercase(Locale.US)
-            .orEmpty()
-        if (normalized.isBlank()) return false
-        if (ampleDetectionRegexes.any { it.containsMatchIn(normalized) }) return true
-        return ampleWordRegex.containsMatchIn(normalized)
-    }
-
     private fun detectDeclaredBundleType(
         bundle: PatchBundle,
         source: PatchBundleSource?
     ): PatchBundleType? {
         val extension = resolveBundleExtension(bundle, source)
         if (extension == "mpp") return PatchBundleType.MORPHE
-
-        val bundlePath = bundle.patchesJar
-        val ampleHint = bundle.manifestAttributes
-            ?.let { attributes ->
-                sequenceOf(
-                    attributes.name,
-                    attributes.source,
-                    attributes.author,
-                    attributes.website
-                )
-                    .filterNotNull()
-                    .any(::looksLikeAmpleMarker)
-            } == true
-        val ampleEndpointHint = source
-            ?.asRemoteOrNull
-            ?.endpoint
-            ?.let(::looksLikeAmpleMarker) == true
-        val localAmpleHint = source
-            ?.takeIf { it.asRemoteOrNull == null }
-            ?.let { bundleLooksAmple(bundlePath, it.uid) } == true
-
-        if (ampleHint || ampleEndpointHint || localAmpleHint) {
-            return PatchBundleType.AMPLE
-        }
-
         return if (extension == "rvp") PatchBundleType.REVANCED else null
     }
 
@@ -1265,35 +1172,6 @@ class PatchBundleRepository(
             .substringAfterLast('.', "")
             .lowercase(Locale.US)
         return extension.takeIf { it in supportedBundleExtensions }
-    }
-
-    private fun bundleLooksAmple(bundlePath: String, localUid: Int?): Boolean {
-        if (localUid != null) {
-            val hint = readLocalBundleHint(localUid)
-            if (looksLikeAmpleMarker(hint)) {
-                return true
-            }
-        }
-        val jar = runCatching { JarFile(bundlePath) }.getOrNull() ?: return false
-        jar.use { jarFile ->
-            val entries = jarFile.entries()
-            while (entries.hasMoreElements()) {
-                val entry = entries.nextElement()
-                if (entry.isDirectory) continue
-                val name = entry.name.lowercase(Locale.US)
-                if (!name.endsWith(".dex")) continue
-                val payload = runCatching {
-                    jarFile.getInputStream(entry).use { stream ->
-                        String(stream.readBytes(), StandardCharsets.ISO_8859_1).lowercase(Locale.US)
-                    }
-                }.getOrNull() ?: continue
-
-                if (ampleDetectionRegexes.any { regex -> regex.containsMatchIn(payload) }) {
-                    return true
-                }
-            }
-        }
-        return false
     }
 
     private fun readLocalBundleHint(uid: Int): String? {

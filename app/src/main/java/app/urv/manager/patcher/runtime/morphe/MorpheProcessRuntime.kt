@@ -275,6 +275,7 @@ class MorpheProcessRuntime(
                 )
             }
 
+            logAaptChoice(runtimeLogger)
             val parameters = MorpheParameters(
                 aaptPath = aaptPath,
                 frameworkDir = frameworkPath,

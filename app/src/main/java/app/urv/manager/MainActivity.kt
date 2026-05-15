@@ -92,6 +92,7 @@ import app.urv.manager.ui.screen.settings.DeveloperSettingsScreen
 import app.urv.manager.ui.screen.settings.DownloadsSettingsScreen
 import app.urv.manager.ui.screen.settings.GeneralSettingsScreen
 import app.urv.manager.ui.screen.settings.ImportExportSettingsScreen
+import app.urv.manager.ui.screen.settings.PatcherRuntimePluginsSettingsScreen
 import app.urv.manager.ui.screen.settings.StorageSettingsScreen
 import app.urv.manager.ui.screen.settings.update.ChangelogsSettingsScreen
 import app.urv.manager.ui.screen.settings.update.UpdatesSettingsScreen
@@ -805,6 +806,10 @@ private fun ReVancedManager(
 
             composable<Settings.Downloads> {
                 DownloadsSettingsScreen(onBackClick = navController::popBackStack)
+            }
+
+            composable<Settings.PatcherRuntimes> {
+                PatcherRuntimePluginsSettingsScreen(onBackClick = navController::popBackStack)
             }
 
             composable<Settings.Storage> {

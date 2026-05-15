@@ -59,9 +59,9 @@ class Revanced21BridgeRuntime(context: Context) : Runtime(context) {
                 "options" to options[bundleUid].orEmpty()
             )
         }
-
         val params = mapOf(
-            "aaptPath" to aaptPath,
+            "aaptPath" to aaptModernPath,
+            "aaptFallbackPath" to aaptLegacyPath,
             "frameworkDir" to frameworkPath,
             "cacheDir" to cacheDir,
             "packageName" to packageName,

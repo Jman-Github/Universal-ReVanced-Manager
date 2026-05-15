@@ -43,13 +43,9 @@ import app.urv.manager.patcher.logger.LogLevel
 import app.urv.manager.patcher.logger.allows
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.patcher.runtime.MemoryLimitConfig
-import app.urv.manager.patcher.ample.AmpleBridgeFailureException
 import app.urv.manager.patcher.morphe.MorpheBridgeFailureException
 import app.urv.manager.patcher.revanced.Revanced21BridgeFailureException
 import app.urv.manager.patcher.revanced.Revanced22BridgeFailureException
-import app.urv.manager.patcher.runtime.ample.AmpleBridgeRuntime
-import app.urv.manager.patcher.runtime.ample.AmpleProcessRuntime
-import app.urv.manager.patcher.runtime.ample.AmpleRuntimeAssets
 import app.urv.manager.patcher.runtime.morphe.MorpheBridgeRuntime
 import app.urv.manager.patcher.runtime.morphe.MorpheProcessRuntime
 import app.urv.manager.patcher.runtime.morphe.MorpheRuntimeAssets
@@ -116,7 +112,6 @@ class PatcherWorker(
     private val patchBundleRepository: PatchBundleRepository by inject()
     private var activeRuntime: app.urv.manager.patcher.runtime.Runtime? = null
     private var activeMorpheRuntime: app.urv.manager.patcher.runtime.morphe.MorpheRuntime? = null
-    private var activeAmpleRuntime: app.urv.manager.patcher.runtime.ample.AmpleRuntime? = null
     @Volatile
     private var patchNotificationSteps: List<String> = emptyList()
     @Volatile
@@ -469,7 +464,6 @@ class PatcherWorker(
     private fun cancelActiveRuntimes() {
         activeRuntime?.cancel()
         activeMorpheRuntime?.cancel()
-        activeAmpleRuntime?.cancel()
     }
 
     private fun isAppTaskPresent(): Boolean {
@@ -1501,7 +1495,7 @@ class PatcherWorker(
             val inputFile = downloadResult.file
 
             val bundleType = patchBundleRepository.selectionBundleType(args.selectedPatches)
-                ?: throw IllegalStateException("Cannot patch with mixed ReVanced, Morphe, or Ample bundles.")
+                ?: throw IllegalStateException("Cannot patch with mixed ReVanced or Morphe bundles.")
             activePatchBundleType = bundleType
             activeMorpheDexGroupTitle = if (bundleType == PatchBundleType.MORPHE) {
                 if (prefs.morpheBytecodeMode.get().runtimeValue.equals("FULL", ignoreCase = true)) {
@@ -1535,11 +1529,6 @@ class PatcherWorker(
             val forceProcessRuntimeReason =
                 if (!processRuntimeRequested && processRuntimeSupported) {
                     when (bundleType) {
-                        PatchBundleType.AMPLE -> when {
-                            inputIsSplitArchive -> "legacy split APK input"
-                            inputHasProblematicEmbeddedApks -> "embedded APK payloads in legacy input"
-                            else -> null
-                        }
                         PatchBundleType.REVANCED -> when {
                             useRevancedPatcher22 -> null
                             inputIsSplitArchive -> "legacy split APK input"
@@ -1547,6 +1536,7 @@ class PatcherWorker(
                             else -> null
                         }
                         PatchBundleType.MORPHE -> null
+                        PatchBundleType.AMPLE -> null
                     }
                 } else {
                     null
@@ -1613,32 +1603,11 @@ class PatcherWorker(
                         skipUnneededSplits
                     )
                 }
-                PatchBundleType.AMPLE -> {
-                    check(AmpleRuntimeAssets.isAvailable(applicationContext)) {
-                        "Ample runtime is not included in this build."
-                    }
-                    val runtime = if (useProcessRuntime) {
-                        AmpleProcessRuntime(applicationContext, useMemoryOverride = memoryOverrideActive)
-                    } else {
-                        AmpleBridgeRuntime(applicationContext)
-                    }
-                    activeAmpleRuntime = runtime
-                    runtime.execute(
-                        inputFile.absolutePath,
-                        patchedApk.absolutePath,
-                        args.packageName,
-                        args.selectedPatches,
-                        args.options,
-                        workerLogger,
-                        eventDispatcher,
-                        stripNativeLibs,
-                        skipUnneededSplits
-                    )
-                }
+                PatchBundleType.AMPLE -> throw IllegalStateException("Ample runtime is no longer supported.")
                 PatchBundleType.REVANCED -> {
                     if (!useRevancedPatcher22) {
                         check(Revanced21RuntimeAssets.isAvailable(applicationContext)) {
-                            "ReVanced v21 runtime is not included in this build."
+                            "ReVanced v21 runtime plugin is not installed or trusted."
                         }
                     }
                     val runtime: app.urv.manager.patcher.runtime.Runtime =
@@ -1736,61 +1705,6 @@ class PatcherWorker(
             Log.e(
                 tag,
                 "An exception occurred in the Morphe bridge runtime while patching. ${e.originalStackTrace}".logFmt()
-            )
-            eventDispatcher(
-                ProgressEvent.Failed(
-                    null,
-                    RemoteError(
-                        type = e::class.java.name,
-                        message = e.message,
-                        stackTrace = e.originalStackTrace
-                    )
-                )
-            )
-            Result.failure(
-                workDataOf(PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(e.originalStackTrace))
-            )
-        } catch (e: AmpleProcessRuntime.ProcessExitException) {
-            Log.e(
-                tag,
-                "Ample patcher process exited with code ${e.exitCode}".logFmt(),
-                e
-            )
-            val message = applicationContext.getString(
-                R.string.patcher_process_exit_message,
-                e.exitCode
-            )
-            eventDispatcher(ProgressEvent.Failed(null, Exception(message).toRemoteError()))
-            val previousLimit = prefs.patcherProcessMemoryLimit.get()
-            Result.failure(
-                workDataOf(
-                    PROCESS_EXIT_CODE_KEY to e.exitCode,
-                    PROCESS_PREVIOUS_LIMIT_KEY to previousLimit,
-                    PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(message)
-                )
-            )
-        } catch (e: AmpleProcessRuntime.RemoteFailureException) {
-            Log.e(
-                tag,
-                "An exception occurred in the Ample remote process while patching. ${e.originalStackTrace}".logFmt()
-            )
-            eventDispatcher(
-                ProgressEvent.Failed(
-                    null,
-                    RemoteError(
-                        type = e::class.java.name,
-                        message = e.message,
-                        stackTrace = e.originalStackTrace
-                    )
-                )
-            )
-            Result.failure(
-                workDataOf(PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(e.originalStackTrace))
-            )
-        } catch (e: AmpleBridgeFailureException) {
-            Log.e(
-                tag,
-                "An exception occurred in the Ample bridge runtime while patching. ${e.originalStackTrace}".logFmt()
             )
             eventDispatcher(
                 ProgressEvent.Failed(
@@ -1943,7 +1857,6 @@ class PatcherWorker(
         } finally {
             activeRuntime = null
             activeMorpheRuntime = null
-            activeAmpleRuntime = null
             patchNotificationSteps = emptyList()
             foregroundStarted = false
             patchedApk.delete()

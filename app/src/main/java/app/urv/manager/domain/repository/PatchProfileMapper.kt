@@ -6,7 +6,6 @@ import app.urv.manager.data.room.profile.PatchProfilePayload
 import app.urv.manager.domain.bundles.PatchBundleSource
 import app.urv.manager.domain.bundles.RemotePatchBundle
 import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
-import app.urv.manager.patcher.ample.AmpleRuntimeBridge
 import app.urv.manager.patcher.morphe.MorpheRuntimeBridge
 import app.urv.manager.patcher.revanced.Revanced21RuntimeBridge
 import app.urv.manager.patcher.revanced.Revanced22RuntimeBridge
@@ -229,10 +228,7 @@ fun PatchProfilePayload.remapLocalBundles(
         val morpheNames = if (revanced22Names == null && revanced21Names == null) {
             runCatching { MorpheRuntimeBridge.loadMetadata(bundle.patchesJar) }.getOrNull()
         } else null
-        val ampleNames = if (revanced22Names == null && revanced21Names == null && morpheNames == null) {
-            runCatching { AmpleRuntimeBridge.loadMetadata(bundle.patchesJar) }.getOrNull()
-        } else null
-        val names = (revanced22Names ?: revanced21Names ?: morpheNames ?: ampleNames)
+        val names = (revanced22Names ?: revanced21Names ?: morpheNames)
             ?.map { it.name.trim().lowercase() }
             ?.toSet()
         if (!names.isNullOrEmpty()) resolvedSignatures[source.uid] = names
