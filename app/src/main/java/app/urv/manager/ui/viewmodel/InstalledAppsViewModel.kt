@@ -684,6 +684,16 @@ class InstalledAppsViewModel(
     }
 
     private fun compareVersionStrings(first: String, second: String): Int {
+        val firstVersion = BundleVersion.parse(first)
+        val secondVersion = BundleVersion.parse(second)
+        if (firstVersion != null && secondVersion != null) {
+            return firstVersion.compareTo(secondVersion)
+        }
+
+        return compareLooseVersionStrings(first, second)
+    }
+
+    private fun compareLooseVersionStrings(first: String, second: String): Int {
         val aParts = first.split(Regex("[^0-9]+"))
             .filter { it.isNotBlank() }
             .map { it.toIntOrNull() ?: 0 }
@@ -697,5 +707,58 @@ class InstalledAppsViewModel(
             if (a != b) return a.compareTo(b)
         }
         return first.compareTo(second, ignoreCase = true)
+    }
+
+    private data class BundleVersion(
+        val core: List<Long>,
+        val prerelease: List<String>
+    ) : Comparable<BundleVersion> {
+        override fun compareTo(other: BundleVersion): Int {
+            val max = maxOf(core.size, other.core.size)
+            for (index in 0 until max) {
+                val first = core.getOrElse(index) { 0 }
+                val second = other.core.getOrElse(index) { 0 }
+                if (first != second) return first.compareTo(second)
+            }
+
+            if (prerelease.isEmpty() && other.prerelease.isEmpty()) return 0
+            if (prerelease.isEmpty()) return 1
+            if (other.prerelease.isEmpty()) return -1
+
+            val prereleaseMax = maxOf(prerelease.size, other.prerelease.size)
+            for (index in 0 until prereleaseMax) {
+                val first = prerelease.getOrNull(index) ?: return -1
+                val second = other.prerelease.getOrNull(index) ?: return 1
+                val firstNumber = first.toLongOrNull()
+                val secondNumber = second.toLongOrNull()
+                val comparison = when {
+                    firstNumber != null && secondNumber != null -> firstNumber.compareTo(secondNumber)
+                    firstNumber != null -> -1
+                    secondNumber != null -> 1
+                    else -> first.compareTo(second, ignoreCase = true)
+                }
+                if (comparison != 0) return comparison
+            }
+
+            return 0
+        }
+
+        companion object {
+            private val versionPattern = Regex("^[vV]?(\\d+(?:\\.\\d+)*)(?:[-_]([^+\\s]+))?(?:\\+.*)?$")
+
+            fun parse(value: String): BundleVersion? {
+                val match = versionPattern.matchEntire(value.trim()) ?: return null
+                val core = match.groupValues[1]
+                    .split('.')
+                    .map { it.toLongOrNull() ?: return null }
+                val prerelease = match.groupValues.getOrNull(2)
+                    ?.takeIf { it.isNotBlank() }
+                    ?.split(Regex("[.-]"))
+                    ?.filter { it.isNotBlank() }
+                    .orEmpty()
+
+                return BundleVersion(core, prerelease)
+            }
+        }
     }
 }
