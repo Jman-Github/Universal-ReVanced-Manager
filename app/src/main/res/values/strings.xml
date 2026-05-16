@@ -232,7 +232,7 @@
     <string name="updates_description">Update behavior and background update flow</string>
     <string name="downloads">Downloads</string>
     <string name="downloads_description">Download handling and exports</string>
-    <string name="storage_cache_management">Storage & Cache Management</string>
+    <string name="storage_cache_management">Storage &amp; Cache Management</string>
     <string name="storage_cache_management_description">Review URV Manager storage usage</string>
     <string name="plugins_help_title">What is a downloader?</string>
     <string name="plugins_help_description">A downloader is a plugin which allows URV Manager to download stock APKs from various sources. The downloaded APKs will be shown in the bottom section. During the patching process, you can choose an already downloaded APKs or you can download it via a plugin.\n\nThe list of supported downloader plugins can be found</string>
@@ -1700,9 +1700,10 @@ Details: %2$s</string>
     <string name="patcher_runtime_plugins_description">Manage runtime plugin APKs used to apply patches</string>
     <string name="patcher_runtime_import_url">Import runtime source</string>
     <string name="patcher_runtime_import_url_description">Add runtime plugins from a GitHub repository or release APK URL</string>
-    <string name="patcher_runtime_import_url_hint">GitHub repository or release APK URL</string>
+    <string name="patcher_runtime_import_url_hint">https://github.com/...</string>
     <string name="patcher_runtime_import_failed">Failed to import runtime source: %1$s</string>
     <string name="patcher_runtime_update_failed">Failed to update runtime source: %1$s</string>
+    <string name="patcher_runtime_plugins_section">Runtime Plugins</string>
     <string name="patcher_runtime_managed_sources">Managed sources</string>
     <string name="patcher_runtime_no_managed_sources">No managed runtime sources added</string>
     <string name="patcher_runtime_installed_plugins">Installed runtime plugins</string>

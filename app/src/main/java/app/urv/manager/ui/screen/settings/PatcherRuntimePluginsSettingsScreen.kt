@@ -145,7 +145,7 @@ fun PatcherRuntimePluginsSettingsScreen(
                 }
                 item {
                     GroupHeader(
-                        title = stringResource(R.string.patcher_runtime_managed_sources),
+                        title = stringResource(R.string.patcher_runtime_plugins_section),
                         icon = SettingsSectionIcons.DownloaderPlugins
                     )
                 }
@@ -166,17 +166,6 @@ fun PatcherRuntimePluginsSettingsScreen(
                         )
                     }
                 }
-                if (sourceStates.isEmpty()) {
-                    item {
-                        EmptyRuntimeText(stringResource(R.string.patcher_runtime_no_managed_sources))
-                    }
-                }
-                item {
-                    GroupHeader(
-                        title = stringResource(R.string.patcher_runtime_installed_plugins),
-                        icon = SettingsSectionIcons.DownloaderPlugins
-                    )
-                }
                 pluginStates.forEach { (packageName, state) ->
                     item(key = packageName) {
                         InstalledRuntimeCard(
@@ -187,7 +176,7 @@ fun PatcherRuntimePluginsSettingsScreen(
                         )
                     }
                 }
-                if (pluginStates.isEmpty()) {
+                if (sourceStates.isEmpty() && pluginStates.isEmpty()) {
                     item {
                         EmptyRuntimeText(stringResource(R.string.patcher_runtime_no_installed_plugins))
                     }

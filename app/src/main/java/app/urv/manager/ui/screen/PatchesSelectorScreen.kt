@@ -818,11 +818,16 @@ fun PatchesSelectorScreen(
         )
     }
 
-    fun requestConfirmation(@StringRes title: Int, message: String, onConfirm: () -> Unit) {
+    fun requestConfirmation(
+        @StringRes title: Int,
+        message: String,
+        icon: ImageVector? = null,
+        onConfirm: () -> Unit
+    ) {
         if (disableActionConfirmations) {
             onConfirm()
         } else {
-            pendingSelectionConfirmation = SelectionConfirmation(title, message, onConfirm)
+            pendingSelectionConfirmation = SelectionConfirmation(title, message, icon, onConfirm)
         }
     }
 
@@ -882,6 +887,9 @@ fun PatchesSelectorScreen(
                     TextButton(onClick = { pendingSelectionConfirmation = null }) {
                         Text(stringResource(R.string.cancel))
                     }
+                },
+                icon = confirmation.icon?.let { icon ->
+                    { Icon(icon, null) }
                 },
                 title = { Text(stringResource(confirmation.title)) },
                 text = { Text(confirmation.message) }
@@ -1101,7 +1109,8 @@ fun PatchesSelectorScreen(
                     message = context.getString(
                         R.string.patch_selection_confirm_bundle_defaults_message,
                         bundleName
-                    )
+                    ),
+                    icon = Icons.Outlined.Restore
                 ) {
                     viewModel.resetBundleToDefaults(bundle.uid, bundleName)
                 }
@@ -2893,6 +2902,7 @@ private fun SelectionActionButton(
 private data class SelectionConfirmation(
     @StringRes val title: Int,
     val message: String,
+    val icon: ImageVector?,
     val onConfirm: () -> Unit
 )
 

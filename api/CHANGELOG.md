@@ -126,6 +126,7 @@
 - Removed the `LITE` and `FULL` URV build system and replaced it with a plugin-based system. ReVanced and Morphe are bundled with URV by default, while support for ReVanced v21 requires installing its plugin
 - Bumped Morphe Patcher to `1.5.1`
 - Removed the AmpleReVanced runtime because Ample now uses the Morphe patcher instead of its own runtime
+- Make dialogs icons more consistent https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/467
 
 
 # Bug fixes

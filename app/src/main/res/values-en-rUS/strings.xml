@@ -230,7 +230,7 @@
     <string name="updates_description">Update behavior and background update flow</string>
     <string name="downloads">Downloads</string>
     <string name="downloads_description">Download handling and exports</string>
-    <string name="storage_cache_management">Storage & Cache Management</string>
+    <string name="storage_cache_management">Storage &amp; Cache Management</string>
     <string name="storage_cache_management_description">Review URV Manager storage usage</string>
     <string name="plugins_help_title">What is a downloader?</string>
     <string name="plugins_help_description">A downloader is a plugin which allows URV Manager to download stock APKs from various sources. The downloaded APKs will be shown in the bottom section. During the patching process, you can choose an already downloaded APKs or you can download it via a plugin.\n\nThe list of supported downloader plugins can be found</string>
@@ -1694,7 +1694,38 @@ Details: %2$s</string>
     <string name="keystore_diagnostics_present_size">Present (%1$s)</string>
     <string name="export">Export</string>
     <string name="confirm">Confirm</string>
-    </resources>
+    <string name="patcher_runtime_plugins">Patcher Runtimes</string>
+    <string name="patcher_runtime_plugins_description">Manage runtime plugin APKs used to apply patches</string>
+    <string name="patcher_runtime_import_url">Import runtime source</string>
+    <string name="patcher_runtime_import_url_description">Add runtime plugins from a GitHub repository or release APK URL</string>
+    <string name="patcher_runtime_import_url_hint">https://github.com/...</string>
+    <string name="patcher_runtime_import_failed">Failed to import runtime source: %1$s</string>
+    <string name="patcher_runtime_update_failed">Failed to update runtime source: %1$s</string>
+    <string name="patcher_runtime_plugins_section">Runtime Plugins</string>
+    <string name="patcher_runtime_managed_sources">Managed sources</string>
+    <string name="patcher_runtime_no_managed_sources">No managed runtime sources added</string>
+    <string name="patcher_runtime_installed_plugins">Installed runtime plugins</string>
+    <string name="patcher_runtime_no_installed_plugins">No runtime plugin APKs installed</string>
+    <string name="patcher_runtime_available">Available runtimes</string>
+    <string name="patcher_runtime_built_in">Built-in</string>
+    <string name="patcher_runtime_available_yes">Available</string>
+    <string name="patcher_runtime_available_no">Missing</string>
+    <string name="patcher_runtime_unknown_version">Unknown version</string>
+    <string name="patcher_runtime_missing">Missing file</string>
+    <string name="patcher_runtime_source_delete_title">Delete runtime source?</string>
+    <string name="patcher_runtime_source_delete_description">Delete &quot;%1$s&quot; and its managed runtime APK?</string>
+    <string name="patcher_runtime_signature_after_trust">The package signature will be saved after trust is confirmed.</string>
+    <string name="patcher_runtime_signature_label">Signature</string>
+    <string name="patcher_runtime_uninstall_title">Uninstall runtime plugin?</string>
+    <string name="patcher_runtime_uninstall_description">Uninstall &quot;%1$s&quot;?</string>
+    <string name="patcher_runtime_uninstall_success">Uninstalled %1$s</string>
+    <string name="patcher_runtime_uninstall_failed">Failed to uninstall %1$s</string>
+    <string name="patcher_runtime_trust_dialog_title">Trust runtime plugin?</string>
+    <string name="patcher_runtime_trust_dialog_body">Continuing will allow this runtime plugin to run patcher code inside URV Manager. Only trust runtime plugins from sources you trust.</string>
+    <string name="import_button">Import</string>
+    <string name="use_latest_release">Use latest release</string>
+    <string name="use_prereleases">Use prereleases</string>
+</resources>
 
 
 

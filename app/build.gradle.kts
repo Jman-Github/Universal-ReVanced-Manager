@@ -245,14 +245,28 @@ android {
     }
 
     val keystoreFile = file("keystore.jks")
-    val releaseSigningConfig = if (project.hasProperty("signAsDebug") || !keystoreFile.exists()) {
+    val keystorePassword = System.getenv("KEYSTORE_PASSWORD")
+    val keystoreEntryAlias = System.getenv("KEYSTORE_ENTRY_ALIAS")
+    val keystoreEntryPassword = System.getenv("KEYSTORE_ENTRY_PASSWORD")
+    val hasReleaseSigningCredentials = keystoreFile.exists() &&
+        !keystorePassword.isNullOrBlank() &&
+        !keystoreEntryAlias.isNullOrBlank() &&
+        !keystoreEntryPassword.isNullOrBlank()
+    val signAsDebug = project.hasProperty("signAsDebug")
+    if (System.getenv("CI").toBoolean() && !signAsDebug && !hasReleaseSigningCredentials) {
+        throw GradleException(
+            "Release signing credentials are required in CI. Set KEYSTORE_PASSWORD, " +
+                "KEYSTORE_ENTRY_ALIAS, and KEYSTORE_ENTRY_PASSWORD, or pass -PsignAsDebug for debug signing."
+        )
+    }
+    val releaseSigningConfig = if (signAsDebug || !hasReleaseSigningCredentials) {
         signingConfigs.getByName("debug")
     } else {
         signingConfigs.create("release") {
             storeFile = keystoreFile
-            storePassword = System.getenv("KEYSTORE_PASSWORD")
-            keyAlias = System.getenv("KEYSTORE_ENTRY_ALIAS")
-            keyPassword = System.getenv("KEYSTORE_ENTRY_PASSWORD")
+            storePassword = keystorePassword
+            keyAlias = keystoreEntryAlias
+            keyPassword = keystoreEntryPassword
         }
     }
 
