@@ -460,7 +460,7 @@ fun KeystoreConverterScreen(onBackClick: () -> Unit) {
                             Icon(Icons.Outlined.Info, null)
                             Text(
                                 text = error,
-                                style = MaterialTheme.typography.bodyMedium
+                                style = MaterialTheme.typography.bodyLarge
                             )
                         }
                     }

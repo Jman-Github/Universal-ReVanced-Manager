@@ -128,6 +128,7 @@
 - Removed the AmpleReVanced runtime because Ample now uses the Morphe patcher instead of its own runtime
 - Make dialogs icons more consistent https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/467
 - Made the confirmation buttons across dialogs more consistent https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/466
+- Adjusted the keystore converter error message text size for better consistency with other tool error messages https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/462
 
 
 # Bug fixes
