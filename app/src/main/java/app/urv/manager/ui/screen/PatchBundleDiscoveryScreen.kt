@@ -153,13 +153,23 @@ fun PatchBundleDiscoveryScreen(
     var previousRelease by remember { mutableStateOf(showRelease) }
     var previousPrerelease by remember { mutableStateOf(showPrerelease) }
     LaunchedEffect(showRelease, showPrerelease, latestSelected) {
-        if (!latestSelected && !showRelease && !showPrerelease) {
-            showRelease = true
-            showPrerelease = true
-        }
         if (!latestSelected) {
-            previousRelease = showRelease
-            previousPrerelease = showPrerelease
+            when {
+                showRelease && showPrerelease -> {
+                    showPrerelease = false
+                    previousRelease = true
+                    previousPrerelease = false
+                }
+                !showRelease && !showPrerelease -> {
+                    showRelease = true
+                    previousRelease = true
+                    previousPrerelease = false
+                }
+                else -> {
+                    previousRelease = showRelease
+                    previousPrerelease = showPrerelease
+                }
+            }
         }
     }
     LaunchedEffect(latestSelected) {
@@ -723,6 +733,7 @@ fun PatchBundleDiscoveryScreen(
                                     if (!newValue && !showPrerelease) return@CheckedFilterChip
                                     showRelease = newValue
                                     if (newValue) {
+                                        showPrerelease = false
                                         latestSelected = false
                                     }
                                 },
@@ -735,6 +746,7 @@ fun PatchBundleDiscoveryScreen(
                                     if (!newValue && !showRelease) return@CheckedFilterChip
                                     showPrerelease = newValue
                                     if (newValue) {
+                                        showRelease = false
                                         latestSelected = false
                                     }
                                 },
@@ -751,11 +763,12 @@ fun PatchBundleDiscoveryScreen(
                                         showRelease = false
                                         showPrerelease = false
                                     } else {
-                                        showRelease = previousRelease
-                                        showPrerelease = previousPrerelease
-                                        if (!showRelease && !showPrerelease) {
-                                            showRelease = true
+                                        if (previousPrerelease && !previousRelease) {
+                                            showRelease = false
                                             showPrerelease = true
+                                        } else {
+                                            showRelease = true
+                                            showPrerelease = false
                                         }
                                     }
                                 },

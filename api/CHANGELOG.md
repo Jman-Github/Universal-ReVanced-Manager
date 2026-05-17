@@ -129,6 +129,9 @@
 - Make dialogs icons more consistent https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/467
 - Made the confirmation buttons across dialogs more consistent https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/466
 - Adjusted the keystore converter error message text size for better consistency with other tool error messages https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/462
+- Release and Pre-release filters can no longer be selected at the same time; use Latest to show the newest bundle across both channels https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/473
+- Reduced reorder hold delay by making app, bundle, and profile drag handles start dragging immediately https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/477
+- Moved Bundle type to the top of bundle information before editable fields https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/481
 
 
 # Bug fixes

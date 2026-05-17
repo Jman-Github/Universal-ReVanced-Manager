@@ -396,6 +396,16 @@ fun BundleInformationDialog(
                     color = MaterialTheme.colorScheme.outlineVariant
                 )
 
+                BundleListItem(
+                    headlineText = stringResource(R.string.bundle_type_label),
+                    supportingText = when (bundleInfo[src.uid]?.bundleType) {
+                        PatchBundleType.REVANCED -> stringResource(R.string.bundle_type_revanced)
+                        PatchBundleType.MORPHE -> stringResource(R.string.bundle_type_morphe)
+                        PatchBundleType.AMPLE -> stringResource(R.string.bundle_type_ample)
+                        null -> stringResource(field_not_set)
+                    }
+                )
+
                 if (showDisplayNameDialog) {
                     TextInputDialog(
                         initial = src.displayName.orEmpty(),
@@ -426,16 +436,6 @@ fun BundleInformationDialog(
                     headlineText = stringResource(R.string.patches_display_name),
                     supportingText = src.displayName?.takeUnless { it.isBlank() }
                         ?: stringResource(field_not_set)
-                )
-
-                BundleListItem(
-                    headlineText = stringResource(R.string.bundle_type_label),
-                    supportingText = when (bundleInfo[src.uid]?.bundleType) {
-                        PatchBundleType.REVANCED -> stringResource(R.string.bundle_type_revanced)
-                        PatchBundleType.MORPHE -> stringResource(R.string.bundle_type_morphe)
-                        PatchBundleType.AMPLE -> stringResource(R.string.bundle_type_ample)
-                        null -> stringResource(field_not_set)
-                    }
                 )
 
                 if (isLocal) {

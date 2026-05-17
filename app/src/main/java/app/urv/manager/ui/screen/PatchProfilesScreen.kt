@@ -1637,7 +1637,7 @@ private fun ReorderableCollectionItemScope.PatchProfileOrderRow(
         IconButton(
             onClick = {},
             interactionSource = interactionSource,
-            modifier = Modifier.longPressDraggableHandle()
+            modifier = Modifier.draggableHandle()
         ) {
             Icon(
                 imageVector = Icons.Filled.DragHandle,
