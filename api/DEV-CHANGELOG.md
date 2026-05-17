@@ -8,6 +8,7 @@
 - Bumped Morphe Patcher to `1.5.1`
 - Removed the AmpleReVanced runtime because Ample now uses the Morphe patcher instead of its own runtime
 - Make dialogs icons more consistent https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/467
+- Made the confirmation buttons across dialogs more consistent https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/466
 
 
 # Bug fixes

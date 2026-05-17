@@ -259,7 +259,7 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
                         }
                     }
                 ) {
-                    Text(stringResource(R.string.storage_clear_cache_confirm))
+                    Text(stringResource(R.string.confirm))
                 }
             },
             dismissButton = {
@@ -295,7 +295,7 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
                         }
                     }
                 ) {
-                    Text(stringResource(R.string.storage_clear_area_confirm))
+                    Text(stringResource(R.string.confirm))
                 }
             },
             dismissButton = {
@@ -320,7 +320,7 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
                         clearTarget(target)
                     }
                 ) {
-                    Text(stringResource(R.string.storage_clear_area_warning_confirm))
+                    Text(stringResource(R.string.confirm))
                 }
             },
             dismissButton = {

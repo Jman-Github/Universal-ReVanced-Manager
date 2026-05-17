@@ -685,7 +685,6 @@ Patch profiles are not affected.</string>
     <string name="storage_clear_cache_dialog_description">This deletes cached URV Manager files that can be recreated later. Settings, patch profiles, keystores, and saved APKs are not cleared.</string>
     <string name="storage_clear_area_dialog_title">Clear %1$s?</string>
     <string name="storage_clear_area_dialog_description">This deletes files from %1$s. Only use this when you no longer need the files stored there.</string>
-    <string name="storage_clear_area_confirm">Clear files</string>
     <string name="storage_clear_area_warning_title">Clear %1$s permanently?</string>
     <string name="storage_clear_internal_files_warning_description">This deletes private files kept in URV Manager internal storage, including custom backgrounds. It can remove legacy keystore files or other imported files that cannot be recreated automatically. This cannot be undone.</string>
     <string name="storage_clear_no_backup_files_warning_description">This deletes private files from no-backup storage. These files are intentionally excluded from Android backup and may contain recovery or app state that URV Manager cannot restore automatically. This cannot be undone.</string>
@@ -695,10 +694,8 @@ Patch profiles are not affected.</string>
     <string name="storage_clear_patch_profile_inputs_warning_description">This deletes APK or XAPK input files attached to patch profiles and clears those app selections from the profiles. The profiles stay, but their input apps must be selected again before patching. This cannot be undone.</string>
     <string name="storage_clear_other_internal_data_warning_description">This deletes private app data that is not listed in another storage row. Treat this like clearing part of URV Manager app data. This cannot be undone.</string>
     <string name="storage_clear_external_files_warning_description">This deletes files URV Manager stored in its external app folders. These files may be visible outside the app and URV Manager cannot restore them automatically. This cannot be undone.</string>
-    <string name="storage_clear_area_warning_confirm">Clear anyway</string>
     <string name="storage_area_cleared">Cleared %1$s: %2$s</string>
     <string name="storage_manage_area">Manage</string>
-    <string name="storage_clear_cache_confirm">Clear cache</string>
     <string name="storage_cache_cleared">Cleared %1$s from cache</string>
     <string name="storage_cache_clear_failed">Could not clear cache</string>
     <string name="storage_open_app_storage_settings">Open Android app storage settings</string>
