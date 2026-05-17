@@ -13,6 +13,9 @@
 - Release and Pre-release filters can no longer be selected at the same time; use Latest to show the newest bundle across both channels https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/473
 - Reduced reorder hold delay by making app, bundle, and profile drag handles start dragging immediately https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/477
 - Moved Bundle type to the top of bundle information before editable fields https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/481
+- Close dashboard search bars when switching between Apps, Patches, and Profiles tabs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/469
+- Center storage management confirmation dialog titles and descriptions https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/461
+- Improve YouTube asset guide ring contrast on both light and dark images https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/463
 
 
 # Bug fixes
@@ -20,6 +23,7 @@
 - Re-added the legacy/modern AAPT2 selector to resolve AAPT2 based resource compilation errors https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/460
 - Fixed bundle update notifications being cleared after a follow-up background check when the same manual bundle update was still available but had already been reported https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/470
 - Fixed the Apps tab "Update available" badge for patch bundles so stable releases correctly outrank matching prerelease/dev versions https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/468
+- Resolved more issues with saved patched apps https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
 
 
 # v1.8.1-dev.16 (2026-04-30)

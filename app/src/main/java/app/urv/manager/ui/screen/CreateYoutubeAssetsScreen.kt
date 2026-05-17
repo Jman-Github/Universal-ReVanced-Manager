@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -77,6 +78,8 @@ import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
@@ -89,6 +92,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -836,9 +840,10 @@ private fun AdaptiveGuideLegend() {
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 ComposeCanvas(modifier = Modifier.size(12.dp)) {
-                    drawCircle(
-                        color = Color.White.copy(alpha = 0.6f),
-                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx())
+                    val strokeWidth = 1.dp.toPx()
+                    drawAdaptiveGuideRing(
+                        radius = size.minDimension / 2f - strokeWidth,
+                        strokeWidth = strokeWidth
                     )
                 }
                 Text(
@@ -852,9 +857,11 @@ private fun AdaptiveGuideLegend() {
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 ComposeCanvas(modifier = Modifier.size(12.dp)) {
-                    drawCircle(
-                        color = Color.White.copy(alpha = 0.35f),
-                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx())
+                    val strokeWidth = 1.dp.toPx()
+                    drawAdaptiveGuideRing(
+                        radius = size.minDimension / 2f - strokeWidth,
+                        strokeWidth = strokeWidth,
+                        alpha = 0.72f
                     )
                 }
                 Text(
@@ -900,7 +907,7 @@ private fun PreviewCircle(
             contentAlignment = Alignment.Center
         ) {
             if (bitmap == null) {
-                Text(stringResource(R.string.tools_youtube_assets_no_image_selected), style = MaterialTheme.typography.bodySmall)
+                ContrastGuideText(stringResource(R.string.tools_youtube_assets_no_image_selected))
             } else {
                 androidx.compose.foundation.Image(
                     bitmap = bitmap.asImageBitmap(),
@@ -916,11 +923,79 @@ private fun PreviewCircle(
             }
             ComposeCanvas(modifier = Modifier.fillMaxSize()) {
                 val c = Offset(size.width / 2f, size.height / 2f)
-                drawCircle(Color.White.copy(alpha = 0.35f), radius = size.minDimension * 0.24f, center = c, style = androidx.compose.ui.graphics.drawscope.Stroke(1.2.dp.toPx()))
-                drawCircle(Color.White.copy(alpha = 0.2f), radius = size.minDimension * 0.38f, center = c, style = androidx.compose.ui.graphics.drawscope.Stroke(1.dp.toPx()))
+                drawAdaptiveGuideRing(
+                    radius = size.minDimension * 0.24f,
+                    center = c,
+                    strokeWidth = 1.2.dp.toPx()
+                )
+                drawAdaptiveGuideRing(
+                    radius = size.minDimension * 0.38f,
+                    center = c,
+                    strokeWidth = 1.dp.toPx(),
+                    alpha = 0.72f
+                )
             }
         }
     }
+}
+
+@Composable
+private fun ContrastGuideText(text: String) {
+    val style = MaterialTheme.typography.labelSmall.copy(
+        fontSize = 8.sp,
+        lineHeight = 9.sp
+    )
+    Box(
+        modifier = Modifier.width(82.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        listOf(
+            Modifier.offset(x = (-1).dp),
+            Modifier.offset(x = 1.dp),
+            Modifier.offset(y = (-1).dp),
+            Modifier.offset(y = 1.dp)
+        ).forEach { outlineModifier ->
+            Text(
+                text = text,
+                modifier = outlineModifier.fillMaxWidth(),
+                color = Color.Black.copy(alpha = 0.9f),
+                maxLines = 1,
+                overflow = TextOverflow.Clip,
+                style = style,
+                textAlign = TextAlign.Center
+            )
+        }
+        Text(
+            text = text,
+            modifier = Modifier.fillMaxWidth(),
+            color = Color.White,
+            maxLines = 1,
+            overflow = TextOverflow.Clip,
+            style = style,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+private fun DrawScope.drawAdaptiveGuideRing(
+    radius: Float,
+    center: Offset? = null,
+    strokeWidth: Float,
+    alpha: Float = 0.9f
+) {
+    val ringCenter = center ?: this.center
+    drawCircle(
+        color = Color.Black.copy(alpha = alpha),
+        radius = radius,
+        center = ringCenter,
+        style = Stroke(width = strokeWidth * 2f)
+    )
+    drawCircle(
+        color = Color.White.copy(alpha = alpha),
+        radius = radius,
+        center = ringCenter,
+        style = Stroke(width = strokeWidth)
+    )
 }
 
 @Composable

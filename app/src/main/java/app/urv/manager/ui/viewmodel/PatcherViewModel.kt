@@ -1258,8 +1258,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             }
             val matchingSavedEntry = if (disableSavedAppOverwrite) null else matchingSavedEntries.firstOrNull()
             val persistedInstallType = installType
-            val shouldArchiveExistingVisibleEntry = persistedInstallType != InstallType.SAVED &&
-                persistedInstallType != InstallType.MOUNT
+            val shouldArchiveExistingVisibleEntry = persistedInstallType != InstallType.SAVED
             val existingFinalPackageEntry = installedAppRepository.get(finalPackageName)
             val existingInstalledEntry = existingFinalPackageEntry?.takeIf {
                 it.installType != InstallType.SAVED
@@ -1269,6 +1268,11 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             }
             val effectiveShouldSaveForLater = shouldSaveForLater
             val existingInstalledIdentity = existingInstalledEntry?.let { savedEntryIdentity(it) }
+            val savedVariantAlreadyInstalled =
+                persistedInstallType == InstallType.SAVED &&
+                    !disableSavedAppOverwrite &&
+                    existingInstalledEntry != null &&
+                    existingInstalledIdentity == newVariantIdentity
             if (
                 disableSavedAppOverwrite &&
                 effectiveShouldSaveForLater &&
@@ -1303,7 +1307,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 )
             }
             val persistedPackageName = if (persistedInstallType == InstallType.SAVED) {
-                if (disableSavedAppOverwrite) {
+                if (savedVariantAlreadyInstalled) {
+                    finalPackageName
+                } else if (disableSavedAppOverwrite) {
                     buildUniqueSavedAppEntryKey(finalPackageName, newVariantIdentity)
                 } else {
                     matchingSavedEntry?.currentPackageName ?: run {
@@ -1362,15 +1368,23 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 savedCopyWritten &&
                 persistedInstallType == InstallType.SAVED
             ) {
-                installedAppRepository.addOrUpdate(
-                    persistedPackageName,
-                    packageName,
-                    finalVersion,
-                    InstallType.SAVED,
-                    sanitizedSelectionFinal,
-                    selectionPayload,
-                    resetCreatedAt = true
-                )
+                if (savedVariantAlreadyInstalled) {
+                    collapseMatchingSavedEntriesForInstalledVariant(
+                        packageName = finalPackageName,
+                        installedPackageName = persistedPackageName,
+                        variantIdentity = newVariantIdentity
+                    )
+                } else {
+                    installedAppRepository.addOrUpdate(
+                        persistedPackageName,
+                        packageName,
+                        finalVersion,
+                        InstallType.SAVED,
+                        sanitizedSelectionFinal,
+                        selectionPayload,
+                        resetCreatedAt = true
+                    )
+                }
             }
 
             if (finalPackageName != packageName) {

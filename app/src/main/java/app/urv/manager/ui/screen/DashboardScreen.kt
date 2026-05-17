@@ -429,6 +429,14 @@ fun DashboardScreen(
             DashboardPage.TOOLS -> Unit
         }
     }
+    fun closeDashboardSearch() {
+        appsSearchActive = false
+        appsSearchQuery = ""
+        bundlesSearchActive = false
+        bundlesSearchQuery = ""
+        profilesSearchActive = false
+        profilesSearchQuery = ""
+    }
     var quickActionPackage by remember { mutableStateOf<String?>(null) }
     var pendingQuickAction by remember { mutableStateOf<InstalledAppAction?>(null) }
     var showQuickExportPicker by remember { mutableStateOf(false) }
@@ -455,6 +463,7 @@ fun DashboardScreen(
         visibleTabs.getOrNull(pagerState.settledPage)?.let { page ->
             if (activeDashboardPage != page) {
                 clearSelectionForPage(activeDashboardPage)
+                closeDashboardSearch()
                 activeDashboardPage = page
             }
         }
@@ -463,6 +472,7 @@ fun DashboardScreen(
     LaunchedEffect(visibleTabs) {
         if (activeDashboardPage !in visibleTabs) {
             clearSelectionForPage(activeDashboardPage)
+            closeDashboardSearch()
             activeDashboardPage = DashboardPage.DASHBOARD
             scrollToVisiblePage(DashboardPage.DASHBOARD, animated = false)
         }

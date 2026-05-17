@@ -267,8 +267,8 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
                     Text(stringResource(R.string.cancel))
                 }
             },
-            title = { Text(stringResource(R.string.storage_clear_cache_dialog_title)) },
-            text = { Text(stringResource(R.string.storage_clear_cache_dialog_description)) }
+            title = { CenteredDialogText(stringResource(R.string.storage_clear_cache_dialog_title)) },
+            text = { CenteredDialogText(stringResource(R.string.storage_clear_cache_dialog_description)) }
         )
     }
 
@@ -303,8 +303,8 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
                     Text(stringResource(R.string.cancel))
                 }
             },
-            title = { Text(stringResource(R.string.storage_clear_area_dialog_title, areaName)) },
-            text = { Text(stringResource(R.string.storage_clear_area_dialog_description, areaName)) }
+            title = { CenteredDialogText(stringResource(R.string.storage_clear_area_dialog_title, areaName)) },
+            text = { CenteredDialogText(stringResource(R.string.storage_clear_area_dialog_description, areaName)) }
         )
     }
 
@@ -328,9 +328,9 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
                     Text(stringResource(R.string.cancel))
                 }
             },
-            title = { Text(stringResource(R.string.storage_clear_area_warning_title, areaName)) },
+            title = { CenteredDialogText(stringResource(R.string.storage_clear_area_warning_title, areaName)) },
             text = {
-                Text(
+                CenteredDialogText(
                     if (warningDescriptionRes != null) {
                         stringResource(warningDescriptionRes)
                     } else {
@@ -752,7 +752,7 @@ private fun AutoClearCacheIntervalDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.storage_auto_clear_cache_dialog_title)) },
+        title = { CenteredDialogText(stringResource(R.string.storage_auto_clear_cache_dialog_title)) },
         text = {
             Column {
                 AutoClearCacheInterval.entries.forEach { interval ->
@@ -786,6 +786,15 @@ private fun AutoClearCacheIntervalDialog(
                 Text(stringResource(R.string.cancel))
             }
         }
+    )
+}
+
+@Composable
+private fun CenteredDialogText(text: String) {
+    Text(
+        text = text,
+        modifier = Modifier.fillMaxWidth(),
+        textAlign = TextAlign.Center
     )
 }
 

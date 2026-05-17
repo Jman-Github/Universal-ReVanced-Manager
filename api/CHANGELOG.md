@@ -132,6 +132,9 @@
 - Release and Pre-release filters can no longer be selected at the same time; use Latest to show the newest bundle across both channels https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/473
 - Reduced reorder hold delay by making app, bundle, and profile drag handles start dragging immediately https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/477
 - Moved Bundle type to the top of bundle information before editable fields https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/481
+- Close dashboard search bars when switching between Apps, Patches, and Profiles tabs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/469
+- Center storage management confirmation dialog titles and descriptions https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/461
+- Improve YouTube asset guide ring contrast on both light and dark images https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/463
 
 
 # Bug fixes
@@ -259,6 +262,7 @@
 - Re-added the legacy/modern AAPT2 selector to resolve AAPT2 based resource compilation errors https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/460
 - Fixed bundle update notifications being cleared after a follow-up background check when the same manual bundle update was still available but had already been reported https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/470
 - Fixed the Apps tab "Update available" badge for patch bundles so stable releases correctly outrank matching prerelease/dev versions https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/468
+- Resolved more issues with saved patched apps https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
 
 
 # Refactors
@@ -270,15 +274,6 @@
 
 - All prereleases/releases are published with a universal (all ABI) APK, and the ABI specific APKs. The in-app updater now automatically picks the APK that matches your ABI
 - Updated manager release APK filenames to use canonical ABI labels such as arm64-v8a, armeabi-v7a, and universal, and updated the in-app updater/workflows to match the new asset names while preserving compatibility with older releases https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/428
-
-
-## Build types
-
-**LITE**: ReVanced v22 and Morphe patcher runtimes included, AmpleReVanced and ReVanced v21 runtimes excluded.   
-**FULL**: Everything (ReVanced v22, v21, Morphe and AmpleReVanced patcher runtimes)
-
-> [!TIP]
-> Excluding patcher runtimes reduces the app size. If you only use the latest ReVanced and Morphe patches, you should install the **LITE** build. If you use more than just the latest ReVanced and Morphe patches, consider installing the **FULL** build instead. Keep in mind that the in-app updater will only download the same build type you currently have installed. If you want to switch build types later, you’ll need to go to the GitHub releases page and download that build manually.
 
 
 # v1.8.0 (2026-02-15)
