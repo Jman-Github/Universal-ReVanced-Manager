@@ -1718,7 +1718,7 @@ Details: %2$s</string>
     <string name="patcher_runtime_uninstall_success">Uninstalled %1$s</string>
     <string name="patcher_runtime_uninstall_failed">Failed to uninstall %1$s</string>
     <string name="patcher_runtime_trust_dialog_title">Trust runtime plugin?</string>
-    <string name="patcher_runtime_trust_dialog_body">Continuing will allow this runtime plugin to run patcher code inside URV Manager. Only trust runtime plugins from sources you trust.</string>
+    <string name="patcher_runtime_trust_dialog_body">Continuing will allow this runtime plugin to run patcher code inside URV Manager.\n\nOnly enable this runtime plugin if you trust it. Runtime plugins can execute arbitrary code and may compromise your device.</string>
     <string name="import_button">Import</string>
     <string name="use_latest_release">Use latest release</string>
     <string name="use_prereleases">Use prereleases</string>

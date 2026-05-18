@@ -1,4 +1,17 @@
-# v1.8.1-dev.17 (TBD)
+# v1.8.1-dev.18 (TBD)
+
+
+# Features
+
+- Improved patcher runtime plugin trust dialogs to match downloader plugin trust dialogs and handle long signatures without overflowing
+
+
+# Bug fixes
+
+- Fixed patcher runtime plugin repository imports so manager APK assets are skipped and valid runtime plugin assets can be found from repository URLs
+
+
+# v1.8.1-dev.17 (2026-05-17)
 
 
 # Features

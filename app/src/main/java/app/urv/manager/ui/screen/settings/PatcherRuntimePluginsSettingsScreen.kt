@@ -5,6 +5,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -27,9 +29,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Security
-import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -812,92 +812,88 @@ private fun TrustRuntimeDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        icon = {
-            Icon(
-                imageVector = Icons.Outlined.WarningAmber,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
-            )
-        },
         title = {
-            Text(
-                text = stringResource(R.string.patcher_runtime_trust_dialog_title),
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
+            Text(stringResource(R.string.patcher_runtime_trust_dialog_title))
         },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 520.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
                     text = stringResource(R.string.patcher_runtime_trust_dialog_body),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                DialogCodeBlock(
-                    text = packageName.wrapForDialogCodeBlock(),
+
+                Card(
                     modifier = Modifier.fillMaxWidth()
-                )
-                if (signature != null) {
-                    Text(
-                        text = stringResource(R.string.patcher_runtime_signature_label),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    DialogCodeBlock(
-                        text = signature.wrapForDialogCodeBlock(),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                } else {
-                    Text(
-                        text = stringResource(R.string.patcher_runtime_signature_after_trust),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = stringResource(
+                                R.string.downloader_plugin_trust_dialog_plugin,
+                                title
+                            )
+                        )
+                        if (packageName != title) {
+                            Text(
+                                text = packageName,
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontFamily = FontFamily.Monospace
+                                ),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (signature != null) {
+                            OutlinedCard(
+                                colors = CardDefaults.outlinedCardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                                )
+                            ) {
+                                Text(
+                                    text = stringResource(
+                                        R.string.downloader_plugin_trust_dialog_signature,
+                                        signature.chunked(2).joinToString(" ")
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontFamily = FontFamily.Monospace
+                                    ),
+                                    modifier = Modifier
+                                        .padding(12.dp)
+                                        .heightIn(max = 320.dp)
+                                        .verticalScroll(rememberScrollState())
+                                )
+                            }
+                        } else {
+                            Text(
+                                text = stringResource(
+                                    R.string.patcher_runtime_signature_after_trust
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             }
         },
         confirmButton = {
-            Button(onClick = onTrust) {
-                Text(stringResource(R.string.trust))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.cancel))
+                }
+                TextButton(onClick = onTrust) {
+                    Text(stringResource(R.string.continue_))
+                }
             }
         }
     )
-}
-
-@Composable
-private fun DialogCodeBlock(
-    text: String,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
 }
 
 @Composable
@@ -966,25 +962,4 @@ private fun String.toGitHubRepoDisplayName(): String {
     } else {
         this
     }
-}
-
-private fun String.wrapForDialogCodeBlock(maxLineLength: Int = 28): String {
-    if (length <= maxLineLength) return this
-    if ('.' !in this) return chunked(maxLineLength).joinToString("\n")
-
-    val parts = split('.')
-    if (parts.isEmpty()) return this
-    val lines = mutableListOf<String>()
-    var current = parts.first()
-    parts.drop(1).forEach { part ->
-        val candidate = "$current.$part"
-        if (candidate.length > maxLineLength && current.isNotBlank()) {
-            lines += "$current."
-            current = part
-        } else {
-            current = candidate
-        }
-    }
-    lines += current
-    return lines.joinToString("\n")
 }

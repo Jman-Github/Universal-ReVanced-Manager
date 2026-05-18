@@ -474,14 +474,12 @@ class PatcherRuntimePluginRepository(
     ): PatcherRuntimePluginSourceEntry {
         val release = latestReleaseFor(
             repoUrl = entry.repoUrl,
-            prerelease = if (entry.latest) null else entry.prerelease
+            prerelease = if (entry.latest) null else entry.prerelease,
+            assetSelector = entry.assetSelector
         )
         val asset = release.assets
             .filter(::isSupportedRuntimeAsset)
-            .firstOrNull {
-                canonicalAssetSelector(normalizeAssetSelector(it.name)) ==
-                    canonicalAssetSelector(entry.assetSelector)
-            }
+            .firstOrNull { it.matchesAssetSelector(entry.assetSelector) }
             ?: throw Exception("No matching patcher runtime APK asset found for ${entry.repoUrl}")
 
         val versionKey = releaseVersionKey(release, asset)
@@ -524,9 +522,9 @@ class PatcherRuntimePluginRepository(
     }
 
     private suspend fun latestImportReleaseFor(repoUrl: String): GitHubRelease =
-        findLatestReleaseFor(repoUrl, prerelease = false)
-            ?: findLatestReleaseFor(repoUrl, prerelease = true)
-            ?: throw Exception("No releases found for $repoUrl")
+        findLatestReleaseFor(repoUrl, prerelease = false, assetSelector = null)
+            ?: findLatestReleaseFor(repoUrl, prerelease = true, assetSelector = null)
+            ?: throw Exception("No patcher runtime APK assets found for $repoUrl")
 
     private suspend fun releaseForTag(repoUrl: String, releaseTag: String): GitHubRelease =
         releaseHistoryFor(repoUrl, prerelease = null, limit = 100)
@@ -544,11 +542,28 @@ class PatcherRuntimePluginRepository(
             limit = limit
         ).successOrThrow("patcher runtime releases for $repoUrl")
 
-    private suspend fun findLatestReleaseFor(repoUrl: String, prerelease: Boolean?): GitHubRelease? =
-        releaseHistoryFor(repoUrl = repoUrl, prerelease = prerelease, limit = 1).firstOrNull()
+    private suspend fun findLatestReleaseFor(
+        repoUrl: String,
+        prerelease: Boolean?,
+        assetSelector: String?
+    ): GitHubRelease? =
+        releaseHistoryFor(repoUrl = repoUrl, prerelease = prerelease, limit = 100)
+            .firstOrNull { release ->
+                release.assets
+                    .filter(::isSupportedRuntimeAsset)
+                    .any { assetSelector == null || it.matchesAssetSelector(assetSelector) }
+            }
 
-    private suspend fun latestReleaseFor(repoUrl: String, prerelease: Boolean?): GitHubRelease =
-        findLatestReleaseFor(repoUrl = repoUrl, prerelease = prerelease)
+    private suspend fun latestReleaseFor(
+        repoUrl: String,
+        prerelease: Boolean?,
+        assetSelector: String
+    ): GitHubRelease =
+        findLatestReleaseFor(
+            repoUrl = repoUrl,
+            prerelease = prerelease,
+            assetSelector = assetSelector
+        )
             ?: throw Exception("No releases found for $repoUrl")
 
     private suspend fun downloadAssetToEntry(
@@ -655,7 +670,12 @@ class PatcherRuntimePluginRepository(
     }
 
     private fun isSupportedRuntimeAsset(asset: GitHubAsset): Boolean =
-        asset.name.endsWith(".apk", ignoreCase = true)
+        asset.name.endsWith(".apk", ignoreCase = true) &&
+            !asset.name.contains("universal-revanced-manager", ignoreCase = true)
+
+    private fun GitHubAsset.matchesAssetSelector(assetSelector: String): Boolean =
+        canonicalAssetSelector(normalizeAssetSelector(name)) ==
+            canonicalAssetSelector(assetSelector)
 
     private fun Throwable.isMissingRuntimeMetadata(): Boolean =
         this is IllegalArgumentException &&
