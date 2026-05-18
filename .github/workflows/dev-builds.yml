@@ -173,6 +173,19 @@ jobs:
           fi
           echo "NEW_TAG=${VERSION}" >> "$GITHUB_OUTPUT"
 
+      - name: Collect APK assets
+        if: steps.release.outputs.NEW_TAG != ''
+        run: |
+          mkdir -p release-assets
+          find release-artifacts -type f -name '*.apk' -exec cp '{}' release-assets/ \;
+          APK_COUNT="$(find release-assets -maxdepth 1 -type f -name '*.apk' | wc -l)"
+          if [ "$APK_COUNT" -eq 0 ]; then
+            echo "No APK assets were found in downloaded artifacts."
+            find release-artifacts -type f -print
+            exit 1
+          fi
+          ls -la release-assets
+
       - name: Publish prerelease
         if: steps.release.outputs.NEW_TAG != ''
         env:
@@ -184,4 +197,4 @@ jobs:
           else
             gh release edit "$TAG" --title "Universal ReVanced Manager ${TAG}" --notes-file dev_release_notes.md --prerelease
           fi
-          gh release upload "$TAG" release-artifacts/*.apk --clobber
+          gh release upload "$TAG" release-assets/*.apk --clobber
