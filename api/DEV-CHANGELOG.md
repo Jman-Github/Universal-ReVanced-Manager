@@ -9,6 +9,7 @@
 # Bug fixes
 
 - Fixed patcher runtime plugin repository imports so manager APK assets are skipped and valid runtime plugin assets can be found from repository URLs
+- Fixed orphaned saved patched APKs taking up storage after they were no longer shown in the Apps tab
 
 
 # v1.8.1-dev.17 (2026-05-17)

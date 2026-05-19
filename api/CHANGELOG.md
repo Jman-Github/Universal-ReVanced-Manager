@@ -263,6 +263,7 @@
 - Fixed bundle update notifications being cleared after a follow-up background check when the same manual bundle update was still available but had already been reported https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/470
 - Fixed the Apps tab "Update available" badge for patch bundles so stable releases correctly outrank matching prerelease/dev versions https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/468
 - Resolved more issues with saved patched apps https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
+- Fixed orphaned saved patched APKs taking up storage after they were no longer shown in the Apps tab
 
 
 # Refactors

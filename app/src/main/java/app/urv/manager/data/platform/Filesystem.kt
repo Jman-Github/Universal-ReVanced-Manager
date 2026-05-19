@@ -169,6 +169,26 @@ class Filesystem(private val app: Application) {
         return removed
     }
 
+    fun prunePatchedAppFiles(retainedFiles: Collection<File>): Int {
+        val retainedPaths = retainedFiles.mapTo(mutableSetOf()) { it.safeCanonicalPath() }
+        val staleFiles = patchedAppsDir.listFiles { file ->
+            file.isFile && file.name.endsWith(".apk", ignoreCase = true)
+        }?.filterNot { file ->
+            file.safeCanonicalPath() in retainedPaths
+        } ?: return 0
+
+        var removed = 0
+        staleFiles.forEach { file ->
+            if (file.delete()) {
+                removed++
+            }
+        }
+        return removed
+    }
+
+    private fun File.safeCanonicalPath(): String =
+        runCatching { canonicalFile.absolutePath }.getOrElse { absoluteFile.absolutePath }
+
     fun getPatchProfileInputFile(profileId: Int, extension: String): File {
         val sanitized = extension.lowercase(Locale.ROOT).takeIf { it.matches(Regex("^[a-z0-9]{1,10}$")) }
             ?: "apk"

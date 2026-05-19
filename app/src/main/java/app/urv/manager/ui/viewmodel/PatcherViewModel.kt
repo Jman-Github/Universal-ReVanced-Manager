@@ -1396,6 +1396,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             appliedSelection = sanitizedSelectionOriginal
             appliedOptions = sanitizedOptionsOriginal
 
+            pruneUnreferencedPatchedAppFiles()
+
             savedPatchedApp = savedPatchedApp ||
                 (effectiveShouldSaveForLater && (savedCopyWritten || savedCopy.exists()))
             true
@@ -4468,6 +4470,19 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     savedEntry.version
                 ).takeIf { it.exists() }?.delete()
             }
+    }
+
+    private suspend fun pruneUnreferencedPatchedAppFiles() {
+        val retainedFiles = installedAppRepository.getAll().first().flatMap { installedApp ->
+            listOf(
+                fs.getPatchedAppFile(installedApp.currentPackageName, installedApp.version),
+                fs.getPatchedAppFile(installedApp.originalPackageName, installedApp.version)
+            )
+        }
+        val removed = fs.prunePatchedAppFiles(retainedFiles)
+        if (removed > 0) {
+            Log.d(TAG, "Removed $removed stale saved patched APK file(s)")
+        }
     }
 
     private fun buildUniqueSavedAppEntryKey(packageName: String, variantIdentity: String): String {

@@ -62,6 +62,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.revanced.manager.R
+import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.data.room.apps.installed.InstallType
 import app.urv.manager.domain.manager.AutoClearCacheInterval
 import app.urv.manager.domain.manager.PreferencesManager
@@ -103,6 +104,7 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
     val patchBundleRepository: PatchBundleRepository = koinInject()
     val patchProfileRepository: PatchProfileRepository = koinInject()
     val workerRepository: WorkerRepository = koinInject()
+    val filesystem: Filesystem = koinInject()
     val coroutineScope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
     val searchTarget by SettingsSearchState.target.collectAsStateWithLifecycle()
@@ -123,7 +125,7 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
             val loadingStartedAt = SystemClock.elapsedRealtime()
             isLoading = true
             try {
-                snapshot = loadStorageSnapshot(context)
+                snapshot = loadStorageSnapshot(context, filesystem, installedAppRepository)
                 val remainingShimmerTime = STORAGE_REFRESH_SHIMMER_MIN_MS -
                     (SystemClock.elapsedRealtime() - loadingStartedAt)
                 if (remainingShimmerTime > 0L) {
@@ -154,7 +156,7 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
                     patchBundleRepository = patchBundleRepository,
                     patchProfileRepository = patchProfileRepository
                 )
-                snapshot = loadStorageSnapshot(context)
+                snapshot = loadStorageSnapshot(context, filesystem, installedAppRepository)
                 context.toast(
                     context.getString(
                         R.string.storage_area_cleared,
@@ -189,7 +191,7 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
             try {
                 workerRepository.workManager.getWorkInfoByIdFlow(workId)
                     .first { workInfo -> workInfo?.state?.isFinished == true }
-                snapshot = loadStorageSnapshot(context)
+                snapshot = loadStorageSnapshot(context, filesystem, installedAppRepository)
             } finally {
                 isLoading = false
             }
@@ -246,7 +248,7 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
                             isLoading = true
                             try {
                                 val clearedBytes = clearManagerCache(context)
-                                snapshot = loadStorageSnapshot(context)
+                                snapshot = loadStorageSnapshot(context, filesystem, installedAppRepository)
                                 context.toast(
                                     context.getString(
                                         R.string.storage_cache_cleared,
@@ -935,7 +937,13 @@ private data class DirectoryStats(
     )
 }
 
-private suspend fun loadStorageSnapshot(context: Context): StorageSnapshot = withContext(Dispatchers.IO) {
+private suspend fun loadStorageSnapshot(
+    context: Context,
+    filesystem: Filesystem,
+    installedAppRepository: InstalledAppRepository
+): StorageSnapshot = withContext(Dispatchers.IO) {
+    pruneUnreferencedPatchedAppFiles(filesystem, installedAppRepository)
+
     val dataRoot = File(context.applicationInfo.dataDir)
     val customBackgroundsDir = context.filesDir.resolve("custom_background")
     val preferencesDataStoreDir = context.filesDir.resolve("datastore")
@@ -1229,6 +1237,19 @@ private fun Context.knownInternalStorageRoots(): List<File> = listOf(
     privateAppDir("ephemeral"),
     privateAppDir("ui_ephemeral")
 )
+
+private suspend fun pruneUnreferencedPatchedAppFiles(
+    filesystem: Filesystem,
+    installedAppRepository: InstalledAppRepository
+) {
+    val retainedFiles = installedAppRepository.getAll().first().flatMap { installedApp ->
+        listOf(
+            filesystem.getPatchedAppFile(installedApp.currentPackageName, installedApp.version),
+            filesystem.getPatchedAppFile(installedApp.originalPackageName, installedApp.version)
+        )
+    }
+    filesystem.prunePatchedAppFiles(retainedFiles)
+}
 
 private fun List<File>.combinedStats(): DirectoryStats =
     fold(DirectoryStats()) { total, file -> total + file.directoryStats() }
