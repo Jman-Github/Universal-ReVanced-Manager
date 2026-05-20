@@ -4,7 +4,7 @@
         android:required="false" />
 
     <application
-        android:label="ReVanced v21 Runtime"
+        android:label="ReVanced v21"
         android:largeHeap="true">
         <meta-data
             android:name="app.urv.manager.patcher.runtime.kind"

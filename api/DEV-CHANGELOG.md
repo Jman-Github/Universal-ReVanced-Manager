@@ -4,6 +4,7 @@
 # Features
 
 - Improved patcher runtime plugin trust dialogs to match downloader plugin trust dialogs and handle long signatures without overflowing
+- Improved downloader and patcher runtime plugin source settings, including clearer runtime source details, repository URL copying, matching switch behavior, and the renamed ReVanced v21 runtime plugin https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/490 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/493
 
 
 # Bug fixes

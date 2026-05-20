@@ -86,11 +86,11 @@ import app.urv.manager.ui.component.ConfirmDialog
 import app.urv.manager.ui.component.TransparentLoadingDialog
 import app.urv.manager.ui.component.patches.PathSelectorDialog
 import app.urv.manager.ui.component.haptics.HapticCheckbox
-import app.urv.manager.ui.component.haptics.HapticSwitch
 import app.urv.manager.ui.component.settings.BooleanItem
 import app.urv.manager.ui.component.settings.ExpressiveSettingsCard
 import app.urv.manager.ui.component.settings.ExpressiveSettingsDivider
 import app.urv.manager.ui.component.settings.ExpressiveSettingsItem
+import app.urv.manager.ui.component.settings.ExpressiveSettingsSwitch
 import app.urv.manager.ui.component.settings.SettingsSearchHighlight
 import app.urv.manager.ui.model.navigation.Settings
 import app.urv.manager.ui.screen.settings.SettingsSearchState
@@ -1108,7 +1108,7 @@ private fun DownloaderSourceSettingsDialog(
                                 )
                             }
                             Spacer(modifier = Modifier.width(12.dp))
-                            HapticSwitch(
+                            ExpressiveSettingsSwitch(
                                 checked = source.entry.autoUpdate,
                                 onCheckedChange = onAutoUpdateChanged
                             )
@@ -1132,7 +1132,7 @@ private fun DownloaderSourceSettingsDialog(
                                 )
                             }
                             Spacer(modifier = Modifier.width(12.dp))
-                            HapticSwitch(
+                            ExpressiveSettingsSwitch(
                                 checked = source.entry.latest,
                                 onCheckedChange = onLatestChanged
                             )
@@ -1156,8 +1156,8 @@ private fun DownloaderSourceSettingsDialog(
                                 )
                             }
                             Spacer(modifier = Modifier.width(12.dp))
-                            HapticSwitch(
-                                checked = source.entry.prerelease,
+                            ExpressiveSettingsSwitch(
+                                checked = source.entry.prerelease && !source.entry.latest,
                                 onCheckedChange = onPrereleaseChanged,
                                 enabled = !source.entry.latest
                             )

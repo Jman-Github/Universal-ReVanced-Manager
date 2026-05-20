@@ -193,7 +193,14 @@ class DownloaderPluginRepository(
 
     suspend fun setSourceLatest(id: String, enabled: Boolean) = withContext(Dispatchers.IO) {
         val entries = readSourceEntries().map { entry ->
-            if (entry.id == id) entry.copy(latest = enabled) else entry
+            if (entry.id == id) {
+                entry.copy(
+                    latest = enabled,
+                    prerelease = if (enabled) false else entry.prerelease
+                )
+            } else {
+                entry
+            }
         }
         writeSourceEntries(entries)
         reload()

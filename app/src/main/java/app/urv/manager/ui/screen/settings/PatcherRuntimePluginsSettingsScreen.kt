@@ -1,5 +1,7 @@
 package app.urv.manager.ui.screen.settings
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import androidx.annotation.StringRes
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -85,6 +87,7 @@ import app.urv.manager.ui.component.settings.ExpressiveSettingsDivider
 import app.urv.manager.ui.component.settings.ExpressiveSettingsItem
 import app.urv.manager.ui.component.settings.ExpressiveSettingsSwitch
 import app.urv.manager.ui.viewmodel.PatcherRuntimePluginsViewModel
+import app.urv.manager.util.toast
 import org.koin.androidx.compose.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -337,10 +340,11 @@ private fun ManagedRuntimeCard(
     var showErrorDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
-    val loaded = source.state as? PatcherRuntimePluginSourceState.State.Loaded
     val untrusted = source.state as? PatcherRuntimePluginSourceState.State.Untrusted
     val failed = source.state as? PatcherRuntimePluginSourceState.State.Failed
     val actionsEnabled = remoteSourceBusyState == null
+    val context = LocalContext.current
+    val clipboard = remember(context) { context.getSystemService(ClipboardManager::class.java) }
 
     RuntimePluginCard(
         title = source.name,
@@ -356,7 +360,7 @@ private fun ManagedRuntimeCard(
                 stringResource(R.string.patcher_runtime_missing)
         },
         type = RuntimePluginType.Remote,
-        detail = loaded?.plugin?.kind?.displayName ?: source.repoUrl.toGitHubRepoDisplayName(),
+        detail = source.repoUrl.toGitHubRepoDisplayName(),
         modifier = modifier,
         secondaryActionLabel = stringResource(R.string.delete),
         onSecondaryAction = { showDeleteDialog = true },
@@ -432,7 +436,16 @@ private fun ManagedRuntimeCard(
             onDismiss = { showSettingsDialog = false },
             onAutoUpdateChanged = { viewModel.setPluginSourceAutoUpdate(source.entry.id, it) },
             onLatestChanged = { viewModel.setPluginSourceLatest(source.entry.id, it) },
-            onPrereleaseChanged = { viewModel.setPluginSourcePrerelease(source.entry.id, it) }
+            onPrereleaseChanged = { viewModel.setPluginSourcePrerelease(source.entry.id, it) },
+            onCopyRepoUrl = {
+                clipboard?.setPrimaryClip(
+                    ClipData.newPlainText(
+                        source.repoUrl.toGitHubRepoDisplayName(),
+                        source.repoUrl
+                    )
+                )
+                context.toast(context.getString(R.string.toast_copied_to_clipboard))
+            }
         )
     }
 }
@@ -718,7 +731,8 @@ private fun RuntimeSourceSettingsDialog(
     onDismiss: () -> Unit,
     onAutoUpdateChanged: (Boolean) -> Unit,
     onLatestChanged: (Boolean) -> Unit,
-    onPrereleaseChanged: (Boolean) -> Unit
+    onPrereleaseChanged: (Boolean) -> Unit,
+    onCopyRepoUrl: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -740,20 +754,53 @@ private fun RuntimeSourceSettingsDialog(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         RuntimeSourceSwitchRow(
-                            title = stringResource(R.string.auto_update),
+                            title = stringResource(R.string.downloader_source_auto_update),
+                            description = stringResource(R.string.auto_update_description),
                             checked = source.entry.autoUpdate,
                             onCheckedChange = onAutoUpdateChanged
                         )
                         RuntimeSourceSwitchRow(
-                            title = stringResource(R.string.use_latest_release),
+                            title = stringResource(R.string.downloader_source_latest),
+                            description = stringResource(R.string.downloader_source_latest_description),
                             checked = source.entry.latest,
                             onCheckedChange = onLatestChanged
                         )
                         RuntimeSourceSwitchRow(
-                            title = stringResource(R.string.use_prereleases),
-                            checked = source.entry.prerelease,
-                            onCheckedChange = onPrereleaseChanged
+                            title = stringResource(R.string.downloader_source_prerelease),
+                            description = stringResource(R.string.downloader_source_prerelease_description),
+                            checked = source.entry.prerelease && !source.entry.latest,
+                            onCheckedChange = onPrereleaseChanged,
+                            enabled = !source.entry.latest
                         )
+                    }
+                }
+                OutlinedCard(
+                    colors = CardDefaults.outlinedCardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.downloader_source_repo_url),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = source.repoUrl,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(onClick = onCopyRepoUrl) {
+                                Text(stringResource(R.string.copy_to_clipboard))
+                            }
+                        }
                     }
                 }
             }
@@ -769,23 +816,43 @@ private fun RuntimeSourceSettingsDialog(
 @Composable
 private fun RuntimeSourceSwitchRow(
     title: String,
+    description: String,
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
+    onCheckedChange: (Boolean) -> Unit,
+    enabled: Boolean = true
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyLarge,
+        Column(
             modifier = Modifier.weight(1f)
-        )
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (enabled) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                }
+            )
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (enabled) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                }
+            )
+        }
         Spacer(modifier = Modifier.width(12.dp))
         ExpressiveSettingsSwitch(
             checked = checked,
-            onCheckedChange = onCheckedChange
+            onCheckedChange = onCheckedChange,
+            enabled = enabled
         )
     }
 }
