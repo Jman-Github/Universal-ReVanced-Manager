@@ -32,5 +32,8 @@ fun String.toDownloaderMainName(): String {
         .removeSuffix(" downloader")
         .removeSuffix(" Downloader")
         .trim()
+        .replace("Apkmirror", "APKMirror", ignoreCase = true)
+        .replace("Apkcombo", "APKCombo", ignoreCase = true)
+        .replace("Apkpure", "APKPure", ignoreCase = true)
         .ifBlank { this }
 }

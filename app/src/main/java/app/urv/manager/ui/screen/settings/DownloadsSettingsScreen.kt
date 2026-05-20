@@ -9,6 +9,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -66,6 +68,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -549,9 +552,9 @@ fun DownloadsSettingsScreen(
                             PluginActionDialog(
                                 title = R.string.downloader_plugin_trust_dialog_title,
                                 body = stringResource(R.string.downloader_plugin_trust_dialog_body),
-                                pluginName = source.name,
+                                pluginName = source.name.toDownloaderMainName(),
                                 signature = source.state.signature,
-                                primaryLabel = R.string.continue_,
+                                primaryLabel = R.string.confirm,
                                 secondaryLabel = R.string.delete,
                                 onPrimary = {
                                     viewModel.trustPluginSource(sourceId)
@@ -669,9 +672,9 @@ fun DownloadsSettingsScreen(
                                     body = stringResource(
                                         R.string.downloader_plugin_trust_dialog_body
                                     ),
-                                    pluginName = appName,
+                                    pluginName = pluginTitle,
                                     signature = signature.orEmpty(),
-                                    primaryLabel = R.string.continue_,
+                                    primaryLabel = R.string.confirm,
                                     onPrimary = {
                                         viewModel.trustPlugin(packageName)
                                         dialogType = null
@@ -689,9 +692,9 @@ fun DownloadsSettingsScreen(
                                     body = stringResource(
                                         R.string.downloader_plugin_trust_dialog_body
                                     ),
-                                    pluginName = appName,
+                                    pluginName = pluginTitle,
                                     signature = signature.orEmpty(),
-                                    primaryLabel = R.string.continue_,
+                                    primaryLabel = R.string.confirm,
                                     onPrimary = {
                                         viewModel.revokePluginTrust(packageName)
                                         dialogType = null
@@ -1347,35 +1350,65 @@ private fun PluginActionDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(title)) },
+        icon = {
+            Icon(
+                imageVector = Icons.Outlined.WarningAmber,
+                contentDescription = null
+            )
+        },
+        title = {
+            Text(
+                text = stringResource(title),
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
+            )
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(body)
-                Card {
-                    Column(
-                        Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Text(
-                            stringResource(
-                                R.string.downloader_plugin_trust_dialog_plugin,
-                                pluginName
-                            )
-                        )
-                        OutlinedCard(
-                            colors = CardDefaults.outlinedCardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                            )
-                        ) {
-                            Text(
-                                stringResource(
-                                    R.string.downloader_plugin_trust_dialog_signature,
-                                    signature.chunked(2).joinToString(" ")
-                                ),
-                                modifier = Modifier.padding(12.dp)
-                            )
-                        }
-                    }
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = body,
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TrustDialogSectionLabel(
+                        text = stringResource(R.string.downloader_plugin_trust_dialog_plugin)
+                    )
+                    Text(
+                        text = pluginName,
+                        modifier = Modifier.fillMaxWidth(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center
+                    )
+                }
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TrustDialogSectionLabel(
+                        text = stringResource(R.string.downloader_plugin_trust_dialog_signature)
+                    )
+                    Text(
+                        text = signature.chunked(2).joinToString(" "),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 320.dp)
+                            .verticalScroll(rememberScrollState()),
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontFamily = FontFamily.Monospace
+                        ),
+                        textAlign = TextAlign.Center
+                    )
                 }
             }
         },
@@ -1394,6 +1427,17 @@ private fun PluginActionDialog(
                 }
             }
         }
+    )
+}
+
+@Composable
+private fun TrustDialogSectionLabel(text: String) {
+    Text(
+        text = text,
+        modifier = Modifier.fillMaxWidth(),
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center
     )
 }
 

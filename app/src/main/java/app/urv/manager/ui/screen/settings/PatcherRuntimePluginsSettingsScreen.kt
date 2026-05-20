@@ -31,6 +31,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -403,10 +404,15 @@ private fun ManagedRuntimeCard(
             title = source.name,
             packageName = untrusted.packageName,
             signature = untrusted.signature,
+            secondaryLabel = R.string.delete,
             onDismiss = { showTrustDialog = false },
             onTrust = {
                 showTrustDialog = false
                 viewModel.trustPluginSource(source.entry.id)
+            },
+            onSecondary = {
+                showTrustDialog = false
+                showDeleteDialog = true
             }
         )
     }
@@ -511,10 +517,15 @@ private fun InstalledRuntimeCard(
             title = appName,
             packageName = packageName,
             signature = null,
+            secondaryLabel = R.string.uninstall,
             onDismiss = { showTrustDialog = false },
             onTrust = {
                 showTrustDialog = false
                 viewModel.trustPlugin(packageName)
+            },
+            onSecondary = {
+                showTrustDialog = false
+                showUninstallDialog = true
             }
         )
     }
@@ -874,13 +885,25 @@ private fun TrustRuntimeDialog(
     title: String,
     packageName: String,
     signature: String?,
+    @StringRes secondaryLabel: Int? = null,
     onDismiss: () -> Unit,
-    onTrust: () -> Unit
+    onTrust: () -> Unit,
+    onSecondary: (() -> Unit)? = null
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = Icons.Outlined.WarningAmber,
+                contentDescription = null
+            )
+        },
         title = {
-            Text(stringResource(R.string.patcher_runtime_trust_dialog_title))
+            Text(
+                text = stringResource(R.string.patcher_runtime_trust_dialog_title),
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
+            )
         },
         text = {
             Column(
@@ -888,65 +911,81 @@ private fun TrustRuntimeDialog(
                     .fillMaxWidth()
                     .heightIn(max = 520.dp)
                     .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
                     text = stringResource(R.string.patcher_runtime_trust_dialog_body),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
                 )
 
-                Card(
-                    modifier = Modifier.fillMaxWidth()
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
+                    TrustDialogSectionLabel(
+                        text = stringResource(R.string.downloader_plugin_trust_dialog_plugin)
+                    )
+                    Text(
+                        text = title,
+                        modifier = Modifier.fillMaxWidth(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center
+                    )
+                    if (packageName != title) {
+                        Text(
+                            text = packageName,
+                            modifier = Modifier.fillMaxWidth(),
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = FontFamily.Monospace
+                            ),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TrustDialogSectionLabel(
+                        text = stringResource(R.string.patcher_runtime_signature_label)
+                    )
+                    if (signature != null) {
+                        Text(
+                            text = signature.chunked(2).joinToString(" "),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 320.dp)
+                                .verticalScroll(rememberScrollState()),
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = FontFamily.Monospace
+                            ),
+                            textAlign = TextAlign.Center
+                        )
+                    } else {
                         Text(
                             text = stringResource(
-                                R.string.downloader_plugin_trust_dialog_plugin,
-                                title
-                            )
+                                R.string.patcher_runtime_signature_after_trust
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
                         )
-                        if (packageName != title) {
-                            Text(
-                                text = packageName,
-                                style = MaterialTheme.typography.bodySmall.copy(
-                                    fontFamily = FontFamily.Monospace
-                                ),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        if (signature != null) {
-                            OutlinedCard(
-                                colors = CardDefaults.outlinedCardColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                                )
-                            ) {
-                                Text(
-                                    text = stringResource(
-                                        R.string.downloader_plugin_trust_dialog_signature,
-                                        signature.chunked(2).joinToString(" ")
-                                    ),
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontFamily = FontFamily.Monospace
-                                    ),
-                                    modifier = Modifier
-                                        .padding(12.dp)
-                                        .heightIn(max = 320.dp)
-                                        .verticalScroll(rememberScrollState())
-                                )
-                            }
-                        } else {
-                            Text(
-                                text = stringResource(
-                                    R.string.patcher_runtime_signature_after_trust
-                                ),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
                     }
+                }
+            }
+        },
+        dismissButton = {
+            if (secondaryLabel != null && onSecondary != null) {
+                TextButton(onClick = onSecondary) {
+                    Text(stringResource(secondaryLabel))
                 }
             }
         },
@@ -956,10 +995,21 @@ private fun TrustRuntimeDialog(
                     Text(stringResource(R.string.cancel))
                 }
                 TextButton(onClick = onTrust) {
-                    Text(stringResource(R.string.continue_))
+                    Text(stringResource(R.string.confirm))
                 }
             }
         }
+    )
+}
+
+@Composable
+private fun TrustDialogSectionLabel(text: String) {
+    Text(
+        text = text,
+        modifier = Modifier.fillMaxWidth(),
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center
     )
 }
 

@@ -135,6 +135,8 @@
 - Close dashboard search bars when switching between Apps, Patches, and Profiles tabs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/469
 - Center storage management confirmation dialog titles and descriptions https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/461
 - Improve YouTube asset guide ring contrast on both light and dark images https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/463
+- Improved downloader and patcher runtime plugin source settings, including clearer runtime source details, repository URL copying, matching switch behavior, and the renamed ReVanced v21 runtime plugin https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/490 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/493
+- Improved downloader and patcher runtime plugin trust dialogs with clearer wording, centered Plugin and Signature sections, consistent warning icons, Confirm actions, and corrected downloader plugin display names https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/491
 
 
 # Bug fixes
@@ -264,7 +266,6 @@
 - Fixed the Apps tab "Update available" badge for patch bundles so stable releases correctly outrank matching prerelease/dev versions https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/468
 - Resolved more issues with saved patched apps https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
 - Fixed orphaned saved patched APKs taking up storage after they were no longer shown in the Apps tab
-- Improved downloader and patcher runtime plugin source settings, including clearer runtime source details, repository URL copying, matching switch behavior, and the renamed ReVanced v21 runtime plugin https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/490 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/493
 
 
 # Refactors
