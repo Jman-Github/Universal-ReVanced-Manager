@@ -1473,7 +1473,7 @@ Details: %2$s</string>
     <string name="revanced_manager_credit_subtext">This app uses code from ReVanced and is a fork of ReVanced Manager</string>
     <string name="morphe_manager_credit">Morphe Manager</string>
     <string name="morphe_manager_credit_prefix">This app uses code from Morphe. To learn more, visit </string>
-    <string name="morphe_manager_credit_suffix">.</string>
+    <string name="morphe_manager_credit_suffix"></string>
     <string name="licensing">Licensing</string>
     <string name="notice">NOTICE</string>
     <string name="notice_description">View project notices and attribution information</string>
@@ -1705,7 +1705,7 @@ Details: %2$s</string>
     <string name="patcher_runtime_no_managed_sources">No managed runtime sources added</string>
     <string name="patcher_runtime_installed_plugins">Installed runtime plugins</string>
     <string name="patcher_runtime_no_installed_plugins">No runtime plugin APKs installed</string>
-    <string name="patcher_runtime_available">Available runtimes</string>
+    <string name="patcher_runtime_available">Available Runtimes</string>
     <string name="patcher_runtime_built_in">Built-in</string>
     <string name="patcher_runtime_available_yes">Available</string>
     <string name="patcher_runtime_available_no">Missing</string>
@@ -1716,7 +1716,7 @@ Details: %2$s</string>
     <string name="patcher_runtime_signature_after_trust">The package signature will be saved after trust is confirmed.</string>
     <string name="patcher_runtime_signature_label">Signature</string>
     <string name="patcher_runtime_uninstall_title">Uninstall runtime plugin?</string>
-    <string name="patcher_runtime_uninstall_description">Uninstall &quot;%1$s&quot;?</string>
+    <string name="patcher_runtime_uninstall_description">Are you sure you want to uninstall %1$s?</string>
     <string name="patcher_runtime_uninstall_success">Uninstalled %1$s</string>
     <string name="patcher_runtime_uninstall_failed">Failed to uninstall %1$s</string>
     <string name="patcher_runtime_trust_dialog_title">Trust runtime plugin?</string>
