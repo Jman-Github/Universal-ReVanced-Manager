@@ -1,5 +1,6 @@
 package app.urv.manager.ui.component
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -18,7 +19,8 @@ fun ConfirmDialog(
     onConfirm: () -> Unit,
     title: String,
     description: String,
-    icon: ImageVector
+    icon: ImageVector,
+    @StringRes confirmLabelRes: Int = R.string.confirm
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -29,7 +31,7 @@ fun ConfirmDialog(
         },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text(stringResource(R.string.confirm))
+                Text(stringResource(confirmLabelRes))
             }
         },
         title = { Text(title, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },

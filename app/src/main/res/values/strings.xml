@@ -1711,11 +1711,11 @@ Details: %2$s</string>
     <string name="patcher_runtime_available_no">Missing</string>
     <string name="patcher_runtime_unknown_version">Unknown version</string>
     <string name="patcher_runtime_missing">Missing file</string>
-    <string name="patcher_runtime_source_delete_title">Delete runtime source?</string>
+    <string name="patcher_runtime_source_delete_title">Delete</string>
     <string name="patcher_runtime_source_delete_description">Delete &quot;%1$s&quot; and its managed runtime APK?</string>
     <string name="patcher_runtime_signature_after_trust">The package signature will be saved after trust is confirmed.</string>
     <string name="patcher_runtime_signature_label">Signature</string>
-    <string name="patcher_runtime_uninstall_title">Uninstall runtime plugin?</string>
+    <string name="patcher_runtime_uninstall_title">Uninstall</string>
     <string name="patcher_runtime_uninstall_description">Are you sure you want to uninstall %1$s?</string>
     <string name="patcher_runtime_uninstall_success">Uninstalled %1$s</string>
     <string name="patcher_runtime_uninstall_failed">Failed to uninstall %1$s</string>

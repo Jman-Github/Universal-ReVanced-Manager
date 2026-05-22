@@ -429,6 +429,7 @@ private fun ManagedRuntimeCard(
             title = stringResource(R.string.patcher_runtime_source_delete_title),
             description = stringResource(R.string.patcher_runtime_source_delete_description, source.name),
             icon = Icons.Outlined.Delete,
+            confirmLabelRes = R.string.delete,
             onDismiss = { showDeleteDialog = false },
             onConfirm = {
                 showDeleteDialog = false
@@ -517,7 +518,7 @@ private fun InstalledRuntimeCard(
             title = appName,
             packageName = packageName,
             signature = null,
-            secondaryLabel = R.string.uninstall,
+            secondaryLabel = R.string.delete,
             onDismiss = { showTrustDialog = false },
             onTrust = {
                 showTrustDialog = false
@@ -542,6 +543,7 @@ private fun InstalledRuntimeCard(
             title = stringResource(R.string.patcher_runtime_uninstall_title),
             description = stringResource(R.string.patcher_runtime_uninstall_description, appName),
             icon = Icons.Outlined.Delete,
+            confirmLabelRes = R.string.uninstall,
             onDismiss = { showUninstallDialog = false },
             onConfirm = {
                 showUninstallDialog = false
