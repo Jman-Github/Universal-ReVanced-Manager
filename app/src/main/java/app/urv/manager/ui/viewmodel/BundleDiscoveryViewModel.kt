@@ -202,6 +202,7 @@ class BundleDiscoveryViewModel(
                         bundles?.isNotEmpty() == true
                     }
                     if (found) break
+                    if (!canLoadMore) break
                     val loaded = loadNextPageInternal(force = true)
                     if (!loaded) break
                 }

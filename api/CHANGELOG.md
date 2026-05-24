@@ -270,6 +270,7 @@
 - Fixed the Apps tab "Update available" badge for patch bundles so stable releases correctly outrank matching prerelease/dev versions https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/468
 - Resolved more issues with saved patched apps https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
 - Fixed orphaned saved patched APKs taking up storage after they were no longer shown in the Apps tab
+- Fixed bundle discovery searches showing the loading state indefinitely when no matching bundles are found https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/499
 
 
 # Refactors

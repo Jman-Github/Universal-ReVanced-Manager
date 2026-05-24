@@ -798,7 +798,7 @@ fun PatchBundleDiscoveryScreen(
 
                 visibleBundles.isNullOrEmpty() -> {
                     item {
-                        if (isSearchingMore && (query.isNotBlank() || packageQuery.isNotBlank())) {
+                        if (isSearchingMore && viewModel.canLoadMore && (query.isNotBlank() || packageQuery.isNotBlank())) {
                             ExpressiveSettingsCard(
                                 modifier = Modifier.fillMaxWidth(),
                                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
