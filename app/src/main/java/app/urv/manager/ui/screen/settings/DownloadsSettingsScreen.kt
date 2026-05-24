@@ -221,6 +221,7 @@ fun DownloadsSettingsScreen(
     sourceIdPendingDeletion
         ?.let(sourceStates::get)
         ?.let { source ->
+            val sourceLabel = source.name.toDownloaderDisplayLabel()
             ConfirmDialog(
                 onDismiss = { sourceIdPendingDeletion = null },
                 onConfirm = {
@@ -230,7 +231,7 @@ fun DownloadsSettingsScreen(
                 title = stringResource(R.string.downloader_source_delete_title),
                 description = stringResource(
                     R.string.downloader_source_delete_description,
-                    source.name
+                    sourceLabel
                 ),
                 icon = Icons.Outlined.Delete
             )
@@ -238,6 +239,7 @@ fun DownloadsSettingsScreen(
     sourceIdPendingTrustRevoke
         ?.let(sourceStates::get)
         ?.let { source ->
+            val sourceLabel = source.name.toDownloaderDisplayLabel()
             ConfirmDialog(
                 onDismiss = { sourceIdPendingTrustRevoke = null },
                 onConfirm = {
@@ -247,7 +249,7 @@ fun DownloadsSettingsScreen(
                 title = stringResource(R.string.downloader_plugin_revoke_trust_dialog_title),
                 description = stringResource(
                     R.string.downloader_source_revoke_trust_description,
-                    source.name
+                    sourceLabel
                 ),
                 icon = Icons.Outlined.WarningAmber
             )
@@ -552,7 +554,7 @@ fun DownloadsSettingsScreen(
                             PluginActionDialog(
                                 title = R.string.downloader_plugin_trust_dialog_title,
                                 body = stringResource(R.string.downloader_plugin_trust_dialog_body),
-                                pluginName = source.name.toDownloaderMainName(),
+                                pluginName = source.name.toDownloaderDisplayLabel(),
                                 signature = source.state.signature,
                                 primaryLabel = R.string.confirm,
                                 secondaryLabel = R.string.delete,
@@ -672,7 +674,7 @@ fun DownloadsSettingsScreen(
                                     body = stringResource(
                                         R.string.downloader_plugin_trust_dialog_body
                                     ),
-                                    pluginName = pluginTitle,
+                                    pluginName = pluginTitle.toDownloaderDisplayLabel(),
                                     signature = signature.orEmpty(),
                                     primaryLabel = R.string.confirm,
                                     onPrimary = {
@@ -692,7 +694,7 @@ fun DownloadsSettingsScreen(
                                     body = stringResource(
                                         R.string.downloader_plugin_trust_dialog_body
                                     ),
-                                    pluginName = pluginTitle,
+                                    pluginName = pluginTitle.toDownloaderDisplayLabel(),
                                     signature = signature.orEmpty(),
                                     primaryLabel = R.string.confirm,
                                     onPrimary = {
@@ -728,7 +730,7 @@ fun DownloadsSettingsScreen(
                                     title = stringResource(R.string.downloader_plugin_uninstall_title),
                                     description = stringResource(
                                         R.string.downloader_plugin_uninstall_description,
-                                        packageName
+                                        pluginTitle.toDownloaderDisplayLabel()
                                     ),
                                     icon = Icons.Outlined.Delete
                                 )
@@ -884,6 +886,15 @@ private data class PendingDownloadedAppsExportConfirmation(
 private enum class DownloaderPluginType(@StringRes val labelRes: Int) {
     Local(R.string.downloader_plugin_type_legacy),
     Remote(R.string.downloader_plugin_type_modern)
+}
+
+private fun String.toDownloaderDisplayLabel(): String {
+    val mainName = toDownloaderMainName()
+    return if (mainName.endsWith(" downloader", ignoreCase = true)) {
+        mainName
+    } else {
+        "$mainName downloader"
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -1073,9 +1084,10 @@ private fun DownloaderSourceSettingsDialog(
     onPrereleaseChanged: (Boolean) -> Unit,
     onCopyRepoUrl: () -> Unit
 ) {
+    val sourceLabel = remember(source.name) { source.name.toDownloaderDisplayLabel() }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.downloader_source_settings_title, source.name)) },
+        title = { Text(stringResource(R.string.downloader_source_settings_title, sourceLabel)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text(

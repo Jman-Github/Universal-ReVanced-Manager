@@ -139,6 +139,7 @@
 - Improved downloader and patcher runtime plugin trust dialogs with clearer wording, centered Plugin and Signature sections, consistent warning icons, Confirm actions, and corrected downloader plugin display names https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/491
 - Polished runtime plugin labels, uninstall confirmation text, and About screen credit punctuation https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/486
 - Improved runtime plugin dialog wording so delete and uninstall confirmations use consistent action labels https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/496
+- Improved downloader and patcher runtime plugin labels for consistent naming across cards and dialogs, and updated the patch bundle discovery empty state to show `No bundles found` centered in the list https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/495 https://github.csues/494-Github/Universal-ReVanced-Manager/issues/494 https://github.coues/500-Github/Universal-ReVanced-Manager/issues/500
 
 
 # Bug fixes

@@ -76,6 +76,7 @@ import app.universal.revanced.manager.R
 import app.urv.manager.network.runtime.PatcherRuntimeKind
 import app.urv.manager.network.runtime.PatcherRuntimePluginSourceState
 import app.urv.manager.network.runtime.PatcherRuntimePluginState
+import app.urv.manager.network.runtime.toRuntimeMainName
 import app.urv.manager.ui.component.AppTopBar
 import app.urv.manager.ui.component.ConfirmDialog
 import app.urv.manager.ui.component.ExceptionViewerDialog
@@ -346,9 +347,11 @@ private fun ManagedRuntimeCard(
     val actionsEnabled = remoteSourceBusyState == null
     val context = LocalContext.current
     val clipboard = remember(context) { context.getSystemService(ClipboardManager::class.java) }
+    val sourceName = remember(source.name) { source.name.toRuntimeMainName() }
+    val sourceLabel = remember(sourceName) { sourceName.toRuntimeDisplayLabel() }
 
     RuntimePluginCard(
-        title = source.name,
+        title = sourceName,
         version = source.version,
         status = when (source.state) {
             is PatcherRuntimePluginSourceState.State.Loaded ->
@@ -401,7 +404,7 @@ private fun ManagedRuntimeCard(
 
     if (showTrustDialog && untrusted != null) {
         TrustRuntimeDialog(
-            title = source.name,
+            title = sourceName,
             packageName = untrusted.packageName,
             signature = untrusted.signature,
             secondaryLabel = R.string.delete,
@@ -427,7 +430,7 @@ private fun ManagedRuntimeCard(
     if (showDeleteDialog) {
         ConfirmDialog(
             title = stringResource(R.string.patcher_runtime_source_delete_title),
-            description = stringResource(R.string.patcher_runtime_source_delete_description, source.name),
+            description = stringResource(R.string.patcher_runtime_source_delete_description, sourceLabel),
             icon = Icons.Outlined.Delete,
             confirmLabelRes = R.string.delete,
             onDismiss = { showDeleteDialog = false },
@@ -477,9 +480,11 @@ private fun InstalledRuntimeCard(
         packageInfo?.applicationInfo?.loadLabel(context.packageManager)?.toString()
             ?: packageName
     }
+    val runtimeName = remember(appName) { appName.toRuntimeMainName() }
+    val runtimeLabel = remember(runtimeName) { runtimeName.toRuntimeDisplayLabel() }
 
     RuntimePluginCard(
-        title = appName,
+        title = runtimeName,
         version = packageInfo?.versionName ?: loaded?.plugin?.version,
         status = when (state) {
             is PatcherRuntimePluginState.Loaded -> stringResource(R.string.downloader_plugin_state_trusted)
@@ -515,7 +520,7 @@ private fun InstalledRuntimeCard(
 
     if (showTrustDialog) {
         TrustRuntimeDialog(
-            title = appName,
+            title = runtimeName,
             packageName = packageName,
             signature = null,
             secondaryLabel = R.string.delete,
@@ -541,7 +546,7 @@ private fun InstalledRuntimeCard(
     if (showUninstallDialog) {
         ConfirmDialog(
             title = stringResource(R.string.patcher_runtime_uninstall_title),
-            description = stringResource(R.string.patcher_runtime_uninstall_description, appName),
+            description = stringResource(R.string.patcher_runtime_uninstall_description, runtimeLabel),
             icon = Icons.Outlined.Delete,
             confirmLabelRes = R.string.uninstall,
             onDismiss = { showUninstallDialog = false },
@@ -557,6 +562,9 @@ private enum class RuntimePluginType(@StringRes val labelRes: Int) {
     Local(R.string.downloader_plugin_type_legacy),
     Remote(R.string.downloader_plugin_type_modern)
 }
+
+private fun String.toRuntimeDisplayLabel(): String =
+    if (endsWith(" runtime", ignoreCase = true)) this else "$this runtime"
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -584,7 +592,7 @@ private fun RuntimePluginCard(
     val supportingSlot: @Composable () -> Unit = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
-                text = "${stringResource(R.string.downloader_plugin_type_label)} " +
+                text = "${stringResource(R.string.patcher_runtime_type_label)} " +
                     stringResource(type.labelRes),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -747,9 +755,11 @@ private fun RuntimeSourceSettingsDialog(
     onPrereleaseChanged: (Boolean) -> Unit,
     onCopyRepoUrl: () -> Unit
 ) {
+    val sourceName = remember(source.name) { source.name.toRuntimeMainName() }
+    val sourceLabel = remember(sourceName) { sourceName.toRuntimeDisplayLabel() }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.downloader_source_settings_title, source.name)) },
+        title = { Text(stringResource(R.string.downloader_source_settings_title, sourceLabel)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text(
