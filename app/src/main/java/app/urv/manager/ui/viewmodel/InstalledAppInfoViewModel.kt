@@ -44,6 +44,7 @@ import app.urv.manager.util.buildSavedAppVariantIdentity
 import app.urv.manager.util.isSavedAppEntryForPackage
 import app.urv.manager.util.mergeWith
 import app.urv.manager.util.savedAppBasePackage
+import app.urv.manager.util.savedApkAbiLabel
 import app.urv.manager.util.simpleMessage
 import app.urv.manager.util.tag
 import app.urv.manager.util.awaitUserConfirmation
@@ -126,6 +127,8 @@ class InstalledAppInfoViewModel(
     var isInstalledOnDevice by mutableStateOf(false)
         private set
     var hasSavedCopy by mutableStateOf(false)
+        private set
+    var savedApkAbiLabel by mutableStateOf<String?>(null)
         private set
     var mountOperation: MountOperation? by mutableStateOf(null)
         private set
@@ -1255,6 +1258,7 @@ class InstalledAppInfoViewModel(
             savedApkFile(app)?.delete()
         }
         hasSavedCopy = false
+        savedApkAbiLabel = null
     }
 
     private fun savedApkFile(app: InstalledApp? = this.installedApp): File? {
@@ -1270,8 +1274,11 @@ class InstalledAppInfoViewModel(
 
     private suspend fun refreshAppState(app: InstalledApp) {
         val devicePackageName = resolveDevicePackageName(app)
+        val savedFile = withContext(Dispatchers.IO) {
+            savedApkFile(app)
+        }
         val savedInfo = withContext(Dispatchers.IO) {
-            savedApkFile(app)?.let(pm::getPackageInfo)
+            savedFile?.let(pm::getPackageInfo)
         }
         val displayInfo = if (app.installType == InstallType.SAVED) {
             savedInfo
@@ -1281,7 +1288,10 @@ class InstalledAppInfoViewModel(
         val installedInfo = withContext(Dispatchers.IO) {
             pm.getPackageInfo(devicePackageName)
         }
-        hasSavedCopy = withContext(Dispatchers.IO) { savedApkFile(app) != null }
+        hasSavedCopy = savedFile != null
+        savedApkAbiLabel = withContext(Dispatchers.IO) {
+            savedFile?.savedApkAbiLabel(context)
+        }
 
         if (installedInfo != null) {
             isInstalledOnDevice = true

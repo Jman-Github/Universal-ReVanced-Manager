@@ -1394,6 +1394,13 @@ Details: %2$s</string>
     <string name="saved_apps_export_failed">Failed to export saved apps</string>
     <string name="saved_apps_export_empty">No saved apps selected</string>
     <string name="saved_app_created_at">Saved %1$s</string>
+    <string name="saved_app_abi_arm64">ARM64</string>
+    <string name="saved_app_abi_armv7">ARMv7</string>
+    <string name="saved_app_abi_arm">ARM</string>
+    <string name="saved_app_abi_x86">x86</string>
+    <string name="saved_app_abi_x86_64">x86_64</string>
+    <string name="saved_app_abi_universal">Universal</string>
+    <string name="saved_app_abi_none">No native libs</string>
     <string name="saved_app_removed_toast">Removed saved patched app</string>
     <string name="saved_app_copy_removed_toast">Removed saved copy</string>
     <string name="delete_saved_app_title">Delete saved app</string>

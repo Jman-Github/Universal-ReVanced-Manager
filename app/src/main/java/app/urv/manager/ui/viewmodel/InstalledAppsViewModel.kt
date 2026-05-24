@@ -31,6 +31,7 @@ import app.urv.manager.util.ExportNameFormatter
 import app.urv.manager.util.buildSavedAppVariantIdentity
 import app.urv.manager.util.mergeWith
 import app.urv.manager.util.savedAppBasePackage
+import app.urv.manager.util.savedApkAbiLabel
 import app.urv.manager.patcher.patch.PatchBundleInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
@@ -64,6 +65,7 @@ class InstalledAppsViewModel(
     val installedOnDeviceMap = mutableStateMapOf<String, Boolean>()
     val mountedOnDeviceMap = mutableStateMapOf<String, Boolean>()
     val savedCopyMap = mutableStateMapOf<String, Boolean>()
+    val savedApkAbiLabelMap = mutableStateMapOf<String, String>()
     private val devicePackageLookupMap = mutableStateMapOf<String, String>()
     private var normalizingSavedEntries = false
     val selectedApps = mutableStateSetOf<String>()
@@ -98,6 +100,7 @@ class InstalledAppsViewModel(
                     installedOnDeviceMap.remove(packageName)
                     mountedOnDeviceMap.remove(packageName)
                     savedCopyMap.remove(packageName)
+                    savedApkAbiLabelMap.remove(packageName)
                     devicePackageLookupMap.remove(packageName)
                     missingPackages.remove(packageName)
                     selectedApps.remove(packageName)
@@ -400,8 +403,15 @@ class InstalledAppsViewModel(
     private suspend fun resolvePackageInfo(installedApp: InstalledApp): PackageInfo? =
         withContext(Dispatchers.IO) {
             val packageName = installedApp.currentPackageName
-            val hasSavedCopy = savedApkFile(installedApp) != null
+            val savedCopy = savedApkFile(installedApp)
+            val hasSavedCopy = savedCopy != null
             savedCopyMap[packageName] = hasSavedCopy
+            val savedAbiLabel = savedCopy?.savedApkAbiLabel(pm.application)
+            if (savedAbiLabel.isNullOrBlank()) {
+                savedApkAbiLabelMap.remove(packageName)
+            } else {
+                savedApkAbiLabelMap[packageName] = savedAbiLabel
+            }
             try {
                 if (
                     installedApp.installType == InstallType.MOUNT &&

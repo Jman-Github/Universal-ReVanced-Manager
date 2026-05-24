@@ -202,6 +202,7 @@ fun InstalledAppsScreen(
                         val isSelected = packageName in viewModel.selectedApps
                         val isInstalledOnDevice = viewModel.installedOnDeviceMap[packageName] == true
                         val hasSavedCopy = viewModel.savedCopyMap[packageName] == true
+                        val savedApkAbiLabel = viewModel.savedApkAbiLabelMap[packageName]
                         val isMounted = if (installedApp.installType == InstallType.MOUNT) {
                             viewModel.mountedOnDeviceMap[packageName]
                                 ?: (viewModel.installedOnDeviceMap[packageName] == true)
@@ -222,6 +223,7 @@ fun InstalledAppsScreen(
                                 isMissingInstall = isMissingInstall,
                                 isInstalledOnDevice = isInstalledOnDevice,
                                 hasSavedCopy = hasSavedCopy,
+                                savedApkAbiLabel = savedApkAbiLabel,
                                 isMounted = isMounted,
                                 bundleSummaries = bundleSummaries,
                                 timeTick = timeTick,
@@ -270,6 +272,7 @@ private fun InstalledAppCard(
     isMissingInstall: Boolean,
     isInstalledOnDevice: Boolean,
     hasSavedCopy: Boolean,
+    savedApkAbiLabel: String?,
     isMounted: Boolean,
     bundleSummaries: List<InstalledAppsViewModel.AppBundleSummary>,
     timeTick: Long,
@@ -296,7 +299,10 @@ private fun InstalledAppCard(
     val formattedVersion = installedApp.version
         .takeIf { it.isNotBlank() }
         ?.let(::formatVersion)
-    val detailLine = listOfNotNull(formattedVersion).joinToString(" • ")
+    val detailLine = listOfNotNull(
+        formattedVersion,
+        savedApkAbiLabel?.takeIf { hasSavedCopy }
+    ).joinToString(" • ")
     val savedAtText = installedApp.createdAt
         .takeIf { it > 0 && (isSaved || hasSavedCopy) }
         ?.let { createdAt ->

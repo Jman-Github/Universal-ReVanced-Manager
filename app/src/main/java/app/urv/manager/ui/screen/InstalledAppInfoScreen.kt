@@ -786,6 +786,13 @@ fun InstalledAppInfoScreen(
                 placeholderLabel = null
             ) {
                 Text(installedApp.version, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                viewModel.savedApkAbiLabel?.let { abiLabel ->
+                    Text(
+                        abiLabel,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
 
                 if (installedApp.installType == InstallType.MOUNT) {
                     val mountStatusText = when (viewModel.mountOperation) {
