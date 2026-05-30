@@ -56,55 +56,63 @@ class AppSelectorViewModel(
 
     val suggestedAppVersions = patchBundleRepository.suggestedVersions.flowOn(Dispatchers.Default)
     val bundleSuggestionsByApp =
-        patchBundleRepository.bundleInfoFlow
-            .combine(patchBundleRepository.suggestedVersionsByBundle) { bundleInfo, bundleVersions ->
-                val result = mutableMapOf<String, MutableList<BundleVersionSuggestion>>()
+        combine(
+            patchBundleRepository.bundleInfoFlow,
+            patchBundleRepository.suggestedVersionsByBundle,
+            patchBundleRepository.sources
+        ) { bundleInfo, bundleVersions, sources ->
+            val result = mutableMapOf<String, MutableList<BundleVersionSuggestion>>()
+            val displayNames = sources.associate { source ->
+                source.uid to source.displayTitle
+            }
 
-                bundleInfo.forEach { (bundleUid, info) ->
-                    val packageSupport = mutableMapOf<String, BundleSupportAccumulator>()
+            bundleInfo.forEach { (bundleUid, info) ->
+                val packageSupport = mutableMapOf<String, BundleSupportAccumulator>()
 
-                    info.patches.forEach { patch ->
-                        patch.compatiblePackages?.forEach { compatible ->
-                            val accumulator =
-                                packageSupport.getOrPut(compatible.packageName) {
-                                    BundleSupportAccumulator(mutableSetOf(), false)
-                                }
-                            val versions = compatible.versions
-                            if (versions.isNullOrEmpty()) {
-                                accumulator.supportsAllVersions = true
-                            } else {
-                                accumulator.versions += versions
+                info.patches.forEach { patch ->
+                    patch.compatiblePackages?.forEach { compatible ->
+                        val accumulator =
+                            packageSupport.getOrPut(compatible.packageName) {
+                                BundleSupportAccumulator(mutableSetOf(), false)
                             }
+                        val versions = compatible.versions
+                        if (versions.isNullOrEmpty()) {
+                            accumulator.supportsAllVersions = true
+                        } else {
+                            accumulator.versions += versions
                         }
                     }
-
-                    packageSupport.forEach { (packageName, support) ->
-                        val recommended = bundleVersions[bundleUid]?.get(packageName)
-                        if (
-                            recommended == null &&
-                            support.versions.isEmpty() &&
-                            !support.supportsAllVersions
-                        ) return@forEach
-
-                        val otherVersions = support.versions
-                            .filterNot { recommended.equals(it, ignoreCase = true) }
-                            .sorted()
-
-                        val suggestions = result.getOrPut(packageName) { mutableListOf() }
-                        suggestions += BundleVersionSuggestion(
-                            bundleUid = bundleUid,
-                            bundleName = info.name,
-                            recommendedVersion = recommended,
-                            otherSupportedVersions = otherVersions,
-                            supportsAllVersions = support.supportsAllVersions
-                        )
-                    }
                 }
 
-                result.mapValues { (_, values) ->
-                    values.sortedBy { it.bundleName.lowercase(Locale.ROOT) }
+                packageSupport.forEach { (packageName, support) ->
+                    val recommended = bundleVersions[bundleUid]?.get(packageName)
+                    if (
+                        recommended == null &&
+                        support.versions.isEmpty() &&
+                        !support.supportsAllVersions
+                    ) return@forEach
+
+                    val otherVersions = support.versions
+                        .filterNot { recommended.equals(it, ignoreCase = true) }
+                        .sorted()
+
+                    val suggestions = result.getOrPut(packageName) { mutableListOf() }
+                    suggestions += BundleVersionSuggestion(
+                        bundleUid = bundleUid,
+                        bundleName = displayNames[bundleUid]
+                            ?.takeIf { it.isNotBlank() }
+                            ?: info.name,
+                        recommendedVersion = recommended,
+                        otherSupportedVersions = otherVersions,
+                        supportsAllVersions = support.supportsAllVersions
+                    )
                 }
             }
+
+            result.mapValues { (_, values) ->
+                values.sortedBy { it.bundleName.lowercase(Locale.ROOT) }
+            }
+        }
             .flowOn(Dispatchers.Default)
 
     var nonSuggestedVersionDialogSubject by mutableStateOf<SelectedApp.Local?>(null)

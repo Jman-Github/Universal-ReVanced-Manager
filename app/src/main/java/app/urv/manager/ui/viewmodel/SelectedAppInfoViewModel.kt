@@ -236,8 +236,13 @@ class SelectedAppInfoViewModel(
     val bundleRecommendationDetailsFlow = combine(
         bundleInfoFlow,
         selectedPatchNamesByBundleFlow,
-        selectedAppState.map { it.packageName }
-    ) { scopedBundles, selectedPatchNames, activePackageName ->
+        selectedAppState.map { it.packageName },
+        bundleRepository.sources
+    ) { scopedBundles, selectedPatchNames, activePackageName, sources ->
+        val displayNames = sources.associate { source ->
+            source.uid to source.displayTitle
+        }
+
         scopedBundles.mapNotNull { scoped ->
             val selected = selectedPatchNames[scoped.uid]?.takeIf { it.isNotEmpty() }
             val support = scoped.collectBundleSupport(activePackageName, selected)
@@ -255,7 +260,9 @@ class SelectedAppInfoViewModel(
 
             BundleRecommendationDetail(
                 bundleUid = scoped.uid,
-                name = scoped.name,
+                name = displayNames[scoped.uid]
+                    ?.takeIf { it.isNotBlank() }
+                    ?: scoped.name,
                 recommendedVersion = recommended,
                 otherSupportedVersions = otherVersions,
                 supportsAllVersions = support.supportsAllVersions
