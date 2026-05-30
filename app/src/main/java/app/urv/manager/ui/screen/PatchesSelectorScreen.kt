@@ -82,6 +82,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberSearchBarState
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
@@ -454,10 +455,13 @@ fun PatchesSelectorScreen(
     }
 
     if (showBottomSheet) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
         ModalBottomSheet(
             onDismissRequest = {
                 showBottomSheet = false
-            }
+            },
+            sheetState = sheetState
         ) {
             Column(
                 modifier = Modifier.padding(horizontal = 24.dp)
