@@ -18,6 +18,7 @@
 - Fixed patcher runtime plugin repository imports so manager APK assets are skipped and valid runtime plugin assets can be found from repository URLs
 - Fixed orphaned saved patched APKs taking up storage after they were no longer shown in the Apps tab
 - Fixed bundle discovery searches showing the loading state indefinitely when no matching bundles are found https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/499
+- Fixed patch option dialogs showing the color picker for file/path options https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/508
 
 
 # v1.8.1-dev.17 (2026-05-17)

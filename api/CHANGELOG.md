@@ -272,6 +272,7 @@
 - Resolved more issues with saved patched apps https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/279
 - Fixed orphaned saved patched APKs taking up storage after they were no longer shown in the Apps tab
 - Fixed bundle discovery searches showing the loading state indefinitely when no matching bundles are found https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/499
+- Fixed patch option dialogs showing the color picker for file/path options https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/508
 
 
 # Refactors

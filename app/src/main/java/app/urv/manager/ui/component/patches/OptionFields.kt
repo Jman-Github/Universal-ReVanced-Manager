@@ -609,10 +609,17 @@ private fun Option<String>.isColorOption(): Boolean {
         .joinToString(" ")
         .lowercase(Locale.US)
     if ("color" in text || "colour" in text || "hex" in text) return true
+    if (isPathOption(text)) return false
 
     if (default?.trim()?.isColorLikeOptionValue() == true) return true
     return presets?.values?.any { it?.trim()?.isColorLikeOptionValue() == true } == true
 }
+
+private fun isPathOption(text: String): Boolean =
+    "path" in text ||
+        "folder" in text ||
+        "directory" in text ||
+        Regex("""(^|[^a-z])file([^a-z]|$)|file[_\-\s]?(path|name)""").containsMatchIn(text)
 
 private fun String.isColorLikeOptionValue(): Boolean =
     startsWith("@android:color/") ||
