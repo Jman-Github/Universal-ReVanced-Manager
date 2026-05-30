@@ -42,7 +42,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -1095,8 +1094,8 @@ private fun DownloaderSourceSettingsDialog(
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                OutlinedCard(
-                    colors = CardDefaults.outlinedCardColors(
+                Card(
+                    colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                     )
                 ) {
@@ -1179,8 +1178,8 @@ private fun DownloaderSourceSettingsDialog(
                         }
                     }
                 }
-                OutlinedCard(
-                    colors = CardDefaults.outlinedCardColors(
+                Card(
+                    colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                     )
                 ) {

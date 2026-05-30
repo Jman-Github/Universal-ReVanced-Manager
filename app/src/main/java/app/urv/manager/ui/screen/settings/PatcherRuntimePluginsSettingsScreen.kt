@@ -40,7 +40,6 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -77,6 +76,7 @@ import app.urv.manager.network.runtime.PatcherRuntimeKind
 import app.urv.manager.network.runtime.PatcherRuntimePluginSourceState
 import app.urv.manager.network.runtime.PatcherRuntimePluginState
 import app.urv.manager.network.runtime.toRuntimeMainName
+import app.urv.manager.ui.component.AppIcon
 import app.urv.manager.ui.component.AppTopBar
 import app.urv.manager.ui.component.ConfirmDialog
 import app.urv.manager.ui.component.ExceptionViewerDialog
@@ -91,6 +91,7 @@ import app.urv.manager.ui.component.settings.ExpressiveSettingsSwitch
 import app.urv.manager.ui.viewmodel.PatcherRuntimePluginsViewModel
 import app.urv.manager.util.toast
 import org.koin.androidx.compose.koinViewModel
+import java.security.MessageDigest
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -482,6 +483,14 @@ private fun InstalledRuntimeCard(
     }
     val runtimeName = remember(appName) { appName.toRuntimeMainName() }
     val runtimeLabel = remember(runtimeName) { runtimeName.toRuntimeDisplayLabel() }
+    val signature = remember(packageName) {
+        runCatching {
+            val androidSignature = viewModel.pm.getSignature(packageName)
+            MessageDigest.getInstance("SHA-256")
+                .digest(androidSignature.toByteArray())
+                .toUpperHexString()
+        }.getOrNull()
+    }
 
     RuntimePluginCard(
         title = runtimeName,
@@ -515,6 +524,9 @@ private fun InstalledRuntimeCard(
                 PatcherRuntimePluginState.Untrusted ->
                     showTrustDialog = true
             }
+        },
+        leadingContent = {
+            RuntimePluginAppIcon(packageInfo = packageInfo)
         }
     )
 
@@ -522,7 +534,7 @@ private fun InstalledRuntimeCard(
         TrustRuntimeDialog(
             title = runtimeName,
             packageName = packageName,
-            signature = null,
+            signature = signature,
             secondaryLabel = R.string.delete,
             onDismiss = { showTrustDialog = false },
             onTrust = {
@@ -587,7 +599,8 @@ private fun RuntimePluginCard(
     primaryActionEnabled: Boolean = true,
     secondaryActionEnabled: Boolean = true,
     middleActionEnabled: Boolean = true,
-    footerActionEnabled: Boolean = true
+    footerActionEnabled: Boolean = true,
+    leadingContent: (@Composable () -> Unit)? = null
 ) {
     val supportingSlot: @Composable () -> Unit = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -622,7 +635,7 @@ private fun RuntimePluginCard(
                 )
             },
             supportingContentSlot = supportingSlot,
-            leadingContent = {
+            leadingContent = leadingContent ?: {
                 RuntimePluginLeadingIcon(
                     icon = when (type) {
                         RuntimePluginType.Local -> Icons.Outlined.Folder
@@ -698,6 +711,29 @@ private fun RuntimeActionText(text: String) {
 }
 
 @Composable
+private fun RuntimePluginAppIcon(packageInfo: android.content.pm.PackageInfo?) {
+    Card(
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+        )
+    ) {
+        Box(
+            modifier = Modifier.size(44.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            AppIcon(
+                packageInfo = packageInfo,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(8.dp))
+            )
+        }
+    }
+}
+
+@Composable
 private fun RuntimePluginLeadingIcon(icon: ImageVector) {
     Card(
         shape = RoundedCornerShape(18.dp),
@@ -767,8 +803,8 @@ private fun RuntimeSourceSettingsDialog(
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                OutlinedCard(
-                    colors = CardDefaults.outlinedCardColors(
+                Card(
+                    colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                     )
                 ) {
@@ -797,8 +833,8 @@ private fun RuntimeSourceSettingsDialog(
                         )
                     }
                 }
-                OutlinedCard(
-                    colors = CardDefaults.outlinedCardColors(
+                Card(
+                    colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
                     )
                 ) {
@@ -1092,3 +1128,14 @@ private fun String.toGitHubRepoDisplayName(): String {
         this
     }
 }
+
+private fun ByteArray.toUpperHexString(): String {
+    val result = StringBuilder(size * 2)
+    for (byte in this) {
+        result.append(HEX_CHARS[(byte.toInt() ushr 4) and 0x0F])
+        result.append(HEX_CHARS[byte.toInt() and 0x0F])
+    }
+    return result.toString()
+}
+
+private const val HEX_CHARS = "0123456789ABCDEF"

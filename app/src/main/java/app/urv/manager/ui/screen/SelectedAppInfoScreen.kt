@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -27,12 +28,13 @@ import androidx.compose.material.icons.outlined.UnfoldLess
 import androidx.compose.material.icons.outlined.UnfoldMore
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
@@ -43,6 +45,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -56,6 +59,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -613,7 +617,14 @@ private fun BundleVersionSelectionDialog(
                 Text(stringResource(R.string.close))
             }
         },
-        title = { Text(stringResource(R.string.bundle_version_dialog_title)) },
+        title = {
+            Text(
+                text = stringResource(R.string.bundle_version_dialog_title),
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
+            )
+        },
+        textBottomPadding = 8.dp,
         text = {
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -754,7 +765,8 @@ private fun BundleRecommendationCard(
 
             BundleVersionOptionRow(
                 title = stringResource(R.string.bundle_version_dialog_recommended, recommendedLabel),
-                subtitle = null,
+                subtitle = stringResource(R.string.other_supported_versions_all)
+                    .takeIf { detail.supportsAllVersions && detail.recommendedVersion == null },
                 selected = isActive && selectedOverride == null,
                 enabled = enabled,
                 onClick = {
@@ -790,13 +802,6 @@ private fun BundleRecommendationCard(
                             style = MaterialTheme.typography.labelLarge
                         )
                     }
-                }
-                detail.supportsAllVersions -> {
-                    Text(
-                        stringResource(R.string.other_supported_versions_all),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 }
             }
         }
@@ -888,35 +893,38 @@ private fun BundleVersionOptionRow(
         MaterialTheme.colorScheme.onSurfaceVariant
     }
 
-    ElevatedCard(
+    Card(
         onClick = onClick,
         modifier = modifier.fillMaxWidth(),
         enabled = enabled,
         shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.elevatedCardColors(
+        colors = CardDefaults.cardColors(
             containerColor = containerColor,
             contentColor = primaryContentColor
-        ),
-        elevation = CardDefaults.elevatedCardElevation(
-            defaultElevation = if (selected) 6.dp else 2.dp,
-            pressedElevation = if (selected) 8.dp else 4.dp
         )
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp)
         ) {
-            RadioButton(
-                selected = selected,
-                enabled = enabled,
-                onClick = null,
-                colors = RadioButtonDefaults.colors(
-                    selectedColor = MaterialTheme.colorScheme.primary,
-                    unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant
+            CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+                RadioButton(
+                    selected = selected,
+                    enabled = enabled,
+                    onClick = null,
+                    modifier = Modifier.size(24.dp),
+                    colors = RadioButtonDefaults.colors(
+                        selectedColor = MaterialTheme.colorScheme.primary,
+                        unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 )
-            )
-            Column(modifier = Modifier.padding(start = 16.dp)) {
-                Text(title, style = MaterialTheme.typography.bodyLarge, color = primaryContentColor)
+            }
+            Column(
+                modifier = Modifier
+                    .padding(start = 12.dp)
+                    .weight(1f)
+            ) {
+                Text(title, style = MaterialTheme.typography.bodyMedium, color = primaryContentColor)
                 subtitle?.let {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
