@@ -750,9 +750,21 @@ fun PatcherScreen(
                             Text(stringResource(R.string.ok))
                         }
                     },
-                    title = { Text(stringResource(R.string.install_app_success)) },
+                    title = {
+                        Text(
+                            text = stringResource(R.string.install_app_success),
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.Center
+                        )
+                    },
                     text = {
-                        status.packageName?.let { Text(text = it) }
+                        status.packageName?.let {
+                            Text(
+                                text = it,
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
                 )
             }

@@ -11,6 +11,7 @@
 - Improved downloader and patcher runtime plugin labels for consistent naming across cards and dialogs, and updated the patch bundle discovery empty state to show `No bundles found` centered in the list https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/495 https://github.csues/494-Github/Universal-ReVanced-Manager/issues/494 https://github.coues/500-Github/Universal-ReVanced-Manager/issues/500
 - Added CPU architecture labels to saved patched apps, showing values like ARM64, ARMv7, x86, Universal, or No native libs in the Apps tab and saved app details https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/251
 - Improved bundle recommendation dialogs, runtime plugin cards, trust dialogs, source settings styling, and added an icon for the ReVanced v21 runtime plugin https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/498
+- Centered the remaining patch selection and patcher result dialog text, including bundle action confirmations, patch defaults, incompatible patches, and install success dialogs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/487
 
 
 # Bug fixes

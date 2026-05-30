@@ -867,7 +867,7 @@ fun PatchesSelectorScreen(
             },
             icon = { Icon(Icons.Outlined.Restore, null) },
             title = { Text(stringResource(R.string.patch_selection_reset_dialog_title)) },
-            text = { Text(resetMessage) }
+            text = { CenteredDialogText(resetMessage) }
         )
     }
 
@@ -891,8 +891,8 @@ fun PatchesSelectorScreen(
                 icon = confirmation.icon?.let { icon ->
                     { Icon(icon, null) }
                 },
-                title = { Text(stringResource(confirmation.title)) },
-                text = { Text(confirmation.message) }
+                title = { CenteredDialogText(stringResource(confirmation.title)) },
+                text = { CenteredDialogText(confirmation.message) }
             )
         }
     }
@@ -2906,6 +2906,15 @@ private data class SelectionConfirmation(
     val onConfirm: () -> Unit
 )
 
+@Composable
+private fun CenteredDialogText(text: String) {
+    Text(
+        text = text,
+        modifier = Modifier.fillMaxWidth(),
+        textAlign = TextAlign.Center
+    )
+}
+
 private enum class PatchSortSettingsMode {
     None,
     HasSettings,
@@ -2955,7 +2964,7 @@ private fun IncompatiblePatchesDialog(
     },
     title = { Text(stringResource(R.string.incompatible_patches)) },
     text = {
-        Text(
+        CenteredDialogText(
             stringResource(
                 R.string.incompatible_patches_dialog,
                 appVersion
