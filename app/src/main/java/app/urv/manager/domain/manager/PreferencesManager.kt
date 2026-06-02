@@ -180,7 +180,9 @@ class PreferencesManager(
     val collapsePatchActionsOnSelection = booleanPreference("collapse_patch_actions_on_selection", true)
     val patchSelectionFilterFlags = intPreference("patch_selection_filter_flags", -1)
     val patchSelectionSortAlphabetical = booleanPreference("patch_selection_sort_alphabetical", false)
+    val patchSelectionSortDescending = booleanPreference("patch_selection_sort_descending", false)
     val patchSelectionSortSettingsMode = stringPreference("patch_selection_sort_settings_mode", "None")
+    val patchSelectionSortSelectionMode = stringPreference("patch_selection_sort_selection_mode", "None")
     val patchSelectionActionOrder =
         stringPreference("patch_selection_action_order", PATCH_ACTION_ORDER_DEFAULT)
     val patchBundleActionOrder =
@@ -299,7 +301,9 @@ class PreferencesManager(
         val collapsePatchActionsOnSelection: Boolean? = null,
         val patchSelectionFilterFlags: Int? = null,
         val patchSelectionSortAlphabetical: Boolean? = null,
+        val patchSelectionSortDescending: Boolean? = null,
         val patchSelectionSortSettingsMode: String? = null,
+        val patchSelectionSortSelectionMode: String? = null,
         val patchSelectionActionOrder: String? = null,
         val patchSelectionHiddenActions: Set<String>? = null,
         val patchSelectionShowVersionTags: Boolean? = null,
@@ -456,7 +460,9 @@ class PreferencesManager(
             collapsePatchActionsOnSelection = collapsePatchActionsOnSelection.get(),
             patchSelectionFilterFlags = patchSelectionFilterFlags.get(),
             patchSelectionSortAlphabetical = patchSelectionSortAlphabetical.get(),
+            patchSelectionSortDescending = patchSelectionSortDescending.get(),
             patchSelectionSortSettingsMode = patchSelectionSortSettingsMode.get(),
+            patchSelectionSortSelectionMode = patchSelectionSortSelectionMode.get(),
             patchSelectionActionOrder = patchSelectionActionOrder.get(),
             patchSelectionHiddenActions = patchSelectionHiddenActions.get(),
             patchSelectionShowVersionTags = patchSelectionShowVersionTags.get(),
@@ -601,7 +607,9 @@ class PreferencesManager(
         snapshot.collapsePatchActionsOnSelection?.let { collapsePatchActionsOnSelection.value = it }
         snapshot.patchSelectionFilterFlags?.let { patchSelectionFilterFlags.value = it }
         snapshot.patchSelectionSortAlphabetical?.let { patchSelectionSortAlphabetical.value = it }
+        snapshot.patchSelectionSortDescending?.let { patchSelectionSortDescending.value = it }
         snapshot.patchSelectionSortSettingsMode?.let { patchSelectionSortSettingsMode.value = it }
+        snapshot.patchSelectionSortSelectionMode?.let { patchSelectionSortSelectionMode.value = it }
         snapshot.patchSelectionActionOrder?.let { patchSelectionActionOrder.value = it }
         snapshot.patchSelectionHiddenActions?.let { patchSelectionHiddenActions.value = it }
         snapshot.patchSelectionShowVersionTags?.let { patchSelectionShowVersionTags.value = it }

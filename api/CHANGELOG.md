@@ -144,6 +144,7 @@
 - Improved bundle recommendation dialogs, runtime plugin cards, trust dialogs, source settings styling, and added an icon for the ReVanced v21 runtime plugin https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/498
 - Centered the remaining patch selection and patcher result dialog text, including bundle action confirmations, patch defaults, incompatible patches, and install success dialogs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/487
 - Made the patch selection filter sheet open fully expanded so all filter options are visible without scrolling first https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/507
+- Added patch selection sorting options for Z-A, enabled first, and disabled first https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/511
 
 
 # Bug fixes

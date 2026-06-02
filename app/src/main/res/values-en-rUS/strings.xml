@@ -1256,7 +1256,7 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="patch_selector_sheet_filter_compat_title">Compatibility</string>
     <string name="patch_selector_sheet_filter_type_title">Patch type</string>
     <string name="patch_selector_sheet_filter_sort_title">Sorting</string>
-    <string name="patch_selector_sheet_filter_sort_alphabetical">Alphabetical</string>
+    <string name="patch_selector_sheet_filter_sort_alphabetical">A-Z</string>
     <string name="patch_selector_sheet_filter_sort_has_settings">Has settings</string>
     <string name="patch_selector_sheet_filter_sort_no_settings">No settings</string>
     <string name="string_option_menu_description">More options</string>

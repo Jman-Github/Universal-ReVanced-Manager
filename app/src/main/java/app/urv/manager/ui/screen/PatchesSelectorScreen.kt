@@ -249,7 +249,9 @@ fun PatchesSelectorScreen(
     val actionOrderPref by viewModel.prefs.patchSelectionActionOrder.getAsState()
     val hiddenActionsPref by viewModel.prefs.patchSelectionHiddenActions.getAsState()
     val sortAlphabeticallyPref by viewModel.prefs.patchSelectionSortAlphabetical.getAsState()
+    val sortDescendingPref by viewModel.prefs.patchSelectionSortDescending.getAsState()
     val sortSettingsModePref by viewModel.prefs.patchSelectionSortSettingsMode.getAsState()
+    val sortSelectionModePref by viewModel.prefs.patchSelectionSortSelectionMode.getAsState()
     val searchEngineHost by viewModel.prefs.searchEngineHost.getAsState()
     val showVersionTags by viewModel.prefs.patchSelectionShowVersionTags.getAsState()
     val disablePatchSelectionTabSwipe by viewModel.prefs.disablePatchSelectionTabSwipe.getAsState()
@@ -357,13 +359,23 @@ fun PatchesSelectorScreen(
     var actionsExpanded by rememberSaveable { mutableStateOf(false) }
     var showResetConfirmation by rememberSaveable { mutableStateOf(false) }
     var sortAlphabetically by rememberSaveable { mutableStateOf(sortAlphabeticallyPref) }
+    var sortDescending by rememberSaveable { mutableStateOf(sortDescendingPref) }
     var sortSettingsMode by rememberSaveable { mutableStateOf(sortSettingsModePref) }
+    var sortSelectionMode by rememberSaveable { mutableStateOf(sortSelectionModePref) }
     val resolvedSortSettingsMode = remember(sortSettingsMode) {
         PatchSortSettingsMode.values().firstOrNull { it.name == sortSettingsMode } ?: PatchSortSettingsMode.None
+    }
+    val resolvedSortSelectionMode = remember(sortSelectionMode) {
+        PatchSortSelectionMode.values().firstOrNull { it.name == sortSelectionMode } ?: PatchSortSelectionMode.None
     }
     LaunchedEffect(sortAlphabeticallyPref) {
         if (sortAlphabetically != sortAlphabeticallyPref) {
             sortAlphabetically = sortAlphabeticallyPref
+        }
+    }
+    LaunchedEffect(sortDescendingPref) {
+        if (sortDescending != sortDescendingPref) {
+            sortDescending = sortDescendingPref
         }
     }
     LaunchedEffect(sortSettingsModePref) {
@@ -371,14 +383,29 @@ fun PatchesSelectorScreen(
             sortSettingsMode = sortSettingsModePref
         }
     }
+    LaunchedEffect(sortSelectionModePref) {
+        if (sortSelectionMode != sortSelectionModePref) {
+            sortSelectionMode = sortSelectionModePref
+        }
+    }
     LaunchedEffect(sortAlphabetically, sortAlphabeticallyPref) {
         if (sortAlphabetically != sortAlphabeticallyPref) {
             viewModel.prefs.patchSelectionSortAlphabetical.update(sortAlphabetically)
         }
     }
+    LaunchedEffect(sortDescending, sortDescendingPref) {
+        if (sortDescending != sortDescendingPref) {
+            viewModel.prefs.patchSelectionSortDescending.update(sortDescending)
+        }
+    }
     LaunchedEffect(sortSettingsMode, sortSettingsModePref) {
         if (sortSettingsMode != sortSettingsModePref) {
             viewModel.prefs.patchSelectionSortSettingsMode.update(sortSettingsMode)
+        }
+    }
+    LaunchedEffect(sortSelectionMode, sortSelectionModePref) {
+        if (sortSelectionMode != sortSelectionModePref) {
+            viewModel.prefs.patchSelectionSortSelectionMode.update(sortSelectionMode)
         }
     }
     LaunchedEffect(patchLazyListStates, collapseActionsOnSelection) {
@@ -530,9 +557,56 @@ fun PatchesSelectorScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     CheckedFilterChip(
-                        selected = sortAlphabetically,
-                        onClick = { sortAlphabetically = !sortAlphabetically },
+                        selected = sortAlphabetically && !sortDescending,
+                        onClick = {
+                            if (sortAlphabetically && !sortDescending) {
+                                sortAlphabetically = false
+                            } else {
+                                sortAlphabetically = true
+                                sortDescending = false
+                            }
+                        },
                         label = { Text(stringResource(R.string.patch_selector_sheet_filter_sort_alphabetical)) }
+                    )
+
+                    CheckedFilterChip(
+                        selected = sortAlphabetically && sortDescending,
+                        onClick = {
+                            if (sortAlphabetically && sortDescending) {
+                                sortAlphabetically = false
+                                sortDescending = false
+                            } else {
+                                sortAlphabetically = true
+                                sortDescending = true
+                            }
+                        },
+                        label = { Text(stringResource(R.string.patch_selector_sheet_filter_sort_za)) }
+                    )
+
+                    CheckedFilterChip(
+                        selected = resolvedSortSelectionMode == PatchSortSelectionMode.EnabledFirst,
+                        onClick = {
+                            sortSelectionMode =
+                                if (resolvedSortSelectionMode == PatchSortSelectionMode.EnabledFirst) {
+                                    PatchSortSelectionMode.None.name
+                                } else {
+                                    PatchSortSelectionMode.EnabledFirst.name
+                                }
+                        },
+                        label = { Text(stringResource(R.string.patch_selector_sheet_filter_sort_enabled_first)) }
+                    )
+
+                    CheckedFilterChip(
+                        selected = resolvedSortSelectionMode == PatchSortSelectionMode.DisabledFirst,
+                        onClick = {
+                            sortSelectionMode =
+                                if (resolvedSortSelectionMode == PatchSortSelectionMode.DisabledFirst) {
+                                    PatchSortSelectionMode.None.name
+                                } else {
+                                    PatchSortSelectionMode.DisabledFirst.name
+                                }
+                        },
+                        label = { Text(stringResource(R.string.patch_selector_sheet_filter_sort_disabled_first)) }
                     )
 
                     CheckedFilterChip(
@@ -919,11 +993,31 @@ fun PatchesSelectorScreen(
                 PatchSortSettingsMode.None -> patches
             }
 
-            val sortedPatches = if (sortAlphabetically) {
-                filteredPatches.sortedBy { it.sortNameKey() }
-            } else {
-                filteredPatches
+            fun PatchInfo.selectionSortRank(): Int = when (resolvedSortSelectionMode) {
+                PatchSortSelectionMode.EnabledFirst -> if (viewModel.isSelected(uid, this)) 0 else 1
+                PatchSortSelectionMode.DisabledFirst -> if (viewModel.isSelected(uid, this)) 1 else 0
+                PatchSortSelectionMode.None -> 0
             }
+
+            val sortedPatches = filteredPatches
+                .withIndex()
+                .sortedWith { left, right ->
+                    val selectionComparison =
+                        left.value.selectionSortRank().compareTo(right.value.selectionSortRank())
+                    if (selectionComparison != 0) return@sortedWith selectionComparison
+
+                    if (sortAlphabetically) {
+                        val nameComparison = if (sortDescending) {
+                            right.value.sortNameKey().compareTo(left.value.sortNameKey())
+                        } else {
+                            left.value.sortNameKey().compareTo(right.value.sortNameKey())
+                        }
+                        if (nameComparison != 0) return@sortedWith nameComparison
+                    }
+
+                    left.index.compareTo(right.index)
+                }
+                .map { it.value }
 
             header?.let {
                 item(contentType = 0) {
@@ -2923,6 +3017,12 @@ private enum class PatchSortSettingsMode {
     None,
     HasSettings,
     NoSettings
+}
+
+private enum class PatchSortSelectionMode {
+    None,
+    EnabledFirst,
+    DisabledFirst
 }
 
 @Composable
