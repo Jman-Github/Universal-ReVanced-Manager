@@ -327,9 +327,11 @@ class Revanced22ProcessRuntime(
                 logger = runtimeLogger,
                 relatedArchives = selectedBundlesByUid.values.map { File(it.patchesJar) }
             )
+            val fallbackAaptPath = resolveAaptFallbackPath(selectedAaptPath)
 
             val parameters = Parameters(
                 aaptPath = selectedAaptPath,
+                aaptFallbackPath = fallbackAaptPath,
                 frameworkDir = frameworkPath,
                 cacheDir = cacheDir,
                 packageName = packageName,

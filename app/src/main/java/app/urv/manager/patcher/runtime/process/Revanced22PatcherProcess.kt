@@ -180,6 +180,7 @@ class Revanced22PatcherProcess(
 
         return LinkedHashMap<String, Any?>().apply {
             put("aaptPath", parameters.aaptPath)
+            put("aaptFallbackPath", parameters.aaptFallbackPath)
             put("frameworkDir", parameters.frameworkDir)
             put("cacheDir", parameters.cacheDir)
             put("apkEditorJarPath", apkEditorJarPath)

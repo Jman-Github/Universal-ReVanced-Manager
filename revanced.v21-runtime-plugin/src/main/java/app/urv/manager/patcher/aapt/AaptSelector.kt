@@ -40,6 +40,15 @@ object AaptSelector {
         return modern
     }
 
+    fun alternate(selected: String, modern: String, legacy: String?): String? {
+        if (legacy.isNullOrBlank() || modern == legacy) return null
+        return when (selected) {
+            modern -> legacy
+            legacy -> modern
+            else -> null
+        }
+    }
+
     private enum class ProbeResult {
         Succeeded,
         Failed

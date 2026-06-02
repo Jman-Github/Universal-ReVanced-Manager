@@ -276,6 +276,7 @@
 - Fixed bundle discovery searches showing the loading state indefinitely when no matching bundles are found https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/499
 - Fixed patch option dialogs showing the color picker for file/path options https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/508
 - Fixed bundle version selection dialogs showing cached patch bundle names instead of custom bundle display names https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/502
+- Fixed ReVanced patching failures by retrying the Write patched APK step with the alternate AAPT2 binary when the selected AAPT2 fails https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/460
 
 
 # Refactors

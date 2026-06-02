@@ -61,6 +61,10 @@ class Session private constructor(
     private var patcherInput = initializePatcherInput()
     private lateinit var patcher: Patcher
 
+    data class ExecutedPatches(
+        val shouldStripNativeLibs: Boolean,
+    )
+
     private fun initializePatcherInput(): PreparedPatcherInput {
         val baseInput = initialPatcherInput ?: input
         return prepareLegacyPatcherInputIfNeeded(
@@ -364,8 +368,16 @@ class Session private constructor(
         stripNativeLibs: Boolean,
         inputWasSplit: Boolean
     ) {
+        val executedPatches = executePatches(loadSelectedPatches, stripNativeLibs, inputWasSplit)
+        writeOutput(output, executedPatches)
+    }
+
+    suspend fun executePatches(
+        loadSelectedPatches: suspend () -> PatchList,
+        stripNativeLibs: Boolean,
+        inputWasSplit: Boolean
+    ): ExecutedPatches {
         checkCancelled()
-        val shouldStripNativeLibs = stripNativeLibs && !inputWasSplit
         runStep(StepId.ExecutePatches, onEvent, checkCancelled) {
             val orderedPatches = loadSelectedPatches().sortedBy { it.name }
             java.util.logging.Logger.getLogger("").apply {
@@ -379,100 +391,105 @@ class Session private constructor(
             executePatchesWithFrameworkRecovery(orderedPatches)
         }
 
-        suspend fun writePatchedApkStep() {
-            runStep(
-                StepId.WriteAPK,
-                onEvent,
-                checkCancelled,
-                startedSubSteps = buildWriteApkSubSteps(
-                    includeStripNativeLibs = shouldStripNativeLibs
+        return ExecutedPatches(
+            shouldStripNativeLibs = stripNativeLibs && !inputWasSplit
+        )
+    }
+
+    suspend fun writeOutput(
+        output: File,
+        executedPatches: ExecutedPatches,
+    ) {
+        runStep(
+            StepId.WriteAPK,
+            onEvent,
+            checkCancelled,
+            startedSubSteps = buildWriteApkSubSteps(
+                includeStripNativeLibs = executedPatches.shouldStripNativeLibs
+            )
+        ) {
+            checkCancelled()
+            logger.info("Writing patched files...")
+            XmlSurrogateSanitizer.sanitize(tempDir.resolve("apk"), logger)
+            ManifestDecimalResourceReferenceSanitizer.sanitize(tempDir.resolve("apk"), logger)
+            MislabeledImageResourceSanitizer.sanitizeDecodedResources(
+                tempDir.resolve("apk").resolve("res"),
+                logger
+            )
+            validateMissingResourceReferences()
+            validateInvalidNumericCharacterReferences()
+            checkCancelled()
+            val result = runCancellableBlockingIo(checkCancelled) { requirePatcher().get() }
+            onEvent(
+                ProgressEvent.Progress(
+                    stepId = StepId.WriteAPK,
+                    message = "Copying base APK"
                 )
-            ) {
-                checkCancelled()
-                logger.info("Writing patched files...")
-                XmlSurrogateSanitizer.sanitize(tempDir.resolve("apk"), logger)
-                ManifestDecimalResourceReferenceSanitizer.sanitize(tempDir.resolve("apk"), logger)
-                MislabeledImageResourceSanitizer.sanitizeDecodedResources(
-                    tempDir.resolve("apk").resolve("res"),
-                    logger
+            )
+
+            val patched = tempDir.resolve("result.apk")
+            runCancellableBlockingIo(checkCancelled) {
+                fastCopy(input, patched)
+            }
+            checkCancelled()
+            onEvent(
+                ProgressEvent.Progress(
+                    stepId = StepId.WriteAPK,
+                    message = "Applying patched changes"
                 )
-                validateMissingResourceReferences()
-                validateInvalidNumericCharacterReferences()
+            )
+            runCancellableBlockingIo(checkCancelled) {
+                applyResultToApk(patched, result)
+            }
+            checkCancelled()
+            runCancellableBlockingIo(checkCancelled) {
+                restoreHiddenEntriesIfNeeded(patched)
+            }
+            checkCancelled()
+
+            logger.info("Patched apk saved to $patched")
+
+            runCancellableBlockingIo(checkCancelled) {
                 checkCancelled()
-                val result = runCancellableBlockingIo(checkCancelled) { requirePatcher().get() }
                 onEvent(
                     ProgressEvent.Progress(
                         stepId = StepId.WriteAPK,
-                        message = "Copying base APK"
+                        message = "Writing output APK"
                     )
                 )
-
-                val patched = tempDir.resolve("result.apk")
-                runCancellableBlockingIo(checkCancelled) {
-                    fastCopy(input, patched)
-                }
-                checkCancelled()
-                onEvent(
-                    ProgressEvent.Progress(
-                        stepId = StepId.WriteAPK,
-                        message = "Applying patched changes"
+                try {
+                    Files.move(
+                        patched.toPath(),
+                        output.toPath(),
+                        StandardCopyOption.REPLACE_EXISTING,
+                        StandardCopyOption.ATOMIC_MOVE
                     )
-                )
-                runCancellableBlockingIo(checkCancelled) {
-                    applyResultToApk(patched, result)
-                }
-                checkCancelled()
-                runCancellableBlockingIo(checkCancelled) {
-                    restoreHiddenEntriesIfNeeded(patched)
-                }
-                checkCancelled()
-
-                logger.info("Patched apk saved to $patched")
-
-                runCancellableBlockingIo(checkCancelled) {
-                    checkCancelled()
-                    onEvent(
-                        ProgressEvent.Progress(
-                            stepId = StepId.WriteAPK,
-                            message = "Writing output APK"
-                        )
+                } catch (_: Exception) {
+                    Files.move(
+                        patched.toPath(),
+                        output.toPath(),
+                        StandardCopyOption.REPLACE_EXISTING
                     )
-                    try {
-                        Files.move(
-                            patched.toPath(),
-                            output.toPath(),
-                            StandardCopyOption.REPLACE_EXISTING,
-                            StandardCopyOption.ATOMIC_MOVE
-                        )
-                    } catch (_: Exception) {
-                        Files.move(
-                            patched.toPath(),
-                            output.toPath(),
-                            StandardCopyOption.REPLACE_EXISTING
-                        )
-                    }
-                }
-                onEvent(
-                    ProgressEvent.Progress(
-                        stepId = StepId.WriteAPK,
-                        message = "Finalizing output"
-                    )
-                )
-                if (shouldStripNativeLibs) {
-                    checkCancelled()
-                    onEvent(
-                        ProgressEvent.Progress(
-                            stepId = StepId.WriteAPK,
-                            message = "Stripping native libraries"
-                        )
-                    )
-                    NativeLibStripper.strip(output, checkCancelled = checkCancelled)
-                    checkCancelled()
                 }
             }
+            onEvent(
+                ProgressEvent.Progress(
+                    stepId = StepId.WriteAPK,
+                    message = "Finalizing output"
+                )
+            )
+            if (executedPatches.shouldStripNativeLibs) {
+                checkCancelled()
+                onEvent(
+                    ProgressEvent.Progress(
+                        stepId = StepId.WriteAPK,
+                        message = "Stripping native libraries"
+                    )
+                )
+                NativeLibStripper.strip(output, checkCancelled = checkCancelled)
+                checkCancelled()
+            }
         }
-
-        writePatchedApkStep()
     }
 
     private fun validateMissingResourceReferences() {

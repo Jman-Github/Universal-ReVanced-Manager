@@ -46,6 +46,13 @@ sealed class Runtime(context: Context) : KoinComponent {
             additionalArchives = relatedArchives
         )
 
+    protected fun resolveAaptFallbackPath(selected: String): String? =
+        AaptSelector.alternate(
+            selected = selected,
+            modern = aaptModernPath,
+            legacy = aaptLegacyPath
+        )
+
     abstract suspend fun execute(
         inputFile: String,
         outputFile: String,

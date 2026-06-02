@@ -146,6 +146,7 @@ object RevancedRuntimeEntry {
 
         val aaptPath = params["aaptPath"] as? String
             ?: return "Missing aaptPath parameter."
+        val aaptFallbackPath = params["aaptFallbackPath"] as? String
         val frameworkDir = params["frameworkDir"] as? String
             ?: return "Missing frameworkDir parameter."
         val cacheDir = params["cacheDir"] as? String
@@ -310,21 +311,12 @@ object RevancedRuntimeEntry {
 
                 var sanitizedInput: MislabeledImageResourceSanitizer.Result? = null
                 try {
-                    val relatedBundleArchives = configs
-                        .asSequence()
-                        .filter { it.patches.isNotEmpty() }
-                        .map { File(it.bundlePath) }
-                        .toList()
-                    val session = runStep(StepId.ReadAPK, ::onEvent, ::throwIfCancelled) {
-                        val preparedInput = preparation ?: prepareInput().also { preparation = it }
-                        val sanitized = MislabeledImageResourceSanitizer.sanitizeApkFile(
-                            apkFile = preparedInput.file,
-                            workingDir = File(cacheDir).resolve("patcher-inputs"),
-                            logger = logger
-                        )
-                        sanitizedInput = sanitized
-                        val patcherInput = sanitized.file
-                        val selectedAaptPath = aaptPath
+                    lateinit var preparedInput: SplitApkPreparer.PreparationResult
+                    lateinit var patcherInput: File
+                    fun openSessionWithAapt(
+                        selectedAaptPath: String,
+                        eventSink: (ProgressEvent) -> Unit
+                    ): RevancedSession {
                         val frameworkCacheDir = FrameworkCacheResolver.resolve(
                             baseFrameworkDir = frameworkDir,
                             runtimeTag = revanced22FrameworkRuntimeTag(),
@@ -332,39 +324,98 @@ object RevancedRuntimeEntry {
                             aaptPath = selectedAaptPath,
                             logger = logger
                         )
-                        RevancedSession(
+                        return RevancedSession(
                             cacheDir = cacheDir,
                             frameworkDir = frameworkCacheDir,
                             aaptPath = selectedAaptPath,
                             logger = logger,
                             input = preparedInput.file,
                             initialPatcherInput = patcherInput,
-                            onEvent = ::onEvent,
+                            onEvent = eventSink,
                             checkCancelled = ::throwIfCancelled,
                             logMode = logMode,
                             continueOnPatchError = continueOnPatchError,
                         )
                     }
-                    val preparedInput = requireNotNull(preparation) {
-                        "APK preparation did not produce an input file."
+
+                    var deferredFailure: ProgressEvent.Failed? = null
+                    fun retryAwareOnEvent(event: ProgressEvent) {
+                        if (event is ProgressEvent.Failed && event.stepId == StepId.WriteAPK) {
+                            deferredFailure = event
+                        } else {
+                            onEvent(event)
+                        }
                     }
 
+                    fun hiddenFallbackOnEvent(event: ProgressEvent) {
+                        if (event is ProgressEvent.Failed) {
+                            onEvent(ProgressEvent.Failed(StepId.WriteAPK, event.error))
+                        }
+                    }
+
+                    fun flushDeferredFailure() {
+                        deferredFailure?.let(::onEvent)
+                        deferredFailure = null
+                    }
+
+                    lateinit var selectedAaptPath: String
+                    val output = File(outputFile)
+                    val session = runStep(StepId.ReadAPK, ::onEvent, ::throwIfCancelled) {
+                        preparedInput = preparation ?: prepareInput().also { preparation = it }
+                        val sanitized = MislabeledImageResourceSanitizer.sanitizeApkFile(
+                            apkFile = preparedInput.file,
+                            workingDir = File(cacheDir).resolve("patcher-inputs"),
+                            logger = logger
+                        )
+                        sanitizedInput = sanitized
+                        patcherInput = sanitized.file
+                        selectedAaptPath = aaptPath
+                        openSessionWithAapt(selectedAaptPath, ::retryAwareOnEvent)
+                    }
                     throwIfCancelled()
                     session.use {
-                        it.run(
-                            File(outputFile),
+                        val executedPatches = it.executePatches(
                             { loadSelectedPatches() },
                             stripNativeLibs,
                             preparedInput.merged
                         )
+                        try {
+                            it.writeOutput(output, executedPatches)
+                        } catch (error: Throwable) {
+                            val alternateAaptPath = aaptFallbackPath
+                                ?.takeIf { path -> path.isNotBlank() && path != selectedAaptPath }
+                            if (
+                                deferredFailure == null ||
+                                alternateAaptPath == null ||
+                                !error.isRetryableAaptFailure()
+                            ) {
+                                flushDeferredFailure()
+                                throw error
+                            }
+
+                            deferredFailure = null
+                            logger.info("AAPT2 fallback: true (${alternateAaptPath.aaptDisplayName()})")
+                            val fallbackSession = openSessionWithAapt(alternateAaptPath, ::hiddenFallbackOnEvent)
+                            fallbackSession.use { fallback ->
+                                // Force a clean retry with fresh patch instances.
+                                cachedSelectedPatches = null
+                                val fallbackExecutedPatches = fallback.executePatches(
+                                    { loadSelectedPatches() },
+                                    stripNativeLibs,
+                                    preparedInput.merged
+                                )
+                                fallback.writeOutput(output, fallbackExecutedPatches)
+                            }
+                            onEvent(ProgressEvent.Completed(StepId.WriteAPK))
+                        }
                     }
                 } finally {
                     sanitizedInput?.cleanup()
                     preparation?.cleanup()
                 }
-                } finally {
-                    cancellationWatcher.cancel()
-                }
+            } finally {
+                cancellationWatcher.cancel()
+            }
             }
 
             null
@@ -381,6 +432,33 @@ object RevancedRuntimeEntry {
         } finally {
             stdioCapture.close()
             aaptLogs.stop()
+        }
+    }
+
+    private fun String.aaptDisplayName(): String {
+        val name = File(this).name
+        val lowerName = name.lowercase(Locale.ROOT)
+        return when {
+            "legacy" in lowerName -> "Legacy"
+            "modern" in lowerName -> "Modern"
+            else -> name
+        }
+    }
+
+    private fun Throwable.isRetryableAaptFailure(): Boolean {
+        if (this is CancellationException || this is OutOfMemoryError) return false
+        return generateSequence(this) { it.cause }.any { error ->
+            val message = error.message.orEmpty()
+            val className = error::class.java.name
+            val stack = error.stackTrace.joinToString("\n") { frame -> frame.className }
+            sequenceOf(className, message, stack).any { text ->
+                text.contains("AAPT", ignoreCase = true) ||
+                    text.contains("aapt2", ignoreCase = true) ||
+                    text.contains("AaptInvoker", ignoreCase = true) ||
+                    text.contains("Androlib", ignoreCase = true) ||
+                    text.contains("BrutException", ignoreCase = true) ||
+                    text.contains("APKTOOL_MISSING", ignoreCase = true)
+            }
         }
     }
 

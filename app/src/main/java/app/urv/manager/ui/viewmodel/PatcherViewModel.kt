@@ -1696,6 +1696,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             PatchBundleType.MORPHE.name -> "N/A"
             else -> "N/A"
         }
+        val aapt2Fallback = findLogValue("AAPT2 fallback:") ?: "false"
 
         val isIgnoring = context.getSystemService<PowerManager>()
             ?.isIgnoringBatteryOptimizations(context.packageName) == true
@@ -1726,7 +1727,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     msg.startsWith("Memory limit:") ||
                     msg.startsWith("Runtime mode:") ||
                     msg.startsWith("Memory override:") ||
-                    msg.startsWith("AAPT2:")
+                    msg.startsWith("AAPT2:") ||
+                    msg.startsWith("AAPT2 fallback:")
             }
             .map { (level, msg) -> "[${level.name}]: $msg" }
 
@@ -1753,6 +1755,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             appendLine("Runtime mode: $runtimeMode")
             appendLine("Memory override: $memoryOverride")
             appendLine("AAPT2: $aapt2")
+            appendLine("AAPT2 fallback: $aapt2Fallback")
             appendLine("Aggressive: $aggressiveLimit")
             appendLine("Strip native libs: ${if (stripNativeLibs) "on" else "off"}")
             appendLine("Skip unused splits: ${if (skipUnusedSplits) "on" else "off"}")
