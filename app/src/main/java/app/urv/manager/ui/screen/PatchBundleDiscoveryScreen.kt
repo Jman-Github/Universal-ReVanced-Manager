@@ -836,7 +836,7 @@ fun PatchBundleDiscoveryScreen(
                             ) {
                                 Text(
                                     text = stringResource(R.string.patch_bundle_discovery_empty),
-                                    style = MaterialTheme.typography.bodyLarge,
+                                    style = MaterialTheme.typography.titleLarge,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     textAlign = TextAlign.Center
                                 )

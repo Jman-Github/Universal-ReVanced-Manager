@@ -146,6 +146,7 @@
 - Made the patch selection filter sheet open fully expanded so all filter options are visible without scrolling first https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/507
 - Added patch selection sorting options for Z-A, enabled first, and disabled first https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/511
 - Added app icon background image output and optional Morphe notification icon generation to the custom YouTube asset creator tool https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/330
+- Increased the patch bundle discovery empty state text size for consistency with other search results https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/513
 
 
 # Bug fixes
