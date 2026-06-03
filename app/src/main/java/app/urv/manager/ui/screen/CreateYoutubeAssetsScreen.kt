@@ -49,6 +49,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -141,12 +142,15 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
     var saveDialogState by remember { mutableStateOf<SaveDialogState?>(null) }
 
     var adaptiveSource by rememberSaveable { mutableStateOf<String?>(null) }
+    var adaptiveBackgroundSource by rememberSaveable { mutableStateOf<String?>(null) }
     var lightSource by rememberSaveable { mutableStateOf<String?>(null) }
     var darkSource by rememberSaveable { mutableStateOf<String?>(null) }
     var adaptiveTransform by rememberSaveable(stateSaver = ImageTransform.saver) { mutableStateOf(ImageTransform()) }
+    var adaptiveBackgroundTransform by rememberSaveable(stateSaver = ImageTransform.saver) { mutableStateOf(ImageTransform()) }
     var lightTransform by rememberSaveable(stateSaver = ImageTransform.saver) { mutableStateOf(ImageTransform()) }
     var darkTransform by rememberSaveable(stateSaver = ImageTransform.saver) { mutableStateOf(ImageTransform()) }
     var adaptiveSize by remember { mutableStateOf(IntSize.Zero) }
+    var adaptiveBackgroundSize by remember { mutableStateOf(IntSize.Zero) }
     var lightSize by remember { mutableStateOf(IntSize.Zero) }
     var darkSize by remember { mutableStateOf(IntSize.Zero) }
 
@@ -155,17 +159,27 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
     var lightName by rememberSaveable { mutableStateOf("morphe_header_custom_light") }
     var darkName by rememberSaveable { mutableStateOf("morphe_header_custom_dark") }
     var adaptiveBackgroundHex by rememberSaveable { mutableStateOf("FFB6E3FF") }
+    var adaptiveEditLayer by rememberSaveable { mutableStateOf(AdaptiveIconEditLayer.FOREGROUND) }
+    var generateMorpheNotificationIcon by rememberSaveable { mutableStateOf(false) }
     val adaptiveBackgroundColor = remember(adaptiveBackgroundHex) { parseColor(adaptiveBackgroundHex, Color(0xFFB6E3FF)) }
 
     val adaptiveBitmap by rememberLoadedBitmap(adaptiveSource)
+    val adaptiveBackgroundBitmap by rememberLoadedBitmap(adaptiveBackgroundSource)
     val lightBitmap by rememberLoadedBitmap(lightSource)
     val darkBitmap by rememberLoadedBitmap(darkSource)
+
+    LaunchedEffect(adaptiveBackgroundSource) {
+        if (adaptiveBackgroundSource == null && adaptiveEditLayer == AdaptiveIconEditLayer.BACKGROUND) {
+            adaptiveEditLayer = AdaptiveIconEditLayer.FOREGROUND
+        }
+    }
 
     var generating by rememberSaveable { mutableStateOf(false) }
     var generatedZip by remember { mutableStateOf<File?>(null) }
     var errorText by rememberSaveable { mutableStateOf<String?>(null) }
     var showColorPicker by rememberSaveable { mutableStateOf(false) }
     var generationMode by rememberSaveable { mutableStateOf(AssetGenerationMode.BOTH) }
+    val canGenerateMorpheNotificationIcon = generationMode != AssetGenerationMode.HEADER_ONLY
     var showGenerationModeMenu by rememberSaveable { mutableStateOf(false) }
     val syncHeaderTransforms by prefs.youtubeAssetsSyncHeaderTransforms.getAsState()
 
@@ -179,6 +193,11 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
             PickerTarget.ADAPTIVE -> {
                 adaptiveSource = source
                 adaptiveTransform = ImageTransform()
+            }
+            PickerTarget.ADAPTIVE_BACKGROUND -> {
+                adaptiveBackgroundSource = source
+                adaptiveBackgroundTransform = ImageTransform()
+                adaptiveEditLayer = AdaptiveIconEditLayer.BACKGROUND
             }
             PickerTarget.LIGHT -> {
                 lightSource = source
@@ -194,6 +213,34 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
     }
 
     fun centered(transform: ImageTransform): ImageTransform = transform.copy(offsetX = 0f, offsetY = 0f)
+
+    fun resetAdaptiveEditLayer() {
+        when (adaptiveEditLayer) {
+            AdaptiveIconEditLayer.FOREGROUND -> adaptiveTransform = ImageTransform()
+            AdaptiveIconEditLayer.BACKGROUND -> adaptiveBackgroundTransform = ImageTransform()
+        }
+    }
+
+    fun centerAdaptiveEditLayer() {
+        when (adaptiveEditLayer) {
+            AdaptiveIconEditLayer.FOREGROUND -> adaptiveTransform = centered(adaptiveTransform)
+            AdaptiveIconEditLayer.BACKGROUND -> adaptiveBackgroundTransform = centered(adaptiveBackgroundTransform)
+        }
+    }
+
+    fun clearAdaptiveEditLayer() {
+        when (adaptiveEditLayer) {
+            AdaptiveIconEditLayer.FOREGROUND -> {
+                adaptiveSource = null
+                adaptiveTransform = ImageTransform()
+            }
+            AdaptiveIconEditLayer.BACKGROUND -> {
+                adaptiveBackgroundSource = null
+                adaptiveBackgroundTransform = ImageTransform()
+                adaptiveEditLayer = AdaptiveIconEditLayer.FOREGROUND
+            }
+        }
+    }
 
     fun updateLightTransform(updated: ImageTransform) {
         lightTransform = updated
@@ -251,6 +298,7 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
     fun generate() {
         generatedZip = null
         val adaptive = adaptiveBitmap
+        val adaptiveBackground = adaptiveBackgroundBitmap
         val light = lightBitmap
         val dark = darkBitmap
         val sanitizedForeground = sanitizeName(foregroundName)
@@ -301,19 +349,23 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
                         request = AssetRequest(
                             mode = generationMode,
                             adaptiveForeground = adaptive,
+                            adaptiveBackground = adaptiveBackground,
                             adaptiveBackgroundArgb = adaptiveBackgroundColor.toArgb(),
                             headerLight = light,
                             headerDark = dark,
                             adaptiveTransform = adaptiveTransform,
+                            adaptiveBackgroundTransform = adaptiveBackgroundTransform,
                             lightTransform = lightTransform,
                             darkTransform = darkTransform,
                             adaptiveSize = adaptiveSize,
+                            adaptiveBackgroundSize = adaptiveBackgroundSize,
                             lightSize = lightSize,
                             darkSize = darkSize,
                             foregroundName = sanitizedForeground,
                             backgroundName = sanitizedBackground,
                             lightName = sanitizedLight,
-                            darkName = sanitizedDark
+                            darkName = sanitizedDark,
+                            generateMorpheNotificationIcon = generateMorpheNotificationIcon && canGenerateMorpheNotificationIcon
                         )
                     )
                 }
@@ -460,25 +512,51 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
             item {
                 AssetEditorCard(
                     title = stringResource(R.string.tools_youtube_assets_adaptive_section),
-                    onReset = { adaptiveTransform = ImageTransform() },
-                    onCenter = { adaptiveTransform = centered(adaptiveTransform) },
-                    onClear = {
-                        adaptiveSource = null
-                        adaptiveTransform = ImageTransform()
-                    }
+                    onReset = ::resetAdaptiveEditLayer,
+                    onCenter = ::centerAdaptiveEditLayer,
+                    onClear = ::clearAdaptiveEditLayer
                 ) {
                     PreviewCircle(
-                        bitmap = adaptiveBitmap,
-                        transform = adaptiveTransform,
-                        onTransformChange = { adaptiveTransform = it },
-                        onSizeChanged = { adaptiveSize = it },
+                        foregroundBitmap = adaptiveBitmap,
+                        foregroundTransform = adaptiveTransform,
+                        onForegroundTransformChange = { adaptiveTransform = it },
+                        backgroundBitmap = adaptiveBackgroundBitmap,
+                        backgroundTransform = adaptiveBackgroundTransform,
+                        onBackgroundTransformChange = { adaptiveBackgroundTransform = it },
+                        editLayer = adaptiveEditLayer,
+                        onSizeChanged = {
+                            adaptiveSize = it
+                            adaptiveBackgroundSize = it
+                        },
                         backgroundColor = adaptiveBackgroundColor
                     )
                     Spacer(Modifier.height(8.dp))
                     AdaptiveGuideLegend()
                     Spacer(Modifier.height(8.dp))
+                    if (adaptiveBackgroundBitmap != null) {
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                selected = adaptiveEditLayer == AdaptiveIconEditLayer.FOREGROUND,
+                                onClick = { adaptiveEditLayer = AdaptiveIconEditLayer.FOREGROUND },
+                                label = { Text(stringResource(R.string.tools_youtube_assets_edit_foreground_image)) }
+                            )
+                            FilterChip(
+                                selected = adaptiveEditLayer == AdaptiveIconEditLayer.BACKGROUND,
+                                onClick = { adaptiveEditLayer = AdaptiveIconEditLayer.BACKGROUND },
+                                label = { Text(stringResource(R.string.tools_youtube_assets_edit_background_image)) }
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
                     Button(onClick = { activePicker = PickerTarget.ADAPTIVE }, modifier = Modifier.fillMaxWidth()) {
                         Text(stringResource(R.string.tools_youtube_assets_select_adaptive_foreground))
+                    }
+                    Button(onClick = { activePicker = PickerTarget.ADAPTIVE_BACKGROUND }, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.tools_youtube_assets_select_adaptive_background))
                     }
                     Spacer(Modifier.height(10.dp))
                     NameField(
@@ -516,6 +594,43 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(stringResource(R.string.tools_youtube_assets_pick_color_wheel))
+                        }
+                    }
+                    Text(
+                        text = stringResource(R.string.tools_youtube_assets_background_image_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = stringResource(R.string.tools_youtube_assets_generate_morphe_notification_icon),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Text(
+                                    text = stringResource(R.string.tools_youtube_assets_generate_morphe_notification_icon_description),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = generateMorpheNotificationIcon && canGenerateMorpheNotificationIcon,
+                                onCheckedChange = { generateMorpheNotificationIcon = it },
+                                enabled = canGenerateMorpheNotificationIcon
+                            )
                         }
                     }
                 }
@@ -876,14 +991,26 @@ private fun AdaptiveGuideLegend() {
 
 @Composable
 private fun PreviewCircle(
-    bitmap: Bitmap?,
-    transform: ImageTransform,
-    onTransformChange: (ImageTransform) -> Unit,
+    foregroundBitmap: Bitmap?,
+    foregroundTransform: ImageTransform,
+    onForegroundTransformChange: (ImageTransform) -> Unit,
+    backgroundBitmap: Bitmap?,
+    backgroundTransform: ImageTransform,
+    onBackgroundTransformChange: (ImageTransform) -> Unit,
+    editLayer: AdaptiveIconEditLayer,
     onSizeChanged: (IntSize) -> Unit,
     backgroundColor: Color
 ) {
-    val latestTransform by rememberUpdatedState(transform)
-    val hasBitmap by rememberUpdatedState(bitmap != null)
+    val latestForegroundTransform by rememberUpdatedState(foregroundTransform)
+    val latestBackgroundTransform by rememberUpdatedState(backgroundTransform)
+    val latestForegroundTransformChange by rememberUpdatedState(onForegroundTransformChange)
+    val latestBackgroundTransformChange by rememberUpdatedState(onBackgroundTransformChange)
+    val hasEditableBitmap by rememberUpdatedState(
+        when (editLayer) {
+            AdaptiveIconEditLayer.FOREGROUND -> foregroundBitmap != null
+            AdaptiveIconEditLayer.BACKGROUND -> backgroundBitmap != null
+        }
+    )
     Box(Modifier.fillMaxWidth().height(230.dp), contentAlignment = Alignment.Center) {
         Box(
             modifier = Modifier
@@ -891,33 +1018,60 @@ private fun PreviewCircle(
                 .clip(CircleShape)
                 .background(backgroundColor)
                 .onSizeChanged(onSizeChanged)
-                .pointerInput(bitmap) {
+                .pointerInput(foregroundBitmap, backgroundBitmap, editLayer) {
                     detectTransformGestures { _, pan, zoom, _ ->
-                        if (!hasBitmap) return@detectTransformGestures
-                        val current = latestTransform
-                        onTransformChange(
-                            current.copy(
-                                scale = (current.scale * zoom).coerceIn(0.4f, 5f),
-                                offsetX = current.offsetX + pan.x,
-                                offsetY = current.offsetY + pan.y
-                            )
-                        )
+                        if (!hasEditableBitmap) return@detectTransformGestures
+                        when (editLayer) {
+                            AdaptiveIconEditLayer.FOREGROUND -> {
+                                val current = latestForegroundTransform
+                                latestForegroundTransformChange(
+                                    current.copy(
+                                        scale = (current.scale * zoom).coerceIn(0.4f, 5f),
+                                        offsetX = current.offsetX + pan.x,
+                                        offsetY = current.offsetY + pan.y
+                                    )
+                                )
+                            }
+                            AdaptiveIconEditLayer.BACKGROUND -> {
+                                val current = latestBackgroundTransform
+                                latestBackgroundTransformChange(
+                                    current.copy(
+                                        scale = (current.scale * zoom).coerceIn(0.4f, 5f),
+                                        offsetX = current.offsetX + pan.x,
+                                        offsetY = current.offsetY + pan.y
+                                    )
+                                )
+                            }
+                        }
                     }
                 },
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.Center,
         ) {
-            if (bitmap == null) {
-                ContrastGuideText(stringResource(R.string.tools_youtube_assets_no_image_selected))
-            } else {
+            backgroundBitmap?.let { bitmap ->
                 androidx.compose.foundation.Image(
                     bitmap = bitmap.asImageBitmap(),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize().graphicsLayer {
-                        scaleX = transform.scale
-                        scaleY = transform.scale
-                        translationX = transform.offsetX
-                        translationY = transform.offsetY
+                        scaleX = backgroundTransform.scale
+                        scaleY = backgroundTransform.scale
+                        translationX = backgroundTransform.offsetX
+                        translationY = backgroundTransform.offsetY
+                    }
+                )
+            }
+            if (foregroundBitmap == null) {
+                ContrastGuideText(stringResource(R.string.tools_youtube_assets_no_image_selected))
+            } else {
+                androidx.compose.foundation.Image(
+                    bitmap = foregroundBitmap.asImageBitmap(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().graphicsLayer {
+                        scaleX = foregroundTransform.scale
+                        scaleY = foregroundTransform.scale
+                        translationX = foregroundTransform.offsetX
+                        translationY = foregroundTransform.offsetY
                     }
                 )
             }
@@ -976,7 +1130,6 @@ private fun ContrastGuideText(text: String) {
         )
     }
 }
-
 private fun DrawScope.drawAdaptiveGuideRing(
     radius: Float,
     center: Offset? = null,
@@ -1081,8 +1234,14 @@ private data class SaveDialogState(
 
 private enum class PickerTarget {
     ADAPTIVE,
+    ADAPTIVE_BACKGROUND,
     LIGHT,
     DARK
+}
+
+private enum class AdaptiveIconEditLayer {
+    FOREGROUND,
+    BACKGROUND
 }
 
 private data class ImageTransform(
@@ -1108,6 +1267,14 @@ private val adaptiveDensities = listOf(
     Density("xxxhdpi", 432, 432)
 )
 
+private val notificationDensities = listOf(
+    Density("mdpi", 24, 24),
+    Density("hdpi", 36, 36),
+    Density("xhdpi", 48, 48),
+    Density("xxhdpi", 72, 72),
+    Density("xxxhdpi", 96, 96)
+)
+
 private val headerDensities = listOf(
     Density("mdpi", 145, 54),
     Density("hdpi", 194, 72),
@@ -1125,19 +1292,23 @@ private enum class AssetGenerationMode(val labelRes: Int) {
 private data class AssetRequest(
     val mode: AssetGenerationMode,
     val adaptiveForeground: Bitmap?,
+    val adaptiveBackground: Bitmap?,
     val adaptiveBackgroundArgb: Int,
     val headerLight: Bitmap?,
     val headerDark: Bitmap?,
     val adaptiveTransform: ImageTransform,
+    val adaptiveBackgroundTransform: ImageTransform,
     val lightTransform: ImageTransform,
     val darkTransform: ImageTransform,
     val adaptiveSize: IntSize,
+    val adaptiveBackgroundSize: IntSize,
     val lightSize: IntSize,
     val darkSize: IntSize,
     val foregroundName: String,
     val backgroundName: String,
     val lightName: String,
-    val darkName: String
+    val darkName: String,
+    val generateMorpheNotificationIcon: Boolean
 )
 
 private fun generateArchive(cacheDir: File, request: AssetRequest): File {
@@ -1148,11 +1319,38 @@ private fun generateArchive(cacheDir: File, request: AssetRequest): File {
             val adaptive = requireNotNull(request.adaptiveForeground)
             adaptiveDensities.forEach { density ->
                 val fg = renderBitmap(adaptive, density.width, density.height, request.adaptiveTransform, request.adaptiveSize)
-                val bg = Bitmap.createBitmap(density.width, density.height, Bitmap.Config.ARGB_8888).apply { eraseColor(request.adaptiveBackgroundArgb) }
+                val bg = request.adaptiveBackground?.let { background ->
+                    renderBitmap(
+                        background,
+                        density.width,
+                        density.height,
+                        request.adaptiveBackgroundTransform,
+                        request.adaptiveBackgroundSize
+                    )
+                } ?: Bitmap.createBitmap(density.width, density.height, Bitmap.Config.ARGB_8888).apply {
+                    eraseColor(request.adaptiveBackgroundArgb)
+                }
                 putPng(zip, "adaptive-icon/mipmap-${density.folder}/${request.foregroundName}.png", fg)
                 putPng(zip, "adaptive-icon/mipmap-${density.folder}/${request.backgroundName}.png", bg)
                 fg.recycle()
                 bg.recycle()
+            }
+            if (request.generateMorpheNotificationIcon) {
+                notificationDensities.forEach { density ->
+                    val notificationIcon = renderNotificationIcon(
+                        adaptive,
+                        density.width,
+                        density.height,
+                        request.adaptiveTransform,
+                        request.adaptiveSize
+                    )
+                    putPng(
+                        zip,
+                        "adaptive-icon/drawable-${density.folder}/morphe_notification_icon_custom.png",
+                        notificationIcon
+                    )
+                    notificationIcon.recycle()
+                }
             }
         }
         if (request.mode != AssetGenerationMode.ADAPTIVE_ONLY) {
@@ -1198,6 +1396,67 @@ private fun renderBitmap(
     canvas.drawBitmap(source, null, RectF(tx, ty, tx + dw, ty + dh), paint)
     return output
 }
+
+private fun renderNotificationIcon(
+    source: Bitmap,
+    targetWidth: Int,
+    targetHeight: Int,
+    transform: ImageTransform,
+    previewSize: IntSize
+): Bitmap {
+    val rendered = renderBitmap(source, targetWidth, targetHeight, transform, previewSize)
+    val output = rendered.toNotificationMask()
+    rendered.recycle()
+    return output
+}
+
+private fun Bitmap.toNotificationMask(): Bitmap {
+    val pixels = IntArray(width * height)
+    getPixels(pixels, 0, width, 0, 0, width, height)
+    val backgroundColor = estimateOpaqueBackgroundColor(pixels, width, height)
+    val outputPixels = IntArray(pixels.size) { index ->
+        val color = pixels[index]
+        val sourceAlpha = AndroidColor.alpha(color)
+        val backgroundAlpha = backgroundColor
+            ?.let { ((colorDistance(color, it) - 12) * 8).coerceIn(0, 255) }
+            ?: 255
+        val alpha = (sourceAlpha * backgroundAlpha) / 255
+        if (alpha == 0) AndroidColor.TRANSPARENT else AndroidColor.argb(alpha, 255, 255, 255)
+    }
+    return Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).apply {
+        setPixels(outputPixels, 0, width, 0, 0, width, height)
+    }
+}
+
+private fun estimateOpaqueBackgroundColor(pixels: IntArray, width: Int, height: Int): Int? {
+    val counts = mutableMapOf<Int, Int>()
+    fun add(color: Int) {
+        if (AndroidColor.alpha(color) < 250) return
+        val key = ((AndroidColor.red(color) / 16) shl 8) or
+            ((AndroidColor.green(color) / 16) shl 4) or
+            (AndroidColor.blue(color) / 16)
+        counts[key] = (counts[key] ?: 0) + 1
+    }
+    for (x in 0 until width) {
+        add(pixels[x])
+        add(pixels[(height - 1) * width + x])
+    }
+    for (y in 1 until height - 1) {
+        add(pixels[y * width])
+        add(pixels[y * width + width - 1])
+    }
+    val key = counts.maxByOrNull { it.value }?.key ?: return null
+    return AndroidColor.rgb(
+        (((key shr 8) and 0xF) * 16) + 8,
+        (((key shr 4) and 0xF) * 16) + 8,
+        ((key and 0xF) * 16) + 8
+    )
+}
+
+private fun colorDistance(first: Int, second: Int): Int =
+    kotlin.math.abs(AndroidColor.red(first) - AndroidColor.red(second)) +
+        kotlin.math.abs(AndroidColor.green(first) - AndroidColor.green(second)) +
+        kotlin.math.abs(AndroidColor.blue(first) - AndroidColor.blue(second))
 
 private fun sanitizeName(input: String): String {
     val cleaned = input.trim().removeSuffix(".png").replace(Regex("[^A-Za-z0-9._-]"), "_")

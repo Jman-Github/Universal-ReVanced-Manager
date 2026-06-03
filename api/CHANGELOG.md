@@ -145,6 +145,7 @@
 - Centered the remaining patch selection and patcher result dialog text, including bundle action confirmations, patch defaults, incompatible patches, and install success dialogs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/487
 - Made the patch selection filter sheet open fully expanded so all filter options are visible without scrolling first https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/507
 - Added patch selection sorting options for Z-A, enabled first, and disabled first https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/511
+- Added app icon background image output and optional Morphe notification icon generation to the custom YouTube asset creator tool https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/330
 
 
 # Bug fixes

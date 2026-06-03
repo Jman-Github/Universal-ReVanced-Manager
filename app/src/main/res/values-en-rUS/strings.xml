@@ -848,10 +848,14 @@ Patch profiles are not affected.</string>
     <string name="tools_youtube_assets_adaptive_section">Adaptive icon</string>
     <string name="tools_youtube_assets_headers_section">Custom headers</string>
     <string name="tools_youtube_assets_select_adaptive_foreground">Select adaptive foreground image</string>
+    <string name="tools_youtube_assets_select_adaptive_background">Select adaptive background image</string>
+    <string name="tools_youtube_assets_edit_foreground_image">Move foreground</string>
+    <string name="tools_youtube_assets_edit_background_image">Move background</string>
     <string name="tools_youtube_assets_adaptive_foreground_name">Adaptive foreground file name</string>
     <string name="tools_youtube_assets_adaptive_background_name">Adaptive background file name</string>
     <string name="tools_youtube_assets_background_color_hex">Adaptive background color (hex)</string>
     <string name="tools_youtube_assets_background_color_hint">Use RRGGBB or AARRGGBB</string>
+    <string name="tools_youtube_assets_background_image_hint">The selected background image is used for the adaptive background PNG. Leave it empty to use the color instead.</string>
     <string name="tools_youtube_assets_pick_color_wheel">Pick color</string>
     <string name="tools_youtube_assets_color_picker_title">Choose adaptive background color</string>
     <string name="tools_youtube_assets_color_picker_desc">Drag in the square to set saturation/brightness, then adjust hue.</string>
@@ -875,6 +879,8 @@ Patch profiles are not affected.</string>
     <string name="tools_youtube_assets_preset_morphe">Morphe defaults</string>
     <string name="tools_youtube_assets_preset_youtube">ReVanced defaults</string>
     <string name="tools_youtube_assets_output_info">Output includes mdpi, hdpi, xhdpi, xxhdpi, and xxxhdpi PNGs for icon and header assets</string>
+    <string name="tools_youtube_assets_generate_morphe_notification_icon">Generate Morphe notification icon</string>
+    <string name="tools_youtube_assets_generate_morphe_notification_icon_description">Adds Morphe-only drawable density PNGs named morphe_notification_icon_custom.png. This is not used by ReVanced branding sets.</string>
     <string name="tools_youtube_assets_generate_mode_label">Package output mode</string>
     <string name="tools_youtube_assets_generate">Generate assets package</string>
     <string name="tools_youtube_assets_generate_mode_button">%1$s: %2$s</string>
