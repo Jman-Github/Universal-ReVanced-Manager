@@ -56,6 +56,7 @@ import app.urv.manager.plugin.downloader.PluginHostApi
 import app.urv.manager.plugin.downloader.Package as DownloaderPackage
 import app.urv.manager.plugin.downloader.UserInteractionException
 import app.urv.manager.ui.model.SelectedApp
+import app.urv.manager.ui.model.SupportedVersionInfo
 import app.urv.manager.ui.model.navigation.Patcher
 import app.urv.manager.ui.model.navigation.SelectedApplicationInfo
 import app.urv.manager.util.Options
@@ -254,9 +255,19 @@ class SelectedAppInfoViewModel(
                 !support.supportsAllVersions
             ) return@mapNotNull null
 
+            val recommendedExperimental = recommended != null &&
+                recommended in support.experimentalVersions &&
+                recommended !in support.stableVersions
             val otherVersions = support.versions
                 .filterNot { recommended.equals(it, ignoreCase = true) }
                 .sorted()
+                .map { version ->
+                    SupportedVersionInfo(
+                        version = version,
+                        experimental = version in support.experimentalVersions &&
+                            version !in support.stableVersions
+                    )
+                }
 
             BundleRecommendationDetail(
                 bundleUid = scoped.uid,
@@ -264,6 +275,7 @@ class SelectedAppInfoViewModel(
                     ?.takeIf { it.isNotBlank() }
                     ?: scoped.name,
                 recommendedVersion = recommended,
+                recommendedVersionExperimental = recommendedExperimental,
                 otherSupportedVersions = otherVersions,
                 supportsAllVersions = support.supportsAllVersions
             )
@@ -1336,6 +1348,8 @@ class SelectedAppInfoViewModel(
     ): BundleSupport {
         var supportsAllVersions = false
         val versions = mutableSetOf<String>()
+        val stableVersions = mutableSetOf<String>()
+        val experimentalVersions = mutableSetOf<String>()
         var hasSupport = false
 
         patches.asSequence()
@@ -1354,7 +1368,10 @@ class SelectedAppInfoViewModel(
                     if (supportedVersions.isNullOrEmpty()) {
                         supportsAllVersions = true
                     } else {
+                        val supportedExperimentalVersions = compatible.experimentalVersions.orEmpty().toSet()
                         versions += supportedVersions
+                        experimentalVersions += supportedExperimentalVersions
+                        stableVersions += supportedVersions.filterNot { it in supportedExperimentalVersions }
                     }
                 }
         }
@@ -1362,14 +1379,18 @@ class SelectedAppInfoViewModel(
         return BundleSupport(
             hasSupport = hasSupport,
             supportsAllVersions = supportsAllVersions,
-            versions = versions
+            versions = versions,
+            stableVersions = stableVersions,
+            experimentalVersions = experimentalVersions
         )
     }
 
     private data class BundleSupport(
         val hasSupport: Boolean,
         val supportsAllVersions: Boolean,
-        val versions: Set<String>
+        val versions: Set<String>,
+        val stableVersions: Set<String>,
+        val experimentalVersions: Set<String>
     )
 
     private fun PatchBundleInfo.Scoped.recommendedVersionForSelection(
@@ -1399,7 +1420,7 @@ class SelectedAppInfoViewModel(
         patches: Iterable<PatchInfo>,
         packageName: String
     ): String? {
-        val versions = linkedMapOf<String, Int>()
+        val versions = linkedMapOf<String, MorpheVersionStats>()
 
         patches.forEach { patch ->
             patch.compatiblePackages
@@ -1407,12 +1428,23 @@ class SelectedAppInfoViewModel(
                 ?.forEach { compatible ->
                     val supportedVersions = compatible.versions ?: return@forEach
                     supportedVersions.sorted().forEach { version ->
-                        versions[version] = (versions[version] ?: 0) + 1
+                        val stats = versions.getOrPut(version) { MorpheVersionStats() }
+                        if (compatible.experimentalVersions?.contains(version) == true) {
+                            stats.experimentalPatchCount += 1
+                        } else {
+                            stats.stablePatchCount += 1
+                        }
                     }
                 }
         }
 
-        return pickRecommendedVersion(versions)
+        val stableVersions = versions.mapValues { (_, stats) -> stats.stablePatchCount }
+            .filterValues { it > 0 }
+        val selectedVersions = stableVersions.ifEmpty {
+            versions.mapValues { (_, stats) -> stats.totalPatchCount }
+        }
+
+        return pickRecommendedVersion(selectedVersions)
     }
 
     private fun pickRecommendedVersion(versions: Map<String, Int>): String? {
@@ -1438,6 +1470,14 @@ class SelectedAppInfoViewModel(
             if (a != b) return a.compareTo(b)
         }
         return first.compareTo(second, ignoreCase = true)
+    }
+
+    private data class MorpheVersionStats(
+        var stablePatchCount: Int = 0,
+        var experimentalPatchCount: Int = 0
+    ) {
+        val totalPatchCount: Int
+            get() = stablePatchCount + experimentalPatchCount
     }
 
     private suspend fun resolveVersionFromDownloaderData(
@@ -1667,7 +1707,8 @@ data class BundleRecommendationDetail(
     val bundleUid: Int,
     val name: String,
     val recommendedVersion: String?,
-    val otherSupportedVersions: List<String>,
+    val recommendedVersionExperimental: Boolean,
+    val otherSupportedVersions: List<SupportedVersionInfo>,
     val supportsAllVersions: Boolean
 )
 

@@ -16,6 +16,7 @@ import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.domain.repository.PatchBundleRepository
 import androidx.documentfile.provider.DocumentFile
 import app.urv.manager.ui.model.SelectedApp
+import app.urv.manager.ui.model.SupportedVersionInfo
 import app.urv.manager.patcher.split.SplitApkInspector
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.util.PM
@@ -73,13 +74,16 @@ class AppSelectorViewModel(
                     patch.compatiblePackages?.forEach { compatible ->
                         val accumulator =
                             packageSupport.getOrPut(compatible.packageName) {
-                                BundleSupportAccumulator(mutableSetOf(), false)
+                                BundleSupportAccumulator(mutableSetOf(), mutableSetOf(), mutableSetOf(), false)
                             }
                         val versions = compatible.versions
                         if (versions.isNullOrEmpty()) {
                             accumulator.supportsAllVersions = true
                         } else {
+                            val experimentalVersions = compatible.experimentalVersions.orEmpty().toSet()
                             accumulator.versions += versions
+                            accumulator.experimentalVersions += experimentalVersions
+                            accumulator.stableVersions += versions.filterNot { it in experimentalVersions }
                         }
                     }
                 }
@@ -92,9 +96,19 @@ class AppSelectorViewModel(
                         !support.supportsAllVersions
                     ) return@forEach
 
+                    val recommendedExperimental = recommended != null &&
+                        recommended in support.experimentalVersions &&
+                        recommended !in support.stableVersions
                     val otherVersions = support.versions
                         .filterNot { recommended.equals(it, ignoreCase = true) }
                         .sorted()
+                        .map { version ->
+                            SupportedVersionInfo(
+                                version = version,
+                                experimental = version in support.experimentalVersions &&
+                                    version !in support.stableVersions
+                            )
+                        }
 
                     val suggestions = result.getOrPut(packageName) { mutableListOf() }
                     suggestions += BundleVersionSuggestion(
@@ -103,6 +117,7 @@ class AppSelectorViewModel(
                             ?.takeIf { it.isNotBlank() }
                             ?: info.name,
                         recommendedVersion = recommended,
+                        recommendedVersionExperimental = recommendedExperimental,
                         otherSupportedVersions = otherVersions,
                         supportsAllVersions = support.supportsAllVersions
                     )
@@ -316,11 +331,14 @@ data class BundleVersionSuggestion(
     val bundleUid: Int,
     val bundleName: String,
     val recommendedVersion: String?,
-    val otherSupportedVersions: List<String>,
+    val recommendedVersionExperimental: Boolean,
+    val otherSupportedVersions: List<SupportedVersionInfo>,
     val supportsAllVersions: Boolean
 )
 
 private data class BundleSupportAccumulator(
     val versions: MutableSet<String>,
+    val stableVersions: MutableSet<String>,
+    val experimentalVersions: MutableSet<String>,
     var supportsAllVersions: Boolean
 )

@@ -329,6 +329,10 @@ private fun PatchBundlePatchItem(
                             .filterNotNull()
                             .filter { it.isNotBlank() }
                             .reversed()
+                        val experimentalVersions = compatiblePackage.experimentalVersions
+                            .filterNotNull()
+                            .filter { it.isNotBlank() }
+                            .toSet()
                         val packageIsAny = isAnyPackageTag(packageName, anyPackageLabel)
 
                         FlowRow(
@@ -351,10 +355,12 @@ private fun PatchBundlePatchItem(
                                 if (expandVersions) {
                                     versions.forEach { version ->
                                         val versionIsAny = isAnyVersionTag(version, anyVersionLabel)
+                                        val versionIsExperimental = version in experimentalVersions
                                         val searchable = !(packageIsAny && versionIsAny)
                                         PatchInfoChip(
                                             modifier = Modifier.align(androidx.compose.ui.Alignment.CenterVertically),
                                             text = "$VERSION_ICON $version",
+                                            experimental = versionIsExperimental,
                                             onClick = if (!searchable) {
                                                 null
                                             } else {
@@ -371,10 +377,12 @@ private fun PatchBundlePatchItem(
                                 } else {
                                     val displayedVersion = versions.first()
                                     val versionIsAny = isAnyVersionTag(displayedVersion, anyVersionLabel)
+                                    val versionIsExperimental = displayedVersion in experimentalVersions
                                     val searchable = !(packageIsAny && versionIsAny)
                                     PatchInfoChip(
                                         modifier = Modifier.align(androidx.compose.ui.Alignment.CenterVertically),
                                         text = "$VERSION_ICON $displayedVersion",
+                                        experimental = versionIsExperimental,
                                         onClick = if (!searchable) {
                                             null
                                         } else {

@@ -2939,30 +2939,54 @@ class PatchBundleRepository(
     }
 
     private fun suggestedVersionsForMorphe(patches: Iterable<PatchInfo>): Map<String, String?> {
-        val versionCounts = mutableMapOf<String, MutableMap<String, Int>>()
+        val versionCounts = mutableMapOf<String, MutableMap<String, MorpheVersionStats>>()
 
         patches.forEach { patch ->
             patch.compatiblePackages?.forEach { pkg ->
                 val versions = pkg.versions ?: return@forEach
                 val counts = versionCounts.getOrPut(pkg.packageName) { linkedMapOf() }
                 versions.sorted().forEach { version ->
-                    counts[version] = (counts[version] ?: 0) + 1
+                    val stats = counts.getOrPut(version) { MorpheVersionStats() }
+                    if (pkg.experimentalVersions?.contains(version) == true) {
+                        stats.experimentalPatchCount += 1
+                    } else {
+                        stats.stablePatchCount += 1
+                    }
                 }
             }
         }
 
         return versionCounts.mapValues { (_, versions) ->
             if (versions.isEmpty()) return@mapValues null
-            if (versions.keys.size < 2) return@mapValues versions.keys.firstOrNull()
 
-            var currentHighestPatchCount = -1
-            versions.entries.last { (_, patchCount) ->
-                if (patchCount >= currentHighestPatchCount) {
-                    currentHighestPatchCount = patchCount
-                    true
-                } else false
-            }.key
+            val stableVersions = versions.mapValues { (_, stats) -> stats.stablePatchCount }
+                .filterValues { it > 0 }
+            val selectedVersions = stableVersions.ifEmpty {
+                versions.mapValues { (_, stats) -> stats.totalPatchCount }
+            }
+            selectSuggestedMorpheVersion(selectedVersions)
         }
+    }
+
+    private fun selectSuggestedMorpheVersion(versions: Map<String, Int>): String? {
+        if (versions.isEmpty()) return null
+        if (versions.keys.size < 2) return versions.keys.firstOrNull()
+
+        var currentHighestPatchCount = -1
+        return versions.entries.last { (_, patchCount) ->
+            if (patchCount >= currentHighestPatchCount) {
+                currentHighestPatchCount = patchCount
+                true
+            } else false
+        }.key
+    }
+
+    private data class MorpheVersionStats(
+        var stablePatchCount: Int = 0,
+        var experimentalPatchCount: Int = 0
+    ) {
+        val totalPatchCount: Int
+            get() = stablePatchCount + experimentalPatchCount
     }
 
     data class BundleVersionMatch(

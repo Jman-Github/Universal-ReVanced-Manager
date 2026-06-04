@@ -6,8 +6,6 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.horizontalScroll
 import app.urv.manager.util.consumeHorizontalScroll
@@ -17,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -77,6 +76,7 @@ import app.urv.manager.ui.component.AppTopBar
 import app.urv.manager.ui.component.AppliedPatchBundleUi
 import app.urv.manager.ui.component.AppliedPatchesDialog
 import app.urv.manager.ui.component.ColumnWithScrollbar
+import app.urv.manager.ui.component.ExperimentalVersionBadge
 import app.urv.manager.ui.component.LoadingIndicator
 import app.urv.manager.ui.component.NonSuggestedVersionDialog
 import app.urv.manager.ui.component.UniversalFallbackVersionDialog
@@ -447,25 +447,43 @@ fun SelectedAppInfoScreen(
                 val selectedDetail = bundleRecommendationDetails.firstOrNull { it.bundleUid == selectedBundleUid }
                 val overrideVersion = selectedBundleOverride
                 val bundleSummary = if (selectedDetail != null) {
+                    var versionIsExperimental = false
                     val versionLabel = when {
                         overrideVersion != null ->
-                            stringResource(R.string.version_label, overrideVersion)
+                            stringResource(R.string.version_label, overrideVersion).also {
+                                versionIsExperimental = selectedDetail.otherSupportedVersions
+                                    .firstOrNull { info -> info.version == overrideVersion }
+                                    ?.experimental == true
+                            }
 
                         selectedDetail.recommendedVersion != null ->
-                            stringResource(R.string.version_label, selectedDetail.recommendedVersion)
+                            stringResource(R.string.version_label, selectedDetail.recommendedVersion).also {
+                                versionIsExperimental = selectedDetail.recommendedVersionExperimental
+                            }
 
                         selectedDetail.supportsAllVersions ->
                             stringResource(R.string.bundle_version_all_versions)
 
-                        selectedDetail.otherSupportedVersions.isNotEmpty() ->
-                            stringResource(R.string.version_label, selectedDetail.otherSupportedVersions.first())
+                        selectedDetail.otherSupportedVersions.isNotEmpty() -> {
+                            val firstVersion = selectedDetail.otherSupportedVersions.first()
+                            versionIsExperimental = firstVersion.experimental
+                            stringResource(
+                                R.string.version_label,
+                                firstVersion.version
+                            )
+                        }
 
                         else -> stringResource(R.string.bundle_version_no_version)
+                    }
+                    val displayVersionLabel = if (versionIsExperimental) {
+                        "$versionLabel (${stringResource(R.string.patch_bundle_experimental_version_label)})"
+                    } else {
+                        versionLabel
                     }
                     stringResource(
                         R.string.bundle_version_item_description_selected,
                         selectedDetail.name,
-                        versionLabel
+                        displayVersionLabel
                     )
                 } else {
                     stringResource(R.string.bundle_version_item_description_default)
@@ -765,8 +783,13 @@ private fun BundleRecommendationCard(
 
             BundleVersionOptionRow(
                 title = stringResource(R.string.bundle_version_dialog_recommended, recommendedLabel),
-                subtitle = stringResource(R.string.other_supported_versions_all)
-                    .takeIf { detail.supportsAllVersions && detail.recommendedVersion == null },
+                subtitle = when {
+                    detail.recommendedVersionExperimental ->
+                        stringResource(R.string.patch_bundle_experimental_version_label)
+                    detail.supportsAllVersions && detail.recommendedVersion == null ->
+                        stringResource(R.string.other_supported_versions_all)
+                    else -> null
+                },
                 selected = isActive && selectedOverride == null,
                 enabled = enabled,
                 onClick = {
@@ -778,15 +801,29 @@ private fun BundleRecommendationCard(
             )
 
             if (selectedOverride != null) {
-                SelectionBadge(
-                    text = stringResource(
-                        R.string.bundle_version_dialog_selected_override,
-                        stringResource(R.string.version_label, selectedOverride)
-                    ),
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.align(Alignment.Start)
-                )
+                Column(
+                    modifier = Modifier.align(Alignment.Start),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    SelectionBadge(
+                        text = stringResource(
+                            R.string.bundle_version_dialog_selected_override,
+                            stringResource(R.string.version_label, selectedOverride)
+                        ),
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    val overrideExperimental = detail.otherSupportedVersions
+                        .firstOrNull { it.version == selectedOverride }
+                        ?.experimental == true
+                    if (overrideExperimental) {
+                        SelectionBadge(
+                            text = stringResource(R.string.patch_bundle_experimental_version_label),
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                    }
+                }
             }
 
             when {
@@ -808,7 +845,6 @@ private fun BundleRecommendationCard(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun OtherSupportedVersionsSelectionDialog(
     detail: BundleRecommendationDetail,
@@ -836,17 +872,43 @@ private fun OtherSupportedVersionsSelectionDialog(
                             color = MaterialTheme.colorScheme.onSurface
                         )
 
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            detail.otherSupportedVersions.forEach { version ->
-                                val label = context.getString(R.string.version_label, version)
-                                FilterChip(
-                                    selected = selectedOverride == version,
-                                    onClick = { onSelect(version) },
-                                    label = { Text(label) }
-                                )
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            detail.otherSupportedVersions.chunked(2).forEach { row ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    row.forEach { info ->
+                                        val label = context.getString(R.string.version_label, info.version)
+                                        FilterChip(
+                                            selected = selectedOverride == info.version,
+                                            onClick = { onSelect(info.version) },
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .heightIn(min = 52.dp),
+                                            label = {
+                                                Column(
+                                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                                                    modifier = Modifier.fillMaxWidth()
+                                                ) {
+                                                    Text(
+                                                        text = label,
+                                                        textAlign = TextAlign.Center,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                    if (info.experimental) {
+                                                        ExperimentalVersionBadge()
+                                                    }
+                                                }
+                                            }
+                                        )
+                                    }
+                                    if (row.size == 1) {
+                                        Spacer(modifier = Modifier.weight(1f))
+                                    }
+                                }
                             }
                         }
                     }

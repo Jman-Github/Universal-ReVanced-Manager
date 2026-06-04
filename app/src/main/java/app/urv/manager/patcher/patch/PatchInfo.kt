@@ -33,6 +33,15 @@ data class PatchInfo(
         }
     }
 
+    fun isExperimental(packageName: String, versionName: String?): Boolean {
+        if (versionName == null) return false
+
+        return compatiblePackages
+            ?.firstOrNull { it.packageName == packageName }
+            ?.experimentalVersions
+            ?.contains(versionName) == true
+    }
+
     /**
      * Create a fake ReVanced [Patch] with the same metadata as the [PatchInfo] instance.
      * The resulting patch cannot be executed.
@@ -58,7 +67,11 @@ data class PatchInfo(
                         ?.mapNotNull { it as? String }
                         ?.toImmutableSet()
                         ?.takeIf { it.isNotEmpty() }
-                    CompatiblePackage(packageName, versions)
+                    val experimentalVersions = (map["experimentalVersions"] as? Iterable<*>)
+                        ?.mapNotNull { it as? String }
+                        ?.toImmutableSet()
+                        ?.takeIf { it.isNotEmpty() }
+                    CompatiblePackage(packageName, versions, experimentalVersions)
                 }
                 ?.toImmutableList()
                 ?.takeIf { it.isNotEmpty() }
@@ -79,7 +92,8 @@ data class PatchInfo(
 @Immutable
 data class CompatiblePackage(
     val packageName: String,
-    val versions: ImmutableSet<String>?
+    val versions: ImmutableSet<String>?,
+    val experimentalVersions: ImmutableSet<String>? = null
 )
 
 @Immutable

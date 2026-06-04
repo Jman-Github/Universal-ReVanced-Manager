@@ -356,7 +356,25 @@ object MorpheRuntimeEntry {
         result["name"] = patch.name.orEmpty()
         result["description"] = patch.description
         result["use"] = patch.use
-        result["compatiblePackages"] = patch.compatiblePackages?.map { (pkg, versions) ->
+        result["compatiblePackages"] = patch.compatibility?.map { compatibility ->
+            val versions = compatibility.targets
+                .mapNotNull { it.version }
+                .toSet()
+                .takeIf { it.isNotEmpty() }
+                ?.toList()
+            val experimentalVersions = compatibility.targets
+                .filter { it.isExperimental }
+                .mapNotNull { it.version }
+                .toSet()
+                .takeIf { it.isNotEmpty() }
+                ?.toList()
+
+            linkedMapOf(
+                "packageName" to compatibility.packageName,
+                "versions" to versions,
+                "experimentalVersions" to experimentalVersions
+            )
+        } ?: patch.compatiblePackages?.map { (pkg, versions) ->
             linkedMapOf(
                 "packageName" to pkg,
                 "versions" to versions?.toList()

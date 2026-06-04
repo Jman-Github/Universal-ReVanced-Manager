@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -36,6 +37,7 @@ import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.patcher.patch.PatchInfo
 import app.urv.manager.ui.component.ArrowButton
+import app.urv.manager.ui.component.ExperimentalVersionBadge
 import app.urv.manager.ui.component.FullscreenDialog
 import app.urv.manager.ui.component.LazyColumnWithScrollbar
 import app.urv.manager.util.openUrl
@@ -239,10 +241,13 @@ fun PatchItem(
                                     if (expandVersions) {
                                         versions.forEach { version ->
                                             val versionIsAny = isAnyVersionTag(version, anyVersionLabel)
+                                            val versionIsExperimental =
+                                                compatiblePackage.experimentalVersions?.contains(version) == true
                                             val searchable = !(packageIsAny && versionIsAny)
                                             PatchInfoChip(
                                                 modifier = Modifier.align(Alignment.CenterVertically),
                                                 text = "$VERSION_ICON $version",
+                                                experimental = versionIsExperimental,
                                                 onClick = if (!searchable) {
                                                     null
                                                 } else {
@@ -259,10 +264,14 @@ fun PatchItem(
                                     } else {
                                         val displayedVersion = versions.first()
                                         val versionIsAny = isAnyVersionTag(displayedVersion, anyVersionLabel)
+                                        val versionIsExperimental =
+                                            compatiblePackage.experimentalVersions
+                                                ?.contains(displayedVersion) == true
                                         val searchable = !(packageIsAny && versionIsAny)
                                         PatchInfoChip(
                                             modifier = Modifier.align(Alignment.CenterVertically),
                                             text = "$VERSION_ICON $displayedVersion",
+                                            experimental = versionIsExperimental,
                                             onClick = if (!searchable) {
                                                 null
                                             } else {
@@ -379,7 +388,8 @@ fun PatchItem(
 fun PatchInfoChip(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
-    text: String
+    text: String,
+    experimental: Boolean = false
 ) {
     val shape = RoundedCornerShape(8.0.dp)
     val cardModifier = if (onClick != null) {
@@ -401,18 +411,22 @@ fun PatchInfoChip(
         shape = shape,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.20f))
     ) {
-        Row(
-            modifier = Modifier.padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
+        Column(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
             Text(
                 text,
+                textAlign = TextAlign.Center,
                 overflow = TextOverflow.Ellipsis,
                 softWrap = false,
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            if (experimental) {
+                ExperimentalVersionBadge()
+            }
         }
     }
 }

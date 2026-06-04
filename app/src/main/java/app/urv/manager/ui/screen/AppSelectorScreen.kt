@@ -7,6 +7,7 @@ import android.content.pm.PackageInfo
 import android.net.Uri
 import android.os.Build
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,13 +17,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -63,6 +64,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -72,6 +74,7 @@ import app.urv.manager.ui.component.AppIcon
 import app.urv.manager.ui.component.AppLabel
 import app.urv.manager.ui.component.AppTopBar
 import app.urv.manager.ui.component.CheckedFilterChip
+import app.urv.manager.ui.component.ExperimentalVersionBadge
 import app.urv.manager.ui.component.InterceptBackHandler
 import app.urv.manager.ui.component.LazyColumnWithScrollbar
 import app.urv.manager.ui.component.ShimmerBox
@@ -82,6 +85,7 @@ import app.urv.manager.ui.component.patches.PathSelectorDialog
 import app.urv.manager.ui.component.SafeguardHintCard
 import app.urv.manager.ui.component.SearchView
 import app.urv.manager.ui.model.SelectedApp
+import app.urv.manager.ui.model.SupportedVersionInfo
 import app.urv.manager.ui.viewmodel.AppSelectorViewModel
 import app.urv.manager.ui.viewmodel.BundleVersionSuggestion
 import app.urv.manager.domain.manager.PreferencesManager
@@ -456,6 +460,7 @@ fun AppSelectorScreen(
                                             bundleName = suggestion.bundleName,
                                             packageName = app.packageName,
                                             recommendedVersion = suggestion.recommendedVersion,
+                                            recommendedVersionExperimental = suggestion.recommendedVersionExperimental,
                                             otherVersions = suggestion.otherSupportedVersions,
                                             supportsAllVersions = suggestion.supportsAllVersions,
                                             searchEngineHost = searchEngineHost,
@@ -685,7 +690,8 @@ private fun VersionSearchRow(
     version: String?,
     searchEngineHost: String,
     modifier: Modifier = Modifier,
-    highlighted: Boolean = false
+    highlighted: Boolean = false,
+    experimental: Boolean = false
 ) {
     Row(
         modifier = modifier,
@@ -697,7 +703,8 @@ private fun VersionSearchRow(
             packageName = packageName,
             version = version,
             searchEngineHost = searchEngineHost,
-            highlighted = highlighted
+            highlighted = highlighted,
+            experimental = experimental
         )
     }
 }
@@ -710,6 +717,7 @@ private fun VersionSearchChip(
     searchEngineHost: String,
     modifier: Modifier = Modifier,
     highlighted: Boolean = false,
+    experimental: Boolean = false
 ) {
     val context = LocalContext.current
     val background = if (highlighted) {
@@ -722,29 +730,62 @@ private fun VersionSearchChip(
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant
     }
+    val chipModifier = if (highlighted) {
+        modifier.widthIn(max = if (experimental) 240.dp else 220.dp)
+    } else {
+        modifier
+            .fillMaxWidth()
+            .heightIn(min = 52.dp)
+    }
     Surface(
-                        onClick = { context.openUrl(buildSearchUrl(packageName, version, searchEngineHost)) },
-        modifier = modifier.widthIn(max = 220.dp),
-        shape = RoundedCornerShape(999.dp),
+        onClick = { context.openUrl(buildSearchUrl(packageName, version, searchEngineHost)) },
+        modifier = chipModifier,
+        shape = if (highlighted) RoundedCornerShape(999.dp) else RoundedCornerShape(6.dp),
         color = background,
-        contentColor = contentColor
+        contentColor = contentColor,
+        border = if (highlighted) {
+            null
+        } else {
+            BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.55f))
+        }
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        val contentModifier = if (highlighted) {
+            Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+        } else {
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 44.dp)
+                .padding(horizontal = 10.dp, vertical = 4.dp)
+        }
+        Column(
+            modifier = contentModifier,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = if (experimental) {
+                Arrangement.spacedBy(3.dp, Alignment.CenterVertically)
+            } else {
+                Arrangement.Center
+            }
         ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Icon(
-                imageVector = Icons.Outlined.Search,
-                contentDescription = stringResource(R.string.search),
-                modifier = Modifier.size(14.dp)
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelLarge,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Icon(
+                    imageVector = Icons.Outlined.Search,
+                    contentDescription = stringResource(R.string.search),
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+            if (experimental) {
+                ExperimentalVersionBadge()
+            }
         }
     }
 }
@@ -776,7 +817,8 @@ private fun OtherSupportedVersionsInfoDialog(
     bundleName: String,
     packageName: String,
     recommendedVersion: String?,
-    otherVersions: List<String>,
+    recommendedVersionExperimental: Boolean,
+    otherVersions: List<SupportedVersionInfo>,
     supportsAllVersions: Boolean,
     searchEngineHost: String,
     onDismissRequest: () -> Unit
@@ -801,7 +843,8 @@ private fun OtherSupportedVersionsInfoDialog(
                         version = version,
                         searchEngineHost = searchEngineHost,
                         modifier = Modifier.align(Alignment.Start),
-                        highlighted = true
+                        highlighted = true,
+                        experimental = recommendedVersionExperimental
                     )
                 }
                 when {
@@ -812,15 +855,14 @@ private fun OtherSupportedVersionsInfoDialog(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
-                                    row.forEach { version ->
+                                    row.forEach { info ->
                                         VersionSearchRow(
-                                            label = stringResource(R.string.version_label, version),
+                                            label = stringResource(R.string.version_label, info.version),
                                             packageName = packageName,
-                                            version = version,
+                                            version = info.version,
                                             searchEngineHost = searchEngineHost,
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .wrapContentWidth(Alignment.Start)
+                                            modifier = Modifier.weight(1f),
+                                            experimental = info.experimental
                                         )
                                     }
                                     if (row.size == 1) {
@@ -894,7 +936,8 @@ private fun BundleSuggestionCard(
                         version = suggestion.recommendedVersion,
                         searchEngineHost = searchEngineHost,
                         modifier = Modifier,
-                        highlighted = true
+                        highlighted = true,
+                        experimental = suggestion.recommendedVersionExperimental
                     )
                 } else if (suggestion.supportsAllVersions) {
                     VersionSearchChip(
@@ -910,6 +953,9 @@ private fun BundleSuggestionCard(
             Text(
                 text = if (suggestion.supportsAllVersions) {
                     stringResource(R.string.other_supported_versions_all)
+                } else if (suggestion.recommendedVersionExperimental) {
+                    stringResource(R.string.bundle_version_dialog_recommended, versionLabel) +
+                        " • " + stringResource(R.string.patch_bundle_experimental_version_label)
                 } else {
                     stringResource(R.string.bundle_version_dialog_recommended, versionLabel)
                 },

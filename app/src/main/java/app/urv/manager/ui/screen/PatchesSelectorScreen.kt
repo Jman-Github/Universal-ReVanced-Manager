@@ -146,6 +146,7 @@ import app.urv.manager.domain.repository.PatchProfile
 import app.urv.manager.domain.repository.resolvePatchProfileAppVersion
 import app.urv.manager.ui.component.AppTopBar
 import app.urv.manager.ui.component.CheckedFilterChip
+import app.urv.manager.ui.component.ExperimentalVersionBadge
 import app.urv.manager.ui.component.FullscreenDialog
 import app.urv.manager.ui.component.InterceptBackHandler
 import app.urv.manager.ui.component.LazyColumnWithScrollbar
@@ -1926,6 +1927,7 @@ private fun PatchItem(
     val supportedPackage = patch.compatiblePackages?.firstOrNull { it.packageName == packageName }
     val supportsAllVersions = patch.compatiblePackages == null || supportedPackage?.versions == null
     val rawVersions = supportedPackage?.versions?.toList()?.sorted().orEmpty()
+    val experimentalVersions = supportedPackage?.experimentalVersions.orEmpty()
     val bundleSuggestedVersion = suggestedVersion?.takeUnless { it.isBlank() }
     val effectiveSuggestedVersion = if (!supportsAllVersions) {
         when {
@@ -1941,7 +1943,8 @@ private fun PatchItem(
                 formatPatchVersionLabel(version)
             ),
             version = version,
-            highlighted = true
+            highlighted = true,
+            experimental = version in experimentalVersions
         )
     }
     val showAllVersionsChip = supportsAllVersions && suggestedVersionInfo == null
@@ -2010,7 +2013,8 @@ private fun PatchItem(
             PatchVersionChipInfo(
                 label = formatPatchVersionLabel(version),
                 version = version,
-                outlined = true
+                outlined = true,
+                experimental = version in experimentalVersions
             )
         }
     }
@@ -2121,7 +2125,8 @@ private fun PatchItem(
                             packageName = packageName,
                             version = info.version,
                             searchEngineHost = searchEngineHost,
-                            highlighted = true
+                            highlighted = true,
+                            experimental = info.experimental
                         )
                     }
                     visibleVersions.forEach { version ->
@@ -2130,7 +2135,8 @@ private fun PatchItem(
                             packageName = packageName,
                             version = version.version,
                             searchEngineHost = searchEngineHost,
-                            outlined = true
+                            outlined = true,
+                            experimental = version.experimental
                         )
                     }
                     if (hasMoreVersions) {
@@ -2238,7 +2244,8 @@ private data class PatchVersionChipInfo(
     val label: String,
     val version: String?,
     val highlighted: Boolean = false,
-    val outlined: Boolean = false
+    val outlined: Boolean = false,
+    val experimental: Boolean = false
 )
 
 @Composable
@@ -2249,14 +2256,19 @@ private fun PatchVersionSearchChip(
     searchEngineHost: String,
     highlighted: Boolean = false,
     outlined: Boolean = false,
+    experimental: Boolean = false,
+    showIcon: Boolean = true,
+    fullWidth: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     PatchVersionChip(
         label = label,
-        icon = Icons.Outlined.Search,
+        icon = Icons.Outlined.Search.takeIf { showIcon },
         highlighted = highlighted,
         outlined = outlined,
+        experimental = experimental,
+        fullWidth = fullWidth,
         modifier = modifier,
         onClick = { context.openUrl(buildSearchUrl(packageName, version, searchEngineHost)) }
     )
@@ -2270,6 +2282,7 @@ private fun PatchVersionChipWithSearch(
     searchEngineHost: String,
     highlighted: Boolean = false,
     outlined: Boolean = false,
+    experimental: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -2280,7 +2293,8 @@ private fun PatchVersionChipWithSearch(
         PatchVersionChip(
             label = label,
             highlighted = highlighted,
-            outlined = outlined
+            outlined = outlined,
+            experimental = experimental
         )
         PatchVersionSearchButton(
             packageName = packageName,
@@ -2297,6 +2311,8 @@ private fun PatchVersionChip(
     icon: ImageVector? = null,
     highlighted: Boolean = false,
     outlined: Boolean = false,
+    experimental: Boolean = false,
+    fullWidth: Boolean = false,
     onClick: (() -> Unit)? = null
 ) {
     val background = when {
@@ -2314,27 +2330,55 @@ private fun PatchVersionChip(
         enabled = onClick != null,
         color = background,
         contentColor = contentColor,
-        shape = RoundedCornerShape(999.dp),
+        shape = if (fullWidth) RoundedCornerShape(6.dp) else RoundedCornerShape(999.dp),
         border = if (outlined) BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)) else null,
-        modifier = modifier.widthIn(max = 220.dp)
+        modifier = if (fullWidth) {
+            modifier
+                .fillMaxWidth()
+                .heightIn(min = 52.dp)
+        } else {
+            modifier.widthIn(max = if (experimental) 240.dp else 220.dp)
+        }
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(if (icon == null) 6.dp else 4.dp)
+        val contentModifier = if (fullWidth) {
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 44.dp)
+                .padding(horizontal = 10.dp, vertical = 4.dp)
+        } else {
+            Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+        }
+        Column(
+            modifier = contentModifier,
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = if (experimental) {
+                Arrangement.spacedBy(3.dp, Alignment.CenterVertically)
+            } else {
+                Arrangement.Center
+            }
         ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (icon != null) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(14.dp)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(if (icon == null) 6.dp else 4.dp)
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = if (fullWidth && icon == null) Modifier.fillMaxWidth() else Modifier
                 )
+                if (icon != null) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+            if (experimental) {
+                ExperimentalVersionBadge()
             }
         }
     }
@@ -2373,7 +2417,8 @@ private fun PatchVersionsDialog(
                         packageName = packageName,
                         version = info.version,
                         searchEngineHost = searchEngineHost,
-                        highlighted = true
+                        highlighted = true,
+                        experimental = info.experimental
                     )
                 }
                 if (versions.isEmpty()) {
@@ -2386,19 +2431,16 @@ private fun PatchVersionsDialog(
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 row.forEach { info ->
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .wrapContentWidth(Alignment.Start)
-                                    ) {
-                                        PatchVersionSearchChip(
-                                            label = info.label,
-                                            packageName = packageName,
-                                            version = info.version,
-                                            searchEngineHost = searchEngineHost,
-                                            outlined = true
-                                        )
-                                    }
+                                    PatchVersionSearchChip(
+                                        label = info.label,
+                                        packageName = packageName,
+                                        version = info.version,
+                                        searchEngineHost = searchEngineHost,
+                                        outlined = true,
+                                        experimental = info.experimental,
+                                        fullWidth = true,
+                                        modifier = Modifier.weight(1f)
+                                    )
                                 }
                                 if (row.size == 1) {
                                     Spacer(modifier = Modifier.weight(1f))

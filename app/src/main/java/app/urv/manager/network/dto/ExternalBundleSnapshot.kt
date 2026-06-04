@@ -37,4 +37,5 @@ data class ExternalBundlePatch(
 data class ExternalBundlePackage(
     val name: String = "",
     val versions: List<String?> = emptyList(),
+    val experimentalVersions: List<String?> = emptyList(),
 )

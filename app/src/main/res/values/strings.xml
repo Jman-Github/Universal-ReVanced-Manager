@@ -66,6 +66,7 @@
     <string name="bundle_update_manual_available_with_version">Update available: %1$s</string>
     <string name="patch_bundle_force_redownload_title">Force redownload</string>
     <string name="patch_bundle_force_redownload_description">Redownload %1$s and overwrite the local copy?</string>
+    <string name="patch_bundle_experimental_version_label">EXPERIMENTAL</string>
     <plurals name="bundle_update_progress_quantity">
         <item quantity="one">%1$d/%2$d bundle processed</item>
         <item quantity="other">%1$d/%2$d bundles processed</item>
