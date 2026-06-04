@@ -147,6 +147,7 @@
 - Added patch selection sorting options for Z-A, enabled first, and disabled first https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/511
 - Added app icon background image output and optional Morphe notification icon generation to the custom YouTube asset creator tool https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/330
 - Increased the patch bundle discovery empty state text size for consistency with other search results https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/513
+- Added a dashboard notification for newly installed runtime plugins and tightened notification card action padding https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/512
 
 
 # Bug fixes

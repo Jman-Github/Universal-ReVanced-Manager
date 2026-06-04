@@ -244,6 +244,7 @@ fun DashboardScreen(
     onUpdateClick: () -> Unit,
     onAnnouncementsClick: () -> Unit,
     onDownloaderPluginClick: () -> Unit,
+    onPatcherRuntimePluginClick: () -> Unit,
     onBundleDiscoveryClick: () -> Unit,
     onMergeSplitClick: () -> Unit,
     onOpenSplitInstallerClick: () -> Unit,
@@ -298,6 +299,9 @@ fun DashboardScreen(
     val patchBundlesLoading by vm.patchBundlesLoading.collectAsStateWithLifecycle()
     val splitMergeState by vm.splitMergeState.collectAsStateWithLifecycle()
     val showNewDownloaderPluginsNotification by vm.newDownloaderPluginsAvailable.collectAsStateWithLifecycle(
+        false
+    )
+    val showNewPatcherRuntimePluginsNotification by vm.newPatcherRuntimePluginsAvailable.collectAsStateWithLifecycle(
         false
     )
     val downloaderPlugins by vm.loadedDownloaderPlugins.collectAsStateWithLifecycle(emptyList())
@@ -2302,6 +2306,20 @@ fun DashboardScreen(
                             modifier = Modifier.clickable(onClick = onDownloaderPluginClick),
                             actions = {
                                 TextButton(onClick = vm::ignoreNewDownloaderPlugins) {
+                                    Text(stringResource(R.string.dismiss))
+                                }
+                            }
+                        )
+                    }
+                } else null,
+                if (showNewPatcherRuntimePluginsNotification) {
+                    {
+                        NotificationCard(
+                            text = stringResource(R.string.new_patcher_runtime_plugins_notification),
+                            icon = Icons.Outlined.Build,
+                            modifier = Modifier.clickable(onClick = onPatcherRuntimePluginClick),
+                            actions = {
+                                TextButton(onClick = vm::ignoreNewPatcherRuntimePlugins) {
                                     Text(stringResource(R.string.dismiss))
                                 }
                             }

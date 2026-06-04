@@ -19,6 +19,7 @@
     <string name="app_filter_patches_available">Patches available</string>
     <string name="app_filter_no_results">No apps found</string>
     <string name="new_downloader_plugins_notification">New downloader plugins available. Click here to configure them.</string>
+    <string name="new_patcher_runtime_plugins_notification">New runtime plugins available. Click here to configure them.</string>
     <string name="unsupported_architecture_warning">Patching on this device architecture is unsupported and will most likely fail.</string>
     <string name="import_">Import</string>
     <string name="file_field_not_set">Not selected</string>

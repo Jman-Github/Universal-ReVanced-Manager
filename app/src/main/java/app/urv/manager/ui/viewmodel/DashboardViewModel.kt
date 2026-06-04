@@ -26,6 +26,7 @@ import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.repository.AnnouncementRepository
 import app.urv.manager.domain.repository.DownloaderPluginRepository
 import app.urv.manager.domain.repository.PatchBundleRepository
+import app.urv.manager.domain.repository.PatcherRuntimePluginRepository
 import app.urv.manager.domain.storage.CacheCleanupGuard
 import app.urv.manager.network.downloader.LoadedDownloaderPlugin
 import app.urv.manager.network.api.ReVancedAPI
@@ -81,6 +82,7 @@ class DashboardViewModel(
     private val app: Application,
     private val patchBundleRepository: PatchBundleRepository,
     private val downloaderPluginRepository: DownloaderPluginRepository,
+    private val patcherRuntimePluginRepository: PatcherRuntimePluginRepository,
     private val announcementRepository: AnnouncementRepository,
     private val reVancedAPI: ReVancedAPI,
     private val networkInfo: NetworkInfo,
@@ -100,6 +102,8 @@ class DashboardViewModel(
 
     val newDownloaderPluginsAvailable =
         downloaderPluginRepository.newPluginPackageNames.map { it.isNotEmpty() }
+    val newPatcherRuntimePluginsAvailable =
+        patcherRuntimePluginRepository.newPluginPackageNames.map { it.isNotEmpty() }
     val loadedDownloaderPlugins = downloaderPluginRepository.loadedPluginsFlow
 
     /**
@@ -161,6 +165,10 @@ class DashboardViewModel(
 
     fun ignoreNewDownloaderPlugins() = viewModelScope.launch {
         downloaderPluginRepository.acknowledgeAllNewPlugins()
+    }
+
+    fun ignoreNewPatcherRuntimePlugins() = viewModelScope.launch {
+        patcherRuntimePluginRepository.acknowledgeAllNewPlugins()
     }
 
     private suspend fun checkForManagerUpdates() {

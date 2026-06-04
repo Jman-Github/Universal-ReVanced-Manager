@@ -40,7 +40,12 @@ fun NotificationCard(
 
     NotificationCardInstance(modifier = modifier, isWarning = isWarning) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(
+                start = 16.dp,
+                top = 16.dp,
+                end = 16.dp,
+                bottom = 4.dp
+            ),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Box(

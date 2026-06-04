@@ -410,6 +410,9 @@ private fun ReVancedManager(
                 onDownloaderPluginClick = {
                     navController.navigate(Settings.Downloads)
                 },
+                onPatcherRuntimePluginClick = {
+                    navController.navigate(Settings.PatcherRuntimes)
+                },
                 onBundleDiscoveryClick = {
                     navController.navigate(PatchBundleDiscovery)
                 },
