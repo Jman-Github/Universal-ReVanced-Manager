@@ -2408,7 +2408,7 @@ class PatchBundleRepository(
         allowUnsafeNetwork: Boolean = false,
         showProgress: Boolean = true,
         onPerBundleProgress: ((bundle: RemotePatchBundle, bytesRead: Long, bytesTotal: Long?) -> Unit)? = null,
-        onBundleUpdated: ((bundle: RemotePatchBundle, updatedName: String?) -> Unit)? = null,
+        onBundleUpdated: ((bundle: RemotePatchBundle, updatedName: String?, updatedVersion: String) -> Unit)? = null,
         predicate: (bundle: RemotePatchBundle) -> Boolean = { true },
     ): Boolean {
         while (true) {
@@ -2638,7 +2638,7 @@ class PatchBundleRepository(
         allowUnsafeNetwork: Boolean,
         showProgress: Boolean,
         onPerBundleProgress: ((bundle: RemotePatchBundle, bytesRead: Long, bytesTotal: Long?) -> Unit)?,
-        onBundleUpdated: ((bundle: RemotePatchBundle, updatedName: String?) -> Unit)?,
+        onBundleUpdated: ((bundle: RemotePatchBundle, updatedName: String?, updatedVersion: String) -> Unit)?,
         predicate: (bundle: RemotePatchBundle) -> Boolean,
     ): Boolean = coroutineScope {
         try {
@@ -2790,7 +2790,11 @@ class PatchBundleRepository(
                         result.changelogAsset?.let { asset ->
                             runCatching { recordChangelog(bundle, asset) }
                         } ?: runCatching { recordChangelog(bundle, bundle.fetchLatestReleaseInfo()) }
-                        onBundleUpdated?.invoke(bundle, downloadedName ?: displayLabel)
+                        onBundleUpdated?.invoke(
+                            bundle,
+                            downloadedName ?: displayLabel,
+                            result.versionSignature
+                        )
                     }
                 }
 

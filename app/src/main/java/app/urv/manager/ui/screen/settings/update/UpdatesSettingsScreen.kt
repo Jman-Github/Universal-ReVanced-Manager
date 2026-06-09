@@ -756,14 +756,7 @@ fun UpdatesSettingsScreen(
                         modifier = highlightModifier,
                         headlineContent = stringResource(R.string.announcement_push_notifications),
                         supportingContent = stringResource(
-                            R.string.announcement_push_notifications_description_with_current,
-                            stringResource(
-                                if (announcementSystemEnabled) {
-                                    announcementPushNotificationInterval.displayName
-                                } else {
-                                    SearchForUpdatesBackgroundInterval.NEVER.displayName
-                                }
-                            )
+                            R.string.announcement_push_notifications_description
                         ),
                         enabled = announcementSystemEnabled,
                         secondaryActionLabel = stringResource(R.string.reset),

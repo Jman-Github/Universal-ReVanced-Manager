@@ -7,6 +7,7 @@
 - Increased the patch bundle discovery empty state text size for consistency with other search results https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/513
 - Added support for experimental app version targets in Morphe patch bundles
 - Improved exported log filename consistency for merger, patcher, debug, and installer logs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/524
+- Improved patch bundle update notifications with the manager icon, ordered bundle/version lists, and stacked grouped alerts https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/299
 
 
 # Bug fixes

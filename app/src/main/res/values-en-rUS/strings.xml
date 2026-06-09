@@ -80,17 +80,21 @@
     <string name="bundle_updates_notification_progress">Updating %1$d of %2$d: %3$s</string>
     <string name="bundle_updates_notification_completed">Update completed</string>
     <plurals name="bundle_updates_notification_completed_with_available_quantity">
-        <item quantity="one">Update completed. %1$d new patch bundles update is available.</item>
-        <item quantity="other">Update completed. %1$d new patch bundles updates are available.</item>
+        <item quantity="one">Update completed. %1$d new patch bundle update is available.</item>
+        <item quantity="other">Update completed. %1$d new patch bundle updates are available.</item>
     </plurals>
     <string name="bundle_updates_notification_completed_named">Updated: %1$s</string>
     <plurals name="bundle_updates_notification_completed_named_with_available_quantity">
-        <item quantity="one">Updated: %1$s. %2$d new patch bundles update is available.</item>
-        <item quantity="other">Updated: %1$s. %2$d new patch bundles updates are available.</item>
+        <item quantity="one">Updated: %1$s. %2$d new patch bundle update is available.</item>
+        <item quantity="other">Updated: %1$s. %2$d new patch bundle updates are available.</item>
     </plurals>
     <plurals name="bundle_updates_notification_available_quantity">
-        <item quantity="one">%1$d new patch bundles update is available.</item>
-        <item quantity="other">%1$d new patch bundles updates are available.</item>
+        <item quantity="one">%1$d new patch bundle update is available:</item>
+        <item quantity="other">%1$d new patch bundle updates are available:</item>
+    </plurals>
+    <plurals name="bundle_updates_notification_updated_quantity">
+        <item quantity="one">%1$d patch bundle updated:</item>
+        <item quantity="other">%1$d patch bundles updated:</item>
     </plurals>
     <string name="bundle_updates_notification_completed_with_available">Update completed. %1$d updates available.</string>
     <string name="bundle_updates_notification_completed_named_with_available">Updated: %1$s. %2$d updates available.</string>
@@ -171,7 +175,6 @@
     <string name="announcement_system_enabled_description">Shows ReVanced announcements in the app and allows announcement notifications</string>
     <string name="announcement_push_notifications">Announcement push notifications</string>
     <string name="announcement_push_notifications_description">Sends a notification when a new ReVanced announcement is published. Background alerts require websocket delivery</string>
-    <string name="announcement_push_notifications_description_with_current">%1$s • Sends a notification when a new ReVanced announcement is published. Select \"Never\" to turn it off</string>
     <string name="background_radio_menu_title">Background updates</string>
     <string name="bundle_update_delivery_mode">Delivery mode</string>
     <string name="bundle_update_delivery_mode_description">Controls how background bundle update checks are delivered</string>
@@ -215,8 +218,8 @@
     <string name="cache_cleanup_notification_title">Cache cleared</string>
     <string name="cache_cleanup_notification_description">Auto-cleared %1$s of cache files.</string>
     <plurals name="bundle_updates_notification_title_found_quantity">
-        <item quantity="one">Patch bundles update found</item>
-        <item quantity="other">Patch bundles updates found</item>
+        <item quantity="one">Patch bundle update found</item>
+        <item quantity="other">Patch bundle updates found</item>
     </plurals>
     <string name="manager_updates_notification_title">URV Manager update found</string>
     <string name="manager_updates_notification_available">A new manager update is available: %1$s</string>
