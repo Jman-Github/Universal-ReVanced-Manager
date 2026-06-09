@@ -11,6 +11,8 @@
 
 # Bug fixes
 
+- Fixed ReVanced v22 AAPT2 selection so it uses the sanitized APK input before opening the patcher session
+
 
 # v1.8.1-dev.18 (2026-06-02)
 

@@ -92,13 +92,6 @@ class Revanced22BridgeRuntime(context: Context) : Runtime(context) {
                 "options" to options[bundleUid].orEmpty()
             )
         }
-        val selectedAaptPath = resolveAaptPath(
-            inputFile = File(runtimeInputFile),
-            logger = runtimeLogger,
-            relatedArchives = selectedBundlesByUid.values.map { File(it.patchesJar) }
-        )
-        val fallbackAaptPath = resolveAaptFallbackPath(selectedAaptPath)
-
         val apkEditorJarPath = Revanced22RuntimeAssets.ensureApkEditorJar(appContext).absolutePath
         val apkEditorMergeJarPath = Revanced22RuntimeAssets.ensureApkEditorMergeJar(appContext).absolutePath
         val runtimeClassPath = Revanced22RuntimeAssets.ensureRuntimeClassPath(appContext).absolutePath
@@ -123,8 +116,8 @@ class Revanced22BridgeRuntime(context: Context) : Runtime(context) {
 
         try {
             val params = mapOf(
-                "aaptPath" to selectedAaptPath,
-                "aaptFallbackPath" to fallbackAaptPath,
+                "aaptPath" to aaptModernPath,
+                "aaptFallbackPath" to aaptLegacyPath,
                 "frameworkDir" to frameworkPath,
                 "cacheDir" to cacheDir,
                 "apkEditorJarPath" to apkEditorJarPath,

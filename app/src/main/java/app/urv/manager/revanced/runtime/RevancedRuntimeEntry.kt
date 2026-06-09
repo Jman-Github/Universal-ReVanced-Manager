@@ -6,6 +6,7 @@ import app.revanced.patcher.patch.Patch
 import app.urv.manager.patcher.ProgressEvent
 import app.urv.manager.patcher.RemoteError
 import app.urv.manager.patcher.StepId
+import app.urv.manager.patcher.aapt.AaptSelector
 import app.urv.manager.patcher.toSafeStackTraceString
 import app.urv.manager.patcher.logger.LogLevel
 import app.urv.manager.patcher.logger.Logger
@@ -369,7 +370,18 @@ object RevancedRuntimeEntry {
                         )
                         sanitizedInput = sanitized
                         patcherInput = sanitized.file
-                        selectedAaptPath = aaptPath
+                        val relatedBundleArchives = configs
+                            .asSequence()
+                            .filter { it.patches.isNotEmpty() }
+                            .map { File(it.bundlePath) }
+                            .toList()
+                        selectedAaptPath = AaptSelector.select(
+                            modern = aaptPath,
+                            legacy = aaptFallbackPath,
+                            apk = patcherInput,
+                            logger = logger,
+                            additionalArchives = relatedBundleArchives
+                        )
                         openSessionWithAapt(selectedAaptPath, ::retryAwareOnEvent)
                     }
                     throwIfCancelled()
@@ -382,8 +394,11 @@ object RevancedRuntimeEntry {
                         try {
                             it.writeOutput(output, executedPatches)
                         } catch (error: Throwable) {
-                            val alternateAaptPath = aaptFallbackPath
-                                ?.takeIf { path -> path.isNotBlank() && path != selectedAaptPath }
+                            val alternateAaptPath = AaptSelector.alternate(
+                                selected = selectedAaptPath,
+                                modern = aaptPath,
+                                legacy = aaptFallbackPath
+                            )
                             if (
                                 deferredFailure == null ||
                                 alternateAaptPath == null ||
