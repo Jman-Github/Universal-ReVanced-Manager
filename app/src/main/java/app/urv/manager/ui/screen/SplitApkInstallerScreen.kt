@@ -72,14 +72,13 @@ import app.urv.manager.ui.component.patches.PathSelectorDialog
 import app.urv.manager.ui.viewmodel.SplitApkInstallerViewModel
 import app.urv.manager.ui.viewmodel.SplitInstallMode
 import app.urv.manager.util.SPLIT_ARCHIVE_MIME_TYPES
+import app.urv.manager.util.FilenameUtils
 import app.urv.manager.util.SplitArchiveIntent
 import app.urv.manager.util.isAllowedSplitArchiveFile
 import app.urv.manager.util.toast
 import app.universal.revanced.manager.R
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 import kotlin.io.path.isDirectory
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -749,8 +748,7 @@ private fun defaultSplitInstallerLogFileName(inputName: String?): String {
         ?.takeIf { it.isNotBlank() }
         ?: "installer"
     val safeSuffix = suffix.replace(Regex("[^A-Za-z0-9._-]"), "_")
-    val timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
-    return "installer-log-$safeSuffix-$timestamp.txt"
+    return "installer-log-$safeSuffix-${FilenameUtils.logTimestamp()}.txt"
 }
 
 private fun resolveDisplayName(contentResolver: ContentResolver, uri: Uri): String? =

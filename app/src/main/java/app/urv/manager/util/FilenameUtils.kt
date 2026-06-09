@@ -1,9 +1,19 @@
 package app.urv.manager.util
 
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+
 /**
  * Utility helpers for working with filenames.
  */
 object FilenameUtils {
+    private val logTimestampFormatter = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
+
+    fun logTimestamp(): String = LocalDateTime.now().format(logTimestampFormatter)
+
+    fun timestampedLogFileName(prefix: String): String =
+        "${sanitize(prefix).ifBlank { "log" }}-log-${logTimestamp()}.txt"
+
     /**
      * Sanitize a string so it can safely be used as part of a filename.
      */

@@ -85,6 +85,7 @@ import app.urv.manager.ui.viewmodel.DashboardViewModel
 import app.urv.manager.ui.viewmodel.SplitMergeState
 import app.urv.manager.ui.viewmodel.SplitMergeStepState
 import app.urv.manager.ui.viewmodel.SplitMergeStepStatus
+import app.urv.manager.util.FilenameUtils
 import app.urv.manager.util.mutableStateSetOf
 import app.urv.manager.util.saver.snapshotStateSetSaver
 import app.urv.manager.util.toast
@@ -117,18 +118,10 @@ fun MergeSplitApkScreen(
     var showLogExportPicker by rememberSaveable { mutableStateOf(false) }
     var logExportFileDialogState by remember { mutableStateOf<OutputFileDialogState?>(null) }
     var logExportInProgress by rememberSaveable { mutableStateOf(false) }
+    var pendingLogExportFileName by rememberSaveable { mutableStateOf<String?>(null) }
     var showDismissConfirmationDialog by rememberSaveable { mutableStateOf(false) }
     var pendingPermissionRequest by rememberSaveable {
         mutableStateOf<PermissionRequest?>(null)
-    }
-    val logFileName = remember(state.inputName) {
-        val base = state.inputName
-            ?.substringAfterLast('/')
-            ?.substringAfterLast('\\')
-            ?.substringBeforeLast('.', "")
-            ?.takeIf { it.isNotBlank() }
-            ?: "split-merge"
-        "merge-log-$base.txt"
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(permissionContract) { granted ->
@@ -138,6 +131,8 @@ fun MergeSplitApkScreen(
                 PermissionRequest.LOG_EXPORT -> showLogExportPicker = true
                 null -> Unit
             }
+        } else if (pendingPermissionRequest == PermissionRequest.LOG_EXPORT) {
+            pendingLogExportFileName = null
         }
         pendingPermissionRequest = null
     }
@@ -156,6 +151,7 @@ fun MergeSplitApkScreen(
     ) { uri: Uri? ->
         vm.exportSplitMergeLogsToUri(uri)
         showLogExportPicker = false
+        pendingLogExportFileName = null
     }
 
     val canSaveNow = state.canSaveAgain &&
@@ -183,6 +179,8 @@ fun MergeSplitApkScreen(
     }
 
     fun openLogExportPicker() {
+        val logFileName = FilenameUtils.timestampedLogFileName("merger")
+        pendingLogExportFileName = logFileName
         if (useCustomFilePicker) {
             if (fs.hasStoragePermission()) {
                 showLogExportPicker = true
@@ -201,6 +199,7 @@ fun MergeSplitApkScreen(
             outputFileDialogState = null
             showLogExportPicker = false
             logExportFileDialogState = null
+            pendingLogExportFileName = null
             pendingPermissionRequest = null
         }
     }
@@ -317,6 +316,7 @@ fun MergeSplitApkScreen(
             onSelect = { path ->
                 if (path == null) {
                     showLogExportPicker = false
+                    pendingLogExportFileName = null
                 }
             },
             fileFilter = { false },
@@ -331,13 +331,16 @@ fun MergeSplitApkScreen(
                 }
                 logExportFileDialogState = OutputFileDialogState(
                     directory = exportDirectory,
-                    fileName = logFileName
+                    fileName = pendingLogExportFileName
+                        ?: FilenameUtils.timestampedLogFileName("merger")
                 )
             }
         )
     }
-    LaunchedEffect(showLogExportPicker, useCustomFilePicker, logFileName) {
+    LaunchedEffect(showLogExportPicker, useCustomFilePicker, pendingLogExportFileName) {
         if (showLogExportPicker && !useCustomFilePicker) {
+            val logFileName = pendingLogExportFileName
+                ?: FilenameUtils.timestampedLogFileName("merger")
             logExportDocumentLauncher.launch(logFileName)
         }
     }
@@ -359,11 +362,15 @@ fun MergeSplitApkScreen(
     logExportFileDialogState?.let { dialogState ->
         ExportSavedApkFileNameDialog(
             initialName = dialogState.fileName,
-            onDismiss = { logExportFileDialogState = null },
+            onDismiss = {
+                logExportFileDialogState = null
+                pendingLogExportFileName = null
+            },
             onConfirm = { fileName ->
                 val trimmed = fileName.trim()
                 if (trimmed.isBlank()) return@ExportSavedApkFileNameDialog
                 logExportFileDialogState = null
+                pendingLogExportFileName = null
                 logExportInProgress = true
                 vm.exportSplitMergeLogsToPath(dialogState.directory.resolve(trimmed)) { success ->
                     logExportInProgress = false

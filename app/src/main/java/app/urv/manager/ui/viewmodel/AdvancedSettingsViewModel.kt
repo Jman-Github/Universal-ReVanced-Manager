@@ -23,6 +23,7 @@ import app.urv.manager.domain.manager.SearchForUpdatesBackgroundInterval
 import app.urv.manager.patcher.logger.PatcherLogMode
 import app.urv.manager.patcher.runtime.morphe.MorpheBytecodeMode
 import app.urv.manager.patcher.worker.AnnouncementNotificationWorker
+import app.urv.manager.util.FilenameUtils
 import app.urv.manager.util.tag
 import app.urv.manager.util.toast
 import app.urv.manager.util.simpleMessage
@@ -37,8 +38,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 import app.urv.manager.ui.model.PatchSelectionActionKey
 import app.urv.manager.ui.model.PatchBundleActionKey
 import app.urv.manager.ui.model.SavedAppActionKey
@@ -57,11 +56,7 @@ class AdvancedSettingsViewModel(
         .map { sources -> sources.any { it.isDefault } }
 
     val debugLogFileName: String
-        get() {
-            val time = DateTimeFormatter.ISO_LOCAL_DATE_TIME.format(LocalDateTime.now())
-
-            return "revanced-manager_logcat_$time"
-        }
+        get() = FilenameUtils.timestampedLogFileName("debug")
 
     fun setApiUrl(value: String) = viewModelScope.launch(Dispatchers.Default) {
         if (value == prefs.api.get()) return@launch

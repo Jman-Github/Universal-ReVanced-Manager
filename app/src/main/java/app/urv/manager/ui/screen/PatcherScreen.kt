@@ -88,6 +88,7 @@ import app.urv.manager.util.PatchSelection
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.util.ExportNameFormatter
 import app.urv.manager.util.EventEffect
+import app.urv.manager.util.FilenameUtils
 import app.urv.manager.util.PatchedAppExportData
 import app.urv.manager.util.isAllowedApkFile
 import app.urv.manager.util.mutableStateSetOf
@@ -143,6 +144,7 @@ fun PatcherScreen(
     var showLogExportPicker by rememberSaveable { mutableStateOf(false) }
     var logExportInProgress by rememberSaveable { mutableStateOf(false) }
     var showInstallerPicker by rememberSaveable { mutableStateOf(false) }
+    var pendingLogExportFileName by rememberSaveable { mutableStateOf<String?>(null) }
     val fs: Filesystem = koinInject()
     val storageRoots = remember { fs.storageRoots() }
     val (permissionContract, permissionName) = remember { fs.permissionContract() }
@@ -151,10 +153,6 @@ fun PatcherScreen(
     var pendingExportConfirmation by remember { mutableStateOf<PendingExportConfirmation?>(null) }
     var logExportFileDialogState by remember { mutableStateOf<LogExportDialogState?>(null) }
     var pendingLogExportConfirmation by remember { mutableStateOf<PendingLogExportConfirmation?>(null) }
-    val logFileName = remember(viewModel.packageName) {
-        val suffix = viewModel.packageName?.takeIf { it.isNotBlank() } ?: "patch"
-        "patcher-log-$suffix.txt"
-    }
     val permissionLauncher =
         rememberLauncherForActivityResult(permissionContract) { granted ->
             if (granted) {
@@ -172,6 +170,7 @@ fun PatcherScreen(
     ) { uri ->
         viewModel.exportLogsToUri(context, uri)
         showLogExportPicker = false
+        pendingLogExportFileName = null
     }
     fun openExportPicker() {
         if (useCustomFilePicker) {
@@ -193,6 +192,7 @@ fun PatcherScreen(
             pendingExportConfirmation = null
             logExportFileDialogState = null
             pendingLogExportConfirmation = null
+            pendingLogExportFileName = null
         }
     }
 
@@ -356,6 +356,7 @@ fun PatcherScreen(
             },
             onExport = {
                 showLogActionsDialog = false
+                pendingLogExportFileName = FilenameUtils.timestampedLogFileName("patcher")
                 showLogExportPicker = true
             }
         )
@@ -384,6 +385,7 @@ fun PatcherScreen(
             onSelect = { path ->
                 if (path == null) {
                     showLogExportPicker = false
+                    pendingLogExportFileName = null
                 }
             },
             fileFilter = { false },
@@ -391,7 +393,10 @@ fun PatcherScreen(
             fileTypeLabel = ".txt",
             confirmButtonText = stringResource(R.string.save),
             onConfirm = { directory ->
-                logExportFileDialogState = LogExportDialogState(directory, logFileName)
+                logExportFileDialogState = LogExportDialogState(
+                    directory,
+                    pendingLogExportFileName ?: FilenameUtils.timestampedLogFileName("patcher")
+                )
             }
         )
     }
@@ -400,19 +405,25 @@ fun PatcherScreen(
             exportDocumentLauncher.launch(exportFileName)
         }
     }
-    LaunchedEffect(showLogExportPicker, useCustomFilePicker, logFileName) {
+    LaunchedEffect(showLogExportPicker, useCustomFilePicker, pendingLogExportFileName) {
         if (showLogExportPicker && !useCustomFilePicker) {
+            val logFileName = pendingLogExportFileName
+                ?: FilenameUtils.timestampedLogFileName("patcher")
             logExportDocumentLauncher.launch(logFileName)
         }
     }
     logExportFileDialogState?.let { state ->
         ExportLogFileNameDialog(
             initialName = state.fileName,
-            onDismiss = { logExportFileDialogState = null },
+            onDismiss = {
+                logExportFileDialogState = null
+                pendingLogExportFileName = null
+            },
             onConfirm = { fileName ->
                 val trimmedName = fileName.trim()
                 if (trimmedName.isBlank()) return@ExportLogFileNameDialog
                 logExportFileDialogState = null
+                pendingLogExportFileName = null
                 val target = state.directory.resolve(trimmedName)
                 if (Files.exists(target)) {
                     pendingLogExportConfirmation = PendingLogExportConfirmation(
