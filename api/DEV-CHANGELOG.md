@@ -8,6 +8,7 @@
 - Added support for experimental app version targets in Morphe patch bundles
 - Improved exported log filename consistency for merger, patcher, debug, and installer logs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/524
 - Improved patch bundle update notifications with the manager icon, ordered bundle/version lists, and stacked grouped alerts https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/299
+- Added separate Split APK merger step expansion settings for auto-collapse, auto-expand, and active-category-only expansion https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/302
 
 
 # Bug fixes

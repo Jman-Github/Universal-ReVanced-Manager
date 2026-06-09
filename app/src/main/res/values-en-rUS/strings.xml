@@ -261,6 +261,7 @@
     <string name="installer_section">Installer</string>
     <string name="patching_engine_section">Patching Engine</string>
     <string name="patching_flow_section">Patching Flow</string>
+    <string name="merge_split_flow_section">Split APK Merger Flow</string>
     <string name="saved_apps_section">Saved Apps</string>
     <string name="safeguards_compatibility_section">Safeguards &amp; Compatibility</string>
     <string name="bundle_system_recovery_section">Bundle/System Recovery</string>
@@ -751,6 +752,12 @@ Patch profiles are not affected.</string>
     <string name="patcher_auto_expand_steps_description">Automatically expand a patcher progress widget when it starts running</string>
     <string name="patcher_auto_expand_running_steps_exclusive">Only auto-expand active main category</string>
     <string name="patcher_auto_expand_running_steps_exclusive_description">When auto-expand is enabled, keep only the currently running main patcher category expanded and do not auto-expand sub-steps</string>
+    <string name="merge_split_auto_collapse_steps">Auto-collapse completed merger steps</string>
+    <string name="merge_split_auto_collapse_steps_description">Automatically collapse each merger progress widget after all of its steps finish</string>
+    <string name="merge_split_auto_expand_steps">Auto-expand running merger steps</string>
+    <string name="merge_split_auto_expand_steps_description">Automatically expand a merger progress widget when it starts running</string>
+    <string name="merge_split_auto_expand_running_steps_exclusive">Only auto-expand active main category</string>
+    <string name="merge_split_auto_expand_running_steps_exclusive_description">When auto-expand is enabled, keep only the currently running main merger category expanded and do not auto-expand sub-steps</string>
     <string name="patcher_saved_apps_title">Save patched apps for later</string>
     <string name="patcher_saved_apps_description">When enabled, the manager saves a patched app entry and APK so it stays in the Apps tab and can be reinstalled later. Turning this off skips saving and deletes all saved patched apps. Any apps installed through the Rooted mount installer remain visible</string>
     <string name="saved_apps_disable_overwrite_title">Always create a new saved app entry when patching</string>

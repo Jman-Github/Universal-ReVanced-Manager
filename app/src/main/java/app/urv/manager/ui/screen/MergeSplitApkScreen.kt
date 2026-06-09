@@ -105,10 +105,12 @@ fun MergeSplitApkScreen(
     val fs: Filesystem = koinInject()
     val prefs: PreferencesManager = koinInject()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
-    val autoCollapsePatcherSteps by prefs.autoCollapsePatcherSteps.getAsState()
-    val autoExpandRunningSteps by prefs.autoExpandRunningSteps.getAsState()
-    val autoExpandRunningStepsExclusive by prefs.autoExpandRunningStepsExclusive.getAsState()
-    val useExclusiveAutoExpand = autoExpandRunningSteps && autoExpandRunningStepsExclusive
+    val splitMergeAutoCollapseSteps by prefs.splitMergeAutoCollapseSteps.getAsState()
+    val splitMergeAutoExpandRunningSteps by prefs.splitMergeAutoExpandRunningSteps.getAsState()
+    val splitMergeAutoExpandRunningStepsExclusive by
+        prefs.splitMergeAutoExpandRunningStepsExclusive.getAsState()
+    val useExclusiveAutoExpand =
+        splitMergeAutoExpandRunningSteps && splitMergeAutoExpandRunningStepsExclusive
     val storageRoots = remember { fs.storageRoots() }
     val (permissionContract, permissionName) = remember { fs.permissionContract() }
 
@@ -566,9 +568,9 @@ fun MergeSplitApkScreen(
                         steps = steps,
                         subStepsById = subStepsById,
                         isExpanded = expandedCategories.contains(category),
-                        autoExpandRunning = autoExpandRunningSteps,
+                        autoExpandRunning = splitMergeAutoExpandRunningSteps,
                         autoExpandRunningMainOnly = useExclusiveAutoExpand,
-                        autoCollapseCompleted = autoCollapsePatcherSteps,
+                        autoCollapseCompleted = splitMergeAutoCollapseSteps,
                         onExpand = {
                             if (useExclusiveAutoExpand) {
                                 expandedCategories.clear()

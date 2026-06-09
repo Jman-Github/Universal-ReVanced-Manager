@@ -1247,6 +1247,78 @@ fun AdvancedSettingsScreen(
                 }
             }
 
+            val splitMergeAutoExpandRunningStepsEnabled by
+                viewModel.prefs.splitMergeAutoExpandRunningSteps.getAsState()
+            val splitMergeAutoExpandRunningStepsExclusiveEnabled by
+                viewModel.prefs.splitMergeAutoExpandRunningStepsExclusive.getAsState()
+            val splitMergeAutoExpandExclusiveEnabled = splitMergeAutoExpandRunningStepsEnabled
+            val splitMergeAutoExpandExclusiveAlpha =
+                if (splitMergeAutoExpandExclusiveEnabled) 1f else 0.5f
+
+            LaunchedEffect(
+                splitMergeAutoExpandRunningStepsEnabled,
+                splitMergeAutoExpandRunningStepsExclusiveEnabled
+            ) {
+                if (
+                    !splitMergeAutoExpandRunningStepsEnabled &&
+                    splitMergeAutoExpandRunningStepsExclusiveEnabled
+                ) {
+                    viewModel.prefs.splitMergeAutoExpandRunningStepsExclusive.update(false)
+                }
+            }
+
+            GroupHeader(
+                stringResource(R.string.merge_split_flow_section),
+                icon = SettingsSectionIcons.PatchingFlow
+            )
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+            ) {
+                SettingsSearchHighlight(
+                    targetKey = R.string.merge_split_auto_collapse_steps,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.splitMergeAutoCollapseSteps,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.merge_split_auto_collapse_steps,
+                        description = R.string.merge_split_auto_collapse_steps_description,
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.merge_split_auto_expand_steps,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.splitMergeAutoExpandRunningSteps,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.merge_split_auto_expand_steps,
+                        description = R.string.merge_split_auto_expand_steps_description,
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.merge_split_auto_expand_running_steps_exclusive,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier.alpha(splitMergeAutoExpandExclusiveAlpha),
+                        preference = viewModel.prefs.splitMergeAutoExpandRunningStepsExclusive,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.merge_split_auto_expand_running_steps_exclusive,
+                        description = R.string.merge_split_auto_expand_running_steps_exclusive_description,
+                        enabled = splitMergeAutoExpandExclusiveEnabled
+                    )
+                }
+            }
+
             GroupHeader(
                 stringResource(R.string.saved_apps_section),
                 icon = SettingsSectionIcons.SavedApps

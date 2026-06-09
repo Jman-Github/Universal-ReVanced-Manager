@@ -207,6 +207,11 @@ class PreferencesManager(
     val splitMergeInstalledFilterSystemApps = booleanPreference("split_merge_installed_filter_system_apps", false)
     val splitMergeInstalledFilterSplitApks = booleanPreference("split_merge_installed_filter_split_apks", false)
     val splitMergeInstalledFilterSingleApks = booleanPreference("split_merge_installed_filter_single_apks", false)
+    val splitMergeAutoCollapseSteps = booleanPreference("split_merge_auto_collapse_steps", false)
+    val splitMergeAutoExpandRunningSteps =
+        booleanPreference("split_merge_auto_expand_running_steps", true)
+    val splitMergeAutoExpandRunningStepsExclusive =
+        booleanPreference("split_merge_auto_expand_running_steps_exclusive", false)
     val useCustomFilePicker = booleanPreference("use_custom_file_picker", true)
     val youtubeAssetsSyncHeaderTransforms = booleanPreference("youtube_assets_sync_header_transforms", false)
     val patchBundleDiscoveryShowRelease = booleanPreference("patch_bundle_discovery_show_release", true)
@@ -327,6 +332,9 @@ class PreferencesManager(
         val splitMergeInstalledFilterSystemApps: Boolean? = null,
         val splitMergeInstalledFilterSplitApks: Boolean? = null,
         val splitMergeInstalledFilterSingleApks: Boolean? = null,
+        val splitMergeAutoCollapseSteps: Boolean? = null,
+        val splitMergeAutoExpandRunningSteps: Boolean? = null,
+        val splitMergeAutoExpandRunningStepsExclusive: Boolean? = null,
         val useCustomFilePicker: Boolean? = null,
         val patchBundleDiscoveryShowRelease: Boolean? = null,
         val patchBundleDiscoveryShowPrerelease: Boolean? = null,
@@ -493,6 +501,9 @@ class PreferencesManager(
             splitMergeInstalledFilterSystemApps = splitMergeInstalledFilterSystemApps.get(),
             splitMergeInstalledFilterSplitApks = splitMergeInstalledFilterSplitApks.get(),
             splitMergeInstalledFilterSingleApks = splitMergeInstalledFilterSingleApks.get(),
+            splitMergeAutoCollapseSteps = splitMergeAutoCollapseSteps.get(),
+            splitMergeAutoExpandRunningSteps = splitMergeAutoExpandRunningSteps.get(),
+            splitMergeAutoExpandRunningStepsExclusive = splitMergeAutoExpandRunningStepsExclusive.get(),
             useCustomFilePicker = useCustomFilePicker.get(),
             patchBundleDiscoveryShowRelease = patchBundleDiscoveryShowRelease.get(),
             patchBundleDiscoveryShowPrerelease = patchBundleDiscoveryShowPrerelease.get(),
@@ -660,6 +671,11 @@ class PreferencesManager(
         snapshot.splitMergeInstalledFilterSystemApps?.let { splitMergeInstalledFilterSystemApps.value = it }
         snapshot.splitMergeInstalledFilterSplitApks?.let { splitMergeInstalledFilterSplitApks.value = it }
         snapshot.splitMergeInstalledFilterSingleApks?.let { splitMergeInstalledFilterSingleApks.value = it }
+        snapshot.splitMergeAutoCollapseSteps?.let { splitMergeAutoCollapseSteps.value = it }
+        snapshot.splitMergeAutoExpandRunningSteps?.let { splitMergeAutoExpandRunningSteps.value = it }
+        snapshot.splitMergeAutoExpandRunningStepsExclusive?.let {
+            splitMergeAutoExpandRunningStepsExclusive.value = it
+        }
         snapshot.useCustomFilePicker?.let { useCustomFilePicker.value = it }
         snapshot.patchBundleDiscoveryShowRelease?.let { patchBundleDiscoveryShowRelease.value = it }
         snapshot.patchBundleDiscoveryShowPrerelease?.let { patchBundleDiscoveryShowPrerelease.value = it }
