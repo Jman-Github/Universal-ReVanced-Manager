@@ -541,7 +541,7 @@ private fun InstalledRuntimeCard(
             title = runtimeName,
             packageName = packageName,
             signature = signature,
-            secondaryLabel = R.string.delete,
+            secondaryLabel = R.string.uninstall,
             onDismiss = { showTrustDialog = false },
             onTrust = {
                 showTrustDialog = false
