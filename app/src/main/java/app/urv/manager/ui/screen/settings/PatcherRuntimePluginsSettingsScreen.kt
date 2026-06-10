@@ -439,7 +439,7 @@ private fun ManagedRuntimeCard(
             title = stringResource(R.string.patcher_runtime_source_delete_title),
             description = stringResource(R.string.patcher_runtime_source_delete_description, sourceLabel),
             icon = Icons.Outlined.Delete,
-            confirmLabelRes = R.string.delete,
+            confirmLabelRes = R.string.confirm,
             onDismiss = { showDeleteDialog = false },
             onConfirm = {
                 showDeleteDialog = false
@@ -461,7 +461,7 @@ private fun ManagedRuntimeCard(
                         source.repoUrl
                     )
                 )
-                context.toast(context.getString(R.string.toast_copied_to_clipboard))
+                context.toast(context.getString(R.string.runtime_plugin_url_copied))
             }
         )
     }
@@ -566,7 +566,7 @@ private fun InstalledRuntimeCard(
             title = stringResource(R.string.patcher_runtime_uninstall_title),
             description = stringResource(R.string.patcher_runtime_uninstall_description, runtimeLabel),
             icon = Icons.Outlined.Delete,
-            confirmLabelRes = R.string.uninstall,
+            confirmLabelRes = R.string.confirm,
             onDismiss = { showUninstallDialog = false },
             onConfirm = {
                 showUninstallDialog = false

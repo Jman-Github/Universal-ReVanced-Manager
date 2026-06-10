@@ -5,6 +5,9 @@
 
 - Improved Patcher Runtimes plugin action button styling so `Update` matches `Delete`/`Settings` and `Revoke trust` uses the grey filled style https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/516
 - Updated the local runtime plugin trust dialog secondary action from `Delete` to `Uninstall` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/521
+- Updated downloader and runtime plugin trust dialog titles to `Trust` for consistency https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/522
+- Updated runtime plugin delete and uninstall confirmation buttons to `Confirm` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/520
+- Added specific copied URL toast messages for downloader plugins, runtime plugins, and patch bundles https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/514
 - Added a Split APK merger progress notification with the manager notification icon https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/304
 - Added the manager icon to the patching progress notification https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/301
 - Added separate Split APK merger step expansion settings for auto-collapse, auto-expand, and active-category-only expansion https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/302

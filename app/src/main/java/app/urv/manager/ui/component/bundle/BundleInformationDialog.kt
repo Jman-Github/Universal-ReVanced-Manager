@@ -580,7 +580,7 @@ fun BundleInformationDialog(
                                                 url
                                             )
                                         )
-                                        context.toast(context.getString(R.string.toast_copied_to_clipboard))
+                                        context.toast(context.getString(R.string.patch_bundle_url_copied))
                                     },
                                     enabled = url.isNotEmpty()
                                 ) {

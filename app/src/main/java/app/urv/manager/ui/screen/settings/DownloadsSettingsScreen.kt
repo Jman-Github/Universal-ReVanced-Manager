@@ -275,7 +275,7 @@ fun DownloadsSettingsScreen(
                             source.repoUrl
                         )
                     )
-                    context.toast(context.getString(R.string.toast_copied_to_clipboard))
+                    context.toast(context.getString(R.string.downloader_plugin_url_copied))
                 }
             )
         }
