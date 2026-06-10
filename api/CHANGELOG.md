@@ -3,6 +3,7 @@
 
 # Features
 
+- Improved downloader and runtime revoke trust dialogs with consistent confirmation prompts https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/497
 - Added toast feedback when force downloading all patch bundles starts or downloads nothing https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/531
 - Improved patch selection and reset patch bundle dialogs with centered content, a restore icon, and consistent `Confirm` actions https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/529 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/530
 - Added `v` prefixes to downloader and runtime plugin version labels https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/526

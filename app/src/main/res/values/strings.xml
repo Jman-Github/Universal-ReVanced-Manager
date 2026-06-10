@@ -1757,6 +1757,7 @@ Details: %2$s</string>
     <string name="patcher_runtime_missing">Missing file</string>
     <string name="patcher_runtime_source_delete_title">Delete</string>
     <string name="patcher_runtime_source_delete_description">Delete &quot;%1$s&quot; and its managed APK?</string>
+    <string name="patcher_runtime_revoke_trust_description">Revoke trust for "%1$s"? You can trust it again later.</string>
     <string name="patcher_runtime_signature_after_trust">The package signature will be saved after trust is confirmed.</string>
     <string name="patcher_runtime_signature_label">Signature</string>
     <string name="patcher_runtime_uninstall_title">Uninstall</string>

@@ -344,6 +344,7 @@ private fun ManagedRuntimeCard(
     var showTrustDialog by remember { mutableStateOf(false) }
     var showErrorDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showRevokeTrustDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
     val untrusted = source.state as? PatcherRuntimePluginSourceState.State.Untrusted
     val failed = source.state as? PatcherRuntimePluginSourceState.State.Failed
@@ -397,7 +398,7 @@ private fun ManagedRuntimeCard(
                     source.state !is PatcherRuntimePluginSourceState.State.Missing
             },
         footerActionStyle = RuntimeActionStyle.FilledTonal,
-        onFooterAction = { viewModel.revokePluginSourceTrust(source.entry.id) },
+        onFooterAction = { showRevokeTrustDialog = true },
         footerActionEnabled = actionsEnabled,
         extraSupportingContent = {
             if (failed != null) {
@@ -448,6 +449,25 @@ private fun ManagedRuntimeCard(
             }
         )
     }
+    if (
+        showRevokeTrustDialog &&
+        source.state !is PatcherRuntimePluginSourceState.State.Untrusted &&
+        source.state !is PatcherRuntimePluginSourceState.State.Missing
+    ) {
+        ConfirmDialog(
+            title = stringResource(R.string.downloader_plugin_revoke_trust_dialog_title),
+            description = stringResource(
+                R.string.patcher_runtime_revoke_trust_description,
+                sourceLabel
+            ),
+            icon = Icons.Outlined.WarningAmber,
+            onDismiss = { showRevokeTrustDialog = false },
+            onConfirm = {
+                showRevokeTrustDialog = false
+                viewModel.revokePluginSourceTrust(source.entry.id)
+            }
+        )
+    }
     if (showSettingsDialog) {
         RuntimeSourceSettingsDialog(
             source = source,
@@ -477,6 +497,7 @@ private fun InstalledRuntimeCard(
 ) {
     var showTrustDialog by remember { mutableStateOf(false) }
     var showErrorDialog by remember { mutableStateOf(false) }
+    var showRevokeTrustDialog by remember { mutableStateOf(false) }
     var showUninstallDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val loaded = state as? PatcherRuntimePluginState.Loaded
@@ -525,7 +546,7 @@ private fun InstalledRuntimeCard(
         onPrimaryAction = {
             when (state) {
                 is PatcherRuntimePluginState.Loaded ->
-                    viewModel.revokePluginTrust(packageName)
+                    showRevokeTrustDialog = true
                 is PatcherRuntimePluginState.Failed ->
                     showErrorDialog = true
                 PatcherRuntimePluginState.Untrusted ->
@@ -559,6 +580,21 @@ private fun InstalledRuntimeCard(
                 failed.throwable.stackTraceToString()
             },
             onDismiss = { showErrorDialog = false }
+        )
+    }
+    if (showRevokeTrustDialog && loaded != null) {
+        ConfirmDialog(
+            title = stringResource(R.string.downloader_plugin_revoke_trust_dialog_title),
+            description = stringResource(
+                R.string.patcher_runtime_revoke_trust_description,
+                runtimeLabel
+            ),
+            icon = Icons.Outlined.WarningAmber,
+            onDismiss = { showRevokeTrustDialog = false },
+            onConfirm = {
+                showRevokeTrustDialog = false
+                viewModel.revokePluginTrust(packageName)
+            }
         )
     }
     if (showUninstallDialog) {

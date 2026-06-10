@@ -695,22 +695,20 @@ fun DownloadsSettingsScreen(
                             }
 
                             PluginDialogType.Revoke -> {
-                                PluginActionDialog(
-                                    title = R.string.downloader_plugin_revoke_trust_dialog_title,
-                                    body = stringResource(
-                                        R.string.downloader_plugin_trust_dialog_body
+                                ConfirmDialog(
+                                    title = stringResource(
+                                        R.string.downloader_plugin_revoke_trust_dialog_title
                                     ),
-                                    pluginName = pluginTitle.toDownloaderMainName(),
-                                    signature = signature.orEmpty(),
-                                    primaryLabel = R.string.confirm,
-                                    onPrimary = {
+                                    description = stringResource(
+                                        R.string.downloader_source_revoke_trust_description,
+                                        pluginTitle.toDownloaderDisplayLabel()
+                                    ),
+                                    icon = Icons.Outlined.WarningAmber,
+                                    onDismiss = { dialogType = null },
+                                    onConfirm = {
                                         viewModel.revokePluginTrust(packageName)
                                         dialogType = null
-                                    },
-                                    onSecondary = {
-                                        dialogType = PluginDialogType.Uninstall
-                                    },
-                                    onDismiss = { dialogType = null }
+                                    }
                                 )
                             }
 

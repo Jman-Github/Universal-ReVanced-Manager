@@ -27,6 +27,7 @@
 - Added `v` prefixes to downloader and runtime plugin version labels https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/526
 - Updated the debug log export toast to `Debug log exported` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/527
 - Added toast feedback when force downloading all patch bundles starts or downloads nothing https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/531
+- Improved downloader and runtime revoke trust dialogs with consistent confirmation prompts https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/497
 
 
 # Bug fixes
