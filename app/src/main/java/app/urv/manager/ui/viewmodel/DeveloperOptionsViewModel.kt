@@ -7,6 +7,7 @@ import app.universal.revanced.manager.R
 import app.urv.manager.domain.bundles.RemotePatchBundle
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.repository.PatchBundleRepository
+import app.urv.manager.util.toast
 import app.urv.manager.util.uiSafe
 import kotlinx.coroutines.launch
 
@@ -17,7 +18,11 @@ class DeveloperOptionsViewModel(
 ) : ViewModel() {
     fun redownloadBundles() = viewModelScope.launch {
         uiSafe(app, R.string.patches_download_fail, RemotePatchBundle.updateFailMsg) {
-            patchBundleRepository.redownloadRemoteBundles()
+            app.toast(app.getString(R.string.patches_force_download_started))
+            val downloaded = patchBundleRepository.redownloadRemoteBundles()
+            if (!downloaded) {
+                app.toast(app.getString(R.string.patches_force_download_none))
+            }
         }
     }
 

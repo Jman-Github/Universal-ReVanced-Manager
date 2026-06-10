@@ -2454,7 +2454,8 @@ class PatchBundleRepository(
         }
     }
 
-    suspend fun redownloadRemoteBundles() = store.dispatch(Update(force = true))
+    suspend fun redownloadRemoteBundles(): Boolean =
+        scope.async { updateNow(force = true) }.await()
 
     /**
      * Updates all bundles that should be automatically updated.

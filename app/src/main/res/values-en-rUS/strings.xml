@@ -852,6 +852,8 @@ Patch profiles are not affected.</string>
     <string name="language_option_ukrainian">Ukrainian</string>
     <string name="device_memory_limit_format">%1$dMB (Normal) - %2$dMB (Large)</string>
     <string name="patches_force_download">Force download all patch bundles</string>
+    <string name="patches_force_download_started">Downloading all patch bundles...</string>
+    <string name="patches_force_download_none">No patch bundles downloaded</string>
     <string name="reset_patch_bundles">Reset patch bundles</string>
     <string name="reset_patch_bundles_description">Delete all bundles and restore the pre-installed Official ReVanced bundle</string>
     <string name="reset_patch_bundles_dialog_title">Reset patch bundles?</string>
