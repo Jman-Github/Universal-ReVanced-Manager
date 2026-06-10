@@ -16,6 +16,7 @@
 - Updated downloader and runtime plugin trust dialog titles to `Trust` for consistency https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/522
 - Updated runtime plugin delete and uninstall confirmation buttons to `Confirm` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/520
 - Added specific copied URL toast messages for downloader plugins, runtime plugins, and patch bundles https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/514
+- Replaced local downloader and runtime plugin repository URL copy buttons with copy icons https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/523
 
 
 # Bug fixes
