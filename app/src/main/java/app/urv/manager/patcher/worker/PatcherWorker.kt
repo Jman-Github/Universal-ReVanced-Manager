@@ -1923,6 +1923,7 @@ class PatcherWorker(
             )
             return Notification.Builder(context, ensureNotificationChannel(context))
                 .setContentTitle(context.getText(R.string.patcher_notification_title))
+                .setLargeIcon(Icon.createWithResource(context, R.drawable.ic_notification))
                 .setSmallIcon(Icon.createWithResource(context, R.drawable.ic_notification_status))
                 .setContentIntent(pendingIntent)
                 .setCategory(Notification.CATEGORY_SERVICE)

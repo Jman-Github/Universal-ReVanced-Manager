@@ -10,6 +10,7 @@
 - Improved patch bundle update notifications with the manager icon, ordered bundle/version lists, and stacked grouped alerts https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/299
 - Added separate Split APK merger step expansion settings for auto-collapse, auto-expand, and active-category-only expansion https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/302
 - Added a Split APK merger progress notification with the manager notification icon https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/304
+- Added the manager icon to the patching progress notification https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/301
 
 
 # Bug fixes
