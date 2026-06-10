@@ -739,7 +739,7 @@ private fun StorageAreaActionButton(
         Text(
             text = text,
             modifier = Modifier.fillMaxWidth(),
-            textAlign = TextAlign.End
+            textAlign = TextAlign.Center
         )
     }
 }

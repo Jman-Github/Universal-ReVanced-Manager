@@ -3,6 +3,7 @@
 
 # Features
 
+- Improved dialog titles, keystore converter messaging, and storage usage `Clear` button alignment for consistency https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/532 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/485 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/484
 - Improved downloader and runtime revoke trust dialogs with consistent confirmation prompts https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/497
 - Added toast feedback when force downloading all patch bundles starts or downloads nothing https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/531
 - Improved patch selection and reset patch bundle dialogs with centered content, a restore icon, and consistent `Confirm` actions https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/529 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/530
@@ -175,6 +176,7 @@
 
 # Bug fixes
 
+- Fixed the Patch Bundles tab empty state so searching with no added bundles still shows the no-bundles message https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/483
 - Fixed pressing the system back button on the `Patch Profiles` and `Tools` tabs sending the user back to the Android home screen instead of a different tab https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/191
 - Fixed the `Patch confirmation` screen's scroll bar being very large https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/186
 - Fixed the Android document provider file picker not resolving intents to local paths https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/202 

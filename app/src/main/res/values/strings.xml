@@ -619,7 +619,7 @@ Patch profiles are not affected.</string>
     <string name="downloader_plugin_trust_dialog_plugin">Plugin</string>
     <string name="downloader_plugin_view_error">View error details</string>
     <string name="downloader_plugin_failed_dialog_body">Failed to load "%1$s". You can view the error details or uninstall the plugin.</string>
-    <string name="downloader_plugin_uninstall_title">Uninstall plugin?</string>
+    <string name="downloader_plugin_uninstall_title">Uninstall</string>
     <string name="downloader_plugin_uninstall_description">Are you sure you want to uninstall "%1$s"?</string>
     <string name="downloader_settings_no_apps">No downloaded apps found</string>
     <string name="search_apps">Search apps</string>
@@ -1072,7 +1072,7 @@ Patch profiles are not affected.</string>
     <string name="merge_split_installed_status_split">Split APK</string>
     <string name="merge_split_installed_status_single">Single APK</string>
     <string name="merge_split_installed_status_system">System app</string>
-    <string name="merge_split_apk_stop_confirm_title">Stop merger</string>
+    <string name="merge_split_apk_stop_confirm_title">Stop</string>
     <string name="merge_split_apk_stop_confirm_description">Are you sure you want to stop the merging process?</string>
     <string name="delete">Delete</string>
     <string name="disable">Disable</string>
@@ -1229,6 +1229,7 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="selected_file_not_supported_apk">Selected file is not a supported APK archive (.apk, .apkm, .xapk, .apks, .zip)</string>
     <string name="selected_file_not_supported_json">Selected file must be a JSON file (.json)</string>
     <string name="selected_file_not_supported_keystore">Selected file is not a supported keystore (.jks, .keystore, .p12, .pfx, .bks)</string>
+    <string name="selected_file_not_supported_keystore_info">Selected file is not a supported keystore (.jks, .keystore, .p12, .pfx, .bks).</string>
     <string name="patch_bundle_url_invalid_json_or_external">Patch bundle URL must point to a .json file or a supported external bundles API URL</string>
     <string name="patch_bundle_url_invalid_external">Patch bundle URL must point to a supported external bundles API URL</string>
     <string name="selected_file_not_supported_image">Selected file is not a supported image type</string>
@@ -1481,7 +1482,7 @@ Details: %2$s</string>
     <string name="merge_split_notification_text">Tap to return to the merger</string>
     <string name="notification_channel_split_merge_name">Split APK merging</string>
     <string name="notification_channel_split_merge_description">Shows progress while merging split APKs.</string>
-    <string name="patcher_stop_confirm_title">Stop patcher</string>
+    <string name="patcher_stop_confirm_title">Stop</string>
     <string name="patcher_stop_confirm_description">Are you sure you want to stop the patching process?</string>
     <string name="patcher_install_in_progress_title">Installation in progress</string>
     <string name="patcher_install_in_progress">Installation is in progress. Please wait</string>

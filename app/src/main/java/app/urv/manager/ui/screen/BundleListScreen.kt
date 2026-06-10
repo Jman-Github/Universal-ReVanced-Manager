@@ -138,16 +138,6 @@ fun BundleListScreen(
                     BundleItemPlaceholder()
                 }
             }
-        } else if (filteredSources.isNullOrEmpty() && normalizedQuery.isNotBlank()) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = stringResource(R.string.bundle_search_no_results),
-                    style = MaterialTheme.typography.titleLarge
-                )
-            }
         } else if (sources!!.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -155,6 +145,16 @@ fun BundleListScreen(
             ) {
                 Text(
                     text = stringResource(R.string.patch_bundle_empty_state),
+                    style = MaterialTheme.typography.titleLarge
+                )
+            }
+        } else if (filteredSources.isNullOrEmpty() && normalizedQuery.isNotBlank()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = stringResource(R.string.bundle_search_no_results),
                     style = MaterialTheme.typography.titleLarge
                 )
             }

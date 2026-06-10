@@ -148,7 +148,7 @@ fun KeystoreConverterScreen(onBackClick: () -> Unit) {
             }
         }.getOrNull() ?: uri.lastPathSegment
         if (!isKeystoreFileName(displayName)) {
-            errorText = context.getString(R.string.selected_file_not_supported_keystore)
+            errorText = context.getString(R.string.selected_file_not_supported_keystore_info)
             return@rememberLauncherForActivityResult
         }
         runCatching {
