@@ -1137,30 +1137,6 @@ private fun DownloaderSourceSettingsDialog(
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Text(
-                                    text = stringResource(R.string.downloader_source_latest),
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                                Text(
-                                    text = stringResource(R.string.downloader_source_latest_description),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            ExpressiveSettingsSwitch(
-                                checked = source.entry.latest,
-                                onCheckedChange = onLatestChanged
-                            )
-                        }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text(
                                     text = stringResource(R.string.downloader_source_prerelease),
                                     style = MaterialTheme.typography.bodyLarge
                                 )
@@ -1175,6 +1151,30 @@ private fun DownloaderSourceSettingsDialog(
                                 checked = source.entry.prerelease && !source.entry.latest,
                                 onCheckedChange = onPrereleaseChanged,
                                 enabled = !source.entry.latest
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.downloader_source_latest),
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                Text(
+                                    text = stringResource(R.string.downloader_source_latest_description),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            ExpressiveSettingsSwitch(
+                                checked = source.entry.latest,
+                                onCheckedChange = onLatestChanged
                             )
                         }
                     }

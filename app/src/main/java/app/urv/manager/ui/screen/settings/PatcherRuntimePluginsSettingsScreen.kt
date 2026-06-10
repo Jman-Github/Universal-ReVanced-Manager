@@ -860,17 +860,17 @@ private fun RuntimeSourceSettingsDialog(
                             onCheckedChange = onAutoUpdateChanged
                         )
                         RuntimeSourceSwitchRow(
-                            title = stringResource(R.string.downloader_source_latest),
-                            description = stringResource(R.string.downloader_source_latest_description),
-                            checked = source.entry.latest,
-                            onCheckedChange = onLatestChanged
-                        )
-                        RuntimeSourceSwitchRow(
                             title = stringResource(R.string.downloader_source_prerelease),
                             description = stringResource(R.string.downloader_source_prerelease_description),
                             checked = source.entry.prerelease && !source.entry.latest,
                             onCheckedChange = onPrereleaseChanged,
                             enabled = !source.entry.latest
+                        )
+                        RuntimeSourceSwitchRow(
+                            title = stringResource(R.string.downloader_source_latest),
+                            description = stringResource(R.string.downloader_source_latest_description),
+                            checked = source.entry.latest,
+                            onCheckedChange = onLatestChanged
                         )
                     }
                 }

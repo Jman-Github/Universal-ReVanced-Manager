@@ -17,6 +17,7 @@
 - Updated runtime plugin delete and uninstall confirmation buttons to `Confirm` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/520
 - Added specific copied URL toast messages for downloader plugins, runtime plugins, and patch bundles https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/514
 - Replaced local downloader and runtime plugin repository URL copy buttons with copy icons https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/523
+- Moved the local downloader and runtime plugin `Latest` option below `Pre-release` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/517
 
 
 # Bug fixes
