@@ -554,7 +554,7 @@ fun DownloadsSettingsScreen(
                             PluginActionDialog(
                                 title = R.string.downloader_plugin_trust_dialog_title,
                                 body = stringResource(R.string.downloader_plugin_trust_dialog_body),
-                                pluginName = source.name.toDownloaderDisplayLabel(),
+                                pluginName = source.name.toDownloaderMainName(),
                                 signature = source.state.signature,
                                 primaryLabel = R.string.confirm,
                                 secondaryLabel = R.string.delete,
@@ -602,6 +602,11 @@ fun DownloadsSettingsScreen(
                                     R.string.update
                                 }
                             ),
+                            primaryActionStyle = if (source.state is DownloaderPluginSourceState.State.Untrusted) {
+                                DownloaderActionStyle.FilledTonal
+                            } else {
+                                DownloaderActionStyle.Outlined
+                            },
                             onPrimaryAction = {
                                 if (source.state is DownloaderPluginSourceState.State.Untrusted) {
                                     showTrustDialog = true
@@ -617,6 +622,7 @@ fun DownloadsSettingsScreen(
                                     source.state !is DownloaderPluginSourceState.State.Untrusted &&
                                         source.state !is DownloaderPluginSourceState.State.Missing
                                 },
+                            footerActionStyle = DownloaderActionStyle.FilledTonal,
                             onFooterAction = { sourceIdPendingTrustRevoke = sourceId },
                             footerActionEnabled = remoteSourceBusyState == null,
                             extraSupportingContent = {
@@ -674,7 +680,7 @@ fun DownloadsSettingsScreen(
                                     body = stringResource(
                                         R.string.downloader_plugin_trust_dialog_body
                                     ),
-                                    pluginName = pluginTitle.toDownloaderDisplayLabel(),
+                                    pluginName = pluginTitle.toDownloaderMainName(),
                                     signature = signature.orEmpty(),
                                     primaryLabel = R.string.confirm,
                                     onPrimary = {
@@ -694,7 +700,7 @@ fun DownloadsSettingsScreen(
                                     body = stringResource(
                                         R.string.downloader_plugin_trust_dialog_body
                                     ),
-                                    pluginName = pluginTitle.toDownloaderDisplayLabel(),
+                                    pluginName = pluginTitle.toDownloaderMainName(),
                                     signature = signature.orEmpty(),
                                     primaryLabel = R.string.confirm,
                                     onPrimary = {
@@ -888,6 +894,11 @@ private enum class DownloaderPluginType(@StringRes val labelRes: Int) {
     Remote(R.string.downloader_plugin_type_modern)
 }
 
+private enum class DownloaderActionStyle {
+    Outlined,
+    FilledTonal
+}
+
 private fun String.toDownloaderDisplayLabel(): String {
     val mainName = toDownloaderMainName()
     return if (mainName.endsWith(" downloader", ignoreCase = true)) {
@@ -915,6 +926,8 @@ private fun DownloaderPluginCard(
     onFooterAction: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     extraSupportingContent: (@Composable (() -> Unit))? = null,
+    primaryActionStyle: DownloaderActionStyle = DownloaderActionStyle.FilledTonal,
+    footerActionStyle: DownloaderActionStyle = DownloaderActionStyle.Outlined,
     primaryActionEnabled: Boolean = true,
     secondaryActionEnabled: Boolean = true,
     middleActionEnabled: Boolean = true,
@@ -989,33 +1002,66 @@ private fun DownloaderPluginCard(
                     )
                 }
             }
-            FilledTonalButton(
+            DownloaderActionButton(
+                label = primaryActionLabel,
                 onClick = onPrimaryAction,
                 enabled = primaryActionEnabled,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    text = primaryActionLabel,
-                    maxLines = 1,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .basicMarquee(),
-                    textAlign = TextAlign.Center
-                )
-            }
+                modifier = Modifier.weight(1f),
+                style = primaryActionStyle
+            )
         }
         if (footerActionLabel != null && onFooterAction != null) {
-            OutlinedButton(
+            DownloaderActionButton(
+                label = footerActionLabel,
                 onClick = onFooterAction,
                 enabled = footerActionEnabled,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
-            ) {
-                Text(footerActionLabel)
-            }
+                    .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                style = footerActionStyle
+            )
         }
     }
+}
+
+@Composable
+private fun DownloaderActionButton(
+    label: String,
+    onClick: () -> Unit,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    style: DownloaderActionStyle = DownloaderActionStyle.FilledTonal
+) {
+    when (style) {
+        DownloaderActionStyle.Outlined -> OutlinedButton(
+            onClick = onClick,
+            enabled = enabled,
+            modifier = modifier
+        ) {
+            DownloaderActionText(label)
+        }
+
+        DownloaderActionStyle.FilledTonal -> FilledTonalButton(
+            onClick = onClick,
+            enabled = enabled,
+            modifier = modifier
+        ) {
+            DownloaderActionText(label)
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun DownloaderActionText(text: String) {
+    Text(
+        text = text,
+        maxLines = 1,
+        modifier = Modifier
+            .fillMaxWidth()
+            .basicMarquee(),
+        textAlign = TextAlign.Center
+    )
 }
 
 @Composable

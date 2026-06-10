@@ -414,7 +414,6 @@ private fun ManagedRuntimeCard(
     if (showTrustDialog && untrusted != null) {
         TrustRuntimeDialog(
             title = sourceName,
-            packageName = untrusted.packageName,
             signature = untrusted.signature,
             secondaryLabel = R.string.delete,
             onDismiss = { showTrustDialog = false },
@@ -541,7 +540,6 @@ private fun InstalledRuntimeCard(
     if (showTrustDialog) {
         TrustRuntimeDialog(
             title = runtimeName,
-            packageName = packageName,
             signature = signature,
             secondaryLabel = R.string.uninstall,
             onDismiss = { showTrustDialog = false },
@@ -977,7 +975,6 @@ private fun EmptyRuntimeText(text: String) {
 @Composable
 private fun TrustRuntimeDialog(
     title: String,
-    packageName: String,
     signature: String?,
     @StringRes secondaryLabel: Int? = null,
     onDismiss: () -> Unit,
@@ -1029,17 +1026,6 @@ private fun TrustRuntimeDialog(
                         style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Center
                     )
-                    if (packageName != title) {
-                        Text(
-                            text = packageName,
-                            modifier = Modifier.fillMaxWidth(),
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = FontFamily.Monospace
-                            ),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
-                        )
-                    }
                 }
 
                 Column(
