@@ -1460,6 +1460,10 @@ Details: %2$s</string>
     <string name="patcher_notification_text">Tap to return to the patcher</string>
     <string name="notification_channel_patching_name">Patching</string>
     <string name="notification_channel_patching_description">Shows progress while patching an app.</string>
+    <string name="merge_split_notification_title">Merging in progress…</string>
+    <string name="merge_split_notification_text">Tap to return to the merger</string>
+    <string name="notification_channel_split_merge_name">Split APK merging</string>
+    <string name="notification_channel_split_merge_description">Shows progress while merging split APKs.</string>
     <string name="patcher_stop_confirm_title">Stop patcher</string>
     <string name="patcher_stop_confirm_description">Are you sure you want to stop the patching process?</string>
     <string name="patcher_install_in_progress_title">Installation in progress</string>

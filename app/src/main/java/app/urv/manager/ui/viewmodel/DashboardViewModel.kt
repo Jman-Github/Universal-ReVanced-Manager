@@ -37,6 +37,7 @@ import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.patcher.split.SplitMergeProcessRuntime
 import app.urv.manager.util.PM
 import app.urv.manager.util.announcementTagKey
+import app.urv.manager.util.SplitMergeNotification
 import app.urv.manager.util.toast
 import app.urv.manager.util.uiSafe
 import app.urv.manager.plugin.downloader.GetScope
@@ -76,6 +77,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.FileNotFoundException
 import kotlin.coroutines.coroutineContext
+
+private const val SPLIT_MERGE_NOTIFICATION_PROGRESS_MAX = 1000
 
 @OptIn(PluginHostApi::class)
 class DashboardViewModel(
@@ -140,6 +143,7 @@ class DashboardViewModel(
     private var splitMergeCancellationJob: Job? = null
     private var splitMergePlugin: LoadedDownloaderPlugin? = null
     private var pendingSplitMergeSource: PendingSplitMergeSource? = null
+    private var lastSplitMergeNotificationSubStepIndex = -1
     private var launchedActivity by mutableStateOf<CompletableDeferred<ActivityResult>?>(null)
     val activeSplitMergePluginId: String? get() = splitMergePlugin?.id
 
@@ -590,6 +594,7 @@ class DashboardViewModel(
                     ),
                     currentMessage = app.getString(R.string.merge_split_apk_downloading)
                 )
+                updateSplitMergeNotification()
                 openSplitMergeScreenChannel.send(Unit)
                 mergeScreenOpened = true
                 val downloaded = downloadSplitInputFromPlugin(plugin, data)
@@ -645,6 +650,9 @@ class DashboardViewModel(
                 }
             } finally {
                 if (splitMergePluginJob === ownerJob) {
+                    if (!splitMergeStateFlow.value.inProgress) {
+                        SplitMergeNotification.clear(app)
+                    }
                     splitMergePlugin = null
                     splitMergePluginJob = null
                 }
@@ -752,9 +760,11 @@ class DashboardViewModel(
     ) {
         if (!isCurrentSplitMergeOwner(ownerJob)) return
         splitMergeStateFlow.value = update(splitMergeStateFlow.value)
+        updateSplitMergeNotification()
     }
 
     private fun setSplitMergeSelectionPreparing(inputName: String?) {
+        resetSplitMergeNotificationSubStepIndex()
         val preparingMessage = app.getString(R.string.merge_split_apk_preparing)
         splitMergeStateFlow.value = SplitMergeState(
             preparingSelection = true,
@@ -842,6 +852,7 @@ class DashboardViewModel(
             selectionIncludedModules = defaultIncludedModules,
             selectionStripNativeLibs = defaultStripNativeLibs
         )
+        SplitMergeNotification.clear(app)
         appendSplitMergeLog(app.getString(R.string.merge_split_apk_selection_ready))
         if (openScreen) {
             openSplitMergeScreenChannel.send(Unit)
@@ -943,6 +954,8 @@ class DashboardViewModel(
         activeSplitMergeRunWorkspace = null
         invalidateCachedSplitMergeOutput()
         cleanupLegacySplitMergeArtifacts()
+        resetSplitMergeNotificationSubStepIndex()
+        SplitMergeNotification.clear(app)
         splitMergeStateFlow.value = SplitMergeState()
     }
 
@@ -958,6 +971,7 @@ class DashboardViewModel(
             splitMergePlugin = null
             splitMergeStateFlow.value = cancelledSplitMergeState(splitMergeStateFlow.value)
             appendSplitMergeLog(app.getString(R.string.merge_split_apk_cancelled))
+            SplitMergeNotification.clear(app)
             return
         }
         val stoppingMessage = app.getString(R.string.merge_split_apk_stopping)
@@ -987,6 +1001,7 @@ class DashboardViewModel(
                 }
             )
         )
+        updateSplitMergeNotification()
         splitMergeRuntime.cancelActiveExecution()
         splitMergeCancellationJob = viewModelScope.launch {
             val cancellationJob = coroutineContext[Job]
@@ -1087,6 +1102,7 @@ class DashboardViewModel(
         var keepRunWorkspace = false
         activeSplitMergeRunWorkspace = runWorkspace
         invalidateCachedSplitMergeOutput()
+        resetSplitMergeNotificationSubStepIndex()
         val currentDownloadStep = splitMergeStateFlow.value.downloadStep
         splitMergeStateFlow.value = SplitMergeState(
             inProgress = true,
@@ -1130,6 +1146,7 @@ class DashboardViewModel(
         )
         appendSplitMergeLog("Starting split merge: $inputDisplayName")
         appendSplitMergeLog(app.getString(R.string.merge_split_apk_preparing))
+        updateSplitMergeNotification()
 
         runCatching {
             withContext(Dispatchers.IO) {
@@ -1178,6 +1195,7 @@ class DashboardViewModel(
                             message = app.getString(R.string.merge_split_apk_retrying_fallback)
                         )
                     )
+                    updateSplitMergeNotification()
                     appendSplitMergeLog(app.getString(R.string.merge_split_apk_retrying_fallback))
 
                     val fallbackPreparation = SplitApkPreparer.prepareIfNeeded(
@@ -1226,6 +1244,7 @@ class DashboardViewModel(
                     ),
                     currentMessage = app.getString(R.string.merge_split_apk_merged)
                 )
+                updateSplitMergeNotification()
                 appendSplitMergeLog(app.getString(R.string.merge_split_apk_merged))
 
                 val signedCopy = runWorkspace.resolve("last-merged.apk")
@@ -1239,6 +1258,7 @@ class DashboardViewModel(
                         message = app.getString(R.string.merge_split_apk_signing)
                     )
                 )
+                updateSplitMergeNotification()
                 appendSplitMergeLog(app.getString(R.string.merge_split_apk_signing))
                 ensureCurrentSplitMergeOwner(ownerJob)
                 keystoreManager.sign(unsignedCopy, signedCopy)
@@ -1327,6 +1347,7 @@ class DashboardViewModel(
             }
             appendSplitMergeLog(resolvedErrorMessage)
         }
+        SplitMergeNotification.clear(app)
         runCatching { sourceCleanup() }
         runCatching { pendingCacheUseToken?.close() }
         runCatching { runCacheUseToken.close() }
@@ -1340,6 +1361,181 @@ class DashboardViewModel(
         if (splitMergeJob === ownerJob) {
             splitMergeJob = null
         }
+    }
+
+    private data class SplitMergeNotificationSubStep(
+        val title: String,
+        val skipped: Boolean
+    )
+
+    private fun updateSplitMergeNotification(state: SplitMergeState = splitMergeStateFlow.value) {
+        if (!state.inProgress && state.saveStep.status != SplitMergeStepStatus.RUNNING) return
+        SplitMergeNotification.show(
+            context = app,
+            contentText = splitMergeNotificationContentText(state),
+            progress = splitMergeNotificationProgress(state)
+        )
+    }
+
+    private fun splitMergeNotificationContentText(state: SplitMergeState): String {
+        val (stepText, detailText) = when {
+            state.downloadStep.status == SplitMergeStepStatus.RUNNING ->
+                app.getString(R.string.merge_split_apk_step_download) to
+                    splitMergeNotificationDetail(state.downloadStep.message, state.currentMessage)
+            state.mergeStep.status == SplitMergeStepStatus.RUNNING ->
+                app.getString(R.string.merge_split_apk_step_merge) to
+                    splitMergeNotificationDetail(state.mergeStep.message, state.currentMessage)
+            state.signStep.status == SplitMergeStepStatus.RUNNING ->
+                app.getString(R.string.merge_split_apk_step_sign) to
+                    splitMergeNotificationDetail(state.signStep.message, state.currentMessage)
+            state.saveStep.status == SplitMergeStepStatus.RUNNING ->
+                app.getString(R.string.merge_split_apk_step_save) to
+                    splitMergeNotificationDetail(state.saveStep.message, state.currentMessage)
+            else -> null to splitMergeNotificationDetail(state.currentMessage, null)
+        }
+        return when {
+            stepText != null && detailText != null -> "$stepText • $detailText"
+            stepText != null -> stepText
+            detailText != null -> detailText
+            else -> app.getString(R.string.merge_split_notification_text)
+        }
+    }
+
+    private fun splitMergeNotificationDetail(
+        primary: String?,
+        fallback: String?
+    ): String? = primary
+        ?.takeIf { it.isNotBlank() }
+        ?: fallback?.takeIf { it.isNotBlank() }
+
+    private fun splitMergeNotificationProgress(
+        state: SplitMergeState
+    ): SplitMergeNotification.Progress {
+        val current = (splitMergeNotificationProgressFraction(state) *
+            SPLIT_MERGE_NOTIFICATION_PROGRESS_MAX)
+            .toInt()
+            .coerceIn(0, SPLIT_MERGE_NOTIFICATION_PROGRESS_MAX)
+        return SplitMergeNotification.Progress(
+            max = SPLIT_MERGE_NOTIFICATION_PROGRESS_MAX,
+            current = current
+        )
+    }
+
+    private fun splitMergeNotificationProgressFraction(state: SplitMergeState): Float {
+        if (
+            !state.showDownloadStep &&
+            state.mergeStep.status == SplitMergeStepStatus.WAITING &&
+            state.signStep.status == SplitMergeStepStatus.WAITING
+        ) {
+            return 0f
+        }
+
+        var completedUnits = 0f
+        var totalUnits = 0f
+
+        if (state.showDownloadStep) {
+            totalUnits += 1f
+            completedUnits += state.downloadStep.notificationProgressFraction(
+                defaultRunningFraction = 0.2f
+            )
+        }
+
+        totalUnits += 1f
+        completedUnits += splitMergeNotificationMergeFraction(state)
+
+        totalUnits += 1f
+        completedUnits += state.signStep.notificationProgressFraction(defaultRunningFraction = 0.5f)
+
+        return if (totalUnits <= 0f) 0f else (completedUnits / totalUnits).coerceIn(0f, 1f)
+    }
+
+    private fun splitMergeNotificationMergeFraction(state: SplitMergeState): Float {
+        return when (state.mergeStep.status) {
+            SplitMergeStepStatus.WAITING -> 0f
+            SplitMergeStepStatus.COMPLETED -> 1f
+            SplitMergeStepStatus.RUNNING,
+            SplitMergeStepStatus.FAILED -> {
+                val entries = splitMergeNotificationSubSteps(state)
+                if (entries.isEmpty()) {
+                    resetSplitMergeNotificationSubStepIndex()
+                    if (state.mergeStep.status == SplitMergeStepStatus.RUNNING) 0.1f else 0f
+                } else {
+                    val matchedIndex = splitMergeNotificationCurrentSubStepIndex(
+                        entries,
+                        state.currentMessage
+                    )
+                    val currentIndex = when {
+                        matchedIndex >= 0 -> {
+                            lastSplitMergeNotificationSubStepIndex = matchedIndex
+                            matchedIndex
+                        }
+                        lastSplitMergeNotificationSubStepIndex in entries.indices ->
+                            lastSplitMergeNotificationSubStepIndex
+                        else -> -1
+                    }
+                    val completedEntries = entries
+                        .take(currentIndex.coerceAtLeast(0))
+                        .count { !it.skipped }
+                        .toFloat()
+                    val currentEntryRunning = currentIndex in entries.indices &&
+                        !entries[currentIndex].skipped &&
+                        state.mergeStep.status == SplitMergeStepStatus.RUNNING
+                    val totalEntries = entries.count { !it.skipped }.coerceAtLeast(1).toFloat()
+                    ((completedEntries + if (currentEntryRunning) 0.5f else 0f) / totalEntries)
+                        .coerceIn(0f, 1f)
+                }
+            }
+        }
+    }
+
+    private fun splitMergeNotificationSubSteps(
+        state: SplitMergeState
+    ): List<SplitMergeNotificationSubStep> {
+        val entries = state.mergeSubSteps.map { raw ->
+            val skipped = raw.startsWith("[skipped]")
+            SplitMergeNotificationSubStep(
+                title = raw.removePrefix("[skipped]").trim(),
+                skipped = skipped
+            )
+        }
+        val extraction = entries.filter {
+            it.title.equals("Extracting split APKs", ignoreCase = true)
+        }
+        val remaining = entries.filterNot {
+            it.title.equals("Extracting split APKs", ignoreCase = true)
+        }
+        return extraction + remaining.filter { it.skipped } + remaining.filter { !it.skipped }
+    }
+
+    private fun splitMergeNotificationCurrentSubStepIndex(
+        entries: List<SplitMergeNotificationSubStep>,
+        currentMessage: String?
+    ): Int {
+        if (currentMessage.isNullOrBlank()) return -1
+        return entries.indexOfFirst { step ->
+            step.title.equals(currentMessage, ignoreCase = true)
+        }
+    }
+
+    private fun SplitMergeStepState.notificationProgressFraction(
+        defaultRunningFraction: Float
+    ): Float = when (status) {
+        SplitMergeStepStatus.WAITING -> 0f
+        SplitMergeStepStatus.COMPLETED -> 1f
+        SplitMergeStepStatus.RUNNING,
+        SplitMergeStepStatus.FAILED -> {
+            if (progressCurrent != null && progressTotal != null && progressTotal > 0L) {
+                (progressCurrent.toFloat() / progressTotal.toFloat()).coerceIn(0f, 1f)
+            } else if (status == SplitMergeStepStatus.RUNNING) {
+                defaultRunningFraction
+            } else {
+                0f
+            }
+        }
+    }
+
+    private fun resetSplitMergeNotificationSubStepIndex() {
+        lastSplitMergeNotificationSubStepIndex = -1
     }
 
     private suspend fun copyUriToTempFile(uri: Uri, displayName: String?): File =
@@ -1438,6 +1634,7 @@ class DashboardViewModel(
             currentMessage = message,
             error = null
         )
+        updateSplitMergeNotification()
         appendSplitMergeLog(message)
     }
 
@@ -1455,6 +1652,7 @@ class DashboardViewModel(
                 progressTotal = total
             )
         )
+        updateSplitMergeNotification()
         if (previousStatus != SplitMergeStepStatus.RUNNING) {
             appendSplitMergeLog(app.getString(R.string.merge_split_apk_downloading))
         }
@@ -1468,6 +1666,7 @@ class DashboardViewModel(
                 message = app.getString(R.string.merge_split_apk_downloaded)
             )
         )
+        updateSplitMergeNotification()
         appendSplitMergeLog(app.getString(R.string.merge_split_apk_downloaded))
     }
 
@@ -1483,6 +1682,7 @@ class DashboardViewModel(
             ),
             currentMessage = app.getString(R.string.merge_split_apk_saved)
         )
+        SplitMergeNotification.clear(app)
         appendSplitMergeLog("${app.getString(R.string.merge_split_apk_saved)} ($outputName)")
     }
 
@@ -1496,6 +1696,7 @@ class DashboardViewModel(
             ),
             currentMessage = resolvedMessage
         )
+        SplitMergeNotification.clear(app)
         appendSplitMergeLog(resolvedMessage)
     }
 
@@ -1635,6 +1836,7 @@ class DashboardViewModel(
         cachedMergedApk?.let(::cleanupCachedMergedApk)
         cachedMergedApk = null
         cleanupLegacySplitMergeArtifacts()
+        SplitMergeNotification.clear(app)
         super.onCleared()
     }
 }

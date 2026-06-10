@@ -24,6 +24,7 @@ import app.urv.manager.network.service.HttpService
 import app.urv.manager.util.AppForeground
 import app.urv.manager.util.tag
 import app.urv.manager.util.PatchListCatalog
+import app.urv.manager.util.SplitMergeNotification
 import app.urv.manager.util.applyAppLanguage
 import kotlinx.coroutines.Dispatchers
 import coil.Coil
@@ -185,6 +186,7 @@ class ManagerApplication : Application() {
                     Log.d(tag, "Fresh process created")
                     onFreshProcessStart()
                 } else Log.d(tag, "System-initiated process death detected")
+                SplitMergeNotification.clear(this@ManagerApplication)
             }
 
             override fun onActivityStarted(activity: Activity) {}
