@@ -908,6 +908,11 @@ private fun String.toDownloaderDisplayLabel(): String {
     }
 }
 
+private fun String?.toPluginVersionLabel(): String? {
+    val version = this?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    return if (version.startsWith("v", ignoreCase = true)) version else "v$version"
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DownloaderPluginCard(
@@ -960,7 +965,7 @@ private fun DownloaderPluginCard(
             leadingContent = {
                 DownloaderPluginLeadingIcon(type = type)
             },
-            trailingContent = version?.let { pluginVersion ->
+            trailingContent = version.toPluginVersionLabel()?.let { pluginVersion ->
                 {
                     Text(pluginVersion)
                 }

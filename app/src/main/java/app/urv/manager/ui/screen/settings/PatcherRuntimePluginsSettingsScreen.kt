@@ -589,6 +589,11 @@ private enum class RuntimeActionStyle {
 private fun String.toRuntimeDisplayLabel(): String =
     if (endsWith(" runtime", ignoreCase = true)) this else "$this runtime"
 
+private fun String?.toRuntimeVersionLabel(): String? {
+    val version = this?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    return if (version.startsWith("v", ignoreCase = true)) version else "v$version"
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun RuntimePluginCard(
@@ -656,7 +661,7 @@ private fun RuntimePluginCard(
                     }
                 )
             },
-            trailingContent = version?.let { pluginVersion ->
+            trailingContent = version.toRuntimeVersionLabel()?.let { pluginVersion ->
                 {
                     Text(
                         text = pluginVersion,

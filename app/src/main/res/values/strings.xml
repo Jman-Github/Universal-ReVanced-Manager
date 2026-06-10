@@ -817,7 +817,7 @@ Patch profiles are not affected.</string>
     <string name="debug_logs_export">Export debug logs</string>
     <string name="debug_logs_export_read_failed">Failed to read logs (exit code %d)</string>
     <string name="debug_logs_export_failed">Failed to export logs</string>
-    <string name="debug_logs_export_success">Exported logs</string>
+    <string name="debug_logs_export_success">Debug log exported</string>
     <string name="api_url">API URL</string>
     <string name="api_url_description">The API used to download necessary files</string>
     <string name="api_url_dialog_title">Change API URL</string>

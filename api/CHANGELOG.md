@@ -3,6 +3,9 @@
 
 # Features
 
+- Improved patch selection and reset patch bundle dialogs with centered content, a restore icon, and consistent `Confirm` actions https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/529 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/530
+- Added `v` prefixes to downloader and runtime plugin version labels https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/526
+- Updated the debug log export toast to `Debug log exported` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/527
 - Improved Patcher Runtimes plugin action button styling so `Update` matches `Delete`/`Settings` and `Revoke trust` uses the grey filled style https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/516
 - Updated the local runtime plugin trust dialog secondary action from `Delete` to `Uninstall` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/521
 - Updated downloader and runtime plugin trust dialog titles to `Trust` for consistency https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/522
@@ -165,6 +168,7 @@
 - Added support for experimental app version targets in Morphe patch bundles
 - Improved exported log filename consistency for merger, patcher, debug, and installer logs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/524
 - Compact saved Apps card patch bundle summaries and added a setting to hide bundle update badges https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/528
+- Bumped Morphe Patcher to `1.5.2`
 
 
 # Bug fixes

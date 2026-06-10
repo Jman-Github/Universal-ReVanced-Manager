@@ -22,6 +22,10 @@
 - Removed redundant `downloader` text from downloader plugin names in trust dialogs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/518
 - Removed package/id details from runtime plugin trust dialogs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/519
 - Compact saved Apps card patch bundle summaries and added a setting to hide bundle update badges https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/528
+- Bumped Morphe Patcher to `1.5.2`
+- Improved patch selection and reset patch bundle dialogs with centered content, a restore icon, and consistent `Confirm` actions https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/529 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/530
+- Added `v` prefixes to downloader and runtime plugin version labels https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/526
+- Updated the debug log export toast to `Debug log exported` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/527
 
 
 # Bug fixes

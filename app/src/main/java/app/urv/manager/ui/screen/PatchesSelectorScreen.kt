@@ -936,7 +936,7 @@ fun PatchesSelectorScreen(
                         viewModel.reset()
                     }
                 ) {
-                    Text(stringResource(R.string.reset))
+                    Text(stringResource(R.string.confirm))
                 }
             },
             dismissButton = {
