@@ -374,6 +374,11 @@ private fun ManagedRuntimeCard(
         primaryActionLabel = stringResource(
             if (untrusted != null) R.string.trust else R.string.update
         ),
+        primaryActionStyle = if (untrusted != null) {
+            RuntimeActionStyle.FilledTonal
+        } else {
+            RuntimeActionStyle.Outlined
+        },
         onPrimaryAction = {
             if (untrusted != null) {
                 showTrustDialog = true
@@ -389,6 +394,7 @@ private fun ManagedRuntimeCard(
                 source.state !is PatcherRuntimePluginSourceState.State.Untrusted &&
                     source.state !is PatcherRuntimePluginSourceState.State.Missing
             },
+        footerActionStyle = RuntimeActionStyle.FilledTonal,
         onFooterAction = { viewModel.revokePluginSourceTrust(source.entry.id) },
         footerActionEnabled = actionsEnabled,
         extraSupportingContent = {
@@ -575,6 +581,11 @@ private enum class RuntimePluginType(@StringRes val labelRes: Int) {
     Remote(R.string.downloader_plugin_type_modern)
 }
 
+private enum class RuntimeActionStyle {
+    Outlined,
+    FilledTonal
+}
+
 private fun String.toRuntimeDisplayLabel(): String =
     if (endsWith(" runtime", ignoreCase = true)) this else "$this runtime"
 
@@ -595,6 +606,8 @@ private fun RuntimePluginCard(
     onMiddleAction: (() -> Unit)? = null,
     footerActionLabel: String? = null,
     onFooterAction: (() -> Unit)? = null,
+    primaryActionStyle: RuntimeActionStyle = RuntimeActionStyle.FilledTonal,
+    footerActionStyle: RuntimeActionStyle = RuntimeActionStyle.Outlined,
     extraSupportingContent: (@Composable (() -> Unit))? = null,
     primaryActionEnabled: Boolean = true,
     secondaryActionEnabled: Boolean = true,
@@ -675,24 +688,50 @@ private fun RuntimePluginCard(
                     RuntimeActionText(middleActionLabel)
                 }
             }
-            FilledTonalButton(
+            RuntimeActionButton(
+                label = primaryActionLabel,
                 onClick = onPrimaryAction,
                 enabled = primaryActionEnabled,
-                modifier = Modifier.weight(1f)
-            ) {
-                RuntimeActionText(primaryActionLabel)
-            }
+                modifier = Modifier.weight(1f),
+                style = primaryActionStyle
+            )
         }
         if (footerActionLabel != null && onFooterAction != null) {
-            OutlinedButton(
+            RuntimeActionButton(
+                label = footerActionLabel,
                 onClick = onFooterAction,
                 enabled = footerActionEnabled,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
-            ) {
-                RuntimeActionText(footerActionLabel)
-            }
+                    .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                style = footerActionStyle
+            )
+        }
+    }
+}
+
+@Composable
+private fun RuntimeActionButton(
+    label: String,
+    onClick: () -> Unit,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    style: RuntimeActionStyle = RuntimeActionStyle.FilledTonal
+) {
+    when (style) {
+        RuntimeActionStyle.Outlined -> OutlinedButton(
+            onClick = onClick,
+            enabled = enabled,
+            modifier = modifier
+        ) {
+            RuntimeActionText(label)
+        }
+        RuntimeActionStyle.FilledTonal -> FilledTonalButton(
+            onClick = onClick,
+            enabled = enabled,
+            modifier = modifier
+        ) {
+            RuntimeActionText(label)
         }
     }
 }
