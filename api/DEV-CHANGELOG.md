@@ -21,6 +21,7 @@
 - Improved downloader plugin action button styling so `Update` matches `Delete`/`Settings` and `Revoke trust` uses the grey filled style https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/515
 - Removed redundant `downloader` text from downloader plugin names in trust dialogs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/518
 - Removed package/id details from runtime plugin trust dialogs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/519
+- Compact saved Apps card patch bundle summaries and added a setting to hide bundle update badges https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/528
 
 
 # Bug fixes

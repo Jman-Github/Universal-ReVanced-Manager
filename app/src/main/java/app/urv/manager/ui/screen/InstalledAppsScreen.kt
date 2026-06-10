@@ -53,6 +53,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -97,6 +98,7 @@ fun InstalledAppsScreen(
     val selectionActive = viewModel.selectedApps.isNotEmpty()
     val savedActionOrderPref by prefs.savedAppActionOrder.getAsState()
     val savedHiddenActionsPref by prefs.savedAppHiddenActions.getAsState()
+    val showSavedAppBundleUpdateBadges by prefs.showSavedAppBundleUpdateBadges.getAsState()
     val savedActionOrderList = remember(savedActionOrderPref) {
         val parsed = savedActionOrderPref
             .split(',')
@@ -226,6 +228,7 @@ fun InstalledAppsScreen(
                                 savedApkAbiLabel = savedApkAbiLabel,
                                 isMounted = isMounted,
                                 bundleSummaries = bundleSummaries,
+                                showBundleUpdateBadges = showSavedAppBundleUpdateBadges,
                                 timeTick = timeTick,
                                 savedActionKeys = visibleSavedActionKeys,
                                 onClick = {
@@ -275,6 +278,7 @@ private fun InstalledAppCard(
     savedApkAbiLabel: String?,
     isMounted: Boolean,
     bundleSummaries: List<InstalledAppsViewModel.AppBundleSummary>,
+    showBundleUpdateBadges: Boolean,
     timeTick: Long,
     savedActionKeys: List<SavedAppActionKey>,
     onClick: () -> Unit,
@@ -394,29 +398,34 @@ private fun InstalledAppCard(
                     )
                 }
                 if (bundleSummaries.isNotEmpty()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        bundleSummaries.forEach { summary ->
-                            val versionText = summary.version?.let(::formatVersion)
-                            val bundleLine = listOfNotNull(summary.title, versionText).joinToString(" • ")
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = bundleLine,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                if (summary.hasUpdate) {
-                                    AppMetaPill(
-                                        text = stringResource(R.string.bundle_update_manual_available),
-                                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                }
-                            }
+                    val bundleLine = if (bundleSummaries.size == 1) {
+                        val summary = bundleSummaries.first()
+                        val versionText = summary.version?.let(::formatVersion)
+                        listOfNotNull(summary.title, versionText).joinToString(" • ")
+                    } else {
+                        pluralStringResource(
+                            R.plurals.saved_app_patch_bundles_applied_quantity,
+                            bundleSummaries.size,
+                            bundleSummaries.size
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = bundleLine,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (showBundleUpdateBadges && bundleSummaries.any { it.hasUpdate }) {
+                            AppMetaPill(
+                                text = stringResource(R.string.saved_app_bundle_update_badge),
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
                         }
                     }
                 }

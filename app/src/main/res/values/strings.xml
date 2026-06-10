@@ -67,6 +67,7 @@
     <string name="bundle_version_suggested_label">Suggested version: %1$s</string>
     <string name="bundle_update_manual_available">Update available</string>
     <string name="bundle_update_manual_available_with_version">Update available: %1$s</string>
+    <string name="saved_app_bundle_update_badge">Bundle update</string>
     <string name="patch_bundle_force_redownload_title">Force redownload</string>
     <string name="patch_bundle_force_redownload_description">Redownload %1$s and overwrite the local copy?</string>
     <string name="patch_bundle_experimental_version_label">EXPERIMENTAL</string>
@@ -767,6 +768,12 @@ Patch profiles are not affected.</string>
     <string name="patcher_saved_apps_description">When enabled, the manager saves a patched app entry and APK so it stays in the Apps tab and can be reinstalled later. Turning this off skips saving and deletes all saved patched apps. Any apps installed through the Rooted mount installer remain visible</string>
     <string name="saved_apps_disable_overwrite_title">Always create a new saved app entry when patching</string>
     <string name="saved_apps_disable_overwrite_description">Prevent newly patched apps saved from the patcher from overwriting existing saved entries. When enabled, each new saved app created from the patcher gets a separate Apps tab entry</string>
+    <string name="saved_apps_show_bundle_update_badges_title">Show saved app bundle update badges</string>
+    <string name="saved_apps_show_bundle_update_badges_description">Show a Bundle update badge on saved Apps cards when any applied patch bundle has a newer version</string>
+    <plurals name="saved_app_patch_bundles_applied_quantity">
+        <item quantity="one">%1$d patch bundle applied</item>
+        <item quantity="other">%1$d patch bundles applied</item>
+    </plurals>
     <string name="use_custom_file_picker_title">Use custom file picker</string>
     <string name="use_custom_file_picker_description">Use the in-app custom file picker. Turn this off to use the Android Documents Provider instead</string>
     <string name="patch_bundle_rename">Rename patch bundle</string>

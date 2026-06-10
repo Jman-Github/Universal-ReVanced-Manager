@@ -1356,6 +1356,21 @@ fun AdvancedSettingsScreen(
                         enabled = savedAppsEnabled
                     )
                 }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.saved_apps_show_bundle_update_badges_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.showSavedAppBundleUpdateBadges,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.saved_apps_show_bundle_update_badges_title,
+                        description = R.string.saved_apps_show_bundle_update_badges_description,
+                        enabled = savedAppsEnabled
+                    )
+                }
             }
     val actionOrderPref by viewModel.prefs.patchSelectionActionOrder.getAsState()
     val hiddenActionsPref by viewModel.prefs.patchSelectionHiddenActions.getAsState()

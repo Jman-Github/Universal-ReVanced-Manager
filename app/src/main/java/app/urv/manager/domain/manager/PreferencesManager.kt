@@ -108,6 +108,8 @@ class PreferencesManager(
     val autoExpandRunningStepsExclusive = booleanPreference("auto_expand_running_steps_exclusive", false)
     val enableSavedApps = booleanPreference("enable_saved_apps", true)
     val disableSavedAppOverwrite = booleanPreference("disable_saved_app_overwrite", false)
+    val showSavedAppBundleUpdateBadges =
+        booleanPreference("show_saved_app_bundle_update_badges", true)
 
     val allowMeteredUpdates = booleanPreference("allow_metered_updates", true)
     val chooseInstallerPerInstall = booleanPreference("choose_installer_per_install", false)
@@ -266,6 +268,7 @@ class PreferencesManager(
         val autoExpandRunningStepsExclusive: Boolean? = null,
         val enableSavedApps: Boolean? = null,
         val disableSavedAppOverwrite: Boolean? = null,
+        val showSavedAppBundleUpdateBadges: Boolean? = null,
         val patchedAppExportFormat: String? = null,
         val officialBundleRemoved: Boolean? = null,
         val officialBundleCustomDisplayName: String? = null,
@@ -440,6 +443,7 @@ class PreferencesManager(
             autoExpandRunningStepsExclusive = autoExpandRunningStepsExclusive.get(),
             enableSavedApps = enableSavedApps.get(),
             disableSavedAppOverwrite = disableSavedAppOverwrite.get(),
+            showSavedAppBundleUpdateBadges = showSavedAppBundleUpdateBadges.get(),
             patchedAppExportFormat = patchedAppExportFormat.get(),
             chooseInstallerPerInstall = chooseInstallerPerInstall.get(),
             installerPrimary = installerPrimary.get(),
@@ -592,6 +596,7 @@ class PreferencesManager(
         snapshot.autoExpandRunningStepsExclusive?.let { autoExpandRunningStepsExclusive.value = it }
         snapshot.enableSavedApps?.let { enableSavedApps.value = it }
         snapshot.disableSavedAppOverwrite?.let { disableSavedAppOverwrite.value = it }
+        snapshot.showSavedAppBundleUpdateBadges?.let { showSavedAppBundleUpdateBadges.value = it }
         snapshot.patchedAppExportFormat?.let { patchedAppExportFormat.value = it }
         snapshot.chooseInstallerPerInstall?.let { chooseInstallerPerInstall.value = it }
         snapshot.installerPrimary?.let { installerPrimary.value = it }
