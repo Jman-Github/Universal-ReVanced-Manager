@@ -646,6 +646,7 @@ fun AdvancedSettingsScreen(
                 InstallerManager.Token.None,
                 InstallerManager.Token.AutoSaved -> null
                 InstallerManager.Token.Shizuku,
+                InstallerManager.Token.ShizukuGooglePlay,
                 is InstallerManager.Token.Component -> entry.icon?.let { drawable ->
                     {
                         InstallerIcon(
@@ -3461,7 +3462,9 @@ private fun InstallerSelectionDialog(
                     val blocked = blockedToken != null && tokensEqual(option.token, blockedToken)
                     val enabled = option.availability.available && !blocked
                     val selectedOption = currentSelection == option.token
-                    val showShizukuAction = option.token == InstallerManager.Token.Shizuku &&
+                    val isShizukuOption = option.token == InstallerManager.Token.Shizuku ||
+                        option.token == InstallerManager.Token.ShizukuGooglePlay
+                    val showShizukuAction = isShizukuOption &&
                         option.availability.reason in shizukuPromptReasons &&
                         onOpenShizuku != null
                     ListItem(
@@ -3473,6 +3476,7 @@ private fun InstallerSelectionDialog(
                             val iconDrawable = option.icon
                             val useInstallerIcon = iconDrawable != null && when (option.token) {
                                 InstallerManager.Token.Shizuku -> true
+                                InstallerManager.Token.ShizukuGooglePlay -> true
                                 is InstallerManager.Token.Component -> true
                                 else -> false
                             }

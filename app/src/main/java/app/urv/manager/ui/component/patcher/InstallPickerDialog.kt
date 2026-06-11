@@ -103,7 +103,9 @@ fun InstallerPickerDialog(
                 options.forEach { option ->
                     val enabled = option.availability.available
                     val selected = option.token == selectedToken
-                    val showShizukuAction = option.token == InstallerManager.Token.Shizuku &&
+                    val isShizukuOption = option.token == InstallerManager.Token.Shizuku ||
+                        option.token == InstallerManager.Token.ShizukuGooglePlay
+                    val showShizukuAction = isShizukuOption &&
                         option.availability.reason in shizukuPromptReasons &&
                         onOpenShizuku != null
                     val desc = option.description?.takeIf { it.isNotBlank() }
@@ -120,6 +122,7 @@ fun InstallerPickerDialog(
                             val iconDrawable = option.icon
                             val useInstallerIcon = iconDrawable != null && when (option.token) {
                                 InstallerManager.Token.Shizuku -> true
+                                InstallerManager.Token.ShizukuGooglePlay -> true
                                 is InstallerManager.Token.Component -> true
                                 else -> false
                             }

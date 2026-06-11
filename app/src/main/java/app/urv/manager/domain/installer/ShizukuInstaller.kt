@@ -67,16 +67,27 @@ class ShizukuInstaller(private val app: Application) {
         return true
     }
 
-    suspend fun install(sourceFile: File, expectedPackage: String): InstallResult =
-        installMultiple(listOf(sourceFile), expectedPackage)
+    suspend fun install(
+        sourceFile: File,
+        expectedPackage: String,
+        installerPackageNameOverride: String? = null
+    ): InstallResult =
+        installMultiple(listOf(sourceFile), expectedPackage, installerPackageNameOverride)
 
-    suspend fun installMultiple(sourceFiles: List<File>, expectedPackage: String?): InstallResult = withContext(Dispatchers.IO) {
+    suspend fun installMultiple(
+        sourceFiles: List<File>,
+        expectedPackage: String?,
+        installerPackageNameOverride: String? = null
+    ): InstallResult = withContext(Dispatchers.IO) {
         if (sourceFiles.isEmpty()) {
             throw IllegalArgumentException("No APK files provided")
         }
         val packageInstaller = obtainPackageInstaller()
         val isRoot = runCatching { Shizuku.getUid() }.getOrDefault(-1) == 0
-        val installerPackageName = if (isRoot) app.packageName else SHELL_PACKAGE
+        val defaultInstallerPackageName = if (isRoot) app.packageName else SHELL_PACKAGE
+        val installerPackageName = installerPackageNameOverride
+            ?.takeIf { it.isNotBlank() }
+            ?: defaultInstallerPackageName
         val installerAttributionTag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) app.attributionTag else null
         val userId = if (isRoot) currentUserId() else 0
 
@@ -150,6 +161,7 @@ class ShizukuInstaller(private val app: Application) {
     class InstallerOperationException(val status: Int, override val message: String?) : Exception(message)
 
     companion object {
+        internal const val GOOGLE_PLAY_PACKAGE = "com.android.vending"
         private const val SHELL_PACKAGE = "com.android.shell"
         private const val BASE_APK_NAME = "base.apk"
         internal const val PACKAGE_NAME = "moe.shizuku.privileged.api"

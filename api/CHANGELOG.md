@@ -3,6 +3,7 @@
 
 # Features
 
+- Added a Shizuku installer option that reports Google Play as the installation source https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/380
 - Improved dialog titles, keystore converter messaging, and storage usage `Clear` button alignment for consistency https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/532 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/485 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/484
 - Improved downloader and runtime revoke trust dialogs with consistent confirmation prompts https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/497
 - Added toast feedback when force downloading all patch bundles starts or downloads nothing https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/531

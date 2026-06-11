@@ -217,7 +217,7 @@ class UpdateViewModel(
             is InstallerManager.InstallPlan.Shizuku -> {
                 state = State.INSTALLING
                 try {
-                    shizukuInstaller.install(location, app.packageName)
+                    shizukuInstaller.install(location, app.packageName, plan.installerPackageNameOverride)
                     installError = ""
                     state = State.SUCCESS
                     app.toast(app.getString(R.string.update_completed))

@@ -1348,6 +1348,8 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="installer_auto_saved_description">Mount the patched APK over the installed app.</string>
     <string name="installer_shizuku_name">Shizuku</string>
     <string name="installer_shizuku_description">Install silently using Shizuku or Sui.</string>
+    <string name="installer_shizuku_google_play_name">Shizuku (Google Play source)</string>
+    <string name="installer_shizuku_google_play_description">Install silently using Shizuku or Sui while setting Google Play as the installation source.</string>
     <string name="installer_option_none">No fallback</string>
     <string name="installer_none_description">No fallback installer is configured.</string>
     <string name="installer_status_requires_root">Root access required</string>

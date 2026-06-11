@@ -373,7 +373,7 @@ fun proceedAfterMissingPatchWarning() {
         val token = when (plan) {
             is InstallerManager.InstallPlan.Internal -> InstallerManager.Token.Internal
             is InstallerManager.InstallPlan.Mount -> InstallerManager.Token.AutoSaved
-            is InstallerManager.InstallPlan.Shizuku -> InstallerManager.Token.Shizuku
+            is InstallerManager.InstallPlan.Shizuku -> plan.token
             is InstallerManager.InstallPlan.External -> plan.token
         }
         val target = when (plan) {
@@ -2064,7 +2064,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
     }
 
-    private suspend fun performShizukuInstall() {
+    private suspend fun performShizukuInstall(installerPackageNameOverride: String? = null) {
         activeInstallType = InstallType.SHIZUKU
         updateInstallingState(true)
         installStatus = InstallCompletionStatus.InProgress
@@ -2087,7 +2087,11 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 rootInstaller.unmount(packageName)
             }
 
-            val result = shizukuInstaller.install(outputFile, currentPackageInfo.packageName)
+            val result = shizukuInstaller.install(
+                outputFile,
+                currentPackageInfo.packageName,
+                installerPackageNameOverride
+            )
             if (result.status != PackageInstaller.STATUS_SUCCESS) {
                 throw ShizukuInstaller.InstallerOperationException(result.status, result.message)
             }
@@ -2157,7 +2161,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 pendingExternalInstall = null
                 externalInstallTimeoutJob?.cancel()
                 externalInstallTimeoutJob = null
-                performShizukuInstall()
+                performShizukuInstall(plan.installerPackageNameOverride)
             }
 
             is InstallerManager.InstallPlan.External -> launchExternalInstaller(plan)
@@ -2408,7 +2412,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     pendingExternalInstall = null
                     externalInstallTimeoutJob?.cancel()
                     externalInstallTimeoutJob = null
-                    performShizukuInstall()
+                    performShizukuInstall(plan.installerPackageNameOverride)
                 }
                 is InstallerManager.InstallPlan.External -> launchExternalInstaller(plan)
             }

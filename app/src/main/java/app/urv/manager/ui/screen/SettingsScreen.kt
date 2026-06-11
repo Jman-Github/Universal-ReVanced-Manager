@@ -62,6 +62,7 @@ private data class SearchEntry(
     @StringRes val description: Int?,
     @StringRes val category: Int,
     val destination: Settings.Destination,
+    val keywords: List<Int> = emptyList(),
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -146,6 +147,8 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                     R.string.installer_choose_per_install_title,
                     R.string.installer_primary_title,
                     R.string.installer_fallback_title,
+                    R.string.installer_shizuku_google_play_name,
+                    R.string.installer_shizuku_google_play_description,
                     R.string.installer_custom_manage_title,
                     R.string.use_custom_file_picker_title,
                     R.string.patch_compat_check,
@@ -380,8 +383,30 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.github_pat, R.string.github_pat_description, R.string.advanced_system, Settings.AdvancedSystem),
             SearchEntry(R.string.include_github_pat_in_exports_label, R.string.include_github_pat_in_exports_supporting, R.string.advanced_system, Settings.AdvancedSystem),
             SearchEntry(R.string.installer_choose_per_install_title, R.string.installer_choose_per_install_description, R.string.advanced_system, Settings.AdvancedSystem),
-            SearchEntry(R.string.installer_primary_title, null, R.string.advanced_system, Settings.AdvancedSystem),
-            SearchEntry(R.string.installer_fallback_title, null, R.string.advanced_system, Settings.AdvancedSystem),
+            SearchEntry(
+                R.string.installer_primary_title,
+                null,
+                R.string.advanced_system,
+                Settings.AdvancedSystem,
+                keywords = listOf(
+                    R.string.installer_shizuku_name,
+                    R.string.installer_shizuku_description,
+                    R.string.installer_shizuku_google_play_name,
+                    R.string.installer_shizuku_google_play_description
+                )
+            ),
+            SearchEntry(
+                R.string.installer_fallback_title,
+                null,
+                R.string.advanced_system,
+                Settings.AdvancedSystem,
+                keywords = listOf(
+                    R.string.installer_shizuku_name,
+                    R.string.installer_shizuku_description,
+                    R.string.installer_shizuku_google_play_name,
+                    R.string.installer_shizuku_google_play_description
+                )
+            ),
             SearchEntry(R.string.installer_custom_manage_title, R.string.installer_custom_manage_description, R.string.advanced_system, Settings.AdvancedSystem),
             SearchEntry(R.string.search_engine_host_title, R.string.search_engine_host_description, R.string.advanced_system, Settings.AdvancedSystem),
             SearchEntry(R.string.patch_compat_check, R.string.patch_compat_check_description, R.string.advanced_system, Settings.AdvancedSystem),
@@ -447,6 +472,10 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                 entry.description?.let { description ->
                     append(' ')
                     append(stringResource(description))
+                }
+                entry.keywords.forEach { keyword ->
+                    append(' ')
+                    append(stringResource(keyword))
                 }
             }.lowercase()
             searchText.contains(normalizedQuery)

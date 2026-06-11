@@ -51,6 +51,7 @@ class InstallerManager(
         entryFor(Token.Internal, target, checkRoot = false)?.let(entries::add)
         entryFor(Token.AutoSaved, target, checkRoot = true)?.let(entries::add)
         entryFor(Token.Shizuku, target, checkRoot = true)?.let(entries::add)
+        entryFor(Token.ShizukuGooglePlay, target, checkRoot = true)?.let(entries::add)
 
         val activityEntries = queryInstallerActivities()
             .filter(::isInstallerCandidate)
@@ -99,6 +100,7 @@ class InstallerManager(
             InstallerPreferenceTokens.SYSTEM -> Token.Internal
             InstallerPreferenceTokens.NONE -> Token.None
             InstallerPreferenceTokens.SHIZUKU -> Token.Shizuku
+            InstallerPreferenceTokens.SHIZUKU_GOOGLE_PLAY -> Token.ShizukuGooglePlay
             InstallerPreferenceTokens.INTERNAL, null, "" -> Token.Internal
             else -> ComponentName.unflattenFromString(value)?.let { component ->
                 if (isDefaultComponent(component)) Token.Internal else Token.Component(component)
@@ -113,6 +115,7 @@ class InstallerManager(
         Token.AutoSaved -> InstallerPreferenceTokens.AUTO_SAVED
         Token.None -> InstallerPreferenceTokens.NONE
         Token.Shizuku -> InstallerPreferenceTokens.SHIZUKU
+        Token.ShizukuGooglePlay -> InstallerPreferenceTokens.SHIZUKU_GOOGLE_PLAY
         is Token.Component -> token.componentName.flattenToString()
     }
 
@@ -330,6 +333,14 @@ class InstallerManager(
                 InstallPlan.Shizuku(target)
             } else null
 
+            Token.ShizukuGooglePlay -> if (availabilityFor(Token.ShizukuGooglePlay, target).available) {
+                InstallPlan.Shizuku(
+                    target = target,
+                    token = Token.ShizukuGooglePlay,
+                    installerPackageNameOverride = ShizukuInstaller.GOOGLE_PLAY_PACKAGE
+                )
+            } else null
+
             is Token.Component -> {
                 if (isDefaultComponent(token.componentName)) {
                     return InstallPlan.Internal(target)
@@ -427,6 +438,14 @@ class InstallerManager(
             icon = if (shizukuInstaller.isInstalled()) loadInstallerIcon(ShizukuInstaller.PACKAGE_NAME) else null
         )
 
+        Token.ShizukuGooglePlay -> Entry(
+            token = Token.ShizukuGooglePlay,
+            label = app.getString(R.string.installer_shizuku_google_play_name),
+            description = app.getString(R.string.installer_shizuku_google_play_description),
+            availability = availabilityFor(Token.ShizukuGooglePlay, target, checkRoot),
+            icon = if (shizukuInstaller.isInstalled()) loadInstallerIcon(ShizukuInstaller.PACKAGE_NAME) else null
+        )
+
         is Token.Component -> {
             val availability = availabilityFor(token, target, checkRoot)
             Entry(
@@ -485,7 +504,8 @@ class InstallerManager(
             Availability(false, R.string.installer_status_requires_root)
         } else Availability(true)
 
-        Token.Shizuku -> {
+        Token.Shizuku,
+        Token.ShizukuGooglePlay -> {
             if (!shizukuInstaller.isInstalled()) {
                 Availability(false, R.string.installer_status_shizuku_not_installed)
             } else {
@@ -597,6 +617,7 @@ class InstallerManager(
         object Internal : Token()
         object AutoSaved : Token()
         object Shizuku : Token()
+        object ShizukuGooglePlay : Token()
         object None : Token()
         data class Component(val componentName: ComponentName) : Token()
     }
@@ -604,7 +625,11 @@ class InstallerManager(
     sealed class InstallPlan {
         data class Internal(val target: InstallTarget) : InstallPlan()
         data class Mount(val target: InstallTarget) : InstallPlan()
-        data class Shizuku(val target: InstallTarget) : InstallPlan()
+        data class Shizuku(
+            val target: InstallTarget,
+            val token: Token = Token.Shizuku,
+            val installerPackageNameOverride: String? = null
+        ) : InstallPlan()
         data class External(
             val target: InstallTarget,
             val intent: Intent,
@@ -689,6 +714,7 @@ private fun InstallerManager.Token.describe(): String = when (this) {
     InstallerManager.Token.Internal -> "Internal"
     InstallerManager.Token.AutoSaved -> "AutoSaved"
     InstallerManager.Token.Shizuku -> "Shizuku"
+    InstallerManager.Token.ShizukuGooglePlay -> "ShizukuGooglePlay"
     InstallerManager.Token.None -> "None"
     is InstallerManager.Token.Component -> "Component(${componentName.flattenToString()})"
 }

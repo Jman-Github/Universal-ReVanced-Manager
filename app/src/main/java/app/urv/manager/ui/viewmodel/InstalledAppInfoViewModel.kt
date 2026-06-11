@@ -693,7 +693,7 @@ class InstalledAppInfoViewModel(
 
             is InstallerManager.InstallPlan.Shizuku -> {
                 try {
-                    shizukuInstaller.install(apk, targetPackage)
+                    shizukuInstaller.install(apk, targetPackage, plan.installerPackageNameOverride)
                     val selection = appliedPatches ?: resolveAppliedSelection(app)
                     withContext(Dispatchers.IO) {
                         val payload = app.selectionPayload
