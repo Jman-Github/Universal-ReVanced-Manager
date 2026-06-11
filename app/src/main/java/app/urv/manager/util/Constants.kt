@@ -4,6 +4,7 @@ const val tag = "Universal ReVanced Manager"
 
 const val JAR_MIMETYPE = "application/java-archive"
 const val APK_MIMETYPE = "application/vnd.android.package-archive"
+const val APK_SIGNER_CACHE_DIR = "apk-signer"
 val APK_FILE_MIME_TYPES = arrayOf(
     APK_MIMETYPE,
     "application/zip",

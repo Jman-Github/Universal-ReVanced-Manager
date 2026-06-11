@@ -51,6 +51,7 @@ import app.urv.manager.util.LocalPreventAccidentalTouching
 import app.urv.manager.ui.model.navigation.Announcement
 import app.urv.manager.ui.model.navigation.Announcements
 import app.urv.manager.ui.model.navigation.AppSelector
+import app.urv.manager.ui.model.navigation.ApkSigner
 import app.urv.manager.ui.model.navigation.ComplexParameter
 import app.urv.manager.ui.model.navigation.CreateYoutubeAssets
 import app.urv.manager.ui.model.navigation.Dashboard
@@ -69,6 +70,7 @@ import app.urv.manager.ui.model.SelectedApp
 import app.urv.manager.ui.screen.AnnouncementScreen
 import app.urv.manager.ui.screen.AnnouncementsScreen
 import app.urv.manager.ui.screen.AppSelectorScreen
+import app.urv.manager.ui.screen.ApkSignerScreen
 import app.urv.manager.ui.screen.CreateYoutubeAssetsScreen
 import app.urv.manager.ui.screen.DashboardScreen
 import app.urv.manager.ui.screen.InstalledAppInfoScreen
@@ -427,6 +429,9 @@ private fun ReVancedManager(
                 onCreateYoutubeAssetsClick = {
                     navController.navigate(CreateYoutubeAssets)
                 },
+                onOpenApkSignerClick = {
+                    navController.navigate(ApkSigner)
+                },
                 onOpenKeystoreCreatorClick = {
                     navController.navigate(KeystoreCreator)
                 },
@@ -624,6 +629,12 @@ private fun ReVancedManager(
 
         composable<CreateYoutubeAssets> {
             CreateYoutubeAssetsScreen(
+                onBackClick = navController::popBackStack
+            )
+        }
+
+        composable<ApkSigner> {
+            ApkSignerScreen(
                 onBackClick = navController::popBackStack
             )
         }

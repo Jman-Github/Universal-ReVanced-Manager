@@ -29,6 +29,7 @@
 - Added toast feedback when force downloading all patch bundles starts or downloads nothing https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/531
 - Improved downloader and runtime revoke trust dialogs with consistent confirmation prompts https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/497
 - Improved dialog titles, keystore converter messaging, and storage usage `Clear` button alignment for consistency https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/532 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/485 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/484
+- Added an APK signer tool to the `Tools` tab for signing APKs with the manager's current signing certificate https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/504
 
 
 # Bug fixes

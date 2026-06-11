@@ -172,6 +172,7 @@
 - Improved exported log filename consistency for merger, patcher, debug, and installer logs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/524
 - Compact saved Apps card patch bundle summaries and added a setting to hide bundle update badges https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/528
 - Bumped Morphe Patcher to `1.5.2`
+- Added an APK signer tool to the `Tools` tab for signing APKs with the manager's current signing certificate https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/504
 
 
 # Bug fixes

@@ -31,6 +31,9 @@ data object SplitApkInstaller
 data object CreateYoutubeAssets
 
 @Serializable
+data object ApkSigner
+
+@Serializable
 data object KeystoreCreator
 
 @Serializable

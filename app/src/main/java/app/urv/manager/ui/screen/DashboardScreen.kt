@@ -84,6 +84,7 @@ import androidx.compose.material.icons.outlined.Sort
 import androidx.compose.material.icons.outlined.Source
 import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.outlined.Update
+import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.ChevronLeft
@@ -249,6 +250,7 @@ fun DashboardScreen(
     onMergeSplitClick: () -> Unit,
     onOpenSplitInstallerClick: () -> Unit,
     onCreateYoutubeAssetsClick: () -> Unit,
+    onOpenApkSignerClick: () -> Unit,
     onOpenKeystoreCreatorClick: () -> Unit,
     onOpenKeystoreConverterClick: () -> Unit,
     onAppClick: (String, InstalledAppAction?) -> Unit,
@@ -2535,6 +2537,7 @@ fun DashboardScreen(
                                 onOpenMergeScreen = ::launchSplitMerge,
                                 onOpenSplitInstallerScreen = onOpenSplitInstallerClick,
                                 onOpenYoutubeAssetsScreen = onCreateYoutubeAssetsClick,
+                                onOpenApkSignerScreen = onOpenApkSignerClick,
                                 onOpenKeystoreCreatorScreen = onOpenKeystoreCreatorClick,
                                 onOpenKeystoreConverterScreen = onOpenKeystoreConverterClick
                             )
@@ -2566,6 +2569,7 @@ private fun ToolsTabScreen(
     onOpenMergeScreen: () -> Unit,
     onOpenSplitInstallerScreen: () -> Unit,
     onOpenYoutubeAssetsScreen: () -> Unit,
+    onOpenApkSignerScreen: () -> Unit,
     onOpenKeystoreCreatorScreen: () -> Unit,
     onOpenKeystoreConverterScreen: () -> Unit
 ) {
@@ -2711,6 +2715,53 @@ private fun ToolsTabScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = stringResource(R.string.tools_split_installer_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            tonalElevation = 2.dp,
+            shadowElevation = 6.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpenApkSignerScreen)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                    modifier = Modifier.size(52.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.VerifiedUser,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .padding(11.dp)
+                            .size(30.dp)
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.tools_apk_signer_title),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.tools_apk_signer_description),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

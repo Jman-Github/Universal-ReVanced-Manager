@@ -83,6 +83,7 @@ import app.urv.manager.ui.component.settings.ExpressiveSettingsDivider
 import app.urv.manager.ui.component.settings.ExpressiveSettingsItem
 import app.urv.manager.ui.component.settings.SettingsSearchHighlight
 import app.urv.manager.ui.model.navigation.Settings
+import app.urv.manager.util.APK_SIGNER_CACHE_DIR
 import app.urv.manager.util.permission.hasNotificationPermission
 import app.urv.manager.util.toast
 import kotlinx.coroutines.Dispatchers
@@ -842,6 +843,7 @@ private data class StorageAreaUsage(
 private enum class StorageClearTarget {
     InternalCache,
     CodeCache,
+    ApkSignerCache,
     InternalFiles,
     NoBackupFiles,
     CustomBackgrounds,
@@ -869,6 +871,7 @@ private enum class StorageClearTarget {
             ExternalFiles -> true
             InternalCache,
             CodeCache,
+            ApkSignerCache,
             CustomBackgrounds,
             DownloadedApps,
             DownloaderPlugins,
@@ -889,6 +892,7 @@ private enum class StorageClearTarget {
             ExternalFiles -> R.string.storage_clear_external_files_warning_description
             InternalCache,
             CodeCache,
+            ApkSignerCache,
             CustomBackgrounds,
             DownloadedApps,
             DownloaderPlugins,
@@ -901,6 +905,7 @@ private enum class StorageClearTarget {
         when (this) {
             InternalCache -> R.string.storage_internal_cache
             CodeCache -> R.string.storage_code_cache
+            ApkSignerCache -> R.string.storage_apk_signer_cache
             InternalFiles -> R.string.storage_internal_files
             NoBackupFiles -> R.string.storage_no_backup_files
             CustomBackgrounds -> R.string.storage_custom_backgrounds
@@ -956,9 +961,11 @@ private suspend fun loadStorageSnapshot(
     val patchProfileInputsDir = context.privateAppDir("patch-profile-inputs")
     val temporaryWorkspaceDir = context.privateAppDir("ephemeral")
     val uiTemporaryWorkspaceDir = context.privateAppDir("ui_ephemeral")
+    val apkSignerCacheDir = context.cacheDir.resolve(APK_SIGNER_CACHE_DIR)
 
     val internalCacheStats = context.cacheDir.directoryStats()
     val codeCacheStats = context.codeCacheDir.directoryStats()
+    val apkSignerCacheStats = apkSignerCacheDir.directoryStats()
     val customBackgroundsStats = customBackgroundsDir.directoryStats()
     val preferencesDataStoreStats = preferencesDataStoreDir.directoryStats()
     val databasesStats = databasesDir.directoryStats()
@@ -1000,6 +1007,13 @@ private suspend fun loadStorageSnapshot(
         stats = codeCacheStats,
         clearTarget = StorageClearTarget.CodeCache
     )
+    val apkSignerCacheArea = StorageAreaUsage(
+        targetKey = R.string.storage_apk_signer_cache,
+        title = context.getString(R.string.storage_apk_signer_cache),
+        description = context.getString(R.string.storage_apk_signer_cache_description),
+        stats = apkSignerCacheStats,
+        clearTarget = StorageClearTarget.ApkSignerCache
+    )
     val customBackgroundsArea = StorageAreaUsage(
         targetKey = R.string.storage_custom_backgrounds,
         title = context.getString(R.string.storage_custom_backgrounds),
@@ -1022,7 +1036,7 @@ private suspend fun loadStorageSnapshot(
             description = context.getString(R.string.storage_internal_cache_description),
             stats = internalCacheStats + codeCacheStats,
             clearTarget = StorageClearTarget.InternalCache,
-            children = listOf(codeCacheArea)
+            children = listOf(codeCacheArea, apkSignerCacheArea)
         ),
         StorageAreaUsage(
             targetKey = R.string.storage_internal_files,
@@ -1129,6 +1143,7 @@ private suspend fun clearStorageTarget(
 ): Long = when (target) {
     StorageClearTarget.InternalCache -> clearStorageDirectories(context.cacheDir, context.codeCacheDir)
     StorageClearTarget.CodeCache -> clearStorageDirectories(context.codeCacheDir)
+    StorageClearTarget.ApkSignerCache -> clearStorageDirectories(context.cacheDir.resolve(APK_SIGNER_CACHE_DIR))
     StorageClearTarget.InternalFiles -> measureClearedStorage(context.filesDir) {
         withContext(Dispatchers.IO) {
             context.filesDir.deleteContentsExcept(context.filesDir.resolve("datastore"))
