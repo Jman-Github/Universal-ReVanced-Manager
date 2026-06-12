@@ -608,8 +608,8 @@ private fun Option<String>.isColorOption(): Boolean {
     val text = listOf(key, title, description)
         .joinToString(" ")
         .lowercase(Locale.US)
-    if ("color" in text || "colour" in text || "hex" in text) return true
     if (isPathOption(text)) return false
+    if ("color" in text || "colour" in text || "hex" in text) return true
 
     if (default?.trim()?.isColorLikeOptionValue() == true) return true
     return presets?.values?.any { it?.trim()?.isColorLikeOptionValue() == true } == true
@@ -621,10 +621,15 @@ private fun isPathOption(text: String): Boolean =
         "directory" in text ||
         Regex("""(^|[^a-z])file([^a-z]|$)|file[_\-\s]?(path|name)""").containsMatchIn(text)
 
-private fun String.isColorLikeOptionValue(): Boolean =
-    startsWith("@android:color/") ||
-        startsWith("@color/") ||
-        normalizeColorOptionValue(this) != null
+private fun String.isColorLikeOptionValue(): Boolean {
+    val trimmed = trim()
+    if (trimmed.isEmpty()) return false
+
+    return trimmed.startsWith("@android:color/") ||
+        trimmed.startsWith("@color/") ||
+        ((trimmed.startsWith("#") || trimmed.startsWith("0x") || trimmed.startsWith("0X")) &&
+            normalizeColorOptionValue(trimmed) != null)
+}
 
 private fun normalizeColorOptionValue(value: String): String? {
     val trimmed = value.trim()

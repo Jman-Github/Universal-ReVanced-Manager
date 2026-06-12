@@ -37,6 +37,7 @@
 
 - Fixed the Patch Bundles tab empty state so searching with no added bundles still shows the no-bundles message https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/483
 - Fixed ReVanced v22 AAPT2 selection so it uses the sanitized APK input before opening the patcher session
+- Fixed color option detection so path-like fields are not mistaken for color values
 
 
 # v1.8.1-dev.18 (2026-06-02)

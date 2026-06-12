@@ -309,6 +309,7 @@
 - Fixed bundle version selection dialogs showing cached patch bundle names instead of custom bundle display names https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/502
 - Fixed ReVanced patching failures by retrying the Write patched APK step with the alternate AAPT2 binary when the selected AAPT2 fails https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/460
 - Fixed ReVanced v22 AAPT2 selection so it uses the sanitized APK input before opening the patcher session
+- Fixed color option detection so path-like fields are not mistaken for color values
 
 
 # Refactors
