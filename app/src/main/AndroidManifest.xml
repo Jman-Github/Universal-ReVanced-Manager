@@ -118,6 +118,10 @@
                 android:value="bundle_update_websocket" />
         </service>
 
+        <receiver
+            android:name="app.urv.manager.receiver.BundleUpdateNotificationDismissReceiver"
+            android:exported="false" />
+
         <provider
             android:name="app.urv.manager.domain.installer.InstallerFileProvider"
             android:authorities="${applicationId}.installerfileprovider"

@@ -178,6 +178,7 @@
 
 # Bug fixes
 
+- Fixed bundle update notifications disappearing after repeat checks while respecting intentionally dismissed alerts https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/535
 - Fixed the Patch Bundles tab empty state so searching with no added bundles still shows the no-bundles message https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/483
 - Fixed pressing the system back button on the `Patch Profiles` and `Tools` tabs sending the user back to the Android home screen instead of a different tab https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/191
 - Fixed the `Patch confirmation` screen's scroll bar being very large https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/186
