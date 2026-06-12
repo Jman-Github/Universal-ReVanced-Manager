@@ -108,6 +108,7 @@ import java.util.Locale
 import androidx.compose.runtime.rememberCoroutineScope
 import java.nio.file.Files
 import java.nio.file.Path
+import app.urv.manager.ui.component.CenteredDialogTitle
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -403,7 +404,7 @@ fun InstalledAppInfoScreen(
                     Text(stringResource(R.string.close))
                 }
             },
-            title = { Text(stringResource(R.string.universal_patches_profile_blocked_title)) },
+            title = { CenteredDialogTitle(stringResource(R.string.universal_patches_profile_blocked_title)) },
             text = {
                 Text(
                     text = stringResource(
@@ -425,7 +426,7 @@ fun InstalledAppInfoScreen(
                     Text(stringResource(R.string.close))
                 }
             },
-            title = { Text(stringResource(R.string.mixed_patch_bundles_title)) },
+            title = { CenteredDialogTitle(stringResource(R.string.mixed_patch_bundles_title)) },
             text = { Text(stringResource(R.string.mixed_patch_bundles_description)) }
         )
     }
@@ -438,7 +439,7 @@ fun InstalledAppInfoScreen(
                     Text(stringResource(R.string.close))
                 }
             },
-            title = { Text(stringResource(R.string.mixed_revanced_patcher_versions_title)) },
+            title = { CenteredDialogTitle(stringResource(R.string.mixed_revanced_patcher_versions_title)) },
             text = { Text(stringResource(R.string.mixed_revanced_patcher_versions_description)) }
         )
     }
@@ -651,7 +652,7 @@ fun InstalledAppInfoScreen(
                     }
                 }
             },
-            title = { Text(stringResource(R.string.saved_app_bundle_select_incompatible_title)) },
+            title = { CenteredDialogTitle(stringResource(R.string.saved_app_bundle_select_incompatible_title)) },
             text = {
                 Text(
                     text = stringResource(
@@ -679,7 +680,7 @@ fun InstalledAppInfoScreen(
                     Text(stringResource(R.string.ok))
                 }
             },
-            title = { Text(stringResource(titleRes)) },
+            title = { CenteredDialogTitle(stringResource(titleRes)) },
             text = { Text(message) }
         )
     }
@@ -697,7 +698,7 @@ fun InstalledAppInfoScreen(
                     Text(stringResource(R.string.cancel))
                 }
             },
-            title = { Text(stringResource(R.string.installation_signature_mismatch_dialog_title)) },
+            title = { CenteredDialogTitle(stringResource(R.string.installation_signature_mismatch_dialog_title)) },
             text = { Text(stringResource(R.string.installation_signature_mismatch_description)) }
         )
     }
@@ -710,7 +711,7 @@ fun InstalledAppInfoScreen(
                     Text(stringResource(R.string.ok))
                 }
             },
-            title = { Text(stringResource(R.string.mount_version_mismatch_title)) },
+            title = { CenteredDialogTitle(stringResource(R.string.mount_version_mismatch_title)) },
             text = { Text(message) }
         )
     }
@@ -740,7 +741,7 @@ fun InstalledAppInfoScreen(
                     Text(stringResource(R.string.ok))
                 }
             },
-            title = { Text(stringResource(titleRes)) },
+            title = { CenteredDialogTitle(stringResource(titleRes)) },
             text = {
                 Text(
                     text = stringResource(descriptionRes),
@@ -1448,7 +1449,7 @@ fun InstalledAppInfoScreen(
     if (showLeaveInstallDialog) {
         AlertDialog(
             onDismissRequest = { showLeaveInstallDialog = false },
-            title = { Text(stringResource(R.string.patcher_install_in_progress_title)) },
+            title = { CenteredDialogTitle(stringResource(R.string.patcher_install_in_progress_title)) },
             text = {
                 Text(
                     stringResource(R.string.patcher_install_in_progress),
@@ -1482,7 +1483,7 @@ fun UninstallDialog(
     onConfirm: () -> Unit
 ) = AlertDialog(
     onDismissRequest = onDismiss,
-    title = { Text(stringResource(R.string.unpatch_app)) },
+    title = { CenteredDialogTitle(stringResource(R.string.unpatch_app)) },
     text = { Text(stringResource(R.string.unpatch_description)) },
     confirmButton = {
         TextButton(

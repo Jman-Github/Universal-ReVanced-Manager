@@ -81,6 +81,7 @@ import org.koin.compose.koinInject
 import sh.calvin.reorderable.ReorderableCollectionItemScope
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
+import app.urv.manager.ui.component.CenteredDialogTitle
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -664,7 +665,7 @@ private fun AppsOrderDialog(
                 Text(text = stringResource(R.string.cancel))
             }
         },
-        title = { Text(text = stringResource(R.string.apps_reorder_title)) },
+        title = { CenteredDialogTitle(text = stringResource(R.string.apps_reorder_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(

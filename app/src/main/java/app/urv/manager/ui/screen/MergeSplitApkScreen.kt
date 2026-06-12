@@ -93,6 +93,7 @@ import app.universal.revanced.manager.R
 import java.nio.file.Files
 import java.nio.file.Path
 import org.koin.compose.koinInject
+import app.urv.manager.ui.component.CenteredDialogTitle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -387,7 +388,7 @@ fun MergeSplitApkScreen(
         AlertDialog(
             onDismissRequest = {},
             confirmButton = {},
-            title = { Text(stringResource(R.string.merge_split_apk_log_exporting_title)) },
+            title = { CenteredDialogTitle(stringResource(R.string.merge_split_apk_log_exporting_title)) },
             text = {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -737,7 +738,7 @@ private fun MergeLogActionsDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Outlined.PostAdd, null) },
-        title = { Text(stringResource(R.string.merge_split_apk_log_dialog_title)) },
+        title = { CenteredDialogTitle(stringResource(R.string.merge_split_apk_log_dialog_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(

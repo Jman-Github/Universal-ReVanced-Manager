@@ -590,7 +590,7 @@ Patch profiles are not affected.</string>
     <string name="downloader_auto_save_latest_only_title">Only keep the most recent plugin download</string>
     <string name="downloader_auto_save_latest_only_description">When a plugin downloads another version of the same app, remove older saved downloads and keep only the latest one</string>
     <string name="downloader_url_sources">URL sources</string>
-    <string name="downloader_import_url">Import downloader from URL</string>
+    <string name="downloader_import_url">Import downloader source</string>
     <string name="downloader_import_url_description">Add downloader plugins from a GitHub repository or release asset URL</string>
     <string name="downloader_import_url_hint">https://github.com/...</string>
     <string name="downloader_no_url_sources">No URL sources added.</string>

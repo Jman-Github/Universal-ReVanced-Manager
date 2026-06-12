@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
+import app.urv.manager.ui.component.CenteredDialogTitle
 
 enum class SavedAppMountPromptMode {
     MOUNT_OR_INSTALL,
@@ -43,7 +44,7 @@ fun SavedAppMountPromptDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(titleRes)) },
+        title = { CenteredDialogTitle(stringResource(titleRes)) },
         text = { Text(stringResource(descriptionRes)) },
         confirmButton = {
             Column(

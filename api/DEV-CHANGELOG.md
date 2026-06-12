@@ -33,6 +33,7 @@
 - Added a Shizuku installer option that reports Google Play as the installation source https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/380
 - Centered dialog titles that were still left-aligned in several dialogs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/534
 - Added patch profile action button ordering and visibility settings https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/482
+- Centered additional dialog titles that were still left-aligned https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/536
 
 
 # Bug fixes

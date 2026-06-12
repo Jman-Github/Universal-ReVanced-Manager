@@ -97,6 +97,7 @@ import app.urv.manager.util.toast
 import org.koin.compose.koinInject
 import java.nio.file.Files
 import java.nio.file.Path
+import app.urv.manager.ui.component.CenteredDialogTitle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -604,7 +605,7 @@ fun PatcherScreen(
     viewModel.signatureMismatchPackage?.let {
         AlertDialog(
             onDismissRequest = viewModel::dismissSignatureMismatchPrompt,
-            title = { Text(stringResource(R.string.installation_signature_mismatch_dialog_title)) },
+            title = { CenteredDialogTitle(stringResource(R.string.installation_signature_mismatch_dialog_title)) },
             text = { Text(stringResource(R.string.installation_signature_mismatch_description)) },
             confirmButton = {
                 TextButton(onClick = viewModel::confirmSignatureMismatchInstall) {
@@ -623,7 +624,7 @@ fun PatcherScreen(
         AlertDialog(
             onDismissRequest = viewModel::dismissKeystoreMissingDialog,
             icon = { Icon(Icons.Outlined.WarningAmber, null) },
-            title = { Text(stringResource(R.string.keystore_missing_dialog_title)) },
+            title = { CenteredDialogTitle(stringResource(R.string.keystore_missing_dialog_title)) },
             text = {
                 Text(
                     text = stringResource(R.string.keystore_missing_dialog_message),
@@ -643,7 +644,7 @@ fun PatcherScreen(
     viewModel.fallbackInstallPrompt?.let { prompt ->
         AlertDialog(
             onDismissRequest = viewModel::dismissFallbackInstallPrompt,
-            title = { Text(stringResource(R.string.installer_fallback_prompt_title)) },
+            title = { CenteredDialogTitle(stringResource(R.string.installer_fallback_prompt_title)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
@@ -681,7 +682,7 @@ fun PatcherScreen(
     viewModel.missingPatchWarning?.let { state ->
         AlertDialog(
             onDismissRequest = {},
-            title = { Text(stringResource(R.string.patcher_missing_patch_title)) },
+            title = { CenteredDialogTitle(stringResource(R.string.patcher_missing_patch_title)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
@@ -834,7 +835,7 @@ fun PatcherScreen(
                         Text(stringResource(R.string.cancel))
                     }
                 },
-                title = { Text(dialog.title) },
+                title = { CenteredDialogTitle(dialog.title) },
                 text = {
                     Text(stringResource(R.string.plugin_activity_dialog_body))
                 }
@@ -979,7 +980,7 @@ private fun SavePatchedAppDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Outlined.Save, null) },
-        title = { Text(stringResource(R.string.save_patched_app_dialog_title)) },
+        title = { CenteredDialogTitle(stringResource(R.string.save_patched_app_dialog_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
@@ -1088,7 +1089,7 @@ private fun PatchLogActionsDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Outlined.PostAdd, null) },
-        title = { Text(stringResource(R.string.patcher_log_dialog_title)) },
+        title = { CenteredDialogTitle(stringResource(R.string.patcher_log_dialog_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(

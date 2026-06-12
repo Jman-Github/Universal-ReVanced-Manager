@@ -176,6 +176,7 @@
 - Added an APK signer tool to the `Tools` tab for signing APKs with the manager's current signing certificate https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/504
 - Centered dialog titles that were still left-aligned in several dialogs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/534
 - Added patch profile action button ordering and visibility settings https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/482
+- Centered additional dialog titles that were still left-aligned https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/536
 
 
 # Bug fixes

@@ -97,6 +97,7 @@ import java.io.File
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
+import app.urv.manager.ui.component.CenteredDialogTitle
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -830,7 +831,7 @@ private fun OtherSupportedVersionsInfoDialog(
                 Text(stringResource(R.string.close))
             }
         },
-        title = { Text(stringResource(R.string.other_supported_versions_title, bundleName)) },
+        title = { CenteredDialogTitle(stringResource(R.string.other_supported_versions_title, bundleName)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 recommendedVersion?.let { version ->

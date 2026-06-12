@@ -50,6 +50,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import sh.calvin.reorderable.ReorderableCollectionItemScope
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
+import app.urv.manager.ui.component.CenteredDialogTitle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -255,7 +256,7 @@ private fun BundleOrderDialog(
                 Text(text = stringResource(R.string.cancel))
             }
         },
-        title = { Text(text = stringResource(R.string.bundle_reorder_title)) },
+        title = { CenteredDialogTitle(text = stringResource(R.string.bundle_reorder_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(

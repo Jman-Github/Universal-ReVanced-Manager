@@ -41,6 +41,7 @@ import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.util.toast
 import app.urv.manager.util.transparentListItemColors
 import com.google.accompanist.drawablepainter.rememberDrawablePainter
+import app.urv.manager.ui.component.CenteredDialogTitle
 
 @Composable
 fun InstallerPickerDialog(
@@ -94,7 +95,7 @@ fun InstallerPickerDialog(
                 Text(stringResource(R.string.install_app))
             }
         },
-        title = { Text(title) },
+        title = { CenteredDialogTitle(title) },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(scrollState),

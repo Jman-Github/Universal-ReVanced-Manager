@@ -94,6 +94,7 @@ import app.urv.manager.ui.viewmodel.PatcherRuntimePluginsViewModel
 import app.urv.manager.util.toast
 import org.koin.androidx.compose.koinViewModel
 import java.security.MessageDigest
+import app.urv.manager.ui.component.CenteredDialogTitle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -875,7 +876,7 @@ private fun RuntimeSourceSettingsDialog(
     val sourceLabel = remember(sourceName) { sourceName.toRuntimeDisplayLabel() }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.downloader_source_settings_title, sourceLabel)) },
+        title = { CenteredDialogTitle(stringResource(R.string.downloader_source_settings_title, sourceLabel)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text(
@@ -1153,7 +1154,7 @@ private fun ImportRuntimeSourceDialog(
     AlertDialog(
         modifier = Modifier.imePadding(),
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.patcher_runtime_import_url)) },
+        title = { CenteredDialogTitle(stringResource(R.string.patcher_runtime_import_url)) },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),

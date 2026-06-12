@@ -107,6 +107,7 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import java.nio.file.Path
 import kotlin.math.roundToInt
+import app.urv.manager.ui.component.CenteredDialogTitle
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -903,7 +904,7 @@ private fun ColorPickerDialog(
 
     AlertDialogExtended(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(titleRes)) },
+        title = { CenteredDialogTitle(stringResource(titleRes)) },
         text = {
             Column(
                 verticalArrangement = Arrangement.spacedBy(12.dp)

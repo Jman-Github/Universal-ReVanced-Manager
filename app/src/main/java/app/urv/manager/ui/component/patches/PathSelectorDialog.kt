@@ -89,6 +89,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
+import app.urv.manager.ui.component.CenteredDialogTitle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -577,7 +578,7 @@ fun PathSelectorDialog(
                         Text(stringResource(R.string.close))
                     }
                 },
-                title = { Text(stringResource(R.string.path_selector_image_preview_title, displayName)) },
+                title = { CenteredDialogTitle(stringResource(R.string.path_selector_image_preview_title, displayName)) },
                 text = {
                     AsyncImage(
                         model = target.toFile(),

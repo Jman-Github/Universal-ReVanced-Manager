@@ -82,6 +82,7 @@ import java.nio.file.Path
 import kotlin.io.path.isDirectory
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
+import app.urv.manager.ui.component.CenteredDialogTitle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -226,7 +227,7 @@ fun SplitApkInstallerScreen(
                 }
             },
             icon = { Icon(Icons.Outlined.PostAdd, null) },
-            title = { Text(stringResource(R.string.split_installer_log_actions_title)) },
+            title = { CenteredDialogTitle(stringResource(R.string.split_installer_log_actions_title)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
@@ -384,7 +385,7 @@ fun SplitApkInstallerScreen(
         AlertDialog(
             onDismissRequest = {},
             confirmButton = {},
-            title = { Text(stringResource(R.string.split_installer_log_exporting_title)) },
+            title = { CenteredDialogTitle(stringResource(R.string.split_installer_log_exporting_title)) },
             text = {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(10.dp),

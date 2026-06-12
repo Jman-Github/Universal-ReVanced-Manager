@@ -42,6 +42,7 @@ import app.urv.manager.ui.screen.settings.SettingsSearchState
 import app.urv.manager.ui.viewmodel.DeveloperOptionsViewModel
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
+import app.urv.manager.ui.component.CenteredDialogTitle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,7 +88,7 @@ fun DeveloperSettingsScreen(
                 }
             },
             icon = { androidx.compose.material3.Icon(Icons.Default.BatteryAlert, null) },
-            title = { Text(stringResource(R.string.battery_optimization_banner_disable_title)) },
+            title = { CenteredDialogTitle(stringResource(R.string.battery_optimization_banner_disable_title)) },
             text = { Text(stringResource(R.string.battery_optimization_banner_disable_description)) }
         )
     }

@@ -222,6 +222,7 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 import kotlin.math.abs
+import app.urv.manager.ui.component.CenteredDialogTitle
 
 enum class DashboardPage(
     val titleResId: Int,
@@ -1655,7 +1656,7 @@ fun DashboardScreen(
                     Text(stringResource(R.string.ok))
                 }
             },
-            title = { Text(stringResource(titleRes)) },
+            title = { CenteredDialogTitle(stringResource(titleRes)) },
             text = { Text(message) }
         )
     }
@@ -1673,7 +1674,7 @@ fun DashboardScreen(
                     Text(stringResource(R.string.cancel))
                 }
             },
-            title = { Text(stringResource(R.string.installation_signature_mismatch_dialog_title)) },
+            title = { CenteredDialogTitle(stringResource(R.string.installation_signature_mismatch_dialog_title)) },
             text = { Text(stringResource(R.string.installation_signature_mismatch_description)) }
         )
     }
@@ -1686,7 +1687,7 @@ fun DashboardScreen(
                     Text(stringResource(R.string.ok))
                 }
             },
-            title = { Text(stringResource(R.string.mount_version_mismatch_title)) },
+            title = { CenteredDialogTitle(stringResource(R.string.mount_version_mismatch_title)) },
             text = { Text(message) }
         )
     }
@@ -1715,7 +1716,7 @@ fun DashboardScreen(
                     Text(stringResource(R.string.ok))
                 }
             },
-            title = { Text(stringResource(titleRes)) },
+            title = { CenteredDialogTitle(stringResource(titleRes)) },
             text = {
                 Text(
                     text = stringResource(descriptionRes),
@@ -1789,7 +1790,7 @@ fun DashboardScreen(
                     Text(stringResource(R.string.close))
                 }
             },
-            title = { Text(stringResource(R.string.mixed_patch_bundles_title)) },
+            title = { CenteredDialogTitle(stringResource(R.string.mixed_patch_bundles_title)) },
             text = { Text(stringResource(R.string.mixed_patch_bundles_description)) }
         )
     }
@@ -1802,7 +1803,7 @@ fun DashboardScreen(
                     Text(stringResource(R.string.close))
                 }
             },
-            title = { Text(stringResource(R.string.mixed_revanced_patcher_versions_title)) },
+            title = { CenteredDialogTitle(stringResource(R.string.mixed_revanced_patcher_versions_title)) },
             text = { Text(stringResource(R.string.mixed_revanced_patcher_versions_description)) }
         )
     }
@@ -2885,7 +2886,7 @@ private fun MergeSplitSourceDialog(
                 Text(stringResource(R.string.cancel))
             }
         },
-        title = { Text(stringResource(R.string.tools_merge_split_source_title)) },
+        title = { CenteredDialogTitle(stringResource(R.string.tools_merge_split_source_title)) },
         textHorizontalPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 0.dp),
         text = {
             Column {
@@ -3237,7 +3238,7 @@ private fun MergeSplitPluginDialog(
                 Text(stringResource(R.string.cancel))
             }
         },
-        title = { Text(stringResource(R.string.tools_merge_split_source_plugin_title)) },
+        title = { CenteredDialogTitle(stringResource(R.string.tools_merge_split_source_plugin_title)) },
         textHorizontalPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 0.dp),
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {

@@ -128,6 +128,7 @@ import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import java.io.File
 import java.util.Locale
+import app.urv.manager.ui.component.CenteredDialogTitle
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
@@ -341,7 +342,7 @@ fun PatchProfilesScreen(
                     enabled = !apkPickerBusy
                 ) { Text(stringResource(R.string.close)) }
             },
-            title = { Text(stringResource(R.string.downloaded_apps)) },
+            title = { CenteredDialogTitle(stringResource(R.string.downloaded_apps)) },
             text = {
                 if (matchingDownloadedApps.isEmpty()) {
                     Text(
@@ -956,7 +957,7 @@ fun PatchProfilesScreen(
                     Text(stringResource(R.string.close))
                 }
             },
-            title = { Text(stringResource(R.string.patch_profile_patch_options_title, data.patchName)) },
+            title = { CenteredDialogTitle(stringResource(R.string.patch_profile_patch_options_title, data.patchName)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     data.entries.forEach { entry ->
@@ -1160,7 +1161,7 @@ fun PatchProfilesScreen(
                     Text(stringResource(R.string.close))
                 }
             },
-            title = { Text(stringResource(R.string.patch_profile_settings_title, settingsProfile.name)) },
+            title = { CenteredDialogTitle(stringResource(R.string.patch_profile_settings_title, settingsProfile.name)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1374,7 +1375,7 @@ fun PatchProfilesScreen(
                     Text(stringResource(R.string.cancel))
                 }
             },
-            title = { Text(stringResource(R.string.patch_profile_version_override_title, profile.name)) },
+            title = { CenteredDialogTitle(stringResource(R.string.patch_profile_version_override_title, profile.name)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
@@ -1501,7 +1502,7 @@ fun PatchProfilesScreen(
                     }
                 }
             },
-            title = { Text(stringResource(R.string.patch_profile_bundle_select_remote_incompatible_title)) },
+            title = { CenteredDialogTitle(stringResource(R.string.patch_profile_bundle_select_remote_incompatible_title)) },
             text = {
                 Text(
                     text = stringResource(
@@ -1523,7 +1524,7 @@ fun PatchProfilesScreen(
                     Text(stringResource(R.string.close))
                 }
             },
-            title = { Text(stringResource(R.string.universal_patches_profile_blocked_title)) },
+            title = { CenteredDialogTitle(stringResource(R.string.universal_patches_profile_blocked_title)) },
             text = {
                 Text(
                     text = stringResource(
@@ -1594,7 +1595,7 @@ private fun PatchProfilesOrderDialog(
                 Text(text = stringResource(R.string.cancel))
             }
         },
-        title = { Text(text = stringResource(R.string.patch_profiles_reorder_title)) },
+        title = { CenteredDialogTitle(text = stringResource(R.string.patch_profiles_reorder_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(

@@ -110,6 +110,7 @@ import java.util.Locale
 import kotlin.math.roundToInt
 import kotlin.random.Random
 import kotlin.reflect.typeOf
+import app.urv.manager.ui.component.CenteredDialogTitle
 
 private class OptionEditorScope<T : Any>(
     private val editor: OptionEditor<T>,
@@ -333,7 +334,7 @@ private object StringOptionEditor : OptionEditor<String> {
 
         AlertDialog(
             onDismissRequest = scope.dismissDialog,
-            title = { Text(scope.option.title) },
+            title = { CenteredDialogTitle(scope.option.title) },
             text = {
                 OutlinedTextField(
                     value = fieldValue,
@@ -481,7 +482,7 @@ private fun PatchOptionColorPickerDialog(
 
     AlertDialogExtended(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
+        title = { CenteredDialogTitle(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
@@ -852,7 +853,7 @@ private class PresetOptionEditor<T : Any>(private val innerEditor: OptionEditor<
                         Text(stringResource(R.string.cancel))
                     }
                 },
-                title = { Text(scope.option.title) },
+                title = { CenteredDialogTitle(scope.option.title) },
                 textHorizontalPadding = PaddingValues(horizontal = 0.dp),
                 text = {
                     val presets = remember(scope.option.presets) {

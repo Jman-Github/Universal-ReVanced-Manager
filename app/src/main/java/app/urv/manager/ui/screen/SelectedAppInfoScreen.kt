@@ -100,6 +100,7 @@ import java.util.Locale
 import java.io.File
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
+import app.urv.manager.ui.component.CenteredDialogTitle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -582,7 +583,7 @@ fun SelectedAppInfoScreen(
                     Text(stringResource(R.string.close))
                 }
             },
-            title = { Text(stringResource(R.string.mixed_patch_bundles_title)) },
+            title = { CenteredDialogTitle(stringResource(R.string.mixed_patch_bundles_title)) },
             text = { Text(stringResource(R.string.mixed_patch_bundles_description)) }
         )
     }
@@ -595,7 +596,7 @@ fun SelectedAppInfoScreen(
                     Text(stringResource(R.string.close))
                 }
             },
-            title = { Text(stringResource(R.string.mixed_revanced_patcher_versions_title)) },
+            title = { CenteredDialogTitle(stringResource(R.string.mixed_revanced_patcher_versions_title)) },
             text = { Text(stringResource(R.string.mixed_revanced_patcher_versions_description)) }
         )
     }
@@ -859,7 +860,7 @@ private fun OtherSupportedVersionsSelectionDialog(
                 Text(stringResource(R.string.close))
             }
         },
-        title = { Text(stringResource(R.string.other_supported_versions_title, detail.name)) },
+        title = { CenteredDialogTitle(stringResource(R.string.other_supported_versions_title, detail.name)) },
         text = {
             when {
                 detail.otherSupportedVersions.isNotEmpty() -> {
@@ -1119,7 +1120,7 @@ private fun AppSourceSelectorDialog(
                 Text(stringResource(R.string.cancel))
             }
         },
-        title = { Text(stringResource(R.string.app_source_dialog_title)) },
+        title = { CenteredDialogTitle(stringResource(R.string.app_source_dialog_title)) },
         textHorizontalPadding = PaddingValues(horizontal = 0.dp),
         text = {
             LazyColumn {

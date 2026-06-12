@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
 import app.urv.manager.ui.component.haptics.HapticCheckbox
 import app.urv.manager.util.transparentListItemColors
+import app.urv.manager.ui.component.CenteredDialogTitle
 
 @Composable
 fun AutoUpdatesDialog(onSubmit: (Boolean, Boolean) -> Unit) {
@@ -39,7 +40,7 @@ fun AutoUpdatesDialog(onSubmit: (Boolean, Boolean) -> Unit) {
             }
         },
         icon = { Icon(Icons.Outlined.Update, null) },
-        title = { Text(text = stringResource(R.string.auto_updates_dialog_title)) },
+        title = { CenteredDialogTitle(text = stringResource(R.string.auto_updates_dialog_title)) },
         text = {
             Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp),

@@ -107,6 +107,7 @@ import java.security.MessageDigest
 import kotlin.text.HexFormat
 import java.nio.file.Files
 import java.nio.file.Path
+import app.urv.manager.ui.component.CenteredDialogTitle
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalStdlibApi::class)
 @Composable
@@ -190,7 +191,7 @@ fun DownloadsSettingsScreen(
     if (showHelpDialog) {
         AlertDialog(
             onDismissRequest = { showHelpDialog = false },
-            title = { Text(stringResource(R.string.plugins_help_title)) },
+            title = { CenteredDialogTitle(stringResource(R.string.plugins_help_title)) },
             text = {
                 // From PR #37: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/37
                 AnnotatedLinkText(
@@ -1136,7 +1137,7 @@ private fun DownloaderSourceSettingsDialog(
     val sourceLabel = remember(source.name) { source.name.toDownloaderDisplayLabel() }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.downloader_source_settings_title, sourceLabel)) },
+        title = { CenteredDialogTitle(stringResource(R.string.downloader_source_settings_title, sourceLabel)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text(
@@ -1302,7 +1303,7 @@ private fun ImportDownloaderSourceDialog(
     AlertDialog(
         modifier = Modifier.imePadding(),
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.downloader_import_url)) },
+        title = { CenteredDialogTitle(stringResource(R.string.downloader_import_url)) },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -1516,7 +1517,7 @@ private fun PluginFailedDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.downloader_plugin_state_failed)) },
+        title = { CenteredDialogTitle(stringResource(R.string.downloader_plugin_state_failed)) },
         text = {
             Text(
                 stringResource(

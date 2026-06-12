@@ -176,6 +176,7 @@ import app.urv.manager.util.transparentListItemColors
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.ceil
+import app.urv.manager.ui.component.CenteredDialogTitle
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -807,7 +808,7 @@ fun PatchesSelectorScreen(
                     Text(stringResource(R.string.patch_profile_version_conflict_keep_existing))
                 }
             },
-            title = { Text(stringResource(R.string.patch_profile_version_conflict_title)) },
+            title = { CenteredDialogTitle(stringResource(R.string.patch_profile_version_conflict_title)) },
             text = {
                 Text(
                     stringResource(
@@ -834,7 +835,7 @@ fun PatchesSelectorScreen(
         val reminderList = missingPatchNames.joinToString(separator = "\nâ€¢ ", prefix = "â€¢ ")
         AlertDialog(
             onDismissRequest = { showMissingPatchReminder = false },
-            title = { Text(stringResource(R.string.patch_selector_missing_patch_title)) },
+            title = { CenteredDialogTitle(stringResource(R.string.patch_selector_missing_patch_title)) },
             text = {
                 Text(
                     stringResource(
@@ -955,7 +956,7 @@ fun PatchesSelectorScreen(
                 }
             },
             icon = { Icon(Icons.Outlined.Restore, null) },
-            title = { Text(stringResource(R.string.patch_selection_reset_dialog_title)) },
+            title = { CenteredDialogTitle(stringResource(R.string.patch_selection_reset_dialog_title)) },
             text = { CenteredDialogText(resetMessage) }
         )
     }
@@ -2048,7 +2049,7 @@ private fun PatchItem(
                     Text(stringResource(R.string.close))
                 }
             },
-            title = { Text(stringResource(R.string.patch_option_preview_title, patch.name)) },
+            title = { CenteredDialogTitle(stringResource(R.string.patch_option_preview_title, patch.name)) },
             text = {
                 val optionPreviewScrollState = rememberScrollState()
                 Column(
@@ -2572,7 +2573,7 @@ private fun PatchProfileBundleDialog(
                 Text(stringResource(R.string.cancel))
             }
         },
-        title = { Text(stringResource(R.string.patch_profile_select_bundles_title)) },
+        title = { CenteredDialogTitle(stringResource(R.string.patch_profile_select_bundles_title)) },
         text = {
             Column(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -2684,7 +2685,7 @@ private fun PatchProfileNameDialog(
                 Text(stringResource(R.string.cancel))
             }
         },
-        title = { Text(stringResource(R.string.patch_profile_name_title)) },
+        title = { CenteredDialogTitle(stringResource(R.string.patch_profile_name_title)) },
         text = {
             Column(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -3118,7 +3119,7 @@ private fun IncompatiblePatchesDialog(
             Text(stringResource(R.string.ok))
         }
     },
-    title = { Text(stringResource(R.string.incompatible_patches)) },
+    title = { CenteredDialogTitle(stringResource(R.string.incompatible_patches)) },
     text = {
         CenteredDialogText(
             stringResource(
@@ -3144,7 +3145,7 @@ private fun IncompatiblePatchDialog(
             Text(stringResource(R.string.ok))
         }
     },
-    title = { Text(stringResource(R.string.incompatible_patch)) },
+    title = { CenteredDialogTitle(stringResource(R.string.incompatible_patch)) },
     text = {
         Text(
             stringResource(

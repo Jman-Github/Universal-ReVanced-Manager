@@ -63,6 +63,7 @@ import org.koin.androidx.compose.koinViewModel
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.urv.manager.ui.component.CenteredDialogTitle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -235,7 +236,7 @@ fun UpdatesSettingsScreen(
                 pendingDeliveryMode = null
                 pendingAnnouncementInterval = null
             },
-            title = { Text(stringResource(R.string.background_bundle_ask_notification)) },
+            title = { CenteredDialogTitle(stringResource(R.string.background_bundle_ask_notification)) },
             text = {
                 Text(
                     stringResource(
@@ -439,7 +440,7 @@ fun UpdatesSettingsScreen(
                 pendingDeliveryMode = null
                 pendingAnnouncementInterval = null
             },
-            title = { Text(stringResource(R.string.battery_optimization_dialog_title)) },
+            title = { CenteredDialogTitle(stringResource(R.string.battery_optimization_dialog_title)) },
             text = { Text(stringResource(R.string.battery_optimization_dialog_description)) },
             confirmButton = {
                 TextButton(
@@ -790,7 +791,7 @@ private fun BackgroundBundleUpdateTimeDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
+        title = { CenteredDialogTitle(title) },
         text = {
             Column {
                 SearchForUpdatesBackgroundInterval.entries.forEach { interval ->
@@ -837,7 +838,7 @@ private fun BundleUpdateDeliveryModeDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.bundle_update_delivery_mode_dialog_title)) },
+        title = { CenteredDialogTitle(stringResource(R.string.bundle_update_delivery_mode_dialog_title)) },
         text = {
             Column {
                 BundleUpdateDeliveryMode.entries.forEach { mode ->

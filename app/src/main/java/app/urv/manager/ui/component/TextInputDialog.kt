@@ -1,4 +1,4 @@
-package app.urv.manager.ui.component
+﻿package app.urv.manager.ui.component
 
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -86,7 +86,7 @@ fun TextInputDialog(
             }
         },
         title = {
-            Text(title)
+            CenteredDialogTitle(title)
         },
         text = {
             TextField(

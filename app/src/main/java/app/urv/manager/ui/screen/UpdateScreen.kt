@@ -1,4 +1,4 @@
-package app.urv.manager.ui.screen
+﻿package app.urv.manager.ui.screen
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.spring
@@ -46,6 +46,7 @@ import app.urv.manager.ui.viewmodel.UpdateViewModel
 import app.urv.manager.ui.viewmodel.UpdateViewModel.State
 import app.urv.manager.util.relativeTime
 import org.koin.androidx.compose.koinViewModel
+import app.urv.manager.ui.component.CenteredDialogTitle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -169,7 +170,7 @@ private fun MeteredDownloadConfirmationDialog(
                 Text(stringResource(R.string.download))
             }
         },
-        title = { Text(stringResource(R.string.download_update_confirmation)) },
+        title = { CenteredDialogTitle(stringResource(R.string.download_update_confirmation)) },
         icon = { Icon(Icons.Outlined.Update, null) },
         text = { Text(stringResource(R.string.download_confirmation_metered)) }
     )
