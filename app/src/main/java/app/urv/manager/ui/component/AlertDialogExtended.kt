@@ -18,6 +18,7 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
@@ -25,8 +26,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+
+@Composable
+fun CenteredDialogTitle(
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    Text(
+        text = text,
+        modifier = modifier.fillMaxWidth(),
+        textAlign = TextAlign.Center
+    )
+}
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -76,18 +90,19 @@ fun AlertDialogExtended(
                             textStyle = MaterialTheme.typography.headlineSmall
                         ) {
                             Box(
-                                // Align the title to the center when an icon is present.
-                                Modifier
+                                modifier = Modifier
                                     .padding(bottom = 16.dp)
-                                    .align(
-                                        if (icon == null) {
-                                            Alignment.Start
-                                        } else {
-                                            Alignment.CenterHorizontally
-                                        }
-                                    )
+                                    .fillMaxWidth()
+                                    .align(Alignment.CenterHorizontally),
+                                contentAlignment = Alignment.Center
                             ) {
-                                title()
+                                CompositionLocalProvider(
+                                    LocalTextStyle provides LocalTextStyle.current.copy(
+                                        textAlign = TextAlign.Center
+                                    )
+                                ) {
+                                    title()
+                                }
                             }
                         }
                     }

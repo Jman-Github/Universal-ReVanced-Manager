@@ -71,7 +71,7 @@ private inline fun <T> NumberInputDialog(
     AlertDialog(
         modifier = Modifier.imePadding(),
         onDismissRequest = { onSubmit(null) },
-        title = { Text(name) },
+        title = { CenteredDialogTitle(name) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(

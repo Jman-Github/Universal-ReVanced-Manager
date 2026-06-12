@@ -177,6 +177,7 @@ import app.universal.revanced.manager.BuildConfig
 import app.universal.revanced.manager.R
 import app.urv.manager.ui.component.AppTopBar
 import app.urv.manager.ui.component.ColumnWithScrollbar
+import app.urv.manager.ui.component.CenteredDialogTitle
 import app.urv.manager.ui.component.GroupHeader
 import app.urv.manager.ui.component.SettingsSectionIcons
 import app.urv.manager.ui.component.splitTrailingPunctuation
@@ -325,7 +326,7 @@ fun AdvancedSettingsScreen(
                     Text(stringResource(R.string.language_restart_later))
                 }
             },
-            title = { Text(stringResource(R.string.language_restart_title)) },
+            title = { CenteredDialogTitle(stringResource(R.string.language_restart_title)) },
             text = { Text(stringResource(R.string.language_restart_message)) }
         )
     }
@@ -2780,7 +2781,7 @@ private fun ExportNameFormatDialog(
                 Text(stringResource(R.string.cancel))
             }
         },
-        title = { Text(stringResource(R.string.export_name_format_dialog_title)) },
+        title = { CenteredDialogTitle(stringResource(R.string.export_name_format_dialog_title)) },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -3452,7 +3453,7 @@ private fun InstallerSelectionDialog(
                 Text(stringResource(R.string.cancel))
             }
         },
-        title = { Text(title) },
+        title = { CenteredDialogTitle(title) },
         text = {
             Column(
                 verticalArrangement = Arrangement.spacedBy(0.dp),
@@ -3628,7 +3629,7 @@ private fun PatcherLogModeDialog(
                 Text(stringResource(R.string.cancel))
             }
         },
-        title = { Text(stringResource(R.string.patcher_log_mode)) },
+        title = { CenteredDialogTitle(stringResource(R.string.patcher_log_mode)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
@@ -3672,7 +3673,7 @@ private fun MorpheBytecodeModeDialog(
                 Text(stringResource(R.string.cancel))
             }
         },
-        title = { Text(stringResource(R.string.morphe_bytecode_mode)) },
+        title = { CenteredDialogTitle(stringResource(R.string.morphe_bytecode_mode)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
