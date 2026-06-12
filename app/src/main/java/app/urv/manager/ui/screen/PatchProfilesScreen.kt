@@ -110,6 +110,7 @@ import app.urv.manager.ui.viewmodel.PatchProfileLaunchData
 import app.urv.manager.ui.viewmodel.PatchProfileListItem
 import app.urv.manager.ui.viewmodel.PatchProfilesViewModel
 import app.urv.manager.ui.viewmodel.PatchProfilesViewModel.RenameResult
+import app.urv.manager.ui.model.PatchProfileActionKey
 import app.urv.manager.util.APK_FILE_EXTENSIONS
 import app.urv.manager.util.PM
 import app.urv.manager.util.consumeHorizontalScroll
@@ -151,6 +152,12 @@ fun PatchProfilesScreen(
     )
     val allowBundleOverride by prefs.allowPatchProfileBundleOverride.flow.collectAsStateWithLifecycle(
         initialValue = prefs.allowPatchProfileBundleOverride.default
+    )
+    val profileActionOrderPref by prefs.patchProfileActionOrder.flow.collectAsStateWithLifecycle(
+        initialValue = prefs.patchProfileActionOrder.default
+    )
+    val profileHiddenActionsPref by prefs.patchProfileHiddenActions.flow.collectAsStateWithLifecycle(
+        initialValue = prefs.patchProfileHiddenActions.default
     )
     val filesystem = koinInject<Filesystem>()
     val downloadedAppRepository = koinInject<DownloadedAppRepository>()
@@ -194,6 +201,15 @@ fun PatchProfilesScreen(
     val selectionActive = viewModel.selectedProfiles.isNotEmpty()
     data class OptionDialogData(val patchName: String, val entries: List<BundleOptionDisplay>)
     var optionDialogData by remember { mutableStateOf<OptionDialogData?>(null) }
+    val profileActionOrder = remember(profileActionOrderPref) {
+        val parsed = profileActionOrderPref
+            .split(',')
+            .mapNotNull { PatchProfileActionKey.fromStorageId(it.trim()) }
+        PatchProfileActionKey.ensureComplete(parsed)
+    }
+    val visibleProfileActionKeys = remember(profileActionOrder, profileHiddenActionsPref) {
+        profileActionOrder.filter { key -> key.storageId !in profileHiddenActionsPref }
+    }
     val normalizedQuery = searchQuery.trim().lowercase()
     val filteredProfiles = if (normalizedQuery.isBlank()) {
         profiles
@@ -661,27 +677,31 @@ fun PatchProfilesScreen(
                                         .widthIn(min = maxWidth)
                                         .consumeHorizontalScroll(actionScrollState)
                                 ) {
-                                    ProfileActionPill(
-                                        text = stringResource(R.string.patch_profile_rename),
-                                        icon = Icons.Outlined.Edit
-                                    ) {
-                                        renameProfileId = profile.id
-                                        renameProfileName = profile.name
-                                    }
-                                    ProfileActionPill(
-                                        text = stringResource(
-                                            if (expanded) R.string.patch_profile_show_less
-                                            else R.string.patch_profile_show_more
-                                        ),
-                                        icon = Icons.Outlined.Extension
-                                    ) {
-                                        expandedProfiles[profile.id] = !expanded
-                                    }
-                                    ProfileActionPill(
-                                        text = stringResource(R.string.settings),
-                                        icon = Icons.Outlined.Settings
-                                    ) {
-                                        settingsDialogProfile = profile
+                                    visibleProfileActionKeys.forEach { actionKey ->
+                                        when (actionKey) {
+                                            PatchProfileActionKey.RENAME -> ProfileActionPill(
+                                                text = stringResource(R.string.patch_profile_rename),
+                                                icon = Icons.Outlined.Edit
+                                            ) {
+                                                renameProfileId = profile.id
+                                                renameProfileName = profile.name
+                                            }
+                                            PatchProfileActionKey.VIEW_PATCHES -> ProfileActionPill(
+                                                text = stringResource(
+                                                    if (expanded) R.string.patch_profile_show_less
+                                                    else R.string.patch_profile_show_more
+                                                ),
+                                                icon = Icons.Outlined.Extension
+                                            ) {
+                                                expandedProfiles[profile.id] = !expanded
+                                            }
+                                            PatchProfileActionKey.SETTINGS -> ProfileActionPill(
+                                                text = stringResource(R.string.settings),
+                                                icon = Icons.Outlined.Settings
+                                            ) {
+                                                settingsDialogProfile = profile
+                                            }
+                                        }
                                     }
                                 }
                             }

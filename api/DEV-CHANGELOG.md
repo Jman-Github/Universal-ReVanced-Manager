@@ -32,6 +32,7 @@
 - Added an APK signer tool to the `Tools` tab for signing APKs with the manager's current signing certificate https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/504
 - Added a Shizuku installer option that reports Google Play as the installation source https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/380
 - Centered dialog titles that were still left-aligned in several dialogs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/534
+- Added patch profile action button ordering and visibility settings https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/482
 
 
 # Bug fixes
@@ -40,6 +41,7 @@
 - Fixed ReVanced v22 AAPT2 selection so it uses the sanitized APK input before opening the patcher session
 - Fixed color option detection so path-like fields are not mistaken for color values
 - Fixed bundle update notifications disappearing after repeat checks while respecting intentionally dismissed alerts https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/535
+- Fixed Android back navigation on the patch selector so it matches the toolbar back behavior https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/408
 
 
 # v1.8.1-dev.18 (2026-06-02)

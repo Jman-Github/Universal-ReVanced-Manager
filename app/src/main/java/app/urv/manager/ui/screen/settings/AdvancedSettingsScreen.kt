@@ -65,6 +65,7 @@ import androidx.compose.material.icons.outlined.Api
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ClearAll
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.DoneAll
@@ -81,6 +82,7 @@ import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SettingsBackupRestore
 import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material.icons.outlined.Block
@@ -206,7 +208,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.urv.manager.ui.model.PatchSelectionActionKey
 import app.urv.manager.ui.model.PatchBundleActionKey
 import app.urv.manager.ui.model.SavedAppActionKey
-import app.urv.manager.ui.model.navigation.Settings
+import app.urv.manager.ui.model.PatchProfileActionKey
+import app.urv.manager.ui.model.navigation.Settings as NavigationSettings
 import app.urv.manager.ui.screen.settings.SettingsSearchState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -1381,6 +1384,8 @@ fun AdvancedSettingsScreen(
     val bundleHiddenActionsPref by viewModel.prefs.patchBundleHiddenActions.getAsState()
     val savedActionOrderPref by viewModel.prefs.savedAppActionOrder.getAsState()
     val savedHiddenActionsPref by viewModel.prefs.savedAppHiddenActions.getAsState()
+    val profileActionOrderPref by viewModel.prefs.patchProfileActionOrder.getAsState()
+    val profileHiddenActionsPref by viewModel.prefs.patchProfileHiddenActions.getAsState()
             val actionOrderList = remember(actionOrderPref) {
                 val parsed = actionOrderPref
                     .split(',')
@@ -1431,6 +1436,19 @@ fun AdvancedSettingsScreen(
             }
             var savedActionsExpanded by rememberSaveable { mutableStateOf(false) }
 
+            val profileActionOrderList = remember(profileActionOrderPref) {
+                val parsed = profileActionOrderPref
+                    .split(',')
+                    .mapNotNull { PatchProfileActionKey.fromStorageId(it.trim()) }
+                PatchProfileActionKey.ensureComplete(parsed)
+            }
+            val profileWorkingOrder = remember(profileActionOrderList) { profileActionOrderList.toMutableStateList() }
+            LaunchedEffect(profileActionOrderList) {
+                profileWorkingOrder.clear()
+                profileWorkingOrder.addAll(profileActionOrderList)
+            }
+            var profileActionsExpanded by rememberSaveable { mutableStateOf(false) }
+
             fun moveAction(action: PatchSelectionActionKey, target: PatchSelectionActionKey) {
                 if (action == target) return
                 val fromIndex = workingOrder.indexOf(action)
@@ -1479,6 +1497,16 @@ fun AdvancedSettingsScreen(
                     .collectLatest { order ->
                         if (order == savedActionOrderList) return@collectLatest
                         viewModel.setSavedAppActionOrder(order)
+                    }
+            }
+
+            LaunchedEffect(profileActionOrderList) {
+                snapshotFlow { profileWorkingOrder.toList() }
+                    .distinctUntilChanged()
+                    .debounce(200)
+                    .collectLatest { order ->
+                        if (order == profileActionOrderList) return@collectLatest
+                        viewModel.setPatchProfileActionOrder(order)
                     }
             }
 
@@ -2082,6 +2110,117 @@ fun AdvancedSettingsScreen(
                     }
                 }
             }
+            ExpressiveSettingsDivider()
+            SettingsSearchHighlight(
+                targetKey = R.string.patch_profile_action_order_title,
+                activeKey = highlightTarget,
+                extraKeys = setOf(R.string.patch_profile_action_visibility_title),
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                ExpressiveSettingsItem(
+                    modifier = highlightModifier,
+                    headlineContent = stringResource(R.string.patch_profile_action_order_title),
+                    supportingContent = stringResource(R.string.patch_profile_action_order_description),
+                    trailingContent = {
+                        Icon(
+                            imageVector = if (profileActionsExpanded) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.KeyboardArrowDown,
+                            contentDescription = null
+                        )
+                    },
+                    onClick = { profileActionsExpanded = !profileActionsExpanded }
+                )
+            }
+
+            if (profileActionsExpanded) {
+                ExpressiveSettingsDivider()
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val rowState = rememberLazyListState()
+                    val reorderableState = rememberReorderableLazyListState(rowState) { from, to ->
+                        profileWorkingOrder.add(to.index, profileWorkingOrder.removeAt(from.index))
+                    }
+
+                    PatchProfileActionPreview(
+                        order = profileWorkingOrder,
+                        hiddenActions = profileHiddenActionsPref,
+                        rowState = rowState,
+                        reorderableState = reorderableState
+                    )
+                }
+
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.patch_profile_action_visibility_title),
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Text(
+                        text = stringResource(R.string.patch_profile_action_visibility_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        PatchProfileActionKey.values()
+                            .forEach { key ->
+                                val visible = key.storageId !in profileHiddenActionsPref
+                                val setVisible: (Boolean) -> Unit = { isVisible ->
+                                    val updated = profileHiddenActionsPref.toMutableSet()
+                                    if (isVisible) updated.remove(key.storageId) else updated.add(key.storageId)
+                                    viewModel.setPatchProfileHiddenActions(updated)
+                                }
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .clickable { setVisible(!visible) }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = stringResource(key.labelRes),
+                                        modifier = Modifier.weight(1f),
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    ExpressiveSettingsSwitch(
+                                        checked = visible,
+                                        onCheckedChange = setVisible
+                                    )
+                                }
+                            }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = { viewModel.setPatchProfileHiddenActions(emptySet()) }
+                        ) {
+                            Text(stringResource(R.string.patch_profile_action_visibility_reset))
+                        }
+                        TextButton(
+                            onClick = {
+                                profileWorkingOrder.clear()
+                                profileWorkingOrder.addAll(PatchProfileActionKey.DefaultOrder)
+                                viewModel.setPatchProfileActionOrder(PatchProfileActionKey.DefaultOrder)
+                            }
+                        ) {
+                            Text(stringResource(R.string.patch_profile_action_order_reset))
+                        }
+                    }
+                }
+            }
         }
         }
 
@@ -2190,11 +2329,11 @@ fun AdvancedSettingsScreen(
 
 enum class AdvancedSettingsMode(
     @StringRes val titleRes: Int,
-    val destination: Settings.Destination
+    val destination: NavigationSettings.Destination
 ) {
-    APP_MANAGER(R.string.advanced, Settings.Advanced),
-    PATCHER(R.string.patcher_category, Settings.Patcher),
-    ADVANCED_SYSTEM(R.string.advanced_system, Settings.AdvancedSystem)
+    APP_MANAGER(R.string.advanced, NavigationSettings.Advanced),
+    PATCHER(R.string.patcher_category, NavigationSettings.Patcher),
+    ADVANCED_SYSTEM(R.string.advanced_system, NavigationSettings.AdvancedSystem)
 }
 
 private enum class InstallerDialogTarget {
@@ -2705,6 +2844,106 @@ private fun SavedAppActionPreviewRow(
     }
 }
 
+@Composable
+private fun PatchProfileActionPreview(
+    order: List<PatchProfileActionKey>,
+    hiddenActions: Set<String> = emptySet(),
+    modifier: Modifier = Modifier,
+    rowState: LazyListState = rememberLazyListState(),
+    reorderableState: sh.calvin.reorderable.ReorderableLazyListState
+) {
+    val density = LocalDensity.current
+    val glowRadiusPx = remember(density) { with(density) { 200.dp.toPx() } }
+
+    Box(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+            tonalElevation = 0.dp,
+            shadowElevation = 6.dp,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f)),
+            modifier = Modifier.widthIn(max = 520.dp)
+        ) {
+            Box {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .blur(26.dp)
+                        .background(
+                            Brush.radialGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                    Color.Transparent
+                                ),
+                                radius = glowRadiusPx
+                            )
+                        )
+                )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.16f))
+                )
+
+                Column(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.End
+                ) {
+                    PatchProfileActionPreviewRow(
+                        keys = order,
+                        hiddenActions = hiddenActions,
+                        state = rowState,
+                        reorderableState = reorderableState
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PatchProfileActionPreviewRow(
+    keys: List<PatchProfileActionKey>,
+    hiddenActions: Set<String>,
+    state: LazyListState,
+    reorderableState: sh.calvin.reorderable.ReorderableLazyListState
+) {
+    LazyRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp),
+        state = state,
+        contentPadding = PaddingValues(horizontal = 4.dp)
+    ) {
+        items(
+            items = keys,
+            key = { key -> key.storageId }
+        ) { key ->
+            ReorderableItem(reorderableState, key = key.storageId) { isDragging ->
+                Box(
+                    modifier = Modifier
+                        .fillParentMaxHeight()
+                        .padding(horizontal = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    SelectionActionPreviewChip(
+                        icon = previewIconForProfileAction(key),
+                        label = stringResource(key.labelRes),
+                        dragging = isDragging,
+                        ghost = isDragging,
+                        hidden = key.storageId in hiddenActions,
+                        modifier = Modifier.longPressDraggableHandle()
+                    )
+                }
+            }
+        }
+    }
+}
+
 private fun previewIconForBundleAction(key: PatchBundleActionKey): ImageVector =
     when (key) {
         PatchBundleActionKey.EDIT -> Icons.Outlined.Edit
@@ -2723,6 +2962,13 @@ private fun previewIconForSavedAppAction(key: SavedAppActionKey): ImageVector =
         SavedAppActionKey.INSTALL_UPDATE -> Icons.Outlined.InstallMobile
         SavedAppActionKey.DELETE -> Icons.Outlined.Delete
         SavedAppActionKey.REPATCH -> Icons.Outlined.Update
+    }
+
+private fun previewIconForProfileAction(key: PatchProfileActionKey): ImageVector =
+    when (key) {
+        PatchProfileActionKey.RENAME -> Icons.Outlined.Edit
+        PatchProfileActionKey.VIEW_PATCHES -> Icons.Outlined.Extension
+        PatchProfileActionKey.SETTINGS -> Icons.Outlined.Settings
     }
 
 @Composable

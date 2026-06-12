@@ -425,8 +425,14 @@ fun PatchesSelectorScreen(
                 }
             }
     }
-    InterceptBackHandler(enabled = !dialogsOpen && (searchActive || searchExpanded || query.isNotBlank())) {
+    fun handlePatchSelectorBack() {
         when {
+            showBottomSheet -> {
+                showBottomSheet = false
+            }
+            actionsExpanded -> {
+                actionsExpanded = false
+            }
             useFallbackSearch && searchActive -> {
                 searchActive = false
             }
@@ -438,7 +444,11 @@ fun PatchesSelectorScreen(
                 }
             }
             query.isNotBlank() -> updateQuery("")
+            else -> onBackClick()
         }
+    }
+    InterceptBackHandler(enabled = !dialogsOpen) {
+        handlePatchSelectorBack()
     }
     LaunchedEffect(searchActive, useFallbackSearch) {
         if (useFallbackSearch && searchActive) {
@@ -1346,7 +1356,7 @@ fun PatchesSelectorScreen(
             if (useFallbackSearch) {
                 AppTopBar(
                     title = stringResource(R.string.patch_selector_item),
-                    onBackClick = onBackClick,
+                    onBackClick = ::handlePatchSelectorBack,
                     actions = {
                         IconButton(onClick = { searchActive = true }) {
                             Icon(
@@ -1442,7 +1452,7 @@ fun PatchesSelectorScreen(
                                         }
                                     }
                                     query.isNotBlank() -> updateQuery("")
-                                    else -> onBackClick()
+                                    else -> handlePatchSelectorBack()
                                 }
                             }
                         ) {

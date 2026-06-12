@@ -175,6 +175,7 @@
 - Bumped Morphe Patcher to `1.5.2`
 - Added an APK signer tool to the `Tools` tab for signing APKs with the manager's current signing certificate https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/504
 - Centered dialog titles that were still left-aligned in several dialogs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/534
+- Added patch profile action button ordering and visibility settings https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/482
 
 
 # Bug fixes
@@ -312,6 +313,7 @@
 - Fixed ReVanced patching failures by retrying the Write patched APK step with the alternate AAPT2 binary when the selected AAPT2 fails https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/460
 - Fixed ReVanced v22 AAPT2 selection so it uses the sanitized APK input before opening the patcher session
 - Fixed color option detection so path-like fields are not mistaken for color values
+- Fixed Android back navigation on the patch selector so it matches the toolbar back behavior https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/408
 
 
 # Refactors

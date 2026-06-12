@@ -442,6 +442,8 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.patch_bundle_action_visibility_title, R.string.patch_bundle_action_visibility_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.saved_app_action_order_title, R.string.saved_app_action_order_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.saved_app_action_visibility_title, R.string.saved_app_action_visibility_description, R.string.patcher_category, Settings.Patcher),
+            SearchEntry(R.string.patch_profile_action_order_title, R.string.patch_profile_action_order_description, R.string.patcher_category, Settings.Patcher),
+            SearchEntry(R.string.patch_profile_action_visibility_title, R.string.patch_profile_action_visibility_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.export_name_format, R.string.export_name_format_description, R.string.advanced_system, Settings.AdvancedSystem),
             SearchEntry(R.string.debug_logs_export, null, R.string.advanced_system, Settings.AdvancedSystem),
             SearchEntry(R.string.about_device, null, R.string.advanced_system, Settings.AdvancedSystem),

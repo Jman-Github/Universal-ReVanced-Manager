@@ -19,6 +19,7 @@ import kotlin.io.path.isReadable
 import app.urv.manager.ui.model.PatchSelectionActionKey
 import app.urv.manager.ui.model.PatchBundleActionKey
 import app.urv.manager.ui.model.SavedAppActionKey
+import app.urv.manager.ui.model.PatchProfileActionKey
 
 enum class SearchForUpdatesBackgroundInterval(val displayName: Int, val value: Long) {
     NEVER(R.string.never, 0),
@@ -50,6 +51,8 @@ class PreferencesManager(
             PatchBundleActionKey.DefaultOrder.joinToString(",") { it.storageId }
         private val SAVED_APP_ACTION_ORDER_DEFAULT =
             SavedAppActionKey.DefaultOrder.joinToString(",") { it.storageId }
+        private val PATCH_PROFILE_ACTION_ORDER_DEFAULT =
+            PatchProfileActionKey.DefaultOrder.joinToString(",") { it.storageId }
         val DEFAULT_ANNOUNCEMENT_TAGS: Set<String> = emptySet()
         const val MIN_BUNDLE_CHANGELOG_HISTORY_LIMIT = 1
         const val DEFAULT_BUNDLE_CHANGELOG_FETCH_LIMIT = 20
@@ -195,6 +198,10 @@ class PreferencesManager(
         stringPreference("saved_app_action_order", SAVED_APP_ACTION_ORDER_DEFAULT)
     val savedAppHiddenActions =
         stringSetPreference("saved_app_hidden_actions", emptySet())
+    val patchProfileActionOrder =
+        stringPreference("patch_profile_action_order", PATCH_PROFILE_ACTION_ORDER_DEFAULT)
+    val patchProfileHiddenActions =
+        stringSetPreference("patch_profile_hidden_actions", emptySet())
     val patchSelectionHiddenActions =
         stringSetPreference("patch_selection_hidden_actions", emptySet())
     val patchSelectionShowVersionTags = booleanPreference("patch_selection_show_version_tags", true)
@@ -319,6 +326,8 @@ class PreferencesManager(
         val patchBundleHiddenActions: Set<String>? = null,
         val savedAppActionOrder: String? = null,
         val savedAppHiddenActions: Set<String>? = null,
+        val patchProfileActionOrder: String? = null,
+        val patchProfileHiddenActions: Set<String>? = null,
         val acknowledgedDownloaderPlugins: Set<String>? = null,
         val downloaderPluginSourcesJson: String? = null,
         val acknowledgedPatcherRuntimePlugins: Set<String>? = null,
@@ -481,7 +490,9 @@ class PreferencesManager(
             patchBundleActionOrder = patchBundleActionOrder.get(),
             patchBundleHiddenActions = patchBundleHiddenActions.get(),
             savedAppActionOrder = savedAppActionOrder.get(),
-            savedAppHiddenActions = savedAppHiddenActions.get()
+            savedAppHiddenActions = savedAppHiddenActions.get(),
+            patchProfileActionOrder = patchProfileActionOrder.get(),
+            patchProfileHiddenActions = patchProfileHiddenActions.get()
         )
     }
 
@@ -633,6 +644,8 @@ class PreferencesManager(
         snapshot.patchBundleHiddenActions?.let { patchBundleHiddenActions.value = it }
         snapshot.savedAppActionOrder?.let { savedAppActionOrder.value = it }
         snapshot.savedAppHiddenActions?.let { savedAppHiddenActions.value = it }
+        snapshot.patchProfileActionOrder?.let { patchProfileActionOrder.value = it }
+        snapshot.patchProfileHiddenActions?.let { patchProfileHiddenActions.value = it }
     }
 
     private fun EditorContext.importDiscoverySettings(snapshot: SettingsSnapshot) {
