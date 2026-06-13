@@ -825,6 +825,11 @@ Patch profiles are not affected.</string>
     <string name="export_name_format_error_blank">Filename format cannot be blank.</string>
     <string name="export_name_format_current">Current pattern: %1$s</string>
     <string name="export_name_format_insert">Insert</string>
+    <string name="merged_apk_name_format">Merged APK filename format</string>
+    <string name="merged_apk_name_format_description">Customize the default filename for APKs saved from the merge split APKs tool</string>
+    <string name="merged_apk_name_format_dialog_title">Merged APK filename format</string>
+    <string name="merged_apk_name_format_dialog_supporting">Use the placeholders below to build the default merged APK filename. The .apk extension is added automatically if missing.</string>
+    <string name="merged_apk_name_format_reset">Reset to default</string>
     <string name="export_name_variable_app_name">App name</string>
     <string name="export_name_variable_app_name_description">Replaced with the app\'s display name.</string>
     <string name="export_name_variable_package_name">Package name</string>

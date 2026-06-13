@@ -44,7 +44,8 @@ import app.urv.manager.plugin.downloader.GetScope
 import app.urv.manager.plugin.downloader.OutputDownloadScope
 import app.urv.manager.plugin.downloader.PluginHostApi
 import app.urv.manager.plugin.downloader.UserInteractionException
-import app.urv.manager.util.FilenameUtils
+import app.urv.manager.util.ExportNameFormatter
+import app.urv.manager.util.PatchedAppExportData
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -53,8 +54,6 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 import java.util.Date
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.CancellationException
@@ -93,8 +92,6 @@ class DashboardViewModel(
     private val keystoreManager: KeystoreManager,
     private val pm: PM,
 ) : ViewModel() {
-    private val mergeOutputTimestampFormatter = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
-
     val availablePatches =
         patchBundleRepository.enabledBundlesInfoFlow.map { it.values.sumOf { bundle -> bundle.patches.size } }
     val patchBundlesLoading = patchBundleRepository.reloadInProgress
@@ -1810,17 +1807,26 @@ class DashboardViewModel(
         return "$base-merged.apk"
     }
 
-    private fun resolveMergedOutputName(
+    private suspend fun resolveMergedOutputName(
         mergedApk: File,
         fallbackSourceName: String?
     ): String {
         val packageInfo = pm.getPackageInfo(mergedApk) ?: return defaultMergedOutputName(fallbackSourceName)
-        val packageName = FilenameUtils.sanitize(packageInfo.packageName).takeIf { it.isNotBlank() }
+        val packageName = packageInfo.packageName.takeIf { it.isNotBlank() }
             ?: return defaultMergedOutputName(fallbackSourceName)
-        val version = FilenameUtils.sanitize(packageInfo.versionName.orEmpty())
-            .ifBlank { "unknown" }
-        val timestamp = mergeOutputTimestampFormatter.format(LocalDateTime.now())
-        return "$packageName-$version-$timestamp.apk"
+        val appName = runCatching { pm.run { packageInfo.label() } }
+            .getOrNull()
+            ?.takeIf { it.isNotBlank() }
+        return ExportNameFormatter.format(
+            prefs.mergedApkExportFormat.get(),
+            PatchedAppExportData(
+                appName = appName,
+                packageName = packageName,
+                appVersion = packageInfo.versionName,
+                patchBundleNames = listOf("Merged")
+            ),
+            ExportNameFormatter.DEFAULT_MERGED_APK_TEMPLATE
+        )
     }
 
     override fun onCleared() {

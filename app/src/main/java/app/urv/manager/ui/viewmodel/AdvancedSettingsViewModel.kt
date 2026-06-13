@@ -156,6 +156,10 @@ class AdvancedSettingsViewModel(
         prefs.patchedAppExportFormat.update(value)
     }
 
+    fun setMergedApkExportFormat(value: String) = viewModelScope.launch(Dispatchers.Default) {
+        prefs.mergedApkExportFormat.update(value)
+    }
+
     fun setMorpheBytecodeMode(mode: MorpheBytecodeMode) = viewModelScope.launch(Dispatchers.Default) {
         prefs.morpheBytecodeMode.update(mode)
     }
@@ -166,6 +170,10 @@ class AdvancedSettingsViewModel(
 
     fun resetPatchedAppExportFormat() = viewModelScope.launch(Dispatchers.Default) {
         prefs.patchedAppExportFormat.update(prefs.patchedAppExportFormat.default)
+    }
+
+    fun resetMergedApkExportFormat() = viewModelScope.launch(Dispatchers.Default) {
+        prefs.mergedApkExportFormat.update(prefs.mergedApkExportFormat.default)
     }
 
     fun setSavedAppsEnabled(enabled: Boolean) = viewModelScope.launch(Dispatchers.Default) {

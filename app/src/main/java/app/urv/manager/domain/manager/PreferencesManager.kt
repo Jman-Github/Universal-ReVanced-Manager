@@ -99,6 +99,10 @@ class PreferencesManager(
         "patched_app_export_format",
         ExportNameFormatter.DEFAULT_TEMPLATE
     )
+    val mergedApkExportFormat = stringPreference(
+        "merged_apk_export_format",
+        ExportNameFormatter.DEFAULT_MERGED_APK_TEMPLATE
+    )
     val officialBundleRemoved = booleanPreference("official_bundle_removed", false)
     val officialBundleSortOrder = intPreference("official_bundle_sort_order", -1)
     val officialBundleCustomDisplayName = stringPreference("official_bundle_custom_display_name", "")
@@ -277,6 +281,7 @@ class PreferencesManager(
         val disableSavedAppOverwrite: Boolean? = null,
         val showSavedAppBundleUpdateBadges: Boolean? = null,
         val patchedAppExportFormat: String? = null,
+        val mergedApkExportFormat: String? = null,
         val officialBundleRemoved: Boolean? = null,
         val officialBundleCustomDisplayName: String? = null,
         val dashboardBundlesFabCollapsed: Boolean? = null,
@@ -454,6 +459,7 @@ class PreferencesManager(
             disableSavedAppOverwrite = disableSavedAppOverwrite.get(),
             showSavedAppBundleUpdateBadges = showSavedAppBundleUpdateBadges.get(),
             patchedAppExportFormat = patchedAppExportFormat.get(),
+            mergedApkExportFormat = mergedApkExportFormat.get(),
             chooseInstallerPerInstall = chooseInstallerPerInstall.get(),
             installerPrimary = installerPrimary.get(),
             installerFallback = installerFallback.get(),
@@ -609,6 +615,7 @@ class PreferencesManager(
         snapshot.disableSavedAppOverwrite?.let { disableSavedAppOverwrite.value = it }
         snapshot.showSavedAppBundleUpdateBadges?.let { showSavedAppBundleUpdateBadges.value = it }
         snapshot.patchedAppExportFormat?.let { patchedAppExportFormat.value = it }
+        snapshot.mergedApkExportFormat?.let { mergedApkExportFormat.value = it }
         snapshot.chooseInstallerPerInstall?.let { chooseInstallerPerInstall.value = it }
         snapshot.installerPrimary?.let { installerPrimary.value = it }
         snapshot.installerFallback?.let { installerFallback.value = it }

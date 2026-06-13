@@ -271,7 +271,9 @@ fun AdvancedSettingsScreen(
         )
     }
     val exportFormat by viewModel.prefs.patchedAppExportFormat.getAsState()
+    val mergedApkExportFormat by viewModel.prefs.mergedApkExportFormat.getAsState()
     var showExportFormatDialog by rememberSaveable { mutableStateOf(false) }
+    var showMergedApkExportFormatDialog by rememberSaveable { mutableStateOf(false) }
     if (showExportFormatDialog) {
         ExportNameFormatDialog(
             currentValue = exportFormat,
@@ -280,6 +282,29 @@ fun AdvancedSettingsScreen(
                 viewModel.setPatchedAppExportFormat(it)
                 showExportFormatDialog = false
             }
+        )
+    }
+    if (showMergedApkExportFormatDialog) {
+        ExportNameFormatDialog(
+            currentValue = mergedApkExportFormat,
+            onDismiss = { showMergedApkExportFormatDialog = false },
+            onSave = {
+                viewModel.setMergedApkExportFormat(it)
+                showMergedApkExportFormatDialog = false
+            },
+            titleRes = R.string.merged_apk_name_format_dialog_title,
+            supportingRes = R.string.merged_apk_name_format_dialog_supporting,
+            fieldLabelRes = R.string.merged_apk_name_format,
+            resetLabelRes = R.string.merged_apk_name_format_reset,
+            defaultFormatTemplate = ExportNameFormatter.DEFAULT_MERGED_APK_TEMPLATE,
+            formatPreview = {
+                ExportNameFormatter.preview(
+                    it,
+                    ExportNameFormatter.mergedApkPreviewData(),
+                    ExportNameFormatter.DEFAULT_MERGED_APK_TEMPLATE
+                )
+            },
+            availableVariables = ExportNameFormatter.availableMergedApkVariables()
         )
     }
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
@@ -1320,6 +1345,42 @@ fun AdvancedSettingsScreen(
                         headline = R.string.merge_split_auto_expand_running_steps_exclusive,
                         description = R.string.merge_split_auto_expand_running_steps_exclusive_description,
                         enabled = splitMergeAutoExpandExclusiveEnabled
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.merged_apk_name_format,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsConfigurableItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(R.string.merged_apk_name_format),
+                        supportingContentSlot = {
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(
+                                    text = stringResource(R.string.merged_apk_name_format_description),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.export_name_format_current, mergedApkExportFormat),
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                        style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        },
+                        secondaryActionLabel = stringResource(R.string.reset),
+                        onSecondaryAction = { viewModel.resetMergedApkExportFormat() },
+                        secondaryActionEnabled = mergedApkExportFormat != viewModel.prefs.mergedApkExportFormat.default,
+                        primaryActionLabel = stringResource(R.string.edit),
+                        onPrimaryAction = { showMergedApkExportFormatDialog = true }
                     )
                 }
             }
@@ -2975,7 +3036,14 @@ private fun previewIconForProfileAction(key: PatchProfileActionKey): ImageVector
 private fun ExportNameFormatDialog(
     currentValue: String,
     onDismiss: () -> Unit,
-    onSave: (String) -> Unit
+    onSave: (String) -> Unit,
+    @StringRes titleRes: Int = R.string.export_name_format_dialog_title,
+    @StringRes supportingRes: Int = R.string.export_name_format_dialog_supporting,
+    @StringRes fieldLabelRes: Int = R.string.export_name_format,
+    @StringRes resetLabelRes: Int = R.string.export_name_format_reset,
+    defaultFormatTemplate: String = ExportNameFormatter.DEFAULT_TEMPLATE,
+    formatPreview: (String) -> String = { ExportNameFormatter.preview(it) },
+    availableVariables: List<ExportNameFormatter.Variable> = ExportNameFormatter.availableVariables()
 ) {
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -2985,9 +3053,9 @@ private fun ExportNameFormatDialog(
     )
     var useAppendInsertionFallback by rememberSaveable(currentValue) { mutableStateOf(true) }
     var showError by rememberSaveable { mutableStateOf(false) }
-    val variables = remember { ExportNameFormatter.availableVariables() }
+    val variables = remember(availableVariables) { availableVariables }
     val preview = remember(textFieldState.text) {
-        ExportNameFormatter.preview(textFieldState.text.toString())
+        formatPreview(textFieldState.text.toString())
     }
 
     val helperScrollState = rememberScrollState()
@@ -3027,14 +3095,14 @@ private fun ExportNameFormatDialog(
                 Text(stringResource(R.string.cancel))
             }
         },
-        title = { CenteredDialogTitle(stringResource(R.string.export_name_format_dialog_title)) },
+        title = { CenteredDialogTitle(stringResource(titleRes)) },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
                 Text(
-                    text = stringResource(R.string.export_name_format_dialog_supporting),
+                    text = stringResource(supportingRes),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -3042,7 +3110,7 @@ private fun ExportNameFormatDialog(
                     state = textFieldState,
                     lineLimits = TextFieldLineLimits.SingleLine,
                     scrollState = formatFieldScrollState,
-                    label = { Text(stringResource(R.string.export_name_format)) },
+                    label = { Text(stringResource(fieldLabelRes)) },
                     isError = showError && textFieldState.text.isBlank(),
                     supportingText = if (showError && textFieldState.text.isBlank()) {
                         { Text(stringResource(R.string.export_name_format_error_blank)) }
@@ -3157,17 +3225,16 @@ private fun ExportNameFormatDialog(
                     }
                     TextButton(
                         onClick = {
-                            val defaultTemplate = ExportNameFormatter.DEFAULT_TEMPLATE
                             textFieldState.edit {
-                                replace(0, length, defaultTemplate)
-                                selection = TextRange(defaultTemplate.length)
+                                replace(0, length, defaultFormatTemplate)
+                                selection = TextRange(defaultFormatTemplate.length)
                             }
                             useAppendInsertionFallback = false
                             showError = false
                         },
                         modifier = Modifier.align(Alignment.Start)
                     ) {
-                        Text(stringResource(R.string.export_name_format_reset))
+                        Text(stringResource(resetLabelRes))
                     }
                 }
             }

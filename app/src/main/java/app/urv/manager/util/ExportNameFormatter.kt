@@ -17,6 +17,7 @@ data class PatchedAppExportData(
 
 object ExportNameFormatter {
     const val DEFAULT_TEMPLATE = "{app name}-{app version}-{patches version}.apk"
+    const val DEFAULT_MERGED_APK_TEMPLATE = "{app name}-{app version}-merged.apk"
 
     data class Variable(
         val token: String,
@@ -40,24 +41,43 @@ object ExportNameFormatter {
         Variable("{date}", app.universal.revanced.manager.R.string.export_name_variable_date, app.universal.revanced.manager.R.string.export_name_variable_date_description)
     )
 
-    fun format(template: String?, data: PatchedAppExportData): String {
-        val resolvedTemplate = template?.takeIf { it.isNotBlank() } ?: DEFAULT_TEMPLATE
+    fun availableMergedApkVariables(): List<Variable> = availableVariables().filterNot { variable ->
+        variable.token == "{patches version}" || variable.token == "{patch bundle names}"
+    }
+
+    fun format(
+        template: String?,
+        data: PatchedAppExportData,
+        defaultTemplate: String = DEFAULT_TEMPLATE
+    ): String {
+        val resolvedTemplate = template?.takeIf { it.isNotBlank() } ?: defaultTemplate
         val sanitizedTemplate = replaceVariables(resolvedTemplate, data)
         val ensuredExtension = ensureExtension(sanitizedTemplate)
-        val clean = ensuredExtension.trim().ifEmpty { DEFAULT_TEMPLATE }
+        val clean = ensuredExtension.trim().ifEmpty { defaultTemplate }
         return FilenameUtils.sanitize(clean)
     }
 
-    fun preview(template: String): String = format(
-        template,
-        PatchedAppExportData(
-            appName = "ExampleApp",
-            packageName = "com.example.app",
-            appVersion = "1.2.3",
-            patchBundleVersions = listOf("2.201.0"),
-            patchBundleNames = listOf("ReVanced Extended"),
-            generatedAt = Instant.now()
-        )
+    fun preview(
+        template: String,
+        data: PatchedAppExportData = patchedAppPreviewData(),
+        defaultTemplate: String = DEFAULT_TEMPLATE
+    ): String = format(template, data, defaultTemplate)
+
+    fun patchedAppPreviewData() = PatchedAppExportData(
+        appName = "ExampleApp",
+        packageName = "com.example.app",
+        appVersion = "1.2.3",
+        patchBundleVersions = listOf("2.201.0"),
+        patchBundleNames = listOf("ReVanced Extended"),
+        generatedAt = Instant.now()
+    )
+
+    fun mergedApkPreviewData() = PatchedAppExportData(
+        appName = "ExampleApp",
+        packageName = "com.example.app",
+        appVersion = "1.2.3",
+        patchBundleNames = listOf("Merged"),
+        generatedAt = Instant.now()
     )
 
     private fun replaceVariables(template: String, data: PatchedAppExportData): String {

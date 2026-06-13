@@ -429,6 +429,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.merge_split_auto_collapse_steps, R.string.merge_split_auto_collapse_steps_description, R.string.merge_split_flow_section, Settings.Patcher),
             SearchEntry(R.string.merge_split_auto_expand_steps, R.string.merge_split_auto_expand_steps_description, R.string.merge_split_flow_section, Settings.Patcher),
             SearchEntry(R.string.merge_split_auto_expand_running_steps_exclusive, R.string.merge_split_auto_expand_running_steps_exclusive_description, R.string.merge_split_flow_section, Settings.Patcher),
+            SearchEntry(R.string.merged_apk_name_format, R.string.merged_apk_name_format_description, R.string.merge_split_flow_section, Settings.Patcher),
             SearchEntry(R.string.patcher_saved_apps_title, R.string.patcher_saved_apps_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.saved_apps_disable_overwrite_title, R.string.saved_apps_disable_overwrite_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.saved_apps_show_bundle_update_badges_title, R.string.saved_apps_show_bundle_update_badges_description, R.string.patcher_category, Settings.Patcher),
