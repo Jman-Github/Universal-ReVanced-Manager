@@ -198,6 +198,11 @@ fun DownloadsSettingsScreen(
                     text = stringResource(R.string.plugins_help_description),
                     linkLabel = stringResource(R.string.here),
                     url = "https://github.com/Jman-Github/Universal-ReVanced-Manager?tab=readme-ov-file#-supported-downloader-plugins",
+                    modifier = Modifier.fillMaxWidth(),
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
                 )
             },
             confirmButton = {

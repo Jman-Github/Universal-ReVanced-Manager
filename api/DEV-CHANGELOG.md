@@ -37,6 +37,7 @@
 - Improved patch bundle and patch profile import result messages with updated and skipped counts https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/386
 - Centered install result dialog titles https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/537
 - Added a filename format setting for merged APKs saved from the split APK merger tool https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/318
+- Centered body text in the downloader help and language restart dialogs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/539
 
 
 # Bug fixes

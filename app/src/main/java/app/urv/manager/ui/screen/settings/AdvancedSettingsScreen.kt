@@ -355,7 +355,13 @@ fun AdvancedSettingsScreen(
                 }
             },
             title = { CenteredDialogTitle(stringResource(R.string.language_restart_title)) },
-            text = { Text(stringResource(R.string.language_restart_message)) }
+            text = {
+                Text(
+                    text = stringResource(R.string.language_restart_message),
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+            }
         )
     }
     val selectedLanguageLabel = when (appLanguage) {
