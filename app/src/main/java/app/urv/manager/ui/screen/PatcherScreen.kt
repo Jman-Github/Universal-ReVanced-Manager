@@ -731,7 +731,7 @@ fun PatcherScreen(
         AlertDialog(
             onDismissRequest = viewModel::dismissInstallFailureMessage,
             title = {
-                Text(
+                CenteredDialogTitle(
                     stringResource(
                         if (viewModel.lastInstallType == InstallType.MOUNT) R.string.mount_app_fail_title else R.string.install_app_fail_title
                     )
@@ -791,7 +791,7 @@ fun PatcherScreen(
                     AlertDialog(
                         onDismissRequest = viewModel::dismissInstallFailureMessage,
                         title = {
-                            Text(
+                            CenteredDialogTitle(
                                 stringResource(
                                     if (viewModel.lastInstallType == InstallType.MOUNT) R.string.mount_app_fail_title else R.string.install_app_fail_title
                                 )
