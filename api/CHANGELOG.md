@@ -178,7 +178,7 @@
 - Added patch profile action button ordering and visibility settings https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/482
 - Centered additional dialog titles that were still left-aligned https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/536
 - Improved patch bundle and patch profile import result messages with updated and skipped counts https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/386
-- Centered install result dialog titles https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/536
+- Centered install result dialog titles https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/537
 
 
 # Bug fixes
