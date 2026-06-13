@@ -378,13 +378,26 @@
     <string name="import_patch_bundles_description">Restore remote patch bundles from a JSON file</string>
     <string name="import_patch_bundles_fail">Could not import patch bundles: %s</string>
     <string name="import_patch_bundles_in_progress">Importing...</string>
+    <string name="import_result_with_skipped">with %d skipped</string>
     <plurals name="import_patch_bundles_success_quantity">
         <item quantity="one">Imported %d patch bundle</item>
         <item quantity="other">Imported %d patch bundles</item>
     </plurals>
+    <plurals name="import_patch_bundles_partial_quantity">
+        <item quantity="one">Imported %1$d patch bundle with %2$d skipped</item>
+        <item quantity="other">Imported %1$d patch bundles with %2$d skipped</item>
+    </plurals>
     <plurals name="import_patch_bundles_updated_quantity">
         <item quantity="one">Updated %d patch bundle</item>
         <item quantity="other">Updated %d patch bundles</item>
+    </plurals>
+    <plurals name="import_patch_bundles_updated_partial_quantity">
+        <item quantity="one">Updated %1$d patch bundle with %2$d skipped</item>
+        <item quantity="other">Updated %1$d patch bundles with %2$d skipped</item>
+    </plurals>
+    <plurals name="import_patch_bundles_skipped_quantity">
+        <item quantity="one">Skipped %d patch bundle</item>
+        <item quantity="other">Skipped %d patch bundles</item>
     </plurals>
     <string name="import_patch_bundles_success">Imported %d patch bundles</string>
     <string name="import_patch_bundles_updated">Updated %d patch bundles</string>
@@ -402,9 +415,17 @@
         <item quantity="one">Imported %d patch profile</item>
         <item quantity="other">Imported %d patch profiles</item>
     </plurals>
+    <plurals name="import_patch_profiles_updated_quantity">
+        <item quantity="one">Updated %d patch profile</item>
+        <item quantity="other">Updated %d patch profiles</item>
+    </plurals>
     <plurals name="import_patch_profiles_partial_quantity">
         <item quantity="one">Imported %1$d patch profile with %2$d skipped</item>
         <item quantity="other">Imported %1$d patch profiles with %2$d skipped</item>
+    </plurals>
+    <plurals name="import_patch_profiles_updated_partial_quantity">
+        <item quantity="one">Updated %1$d patch profile with %2$d skipped</item>
+        <item quantity="other">Updated %1$d patch profiles with %2$d skipped</item>
     </plurals>
     <plurals name="import_patch_profiles_skipped_quantity">
         <item quantity="one">Skipped %d duplicate patch profile</item>

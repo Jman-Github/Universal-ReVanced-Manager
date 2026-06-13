@@ -143,7 +143,8 @@ enum class OfficialBundleState {
 
 private data class PatchBundleImportSummary(
     val created: Int,
-    val updated: Int
+    val updated: Int,
+    val skipped: Int
 )
 
 private data class PatchBundleExportResult(
@@ -701,6 +702,83 @@ class ImportExportViewModel(
         selectionAction = SelectionAction.ExportAllBundles
     }
 
+    private fun buildPatchBundleImportMessage(
+        imported: Int,
+        updated: Int,
+        skipped: Int
+    ) = buildImportResultMessage(
+        imported = imported,
+        updated = updated,
+        skipped = skipped,
+        importedQuantity = R.plurals.import_patch_bundles_success_quantity,
+        importedPartialQuantity = R.plurals.import_patch_bundles_partial_quantity,
+        updatedQuantity = R.plurals.import_patch_bundles_updated_quantity,
+        updatedPartialQuantity = R.plurals.import_patch_bundles_updated_partial_quantity,
+        skippedQuantity = R.plurals.import_patch_bundles_skipped_quantity,
+        none = R.string.import_patch_bundles_none
+    )
+
+    private fun buildPatchProfileImportMessage(
+        imported: Int,
+        updated: Int,
+        skipped: Int
+    ) = buildImportResultMessage(
+        imported = imported,
+        updated = updated,
+        skipped = skipped,
+        importedQuantity = R.plurals.import_patch_profiles_success_quantity,
+        importedPartialQuantity = R.plurals.import_patch_profiles_partial_quantity,
+        updatedQuantity = R.plurals.import_patch_profiles_updated_quantity,
+        updatedPartialQuantity = R.plurals.import_patch_profiles_updated_partial_quantity,
+        skippedQuantity = R.plurals.import_patch_profiles_skipped_quantity,
+        none = R.string.import_patch_profiles_none
+    )
+
+    private fun buildImportResultMessage(
+        imported: Int,
+        updated: Int,
+        skipped: Int,
+        importedQuantity: Int,
+        importedPartialQuantity: Int,
+        updatedQuantity: Int,
+        updatedPartialQuantity: Int,
+        skippedQuantity: Int,
+        none: Int
+    ): String {
+        val resources = app.resources
+        val importedText = {
+            resources.getQuantityString(importedQuantity, imported, imported)
+        }
+        val updatedText = {
+            resources.getQuantityString(updatedQuantity, updated, updated)
+        }
+        val skippedText = {
+            app.getString(R.string.import_result_with_skipped, skipped)
+        }
+        return when {
+            imported > 0 && updated > 0 && skipped > 0 ->
+                "${importedText()}, ${updatedText().replaceFirstChar { it.lowercase() }}, ${skippedText()}"
+            imported > 0 && updated > 0 ->
+                "${importedText()}, ${updatedText().replaceFirstChar { it.lowercase() }}"
+            imported > 0 && skipped > 0 -> resources.getQuantityString(
+                importedPartialQuantity,
+                imported,
+                imported,
+                skipped
+            )
+            imported > 0 -> importedText()
+            updated > 0 && skipped > 0 -> resources.getQuantityString(
+                updatedPartialQuantity,
+                updated,
+                updated,
+                skipped
+            )
+            updated > 0 -> updatedText()
+            skipped > 0 -> resources.getQuantityString(skippedQuantity, skipped, skipped)
+            else -> app.getString(none)
+        }
+    }
+
     fun importPatchBundles(
         source: Uri,
         onToast: (String) -> Unit = { app.toast(it) }
@@ -754,6 +832,7 @@ class ImportExportViewModel(
 
                             var createdCount = 0
                             var updatedCount = 0
+                            var skippedCount = 0
                             var officialSnapshot: PatchBundleSnapshot? = null
                             val pendingEnabledUpdates = LinkedHashMap<Int, Boolean>()
                             val total = exportFile.bundles.size.coerceAtLeast(1)
@@ -823,6 +902,7 @@ class ImportExportViewModel(
                                     continue
                                 }
                                 if (endpoint.isBlank()) {
+                                    skippedCount += 1
                                     finishImportItem()
                                     continue
                                 }
@@ -859,6 +939,7 @@ class ImportExportViewModel(
                                             snapshot.createdAt,
                                             snapshot.updatedAt
                                         )
+                                        changed = true
                                     }
                                     if (snapshot.changelogHistory.isNotEmpty()) {
                                         val existingHistory =
@@ -870,6 +951,11 @@ class ImportExportViewModel(
                                             )
                                             changed = true
                                         }
+                                    }
+                                    if (changed) {
+                                        updatedCount += 1
+                                    } else {
+                                        skippedCount += 1
                                     }
                                     finishImportItem()
                                     continue
@@ -893,6 +979,7 @@ class ImportExportViewModel(
                                     )
                                 } catch (error: Exception) {
                                     Log.e(tag, "Failed to import patch bundle $endpoint", error)
+                                    skippedCount += 1
                                     finishImportItem()
                                     continue
                                 }
@@ -905,6 +992,7 @@ class ImportExportViewModel(
                                         .first { it.endpoint == endpoint }
                                 }
                                 if (created == null) {
+                                    skippedCount += 1
                                     finishImportItem()
                                     continue
                                 }
@@ -1123,7 +1211,7 @@ class ImportExportViewModel(
                                 patchBundleRepository.update(*missingRemotes.toTypedArray())
                             }
 
-                            PatchBundleImportSummary(createdCount, updatedCount)
+                            PatchBundleImportSummary(createdCount, updatedCount, skippedCount)
                         }
                     } finally {
                         toastRepeater.cancel()
@@ -1135,23 +1223,13 @@ class ImportExportViewModel(
                     val totalCreated = summary.created + if (officialCreated) 1 else 0
                     val totalUpdated = summary.updated + if (!officialCreated && officialUpdated) 1 else 0
 
-                    when {
-                        totalCreated > 0 -> onToast(
-                            app.resources.getQuantityString(
-                                R.plurals.import_patch_bundles_success_quantity,
-                                totalCreated,
-                                totalCreated
-                            )
+                    onToast(
+                        buildPatchBundleImportMessage(
+                            imported = totalCreated,
+                            updated = totalUpdated,
+                            skipped = summary.skipped
                         )
-                        totalUpdated > 0 -> onToast(
-                            app.resources.getQuantityString(
-                                R.plurals.import_patch_bundles_updated_quantity,
-                                totalUpdated,
-                                totalUpdated
-                            )
-                        )
-                        else -> onToast(app.getString(R.string.import_patch_bundles_none))
-                    }
+                    )
                     patchBundleRepository.enforceOfficialOrderPreference()
                 }
             }
@@ -1294,37 +1372,13 @@ class ImportExportViewModel(
                 }
 
                 val result = patchProfileRepository.importProfiles(remappedEntries)
-                when {
-                    result.imported > 0 && result.skipped > 0 -> {
-                        onToast(
-                            app.resources.getQuantityString(
-                                R.plurals.import_patch_profiles_partial_quantity,
-                                result.imported,
-                                result.imported,
-                                result.skipped
-                            )
-                        )
-                    }
-                    result.imported > 0 -> {
-                        onToast(
-                            app.resources.getQuantityString(
-                                R.plurals.import_patch_profiles_success_quantity,
-                                result.imported,
-                                result.imported
-                            )
-                        )
-                    }
-                    result.skipped > 0 -> {
-                        onToast(
-                            app.resources.getQuantityString(
-                                R.plurals.import_patch_profiles_skipped_quantity,
-                                result.skipped,
-                                result.skipped
-                            )
-                        )
-                    }
-                    else -> onToast(app.getString(R.string.import_patch_profiles_none))
-                }
+                onToast(
+                    buildPatchProfileImportMessage(
+                        imported = result.imported,
+                        updated = result.updated,
+                        skipped = result.skipped
+                    )
+                )
             }
         }
     }

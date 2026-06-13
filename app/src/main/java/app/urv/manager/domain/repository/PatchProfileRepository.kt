@@ -114,14 +114,27 @@ class PatchProfileRepository(
         dao.getAll().map(PatchProfileEntity::toExportEntry)
 
     suspend fun importProfiles(entries: Collection<PatchProfileExportEntry>): ImportProfilesResult {
-        if (entries.isEmpty()) return ImportProfilesResult(0, 0)
+        if (entries.isEmpty()) return ImportProfilesResult(0, 0, 0)
         var imported = 0
+        var updated = 0
         var skipped = 0
         var nextSortOrder = (dao.getMaxSortOrder() ?: -1) + 1
         for (entry in entries) {
             val existing = dao.findByPackageAndName(entry.packageName, entry.name)
             if (existing != null) {
-                skipped++
+                val updatedEntity = existing.copy(
+                    appVersion = entry.appVersion,
+                    useSelectedApkVersion = entry.useSelectedApkVersion,
+                    autoPatch = entry.autoPatch,
+                    payload = entry.payload,
+                    createdAt = entry.createdAt ?: existing.createdAt
+                )
+                if (updatedEntity != existing) {
+                    dao.upsert(updatedEntity)
+                    updated++
+                } else {
+                    skipped++
+                }
                 continue
             }
             val entity = PatchProfileEntity(
@@ -142,7 +155,7 @@ class PatchProfileRepository(
             imported++
             nextSortOrder += 1
         }
-        return ImportProfilesResult(imported, skipped)
+        return ImportProfilesResult(imported, updated, skipped)
     }
 
     suspend fun reorderProfiles(orderedUids: List<Int>) {
@@ -179,6 +192,7 @@ data class PatchProfileExportEntry(
 
 data class ImportProfilesResult(
     val imported: Int,
+    val updated: Int,
     val skipped: Int
 )
 
