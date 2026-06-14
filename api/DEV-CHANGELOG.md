@@ -9,6 +9,8 @@
 
 # Bug fixes
 
+- Fixed the saved app bundle update badge toggle appearing enabled while disabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/547
+
 
 # v1.8.1-dev.19 (2026-06-14)
 

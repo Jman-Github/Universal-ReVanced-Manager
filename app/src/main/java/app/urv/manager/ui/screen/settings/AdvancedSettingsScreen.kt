@@ -1434,10 +1434,15 @@ fun AdvancedSettingsScreen(
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
+                    val showSavedAppBundleUpdateBadges by viewModel.prefs.showSavedAppBundleUpdateBadges.getAsState()
                     BooleanItem(
                         modifier = highlightModifier,
-                        preference = viewModel.prefs.showSavedAppBundleUpdateBadges,
-                        coroutineScope = viewModel.viewModelScope,
+                        value = savedAppsEnabled && showSavedAppBundleUpdateBadges,
+                        onValueChange = { value ->
+                            viewModel.viewModelScope.launch {
+                                viewModel.prefs.showSavedAppBundleUpdateBadges.update(value)
+                            }
+                        },
                         headline = R.string.saved_apps_show_bundle_update_badges_title,
                         description = R.string.saved_apps_show_bundle_update_badges_description,
                         enabled = savedAppsEnabled
