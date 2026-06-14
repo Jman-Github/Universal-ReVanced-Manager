@@ -814,8 +814,7 @@ class DashboardViewModel(
             runCatching { cacheUseToken?.close() }
             throw error
         }
-        val defaultStripNativeLibs = false
-        val defaultIncludedModules = resolveDefaultSplitSelection(inspection)
+        val defaultSelection = resolveDefaultSplitSelection(inspection)
 
         clearPendingSplitMergeSource()
         pendingSplitMergeSource = PendingSplitMergeSource(
@@ -846,8 +845,8 @@ class DashboardViewModel(
             currentMessage = app.getString(R.string.merge_split_apk_selection_ready),
             inputName = inputDisplayName,
             selection = inspection,
-            selectionIncludedModules = defaultIncludedModules,
-            selectionStripNativeLibs = defaultStripNativeLibs
+            selectionIncludedModules = defaultSelection.includedModules,
+            selectionStripNativeLibs = defaultSelection.excludeExtraNativeLibs
         )
         SplitMergeNotification.clear(app)
         appendSplitMergeLog(app.getString(R.string.merge_split_apk_selection_ready))
@@ -856,15 +855,40 @@ class DashboardViewModel(
         }
     }
 
-    fun rememberSplitMergeSelectionPreset(presetKey: String) {
+    fun rememberSplitMergeSelectionPreset(
+        presetKey: String,
+        excludeUnusedLanguages: Boolean = false,
+        excludeExtraDensities: Boolean = false,
+        excludeExtraNativeLibs: Boolean = false
+    ) {
         viewModelScope.launch {
             prefs.splitMergeSelectionPreset.update(presetKey)
+            prefs.splitMergeExcludeUnusedLanguages.update(excludeUnusedLanguages)
+            prefs.splitMergeExcludeExtraDensities.update(excludeExtraDensities)
+            prefs.splitMergeExcludeExtraNativeLibs.update(excludeExtraNativeLibs)
+        }
+    }
+
+    fun rememberSplitMergeCleanupFilters(
+        excludeUnusedLanguages: Boolean,
+        excludeExtraDensities: Boolean,
+        excludeExtraNativeLibs: Boolean
+    ) {
+        viewModelScope.launch {
+            prefs.splitMergeExcludeUnusedLanguages.update(excludeUnusedLanguages)
+            prefs.splitMergeExcludeExtraDensities.update(excludeExtraDensities)
+            prefs.splitMergeExcludeExtraNativeLibs.update(excludeExtraNativeLibs)
+            if (prefs.splitMergeSelectionPreset.get() == "languages" ||
+                prefs.splitMergeSelectionPreset.get() == "density"
+            ) {
+                prefs.splitMergeSelectionPreset.update("all")
+            }
         }
     }
 
     private fun resolveDefaultSplitSelection(
         inspection: SplitApkPreparer.SplitArchiveInspection
-    ): Set<String> {
+    ): SplitMergeDefaultSelection {
         val presetKey = prefs.splitMergeSelectionPreset.getBlocking()
         val allModules = inspection.modules.mapTo(linkedSetOf()) { it.name }
         val requiredModules = buildSet {
@@ -873,16 +897,47 @@ class DashboardViewModel(
                 inspection.modules.firstOrNull()?.name?.let(::add)
             }
         }
-        return when (presetKey) {
+        val languageModules = inspection.modules
+            .filter { it.kind == SplitApkPreparer.SplitArchiveModuleKind.LANGUAGE }
+            .mapTo(linkedSetOf()) { it.name }
+        val densityModules = inspection.modules
+            .filter { it.kind == SplitApkPreparer.SplitArchiveModuleKind.DENSITY }
+            .mapTo(linkedSetOf()) { it.name }
+        val abiModules = inspection.modules
+            .filter { it.kind == SplitApkPreparer.SplitArchiveModuleKind.ABI }
+            .mapTo(linkedSetOf()) { it.name }
+        val optionalLanguageModules = languageModules - requiredModules
+        val optionalDensityModules = densityModules - requiredModules
+        val optionalAbiModules = abiModules - requiredModules
+        val trimmedLanguageModules = inspection.languageTrimmedModules intersect optionalLanguageModules
+        val trimmedDensityModules = inspection.densityTrimmedModules intersect optionalDensityModules
+        val trimmedAbiModules = inspection.abiTrimmedModules intersect optionalAbiModules
+        val excludeUnusedLanguages = prefs.splitMergeExcludeUnusedLanguages.getBlocking() || presetKey == "languages"
+        val excludeExtraDensities = prefs.splitMergeExcludeExtraDensities.getBlocking() || presetKey == "density"
+        val excludeExtraNativeLibs = prefs.splitMergeExcludeExtraNativeLibs.getBlocking()
+        val baseModules = when (presetKey) {
             "none" -> requiredModules
             "recommended" -> (inspection.recommendedModules + requiredModules)
                 .ifEmpty { requiredModules.ifEmpty { allModules } }
-            "languages" -> (inspection.languageTrimmedModules + requiredModules)
-                .ifEmpty { requiredModules.ifEmpty { allModules } }
-            "density" -> (inspection.densityTrimmedModules + requiredModules)
-                .ifEmpty { requiredModules.ifEmpty { allModules } }
             else -> allModules
         }
+        var modules = baseModules
+        if (excludeUnusedLanguages) {
+            modules = (modules - optionalLanguageModules) + trimmedLanguageModules
+        }
+        if (excludeExtraDensities) {
+            modules = (modules - optionalDensityModules) + trimmedDensityModules
+        }
+        if (excludeExtraNativeLibs) {
+            modules = (modules - optionalAbiModules) + trimmedAbiModules
+        }
+        modules = (modules + requiredModules)
+            .takeIf { it.isNotEmpty() }
+            ?: requiredModules.ifEmpty { allModules }
+        return SplitMergeDefaultSelection(
+            includedModules = modules,
+            excludeExtraNativeLibs = excludeExtraNativeLibs
+        )
     }
 
     fun saveLastMergedToPath(outputPath: String) = viewModelScope.launch {
@@ -1846,6 +1901,12 @@ class DashboardViewModel(
         super.onCleared()
     }
 }
+
+
+private data class SplitMergeDefaultSelection(
+    val includedModules: Set<String>,
+    val excludeExtraNativeLibs: Boolean
+)
 
 data class SplitMergeState(
     val preparingSelection: Boolean = false,

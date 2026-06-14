@@ -259,7 +259,8 @@ fun MergeSplitApkScreen(
                 vm.clearSplitMergeState()
                 onBackClick()
             },
-            onPresetSelected = vm::rememberSplitMergeSelectionPreset,
+            onPresetSelected = { presetKey -> vm.rememberSplitMergeSelectionPreset(presetKey) },
+            onCleanupFiltersChanged = vm::rememberSplitMergeCleanupFilters,
             onConfirm = { includedModules, stripNativeLibs ->
                 vm.confirmSplitMergeSelection(
                     includedModules = includedModules,
@@ -827,6 +828,7 @@ private fun SplitMergeSelectionDialog(
     initialStripNativeLibs: Boolean,
     onDismissRequest: () -> Unit,
     onPresetSelected: (String) -> Unit,
+    onCleanupFiltersChanged: (Boolean, Boolean, Boolean) -> Unit,
     onConfirm: (Set<String>, Boolean) -> Unit
 ) {
     val requiredModules = remember(selection) {
@@ -867,29 +869,38 @@ private fun SplitMergeSelectionDialog(
             .map { it.name }
             .toSet()
     }
-    val abiPresetModules = remember(selection, allModules, abiModules) {
-        (allModules - abiModules) +
-            abiModules.filterTo(linkedSetOf()) { it in selection.abiTrimmedModules }
-    }
     val recommendedModules = remember(selection, allModules, requiredModules) {
         (selection.recommendedModules + requiredModules)
             .ifEmpty { requiredModules.ifEmpty { allModules } }
     }
-    val languagePresetModules = remember(selection, allModules, languageModules) {
-        (allModules - languageModules) +
-            languageModules.filterTo(linkedSetOf()) { it in selection.languageTrimmedModules }
+    val trimmedLanguageModules = remember(selection, languageModules) {
+        languageModules.filterTo(linkedSetOf()) { it in selection.languageTrimmedModules }
     }
-    val densityPresetModules = remember(selection, allModules, densityModules) {
-        (allModules - densityModules) +
-            densityModules.filterTo(linkedSetOf()) { it in selection.densityTrimmedModules }
+    val trimmedDensityModules = remember(selection, densityModules) {
+        densityModules.filterTo(linkedSetOf()) { it in selection.densityTrimmedModules }
+    }
+    val optionalLanguageModules = remember(languageModules, requiredModules) { languageModules - requiredModules }
+    val optionalDensityModules = remember(densityModules, requiredModules) { densityModules - requiredModules }
+    val optionalAbiModules = remember(abiModules, requiredModules) { abiModules - requiredModules }
+    val trimmedOptionalLanguageModules = remember(trimmedLanguageModules, optionalLanguageModules) {
+        trimmedLanguageModules intersect optionalLanguageModules
+    }
+    val trimmedOptionalDensityModules = remember(trimmedDensityModules, optionalDensityModules) {
+        trimmedDensityModules intersect optionalDensityModules
+    }
+    val trimmedOptionalAbiModules = remember(selection, optionalAbiModules) {
+        selection.abiTrimmedModules intersect optionalAbiModules
+    }
+    val languageCleanupAvailable = remember(optionalLanguageModules, trimmedOptionalLanguageModules) {
+        optionalLanguageModules.isNotEmpty() && trimmedOptionalLanguageModules != optionalLanguageModules
+    }
+    val densityCleanupAvailable = remember(optionalDensityModules, trimmedOptionalDensityModules) {
+        optionalDensityModules.isNotEmpty() && trimmedOptionalDensityModules != optionalDensityModules
     }
     val presetOptions = remember(
-        selection,
         allModules,
         requiredModules,
-        recommendedModules,
-        languagePresetModules,
-        densityPresetModules
+        recommendedModules
     ) {
         buildList {
             add(
@@ -913,24 +924,6 @@ private fun SplitMergeSelectionDialog(
                     recommendedModules
                 )
             )
-            if (languagePresetModules != allModules) {
-                add(
-                    SplitMergePresetOption(
-                        "languages",
-                        R.string.merge_split_apk_selection_preset_languages,
-                        languagePresetModules
-                    )
-                )
-            }
-            if (densityPresetModules != allModules) {
-                add(
-                    SplitMergePresetOption(
-                        "density",
-                        R.string.merge_split_apk_selection_preset_densities,
-                        densityPresetModules
-                    )
-                )
-            }
         }
     }
 
@@ -957,14 +950,40 @@ private fun SplitMergeSelectionDialog(
     val selectedModuleCount by remember(selectedModules, requiredModules) {
         derivedStateOf { (selectedModules + requiredModules).size }
     }
+    fun isLanguageCleanupSelected(modules: Set<String>): Boolean =
+        languageCleanupAvailable && ((modules + requiredModules) intersect optionalLanguageModules) ==
+            trimmedOptionalLanguageModules
+
+    fun isDensityCleanupSelected(modules: Set<String>): Boolean =
+        densityCleanupAvailable && ((modules + requiredModules) intersect optionalDensityModules) ==
+            trimmedOptionalDensityModules
+
+    val languageCleanupSelected by remember(
+        selectedModules,
+        requiredModules,
+        optionalLanguageModules,
+        trimmedOptionalLanguageModules,
+        languageCleanupAvailable
+    ) {
+        derivedStateOf { isLanguageCleanupSelected(selectedModules) }
+    }
+    val densityCleanupSelected by remember(
+        selectedModules,
+        requiredModules,
+        optionalDensityModules,
+        trimmedOptionalDensityModules,
+        densityCleanupAvailable
+    ) {
+        derivedStateOf { isDensityCleanupSelected(selectedModules) }
+    }
 
     fun updateSelection(
         modules: Set<String>,
         stripUnusedNativeLibs: Boolean,
         preferredPresetKey: String? = null
-    ) {
+    ): Set<String> {
         val abiAdjustedModules = if (stripUnusedNativeLibs) {
-            (modules - abiModules) + (abiPresetModules intersect abiModules)
+            (modules - optionalAbiModules) + trimmedOptionalAbiModules
         } else {
             modules
         }
@@ -982,6 +1001,7 @@ private fun SplitMergeSelectionDialog(
             matchingKeys.size == 1 -> matchingKeys.first()
             else -> null
         }
+        return normalizedModules
     }
 
     FullscreenDialog(onDismissRequest = onDismissRequest) {
@@ -1030,13 +1050,69 @@ private fun SplitMergeSelectionDialog(
                                 label = { Text(stringResource(preset.labelRes)) }
                             )
                         }
+                        if (languageCleanupAvailable) {
+                            CheckedFilterChip(
+                                selected = languageCleanupSelected,
+                                onClick = {
+                                    val toggledLanguageCleanup = !languageCleanupSelected
+                                    val nextModules = if (toggledLanguageCleanup) {
+                                        (selectedModules - optionalLanguageModules) + trimmedOptionalLanguageModules
+                                    } else {
+                                        selectedModules + optionalLanguageModules
+                                    }
+                                    val normalizedModules = updateSelection(nextModules, stripNativeLibs)
+                                    onCleanupFiltersChanged(
+                                        isLanguageCleanupSelected(normalizedModules),
+                                        isDensityCleanupSelected(normalizedModules),
+                                        stripNativeLibs
+                                    )
+                                },
+                                colors = chipColors,
+                                label = {
+                                    Text(stringResource(R.string.merge_split_apk_selection_preset_languages))
+                                }
+                            )
+                        }
+                        if (densityCleanupAvailable) {
+                            CheckedFilterChip(
+                                selected = densityCleanupSelected,
+                                onClick = {
+                                    val toggledDensityCleanup = !densityCleanupSelected
+                                    val nextModules = if (toggledDensityCleanup) {
+                                        (selectedModules - optionalDensityModules) + trimmedOptionalDensityModules
+                                    } else {
+                                        selectedModules + optionalDensityModules
+                                    }
+                                    val normalizedModules = updateSelection(nextModules, stripNativeLibs)
+                                    onCleanupFiltersChanged(
+                                        isLanguageCleanupSelected(normalizedModules),
+                                        isDensityCleanupSelected(normalizedModules),
+                                        stripNativeLibs
+                                    )
+                                },
+                                colors = chipColors,
+                                label = {
+                                    Text(stringResource(R.string.merge_split_apk_selection_preset_densities))
+                                }
+                            )
+                        }
                         CheckedFilterChip(
                             selected = stripNativeLibs,
                             onClick = {
                                 val toggledStripNativeLibs = !stripNativeLibs
-                                updateSelection(
-                                    modules = if (toggledStripNativeLibs) allModules else selectedModules,
+                                val nextModules = if (toggledStripNativeLibs) {
+                                    selectedModules
+                                } else {
+                                    selectedModules + optionalAbiModules
+                                }
+                                val normalizedModules = updateSelection(
+                                    modules = nextModules,
                                     stripUnusedNativeLibs = toggledStripNativeLibs
+                                )
+                                onCleanupFiltersChanged(
+                                    isLanguageCleanupSelected(normalizedModules),
+                                    isDensityCleanupSelected(normalizedModules),
+                                    toggledStripNativeLibs
                                 )
                             },
                             colors = chipColors,
@@ -1050,7 +1126,8 @@ private fun SplitMergeSelectionDialog(
                         val forcedOffByNativeStrip =
                             stripNativeLibs &&
                                 module.kind == SplitApkPreparer.SplitArchiveModuleKind.ABI &&
-                                module.name !in selection.abiTrimmedModules
+                                module.name in optionalAbiModules &&
+                                module.name !in trimmedOptionalAbiModules
                         SplitMergeModuleRow(
                             module = module,
                             checked = required || selectedModules.contains(module.name),
@@ -1059,7 +1136,12 @@ private fun SplitMergeSelectionDialog(
                                 val updatedModules = selectedModules.toMutableSet().apply {
                                     if (checked) add(module.name) else remove(module.name)
                                 }
-                                updateSelection(updatedModules, stripNativeLibs)
+                                val normalizedModules = updateSelection(updatedModules, stripNativeLibs)
+                                onCleanupFiltersChanged(
+                                    isLanguageCleanupSelected(normalizedModules),
+                                    isDensityCleanupSelected(normalizedModules),
+                                    stripNativeLibs
+                                )
                             }
                         )
                     }

@@ -216,6 +216,9 @@ class PreferencesManager(
     val appSelectorFilterInstalledOnly = booleanPreference("app_selector_filter_installed_only", false)
     val appSelectorFilterPatchesAvailable = booleanPreference("app_selector_filter_patches_available", false)
     val splitMergeSelectionPreset = stringPreference("split_merge_selection_preset", "all")
+    val splitMergeExcludeUnusedLanguages = booleanPreference("split_merge_exclude_unused_languages", false)
+    val splitMergeExcludeExtraDensities = booleanPreference("split_merge_exclude_extra_densities", false)
+    val splitMergeExcludeExtraNativeLibs = booleanPreference("split_merge_exclude_extra_native_libs", false)
     val splitMergeInstalledFilterUserApps = booleanPreference("split_merge_installed_filter_user_apps", false)
     val splitMergeInstalledFilterSystemApps = booleanPreference("split_merge_installed_filter_system_apps", false)
     val splitMergeInstalledFilterSplitApks = booleanPreference("split_merge_installed_filter_split_apks", false)
@@ -345,6 +348,9 @@ class PreferencesManager(
         val appSelectorFilterInstalledOnly: Boolean? = null,
         val appSelectorFilterPatchesAvailable: Boolean? = null,
         val splitMergeSelectionPreset: String? = null,
+        val splitMergeExcludeUnusedLanguages: Boolean? = null,
+        val splitMergeExcludeExtraDensities: Boolean? = null,
+        val splitMergeExcludeExtraNativeLibs: Boolean? = null,
         val splitMergeInstalledFilterUserApps: Boolean? = null,
         val splitMergeInstalledFilterSystemApps: Boolean? = null,
         val splitMergeInstalledFilterSplitApks: Boolean? = null,
@@ -518,6 +524,9 @@ class PreferencesManager(
             appSelectorFilterInstalledOnly = appSelectorFilterInstalledOnly.get(),
             appSelectorFilterPatchesAvailable = appSelectorFilterPatchesAvailable.get(),
             splitMergeSelectionPreset = splitMergeSelectionPreset.get().takeIf { it.isNotBlank() },
+            splitMergeExcludeUnusedLanguages = splitMergeExcludeUnusedLanguages.get(),
+            splitMergeExcludeExtraDensities = splitMergeExcludeExtraDensities.get(),
+            splitMergeExcludeExtraNativeLibs = splitMergeExcludeExtraNativeLibs.get(),
             splitMergeInstalledFilterUserApps = splitMergeInstalledFilterUserApps.get(),
             splitMergeInstalledFilterSystemApps = splitMergeInstalledFilterSystemApps.get(),
             splitMergeInstalledFilterSplitApks = splitMergeInstalledFilterSplitApks.get(),
@@ -692,6 +701,9 @@ class PreferencesManager(
         snapshot.splitMergeSelectionPreset?.takeIf { it.isNotBlank() }?.let {
             splitMergeSelectionPreset.value = it
         }
+        snapshot.splitMergeExcludeUnusedLanguages?.let { splitMergeExcludeUnusedLanguages.value = it }
+        snapshot.splitMergeExcludeExtraDensities?.let { splitMergeExcludeExtraDensities.value = it }
+        snapshot.splitMergeExcludeExtraNativeLibs?.let { splitMergeExcludeExtraNativeLibs.value = it }
         snapshot.splitMergeInstalledFilterUserApps?.let { splitMergeInstalledFilterUserApps.value = it }
         snapshot.splitMergeInstalledFilterSystemApps?.let { splitMergeInstalledFilterSystemApps.value = it }
         snapshot.splitMergeInstalledFilterSplitApks?.let { splitMergeInstalledFilterSplitApks.value = it }
