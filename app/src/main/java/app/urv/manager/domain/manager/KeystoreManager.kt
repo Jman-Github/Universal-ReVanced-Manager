@@ -39,10 +39,18 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider
 class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
     companion object Constants {
         /**
-         * Default alias and password for the keystore.
+         * Default alias and password for newly generated manager keystores.
          */
-        const val DEFAULT = "ReVanced"
-        private const val LEGACY_DEFAULT_PASSWORD = "s3cur3p@ssw0rd"
+        const val DEFAULT_ALIAS = "alias"
+        const val DEFAULT_PASSWORD = "password"
+        const val DEFAULT_KEY_PASSWORD = DEFAULT_PASSWORD
+        const val LEGACY_DEFAULT_ALIAS = "ReVanced"
+        const val LEGACY_DEFAULT_PASSWORD = "s3cur3p@ssw0rd"
+
+        /**
+         * Kept for source compatibility with older code paths that referenced a single default value.
+         */
+        const val DEFAULT = DEFAULT_ALIAS
         private const val LOG_TAG = "KeystoreManager"
         private const val KEYSTORE_FILE_NAME = "urv_keystore.keystore"
         private const val LEGACY_KEYSTORE_FILE_NAME = "manager.keystore"
@@ -144,11 +152,12 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         val prefKeyPass = prefs.keystoreKeyPass.get()
         val keyPass = fileCreds?.keyPass?.takeIf { it.isNotBlank() }
             ?: prefKeyPass.takeIf { it.isNotBlank() }
+        val defaultKeyPassValues = setOf(DEFAULT_KEY_PASSWORD, LEGACY_DEFAULT_ALIAS)
         val resolvedKeyPass = when {
             fileCreds == null &&
-                prefKeyPass == DEFAULT &&
+                prefKeyPass in defaultKeyPassValues &&
                 storePass.isNotBlank() &&
-                storePass != DEFAULT -> storePass
+                storePass !in defaultKeyPassValues -> storePass
             keyPass.isNullOrBlank() -> storePass
             else -> keyPass
         }
@@ -652,12 +661,12 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
     private fun resolveSigningType(credentials: KeystoreCredentials): String? {
         val type = credentials.type?.trim()?.uppercase()?.takeIf { it.isNotBlank() }
         if (type != null) return type
-        return if (credentials.alias == DEFAULT) "BKS" else null
+        return if (credentials.alias == DEFAULT_ALIAS || credentials.alias == LEGACY_DEFAULT_ALIAS) "BKS" else null
     }
 
     private fun recoverManagerKeystoreCredentials(keystoreData: ByteArray): RecoveredCredentials? {
-        val aliasCandidates = listOf(DEFAULT, "alias", "ReVanced Key")
-        val passCandidates = listOf(DEFAULT, LEGACY_DEFAULT_PASSWORD, "")
+        val aliasCandidates = listOf(DEFAULT_ALIAS, LEGACY_DEFAULT_ALIAS, "ReVanced Key")
+        val passCandidates = listOf(DEFAULT_PASSWORD, LEGACY_DEFAULT_ALIAS, LEGACY_DEFAULT_PASSWORD, "")
         val types = keyStoreTypes(null)
 
         for (type in types) {
@@ -705,19 +714,19 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
     private suspend fun regenerateLocked() {
         Log.i(LOG_TAG, "Regenerating keystore")
         val keyCertPair = RevancedApkSigner.newPrivateKeyCertificatePair(
-            prefs.keystoreAlias.get(),
+            DEFAULT_ALIAS,
             maxCertificateNotAfter
         )
         val ks = RevancedApkSigner.newKeyStore(
             setOf(
                 RevancedApkSigner.KeyStoreEntry(
-                    DEFAULT, DEFAULT, keyCertPair
+                    DEFAULT_ALIAS, DEFAULT_KEY_PASSWORD, keyCertPair
                 )
             )
         )
         val bytes = withContext(Dispatchers.IO) {
             ByteArrayOutputStream().use { output ->
-                ks.store(output, DEFAULT.toCharArray())
+                ks.store(output, DEFAULT_PASSWORD.toCharArray())
                 output.toByteArray()
             }
         }
@@ -728,7 +737,7 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
             deleteLegacyKeystoreCopies()
         }
 
-        updatePrefs(DEFAULT, DEFAULT, DEFAULT, "BKS", fingerprint)
+        updatePrefs(DEFAULT_ALIAS, DEFAULT_PASSWORD, DEFAULT_KEY_PASSWORD, "BKS", fingerprint)
         Log.i(LOG_TAG, "Keystore regenerated at ${keystorePath.absolutePath}")
     }
 
@@ -783,14 +792,15 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
     private suspend fun rehydrateCredentials(keystoreData: ByteArray): Boolean {
         val aliasCandidates = listOf(
             prefs.keystoreAlias.get(),
-            DEFAULT,
-            "alias",
+            DEFAULT_ALIAS,
+            LEGACY_DEFAULT_ALIAS,
             "ReVanced Key"
         ).filter { it.isNotBlank() }.distinct()
         val passCandidates = listOf(
             prefs.keystorePass.get(),
             prefs.keystoreKeyPass.get(),
-            DEFAULT,
+            DEFAULT_PASSWORD,
+            LEGACY_DEFAULT_ALIAS,
             LEGACY_DEFAULT_PASSWORD
         ).filter { it.isNotBlank() }.distinct()
         val fingerprint = keystoreFingerprint(keystoreData)

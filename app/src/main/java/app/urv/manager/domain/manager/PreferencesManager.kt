@@ -125,9 +125,9 @@ class PreferencesManager(
     val installerCustomComponents = stringSetPreference("installer_custom_components", emptySet())
     val installerHiddenComponents = stringSetPreference("installer_hidden_components", emptySet())
 
-    val keystoreAlias = stringPreference("keystore_alias", KeystoreManager.DEFAULT)
-    val keystorePass = stringPreference("keystore_pass", KeystoreManager.DEFAULT)
-    val keystoreKeyPass = stringPreference("keystore_key_pass", KeystoreManager.DEFAULT)
+    val keystoreAlias = stringPreference("keystore_alias", KeystoreManager.DEFAULT_ALIAS)
+    val keystorePass = stringPreference("keystore_pass", KeystoreManager.DEFAULT_PASSWORD)
+    val keystoreKeyPass = stringPreference("keystore_key_pass", KeystoreManager.DEFAULT_KEY_PASSWORD)
 
     val firstLaunch = booleanPreference("first_launch", true)
     val managerAutoUpdates = booleanPreference("manager_auto_updates", false)

@@ -223,12 +223,13 @@ class MainViewModel(
             val keystoreBytes = Base64.decode(keystore, Base64.DEFAULT)
             val passwordCandidates = listOf(
                 settings.keystorePassword,
-                KeystoreManager.DEFAULT,
-                "s3cur3p@ssw0rd"
+                KeystoreManager.DEFAULT_PASSWORD,
+                KeystoreManager.LEGACY_DEFAULT_ALIAS,
+                KeystoreManager.LEGACY_DEFAULT_PASSWORD
             ).filter { it.isNotBlank() }.distinct()
             val aliasCandidates = listOf(
-                KeystoreManager.DEFAULT,
-                "alias",
+                KeystoreManager.DEFAULT_ALIAS,
+                KeystoreManager.LEGACY_DEFAULT_ALIAS,
                 "ReVanced Key"
             ).distinct()
             var imported = false
