@@ -327,6 +327,7 @@
 - Fixed color option detection so path-like fields are not mistaken for color values
 - Fixed Android back navigation on the patch selector so it matches the toolbar back behavior https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/408
 - Fixed the saved app bundle update badge toggle appearing enabled while disabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/547
+- Fixed merger collapsible sections not respecting the auto-collapse and auto-expand settings https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/548
 
 
 # Refactors

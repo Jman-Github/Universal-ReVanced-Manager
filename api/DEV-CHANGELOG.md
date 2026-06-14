@@ -10,6 +10,7 @@
 # Bug fixes
 
 - Fixed the saved app bundle update badge toggle appearing enabled while disabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/547
+- Fixed merger collapsible sections not respecting the auto-collapse and auto-expand settings https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/548
 
 
 # v1.8.1-dev.19 (2026-06-14)

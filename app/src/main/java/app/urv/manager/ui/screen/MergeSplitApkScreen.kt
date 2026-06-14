@@ -514,9 +514,7 @@ fun MergeSplitApkScreen(
     val expandedCategories = rememberSaveable(
         saver = snapshotStateSetSaver<StepCategory>()
     ) {
-        mutableStateSetOf<StepCategory>().apply {
-            addAll(stepsByCategory.keys)
-        }
+        mutableStateSetOf<StepCategory>()
     }
 
     AppScaffold(

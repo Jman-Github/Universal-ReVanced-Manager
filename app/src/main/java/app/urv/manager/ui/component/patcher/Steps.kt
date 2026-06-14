@@ -91,7 +91,7 @@ fun Steps(
         if (state != State.COMPLETED) {
             autoCollapsed = false
         }
-        if ((autoExpandRunning && state == State.RUNNING) || state == State.FAILED || hasFailedStep) {
+        if (autoExpandRunning && (state == State.RUNNING || state == State.FAILED || hasFailedStep)) {
             onExpand()
         }
     }
@@ -155,7 +155,7 @@ fun Steps(
                             subSteps = subSteps,
                             progress = progress,
                             progressText = progressText,
-                            autoExpandSubSteps = !autoExpandRunningMainOnly,
+                            autoExpandSubSteps = autoExpandRunning && !autoExpandRunningMainOnly,
                             autoCollapseCompleted = autoCollapseCompleted,
                             isFirst = index == 0,
                             isLast = index == filteredSteps.lastIndex
