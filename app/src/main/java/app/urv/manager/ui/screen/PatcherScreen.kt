@@ -606,7 +606,13 @@ fun PatcherScreen(
         AlertDialog(
             onDismissRequest = viewModel::dismissSignatureMismatchPrompt,
             title = { CenteredDialogTitle(stringResource(R.string.installation_signature_mismatch_dialog_title)) },
-            text = { Text(stringResource(R.string.installation_signature_mismatch_description)) },
+            text = {
+                Text(
+                    text = stringResource(R.string.installation_signature_mismatch_description),
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+            },
             confirmButton = {
                 TextButton(onClick = viewModel::confirmSignatureMismatchInstall) {
                     Text(stringResource(R.string.installation_signature_mismatch_confirm))

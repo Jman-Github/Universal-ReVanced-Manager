@@ -699,7 +699,13 @@ fun InstalledAppInfoScreen(
                 }
             },
             title = { CenteredDialogTitle(stringResource(R.string.installation_signature_mismatch_dialog_title)) },
-            text = { Text(stringResource(R.string.installation_signature_mismatch_description)) }
+            text = {
+                Text(
+                    text = stringResource(R.string.installation_signature_mismatch_description),
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+            }
         )
     }
 
