@@ -1,9 +1,13 @@
 package app.urv.manager.util
 
 import android.content.Intent
+import android.net.Uri
 import app.urv.manager.ui.model.navigation.Announcement
 
-data class BundleDeepLink(val bundleUid: Int?)
+data class BundleDeepLink(
+    val bundleUid: Int?,
+    val importUrl: String? = null
+)
 
 object BundleDeepLinkIntent {
     const val EXTRA_BUNDLE_UID = "bundle_uid"
@@ -19,10 +23,28 @@ object BundleDeepLinkIntent {
 
     fun fromIntent(intent: Intent?): BundleDeepLink? {
         if (intent == null) return null
+        importUrlFromIntent(intent)?.let { url ->
+            return BundleDeepLink(bundleUid = null, importUrl = url)
+        }
         val hasUid = intent.hasExtra(EXTRA_BUNDLE_UID)
         if (!intent.getBooleanExtra(EXTRA_OPEN_BUNDLES_TAB, false) && !hasUid) return null
         val uid = if (hasUid) intent.getIntExtra(EXTRA_BUNDLE_UID, 0) else null
         return BundleDeepLink(uid)
+    }
+
+    private fun importUrlFromIntent(intent: Intent): String? {
+        if (intent.action != Intent.ACTION_VIEW) return null
+        val uri = intent.data ?: return null
+        return uri.toString().takeIf { uri.isSupportedMorpheSourceUrl() }
+    }
+
+    private fun Uri.isSupportedMorpheSourceUrl(): Boolean {
+        val scheme = scheme?.lowercase() ?: return false
+        if (scheme != "https" && scheme != "http") return false
+        if (!host.equals("morphe.software", ignoreCase = true)) return false
+        if (path != "/add-source") return false
+        return !getQueryParameter("github").isNullOrBlank() ||
+            !getQueryParameter("gitlab").isNullOrBlank()
     }
 }
 

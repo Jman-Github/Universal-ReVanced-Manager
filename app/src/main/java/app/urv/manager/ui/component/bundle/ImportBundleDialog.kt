@@ -48,11 +48,15 @@ fun ImportPatchBundleDialog(
     onRemoteSubmit: (String, Boolean, Boolean) -> Unit,
     onLocalSubmit: (String) -> Unit,
     onLocalPick: () -> Unit,
-    selectedLocalPath: String?
+    selectedLocalPath: String?,
+    initialRemoteUrl: String = ""
 ) {
-    var currentStep by rememberSaveable { mutableIntStateOf(0) }
-    var bundleType by rememberSaveable { mutableStateOf(BundleType.Remote) }
-    var remoteUrl by rememberSaveable { mutableStateOf("") }
+    val normalizedInitialRemoteUrl = remember(initialRemoteUrl) { initialRemoteUrl.trim() }
+    var currentStep by rememberSaveable(normalizedInitialRemoteUrl) {
+        mutableIntStateOf(if (normalizedInitialRemoteUrl.isNotBlank()) 1 else 0)
+    }
+    var bundleType by rememberSaveable(normalizedInitialRemoteUrl) { mutableStateOf(BundleType.Remote) }
+    var remoteUrl by rememberSaveable(normalizedInitialRemoteUrl) { mutableStateOf(normalizedInitialRemoteUrl) }
     var autoUpdate by rememberSaveable { mutableStateOf(true) }
     var searchUpdate by rememberSaveable { mutableStateOf(true) }
 

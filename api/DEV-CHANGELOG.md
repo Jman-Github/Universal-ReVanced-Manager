@@ -1,3 +1,15 @@
+# v1.8.1-dev.20 (TBD)
+
+
+# Features
+
+- Added support for importing remote patch bundles from GitHub and GitLab repository URLs by resolving root-level `patches-bundle.json` metadata https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/545
+- Added support for Morphe `add-source` links, including opening them in URV with the import dialog prefilled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/545
+
+
+# Bug fixes
+
+
 # v1.8.1-dev.19 (2026-06-14)
 
 

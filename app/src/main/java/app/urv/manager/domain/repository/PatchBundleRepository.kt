@@ -2289,6 +2289,14 @@ class PatchBundleRepository(
             throw IllegalArgumentException("Invalid bundle URL: ${e.message ?: trimmed}")
         }
 
+        morpheAddSourceRepositoryUrl(parsed)?.let { repositoryUrl ->
+            return normalizeRemoteBundleUrl(repositoryUrl)
+        }
+
+        repositoryManifestUrl(parsed)?.let { manifestUrl ->
+            return manifestUrl
+        }
+
         var host = parsed.host
         var pathSegments = parsed.encodedPath.trim('/').split('/').filter { it.isNotBlank() }
 
@@ -2310,6 +2318,10 @@ class PatchBundleRepository(
             val branchAndPath = pathSegments.drop(3)
             host = "raw.githubusercontent.com"
             pathSegments = listOf(owner, repo) + branchAndPath
+        }
+
+        if (host.equals("gitlab.com", ignoreCase = true)) {
+            gitLabBlobUrlToRawUrl(pathSegments)?.let { return it }
         }
 
         val normalizedPath = "/" + pathSegments.joinToString("/")
@@ -2336,6 +2348,104 @@ class PatchBundleRepository(
         val query = parsed.encodedQuery.takeIf { it.isNotEmpty() }?.let { "?$it" }.orEmpty()
         return "https://$host$normalizedPath$query"
     }
+
+    private fun morpheAddSourceRepositoryUrl(parsed: Url): String? {
+        val host = parsed.host.lowercase(Locale.US)
+        val path = parsed.encodedPath.substringBefore('?').substringBefore('#')
+        if (host != "morphe.software" || path != "/add-source") return null
+
+        parsed.parameters["github"]
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.let { return repositoryUrlFromMorpheParameter(it, "github.com") }
+
+        parsed.parameters["gitlab"]
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.let { return repositoryUrlFromMorpheParameter(it, "gitlab.com") }
+
+        return null
+    }
+
+    private fun repositoryUrlFromMorpheParameter(value: String, defaultHost: String): String {
+        val trimmed = value.trim().removePrefix("@").trim('/')
+        if (trimmed.startsWith("https://", ignoreCase = true) ||
+            trimmed.startsWith("http://", ignoreCase = true)
+        ) {
+            return trimmed
+        }
+
+        val lower = trimmed.lowercase(Locale.US)
+        val repositoryPath = when {
+            lower.startsWith("$defaultHost/") -> trimmed.substring(defaultHost.length + 1)
+            lower.startsWith("www.$defaultHost/") -> trimmed.substring(defaultHost.length + 5)
+            else -> trimmed
+        }.trim('/')
+
+        return "https://$defaultHost/$repositoryPath"
+    }
+
+    private fun repositoryManifestUrl(parsed: Url): String? {
+        val host = parsed.host.lowercase(Locale.US)
+        val pathSegments = parsed.encodedPath.trim('/').split('/').filter { it.isNotBlank() }
+        return when (host) {
+            "github.com" -> gitHubRepositoryManifestUrl(pathSegments)
+            "gitlab.com" -> gitLabRepositoryManifestUrl(pathSegments)
+            else -> null
+        }
+    }
+
+    private fun gitHubRepositoryManifestUrl(pathSegments: List<String>): String? {
+        if (pathSegments.size < 2) return null
+        if (pathSegments.size > 2 && pathSegments[2] != "tree") return null
+        if (pathSegments.size > 4) return null
+
+        val owner = pathSegments[0]
+        val repo = pathSegments[1].removeSuffix(".git").takeIf { it.isNotBlank() } ?: return null
+        val ref = if (pathSegments.size == 4 && pathSegments[2] == "tree") {
+            pathSegments[3].takeIf { it.isNotBlank() } ?: "HEAD"
+        } else {
+            "HEAD"
+        }
+
+        return "https://raw.githubusercontent.com/$owner/$repo/$ref/patches-bundle.json"
+    }
+
+    private fun gitLabRepositoryManifestUrl(pathSegments: List<String>): String? {
+        if (pathSegments.size < 2) return null
+        val markerIndex = pathSegments.indexOf("-")
+        if (markerIndex >= 0) {
+            val repoSegments = pathSegments.take(markerIndex)
+            if (repoSegments.size < 2) return null
+            val mode = pathSegments.getOrNull(markerIndex + 1) ?: return null
+            if (mode != "tree") return null
+            val refSegments = pathSegments.drop(markerIndex + 2)
+            if (refSegments.size > 1) return null
+            val ref = refSegments.firstOrNull()?.takeIf { it.isNotBlank() } ?: "HEAD"
+            return "https://gitlab.com/${repoSegments.joinToString("/")}/-/raw/$ref/patches-bundle.json"
+        }
+
+        val repoSegments = pathSegments.toMutableList()
+        repoSegments[repoSegments.lastIndex] = repoSegments.last().removeSuffix(".git")
+        if (repoSegments.any { it.isBlank() }) return null
+        return "https://gitlab.com/${repoSegments.joinToString("/")}/-/raw/HEAD/patches-bundle.json"
+    }
+
+    private fun gitLabBlobUrlToRawUrl(pathSegments: List<String>): String? {
+        val markerIndex = pathSegments.indexOf("-")
+        if (markerIndex < 0) return null
+        val repoSegments = pathSegments.take(markerIndex)
+        if (repoSegments.size < 2) return null
+        val mode = pathSegments.getOrNull(markerIndex + 1)
+        if (mode != "blob") return null
+        val branchAndPath = pathSegments.drop(markerIndex + 2)
+        if (branchAndPath.size < 2) return null
+        val ref = branchAndPath.first()
+        val filePath = branchAndPath.drop(1).joinToString("/")
+        if (!filePath.endsWith(".json", ignoreCase = true)) return null
+        return "https://gitlab.com/${repoSegments.joinToString("/")}/-/raw/$ref/$filePath"
+    }
+
 
     suspend fun reloadApiBundles() {
         withTrackedReload {

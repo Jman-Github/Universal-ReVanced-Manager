@@ -186,6 +186,8 @@
 - Added a default-enabled New patches filter that shows newly added patches from each bundle at the top of the patch selection screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/236
 - Centered the signature mismatch dialog body text across the patcher, app info, and quick action install flows https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/544
 - Updated newly generated manager signing keystores to use `alias` as the alias and `password` as the password while preserving compatibility with existing and legacy manager keystores https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/538
+- Added support for importing remote patch bundles from GitHub and GitLab repository URLs by resolving root-level `patches-bundle.json` metadata https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/545
+- Added support for Morphe `add-source` links, including opening them in URV with the import dialog prefilled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/545
 
 
 # Bug fixes

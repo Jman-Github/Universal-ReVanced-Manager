@@ -635,6 +635,8 @@ fun DashboardScreen(
     var showBundleFilePicker by rememberSaveable { mutableStateOf(false) }
     var selectedBundlePath by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedBundleUri by remember { mutableStateOf<Uri?>(null) }
+    var showAddBundleDialog by rememberSaveable { mutableStateOf(false) }
+    var initialAddBundleRemoteUrl by rememberSaveable { mutableStateOf("") }
     val (bundlePermissionContract, bundlePermissionName) = remember { fs.permissionContract() }
     val bundlePermissionLauncher =
         rememberLauncherForActivityResult(bundlePermissionContract) { granted ->
@@ -1061,6 +1063,12 @@ fun DashboardScreen(
                     scrollToVisiblePage(DashboardPage.BUNDLES, animated = false)
                 }
             }
+            deepLink.importUrl?.trim()?.takeIf { it.isNotBlank() }?.let { url ->
+                initialAddBundleRemoteUrl = url
+                selectedBundlePath = null
+                selectedBundleUri = null
+                showAddBundleDialog = true
+            }
         } finally {
             onBundleDeepLinkConsumed()
         }
@@ -1396,12 +1404,15 @@ fun DashboardScreen(
         )
     }
 
-    var showAddBundleDialog by rememberSaveable { mutableStateOf(false) }
     if (showAddBundleDialog) {
         ImportPatchBundleDialog(
-            onDismiss = { showAddBundleDialog = false },
+            onDismiss = {
+                showAddBundleDialog = false
+                initialAddBundleRemoteUrl = ""
+            },
             onLocalSubmit = { path ->
                 showAddBundleDialog = false
+                initialAddBundleRemoteUrl = ""
                 selectedBundlePath = null
                 val selectedUri = selectedBundleUri
                 selectedBundleUri = null
@@ -1413,12 +1424,14 @@ fun DashboardScreen(
             },
             onRemoteSubmit = { url, autoUpdate, searchUpdate ->
                 showAddBundleDialog = false
+                initialAddBundleRemoteUrl = ""
                 vm.createRemoteSource(url, autoUpdate, searchUpdate)
             },
             onLocalPick = {
                 requestBundleFilePicker()
             },
-            selectedLocalPath = selectedBundlePath
+            selectedLocalPath = selectedBundlePath,
+            initialRemoteUrl = initialAddBundleRemoteUrl
         )
     }
 
