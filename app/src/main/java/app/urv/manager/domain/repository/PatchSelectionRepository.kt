@@ -39,6 +39,28 @@ class PatchSelectionRepository(db: AppDatabase) {
             })
         }
 
+    suspend fun updateSelectionWithSeenPatches(
+        packageName: String,
+        selection: Map<Int, Set<String>>,
+        patchesByBundle: Map<Int, Set<String>>
+    ) {
+        updateSelection(packageName, selection)
+        saveSeenPatches(packageName, patchesByBundle)
+    }
+
+    suspend fun saveSeenPatches(packageName: String, patchesByBundle: Map<Int, Set<String>>) {
+        if (patchesByBundle.isEmpty()) return
+        dao.pruneSeenPatches(packageName, patchesByBundle.keys)
+        patchesByBundle.forEach { (bundleUid, patchNames) ->
+            dao.updateSeenPatches(packageName, bundleUid, patchNames)
+        }
+    }
+
+    suspend fun getSeenPatches(packageName: String, bundleUid: Int): Set<String>? {
+        val patches = dao.getSeenPatches(packageName, bundleUid)
+        return patches.takeIf { it.isNotEmpty() }?.toSet()
+    }
+
     fun getPackagesWithSavedSelection() =
         dao.getPackagesWithSelection().map(Iterable<String>::toSet).distinctUntilChanged()
 

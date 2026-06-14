@@ -65,4 +65,27 @@ abstract class SelectionDao {
             clearSelection(selectionUid)
             selectPatches(patches.map { SelectedPatch(selectionUid, it) })
         }
+
+    @Query("SELECT patch_name FROM seen_patches WHERE patch_bundle = :bundleUid AND package_name = :packageName")
+    abstract suspend fun getSeenPatches(packageName: String, bundleUid: Int): List<String>
+
+    @Query("DELETE FROM seen_patches WHERE patch_bundle = :bundleUid AND package_name = :packageName")
+    protected abstract suspend fun clearSeenPatches(packageName: String, bundleUid: Int)
+
+    @Query(
+        "DELETE FROM seen_patches " +
+                "WHERE package_name = :packageName AND patch_bundle NOT IN (:bundleUids)"
+    )
+    abstract suspend fun pruneSeenPatches(packageName: String, bundleUids: Set<Int>)
+
+    @Insert
+    protected abstract suspend fun insertSeenPatches(patches: List<SeenPatch>)
+
+    @Transaction
+    open suspend fun updateSeenPatches(packageName: String, bundleUid: Int, patchNames: Set<String>) {
+        clearSeenPatches(packageName, bundleUid)
+        if (patchNames.isNotEmpty()) {
+            insertSeenPatches(patchNames.map { SeenPatch(bundleUid, packageName, it) })
+        }
+    }
 }

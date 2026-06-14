@@ -192,6 +192,9 @@ fun PatchesSelectorScreen(
     val suggestedVersionsByBundle by viewModel.suggestedVersionsByBundle.collectAsStateWithLifecycle(
         initialValue = emptyMap()
     )
+    val newPatchNamesByBundle by viewModel.newPatchNamesByBundle.collectAsStateWithLifecycle(
+        initialValue = emptyMap()
+    )
     val pagerState = rememberPagerState(
         initialPage = 0,
         initialPageOffsetFraction = 0f
@@ -540,6 +543,11 @@ fun PatchesSelectorScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    CheckedFilterChip(
+                        selected = viewModel.showNewPatchesSection,
+                        onClick = viewModel::toggleNewPatchesSection,
+                        label = { Text(stringResource(R.string.patch_selector_sheet_filter_new_patches)) }
+                    )
                     CheckedFilterChip(
                         selected = typeFilterActive && viewModel.filter and SHOW_NON_UNIVERSAL != 0,
                         onClick = { viewModel.toggleTypeFlag(SHOW_NON_UNIVERSAL) },
@@ -1077,6 +1085,145 @@ fun PatchesSelectorScreen(
         }
     }
 
+    fun LazyListScope.patchSections(
+        uid: Int,
+        regularPatches: List<PatchInfo>,
+        incompatiblePatches: List<PatchInfo>,
+        universalPatches: List<PatchInfo>,
+        suggestedVersion: String?
+    ) {
+        val newPatchNames = if (viewModel.showNewPatchesSection) {
+            newPatchNamesByBundle[uid].orEmpty()
+        } else {
+            emptySet()
+        }
+        val showNewSection = newPatchNames.isNotEmpty()
+        val newCompatiblePatches = if (showNewSection) {
+            (regularPatches + universalPatches).filter { it.name in newPatchNames }
+        } else {
+            emptyList()
+        }
+        val newIncompatiblePatches = if (
+            showNewSection &&
+            viewModel.filter and SHOW_INCOMPATIBLE != 0
+        ) {
+            incompatiblePatches.filter { it.name in newPatchNames }
+        } else {
+            emptyList()
+        }
+        var newHeaderShown = false
+        fun newPatchHeader(): (@Composable () -> Unit)? {
+            if (newHeaderShown) return null
+            newHeaderShown = true
+            return {
+                ListHeader(title = stringResource(R.string.patch_selector_sheet_filter_new_patches))
+            }
+        }
+
+        patchList(
+            uid = uid,
+            patches = newCompatiblePatches,
+            visible = showNewSection,
+            compatible = true,
+            suggestedVersion = suggestedVersion,
+            header = if (newCompatiblePatches.isNotEmpty()) newPatchHeader() else null
+        )
+        patchList(
+            uid = uid,
+            patches = newIncompatiblePatches,
+            visible = showNewSection,
+            compatible = viewModel.allowIncompatiblePatches,
+            suggestedVersion = suggestedVersion,
+            header = if (newIncompatiblePatches.isNotEmpty()) newPatchHeader() else null
+        )
+
+        val regularVisible = if (showNewSection) {
+            regularPatches.filterNot { it.name in newPatchNames }
+        } else {
+            regularPatches
+        }
+        val incompatibleVisible = if (showNewSection) {
+            incompatiblePatches.filterNot { it.name in newPatchNames }
+        } else {
+            incompatiblePatches
+        }
+        val universalVisible = if (showNewSection) {
+            universalPatches.filterNot { it.name in newPatchNames }
+        } else {
+            universalPatches
+        }
+
+        if (nonUniversalSelected) {
+            if (regularVisible.isNotEmpty()) {
+                item(contentType = 0) {
+                    ListHeader(title = stringResource(R.string.regular_patches))
+                }
+            }
+            patchList(
+                uid = uid,
+                patches = regularVisible,
+                visible = true,
+                compatible = true,
+                suggestedVersion = suggestedVersion
+            )
+            patchList(
+                uid = uid,
+                patches = incompatibleVisible,
+                visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
+                compatible = viewModel.allowIncompatiblePatches,
+                suggestedVersion = suggestedVersion
+            ) {
+                ListHeader(
+                    title = stringResource(R.string.incompatible_patches),
+                    onHelpClick = { showIncompatiblePatchesDialog = true }
+                )
+            }
+            patchList(
+                uid = uid,
+                patches = universalVisible,
+                visible = true,
+                compatible = true,
+                suggestedVersion = suggestedVersion
+            ) {
+                ListHeader(title = stringResource(R.string.universal_patches))
+            }
+        } else {
+            patchList(
+                uid = uid,
+                patches = universalVisible,
+                visible = true,
+                compatible = true,
+                suggestedVersion = suggestedVersion
+            ) {
+                ListHeader(title = stringResource(R.string.universal_patches))
+            }
+            if (regularVisible.isNotEmpty()) {
+                item(contentType = 0) {
+                    ListHeader(title = stringResource(R.string.regular_patches))
+                }
+            }
+            patchList(
+                uid = uid,
+                patches = regularVisible,
+                visible = true,
+                compatible = true,
+                suggestedVersion = suggestedVersion
+            )
+            patchList(
+                uid = uid,
+                patches = incompatibleVisible,
+                visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
+                compatible = viewModel.allowIncompatiblePatches,
+                suggestedVersion = suggestedVersion
+            ) {
+                ListHeader(
+                    title = stringResource(R.string.incompatible_patches),
+                    onHelpClick = { showIncompatiblePatchesDialog = true }
+                )
+            }
+        }
+    }
+
     val currentBundle = bundles.getOrNull(settledPageIndex)
     val currentBundleDisplayName = currentBundle?.let { bundleDisplayNames[it.uid] ?: it.name }
     val warningEnabled = viewModel.selectionWarningEnabled
@@ -1271,83 +1418,13 @@ fun PatchesSelectorScreen(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                if (nonUniversalSelected) {
-                    if (regularPatches.isNotEmpty()) {
-                        item(contentType = 0) {
-                            ListHeader(
-                                title = stringResource(R.string.regular_patches)
-                            )
-                        }
-                    }
-                    patchList(
-                        uid = bundle.uid,
-                        patches = regularPatches,
-                        visible = true,
-                        compatible = true,
-                        suggestedVersion = suggestedVersion
-                    )
-                    patchList(
-                        uid = bundle.uid,
-                        patches = incompatiblePatches,
-                        visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
-                        compatible = viewModel.allowIncompatiblePatches,
-                        suggestedVersion = suggestedVersion
-                    ) {
-                        ListHeader(
-                            title = stringResource(R.string.incompatible_patches),
-                            onHelpClick = { showIncompatiblePatchesDialog = true }
-                        )
-                    }
-                    patchList(
-                        uid = bundle.uid,
-                        patches = universalPatches,
-                        visible = true,
-                        compatible = true,
-                        suggestedVersion = suggestedVersion
-                    ) {
-                        ListHeader(
-                            title = stringResource(R.string.universal_patches),
-                        )
-                    }
-                } else {
-                    patchList(
-                        uid = bundle.uid,
-                        patches = universalPatches,
-                        visible = true,
-                        compatible = true,
-                        suggestedVersion = suggestedVersion
-                    ) {
-                        ListHeader(
-                            title = stringResource(R.string.universal_patches),
-                        )
-                    }
-                    if (regularPatches.isNotEmpty()) {
-                        item(contentType = 0) {
-                            ListHeader(
-                                title = stringResource(R.string.regular_patches)
-                            )
-                        }
-                    }
-                    patchList(
-                        uid = bundle.uid,
-                        patches = regularPatches,
-                        visible = true,
-                        compatible = true,
-                        suggestedVersion = suggestedVersion
-                    )
-                    patchList(
-                        uid = bundle.uid,
-                        patches = incompatiblePatches,
-                        visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
-                        compatible = viewModel.allowIncompatiblePatches,
-                        suggestedVersion = suggestedVersion
-                    ) {
-                        ListHeader(
-                            title = stringResource(R.string.incompatible_patches),
-                            onHelpClick = { showIncompatiblePatchesDialog = true }
-                        )
-                    }
-                }
+                patchSections(
+                    uid = bundle.uid,
+                    regularPatches = regularPatches,
+                    incompatiblePatches = incompatiblePatches,
+                    universalPatches = universalPatches,
+                    suggestedVersion = suggestedVersion
+                )
             }
         }
     }
@@ -1554,83 +1631,13 @@ fun PatchesSelectorScreen(
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        if (nonUniversalSelected) {
-                            if (regularPatches.isNotEmpty()) {
-                                item(contentType = 0) {
-                                    ListHeader(
-                                        title = stringResource(R.string.regular_patches)
-                                    )
-                                }
-                            }
-                            patchList(
-                                uid = bundle.uid,
-                                patches = regularPatches,
-                                visible = true,
-                                compatible = true,
-                                suggestedVersion = suggestedVersion
-                            )
-                            patchList(
-                                uid = bundle.uid,
-                                patches = incompatiblePatches,
-                                visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
-                                compatible = viewModel.allowIncompatiblePatches,
-                                suggestedVersion = suggestedVersion
-                            ) {
-                                ListHeader(
-                                    title = stringResource(R.string.incompatible_patches),
-                                    onHelpClick = { showIncompatiblePatchesDialog = true }
-                                )
-                            }
-                            patchList(
-                                uid = bundle.uid,
-                                patches = universalPatches,
-                                visible = true,
-                                compatible = true,
-                                suggestedVersion = suggestedVersion
-                            ) {
-                                ListHeader(
-                                    title = stringResource(R.string.universal_patches),
-                                )
-                            }
-                        } else {
-                            patchList(
-                                uid = bundle.uid,
-                                patches = universalPatches,
-                                visible = true,
-                                compatible = true,
-                                suggestedVersion = suggestedVersion
-                            ) {
-                                ListHeader(
-                                    title = stringResource(R.string.universal_patches),
-                                )
-                            }
-                            if (regularPatches.isNotEmpty()) {
-                                item(contentType = 0) {
-                                    ListHeader(
-                                        title = stringResource(R.string.regular_patches)
-                                    )
-                                }
-                            }
-                            patchList(
-                                uid = bundle.uid,
-                                patches = regularPatches,
-                                visible = true,
-                                compatible = true,
-                                suggestedVersion = suggestedVersion
-                            )
-                            patchList(
-                                uid = bundle.uid,
-                                patches = incompatiblePatches,
-                                visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
-                                compatible = viewModel.allowIncompatiblePatches,
-                                suggestedVersion = suggestedVersion
-                            ) {
-                                ListHeader(
-                                    title = stringResource(R.string.incompatible_patches),
-                                    onHelpClick = { showIncompatiblePatchesDialog = true }
-                                )
-                            }
-                        }
+                        patchSections(
+                            uid = bundle.uid,
+                            regularPatches = regularPatches,
+                            incompatiblePatches = incompatiblePatches,
+                            universalPatches = universalPatches,
+                            suggestedVersion = suggestedVersion
+                        )
                     }
                 }
             }
@@ -1813,83 +1820,13 @@ fun PatchesSelectorScreen(
                                 ),
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                            if (nonUniversalSelected) {
-                                if (regularPatches.isNotEmpty()) {
-                                    item(contentType = 0) {
-                                        ListHeader(
-                                            title = stringResource(R.string.regular_patches)
-                                        )
-                                    }
-                                }
-                                patchList(
-                                    uid = bundle.uid,
-                                    patches = regularPatches,
-                                    visible = true,
-                                    compatible = true,
-                                    suggestedVersion = suggestedVersion
-                                )
-                                patchList(
-                                    uid = bundle.uid,
-                                    patches = incompatiblePatches,
-                                    visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
-                                    compatible = viewModel.allowIncompatiblePatches,
-                                    suggestedVersion = suggestedVersion
-                                ) {
-                                    ListHeader(
-                                        title = stringResource(R.string.incompatible_patches),
-                                        onHelpClick = { showIncompatiblePatchesDialog = true }
-                                    )
-                                }
-                                patchList(
-                                    uid = bundle.uid,
-                                    patches = universalPatches,
-                                    visible = true,
-                                    compatible = true,
-                                    suggestedVersion = suggestedVersion
-                                ) {
-                                    ListHeader(
-                                        title = stringResource(R.string.universal_patches),
-                                    )
-                                }
-                            } else {
-                                patchList(
-                                    uid = bundle.uid,
-                                    patches = universalPatches,
-                                    visible = true,
-                                    compatible = true,
-                                    suggestedVersion = suggestedVersion
-                                ) {
-                                    ListHeader(
-                                        title = stringResource(R.string.universal_patches),
-                                    )
-                                }
-                                if (regularPatches.isNotEmpty()) {
-                                    item(contentType = 0) {
-                                        ListHeader(
-                                            title = stringResource(R.string.regular_patches)
-                                        )
-                                    }
-                                }
-                                patchList(
-                                    uid = bundle.uid,
-                                    patches = regularPatches,
-                                    visible = true,
-                                    compatible = true,
-                                    suggestedVersion = suggestedVersion
-                                )
-                                patchList(
-                                    uid = bundle.uid,
-                                    patches = incompatiblePatches,
-                                    visible = viewModel.filter and SHOW_INCOMPATIBLE != 0,
-                                    compatible = viewModel.allowIncompatiblePatches,
-                                    suggestedVersion = suggestedVersion
-                                ) {
-                                    ListHeader(
-                                        title = stringResource(R.string.incompatible_patches),
-                                        onHelpClick = { showIncompatiblePatchesDialog = true }
-                                    )
-                                }
-                            }
+                            patchSections(
+                                uid = bundle.uid,
+                                regularPatches = regularPatches,
+                                incompatiblePatches = incompatiblePatches,
+                                universalPatches = universalPatches,
+                                suggestedVersion = suggestedVersion
+                            )
                             }
                         }
                     )

@@ -24,6 +24,7 @@ import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNul
 import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.isPreinstalled
 import app.urv.manager.domain.bundles.RemotePatchBundle
 import app.urv.manager.domain.repository.PatchBundleRepository
+import app.urv.manager.domain.repository.PatchSelectionRepository
 import app.urv.manager.domain.repository.DuplicatePatchProfileNameException
 import app.urv.manager.domain.repository.PatchProfileRepository
 import app.urv.manager.domain.repository.remapLocalBundles
@@ -52,6 +53,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -72,6 +74,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
     private val savedStateHandle: SavedStateHandle = get()
     val prefs: PreferencesManager = get()
     private val patchBundleRepository: PatchBundleRepository = get()
+    private val patchSelectionRepository: PatchSelectionRepository = get()
     val missingPatchNames: List<String>? = input.missingPatchNames
     private val patchProfileRepository: PatchProfileRepository = get()
 
@@ -165,6 +168,10 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
                 prefs.patchSelectionFilterFlags.update(value)
             }
         }
+    var showNewPatchesSection by mutableStateOf(prefs.patchSelectionShowNewPatches.getBlocking())
+        private set
+    private val _newPatchNamesByBundle = MutableStateFlow<Map<Int, Set<String>>>(emptyMap())
+    val newPatchNamesByBundle = _newPatchNamesByBundle.asStateFlow()
     val suggestedVersionsByBundle = patchBundleRepository.suggestedVersionsByBundle
 
     init {
@@ -214,6 +221,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         viewModelScope.launch {
             bundlesFlow.collect { bundles ->
                 currentBundles = bundles
+                _newPatchNamesByBundle.value = loadNewPatchNames(bundles)
                 if (!allowUniversalPatches) pruneSelectionsAndOptions()
             }
         }
@@ -888,6 +896,25 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
 
     fun toggleFlag(flag: Int) {
         filter = filter xor flag
+    }
+
+    fun toggleNewPatchesSection() {
+        showNewPatchesSection = !showNewPatchesSection
+        viewModelScope.launch {
+            prefs.patchSelectionShowNewPatches.update(showNewPatchesSection)
+        }
+    }
+
+    private suspend fun loadNewPatchNames(
+        bundles: List<PatchBundleInfo.Scoped>
+    ): Map<Int, Set<String>> = withContext(Dispatchers.Default) {
+        bundles.mapNotNull { bundle ->
+            val seenPatchNames = patchSelectionRepository.getSeenPatches(packageName, bundle.uid)
+                ?: return@mapNotNull null
+            val currentPatchNames = bundle.patches.map(PatchInfo::name).toSet()
+            val newPatchNames = currentPatchNames - seenPatchNames
+            if (newPatchNames.isEmpty()) null else bundle.uid to newPatchNames
+        }.toMap()
     }
 
     fun toggleTypeFlag(flag: Int) {

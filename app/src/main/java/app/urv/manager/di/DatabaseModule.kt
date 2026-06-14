@@ -16,6 +16,7 @@ import app.urv.manager.data.room.MIGRATION_10_11
 import app.urv.manager.data.room.MIGRATION_11_12
 import app.urv.manager.data.room.MIGRATION_12_13
 import app.urv.manager.data.room.MIGRATION_13_14
+import app.urv.manager.data.room.MIGRATION_14_15
 import org.koin.android.ext.koin.androidContext
 import org.koin.dsl.module
 
@@ -35,7 +36,8 @@ val databaseModule = module {
                 MIGRATION_10_11,
                 MIGRATION_11_12,
                 MIGRATION_12_13,
-                MIGRATION_13_14
+                MIGRATION_13_14,
+                MIGRATION_14_15
             )
             .build()
 

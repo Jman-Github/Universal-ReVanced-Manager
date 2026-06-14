@@ -1308,8 +1308,16 @@ class SelectedAppInfoViewModel(
 
         if (!persistConfiguration || !persistState) return@launch
         viewModelScope.launch(Dispatchers.Default) {
-            selection?.let { selectionRepository.updateSelection(packageName, it) }
-                ?: selectionRepository.resetSelectionForPackage(packageName)
+            val seenPatchesByBundle = bundleInfoFlow.first().associate { bundle ->
+                bundle.uid to bundle.patches.map(PatchInfo::name).toSet()
+            }
+            selection?.let {
+                selectionRepository.updateSelectionWithSeenPatches(
+                    packageName,
+                    it,
+                    seenPatchesByBundle
+                )
+            } ?: selectionRepository.resetSelectionForPackage(packageName)
 
             optionsRepository.saveOptions(packageName, filteredOptions)
         }

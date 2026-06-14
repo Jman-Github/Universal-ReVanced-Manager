@@ -10,6 +10,7 @@ import app.urv.manager.data.room.apps.installed.InstalledApp
 import app.urv.manager.data.room.apps.installed.InstalledAppDao
 import app.urv.manager.data.room.selection.PatchSelection
 import app.urv.manager.data.room.selection.SelectedPatch
+import app.urv.manager.data.room.selection.SeenPatch
 import app.urv.manager.data.room.selection.SelectionDao
 import app.urv.manager.data.room.bundles.PatchBundleDao
 import app.urv.manager.data.room.bundles.PatchBundleEntity
@@ -23,8 +24,8 @@ import app.urv.manager.data.room.profile.PatchProfileEntity
 import kotlin.random.Random
 
 @Database(
-    entities = [PatchBundleEntity::class, PatchSelection::class, SelectedPatch::class, DownloadedApp::class, InstalledApp::class, AppliedPatch::class, OptionGroup::class, Option::class, TrustedDownloaderPlugin::class, PatchProfileEntity::class],
-    version = 14
+    entities = [PatchBundleEntity::class, PatchSelection::class, SelectedPatch::class, SeenPatch::class, DownloadedApp::class, InstalledApp::class, AppliedPatch::class, OptionGroup::class, Option::class, TrustedDownloaderPlugin::class, PatchProfileEntity::class],
+    version = 15
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {

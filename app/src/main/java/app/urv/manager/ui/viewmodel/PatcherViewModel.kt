@@ -1230,6 +1230,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             }
 
             val globalBundlesFinal = patchBundleRepository.allBundlesInfoFlow.first()
+            val seenPatchesByBundle = globalBundlesFinal.mapValues { (_, bundle) ->
+                bundle.patches.map { it.name }.toSet()
+            }
             val sanitizedSelectionFinal = sanitizeSelection(appliedSelection, globalBundlesFinal)
             val sanitizedOptionsFinal = sanitizeOptions(appliedOptions, globalBundlesFinal)
             val sanitizedSelectionOriginal = sanitizeSelection(appliedSelection, globalBundlesFinal)
@@ -1388,10 +1391,18 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             }
 
             if (finalPackageName != packageName) {
-                patchSelectionRepository.updateSelection(finalPackageName, sanitizedSelectionFinal)
+                patchSelectionRepository.updateSelectionWithSeenPatches(
+                    finalPackageName,
+                    sanitizedSelectionFinal,
+                    seenPatchesByBundle
+                )
                 patchOptionsRepository.saveOptions(finalPackageName, sanitizedOptionsFinal)
             }
-            patchSelectionRepository.updateSelection(packageName, sanitizedSelectionOriginal)
+            patchSelectionRepository.updateSelectionWithSeenPatches(
+                packageName,
+                sanitizedSelectionOriginal,
+                seenPatchesByBundle
+            )
             patchOptionsRepository.saveOptions(packageName, sanitizedOptionsOriginal)
             appliedSelection = sanitizedSelectionOriginal
             appliedOptions = sanitizedOptionsOriginal

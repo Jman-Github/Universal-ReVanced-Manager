@@ -177,3 +177,20 @@ val MIGRATION_13_14 = object : Migration(13, 14) {
         )
     }
 }
+
+
+val MIGRATION_14_15 = object : Migration(14, 15) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS seen_patches (
+                patch_bundle INTEGER NOT NULL,
+                package_name TEXT NOT NULL,
+                patch_name TEXT NOT NULL,
+                PRIMARY KEY(patch_bundle, package_name, patch_name),
+                FOREIGN KEY(patch_bundle) REFERENCES patch_bundles(uid) ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+            """.trimIndent()
+        )
+    }
+}

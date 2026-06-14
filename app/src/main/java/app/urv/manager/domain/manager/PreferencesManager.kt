@@ -188,6 +188,7 @@ class PreferencesManager(
     val showPatchSelectionSummary = booleanPreference("show_patch_selection_summary", true)
     val collapsePatchActionsOnSelection = booleanPreference("collapse_patch_actions_on_selection", true)
     val patchSelectionFilterFlags = intPreference("patch_selection_filter_flags", -1)
+    val patchSelectionShowNewPatches = booleanPreference("patch_selection_show_new_patches", true)
     val patchSelectionSortAlphabetical = booleanPreference("patch_selection_sort_alphabetical", false)
     val patchSelectionSortDescending = booleanPreference("patch_selection_sort_descending", false)
     val patchSelectionSortSettingsMode = stringPreference("patch_selection_sort_settings_mode", "None")
@@ -323,6 +324,7 @@ class PreferencesManager(
         val showPatchSelectionSummary: Boolean? = null,
         val collapsePatchActionsOnSelection: Boolean? = null,
         val patchSelectionFilterFlags: Int? = null,
+        val patchSelectionShowNewPatches: Boolean? = null,
         val patchSelectionSortAlphabetical: Boolean? = null,
         val patchSelectionSortDescending: Boolean? = null,
         val patchSelectionSortSettingsMode: String? = null,
@@ -492,6 +494,7 @@ class PreferencesManager(
             showPatchSelectionSummary = showPatchSelectionSummary.get(),
             collapsePatchActionsOnSelection = collapsePatchActionsOnSelection.get(),
             patchSelectionFilterFlags = patchSelectionFilterFlags.get(),
+            patchSelectionShowNewPatches = patchSelectionShowNewPatches.get(),
             patchSelectionSortAlphabetical = patchSelectionSortAlphabetical.get(),
             patchSelectionSortDescending = patchSelectionSortDescending.get(),
             patchSelectionSortSettingsMode = patchSelectionSortSettingsMode.get(),
@@ -649,6 +652,7 @@ class PreferencesManager(
         snapshot.showPatchSelectionSummary?.let { showPatchSelectionSummary.value = it }
         snapshot.collapsePatchActionsOnSelection?.let { collapsePatchActionsOnSelection.value = it }
         snapshot.patchSelectionFilterFlags?.let { patchSelectionFilterFlags.value = it }
+        snapshot.patchSelectionShowNewPatches?.let { patchSelectionShowNewPatches.value = it }
         snapshot.patchSelectionSortAlphabetical?.let { patchSelectionSortAlphabetical.value = it }
         snapshot.patchSelectionSortDescending?.let { patchSelectionSortDescending.value = it }
         snapshot.patchSelectionSortSettingsMode?.let { patchSelectionSortSettingsMode.value = it }

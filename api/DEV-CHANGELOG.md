@@ -1,4 +1,4 @@
-# v1.8.1-dev.19 (TBD)
+# v1.8.1-dev.19 (2026-06-14)
 
 
 # Features
@@ -40,6 +40,7 @@
 - Centered body text in the downloader help and language restart dialogs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/539
 - Allowed combining cleanup filters in the split APK merge tool https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/360
 - Standardized supported version dialog layouts and centered suggested version chips https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/540
+- Added a default-enabled New patches filter that shows newly added patches from each bundle at the top of the patch selection screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/542
 
 
 # Bug fixes
