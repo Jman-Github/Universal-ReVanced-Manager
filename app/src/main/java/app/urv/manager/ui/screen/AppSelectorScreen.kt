@@ -833,7 +833,11 @@ private fun OtherSupportedVersionsInfoDialog(
         },
         title = { CenteredDialogTitle(stringResource(R.string.other_supported_versions_title, bundleName)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 recommendedVersion?.let { version ->
                     VersionSearchRow(
                         label = stringResource(
@@ -843,7 +847,7 @@ private fun OtherSupportedVersionsInfoDialog(
                         packageName = packageName,
                         version = version,
                         searchEngineHost = searchEngineHost,
-                        modifier = Modifier.align(Alignment.Start),
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
                         highlighted = true,
                         experimental = recommendedVersionExperimental
                     )
@@ -879,7 +883,7 @@ private fun OtherSupportedVersionsInfoDialog(
                             packageName = packageName,
                             version = null,
                             searchEngineHost = searchEngineHost,
-                            modifier = Modifier.align(Alignment.Start),
+                            modifier = Modifier.align(Alignment.CenterHorizontally),
                             highlighted = true
                         )
                     }

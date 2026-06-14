@@ -182,6 +182,7 @@
 - Added a filename format setting for merged APKs saved from the split APK merger tool https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/318
 - Centered body text in the downloader help and language restart dialogs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/539
 - Allowed combining cleanup filters in the split APK merge tool https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/360
+- Standardized supported version dialog layouts and centered suggested version chips https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/540
 
 
 # Bug fixes

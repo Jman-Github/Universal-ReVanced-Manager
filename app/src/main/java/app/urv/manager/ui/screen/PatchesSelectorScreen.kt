@@ -2413,27 +2413,38 @@ private fun PatchVersionsDialog(
             }
         },
         title = {
-            Text(stringResource(R.string.patch_versions_dialog_title, patchName))
+            CenteredDialogTitle(stringResource(R.string.patch_versions_dialog_title, patchName))
         },
         text = {
             Column(
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier
+                    .fillMaxWidth()
                     .heightIn(max = 320.dp)
                     .verticalScroll(scrollState)
             ) {
                 suggestedVersion?.let { info ->
-                    PatchVersionSearchChip(
-                        label = info.label,
-                        packageName = packageName,
-                        version = info.version,
-                        searchEngineHost = searchEngineHost,
-                        highlighted = true,
-                        experimental = info.experimental
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        PatchVersionSearchChip(
+                            label = info.label,
+                            packageName = packageName,
+                            version = info.version,
+                            searchEngineHost = searchEngineHost,
+                            highlighted = true,
+                            experimental = info.experimental
+                        )
+                    }
                 }
                 if (versions.isEmpty()) {
-                    Text(stringResource(R.string.other_supported_versions_empty))
+                    Text(
+                        text = stringResource(R.string.other_supported_versions_empty),
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         versions.chunked(2).forEach { row ->
