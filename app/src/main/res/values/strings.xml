@@ -1065,6 +1065,8 @@ Patch profiles are not affected.</string>
     <string name="merge_split_apk_step_sign">Sign merged APK</string>
     <string name="merge_split_apk_step_save">Save merged APK</string>
     <string name="merge_split_apk_downloading">Downloading split archive…</string>
+    <string name="merge_split_apk_downloading_bytes">Downloaded %1$s</string>
+    <string name="merge_split_apk_download_cancel">Cancel download</string>
     <string name="merge_split_apk_downloaded">Split archive downloaded.</string>
     <string name="merge_split_apk_preparing">Preparing split archive…</string>
     <string name="merge_split_apk_input_missing">Selected split archive no longer exists.</string>

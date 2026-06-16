@@ -526,7 +526,7 @@ class DashboardViewModel(
         splitMergePlugin = plugin
         splitMergePluginJob = viewModelScope.launch {
             val ownerJob = coroutineContext[Job]
-            var mergeScreenOpened = false
+            var loadingShown = false
             try {
                 val scope = object : GetScope {
                     override val hostPackageName = app.packageName
@@ -568,49 +568,42 @@ class DashboardViewModel(
                 }
 
                 ensureCurrentSplitMergeOwner(ownerJob)
+                val downloadingMessage = app.getString(R.string.merge_split_apk_downloading)
                 splitMergeStateFlow.value = SplitMergeState(
-                    inProgress = true,
-                    showDownloadStep = true,
+                    preparingSelection = true,
+                    inputName = packageName.trim().takeIf { it.isNotBlank() },
+                    currentMessage = downloadingMessage,
                     downloadStep = SplitMergeStepState(
                         status = SplitMergeStepStatus.RUNNING,
-                        message = null,
+                        message = downloadingMessage,
                         progressCurrent = 0L,
                         progressTotal = null
                     ),
                     mergeStep = SplitMergeStepState(
                         status = SplitMergeStepStatus.WAITING,
-                        message = null
-                    ),
-                    signStep = SplitMergeStepState(
-                        status = SplitMergeStepStatus.WAITING,
-                        message = null
-                    ),
-                    saveStep = SplitMergeStepState(
-                        status = SplitMergeStepStatus.WAITING,
-                        message = null
-                    ),
-                    currentMessage = app.getString(R.string.merge_split_apk_downloading)
+                        message = downloadingMessage
+                    )
                 )
-                updateSplitMergeNotification()
-                openSplitMergeScreenChannel.send(Unit)
-                mergeScreenOpened = true
+                appendSplitMergeLog(downloadingMessage)
+                loadingShown = true
                 val downloaded = downloadSplitInputFromPlugin(plugin, data)
                 ensureCurrentSplitMergeOwner(coroutineContext[Job])
-                updateDownloadStepCompleted()
                 prepareSplitMergeSelection(
                     inputFile = downloaded,
                     inputDisplayName = downloaded.name,
                     cleanup = { runCatching { downloaded.delete() } },
-                    showDownloadStep = true,
-                    openScreen = false
+                    showDownloadStep = false,
+                    openScreen = true
                 )
             } catch (e: UserInteractionException.Activity) {
                 if (splitMergePluginJob === ownerJob) {
-                    if (mergeScreenOpened) {
+                    if (loadingShown) {
                         splitMergeStateFlow.value = splitMergeStateFlow.value.copy(
+                            preparingSelection = false,
                             inProgress = false,
                             completed = false,
                             canSaveAgain = false,
+                            showDownloadStep = false,
                             error = e.message ?: app.getString(R.string.merge_split_apk_cancelled),
                             currentMessage = e.message ?: app.getString(R.string.merge_split_apk_cancelled),
                             downloadStep = splitMergeStateFlow.value.downloadStep.copy(
@@ -625,11 +618,13 @@ class DashboardViewModel(
                 throw e
             } catch (e: Exception) {
                 if (splitMergePluginJob === ownerJob) {
-                    if (mergeScreenOpened) {
+                    if (loadingShown) {
                         splitMergeStateFlow.value = splitMergeStateFlow.value.copy(
+                            preparingSelection = false,
                             inProgress = false,
                             completed = false,
                             canSaveAgain = false,
+                            showDownloadStep = false,
                             error = e.message ?: app.getString(R.string.merge_split_apk_failed),
                             currentMessage = e.message ?: app.getString(R.string.merge_split_apk_failed),
                             downloadStep = splitMergeStateFlow.value.downloadStep.copy(
@@ -722,20 +717,31 @@ class DashboardViewModel(
         return parent.takeIf { it.parentFile == splitMergeWorkspace && it.name.startsWith("run-") }
     }
 
-    private fun cleanupLegacySplitMergeArtifacts() {
+    private fun cleanupLegacySplitMergeArtifacts(protectedFiles: Set<File> = emptySet()) {
         val protectedDirs = buildSet {
             activeSplitMergeRunWorkspace?.absoluteFile?.let(::add)
             splitMergeRunWorkspaceFor(cachedMergedApk)?.absoluteFile?.let(::add)
         }
+        val protectedFilePaths = protectedFiles.mapTo(mutableSetOf()) { file ->
+            runCatching { file.canonicalFile }.getOrElse { file.absoluteFile }.toPath()
+        }
+        fun File.isProtectedFile(): Boolean {
+            val path = runCatching { canonicalFile }.getOrElse { absoluteFile }.toPath()
+            return path in protectedFilePaths
+        }
         runCatching { splitMergeWorkspace.resolve("selected-modules.txt").delete() }
         runCatching { splitMergeWorkspace.resolve("last-merged-unsigned.apk").delete() }
         splitMergeWorkspace.listFiles()
-            ?.filter { dir ->
-                dir.isDirectory &&
-                    (dir.name.startsWith("split-") || dir.name.startsWith("run-")) &&
-                    dir.absoluteFile !in protectedDirs
+            ?.forEach { entry ->
+                when {
+                    entry.isDirectory &&
+                        (entry.name.startsWith("split-") || entry.name.startsWith("run-")) &&
+                        entry.absoluteFile !in protectedDirs ->
+                        runCatching { entry.deleteRecursively() }
+                    entry.isFile && entry.name.startsWith("plugin-input-") && !entry.isProtectedFile() ->
+                        runCatching { entry.delete() }
+                }
             }
-            ?.forEach { dir -> runCatching { dir.deleteRecursively() } }
     }
 
     private fun isCurrentSplitMergeOwner(ownerJob: Job?): Boolean =
@@ -808,7 +814,7 @@ class DashboardViewModel(
         }
         try {
             ensureCurrentSplitMergeOwner(coroutineContext[Job])
-            cleanupLegacySplitMergeArtifacts()
+            cleanupLegacySplitMergeArtifacts(protectedFiles = setOf(inputFile))
         } catch (error: Throwable) {
             runCatching { cleanup() }
             runCatching { cacheUseToken?.close() }
@@ -1055,6 +1061,25 @@ class DashboardViewModel(
             SplitMergeNotification.clear(app)
             return
         }
+        val isPluginDownloadLoading = pluginJob?.isActive == true &&
+            job?.isActive != true &&
+            splitMergeStateFlow.value.preparingSelection &&
+            splitMergeStateFlow.value.downloadStep.status == SplitMergeStepStatus.RUNNING
+        if (isPluginDownloadLoading) {
+            val cancelException = CancellationException(app.getString(R.string.merge_split_apk_cancelled))
+            pluginJob.cancel(cancelException)
+            if (splitMergePluginJob === pluginJob) {
+                splitMergePluginJob = null
+            }
+            splitMergePlugin = null
+            clearPendingSplitMergeSource()
+            cleanupLegacySplitMergeArtifacts()
+            splitMergeStateFlow.value = cancelledSplitMergeState(splitMergeStateFlow.value)
+            appendSplitMergeLog(app.getString(R.string.merge_split_apk_cancelled))
+            SplitMergeNotification.clear(app)
+            return
+        }
+
         val stoppingMessage = app.getString(R.string.merge_split_apk_stopping)
         splitMergeStateFlow.value = splitMergeStateFlow.value.copy(
             cancellationInProgress = true,
@@ -1652,48 +1677,63 @@ class DashboardViewModel(
         withContext(Dispatchers.IO) {
             val tempInput = splitMergeWorkspace.resolve("plugin-input-${System.currentTimeMillis()}.apk")
             tempInput.parentFile?.mkdirs()
-            tempInput.outputStream().buffered().use { baseOutput ->
-                var downloadedBytes = 0L
-                var totalBytes: Long? = null
-                var lastUpdateAt = 0L
-                fun maybePublishProgress(force: Boolean = false) {
-                    val now = System.currentTimeMillis()
-                    if (!force && now - lastUpdateAt < 120L) return
-                    lastUpdateAt = now
-                    updateDownloadStepRunning(downloadedBytes, totalBytes)
-                }
-                val progressOutput = object : java.io.OutputStream() {
-                    override fun write(b: Int) {
-                        baseOutput.write(b)
-                        downloadedBytes += 1L
-                        maybePublishProgress()
-                    }
-
-                    override fun write(b: ByteArray, off: Int, len: Int) {
-                        baseOutput.write(b, off, len)
-                        downloadedBytes += len.toLong()
-                        maybePublishProgress()
-                    }
-
-                    override fun flush() {
-                        baseOutput.flush()
-                    }
-                }
-                val scope = object : OutputDownloadScope {
-                    override val hostPackageName = app.packageName
-                    override val pluginPackageName = plugin.packageName
-                    override suspend fun reportSize(size: Long) {
-                        totalBytes = size
-                        maybePublishProgress(force = true)
-                    }
-                }
-                plugin.download(scope, data, progressOutput)
-                maybePublishProgress(force = true)
+            val downloadJob = coroutineContext[Job]
+            fun ensureDownloadActive() {
+                downloadJob?.ensureActive()
             }
-            if (!tempInput.exists() || tempInput.length() <= 0L) {
-                throw IOException("Downloader plugin returned an empty file.")
+            try {
+                tempInput.outputStream().buffered().use { baseOutput ->
+                    var downloadedBytes = 0L
+                    var totalBytes: Long? = null
+                    var lastUpdateAt = 0L
+                    fun maybePublishProgress(force: Boolean = false) {
+                        ensureDownloadActive()
+                        val now = System.currentTimeMillis()
+                        if (!force && now - lastUpdateAt < 120L) return
+                        lastUpdateAt = now
+                        updateDownloadStepRunning(downloadedBytes, totalBytes)
+                    }
+                    val progressOutput = object : java.io.OutputStream() {
+                        override fun write(b: Int) {
+                            ensureDownloadActive()
+                            baseOutput.write(b)
+                            downloadedBytes += 1L
+                            maybePublishProgress()
+                        }
+
+                        override fun write(b: ByteArray, off: Int, len: Int) {
+                            ensureDownloadActive()
+                            baseOutput.write(b, off, len)
+                            downloadedBytes += len.toLong()
+                            maybePublishProgress()
+                        }
+
+                        override fun flush() {
+                            ensureDownloadActive()
+                            baseOutput.flush()
+                        }
+                    }
+                    val scope = object : OutputDownloadScope {
+                        override val hostPackageName = app.packageName
+                        override val pluginPackageName = plugin.packageName
+                        override suspend fun reportSize(size: Long) {
+                            ensureDownloadActive()
+                            totalBytes = size
+                            maybePublishProgress(force = true)
+                        }
+                    }
+                    plugin.download(scope, data, progressOutput)
+                    maybePublishProgress(force = true)
+                }
+                ensureDownloadActive()
+                if (!tempInput.exists() || tempInput.length() <= 0L) {
+                    throw IOException("Downloader plugin returned an empty file.")
+                }
+                tempInput
+            } catch (error: Throwable) {
+                runCatching { tempInput.delete() }
+                throw error
             }
-            tempInput
         }
     }
 
@@ -1721,21 +1761,22 @@ class DashboardViewModel(
 
     private fun updateDownloadStepRunning(downloaded: Long, total: Long?) {
         val previousStatus = splitMergeStateFlow.value.downloadStep.status
+        val downloadingMessage = app.getString(R.string.merge_split_apk_downloading)
         splitMergeStateFlow.value = splitMergeStateFlow.value.copy(
-            inProgress = true,
-            showDownloadStep = true,
-            currentMessage = app.getString(R.string.merge_split_apk_downloading),
+            preparingSelection = true,
+            inProgress = false,
+            showDownloadStep = false,
+            currentMessage = downloadingMessage,
             error = null,
             downloadStep = splitMergeStateFlow.value.downloadStep.copy(
                 status = SplitMergeStepStatus.RUNNING,
-                message = null,
+                message = downloadingMessage,
                 progressCurrent = downloaded,
                 progressTotal = total
             )
         )
-        updateSplitMergeNotification()
         if (previousStatus != SplitMergeStepStatus.RUNNING) {
-            appendSplitMergeLog(app.getString(R.string.merge_split_apk_downloading))
+            appendSplitMergeLog(downloadingMessage)
         }
     }
 

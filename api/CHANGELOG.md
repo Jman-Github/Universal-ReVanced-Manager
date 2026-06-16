@@ -188,6 +188,7 @@
 - Updated newly generated manager signing keystores to use `alias` as the alias and `password` as the password while preserving compatibility with existing and legacy manager keystores https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/538
 - Added support for importing remote patch bundles from GitHub and GitLab repository URLs by resolving root-level `patches-bundle.json` metadata https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/545
 - Added support for Morphe `add-source` links, including opening them in URV with the import dialog prefilled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/545
+- Improved the split APK downloader plugin flow by showing download progress in a loading screen before opening split selection
 
 
 # Bug fixes

@@ -124,6 +124,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -692,6 +693,24 @@ fun DashboardScreen(
     val showSplitMergeLoading = pendingSplitInstalledPackage != null ||
         splitMergeState.preparingSelection ||
         (showSplitInstalledAppsDialog && splitInstalledApps == null)
+    val splitMergeDownloadLoading = splitMergeState.preparingSelection &&
+        splitMergeState.downloadStep.status == SplitMergeStepStatus.RUNNING
+    val splitMergeLoadingMessage = splitMergeState.downloadStep.let { step ->
+        val current = step.progressCurrent
+        val total = step.progressTotal
+        when {
+            splitMergeDownloadLoading && current != null && total != null && total > 0L ->
+                "${(current.coerceIn(0L, total) * 100L) / total}%"
+            splitMergeDownloadLoading && current != null && current > 0L ->
+                stringResource(
+                    R.string.merge_split_apk_downloading_bytes,
+                    Formatter.formatShortFileSize(androidContext, current)
+                )
+            splitMergeDownloadLoading -> stringResource(R.string.merge_split_apk_downloading)
+            else -> null
+        }
+    }
+    val canCancelSplitMergeLoading = splitMergeDownloadLoading && !splitMergeState.cancellationInProgress
     var splitPluginPackageName by rememberSaveable { mutableStateOf("") }
     var splitPluginVersion by rememberSaveable { mutableStateOf("") }
     var pendingSplitPermissionRequest by rememberSaveable {
@@ -1317,7 +1336,15 @@ fun DashboardScreen(
         )
     }
     if (showSplitMergeLoading) {
-        TransparentLoadingDialog()
+        TransparentLoadingDialog(
+            message = splitMergeLoadingMessage,
+            cancelButtonText = if (canCancelSplitMergeLoading) {
+                stringResource(R.string.merge_split_apk_download_cancel)
+            } else {
+                null
+            },
+            onCancel = if (canCancelSplitMergeLoading) vm::cancelSplitMerge else null
+        )
     }
     if (showSavedAppsExportPicker && useCustomFilePicker) {
         PathSelectorDialog(
@@ -1829,6 +1856,7 @@ fun DashboardScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
+            modifier = Modifier.blur(if (splitMergeDownloadLoading) 16.dp else 0.dp),
             topBar = {
                 when {
                 appsSelectionActive &&
