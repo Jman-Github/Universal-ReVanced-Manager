@@ -255,12 +255,12 @@ fun MergeSplitApkScreen(
             selection = selection,
             initialModules = state.selectionIncludedModules,
             initialStripNativeLibs = state.selectionStripNativeLibs,
+            initialPresetKey = state.selectionPresetKey,
             onDismissRequest = {
                 vm.clearSplitMergeState()
                 onBackClick()
             },
-            onPresetSelected = { presetKey -> vm.rememberSplitMergeSelectionPreset(presetKey) },
-            onCleanupFiltersChanged = vm::rememberSplitMergeCleanupFilters,
+            onFilterSelectionChanged = vm::rememberSplitMergeFilterState,
             onConfirm = { includedModules, stripNativeLibs ->
                 vm.confirmSplitMergeSelection(
                     includedModules = includedModules,
@@ -824,9 +824,9 @@ private fun SplitMergeSelectionDialog(
     selection: SplitApkPreparer.SplitArchiveInspection,
     initialModules: Set<String>,
     initialStripNativeLibs: Boolean,
+    initialPresetKey: String,
     onDismissRequest: () -> Unit,
-    onPresetSelected: (String) -> Unit,
-    onCleanupFiltersChanged: (Boolean, Boolean, Boolean) -> Unit,
+    onFilterSelectionChanged: (String, Boolean, Boolean, Boolean) -> Unit,
     onConfirm: (Set<String>, Boolean) -> Unit
 ) {
     val requiredModules = remember(selection) {
@@ -931,20 +931,22 @@ private fun SplitMergeSelectionDialog(
             .map { preset -> preset.key }
             .toSet()
 
-    val initialPresetKey = remember(presetOptions, effectiveInitialModules, requiredModules, initialStripNativeLibs) {
-        if (initialStripNativeLibs) {
-            null
-        } else {
-            val matchingKeys = matchingPresetKeys(effectiveInitialModules)
-            when {
-                effectiveInitialModules == allModules && matchingKeys.contains("all") -> "all"
-                effectiveInitialModules == requiredModules && matchingKeys.contains("none") -> "none"
-                matchingKeys.size == 1 -> matchingKeys.first()
-                else -> null
-            }
+    fun inferPresetKey(modules: Set<String>): String? {
+        val matchingKeys = matchingPresetKeys(modules)
+        return when {
+            modules == allModules && matchingKeys.contains("all") -> "all"
+            modules == requiredModules && matchingKeys.contains("none") -> "none"
+            matchingKeys.size == 1 -> matchingKeys.first()
+            else -> null
         }
     }
-    var selectedPresetKey by remember(selection, initialPresetKey) { mutableStateOf<String?>(initialPresetKey) }
+
+    val rememberedInitialPresetKey = remember(initialPresetKey) {
+        initialPresetKey.takeIf { it == "all" || it == "none" || it == "recommended" } ?: "all"
+    }
+    var selectedPresetKey by remember(selection, rememberedInitialPresetKey) {
+        mutableStateOf<String?>(rememberedInitialPresetKey)
+    }
     val selectedModuleCount by remember(selectedModules, requiredModules) {
         derivedStateOf { (selectedModules + requiredModules).size }
     }
@@ -978,7 +980,8 @@ private fun SplitMergeSelectionDialog(
     fun updateSelection(
         modules: Set<String>,
         stripUnusedNativeLibs: Boolean,
-        preferredPresetKey: String? = null
+        preferredPresetKey: String? = null,
+        inferPresetFromModules: Boolean = false
     ): Set<String> {
         val abiAdjustedModules = if (stripUnusedNativeLibs) {
             (modules - optionalAbiModules) + trimmedOptionalAbiModules
@@ -988,18 +991,27 @@ private fun SplitMergeSelectionDialog(
         val normalizedModules = (abiAdjustedModules + requiredModules)
             .takeIf { it.isNotEmpty() }
             ?: requiredModules.ifEmpty { allModules }
-        val matchingKeys = matchingPresetKeys(normalizedModules)
-        val currentPresetKey = selectedPresetKey
         selectedModules = normalizedModules
         stripNativeLibs = stripUnusedNativeLibs
         selectedPresetKey = when {
-            stripUnusedNativeLibs -> null
             preferredPresetKey != null -> preferredPresetKey
-            currentPresetKey != null && matchingKeys.contains(currentPresetKey) -> currentPresetKey
-            matchingKeys.size == 1 -> matchingKeys.first()
-            else -> null
+            inferPresetFromModules -> inferPresetKey(normalizedModules)
+            else -> selectedPresetKey
         }
         return normalizedModules
+    }
+
+    fun rememberCurrentFilterSelection(
+        modules: Set<String>,
+        stripUnusedNativeLibs: Boolean,
+        presetKey: String = selectedPresetKey ?: "all"
+    ) {
+        onFilterSelectionChanged(
+            presetKey,
+            isLanguageCleanupSelected(modules),
+            isDensityCleanupSelected(modules),
+            stripUnusedNativeLibs
+        )
     }
 
     FullscreenDialog(onDismissRequest = onDismissRequest) {
@@ -1037,11 +1049,15 @@ private fun SplitMergeSelectionDialog(
                             CheckedFilterChip(
                                 selected = selectedPresetKey == preset.key,
                                 onClick = {
-                                    onPresetSelected(preset.key)
-                                    updateSelection(
+                                    val normalizedModules = updateSelection(
                                         modules = preset.modules,
                                         stripUnusedNativeLibs = false,
                                         preferredPresetKey = preset.key
+                                    )
+                                    rememberCurrentFilterSelection(
+                                        modules = normalizedModules,
+                                        stripUnusedNativeLibs = false,
+                                        presetKey = preset.key
                                     )
                                 },
                                 colors = chipColors,
@@ -1059,10 +1075,9 @@ private fun SplitMergeSelectionDialog(
                                         selectedModules + optionalLanguageModules
                                     }
                                     val normalizedModules = updateSelection(nextModules, stripNativeLibs)
-                                    onCleanupFiltersChanged(
-                                        isLanguageCleanupSelected(normalizedModules),
-                                        isDensityCleanupSelected(normalizedModules),
-                                        stripNativeLibs
+                                    rememberCurrentFilterSelection(
+                                        modules = normalizedModules,
+                                        stripUnusedNativeLibs = stripNativeLibs
                                     )
                                 },
                                 colors = chipColors,
@@ -1082,10 +1097,9 @@ private fun SplitMergeSelectionDialog(
                                         selectedModules + optionalDensityModules
                                     }
                                     val normalizedModules = updateSelection(nextModules, stripNativeLibs)
-                                    onCleanupFiltersChanged(
-                                        isLanguageCleanupSelected(normalizedModules),
-                                        isDensityCleanupSelected(normalizedModules),
-                                        stripNativeLibs
+                                    rememberCurrentFilterSelection(
+                                        modules = normalizedModules,
+                                        stripUnusedNativeLibs = stripNativeLibs
                                     )
                                 },
                                 colors = chipColors,
@@ -1107,10 +1121,9 @@ private fun SplitMergeSelectionDialog(
                                     modules = nextModules,
                                     stripUnusedNativeLibs = toggledStripNativeLibs
                                 )
-                                onCleanupFiltersChanged(
-                                    isLanguageCleanupSelected(normalizedModules),
-                                    isDensityCleanupSelected(normalizedModules),
-                                    toggledStripNativeLibs
+                                rememberCurrentFilterSelection(
+                                    modules = normalizedModules,
+                                    stripUnusedNativeLibs = toggledStripNativeLibs
                                 )
                             },
                             colors = chipColors,
@@ -1134,11 +1147,14 @@ private fun SplitMergeSelectionDialog(
                                 val updatedModules = selectedModules.toMutableSet().apply {
                                     if (checked) add(module.name) else remove(module.name)
                                 }
-                                val normalizedModules = updateSelection(updatedModules, stripNativeLibs)
-                                onCleanupFiltersChanged(
-                                    isLanguageCleanupSelected(normalizedModules),
-                                    isDensityCleanupSelected(normalizedModules),
-                                    stripNativeLibs
+                                val normalizedModules = updateSelection(
+                                    modules = updatedModules,
+                                    stripUnusedNativeLibs = stripNativeLibs,
+                                    inferPresetFromModules = true
+                                )
+                                rememberCurrentFilterSelection(
+                                    modules = normalizedModules,
+                                    stripUnusedNativeLibs = stripNativeLibs
                                 )
                             }
                         )
