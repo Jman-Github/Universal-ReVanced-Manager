@@ -32,6 +32,7 @@ class Revanced21BridgeRuntime(context: Context) : Runtime(context) {
         options: Options,
         logger: Logger,
         onEvent: (ProgressEvent) -> Unit,
+        onMemoryUsage: (usedMb: Long, maxMb: Long) -> Unit,
         stripNativeLibs: Boolean,
         skipUnneededSplits: Boolean,
     ) {
@@ -74,10 +75,15 @@ class Revanced21BridgeRuntime(context: Context) : Runtime(context) {
             "configurations" to configs
         )
 
-        ensureNotCancelled()
-        val error = Revanced21RuntimeBridge.runPatcher(params, runtimeLogger, onEvent, cancelRequested::get)
-        if (!error.isNullOrBlank()) {
-            throw Revanced21BridgeFailureException(error)
+        val memoryMonitor = PatcherMemoryMonitor.start(onMemoryUsage)
+        try {
+            ensureNotCancelled()
+            val error = Revanced21RuntimeBridge.runPatcher(params, runtimeLogger, onEvent, cancelRequested::get)
+            if (!error.isNullOrBlank()) {
+                throw Revanced21BridgeFailureException(error)
+            }
+        } finally {
+            memoryMonitor.stop()
         }
     }
 }

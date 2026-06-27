@@ -779,12 +779,16 @@ Patch profiles are not affected.</string>
     <string name="morphe_bytecode_mode_full_description">Uses the legacy full bytecode pipeline. Slower and more memory intensive, but useful if fast mode causes issues.</string>
     <string name="reset_to_recommended">Reset to recommended</string>
     <string name="reset_to_default">Reset to default</string>
+    <string name="patcher_memory_usage_graph_title">Show patcher memory graph</string>
+    <string name="patcher_memory_usage_graph_description">Show live memory usage above the patcher progress steps</string>
     <string name="patcher_auto_collapse_steps">Auto-collapse completed patcher steps</string>
     <string name="patcher_auto_collapse_steps_description">Automatically collapse each patcher progress widget after all of its steps finish</string>
     <string name="patcher_auto_expand_steps">Auto-expand running steps</string>
     <string name="patcher_auto_expand_steps_description">Automatically expand a patcher progress widget when it starts running</string>
     <string name="patcher_auto_expand_running_steps_exclusive">Only auto-expand active main category</string>
     <string name="patcher_auto_expand_running_steps_exclusive_description">When auto-expand is enabled, keep only the currently running main patcher category expanded and do not auto-expand sub-steps</string>
+    <string name="merge_split_memory_usage_graph_title">Show merger memory graph</string>
+    <string name="merge_split_memory_usage_graph_description">Show live memory usage above the split APK merger progress steps</string>
     <string name="merge_split_auto_collapse_steps">Auto-collapse completed merger steps</string>
     <string name="merge_split_auto_collapse_steps_description">Automatically collapse each merger progress widget after all of its steps finish</string>
     <string name="merge_split_auto_expand_steps">Auto-expand running merger steps</string>
@@ -1514,6 +1518,8 @@ Details: %2$s</string>
     <string name="manager_version_copied">Manager version copied</string>
     <string name="plugin_activity_dialog_body">User interaction is required in order to proceed with this plugin.</string>
     <string name="select_install_type">Select installation type</string>
+    <string name="patcher_memory_usage">Memory usage</string>
+    <string name="patcher_memory_usage_format">%1$d MB / %2$d MB</string>
     <string name="patcher_step_group_preparing">Preparing</string>
     <string name="patcher_step_load_patches">Load patches</string>
     <string name="patcher_step_prepare_split_apk">Merge split APK</string>

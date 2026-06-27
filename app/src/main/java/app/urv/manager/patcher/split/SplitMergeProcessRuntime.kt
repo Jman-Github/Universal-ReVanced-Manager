@@ -5,6 +5,8 @@ import android.os.Build
 import android.util.Log
 import app.urv.manager.patcher.LibraryResolver
 import app.urv.manager.patcher.runtime.MemoryLimitConfig
+import app.urv.manager.patcher.runtime.PatcherMemoryMonitor
+import app.urv.manager.patcher.worker.PatcherMemoryUsage
 import app.urv.manager.util.tag
 import java.io.File
 import java.io.IOException
@@ -34,7 +36,8 @@ class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver()
         skipUnneededSplits: Boolean,
         includedModules: Set<String>? = null,
         onProgress: (String) -> Unit,
-        onSubSteps: (List<String>) -> Unit
+        onSubSteps: (List<String>) -> Unit,
+        onMemoryUsage: (PatcherMemoryUsage) -> Unit = {}
     ): File = coroutineScope {
         workspace.mkdirs()
         val output = workspace.resolve("last-merged-unsigned.apk")
@@ -115,6 +118,11 @@ class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver()
                             onSubSteps(subSteps.toList())
                         }
 
+                        line.startsWith(MEMORY_PREFIX) -> {
+                            parseMemoryUsageSample(line.removePrefix(MEMORY_PREFIX))
+                                ?.let(onMemoryUsage)
+                        }
+
                         line.isNotBlank() -> Log.d(tag, "[split-merge process] $line")
                     }
                 }
@@ -170,6 +178,17 @@ class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver()
         }
     }
 
+    private fun parseMemoryUsageSample(raw: String): PatcherMemoryUsage? {
+        val parts = raw.trim().split(':')
+        val usedMb = parts.getOrNull(0)?.toLongOrNull()?.takeIf { it >= 0L } ?: return null
+        val maxMb = parts.getOrNull(1)?.toLongOrNull()?.takeIf { it > 0L }
+            ?: MemoryLimitConfig.maxLimitMb(context).toLong()
+        return PatcherMemoryUsage(
+            usedMb = usedMb,
+            maxMb = maxMb.coerceAtLeast(1L)
+        )
+    }
+
     class ProcessExitException(val exitCode: Int) :
         Exception("Split merge process exited with nonzero exit code $exitCode")
 
@@ -194,6 +213,7 @@ class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver()
     companion object {
         const val PROGRESS_PREFIX = "URV_SPLIT_PROGRESS:"
         const val SUBSTEP_PREFIX = "URV_SPLIT_SUBSTEP:"
+        const val MEMORY_PREFIX = "URV_SPLIT_MEMORY_MB:"
         private const val APP_PROCESS_BIN_PATH = "/system/bin/app_process"
         private const val APP_PROCESS_BIN_PATH_64 = "/system/bin/app_process64"
         private const val APP_PROCESS_BIN_PATH_32 = "/system/bin/app_process32"
@@ -220,28 +240,35 @@ object SplitMergeProcess {
             ?.map(String::trim)
             ?.filter(String::isNotBlank)
             ?.toSet()
-
+        val memoryMonitor = PatcherMemoryMonitor.start { usedMb, maxMb ->
+            println("${SplitMergeProcessRuntime.MEMORY_PREFIX}$usedMb:$maxMb")
+            System.out.flush()
+        }
         runBlocking {
-            val preparation = SplitApkPreparer.prepareIfNeeded(
-                source = input,
-                workspace = workspace,
-                stripNativeLibs = stripNativeLibs,
-                skipUnneededSplits = skipUnneededSplits,
-                includedModules = selectedModules,
-                onProgress = { msg ->
-                    println("${SplitMergeProcessRuntime.PROGRESS_PREFIX}$msg")
-                },
-                onSubSteps = { steps ->
-                    steps.forEach { step ->
-                        println("${SplitMergeProcessRuntime.SUBSTEP_PREFIX}$step")
-                    }
-                }
-            )
-
             try {
-                preparation.file.copyTo(output, overwrite = true)
+                val preparation = SplitApkPreparer.prepareIfNeeded(
+                    source = input,
+                    workspace = workspace,
+                    stripNativeLibs = stripNativeLibs,
+                    skipUnneededSplits = skipUnneededSplits,
+                    includedModules = selectedModules,
+                    onProgress = { msg ->
+                        println("${SplitMergeProcessRuntime.PROGRESS_PREFIX}$msg")
+                    },
+                    onSubSteps = { steps ->
+                        steps.forEach { step ->
+                            println("${SplitMergeProcessRuntime.SUBSTEP_PREFIX}$step")
+                        }
+                    }
+                )
+
+                try {
+                    preparation.file.copyTo(output, overwrite = true)
+                } finally {
+                    preparation.cleanup()
+                }
             } finally {
-                preparation.cleanup()
+                memoryMonitor.stop()
             }
         }
     }

@@ -62,6 +62,7 @@ import app.urv.manager.patcher.runtime.MemoryLimitConfig
 import app.urv.manager.patcher.runtime.Revanced22ProcessRuntime
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.patcher.worker.PatcherWorker
+import app.urv.manager.patcher.worker.PatcherMemoryUsage
 import app.urv.manager.patcher.worker.PatcherWorkerProgressState
 import app.urv.manager.patcher.worker.PatcherWorkerProgressUpdate
 import app.urv.manager.plugin.downloader.PluginHostApi
@@ -1033,6 +1034,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     var progress by mutableFloatStateOf(0f)
         private set
+    val patcherMemoryUsageSamples = mutableStateListOf<PatcherMemoryUsage>()
 
     private val workManager = WorkManager.getInstance(app)
     private val _patcherSucceeded = MediatorLiveData<Boolean?>()
@@ -1044,6 +1046,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private var replayWorkerProgressSnapshots = false
     private var lastAppliedWorkerProgressGeneration = Long.MIN_VALUE
     private var lastAppliedWorkerProgressSequence = Long.MIN_VALUE
+    private var patcherMemoryUsageGeneration = -1L
     private var forceKeepLocalInput = false
     private var lastLoggedErrorSignature: String? = null
 
@@ -1104,6 +1107,14 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private fun startWorker() {
         resetDexCompileState()
         resetFailureLogState()
+        patcherMemoryUsageGeneration = -1L
+        patcherMemoryUsageSamples.clear()
+        patcherMemoryUsageSamples.add(
+            PatcherMemoryUsage(
+                usedMb = 0L,
+                maxMb = (Runtime.getRuntime().maxMemory() / (1024L * 1024L)).coerceAtLeast(1L)
+            )
+        )
         runtimeReportedMemoryLimitMb = null
         replayWorkerProgressSnapshots = false
         lastAppliedWorkerProgressGeneration = Long.MIN_VALUE
@@ -2643,14 +2654,45 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         )
     }
 
-    private fun handleProgressEvent(update: PatcherWorkerProgressUpdate) =
-        enqueueWorkerProgressEvent(
-            generation = update.generation,
-            sequence = update.sequence,
-            event = update.event,
-            notificationProgressCurrent = update.notificationProgressCurrent,
-            notificationProgressMax = update.notificationProgressMax
+    private fun handleProgressEvent(update: PatcherWorkerProgressUpdate) {
+        viewModelScope.launch {
+            recordPatcherMemoryUsage(update.generation, update.memoryUsage)
+        }
+        update.event?.let { event ->
+            enqueueWorkerProgressEvent(
+                generation = update.generation,
+                sequence = update.sequence,
+                event = event,
+                notificationProgressCurrent = update.notificationProgressCurrent,
+                notificationProgressMax = update.notificationProgressMax
+            )
+        }
+    }
+
+    private fun recordPatcherMemoryUsage(generation: Long, memoryUsage: PatcherMemoryUsage?) {
+        memoryUsage ?: return
+        if (patcherMemoryUsageGeneration > generation) return
+        val maxMb = memoryUsage.maxMb.coerceAtLeast(1L)
+        val normalized = memoryUsage.copy(
+            usedMb = memoryUsage.usedMb.coerceIn(0L, maxMb),
+            maxMb = maxMb
         )
+        val scaleChanged = patcherMemoryUsageSamples.lastOrNull()?.maxMb != normalized.maxMb
+        if (patcherMemoryUsageGeneration != generation || scaleChanged) {
+            patcherMemoryUsageGeneration = generation
+            patcherMemoryUsageSamples.clear()
+            patcherMemoryUsageSamples.add(
+                PatcherMemoryUsage(
+                    usedMb = 0L,
+                    maxMb = normalized.maxMb
+                )
+            )
+        }
+        patcherMemoryUsageSamples.add(normalized)
+        while (patcherMemoryUsageSamples.size > PATCHER_MEMORY_USAGE_SAMPLE_LIMIT) {
+            patcherMemoryUsageSamples.removeAt(0)
+        }
+    }
 
     private fun enqueueWorkerProgressEvent(
         generation: Long,
@@ -4120,6 +4162,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 }
             }
         } ?: return
+        recordPatcherMemoryUsage(snapshot.generation, snapshot.memoryUsage)
         enqueueWorkerProgressEvent(
             generation = snapshot.generation,
             sequence = snapshot.sequence,
@@ -4526,6 +4569,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         private const val PATCHER_LOG_ENTRY_SOFT_LIMIT = 9_000
         private const val PATCHER_LOG_ENTRY_HARD_LIMIT = 12_000
         private const val PATCHER_LOG_MESSAGE_CHAR_LIMIT = 12_000
+        private const val PATCHER_MEMORY_USAGE_SAMPLE_LIMIT = 48
         fun LogLevel.androidLog(msg: String) = when (this) {
             LogLevel.TRACE -> Log.v(TAG, msg)
             LogLevel.INFO -> Log.i(TAG, msg)

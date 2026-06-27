@@ -15,6 +15,7 @@ data class PatcherWorkerProgressSnapshot(
     val event: ProgressEvent,
     val notificationProgressCurrent: Int? = null,
     val notificationProgressMax: Int? = null,
+    val memoryUsage: PatcherMemoryUsage? = null,
     val failedPatchIndexes: Set<Int> = emptySet()
 )
 
@@ -24,6 +25,8 @@ object PatcherWorkerProgressState {
     private const val PROGRESS_EVENT_KEY = "patching_progress_event"
     private const val PROGRESS_NOTIFICATION_CURRENT_KEY = "patching_progress_notification_current"
     private const val PROGRESS_NOTIFICATION_MAX_KEY = "patching_progress_notification_max"
+    private const val PROGRESS_MEMORY_USED_MB_KEY = "patching_progress_memory_used_mb"
+    private const val PROGRESS_MEMORY_MAX_MB_KEY = "patching_progress_memory_max_mb"
     private const val PROGRESS_FAILED_PATCH_INDEXES_KEY = "patching_progress_failed_patch_indexes"
 
     fun toWorkData(
@@ -44,6 +47,10 @@ object PatcherWorkerProgressState {
             }
             snapshot.notificationProgressMax?.let { max ->
                 builder.putInt(PROGRESS_NOTIFICATION_MAX_KEY, max)
+            }
+            snapshot.memoryUsage?.let { memory ->
+                builder.putLong(PROGRESS_MEMORY_USED_MB_KEY, memory.usedMb)
+                builder.putLong(PROGRESS_MEMORY_MAX_MB_KEY, memory.maxMb)
             }
             if (snapshot.failedPatchIndexes.isNotEmpty()) {
                 builder.putIntArray(
@@ -71,12 +78,24 @@ object PatcherWorkerProgressState {
         } else {
             null
         }
+        val memoryUsage = if (
+            data.keyValueMap.containsKey(PROGRESS_MEMORY_USED_MB_KEY) &&
+            data.keyValueMap.containsKey(PROGRESS_MEMORY_MAX_MB_KEY)
+        ) {
+            PatcherMemoryUsage(
+                usedMb = data.getLong(PROGRESS_MEMORY_USED_MB_KEY, 0L),
+                maxMb = data.getLong(PROGRESS_MEMORY_MAX_MB_KEY, 1L).coerceAtLeast(1L)
+            )
+        } else {
+            null
+        }
         return PatcherWorkerProgressSnapshot(
             generation = generation,
             sequence = sequence,
             event = event,
             notificationProgressCurrent = notificationCurrent,
             notificationProgressMax = notificationMax,
+            memoryUsage = memoryUsage,
             failedPatchIndexes = data.getIntArray(PROGRESS_FAILED_PATCH_INDEXES_KEY)?.toSet().orEmpty()
         )
     }

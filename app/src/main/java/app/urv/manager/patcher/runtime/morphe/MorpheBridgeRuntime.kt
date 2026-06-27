@@ -6,6 +6,7 @@ import app.urv.manager.patcher.logger.Logger
 import app.urv.manager.patcher.logger.filtered
 import app.urv.manager.patcher.morphe.MorpheBridgeFailureException
 import app.urv.manager.patcher.morphe.MorpheRuntimeBridge
+import app.urv.manager.patcher.runtime.PatcherMemoryMonitor
 import app.urv.manager.util.Options
 import app.urv.manager.util.PatchSelection
 import java.util.concurrent.atomic.AtomicBoolean
@@ -32,6 +33,7 @@ class MorpheBridgeRuntime(context: Context) : MorpheRuntime(context) {
         options: Options,
         logger: Logger,
         onEvent: (ProgressEvent) -> Unit,
+        onMemoryUsage: (usedMb: Long, maxMb: Long) -> Unit,
         stripNativeLibs: Boolean,
         skipUnneededSplits: Boolean,
     ) {
@@ -75,11 +77,15 @@ class MorpheBridgeRuntime(context: Context) : MorpheRuntime(context) {
             "bytecodeMode" to prefs.morpheBytecodeMode.get().runtimeValue,
             "configurations" to configs
         )
-
-        ensureNotCancelled()
-        val error = MorpheRuntimeBridge.runPatcher(params, runtimeLogger, onEvent, cancelRequested::get)
-        if (!error.isNullOrBlank()) {
-            throw MorpheBridgeFailureException(error)
+        val memoryMonitor = PatcherMemoryMonitor.start(onMemoryUsage)
+        try {
+            ensureNotCancelled()
+            val error = MorpheRuntimeBridge.runPatcher(params, runtimeLogger, onEvent, cancelRequested::get)
+            if (!error.isNullOrBlank()) {
+                throw MorpheBridgeFailureException(error)
+            }
+        } finally {
+            memoryMonitor.stop()
         }
     }
 }

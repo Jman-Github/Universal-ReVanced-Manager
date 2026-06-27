@@ -15,6 +15,7 @@ import app.urv.manager.patcher.logger.PatcherLogMode
 import app.urv.manager.patcher.logger.allows
 import app.urv.manager.patcher.revanced.Revanced21RuntimeBridge
 import app.urv.manager.patcher.runtime.Revanced21ProcessRuntime
+import app.urv.manager.patcher.runtime.PatcherMemoryMonitor
 import app.urv.manager.patcher.toParcel
 import java.io.OutputStream
 import java.io.PrintStream
@@ -93,6 +94,15 @@ class Revanced21PatcherProcess(
             }
         }
 
+        fun safeMemory(usedMb: Long, maxMb: Long) {
+            if (!eventsEnabled.get()) return
+            try {
+                events.memory(usedMb, maxMb)
+            } catch (_: Throwable) {
+                eventsEnabled.set(false)
+            }
+        }
+
         fun safeFinished(exceptionStackTrace: String?) {
             if (!eventsEnabled.get()) return
             try {
@@ -117,6 +127,7 @@ class Revanced21PatcherProcess(
                 start(mirrorToOriginal = logMode == PatcherLogMode.VERBOSE)
             }
             var exitCode = 0
+            val memoryMonitor = PatcherMemoryMonitor.start(::safeMemory)
 
             try {
                 Revanced21RuntimeBridge.initialize(appContext, parameters.runtimeClassPath)
@@ -140,6 +151,7 @@ class Revanced21PatcherProcess(
                 safeFinished(report)
                 exitCode = 1
             } finally {
+                memoryMonitor.stop()
                 stdioCapture.close()
                 aaptLogs.stop()
             }

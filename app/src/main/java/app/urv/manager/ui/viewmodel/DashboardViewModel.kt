@@ -32,9 +32,12 @@ import app.urv.manager.network.downloader.LoadedDownloaderPlugin
 import app.urv.manager.network.api.ReVancedAPI
 import app.urv.manager.network.dto.ReVancedAnnouncement
 import app.urv.manager.network.dto.ReVancedAsset
+import app.urv.manager.patcher.runtime.MemoryLimitConfig
+import app.urv.manager.patcher.runtime.PatcherMemoryMonitor
 import app.urv.manager.patcher.split.InstalledSplitArchiveBuilder
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.patcher.split.SplitMergeProcessRuntime
+import app.urv.manager.patcher.worker.PatcherMemoryUsage
 import app.urv.manager.util.PM
 import app.urv.manager.util.announcementTagKey
 import app.urv.manager.util.SplitMergeNotification
@@ -78,6 +81,7 @@ import java.io.FileNotFoundException
 import kotlin.coroutines.coroutineContext
 
 private const val SPLIT_MERGE_NOTIFICATION_PROGRESS_MAX = 1000
+private const val SPLIT_MERGE_MEMORY_USAGE_SAMPLE_LIMIT = 48
 
 @OptIn(PluginHostApi::class)
 class DashboardViewModel(
@@ -1248,7 +1252,13 @@ class DashboardViewModel(
             logEntries = splitMergeStateFlow.value.logEntries,
             selectionIncludedModules = includedModules.orEmpty(),
             selectionStripNativeLibs = stripNativeLibs,
-            excludedModules = excludedModules
+            excludedModules = excludedModules,
+            memoryUsageSamples = listOf(
+                PatcherMemoryUsage(
+                    usedMb = 0L,
+                    maxMb = MemoryLimitConfig.maxLimitMb(app).toLong().coerceAtLeast(1L)
+                )
+            )
         )
         appendSplitMergeLog("Starting split merge: $inputDisplayName")
         appendSplitMergeLog(app.getString(R.string.merge_split_apk_preparing))
@@ -1288,6 +1298,9 @@ class DashboardViewModel(
                             updateSplitMergeStateIfCurrent(ownerJob) { current ->
                                 current.copy(mergeSubSteps = subSteps)
                             }
+                        },
+                        onMemoryUsage = { sample ->
+                            recordSplitMergeMemoryUsage(ownerJob, sample)
                         }
                     )
                 } catch (processError: SplitMergeProcessRuntime.ProcessExitException) {
@@ -1304,41 +1317,54 @@ class DashboardViewModel(
                     updateSplitMergeNotification()
                     appendSplitMergeLog(app.getString(R.string.merge_split_apk_retrying_fallback))
 
-                    val fallbackPreparation = SplitApkPreparer.prepareIfNeeded(
-                        source = inputFile,
-                        workspace = runWorkspace,
-                        stripNativeLibs = stripNativeLibs,
-                        skipUnneededSplits = false,
-                        includedModules = includedModules,
-                        onProgress = { message ->
-                            if (isCurrentSplitMergeOwner(ownerJob)) {
-                                appendSplitMergeLog(message)
-                            }
-                            updateSplitMergeStateIfCurrent(ownerJob) { current ->
-                                current.copy(
-                                    currentMessage = message,
-                                    mergeStep = current.mergeStep.copy(
-                                        status = SplitMergeStepStatus.RUNNING,
-                                        message = message
-                                    )
-                                )
-                            }
-                        },
-                        onSubSteps = { subSteps ->
-                            updateSplitMergeStateIfCurrent(ownerJob) { current ->
-                                current.copy(mergeSubSteps = subSteps)
-                            }
-                        }
-                    )
-
+                    val fallbackMemoryMonitor = PatcherMemoryMonitor.start { usedMb, maxMb ->
+                        recordSplitMergeMemoryUsage(
+                            ownerJob,
+                            PatcherMemoryUsage(
+                                usedMb = usedMb,
+                                maxMb = maxMb.coerceAtLeast(1L)
+                            )
+                        )
+                    }
                     try {
-                        ensureCurrentSplitMergeOwner(ownerJob)
-                        val fallbackUnsigned = runWorkspace.resolve("last-merged-unsigned.apk")
-                        fallbackUnsigned.parentFile?.mkdirs()
-                        fallbackPreparation.file.copyTo(fallbackUnsigned, overwrite = true)
-                        fallbackUnsigned
+                        val fallbackPreparation = SplitApkPreparer.prepareIfNeeded(
+                            source = inputFile,
+                            workspace = runWorkspace,
+                            stripNativeLibs = stripNativeLibs,
+                            skipUnneededSplits = false,
+                            includedModules = includedModules,
+                            onProgress = { message ->
+                                if (isCurrentSplitMergeOwner(ownerJob)) {
+                                    appendSplitMergeLog(message)
+                                }
+                                updateSplitMergeStateIfCurrent(ownerJob) { current ->
+                                    current.copy(
+                                        currentMessage = message,
+                                        mergeStep = current.mergeStep.copy(
+                                            status = SplitMergeStepStatus.RUNNING,
+                                            message = message
+                                        )
+                                    )
+                                }
+                            },
+                            onSubSteps = { subSteps ->
+                                updateSplitMergeStateIfCurrent(ownerJob) { current ->
+                                    current.copy(mergeSubSteps = subSteps)
+                                }
+                            }
+                        )
+
+                        try {
+                            ensureCurrentSplitMergeOwner(ownerJob)
+                            val fallbackUnsigned = runWorkspace.resolve("last-merged-unsigned.apk")
+                            fallbackUnsigned.parentFile?.mkdirs()
+                            fallbackPreparation.file.copyTo(fallbackUnsigned, overwrite = true)
+                            fallbackUnsigned
+                        } finally {
+                            fallbackPreparation.cleanup()
+                        }
                     } finally {
-                        fallbackPreparation.cleanup()
+                        fallbackMemoryMonitor.stop()
                     }
                 }
 
@@ -1466,6 +1492,23 @@ class DashboardViewModel(
         cleanupLegacySplitMergeArtifacts()
         if (splitMergeJob === ownerJob) {
             splitMergeJob = null
+        }
+    }
+
+    private fun recordSplitMergeMemoryUsage(ownerJob: Job?, sample: PatcherMemoryUsage) {
+        val maxMb = sample.maxMb.coerceAtLeast(1L)
+        val normalized = sample.copy(
+            usedMb = sample.usedMb.coerceIn(0L, maxMb),
+            maxMb = maxMb
+        )
+        updateSplitMergeStateIfCurrent(ownerJob) { current ->
+            val existingSamples = current.memoryUsageSamples.takeIf {
+                it.lastOrNull()?.maxMb == normalized.maxMb
+            }.orEmpty()
+            current.copy(
+                memoryUsageSamples = (existingSamples + normalized)
+                    .takeLast(SPLIT_MERGE_MEMORY_USAGE_SAMPLE_LIMIT)
+            )
         }
     }
 
@@ -2005,7 +2048,8 @@ data class SplitMergeState(
     val downloadStep: SplitMergeStepState = SplitMergeStepState(),
     val mergeStep: SplitMergeStepState = SplitMergeStepState(),
     val signStep: SplitMergeStepState = SplitMergeStepState(),
-    val saveStep: SplitMergeStepState = SplitMergeStepState()
+    val saveStep: SplitMergeStepState = SplitMergeStepState(),
+    val memoryUsageSamples: List<PatcherMemoryUsage> = emptyList()
 )
 
 private data class PendingSplitMergeSource(

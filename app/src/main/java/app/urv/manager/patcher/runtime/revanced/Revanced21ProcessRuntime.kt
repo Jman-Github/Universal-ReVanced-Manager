@@ -92,6 +92,7 @@ class Revanced21ProcessRuntime(
         options: Options,
         logger: Logger,
         onEvent: (ProgressEvent) -> Unit,
+        onMemoryUsage: (usedMb: Long, maxMb: Long) -> Unit,
         stripNativeLibs: Boolean,
         skipUnneededSplits: Boolean,
     ) = coroutineScope {
@@ -244,6 +245,10 @@ class Revanced21ProcessRuntime(
 
                 override fun event(event: ProgressEventParcel?) {
                     event?.let { eventQueue.trySend(it.toEvent()) }
+                }
+
+                override fun memory(usedMb: Long, maxMb: Long) {
+                    onMemoryUsage(usedMb, maxMb)
                 }
 
                 override fun finished(exceptionStackTrace: String?) {

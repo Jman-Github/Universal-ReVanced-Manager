@@ -75,6 +75,7 @@ import app.urv.manager.ui.component.ExportSavedApkFileNameDialog
 import app.urv.manager.ui.component.FullscreenDialog
 import app.urv.manager.ui.component.InterceptBackHandler
 import app.urv.manager.ui.component.haptics.HapticExtendedFloatingActionButton
+import app.urv.manager.ui.component.patcher.PatcherMemoryUsageCard
 import app.urv.manager.ui.component.patcher.Steps
 import app.urv.manager.ui.component.patches.PathSelectorDialog
 import app.urv.manager.ui.model.State
@@ -107,6 +108,7 @@ fun MergeSplitApkScreen(
     val prefs: PreferencesManager = koinInject()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val splitMergeAutoCollapseSteps by prefs.splitMergeAutoCollapseSteps.getAsState()
+    val showSplitMergeMemoryUsageGraph by prefs.showSplitMergeMemoryUsageGraph.getAsState()
     val splitMergeAutoExpandRunningSteps by prefs.splitMergeAutoExpandRunningSteps.getAsState()
     val splitMergeAutoExpandRunningStepsExclusive by
         prefs.splitMergeAutoExpandRunningStepsExclusive.getAsState()
@@ -562,6 +564,11 @@ fun MergeSplitApkScreen(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                if (showSplitMergeMemoryUsageGraph && state.memoryUsageSamples.isNotEmpty()) {
+                    item(key = "memory-usage") {
+                        PatcherMemoryUsageCard(samples = state.memoryUsageSamples)
+                    }
+                }
                 items(stepsByCategory.toList(), key = { it.first }) { (category, steps) ->
                     Steps(
                         category = category,

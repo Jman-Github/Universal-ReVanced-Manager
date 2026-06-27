@@ -1212,6 +1212,21 @@ fun AdvancedSettingsScreen(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
             ) {
                 SettingsSearchHighlight(
+                    targetKey = R.string.patcher_memory_usage_graph_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.showPatcherMemoryUsageGraph,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.patcher_memory_usage_graph_title,
+                        description = R.string.patcher_memory_usage_graph_description,
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+
                     targetKey = R.string.patcher_auto_collapse_steps,
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }
@@ -1312,6 +1327,21 @@ fun AdvancedSettingsScreen(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
             ) {
                 SettingsSearchHighlight(
+                    targetKey = R.string.merge_split_memory_usage_graph_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.showSplitMergeMemoryUsageGraph,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.merge_split_memory_usage_graph_title,
+                        description = R.string.merge_split_memory_usage_graph_description,
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+
                     targetKey = R.string.merge_split_auto_collapse_steps,
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }

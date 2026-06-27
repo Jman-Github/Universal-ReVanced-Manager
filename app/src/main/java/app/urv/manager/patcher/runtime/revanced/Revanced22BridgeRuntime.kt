@@ -40,109 +40,115 @@ class Revanced22BridgeRuntime(context: Context) : Runtime(context) {
         options: Options,
         logger: Logger,
         onEvent: (ProgressEvent) -> Unit,
+        onMemoryUsage: (usedMb: Long, maxMb: Long) -> Unit,
         stripNativeLibs: Boolean,
         skipUnneededSplits: Boolean,
     ) {
         val logMode = prefs.patcherLogMode.get()
         val runtimeLogger = logger.filtered(logMode)
-        ensureNotCancelled()
-        val sourceInput = File(inputFile)
-        val hostPreparation = if (SplitApkPreparer.isSplitArchive(sourceInput)) {
-            runStep(
-                stepId = StepId.PrepareSplitApk,
-                onEvent = onEvent,
-                checkCancelled = ::ensureNotCancelled
-            ) {
-                SplitApkPreparer.prepareIfNeeded(
-                    source = sourceInput,
-                    workspace = File(cacheDir),
-                    logger = runtimeLogger,
-                    stripNativeLibs = stripNativeLibs,
-                    skipUnneededSplits = skipUnneededSplits,
-                    onProgress = { message ->
-                        onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
-                    },
-                    onSubSteps = { subSteps ->
-                        onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
-                    }
+        val memoryMonitor = PatcherMemoryMonitor.start(onMemoryUsage)
+        try {
+            ensureNotCancelled()
+            val sourceInput = File(inputFile)
+            val hostPreparation = if (SplitApkPreparer.isSplitArchive(sourceInput)) {
+                runStep(
+                    stepId = StepId.PrepareSplitApk,
+                    onEvent = onEvent,
+                    checkCancelled = ::ensureNotCancelled
+                ) {
+                    SplitApkPreparer.prepareIfNeeded(
+                        source = sourceInput,
+                        workspace = File(cacheDir),
+                        logger = runtimeLogger,
+                        stripNativeLibs = stripNativeLibs,
+                        skipUnneededSplits = skipUnneededSplits,
+                        onProgress = { message ->
+                            onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
+                        },
+                        onSubSteps = { subSteps ->
+                            onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
+                        }
+                    )
+                }
+            } else {
+                null
+            }
+            val runtimeInputFile = hostPreparation?.file?.absolutePath ?: inputFile
+            val activeSelectedPatches = selectedPatches.filterValues { it.isNotEmpty() }
+            val selectedBundleIds = activeSelectedPatches.keys
+            val bundlesByUid = bundles()
+            val selectedBundlesByUid = bundlesByUid.filterKeys { it in selectedBundleIds }
+            val staleBundleIds = selectedBundleIds - selectedBundlesByUid.keys
+            if (staleBundleIds.isNotEmpty()) {
+                runtimeLogger.warn("Ignoring missing patch bundle IDs in selection: ${staleBundleIds.joinToString(",")}")
+            }
+            if (activeSelectedPatches.isNotEmpty() && selectedBundlesByUid.isEmpty()) {
+                throw IllegalArgumentException(
+                    "Selected patches are unavailable. Re-open patch selection and select patches again."
                 )
             }
-        } else {
-            null
-        }
-        val runtimeInputFile = hostPreparation?.file?.absolutePath ?: inputFile
-        val activeSelectedPatches = selectedPatches.filterValues { it.isNotEmpty() }
-        val selectedBundleIds = activeSelectedPatches.keys
-        val bundlesByUid = bundles()
-        val selectedBundlesByUid = bundlesByUid.filterKeys { it in selectedBundleIds }
-        val staleBundleIds = selectedBundleIds - selectedBundlesByUid.keys
-        if (staleBundleIds.isNotEmpty()) {
-            runtimeLogger.warn("Ignoring missing patch bundle IDs in selection: ${staleBundleIds.joinToString(",")}")
-        }
-        if (activeSelectedPatches.isNotEmpty() && selectedBundlesByUid.isEmpty()) {
-            throw IllegalArgumentException(
-                "Selected patches are unavailable. Re-open patch selection and select patches again."
-            )
-        }
 
-        val configs = selectedBundlesByUid.map { (bundleUid, bundle) ->
-            mapOf(
-                "bundlePath" to bundle.patchesJar,
-                "patches" to activeSelectedPatches[bundleUid].orEmpty().toList(),
-                "options" to options[bundleUid].orEmpty()
-            )
-        }
-        val apkEditorJarPath = Revanced22RuntimeAssets.ensureApkEditorJar(appContext).absolutePath
-        val apkEditorMergeJarPath = Revanced22RuntimeAssets.ensureApkEditorMergeJar(appContext).absolutePath
-        val runtimeClassPath = Revanced22RuntimeAssets.ensureRuntimeClassPath(appContext).absolutePath
-        val appProcessPath = resolveAppProcessBin(appContext)
-
-        val requestedLimit = prefs.patcherProcessMemoryLimit.get()
-        val aggressiveLimit = prefs.patcherProcessMemoryAggressive.get()
-        val mergeMemoryLimitMb = MemoryLimitConfig.clampLimitMb(
-            appContext,
-            if (aggressiveLimit) {
-                MemoryLimitConfig.maxLimitMb(appContext)
-            } else {
-                requestedLimit
+            val configs = selectedBundlesByUid.map { (bundleUid, bundle) ->
+                mapOf(
+                    "bundlePath" to bundle.patchesJar,
+                    "patches" to activeSelectedPatches[bundleUid].orEmpty().toList(),
+                    "options" to options[bundleUid].orEmpty()
+                )
             }
-        )
+            val apkEditorJarPath = Revanced22RuntimeAssets.ensureApkEditorJar(appContext).absolutePath
+            val apkEditorMergeJarPath = Revanced22RuntimeAssets.ensureApkEditorMergeJar(appContext).absolutePath
+            val runtimeClassPath = Revanced22RuntimeAssets.ensureRuntimeClassPath(appContext).absolutePath
+            val appProcessPath = resolveAppProcessBin(appContext)
 
-        val propOverridePath = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            resolvePropOverride(appContext)?.absolutePath
-        } else {
-            null
-        }
-
-        try {
-            val params = mapOf(
-                "aaptPath" to aaptModernPath,
-                "aaptFallbackPath" to aaptLegacyPath,
-                "frameworkDir" to frameworkPath,
-                "cacheDir" to cacheDir,
-                "apkEditorJarPath" to apkEditorJarPath,
-                "apkEditorMergeJarPath" to apkEditorMergeJarPath,
-                "runtimeClassPath" to runtimeClassPath,
-                "propOverridePath" to propOverridePath,
-                "mergeMemoryLimitMb" to mergeMemoryLimitMb,
-                "appProcessPath" to appProcessPath,
-                "packageName" to packageName,
-                "inputFile" to runtimeInputFile,
-                "outputFile" to outputFile,
-                "patcherLogMode" to logMode.name,
-                "stripNativeLibs" to stripNativeLibs,
-                "skipUnneededSplits" to skipUnneededSplits,
-                "continueOnPatchError" to prefs.continueOnPatchError.get(),
-                "configurations" to configs
+            val requestedLimit = prefs.patcherProcessMemoryLimit.get()
+            val aggressiveLimit = prefs.patcherProcessMemoryAggressive.get()
+            val mergeMemoryLimitMb = MemoryLimitConfig.clampLimitMb(
+                appContext,
+                if (aggressiveLimit) {
+                    MemoryLimitConfig.maxLimitMb(appContext)
+                } else {
+                    requestedLimit
+                }
             )
 
-            ensureNotCancelled()
-            val error = Revanced22RuntimeBridge.runPatcher(params, runtimeLogger, onEvent, cancelRequested::get)
-            if (!error.isNullOrBlank()) {
-                throw Revanced22BridgeFailureException(error)
+            val propOverridePath = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                resolvePropOverride(appContext)?.absolutePath
+            } else {
+                null
+            }
+
+            try {
+                val params = mapOf(
+                    "aaptPath" to aaptModernPath,
+                    "aaptFallbackPath" to aaptLegacyPath,
+                    "frameworkDir" to frameworkPath,
+                    "cacheDir" to cacheDir,
+                    "apkEditorJarPath" to apkEditorJarPath,
+                    "apkEditorMergeJarPath" to apkEditorMergeJarPath,
+                    "runtimeClassPath" to runtimeClassPath,
+                    "propOverridePath" to propOverridePath,
+                    "mergeMemoryLimitMb" to mergeMemoryLimitMb,
+                    "appProcessPath" to appProcessPath,
+                    "packageName" to packageName,
+                    "inputFile" to runtimeInputFile,
+                    "outputFile" to outputFile,
+                    "patcherLogMode" to logMode.name,
+                    "stripNativeLibs" to stripNativeLibs,
+                    "skipUnneededSplits" to skipUnneededSplits,
+                    "continueOnPatchError" to prefs.continueOnPatchError.get(),
+                    "configurations" to configs
+                )
+
+                ensureNotCancelled()
+                val error = Revanced22RuntimeBridge.runPatcher(params, runtimeLogger, onEvent, cancelRequested::get)
+                if (!error.isNullOrBlank()) {
+                    throw Revanced22BridgeFailureException(error)
+                }
+            } finally {
+                hostPreparation?.cleanup()
             }
         } finally {
-            hostPreparation?.cleanup()
+            memoryMonitor.stop()
         }
     }
 

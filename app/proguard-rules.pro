@@ -18,6 +18,12 @@
 -keep class com.android.tools.smali.** { *; }
 
 -keep class app.urv.manager.patcher.runtime.process.* { *; }
+
+# Invoked reflectively by app_process for the standalone split APK merger.
+-keep class app.urv.manager.patcher.split.SplitMergeProcess {
+    public static void main(java.lang.String[]);
+}
+
 -keep class app.revanced.manager.plugin.downloader.** { *; }
 -keep class app.revanced.manager.downloader.** { *; }
 -keep class app.urv.manager.plugin.downloader.** { *; }

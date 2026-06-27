@@ -111,6 +111,7 @@ class PreferencesManager(
     val dashboardAppsFabCollapsed = booleanPreference("dashboard_apps_fab_collapsed", false)
     val dashboardProgressBannerCollapsed = booleanPreference("dashboard_progress_banner_collapsed", false)
     val autoCollapsePatcherSteps = booleanPreference("auto_collapse_patcher_steps", false)
+    val showPatcherMemoryUsageGraph = booleanPreference("show_patcher_memory_usage_graph", true)
     val autoExpandRunningSteps = booleanPreference("auto_expand_running_steps", true)
     val autoExpandRunningStepsExclusive = booleanPreference("auto_expand_running_steps_exclusive", false)
     val enableSavedApps = booleanPreference("enable_saved_apps", true)
@@ -225,6 +226,7 @@ class PreferencesManager(
     val splitMergeInstalledFilterSplitApks = booleanPreference("split_merge_installed_filter_split_apks", false)
     val splitMergeInstalledFilterSingleApks = booleanPreference("split_merge_installed_filter_single_apks", false)
     val splitMergeAutoCollapseSteps = booleanPreference("split_merge_auto_collapse_steps", false)
+    val showSplitMergeMemoryUsageGraph = booleanPreference("show_split_merge_memory_usage_graph", true)
     val splitMergeAutoExpandRunningSteps =
         booleanPreference("split_merge_auto_expand_running_steps", true)
     val splitMergeAutoExpandRunningStepsExclusive =
@@ -279,6 +281,7 @@ class PreferencesManager(
         val patcherProcessMemoryLimit: Int? = null,
         val patcherProcessMemoryAggressive: Boolean? = null,
         val autoCollapsePatcherSteps: Boolean? = null,
+        val showPatcherMemoryUsageGraph: Boolean? = null,
         val autoExpandRunningSteps: Boolean? = null,
         val autoExpandRunningStepsExclusive: Boolean? = null,
         val enableSavedApps: Boolean? = null,
@@ -358,6 +361,7 @@ class PreferencesManager(
         val splitMergeInstalledFilterSplitApks: Boolean? = null,
         val splitMergeInstalledFilterSingleApks: Boolean? = null,
         val splitMergeAutoCollapseSteps: Boolean? = null,
+        val showSplitMergeMemoryUsageGraph: Boolean? = null,
         val splitMergeAutoExpandRunningSteps: Boolean? = null,
         val splitMergeAutoExpandRunningStepsExclusive: Boolean? = null,
         val useCustomFilePicker: Boolean? = null,
@@ -461,6 +465,7 @@ class PreferencesManager(
             patcherProcessMemoryLimit = patcherProcessMemoryLimit.get(),
             patcherProcessMemoryAggressive = patcherProcessMemoryAggressive.get(),
             autoCollapsePatcherSteps = autoCollapsePatcherSteps.get(),
+            showPatcherMemoryUsageGraph = showPatcherMemoryUsageGraph.get(),
             autoExpandRunningSteps = autoExpandRunningSteps.get(),
             autoExpandRunningStepsExclusive = autoExpandRunningStepsExclusive.get(),
             enableSavedApps = enableSavedApps.get(),
@@ -535,6 +540,7 @@ class PreferencesManager(
             splitMergeInstalledFilterSplitApks = splitMergeInstalledFilterSplitApks.get(),
             splitMergeInstalledFilterSingleApks = splitMergeInstalledFilterSingleApks.get(),
             splitMergeAutoCollapseSteps = splitMergeAutoCollapseSteps.get(),
+            showSplitMergeMemoryUsageGraph = showSplitMergeMemoryUsageGraph.get(),
             splitMergeAutoExpandRunningSteps = splitMergeAutoExpandRunningSteps.get(),
             splitMergeAutoExpandRunningStepsExclusive = splitMergeAutoExpandRunningStepsExclusive.get(),
             useCustomFilePicker = useCustomFilePicker.get(),
@@ -621,6 +627,7 @@ class PreferencesManager(
         snapshot.patcherProcessMemoryLimit?.let { patcherProcessMemoryLimit.value = it }
         snapshot.patcherProcessMemoryAggressive?.let { patcherProcessMemoryAggressive.value = it }
         snapshot.autoCollapsePatcherSteps?.let { autoCollapsePatcherSteps.value = it }
+        snapshot.showPatcherMemoryUsageGraph?.let { showPatcherMemoryUsageGraph.value = it }
         snapshot.autoExpandRunningSteps?.let { autoExpandRunningSteps.value = it }
         snapshot.autoExpandRunningStepsExclusive?.let { autoExpandRunningStepsExclusive.value = it }
         snapshot.enableSavedApps?.let { enableSavedApps.value = it }
@@ -713,6 +720,7 @@ class PreferencesManager(
         snapshot.splitMergeInstalledFilterSplitApks?.let { splitMergeInstalledFilterSplitApks.value = it }
         snapshot.splitMergeInstalledFilterSingleApks?.let { splitMergeInstalledFilterSingleApks.value = it }
         snapshot.splitMergeAutoCollapseSteps?.let { splitMergeAutoCollapseSteps.value = it }
+        snapshot.showSplitMergeMemoryUsageGraph?.let { showSplitMergeMemoryUsageGraph.value = it }
         snapshot.splitMergeAutoExpandRunningSteps?.let { splitMergeAutoExpandRunningSteps.value = it }
         snapshot.splitMergeAutoExpandRunningStepsExclusive?.let {
             splitMergeAutoExpandRunningStepsExclusive.value = it

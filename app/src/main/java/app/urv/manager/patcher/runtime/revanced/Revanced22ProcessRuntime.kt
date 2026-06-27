@@ -98,6 +98,7 @@ class Revanced22ProcessRuntime(
         options: Options,
         logger: Logger,
         onEvent: (ProgressEvent) -> Unit,
+        onMemoryUsage: (usedMb: Long, maxMb: Long) -> Unit,
         stripNativeLibs: Boolean,
         skipUnneededSplits: Boolean,
     ) = coroutineScope {
@@ -111,28 +112,33 @@ class Revanced22ProcessRuntime(
         cancellationRequested.set(false)
         val sourceInput = File(inputFile)
         val hostPreparation = if (SplitApkPreparer.isSplitArchive(sourceInput)) {
-            runStep(
-                stepId = StepId.PrepareSplitApk,
-                onEvent = onEvent,
-                checkCancelled = {
-                    if (cancellationRequested.get()) {
-                        throw CancellationException("Patching cancelled")
+            val memoryMonitor = PatcherMemoryMonitor.start(onMemoryUsage)
+            try {
+                runStep(
+                    stepId = StepId.PrepareSplitApk,
+                    onEvent = onEvent,
+                    checkCancelled = {
+                        if (cancellationRequested.get()) {
+                            throw CancellationException("Patching cancelled")
+                        }
                     }
+                ) {
+                    SplitApkPreparer.prepareIfNeeded(
+                        source = sourceInput,
+                        workspace = File(cacheDir),
+                        logger = runtimeLogger,
+                        stripNativeLibs = stripNativeLibs,
+                        skipUnneededSplits = skipUnneededSplits,
+                        onProgress = { message ->
+                            onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
+                        },
+                        onSubSteps = { subSteps ->
+                            onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
+                        }
+                    )
                 }
-            ) {
-                SplitApkPreparer.prepareIfNeeded(
-                    source = sourceInput,
-                    workspace = File(cacheDir),
-                    logger = runtimeLogger,
-                    stripNativeLibs = stripNativeLibs,
-                    skipUnneededSplits = skipUnneededSplits,
-                    onProgress = { message ->
-                        onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
-                    },
-                    onSubSteps = { subSteps ->
-                        onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
-                    }
-                )
+            } finally {
+                memoryMonitor.stop()
             }
         } else {
             null
@@ -294,6 +300,10 @@ class Revanced22ProcessRuntime(
                         eventQueue.trySend(progressEvent)
                         handleProgressEvent(progressEvent)
                     }
+                }
+
+                override fun memory(usedMb: Long, maxMb: Long) {
+                    onMemoryUsage(usedMb, maxMb)
                 }
 
                 override fun finished(exceptionStackTrace: String?) {

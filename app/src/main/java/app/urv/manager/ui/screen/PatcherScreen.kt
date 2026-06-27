@@ -78,6 +78,7 @@ import app.urv.manager.ui.component.InstallerStatusDialog
 import app.urv.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.urv.manager.ui.component.patches.PathSelectorDialog
 import app.urv.manager.ui.component.patcher.InstallerPickerDialog
+import app.urv.manager.ui.component.patcher.PatcherMemoryUsageCard
 import app.urv.manager.ui.component.patcher.Steps
 import app.urv.manager.ui.model.StepCategory
 import app.urv.manager.ui.model.SelectedApp
@@ -113,6 +114,7 @@ fun PatcherScreen(
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val autoCollapsePatcherSteps by prefs.autoCollapsePatcherSteps.getAsState()
+    val showPatcherMemoryUsageGraph by prefs.showPatcherMemoryUsageGraph.getAsState()
     val autoExpandRunningSteps by prefs.autoExpandRunningSteps.getAsState()
     val autoExpandRunningStepsExclusive by prefs.autoExpandRunningStepsExclusive.getAsState()
     val chooseInstallerPerInstall by prefs.chooseInstallerPerInstall.getAsState()
@@ -944,6 +946,11 @@ fun PatcherScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 contentPadding = PaddingValues(16.dp)
             ) {
+                if (showPatcherMemoryUsageGraph && viewModel.patcherMemoryUsageSamples.isNotEmpty()) {
+                    item(key = "memory-usage") {
+                        PatcherMemoryUsageCard(samples = viewModel.patcherMemoryUsageSamples)
+                    }
+                }
                 items(
                     items = steps.toList(),
                     key = { it.first }

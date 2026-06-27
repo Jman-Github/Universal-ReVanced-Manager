@@ -142,6 +142,8 @@ class PatcherWorker(
     private var activeMorpheDexGroupTitle: String? = null
     @Volatile
     private var activeMorpheDexChildTitle: String? = null
+    @Volatile
+    private var lastPatcherMemoryUsage: PatcherMemoryUsage? = null
     private val dexCompilePattern =
         Regex("(Compiling|Compiled)\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
     private val dexWritePattern =
@@ -766,6 +768,7 @@ class PatcherWorker(
             event = snapshotEvent,
             notificationProgressCurrent = persistedNotificationProgress?.current,
             notificationProgressMax = persistedNotificationProgress?.max,
+            memoryUsage = lastPatcherMemoryUsage,
             failedPatchIndexes = currentFailedPatchIndexes()
         )
 
@@ -932,6 +935,7 @@ class PatcherWorker(
             event = snapshotEvent,
             notificationProgressCurrent = persistedNotificationProgress?.current,
             notificationProgressMax = persistedNotificationProgress?.max,
+            memoryUsage = lastPatcherMemoryUsage,
             failedPatchIndexes = currentFailedPatchIndexes()
         )
 
@@ -950,7 +954,8 @@ class PatcherWorker(
         sequence = sequence,
         event = event,
         notificationProgressCurrent = notificationProgress?.current,
-        notificationProgressMax = notificationProgress?.max
+        notificationProgressMax = notificationProgress?.max,
+        memoryUsage = lastPatcherMemoryUsage
     )
 
     private fun buildWriteApkLogEvent(rawMessage: String): ProgressEvent.Progress? {
@@ -1333,6 +1338,7 @@ class PatcherWorker(
 
     private suspend fun runPatcher(args: Args, totalPatchCount: Int): Result {
         cleanupTemporarySplitArtifacts()
+        lastPatcherMemoryUsage = null
         val patchedApk = fs.tempDir.resolve("patched.apk")
         var downloadCleanup: (() -> Unit)? = null
         patchNotificationSteps = args.selectedPatches.values
@@ -1578,6 +1584,15 @@ class PatcherWorker(
                         "cannot reliably initialize $forceProcessRuntimeReason"
                 )
             }
+            val runtimeMemoryUsageDispatcher: (Long, Long) -> Unit = { usedMb, maxMb ->
+                publishPatcherMemoryUsage(
+                    PatcherMemoryUsage(
+                        usedMb = usedMb.coerceIn(0L, maxMb.coerceAtLeast(1L)),
+                        maxMb = maxMb.coerceAtLeast(1L)
+                    ),
+                    args.onEvent
+                )
+            }
             workerLogger.info("Runtime mode: ${if (useProcessRuntime) "process" else "in-process"}")
             workerLogger.info("Memory override: ${if (memoryOverrideActive) "enabled" else "disabled"}")
             when (bundleType) {
@@ -1599,6 +1614,7 @@ class PatcherWorker(
                         args.options,
                         workerLogger,
                         eventDispatcher,
+                        runtimeMemoryUsageDispatcher,
                         stripNativeLibs,
                         skipUnneededSplits
                     )
@@ -1639,6 +1655,7 @@ class PatcherWorker(
                         args.options,
                         workerLogger,
                         eventDispatcher,
+                        runtimeMemoryUsageDispatcher,
                         stripNativeLibs,
                         skipUnneededSplits
                     )
@@ -1862,6 +1879,25 @@ class PatcherWorker(
             patchedApk.delete()
             downloadCleanup?.invoke()
             cleanupTemporarySplitArtifacts()
+        }
+    }
+
+    private fun publishPatcherMemoryUsage(
+        memoryUsage: PatcherMemoryUsage,
+        onEvent: (PatcherWorkerProgressUpdate) -> Unit
+    ) {
+        lastPatcherMemoryUsage = memoryUsage
+        val sequence = progressSequence.incrementAndGet()
+        runCatching {
+            onEvent(
+                PatcherWorkerProgressUpdate(
+                    generation = progressGeneration,
+                    sequence = sequence,
+                    memoryUsage = memoryUsage
+                )
+            )
+        }.onFailure { error ->
+            Log.d(tag, "Failed to publish patcher memory usage", error)
         }
     }
 

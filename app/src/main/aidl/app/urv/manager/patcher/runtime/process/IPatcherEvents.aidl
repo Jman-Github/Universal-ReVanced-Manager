@@ -7,6 +7,7 @@ import app.urv.manager.patcher.ProgressEventParcel;
 oneway interface IPatcherEvents {
     void log(String level, String msg);
     void event(in ProgressEventParcel event);
+    void memory(long usedMb, long maxMb);
     // The patching process has ended. The exceptionStackTrace is null if it finished successfully.
     void finished(String exceptionStackTrace);
 }

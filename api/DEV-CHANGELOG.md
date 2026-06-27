@@ -6,6 +6,7 @@
 - Added support for importing remote patch bundles from GitHub and GitLab repository URLs by resolving root-level `patches-bundle.json` metadata https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/545
 - Added support for Morphe `add-source` links, including opening them in URV with the import dialog prefilled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/545
 - Improved the split APK downloader plugin flow by showing download progress in a loading screen before opening split selection
+- Added optional live memory usage graphs to the patcher and split APK merger tool https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/567
 
 
 # Bug fixes
