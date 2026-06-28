@@ -328,11 +328,7 @@
     <string name="dark">ダーク</string>
     <string name="appearance">外観</string>
     <string name="downloaded_apps">ダウンロード済みアプリ</string>
-    <string name="process_runtime">パッチャーを別のプロセスで実行（実験的）</string>
-    <string name="process_runtime_description">高速化され、パッチャーがより多くのメモリを使用できるようになります</string>
     <string name="strip_unused_libs">未使用のネイティブライブラリを削除</string>
-    <string name="process_runtime_memory_limit">パッチャープロセスのメモリ制限</string>
-    <string name="process_runtime_memory_limit_description">パッチャープロセスが使用できるメモリの最大量（メガバイト単位）</string>
     <string name="reset_to_recommended">推奨値にリセット</string>
     <string name="patcher_auto_collapse_steps">完了したパッチャーステップを自動的に折りたたむ</string>
     <string name="patcher_auto_collapse_steps_description">すべてのステップが完了した後、各 Patcher 進捗ウィジェットを自動的に折りたたみます</string>

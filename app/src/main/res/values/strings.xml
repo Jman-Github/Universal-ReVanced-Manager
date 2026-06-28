@@ -751,10 +751,6 @@ Patch profiles are not affected.</string>
     <string name="dark">Dark</string>
     <string name="appearance">Appearance</string>
     <string name="downloaded_apps">Downloaded apps</string>
-    <string name="process_runtime">Run Patcher in another process (experimental)</string>
-    <string name="process_runtime_description">Runs patching in a separate process on Android 11+ to allow higher memory limits. On Android 10 and lower, patching stays in-process</string>
-    <string name="process_runtime_effective_limit_format">Effective limit: %1$d MB</string>
-    <string name="process_runtime_effective_limit_disabled">Effective limit: Off</string>
     <string name="strip_unused_libs">Remove unused native libraries</string>
     <string name="strip_unused_libs_description">Remove all native libraries except a single supported CPU architecture from patched apps</string>
     <string name="skip_unneeded_split_apks">Skip unneeded split APKs</string>
@@ -768,10 +764,6 @@ Patch profiles are not affected.</string>
     <string name="patcher_log_mode_default_description">Keeps the progress logs needed by the patcher UI while dropping extra noise. This can reduce logging overhead and help lower the chance of slowdowns or log-driven memory pressure.</string>
     <string name="patcher_log_mode_verbose">Verbose</string>
     <string name="patcher_log_mode_verbose_description">Keeps the full logging behavior, including trace-heavy output. Useful for debugging patch failures, but it can make patching slower and increase memory pressure.</string>
-    <string name="process_runtime_memory_limit">Patcher process memory limit</string>
-    <string name="process_runtime_memory_limit_description">The max amount of memory that the separate patcher process can use (in megabytes). This applies on Android 11+ when process runtime is enabled</string>
-    <string name="process_runtime_memory_aggressive">Aggressive patcher memory limit</string>
-    <string name="process_runtime_memory_aggressive_description">Use the highest memory limit allowed by your device for the experimental patcher</string>
     <string name="morphe_bytecode_mode">Morphe bytecode processing mode</string>
     <string name="morphe_bytecode_mode_description">Controls how the Morphe runtime processes bytecode during patching. Only applies to the Morphe runtime</string>
     <string name="morphe_bytecode_mode_dialog_description">Choose how Morphe processes DEX files when applying Morphe patches. This only affects the Morphe runtime.</string>
@@ -1524,6 +1516,7 @@ Details: %2$s</string>
     <string name="plugin_activity_dialog_body">User interaction is required in order to proceed with this plugin.</string>
     <string name="select_install_type">Select installation type</string>
     <string name="patcher_memory_usage">Memory usage</string>
+    <string name="legacy_android_memory_warning">Android 10 and older cannot use the same process isolation and memory safeguards available on Android 11 and newer. The app may become unstable or close if memory runs out.</string>
     <string name="patcher_memory_usage_format">%1$d MB / %2$d MB</string>
     <string name="patcher_step_group_preparing">Preparing</string>
     <string name="patcher_step_load_patches">Load patches</string>

@@ -317,11 +317,7 @@
     <string name="dark">深色</string>
     <string name="appearance">外观</string>
     <string name="downloaded_apps">已下载的应用</string>
-    <string name="process_runtime">在另一个进程中运行修补程序（实验性）</string>
-    <string name="process_runtime_description">这速度更快，并允许修补程序使用更多内存</string>
     <string name="strip_unused_libs">移除未使用的原生库</string>
-    <string name="process_runtime_memory_limit">修补程序进程内存限制</string>
-    <string name="process_runtime_memory_limit_description">修补程序进程可以使用的最大内存量（以兆字节为单位）</string>
     <string name="reset_to_recommended">重置为推荐值</string>
     <string name="patcher_auto_collapse_steps">自动折叠已完成的修补程序步骤</string>
     <string name="patcher_auto_collapse_steps_description">在所有步骤完成后自动折叠每个修补程序进度小部件。</string>

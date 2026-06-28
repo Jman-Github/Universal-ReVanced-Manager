@@ -1,5 +1,6 @@
 package app.urv.manager.ui.screen
 
+import android.os.Build
 import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -75,6 +76,7 @@ import app.urv.manager.ui.component.ExportSavedApkFileNameDialog
 import app.urv.manager.ui.component.FullscreenDialog
 import app.urv.manager.ui.component.InterceptBackHandler
 import app.urv.manager.ui.component.haptics.HapticExtendedFloatingActionButton
+import app.urv.manager.ui.component.patcher.LegacyAndroidMemoryWarning
 import app.urv.manager.ui.component.patcher.PatcherMemoryUsageCard
 import app.urv.manager.ui.component.patcher.Steps
 import app.urv.manager.ui.component.patches.PathSelectorDialog
@@ -592,6 +594,11 @@ fun MergeSplitApkScreen(
                             }
                         }
                     )
+                }
+                if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
+                    item(key = "legacy-android-memory-warning") {
+                        LegacyAndroidMemoryWarning()
+                    }
                 }
             }
         }

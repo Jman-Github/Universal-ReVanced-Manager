@@ -35,6 +35,7 @@ class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver()
         stripNativeLibs: Boolean,
         skipUnneededSplits: Boolean,
         includedModules: Set<String>? = null,
+        memoryLimitMb: Int? = MemoryLimitConfig.maxLimitMb(context),
         onProgress: (String) -> Unit,
         onSubSteps: (List<String>) -> Unit,
         onMemoryUsage: (PatcherMemoryUsage) -> Unit = {}
@@ -50,10 +51,10 @@ class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver()
             put("CLASSPATH", managerBaseApk)
         }
         val usePropOverride = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
-        if (usePropOverride) {
+        if (usePropOverride && memoryLimitMb != null) {
             val propOverride = findLibrary(context, "prop_override")
             if (propOverride != null) {
-                val limit = "${MemoryLimitConfig.maxLimitMb(context)}M"
+                val limit = "${MemoryLimitConfig.clampLimitMb(context, memoryLimitMb)}M"
                 env["LD_PRELOAD"] = propOverride.absolutePath
                 env["PROP_dalvik.vm.heapgrowthlimit"] = limit
                 env["PROP_dalvik.vm.heapsize"] = limit

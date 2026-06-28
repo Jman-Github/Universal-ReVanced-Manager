@@ -190,6 +190,9 @@
 - Added support for Morphe `add-source` links, including opening them in URV with the import dialog prefilled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/545
 - Improved the split APK downloader plugin flow by showing download progress in a loading screen before opening split selection
 - Added optional live memory usage graphs to the patcher and split APK merger tool https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/567
+- Force patching and split APK merging to run in separate processes on Android 11+ to prevent memory crashes https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/572
+- Removed obsolete experimental patcher and memory-limit settings
+- Added an instability warning for Android 10 and older
 
 
 # Bug fixes

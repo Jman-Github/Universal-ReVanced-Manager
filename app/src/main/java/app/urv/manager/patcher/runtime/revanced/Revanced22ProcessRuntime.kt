@@ -16,6 +16,7 @@ import app.urv.manager.patcher.logger.Logger
 import app.urv.manager.patcher.logger.filtered
 import app.urv.manager.patcher.runStep
 import app.urv.manager.patcher.split.SplitApkPreparer
+import app.urv.manager.patcher.split.SplitMergeProcessRuntime
 import app.urv.manager.patcher.runtime.StdIoWarningAccumulator
 import app.urv.manager.patcher.runtime.process.IPatcherEvents
 import app.urv.manager.patcher.runtime.process.IPatcherProcess
@@ -49,16 +50,17 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.core.component.inject
 
 class Revanced22ProcessRuntime(
-    private val context: Context,
-    private val useMemoryOverride: Boolean = true
+    private val context: Context
 ) : Runtime(context) {
     private val pm: PM by inject()
     private val binderRef = AtomicReference<IPatcherProcess?>()
     private val eventHandlerRef = AtomicReference<IPatcherEvents?>()
     private val cancellationRequested = AtomicBoolean(false)
+    private val splitMergeRuntime = SplitMergeProcessRuntime(context)
 
     override fun cancel() {
         cancellationRequested.set(true)
+        splitMergeRuntime.cancelActiveExecution()
         runCatching { binderRef.getAndSet(null)?.exit() }
         eventHandlerRef.set(null)
     }
@@ -106,39 +108,47 @@ class Revanced22ProcessRuntime(
         val runtimeLogger = logger.filtered(logMode)
         currentCoroutineContext()[Job]?.invokeOnCompletion {
             cancellationRequested.set(true)
+            splitMergeRuntime.cancelActiveExecution()
             runCatching { binderRef.get()?.exit() }
             eventHandlerRef.set(null)
         }
         cancellationRequested.set(false)
+        val runtimeLimit = MemoryLimitConfig.maxLimitMb(context)
         val sourceInput = File(inputFile)
         val hostPreparation = if (SplitApkPreparer.isSplitArchive(sourceInput)) {
-            val memoryMonitor = PatcherMemoryMonitor.start(onMemoryUsage)
-            try {
-                runStep(
-                    stepId = StepId.PrepareSplitApk,
-                    onEvent = onEvent,
-                    checkCancelled = {
-                        if (cancellationRequested.get()) {
-                            throw CancellationException("Patching cancelled")
-                        }
+            runStep(
+                stepId = StepId.PrepareSplitApk,
+                onEvent = onEvent,
+                checkCancelled = {
+                    if (cancellationRequested.get()) {
+                        throw CancellationException("Patching cancelled")
                     }
-                ) {
-                    SplitApkPreparer.prepareIfNeeded(
-                        source = sourceInput,
-                        workspace = File(cacheDir),
-                        logger = runtimeLogger,
-                        stripNativeLibs = stripNativeLibs,
-                        skipUnneededSplits = skipUnneededSplits,
-                        onProgress = { message ->
-                            onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
-                        },
-                        onSubSteps = { subSteps ->
-                            onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
-                        }
-                    )
                 }
-            } finally {
-                memoryMonitor.stop()
+            ) {
+                val mergeWorkspace = File(cacheDir).resolve(
+                    "revanced22-split-${System.currentTimeMillis()}"
+                )
+                val mergedFile = splitMergeRuntime.execute(
+                    inputFile = sourceInput,
+                    workspace = mergeWorkspace,
+                    stripNativeLibs = stripNativeLibs,
+                    skipUnneededSplits = skipUnneededSplits,
+                    memoryLimitMb = runtimeLimit,
+                    onProgress = { message ->
+                        onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, message = message))
+                    },
+                    onSubSteps = { subSteps ->
+                        onEvent(ProgressEvent.Progress(stepId = StepId.PrepareSplitApk, subSteps = subSteps))
+                    },
+                    onMemoryUsage = { sample ->
+                        onMemoryUsage(sample.usedMb, sample.maxMb)
+                    }
+                )
+                SplitApkPreparer.PreparationResult(
+                    file = mergedFile,
+                    merged = true,
+                    cleanup = { mergeWorkspace.deleteRecursively() }
+                )
             }
         } else {
             null
@@ -165,33 +175,22 @@ class Revanced22ProcessRuntime(
             put("REVANCED22_APP_PROCESS_PATH", appProcessBin)
         }
 
-        if (useMemoryOverride) {
-            val requestedLimit = prefs.patcherProcessMemoryLimit.get()
-            val aggressiveLimit = prefs.patcherProcessMemoryAggressive.get()
-            val runtimeLimit = MemoryLimitConfig.clampLimitMb(
-                context,
-                if (aggressiveLimit) MemoryLimitConfig.maxLimitMb(context) else requestedLimit
-            )
-            val limit = "${runtimeLimit}M"
-            val usePropOverride = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
-            val propOverride = if (usePropOverride) {
-                resolvePropOverride(context)?.absolutePath
-                    ?: throw Exception("Couldn't find prop override library")
-            } else {
-                null
-            }
-            if (propOverride != null) {
-                env["LD_PRELOAD"] = propOverride
-                env["PROP_dalvik.vm.heapgrowthlimit"] = limit
-                env["PROP_dalvik.vm.heapsize"] = limit
-                env["REVANCED22_PROP_OVERRIDE_PATH"] = propOverride
-            } else {
-                Log.w(tag, "Skipping prop override on Android ${Build.VERSION.SDK_INT}")
-            }
-            env["REVANCED22_MERGE_MEMORY_LIMIT_MB"] = runtimeLimit.toString()
+        val limit = "${runtimeLimit}M"
+        val propOverride = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            resolvePropOverride(context)?.absolutePath
+                ?: throw Exception("Couldn't find prop override library")
         } else {
-            Log.d(tag, "ReVanced v22 process runtime started without memory override")
+            null
         }
+        if (propOverride != null) {
+            env["LD_PRELOAD"] = propOverride
+            env["PROP_dalvik.vm.heapgrowthlimit"] = limit
+            env["PROP_dalvik.vm.heapsize"] = limit
+            env["REVANCED22_PROP_OVERRIDE_PATH"] = propOverride
+        } else {
+            Log.w(tag, "Skipping prop override on Android ${Build.VERSION.SDK_INT}")
+        }
+        env["REVANCED22_MERGE_MEMORY_LIMIT_MB"] = runtimeLimit.toString()
 
         fun handleProgressEvent(event: ProgressEvent) = Unit
 
@@ -381,6 +380,7 @@ class Revanced22ProcessRuntime(
         private const val APP_PROCESS_BIN_PATH_64 = "/system/bin/app_process64"
         private const val APP_PROCESS_BIN_PATH_32 = "/system/bin/app_process32"
         const val OOM_EXIT_CODE = 134
+        const val LOW_MEMORY_KILL_EXIT_CODE = 137
 
         const val CONNECT_TO_APP_ACTION = "CONNECT_TO_REVANCED22_APP_ACTION"
         const val INTENT_BUNDLE_KEY = "BUNDLE"

@@ -43,8 +43,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.io.File
 
 class MorpheProcessRuntime(
-    private val context: Context,
-    private val useMemoryOverride: Boolean = true
+    private val context: Context
 ) : MorpheRuntime(context) {
     private val binderRef = AtomicReference<IMorphePatcherProcess?>()
     private val eventHandlerRef = AtomicReference<IPatcherEvents?>()
@@ -121,30 +120,19 @@ class MorpheProcessRuntime(
             put("CLASSPATH", runtimeClassPath)
         }
 
-        if (useMemoryOverride) {
-            val requestedLimit = prefs.patcherProcessMemoryLimit.get()
-            val aggressiveLimit = prefs.patcherProcessMemoryAggressive.get()
-            val runtimeLimit = MemoryLimitConfig.clampLimitMb(
-                context,
-                if (aggressiveLimit) MemoryLimitConfig.maxLimitMb(context) else requestedLimit
-            )
-            val limit = "${runtimeLimit}M"
-            val usePropOverride = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
-            val propOverride = if (usePropOverride) {
-                resolvePropOverride(context)?.absolutePath
-                    ?: throw Exception("Couldn't find prop override library")
-            } else {
-                null
-            }
-            if (propOverride != null) {
-                env["LD_PRELOAD"] = propOverride
-                env["PROP_dalvik.vm.heapgrowthlimit"] = limit
-                env["PROP_dalvik.vm.heapsize"] = limit
-            } else {
-                Log.w(tag, "Skipping prop override on Android ${Build.VERSION.SDK_INT}")
-            }
+        val limit = "${MemoryLimitConfig.maxLimitMb(context)}M"
+        val propOverride = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            resolvePropOverride(context)?.absolutePath
+                ?: throw Exception("Couldn't find prop override library")
         } else {
-            Log.d(tag, "Morphe process runtime started without memory override")
+            null
+        }
+        if (propOverride != null) {
+            env["LD_PRELOAD"] = propOverride
+            env["PROP_dalvik.vm.heapgrowthlimit"] = limit
+            env["PROP_dalvik.vm.heapsize"] = limit
+        } else {
+            Log.w(tag, "Skipping prop override on Android ${Build.VERSION.SDK_INT}")
         }
 
         val appProcessBin = resolveAppProcessBin(context)

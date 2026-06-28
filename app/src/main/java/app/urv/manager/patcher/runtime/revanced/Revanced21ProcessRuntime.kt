@@ -43,8 +43,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.core.component.inject
 
 class Revanced21ProcessRuntime(
-    private val context: Context,
-    private val useMemoryOverride: Boolean = true
+    private val context: Context
 ) : Runtime(context) {
     private val pm: PM by inject()
     private val binderRef = AtomicReference<IPatcherProcess?>()
@@ -121,27 +120,19 @@ class Revanced21ProcessRuntime(
         val appProcessBin = resolveAppProcessBin(context)
         val env = System.getenv().toMutableMap().apply {
             put("CLASSPATH", managerBaseApk)
-            if (useMemoryOverride) {
-                val requestedLimit = prefs.patcherProcessMemoryLimit.get()
-                val aggressiveLimit = prefs.patcherProcessMemoryAggressive.get()
-                val runtimeLimit = MemoryLimitConfig.clampLimitMb(
-                    context,
-                    if (aggressiveLimit) MemoryLimitConfig.maxLimitMb(context) else requestedLimit
-                )
-                val limit = "${runtimeLimit}M"
-                val propOverride = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    resolvePropOverride(context)?.absolutePath
-                        ?: throw Exception("Couldn't find prop override library")
-                } else {
-                    null
-                }
-                if (propOverride != null) {
-                    put("LD_PRELOAD", propOverride)
-                    put("PROP_dalvik.vm.heapgrowthlimit", limit)
-                    put("PROP_dalvik.vm.heapsize", limit)
-                } else {
-                    Log.w(tag, "Skipping prop override on Android ${Build.VERSION.SDK_INT}")
-                }
+            val limit = "${MemoryLimitConfig.maxLimitMb(context)}M"
+            val propOverride = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                resolvePropOverride(context)?.absolutePath
+                    ?: throw Exception("Couldn't find prop override library")
+            } else {
+                null
+            }
+            if (propOverride != null) {
+                put("LD_PRELOAD", propOverride)
+                put("PROP_dalvik.vm.heapgrowthlimit", limit)
+                put("PROP_dalvik.vm.heapsize", limit)
+            } else {
+                Log.w(tag, "Skipping prop override on Android ${Build.VERSION.SDK_INT}")
             }
         }
 

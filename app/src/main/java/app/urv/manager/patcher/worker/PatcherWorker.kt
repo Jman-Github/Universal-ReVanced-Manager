@@ -84,13 +84,11 @@ import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.io.File
 import java.util.LinkedHashSet
-import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.ZipEntry
-import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -1524,43 +1522,12 @@ class PatcherWorker(
             val stripNativeLibs = prefs.stripUnusedNativeLibs.get()
             val skipUnneededSplits = prefs.skipUnneededSplitApks.get()
             val inputIsSplitArchive = SplitApkPreparer.isSplitArchive(inputFile)
-            val inputHasProblematicEmbeddedApks =
-                !inputIsSplitArchive && hasProblematicEmbeddedApkPayloads(inputFile)
             val selectedCount = totalPatchCount
-            val processRuntimeRequested = prefs.useProcessRuntime.get()
-            val processRuntimeSupported = Build.VERSION.SDK_INT > Build.VERSION_CODES.Q
+            val useProcessRuntime = Build.VERSION.SDK_INT > Build.VERSION_CODES.Q
             val useRevancedPatcher22 =
                 bundleType == PatchBundleType.REVANCED &&
                     patchBundleRepository.selectionUsesRevancedPatcher22(args.selectedPatches)
-            val forceProcessRuntimeReason =
-                if (!processRuntimeRequested && processRuntimeSupported) {
-                    when (bundleType) {
-                        PatchBundleType.REVANCED -> when {
-                            useRevancedPatcher22 -> null
-                            inputIsSplitArchive -> "legacy split APK input"
-                            inputHasProblematicEmbeddedApks -> "embedded APK payloads in legacy input"
-                            else -> null
-                        }
-                        PatchBundleType.MORPHE -> null
-                        PatchBundleType.AMPLE -> null
-                    }
-                } else {
-                    null
-                }
-            val forceProcessRuntimeForLegacyInput = forceProcessRuntimeReason != null
-            val useProcessRuntime =
-                (processRuntimeRequested && processRuntimeSupported) || forceProcessRuntimeForLegacyInput
-            val memoryOverrideActive = useProcessRuntime && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
-            val requestedLimit = prefs.patcherProcessMemoryLimit.get()
-            val aggressiveLimit = prefs.patcherProcessMemoryAggressive.get()
-            val effectiveLimit = MemoryLimitConfig.clampLimitMb(
-                applicationContext,
-                if (aggressiveLimit) {
-                    MemoryLimitConfig.maxLimitMb(applicationContext)
-                } else {
-                    requestedLimit
-                }
-            )
+            val effectiveLimit = MemoryLimitConfig.maxLimitMb(applicationContext)
 
             workerLogger.info(
                 "Patching started at ${System.currentTimeMillis()} " +
@@ -1569,21 +1536,8 @@ class PatcherWorker(
                         "split=$inputIsSplitArchive patches=$selectedCount"
             )
             workerLogger.info(
-                "Patcher runtime: bundle=$bundleType experimental=$processRuntimeRequested " +
-                    "memoryLimit=${if (memoryOverrideActive) "${effectiveLimit}MB" else "disabled"} " +
-                    "(requested=${requestedLimit}MB${if (aggressiveLimit) ", aggressive" else ""})"
+                "Patcher runtime: bundle=$bundleType memoryLimit=${effectiveLimit}MB"
             )
-            if (processRuntimeRequested && !processRuntimeSupported) {
-                workerLogger.warn(
-                    "Process runtime requested but unsupported on Android ${Build.VERSION.SDK_INT}; using in-process runtime"
-                )
-            }
-            if (forceProcessRuntimeReason != null) {
-                workerLogger.warn(
-                    "Forcing process runtime for legacy input because the in-process legacy runtime " +
-                        "cannot reliably initialize $forceProcessRuntimeReason"
-                )
-            }
             val runtimeMemoryUsageDispatcher: (Long, Long) -> Unit = { usedMb, maxMb ->
                 publishPatcherMemoryUsage(
                     PatcherMemoryUsage(
@@ -1594,14 +1548,14 @@ class PatcherWorker(
                 )
             }
             workerLogger.info("Runtime mode: ${if (useProcessRuntime) "process" else "in-process"}")
-            workerLogger.info("Memory override: ${if (memoryOverrideActive) "enabled" else "disabled"}")
+            workerLogger.info("Memory override: ${if (useProcessRuntime) "enabled" else "disabled"}")
             when (bundleType) {
                 PatchBundleType.MORPHE -> {
                     check(MorpheRuntimeAssets.isAvailable(applicationContext)) {
                         "Morphe runtime is not included in this build."
                     }
                     val runtime = if (useProcessRuntime) {
-                        MorpheProcessRuntime(applicationContext, useMemoryOverride = memoryOverrideActive)
+                        MorpheProcessRuntime(applicationContext)
                     } else {
                         MorpheBridgeRuntime(applicationContext)
                     }
@@ -1630,8 +1584,7 @@ class PatcherWorker(
                         if (useRevancedPatcher22) {
                             if (useProcessRuntime) {
                                 Revanced22ProcessRuntime(
-                                    applicationContext,
-                                    useMemoryOverride = memoryOverrideActive
+                                    applicationContext
                                 )
                             } else {
                                 Revanced22BridgeRuntime(applicationContext)
@@ -1639,8 +1592,7 @@ class PatcherWorker(
                         } else {
                             if (useProcessRuntime) {
                                 Revanced21ProcessRuntime(
-                                    applicationContext,
-                                    useMemoryOverride = memoryOverrideActive
+                                    applicationContext
                                 )
                             } else {
                                 Revanced21BridgeRuntime(applicationContext)
@@ -1692,11 +1644,9 @@ class PatcherWorker(
                 e.exitCode
             )
             eventDispatcher(ProgressEvent.Failed(null, Exception(message).toRemoteError()))
-            val previousLimit = prefs.patcherProcessMemoryLimit.get()
             Result.failure(
                 workDataOf(
                     PROCESS_EXIT_CODE_KEY to e.exitCode,
-                    PROCESS_PREVIOUS_LIMIT_KEY to previousLimit,
                     PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(message)
                 )
             )
@@ -1747,11 +1697,9 @@ class PatcherWorker(
                 e.exitCode
             )
             eventDispatcher(ProgressEvent.Failed(null, Exception(message).toRemoteError()))
-            val previousLimit = prefs.patcherProcessMemoryLimit.get()
             Result.failure(
                 workDataOf(
                     PROCESS_EXIT_CODE_KEY to e.exitCode,
-                    PROCESS_PREVIOUS_LIMIT_KEY to previousLimit,
                     PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(message)
                 )
             )
@@ -1802,11 +1750,11 @@ class PatcherWorker(
                 e.exitCode
             )
             eventDispatcher(ProgressEvent.Failed(null, Exception(message).toRemoteError()))
-            val previousLimit = prefs.patcherProcessMemoryLimit.get()
+
             Result.failure(
                 workDataOf(
                     PROCESS_EXIT_CODE_KEY to e.exitCode,
-                    PROCESS_PREVIOUS_LIMIT_KEY to previousLimit,
+
                     PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(message)
                 )
             )
@@ -1908,7 +1856,7 @@ class PatcherWorker(
         internal const val PATCHING_NOTIFICATION_CHANNEL_ID = "revanced-patcher-patching"
         internal const val NOTIFICATION_ID = 1
         const val PROCESS_EXIT_CODE_KEY = "process_exit_code"
-        const val PROCESS_PREVIOUS_LIMIT_KEY = "process_previous_limit"
+
         const val PROCESS_FAILURE_MESSAGE_KEY = "process_failure_message"
         const val PATCHING_ACTIVE_KEY = "patching_active"
         const val FAILED_PATCH_INDEXES_KEY = "failed_patch_indexes"
@@ -2033,34 +1981,6 @@ class PatcherWorker(
         }
     }
 
-    private fun hasProblematicEmbeddedApkPayloads(file: File): Boolean {
-        if (!file.exists() || !file.extension.equals("apk", ignoreCase = true)) return false
-        return runCatching {
-            ZipFile(file).use { zip ->
-                zip.entries().asSequence()
-                    .filterNot { it.isDirectory }
-                    .any { entry ->
-                        val name = entry.name
-                        name.endsWith(".apk", ignoreCase = true) &&
-                            !SplitApkPreparer.isLikelySplitApkEntryName(name) &&
-                            isProblematicEmbeddedApkEntryName(name)
-                    }
-            }
-        }.getOrDefault(false)
-    }
-
-    private fun isProblematicEmbeddedApkEntryName(entryName: String): Boolean {
-        val normalized = entryName.replace('\\', '/')
-        val fileName = normalized.substringAfterLast('/')
-        if (!fileName.endsWith(".apk", ignoreCase = true)) return false
-
-        val stem = fileName.removeSuffix(".apk").lowercase(Locale.ROOT)
-        val parts = stem.split('.')
-        if (parts.size < 3) return false
-        return parts.all { part ->
-            part.isNotBlank() && part.all { ch -> ch.isLowerCase() || ch.isDigit() || ch == '_' }
-        }
-    }
 
     private suspend fun prepareInstalledInput(packageName: String): DownloadResult = withContext(Dispatchers.IO) {
         val packageInfo = pm.getPackageInfo(packageName)

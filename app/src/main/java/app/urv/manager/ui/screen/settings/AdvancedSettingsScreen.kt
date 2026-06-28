@@ -184,8 +184,6 @@ import app.urv.manager.ui.component.GroupHeader
 import app.urv.manager.ui.component.SettingsSectionIcons
 import app.urv.manager.ui.component.splitTrailingPunctuation
 import app.urv.manager.ui.component.settings.BooleanItem
-import app.urv.manager.patcher.runtime.MemoryLimitConfig
-import app.urv.manager.ui.component.settings.IntegerItem
 import app.urv.manager.ui.component.settings.SafeguardBooleanItem
 import app.urv.manager.ui.component.settings.ExpressiveSettingsCard
 import app.urv.manager.ui.component.settings.ExpressiveSettingsConfigurableItem
@@ -1045,121 +1043,6 @@ fun AdvancedSettingsScreen(
                         secondaryActionEnabled = patcherLogMode != viewModel.prefs.patcherLogMode.default,
                         primaryActionLabel = stringResource(R.string.edit),
                         onPrimaryAction = { showPatcherLogModeDialog = true }
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.process_runtime,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    val processRuntimeEnabled by viewModel.prefs.useProcessRuntime.getAsState()
-                    val processMemoryLimit by viewModel.prefs.patcherProcessMemoryLimit.getAsState()
-                    val aggressiveLimitEnabled by viewModel.prefs.patcherProcessMemoryAggressive.getAsState()
-                    val processRuntimeSupported = remember { Build.VERSION.SDK_INT > Build.VERSION_CODES.Q }
-                    val processRuntimeActive = processRuntimeEnabled && processRuntimeSupported
-                    val effectiveLimit = remember(processRuntimeActive, processMemoryLimit, aggressiveLimitEnabled) {
-                        if (!processRuntimeActive) {
-                            null
-                        } else if (aggressiveLimitEnabled) {
-                            MemoryLimitConfig.maxLimitMb(context)
-                        } else {
-                            MemoryLimitConfig.autoScaleLimitMb(context, processMemoryLimit)
-                        }?.let { MemoryLimitConfig.clampLimitMb(context, it) }
-                    }
-
-                    ExpressiveSettingsItem(
-                        modifier = Modifier
-                            .clickable { viewModel.viewModelScope.launch { viewModel.prefs.useProcessRuntime.update(!processRuntimeEnabled) } }
-                            .then(highlightModifier),
-                        headlineContent = stringResource(R.string.process_runtime),
-                        supportingContentSlot = {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(
-                                    text = stringResource(R.string.process_runtime_description),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Surface(
-                                    shape = RoundedCornerShape(999.dp),
-                                    color = if (processRuntimeActive) {
-                                        MaterialTheme.colorScheme.primaryContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.surfaceVariant
-                                    }
-                                ) {
-                                    Text(
-                                        text = if (effectiveLimit != null) {
-                                            stringResource(R.string.process_runtime_effective_limit_format, effectiveLimit)
-                                        } else {
-                                            stringResource(R.string.process_runtime_effective_limit_disabled)
-                                        },
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = if (processRuntimeActive) {
-                                            MaterialTheme.colorScheme.onPrimaryContainer
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        }
-                                    )
-                                }
-                            }
-                        },
-                        trailingContent = {
-                            ExpressiveSettingsSwitch(
-                                checked = processRuntimeEnabled,
-                                onCheckedChange = { enabled ->
-                                    viewModel.viewModelScope.launch { viewModel.prefs.useProcessRuntime.update(enabled) }
-                                }
-                            )
-                        }
-                    )
-                }
-                ExpressiveSettingsDivider()
-                val recommendedProcessLimit = remember(context) {
-                    MemoryLimitConfig.recommendedLimitMb(context)
-                }
-                val processRuntimeEnabled by viewModel.prefs.useProcessRuntime.getAsState()
-                val aggressiveLimitEnabled by viewModel.prefs.patcherProcessMemoryAggressive.getAsState()
-                val aggressiveControlEnabled = processRuntimeEnabled
-                val memoryLimitEnabled = processRuntimeEnabled && !aggressiveLimitEnabled
-                val memoryLimitAlpha = if (memoryLimitEnabled) 1f else 0.5f
-                val aggressiveAlpha = if (aggressiveControlEnabled) 1f else 0.5f
-
-                LaunchedEffect(processRuntimeEnabled, aggressiveLimitEnabled) {
-                    if (!processRuntimeEnabled && aggressiveLimitEnabled) {
-                        viewModel.prefs.patcherProcessMemoryAggressive.update(false)
-                    }
-                }
-                SettingsSearchHighlight(
-                    targetKey = R.string.process_runtime_memory_limit,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    IntegerItem(
-                        modifier = highlightModifier.alpha(memoryLimitAlpha),
-                        preference = viewModel.prefs.patcherProcessMemoryLimit,
-                        coroutineScope = viewModel.viewModelScope,
-                        headline = R.string.process_runtime_memory_limit,
-                        description = R.string.process_runtime_memory_limit_description,
-                        neutralButtonLabel = stringResource(R.string.reset_to_recommended),
-                        neutralValueProvider = { recommendedProcessLimit },
-                        enabled = memoryLimitEnabled
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.process_runtime_memory_aggressive,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier.alpha(aggressiveAlpha),
-                        preference = viewModel.prefs.patcherProcessMemoryAggressive,
-                        coroutineScope = viewModel.viewModelScope,
-                        headline = R.string.process_runtime_memory_aggressive,
-                        description = R.string.process_runtime_memory_aggressive_description,
-                        enabled = aggressiveControlEnabled
                     )
                 }
                 ExpressiveSettingsDivider()

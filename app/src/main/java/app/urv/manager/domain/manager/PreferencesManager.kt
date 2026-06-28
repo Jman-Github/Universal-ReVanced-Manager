@@ -6,7 +6,6 @@ import app.universal.revanced.manager.R
 import app.urv.manager.domain.manager.base.BasePreferencesManager
 import app.urv.manager.domain.manager.base.EditorContext
 import app.urv.manager.patcher.logger.PatcherLogMode
-import app.urv.manager.patcher.runtime.MemoryLimitConfig
 import app.urv.manager.patcher.runtime.morphe.MorpheBytecodeMode
 import app.urv.manager.ui.theme.Theme
 import app.urv.manager.util.ExportNameFormatter
@@ -81,20 +80,11 @@ class PreferencesManager(
     val gitHubPat = stringPreference("github_pat", "")
     val includeGitHubPatInExports = booleanPreference("include_github_pat_in_exports", false)
 
-    val useProcessRuntime = booleanPreference("use_process_runtime", false)
     val stripUnusedNativeLibs = booleanPreference("strip_unused_native_libs", false)
     val skipUnneededSplitApks = booleanPreference("skip_unneeded_split_apks", false)
     val continueOnPatchError = booleanPreference("continue_on_patch_error", false)
     val morpheBytecodeMode = enumPreference("morphe_bytecode_mode", MorpheBytecodeMode.FAST)
     val patcherLogMode = enumPreference("patcher_log_mode", PatcherLogMode.DEFAULT)
-    val patcherProcessMemoryLimit = intPreference(
-        "process_runtime_memory_limit",
-        MemoryLimitConfig.recommendedLimitMb(context)
-    )
-    val patcherProcessMemoryAggressive = booleanPreference(
-        "process_runtime_memory_aggressive",
-        false
-    )
     val patchedAppExportFormat = stringPreference(
         "patched_app_export_format",
         ExportNameFormatter.DEFAULT_TEMPLATE
@@ -277,9 +267,6 @@ class PreferencesManager(
         val api: String? = null,
         val gitHubPat: String? = null,
         val includeGitHubPatInExports: Boolean? = null,
-        val useProcessRuntime: Boolean? = null,
-        val patcherProcessMemoryLimit: Int? = null,
-        val patcherProcessMemoryAggressive: Boolean? = null,
         val autoCollapsePatcherSteps: Boolean? = null,
         val showPatcherMemoryUsageGraph: Boolean? = null,
         val autoExpandRunningSteps: Boolean? = null,
@@ -456,14 +443,11 @@ class PreferencesManager(
 
     private suspend fun exportRuntimeAndInstallerSettings(snapshot: SettingsSnapshot): SettingsSnapshot {
         return snapshot.copy(
-            useProcessRuntime = useProcessRuntime.get(),
             stripUnusedNativeLibs = stripUnusedNativeLibs.get(),
             skipUnneededSplitApks = skipUnneededSplitApks.get(),
             continueOnPatchError = continueOnPatchError.get(),
             morpheBytecodeMode = morpheBytecodeMode.get().runtimeValue,
             patcherLogMode = patcherLogMode.get(),
-            patcherProcessMemoryLimit = patcherProcessMemoryLimit.get(),
-            patcherProcessMemoryAggressive = patcherProcessMemoryAggressive.get(),
             autoCollapsePatcherSteps = autoCollapsePatcherSteps.get(),
             showPatcherMemoryUsageGraph = showPatcherMemoryUsageGraph.get(),
             autoExpandRunningSteps = autoExpandRunningSteps.get(),
@@ -616,7 +600,6 @@ class PreferencesManager(
     }
 
     private fun EditorContext.importRuntimeAndInstallerSettings(snapshot: SettingsSnapshot) {
-        snapshot.useProcessRuntime?.let { useProcessRuntime.value = it }
         snapshot.stripUnusedNativeLibs?.let { stripUnusedNativeLibs.value = it }
         snapshot.skipUnneededSplitApks?.let { skipUnneededSplitApks.value = it }
         snapshot.continueOnPatchError?.let { continueOnPatchError.value = it }
@@ -624,8 +607,6 @@ class PreferencesManager(
             morpheBytecodeMode.value = MorpheBytecodeMode.fromRuntimeValue(it)
         }
         snapshot.patcherLogMode?.let { patcherLogMode.value = it }
-        snapshot.patcherProcessMemoryLimit?.let { patcherProcessMemoryLimit.value = it }
-        snapshot.patcherProcessMemoryAggressive?.let { patcherProcessMemoryAggressive.value = it }
         snapshot.autoCollapsePatcherSteps?.let { autoCollapsePatcherSteps.value = it }
         snapshot.showPatcherMemoryUsageGraph?.let { showPatcherMemoryUsageGraph.value = it }
         snapshot.autoExpandRunningSteps?.let { autoExpandRunningSteps.value = it }

@@ -1629,9 +1629,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 ?.trim()
 
         data class LogPrefsSnapshot(
-            val requestedLimit: Int,
-            val aggressiveLimit: Boolean,
-            val experimental: Boolean,
             val bundleType: String,
             val morpheBytecodeMode: String?,
             val revancedPatcherVersion: String?,
@@ -1641,9 +1638,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             val selectedPatchLines: List<String>
         )
         val prefsSnapshot = runBlocking {
-            val requested = prefs.patcherProcessMemoryLimit.get()
-            val aggressive = prefs.patcherProcessMemoryAggressive.get()
-            val experimentalEnabled = prefs.useProcessRuntime.get()
             val bundleType = patchBundleRepository.selectionBundleType(input.selectedPatches)
             val bundle = bundleType?.name ?: "UNKNOWN"
             val morpheBytecodeMode = if (bundleType == PatchBundleType.MORPHE) {
@@ -1671,9 +1665,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             }
             val selectedPatchLines = collectSelectedPatchDescriptions()
             LogPrefsSnapshot(
-                requested,
-                aggressive,
-                experimentalEnabled,
                 bundle,
                 morpheBytecodeMode,
                 revancedPatcherVersion,
@@ -1683,9 +1674,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 selectedPatchLines
             )
         }
-        val requestedLimit = prefsSnapshot.requestedLimit
-        val aggressiveLimit = prefsSnapshot.aggressiveLimit
-        val experimental = prefsSnapshot.experimental
         val bundleType = prefsSnapshot.bundleType
         val morpheBytecodeMode = prefsSnapshot.morpheBytecodeMode
         val revancedPatcherVersion = prefsSnapshot.revancedPatcherVersion
@@ -1699,20 +1687,12 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 ?.removePrefix("Memory limit:")
                 ?.trim()
         )
-        val effectiveLimit = runtimeReportedLimit ?: if (aggressiveLimit) {
-            MemoryLimitConfig.maxLimitMb(context)
-        } else {
-            MemoryLimitConfig.clampLimitMb(context, requestedLimit)
-        }
+        val effectiveLimit = runtimeReportedLimit ?: MemoryLimitConfig.maxLimitMb(context)
         val processRuntimeSupported = Build.VERSION.SDK_INT > Build.VERSION_CODES.Q
         val runtimeMode = findLogValue("Runtime mode:")
-            ?: if (experimental && processRuntimeSupported) "process" else "in-process"
+            ?: if (processRuntimeSupported) "process" else "in-process"
         val memoryOverride = findLogValue("Memory override:")
-            ?: if (experimental && processRuntimeSupported && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                "enabled"
-            } else {
-                "disabled"
-            }
+            ?: if (processRuntimeSupported) "enabled" else "disabled"
         val aapt2 = findLogValue("AAPT2:") ?: when (bundleType) {
             PatchBundleType.REVANCED.name -> "Modern"
             PatchBundleType.MORPHE.name -> "N/A"
@@ -1764,7 +1744,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             appendLine("Device model: ${Build.MODEL}")
             appendLine("Android version: ${Build.VERSION.RELEASE} (${Build.VERSION.SDK_INT})")
             appendLine("Environment: $environment")
-            appendLine("Requested memory limit: ${requestedLimit}MB")
             appendLine("Effective memory limit: ${effectiveLimit}MB")
             appendLine("Bundle type: $bundleType")
             morpheBytecodeMode?.let {
@@ -1773,12 +1752,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             revancedPatcherVersion?.let {
                 appendLine("ReVanced Patcher version: $it")
             }
-            appendLine("Experimental: $experimental")
             appendLine("Runtime mode: $runtimeMode")
             appendLine("Memory override: $memoryOverride")
             appendLine("AAPT2: $aapt2")
             appendLine("AAPT2 fallback: $aapt2Fallback")
-            appendLine("Aggressive: $aggressiveLimit")
             appendLine("Strip native libs: ${if (stripNativeLibs) "on" else "off"}")
             appendLine("Skip unused splits: ${if (skipUnusedSplits) "on" else "off"}")
             appendLine("Battery optimization: $batteryOptimization")
@@ -4251,11 +4228,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         if (!handledFailureIds.add(workInfo.id)) return
         reconcileFailureState(workInfo.outputData.getString(PatcherWorker.PROCESS_FAILURE_MESSAGE_KEY))
         val exitCode = workInfo.outputData.getInt(PatcherWorker.PROCESS_EXIT_CODE_KEY, Int.MIN_VALUE)
-        if (exitCode == Revanced22ProcessRuntime.OOM_EXIT_CODE) {
-            viewModelScope.launch {
-                if (!prefs.useProcessRuntime.get()) return@launch
-                forceKeepLocalInput = true
-            }
+        if (exitCode == Revanced22ProcessRuntime.OOM_EXIT_CODE ||
+            exitCode == Revanced22ProcessRuntime.LOW_MEMORY_KILL_EXIT_CODE) {
+            forceKeepLocalInput = true
         }
 
         // Missing patch issues are handled during preflight validation.

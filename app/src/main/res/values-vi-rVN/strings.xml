@@ -359,13 +359,7 @@
     <string name="dark">Tối</string>
     <string name="appearance">Giao diện</string>
     <string name="downloaded_apps">Ứng dụng đã tải</string>
-    <string name="process_runtime">Chạy trình vá trong một tiến trình riêng (thử nghiệm)</string>
-    <string name="process_runtime_description">Cách này nhanh hơn vì cho phép trình vá sử dụng nhiều bộ nhớ hơn.</string>
     <string name="strip_unused_libs">Xóa thư viện gốc không dùng tới</string>
-    <string name="process_runtime_memory_limit">Giới hạn bộ nhớ cho tiến trình vá</string>
-    <string name="process_runtime_memory_limit_description">Nhập dung lượng bộ nhớ tối đa mà tiến trình vá sử dụng (tính bằng megabyte).</string>
-    <string name="process_runtime_memory_aggressive">Giới hạn bộ nhớ tối đa cho trình vá</string>
-    <string name="process_runtime_memory_aggressive_description">Dùng mức bộ nhớ cao nhất mà thiết bị cho phép cho trình vá thử nghiệm.</string>
     <string name="reset_to_recommended">Đặt lại</string>
     <string name="patcher_auto_collapse_steps">Tự thu gọn bước đã hoàn tất</string>
     <string name="patcher_auto_collapse_steps_description">Tự động thu gọn từng tiến trình vá sau khi chúng kết thúc.</string>
