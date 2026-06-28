@@ -681,6 +681,7 @@ class InstalledAppsViewModel(
 
         val payloadVersion = payloadBundle?.version?.takeUnless { it.isBlank() }
         val currentVersion = info?.version?.takeUnless { it.isBlank() }
+            ?: source?.version?.takeUnless { it.isBlank() }
         val version = payloadVersion ?: currentVersion
         val hasUpdate = payloadVersion != null &&
             currentVersion != null &&

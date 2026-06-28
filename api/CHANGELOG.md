@@ -337,6 +337,7 @@
 - Fixed bundle update notifications sometimes appearing again after being tapped https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/571
 - Fixed split APK merger progress briefly moving backward when merging starts https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/570
 - Fixed the merge notification remaining visible after cancellation on some devices https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/549
+- Fixed the Bundle update label sometimes missing from saved app cards https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/566
 
 
 # Refactors
