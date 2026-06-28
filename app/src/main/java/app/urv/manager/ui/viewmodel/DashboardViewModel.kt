@@ -1453,7 +1453,12 @@ class DashboardViewModel(
     )
 
     private fun updateSplitMergeNotification(state: SplitMergeState = splitMergeStateFlow.value) {
-        if (!state.inProgress && state.saveStep.status != SplitMergeStepStatus.RUNNING) return
+        val shouldShow = !state.cancellationInProgress &&
+            (state.inProgress || state.saveStep.status == SplitMergeStepStatus.RUNNING)
+        if (!shouldShow) {
+            SplitMergeNotification.clear(app)
+            return
+        }
         SplitMergeNotification.show(
             context = app,
             contentText = splitMergeNotificationContentText(state),
