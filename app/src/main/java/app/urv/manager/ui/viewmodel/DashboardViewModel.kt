@@ -144,6 +144,7 @@ class DashboardViewModel(
     private var splitMergePlugin: LoadedDownloaderPlugin? = null
     private var pendingSplitMergeSource: PendingSplitMergeSource? = null
     private var lastSplitMergeNotificationSubStepIndex = -1
+    private var lastSplitMergeNotificationProgress = 0
     private var launchedActivity by mutableStateOf<CompletableDeferred<ActivityResult>?>(null)
     val activeSplitMergePluginId: String? get() = splitMergePlugin?.id
 
@@ -770,7 +771,7 @@ class DashboardViewModel(
     }
 
     private fun setSplitMergeSelectionPreparing(inputName: String?) {
-        resetSplitMergeNotificationSubStepIndex()
+        resetSplitMergeNotificationProgressTracking()
         val preparingMessage = app.getString(R.string.merge_split_apk_preparing)
         splitMergeStateFlow.value = SplitMergeState(
             preparingSelection = true,
@@ -1044,7 +1045,7 @@ class DashboardViewModel(
         activeSplitMergeRunWorkspace = null
         invalidateCachedSplitMergeOutput()
         cleanupLegacySplitMergeArtifacts()
-        resetSplitMergeNotificationSubStepIndex()
+        resetSplitMergeNotificationProgressTracking()
         SplitMergeNotification.clear(app)
         splitMergeStateFlow.value = SplitMergeState()
     }
@@ -1211,7 +1212,7 @@ class DashboardViewModel(
         var keepRunWorkspace = false
         activeSplitMergeRunWorkspace = runWorkspace
         invalidateCachedSplitMergeOutput()
-        resetSplitMergeNotificationSubStepIndex()
+        resetSplitMergeNotificationProgressTracking()
         val currentDownloadStep = splitMergeStateFlow.value.downloadStep
         splitMergeStateFlow.value = SplitMergeState(
             inProgress = true,
@@ -1494,10 +1495,17 @@ class DashboardViewModel(
     private fun splitMergeNotificationProgress(
         state: SplitMergeState
     ): SplitMergeNotification.Progress {
-        val current = (splitMergeNotificationProgressFraction(state) *
+        val calculated = (splitMergeNotificationProgressFraction(state) *
             SPLIT_MERGE_NOTIFICATION_PROGRESS_MAX)
             .toInt()
             .coerceIn(0, SPLIT_MERGE_NOTIFICATION_PROGRESS_MAX)
+        val current = if (state.inProgress) {
+            maxOf(lastSplitMergeNotificationProgress, calculated).also {
+                lastSplitMergeNotificationProgress = it
+            }
+        } else {
+            calculated
+        }
         return SplitMergeNotification.Progress(
             max = SPLIT_MERGE_NOTIFICATION_PROGRESS_MAX,
             current = current
@@ -1541,7 +1549,7 @@ class DashboardViewModel(
                 val entries = splitMergeNotificationSubSteps(state)
                 if (entries.isEmpty()) {
                     resetSplitMergeNotificationSubStepIndex()
-                    if (state.mergeStep.status == SplitMergeStepStatus.RUNNING) 0.1f else 0f
+                    0f
                 } else {
                     val matchedIndex = splitMergeNotificationCurrentSubStepIndex(
                         entries,
@@ -1619,6 +1627,11 @@ class DashboardViewModel(
 
     private fun resetSplitMergeNotificationSubStepIndex() {
         lastSplitMergeNotificationSubStepIndex = -1
+    }
+
+    private fun resetSplitMergeNotificationProgressTracking() {
+        resetSplitMergeNotificationSubStepIndex()
+        lastSplitMergeNotificationProgress = 0
     }
 
     private suspend fun copyUriToTempFile(uri: Uri, displayName: String?): File =

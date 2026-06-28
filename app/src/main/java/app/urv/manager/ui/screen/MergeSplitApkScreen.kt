@@ -462,7 +462,9 @@ fun MergeSplitApkScreen(
         }
     }
 
-    var currentSubStepIndex by rememberSaveable { mutableIntStateOf(-1) }
+    var currentSubStepIndex by rememberSaveable(state.inProgress, state.inputName) {
+        mutableIntStateOf(-1)
+    }
     LaunchedEffect(
         state.mergeStep.status,
         state.currentMessage,
@@ -483,13 +485,21 @@ fun MergeSplitApkScreen(
             }
         }
     }
-    val mergeProgress by remember(state, currentSubStepIndex) {
+    val rawMergeProgress by remember(state, currentSubStepIndex) {
         derivedStateOf {
             calculateSplitMergeProgress(
                 state = state,
                 currentSubStepIndex = currentSubStepIndex
             )
         }
+    }
+    val progressTracker = remember(state.inProgress, state.inputName) {
+        MonotonicProgressTracker()
+    }
+    val mergeProgress = if (state.inProgress) {
+        progressTracker.record(rawMergeProgress)
+    } else {
+        rawMergeProgress
     }
 
     val subStepsById by remember(state, currentSubStepIndex) {
@@ -605,6 +615,15 @@ fun MergeSplitApkScreen(
     }
 }
 
+private class MonotonicProgressTracker {
+    private var highestProgress = 0f
+
+    fun record(progress: Float): Float {
+        highestProgress = maxOf(highestProgress, progress)
+        return highestProgress
+    }
+}
+
 private data class OutputFileDialogState(
     val directory: Path,
     val fileName: String
@@ -710,7 +729,7 @@ private fun calculateMergePhaseFraction(
         SplitMergeStepStatus.FAILED -> {
             val entries = parseMergeSubSteps(state)
             if (entries.isEmpty()) {
-                if (state.mergeStep.status == SplitMergeStepStatus.RUNNING) 0.1f else 0f
+                0f
             } else {
                 val completedEntries = entries
                     .take(currentSubStepIndex.coerceAtLeast(0))

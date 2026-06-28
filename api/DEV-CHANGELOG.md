@@ -18,6 +18,7 @@
 - Fixed merger collapsible sections not respecting the auto-collapse and auto-expand settings https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/548
 - Fixed merge split APK filter combinations not always being remembered across sessions https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/563
 - Fixed bundle update notifications sometimes appearing again after being tapped https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/571
+- Fixed split APK merger progress briefly moving backward when merging starts https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/570
 
 
 # v1.8.1-dev.19 (2026-06-14)
