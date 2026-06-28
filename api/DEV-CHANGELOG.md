@@ -21,6 +21,7 @@
 - Fixed split APK merger progress briefly moving backward when merging starts https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/570
 - Fixed the merge notification remaining visible after cancellation on some devices https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/549
 - Fixed the Bundle update label sometimes missing from saved app cards https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/566
+- Fixed the Tools screen briefly appearing when holding Back after merging or saving a split APK https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/560
 
 
 # v1.8.1-dev.19 (2026-06-14)

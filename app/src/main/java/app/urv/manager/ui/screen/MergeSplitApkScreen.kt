@@ -225,10 +225,7 @@ fun MergeSplitApkScreen(
         }
     }
 
-    InterceptBackHandler(
-        enabled = state.inProgress || state.selection != null || state.cancellationInProgress,
-        onBack = ::onPageBack
-    )
+    InterceptBackHandler(onBack = ::onPageBack)
 
     if (state.inProgress) {
         DisposableEffect(context) {
