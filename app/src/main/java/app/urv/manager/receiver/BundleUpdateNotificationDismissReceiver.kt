@@ -7,20 +7,7 @@ import android.content.Intent
 class BundleUpdateNotificationDismissReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != ACTION_BUNDLE_UPDATE_NOTIFICATION_DISMISSED) return
-        val markers = intent.getStringArrayExtra(EXTRA_DISMISSAL_MARKERS)
-            ?.filter { it.isNotBlank() }
-            ?.toSet()
-            .orEmpty()
-        if (markers.isEmpty()) return
-
-        val prefs = context.applicationContext.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
-        val updated = prefs.getStringSet(KEY_DISMISSED_MANUAL_UPDATE_MARKERS, emptySet())
-            .orEmpty()
-            .toMutableSet()
-            .apply { addAll(markers) }
-        prefs.edit()
-            .putStringSet(KEY_DISMISSED_MANUAL_UPDATE_MARKERS, updated)
-            .apply()
+        markDismissedMarkers(context, dismissalMarkers(intent))
     }
 
     companion object {
@@ -35,6 +22,24 @@ class BundleUpdateNotificationDismissReceiver : BroadcastReceiver() {
                 .getStringSet(KEY_DISMISSED_MANUAL_UPDATE_MARKERS, emptySet())
                 .orEmpty()
                 .toSet()
+
+        fun dismissalMarkers(intent: Intent?): Set<String> =
+            intent?.getStringArrayExtra(EXTRA_DISMISSAL_MARKERS)
+                ?.filter { it.isNotBlank() }
+                ?.toSet()
+                .orEmpty()
+
+        fun markDismissedMarkers(context: Context, markers: Collection<String>) {
+            if (markers.isEmpty()) return
+            val prefs = context.applicationContext.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
+            val updated = prefs.getStringSet(KEY_DISMISSED_MANUAL_UPDATE_MARKERS, emptySet())
+                .orEmpty()
+                .toMutableSet()
+                .apply { addAll(markers) }
+            prefs.edit()
+                .putStringSet(KEY_DISMISSED_MANUAL_UPDATE_MARKERS, updated)
+                .apply()
+        }
 
         fun clearDismissedMarkers(context: Context, markers: Set<String>) {
             if (markers.isEmpty()) return

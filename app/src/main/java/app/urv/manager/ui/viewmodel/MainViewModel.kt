@@ -17,6 +17,7 @@ import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.domain.repository.PatchSelectionRepository
 import app.urv.manager.domain.repository.SerializedSelection
 import app.urv.manager.data.room.profile.PatchProfilePayload
+import app.urv.manager.receiver.BundleUpdateNotificationDismissReceiver
 import app.urv.manager.ui.model.SelectedApp
 import app.urv.manager.ui.model.navigation.SelectedApplicationInfo
 import app.urv.manager.ui.theme.Theme
@@ -141,6 +142,10 @@ class MainViewModel(
             }
         }
         val deepLink = BundleDeepLinkIntent.fromIntent(intent) ?: return
+        BundleUpdateNotificationDismissReceiver.markDismissedMarkers(
+            app,
+            BundleUpdateNotificationDismissReceiver.dismissalMarkers(intent)
+        )
         bundleDeepLinkChannel.trySend(deepLink)
     }
 

@@ -57,12 +57,21 @@ class BundleUpdateNotificationWorker(
                 applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(bundleNotificationChannel)
 
-            fun buildPendingIntent(bundleUid: Int?): PendingIntent {
+            fun buildPendingIntent(
+                requestCode: Int,
+                bundleUid: Int?,
+                dismissalMarkers: Array<String> = emptyArray()
+            ): PendingIntent {
                 val intent = Intent(applicationContext, MainActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
                     BundleDeepLinkIntent.addBundleUid(this, bundleUid)
+                    if (dismissalMarkers.isNotEmpty()) {
+                        putExtra(
+                            BundleUpdateNotificationDismissReceiver.EXTRA_DISMISSAL_MARKERS,
+                            dismissalMarkers
+                        )
+                    }
                 }
-                val requestCode = bundleUid?.plus(1) ?: 0
                 return PendingIntent.getActivity(
                     applicationContext,
                     requestCode,
@@ -109,7 +118,10 @@ class BundleUpdateNotificationWorker(
                             channelId = bundleNotificationChannel.id,
                             title = bundleNotificationTitle(totalAutoUpdates.coerceAtLeast(1)),
                             description = progressText,
-                            pendingIntent = buildPendingIntent(bundle.uid),
+                            pendingIntent = buildPendingIntent(
+                                BUNDLE_PROGRESS_NOTIFICATION_ID,
+                                bundle.uid
+                            ),
                             ongoing = true,
                             progress = ProgressInfo(bytesRead, bytesTotal)
                         )
@@ -172,6 +184,7 @@ class BundleUpdateNotificationWorker(
                 val orderedUpdatedBundles = updatedBundles.values.orderBySource(sourceOrder)
                 val orderedManualUpdates = manualUpdates.values.orderBySource(sourceOrder)
                 if (orderedManualUpdates.isNotEmpty()) {
+                    val dismissalMarkers = orderedManualUpdates.dismissalMarkers()
                     val sections = listOf(
                         BundleNotificationSection(
                             header = bundleNotificationAvailable(orderedManualUpdates.size),
@@ -183,12 +196,14 @@ class BundleUpdateNotificationWorker(
                         title = bundleNotificationTitle(orderedManualUpdates.size),
                         description = sections.toNotificationText(),
                         pendingIntent = buildPendingIntent(
-                            if (orderedManualUpdates.size == 1) orderedManualUpdates.first().uid else null
+                            BUNDLE_MANUAL_UPDATE_NOTIFICATION_ID,
+                            if (orderedManualUpdates.size == 1) orderedManualUpdates.first().uid else null,
+                            dismissalMarkers
                         ),
                         ongoing = false,
                         progress = null,
                         sections = sections,
-                        dismissalMarkers = orderedManualUpdates.dismissalMarkers()
+                        dismissalMarkers = dismissalMarkers
                     )
                     notificationManager.notify(BUNDLE_MANUAL_UPDATE_NOTIFICATION_ID, notification)
                 } else {
@@ -216,6 +231,7 @@ class BundleUpdateNotificationWorker(
                             title = bundleNotificationTitle(orderedUpdatedBundles.size.coerceAtLeast(1)),
                             description = description,
                             pendingIntent = buildPendingIntent(
+                                BUNDLE_AUTO_RESULT_NOTIFICATION_ID,
                                 if (orderedUpdatedBundles.size == 1) orderedUpdatedBundles.first().uid else null
                             ),
                             ongoing = false,
@@ -235,7 +251,10 @@ class BundleUpdateNotificationWorker(
                             channelId = bundleNotificationChannel.id,
                             title = bundleNotificationTitle(seenUids.size.coerceAtLeast(1)),
                             description = description,
-                            pendingIntent = buildPendingIntent(seenUids.firstOrNull()),
+                            pendingIntent = buildPendingIntent(
+                                BUNDLE_PROGRESS_NOTIFICATION_ID,
+                                seenUids.firstOrNull()
+                            ),
                             ongoing = false,
                             progress = null,
                             sections = emptyList()
