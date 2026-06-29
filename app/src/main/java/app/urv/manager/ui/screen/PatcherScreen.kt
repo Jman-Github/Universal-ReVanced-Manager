@@ -68,7 +68,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
-import app.urv.manager.MainActivity
 import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.ui.component.AppScaffold
@@ -238,14 +237,6 @@ fun PatcherScreen(
     fun onPageBackToDashboard() = requestLeave(toDashboard = true)
 
     InterceptBackHandler(onBack = ::onPageBack)
-
-    val hostActivity = LocalContext.current as? MainActivity
-    DisposableEffect(hostActivity) {
-        hostActivity?.setOnSystemBackLongPress(::onPageBackToDashboard)
-        onDispose {
-            hostActivity?.setOnSystemBackLongPress(null)
-        }
-    }
 
     DisposableEffect(lifecycleOwner, viewModel) {
         val observer = LifecycleEventObserver { _, event ->
