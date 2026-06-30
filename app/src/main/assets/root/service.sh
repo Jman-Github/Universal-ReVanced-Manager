@@ -133,4 +133,10 @@ if ! mount -o bind "$base_path" "$stock_path"; then
   exit 1
 fi
 
+# The app may have started before this late-start script mounted the patched APK.
+# Kill any stale process without marking the package as stopped.
+if ! am kill "$package_name"; then
+  echo "Failed to kill app process after mounting (ignored)"
+fi
+
 echo "Mounted patched APK onto $stock_path"

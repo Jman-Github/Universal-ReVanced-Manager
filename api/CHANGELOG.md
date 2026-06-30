@@ -340,6 +340,7 @@
 - Fixed the merge notification remaining visible after cancellation on some devices https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/549
 - Fixed the Bundle update label sometimes missing from saved app cards https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/566
 - Fixed the Tools screen briefly appearing when holding Back after merging or saving a split APK https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/560
+- Fixed rooted mounted apps sometimes starting without patches after reboot https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/578
 
 
 # Refactors
