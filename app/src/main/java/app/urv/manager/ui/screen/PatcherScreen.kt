@@ -931,7 +931,8 @@ fun PatcherScreen(
 
             LinearProgressIndicator(
                 progress = { viewModel.progress },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                drawStopIndicator = {}
             )
 
             LazyColumn(

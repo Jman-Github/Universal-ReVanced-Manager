@@ -565,7 +565,8 @@ fun MergeSplitApkScreen(
         ) {
             LinearProgressIndicator(
                 progress = { mergeProgress },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                drawStopIndicator = {}
             )
 
             LazyColumn(

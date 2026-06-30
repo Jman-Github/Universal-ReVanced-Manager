@@ -24,6 +24,7 @@
 - Fixed the Bundle update label sometimes missing from saved app cards https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/566
 - Fixed the Tools screen briefly appearing when holding Back after merging or saving a split APK https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/560
 - Fixed rooted mounted apps sometimes starting without patches after reboot https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/578
+- Fixed patcher and split APK merger progress bars appearing partially filled before progress begins https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/569
 
 
 # v1.8.1-dev.19 (2026-06-14)
