@@ -193,6 +193,7 @@
 - Force patching and split APK merging to run in separate processes on Android 11+ to prevent memory crashes https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/572
 - Removed obsolete experimental patcher and memory-limit settings
 - Added an instability warning for Android 10 and older
+- Updating patch profiles no longer requires you to select their patch bundles again https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/577
 
 
 # Bug fixes

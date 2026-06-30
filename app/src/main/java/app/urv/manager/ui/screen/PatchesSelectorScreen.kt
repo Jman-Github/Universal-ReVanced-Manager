@@ -284,6 +284,7 @@ fun PatchesSelectorScreen(
     var showProfileNameDialog by rememberSaveable { mutableStateOf(false) }
     var pendingProfileName by rememberSaveable { mutableStateOf("") }
     var selectedProfileId by rememberSaveable { mutableStateOf<Int?>(null) }
+    var bundleSelectionCustomized by rememberSaveable { mutableStateOf(false) }
     var isSavingProfile by remember { mutableStateOf(false) }
     data class ProfileVersionConflict(
         val profileId: Int,
@@ -319,6 +320,7 @@ fun PatchesSelectorScreen(
             pendingProfileName = ""
             selectedBundleUids.clear()
             selectedProfileId = null
+            bundleSelectionCustomized = false
         }
     }
     fun String.asVersionLabel(): String =
@@ -475,12 +477,17 @@ fun PatchesSelectorScreen(
         }
     }
 
-    fun openProfileSaveDialog() {
-        if (bundles.isEmpty() || isSavingProfile) return
+    fun selectDefaultProfileBundle() {
         selectedBundleUids.clear()
         val defaultBundleUid =
             bundles.getOrNull(settledPageIndex)?.uid ?: bundles.firstOrNull()?.uid
         defaultBundleUid?.let { selectedBundleUids.add(it) }
+    }
+
+    fun openProfileSaveDialog() {
+        if (bundles.isEmpty() || isSavingProfile) return
+        selectDefaultProfileBundle()
+        bundleSelectionCustomized = false
         pendingProfileName = ""
         selectedProfileId = null
         if (useFallbackSearch && searchActive) {
@@ -689,11 +696,13 @@ fun PatchesSelectorScreen(
             bundleDisplayNames = bundleDisplayNames,
             bundleTypes = bundleTypes,
             selectedBundleUids = selectedBundleUids,
+            onSelectionChanged = { bundleSelectionCustomized = true },
             onDismiss = {
                 showBundleDialog = false
                 selectedBundleUids.clear()
                 pendingProfileName = ""
                 selectedProfileId = null
+                bundleSelectionCustomized = false
             },
             onConfirm = {
                 if (selectedBundleUids.isNotEmpty()) {
@@ -714,9 +723,23 @@ fun PatchesSelectorScreen(
             onProfileSelected = { profile ->
                 if (profile == null) {
                     selectedProfileId = null
+                    if (!bundleSelectionCustomized) {
+                        selectDefaultProfileBundle()
+                    }
                 } else {
                     selectedProfileId = profile.uid
                     pendingProfileName = profile.name
+                    if (!bundleSelectionCustomized) {
+                        val availableBundleUids = bundles.mapTo(mutableSetOf()) { it.uid }
+                        val savedBundleUids = profile.payload.bundles
+                            .map { it.bundleUid }
+                            .filter { it in availableBundleUids }
+                            .distinct()
+                        if (savedBundleUids.isNotEmpty()) {
+                            selectedBundleUids.clear()
+                            selectedBundleUids.addAll(savedBundleUids)
+                        }
+                    }
                 }
             },
             onDismiss = {
@@ -725,6 +748,7 @@ fun PatchesSelectorScreen(
                 selectedBundleUids.clear()
                 pendingProfileName = ""
                 selectedProfileId = null
+                bundleSelectionCustomized = false
             },
             onConfirm = {
                 if (pendingProfileName.isBlank() || isSavingProfile) return@PatchProfileNameDialog
@@ -2504,6 +2528,7 @@ private fun PatchProfileBundleDialog(
     bundleDisplayNames: Map<Int, String>,
     bundleTypes: Map<Int, BundleSourceType>,
     selectedBundleUids: MutableList<Int>,
+    onSelectionChanged: () -> Unit,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
@@ -2543,6 +2568,7 @@ private fun PatchProfileBundleDialog(
                         items(bundles, key = { it.uid }) { bundle ->
                             val selected = bundle.uid in selectedBundleUids
                             val toggle: () -> Unit = {
+                                onSelectionChanged()
                                 if (bundle.uid in selectedBundleUids) {
                                     selectedBundleUids.remove(bundle.uid)
                                 } else {
