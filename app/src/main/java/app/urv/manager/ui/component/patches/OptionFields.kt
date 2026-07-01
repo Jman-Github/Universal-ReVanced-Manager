@@ -797,6 +797,11 @@ private object UnknownTypeEditor : OptionEditor<Any>, KoinComponent {
 private class PresetOptionEditor<T : Any>(private val innerEditor: OptionEditor<T>) :
     OptionEditor<T> {
     @Composable
+    override fun ListItemTrailingContent(scope: OptionEditorScope<T>) {
+        innerEditor.ListItemTrailingContent(scope)
+    }
+
+    @Composable
     override fun Dialog(scope: OptionEditorScope<T>) {
         var selectedPreset by rememberSaveable(scope.value, scope.option.presets) {
             val presets = scope.option.presets!!
@@ -859,6 +864,14 @@ private class PresetOptionEditor<T : Any>(private val innerEditor: OptionEditor<
                     val presets = remember(scope.option.presets) {
                         scope.option.presets?.entries?.toList().orEmpty()
                     }
+                    val isColorOption = remember(scope.option) {
+                        if (scope.option.type != typeOf<String>()) {
+                            false
+                        } else {
+                            @Suppress("UNCHECKED_CAST")
+                            (scope.option as Option<String>).isColorOption()
+                        }
+                    }
 
                     LazyColumn {
                         @Composable
@@ -872,6 +885,11 @@ private class PresetOptionEditor<T : Any>(private val innerEditor: OptionEditor<
                                         selected = selectedPreset == presetKey,
                                         onClick = { selectedPreset = presetKey }
                                     )
+                                },
+                                trailingContent = if (isColorOption && value is String) {
+                                    { ColorOptionSwatch(value) }
+                                } else {
+                                    null
                                 },
                                 colors = transparentListItemColors
                             )

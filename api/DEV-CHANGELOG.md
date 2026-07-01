@@ -12,6 +12,7 @@
 - Added an instability warning for Android 10 and older
 - Updating patch profiles no longer requires you to select their patch bundles again https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/577
 - Added live progress percentages to the patcher and split APK merger with smoother step and substep tracking https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/568
+- Added color previews to patch option presets https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/564
 
 
 # Bug fixes
