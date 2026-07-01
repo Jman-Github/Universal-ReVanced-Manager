@@ -2683,11 +2683,11 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         progressEventMutex.withLock {
             if (!shouldApplyWorkerProgress(generation, sequence)) return@withLock
             recordAppliedWorkerProgress(generation, sequence)
-            seedVisualProgressFromWorkerProgress(
-                current = notificationProgressCurrent,
-                max = notificationProgressMax
-            )
             if (seedFromWorkerSnapshot) {
+                seedVisualProgressFromWorkerProgress(
+                    current = notificationProgressCurrent,
+                    max = notificationProgressMax
+                )
                 seedProgressStateFromWorkerSnapshot(event, failedPatchIndexes)
             }
             processProgressEventLocked(event)
@@ -3336,25 +3336,72 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         progress = 0f
     }
 
+    private data class VisualProgressUnits(
+        val completed: Double,
+        val total: Int
+    )
+
     private fun refreshVisualProgress() {
-        val total = steps.size
-        if (total <= 0) {
+        val totalSteps = steps.size
+        if (totalSteps <= 0) {
             progress = 0f
             return
         }
 
-        val completedUnits = steps.count { it.state == State.COMPLETED }.toFloat()
-        val runningUnits = steps.sumOf { step ->
-            if (step.state != State.RUNNING) return@sumOf 0.0
-            val stepProgress = step.progress ?: return@sumOf 0.0
-            val current = stepProgress.first
-            val max = stepProgress.second?.takeIf { it > 0L } ?: return@sumOf 0.0
-            (current.toDouble() / max.toDouble()).coerceIn(0.0, 1.0)
-        }.toFloat()
-        val candidate = ((completedUnits + runningUnits) / total.toFloat()).coerceIn(0f, 1f)
+        val completedSteps = steps.sumOf(::calculateProgressFraction)
+        val candidate = (completedSteps / totalSteps.toDouble()).toFloat().coerceIn(0f, 1f)
         if (candidate > progress) {
             progress = candidate
         }
+    }
+
+    private fun calculateProgressFraction(step: Step): Double {
+        if (step.state == State.COMPLETED) return 1.0
+
+        val subSteps = stepSubSteps[step.id].orEmpty()
+            .filterNot { it.skipped }
+            .map(::calculateProgressUnits)
+        val subStepTotal = subSteps.sumOf { it.total }
+        if (subStepTotal > 0) {
+            return (subSteps.sumOf { it.completed } / subStepTotal.toDouble())
+                .coerceIn(0.0, 1.0)
+        }
+
+        return step.state.progressFraction(step.progress)
+    }
+
+    private fun calculateProgressUnits(detail: StepDetail): VisualProgressUnits {
+        val children = detail.children
+            .filterNot { it.skipped }
+            .map(::calculateProgressUnits)
+        val childTotal = children.sumOf { it.total }
+        if (childTotal > 0) {
+            val completed = if (detail.state == State.COMPLETED) {
+                childTotal.toDouble()
+            } else {
+                children.sumOf { it.completed }
+            }
+            return VisualProgressUnits(completed = completed, total = childTotal)
+        }
+
+        return VisualProgressUnits(
+            completed = detail.state.progressFraction(detail.progress),
+            total = 1
+        )
+    }
+
+    private fun State.progressFraction(progress: Pair<Long, Long?>?): Double = when (this) {
+        State.COMPLETED -> 1.0
+        State.RUNNING -> {
+            val current = progress?.first
+            val total = progress?.second?.takeIf { it > 0L }
+            if (current != null && total != null) {
+                (current.toDouble() / total.toDouble()).coerceIn(0.0, 1.0)
+            } else {
+                0.0
+            }
+        }
+        else -> 0.0
     }
 
     private fun flushPendingDexCompileLines(force: Boolean = false) {

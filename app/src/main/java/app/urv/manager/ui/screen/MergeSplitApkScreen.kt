@@ -75,6 +75,7 @@ import app.urv.manager.ui.component.ConfirmDialog
 import app.urv.manager.ui.component.ExportSavedApkFileNameDialog
 import app.urv.manager.ui.component.FullscreenDialog
 import app.urv.manager.ui.component.InterceptBackHandler
+import app.urv.manager.ui.component.ProgressPercentageBadge
 import app.urv.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.urv.manager.ui.component.patcher.LegacyAndroidMemoryWarning
 import app.urv.manager.ui.component.patcher.PatcherMemoryUsageCard
@@ -533,7 +534,10 @@ fun MergeSplitApkScreen(
             AppTopBar(
                 title = stringResource(R.string.tools_merge_split_screen_title),
                 scrollBehavior = scrollBehavior,
-                onBackClick = ::onPageBack
+                onBackClick = ::onPageBack,
+                actions = {
+                    ProgressPercentageBadge(progress = mergeProgress)
+                }
             )
         },
         bottomBar = {
@@ -699,48 +703,48 @@ private fun calculateSplitMergeProgress(
         return 0f
     }
 
-    var completedUnits = 0f
-    var totalUnits = 0f
+    var completedPhases = 0f
+    var totalPhases = 0
 
     if (state.showDownloadStep) {
-        totalUnits += 1f
-        completedUnits += state.downloadStep.progressFraction(defaultRunningFraction = 0.2f)
+        totalPhases += 1
+        completedPhases += state.downloadStep.progressFraction(defaultRunningFraction = 0f)
     }
 
-    totalUnits += 1f
-    completedUnits += calculateMergePhaseFraction(state, currentSubStepIndex)
+    val mergeEntries = parseMergeSubSteps(state)
+    totalPhases += 1
+    completedPhases += calculateMergePhaseFraction(
+        state = state,
+        entries = mergeEntries,
+        currentSubStepIndex = currentSubStepIndex
+    )
 
-    totalUnits += 1f
-    completedUnits += state.signStep.progressFraction(defaultRunningFraction = 0.5f)
+    totalPhases += 1
+    completedPhases += state.signStep.progressFraction(defaultRunningFraction = 0f)
 
-    return if (totalUnits <= 0f) 0f else (completedUnits / totalUnits).coerceIn(0f, 1f)
+    return if (totalPhases <= 0) {
+        0f
+    } else {
+        (completedPhases / totalPhases.toFloat()).coerceIn(0f, 1f)
+    }
 }
 
 private fun calculateMergePhaseFraction(
     state: SplitMergeState,
+    entries: List<MergeSubStep>,
     currentSubStepIndex: Int
 ): Float {
+    val totalEntries = entries.count { !it.skipped }.coerceAtLeast(1)
     return when (state.mergeStep.status) {
         SplitMergeStepStatus.WAITING -> 0f
         SplitMergeStepStatus.COMPLETED -> 1f
         SplitMergeStepStatus.RUNNING,
-        SplitMergeStepStatus.FAILED -> {
-            val entries = parseMergeSubSteps(state)
-            if (entries.isEmpty()) {
-                0f
-            } else {
-                val completedEntries = entries
-                    .take(currentSubStepIndex.coerceAtLeast(0))
-                    .count { !it.skipped }
-                    .toFloat()
-                val currentEntryRunning = currentSubStepIndex in entries.indices &&
-                    !entries[currentSubStepIndex].skipped &&
-                    state.mergeStep.status == SplitMergeStepStatus.RUNNING
-                val totalEntries = entries.count { !it.skipped }.coerceAtLeast(1).toFloat()
-                ((completedEntries + if (currentEntryRunning) 0.5f else 0f) / totalEntries)
-                    .coerceIn(0f, 1f)
-            }
-        }
+        SplitMergeStepStatus.FAILED -> entries
+            .take(currentSubStepIndex.coerceAtLeast(0))
+            .count { !it.skipped }
+            .toFloat()
+            .div(totalEntries.toFloat())
+            .coerceIn(0f, 1f)
     }
 }
 

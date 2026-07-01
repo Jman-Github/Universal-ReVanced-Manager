@@ -194,6 +194,7 @@
 - Removed obsolete experimental patcher and memory-limit settings
 - Added an instability warning for Android 10 and older
 - Updating patch profiles no longer requires you to select their patch bundles again https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/577
+- Added live progress percentages to the patcher and split APK merger with smoother step and substep tracking https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/568
 
 
 # Bug fixes

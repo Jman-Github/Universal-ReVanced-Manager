@@ -75,6 +75,7 @@ import app.urv.manager.ui.component.AppTopBar
 import app.urv.manager.ui.component.ConfirmDialog
 import app.urv.manager.ui.component.InterceptBackHandler
 import app.urv.manager.ui.component.InstallerStatusDialog
+import app.urv.manager.ui.component.ProgressPercentageBadge
 import app.urv.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.urv.manager.ui.component.patches.PathSelectorDialog
 import app.urv.manager.ui.component.patcher.InstallerPickerDialog
@@ -863,7 +864,10 @@ fun PatcherScreen(
                 title = stringResource(R.string.patcher),
                 scrollBehavior = scrollBehavior,
                 onBackClick = ::onPageBack,
-                onBackLongClick = ::onPageBackToDashboard
+                onBackLongClick = ::onPageBackToDashboard,
+                actions = {
+                    ProgressPercentageBadge(progress = viewModel.progress)
+                }
             )
         },
         bottomBar = {
