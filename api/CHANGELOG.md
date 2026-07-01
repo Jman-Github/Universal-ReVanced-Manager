@@ -196,6 +196,7 @@
 - Updating patch profiles no longer requires you to select their patch bundles again https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/577
 - Added live progress percentages to the patcher and split APK merger with smoother step and substep tracking https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/568
 - Added color previews to patch option presets https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/564
+- Updated local downloader and runtime plugins to display "Loaded" instead of "Trusted" https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/562
 
 
 # Bug fixes

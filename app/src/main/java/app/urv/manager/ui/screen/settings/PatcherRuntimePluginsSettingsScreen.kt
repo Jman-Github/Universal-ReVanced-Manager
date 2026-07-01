@@ -525,7 +525,7 @@ private fun InstalledRuntimeCard(
         title = runtimeName,
         version = packageInfo?.versionName ?: loaded?.plugin?.version,
         status = when (state) {
-            is PatcherRuntimePluginState.Loaded -> stringResource(R.string.downloader_plugin_state_trusted)
+            is PatcherRuntimePluginState.Loaded -> stringResource(R.string.downloader_source_state_loaded)
             is PatcherRuntimePluginState.Failed -> stringResource(R.string.downloader_source_state_failed)
             PatcherRuntimePluginState.Untrusted -> stringResource(R.string.downloader_plugin_state_untrusted)
         },

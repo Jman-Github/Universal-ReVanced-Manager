@@ -763,7 +763,7 @@ fun DownloadsSettingsScreen(
                             status = stringResource(
                                 when (state) {
                                     is DownloaderPluginState.Loaded ->
-                                        R.string.downloader_plugin_state_trusted
+                                        R.string.downloader_source_state_loaded
 
                                     is DownloaderPluginState.Failed ->
                                         R.string.downloader_source_state_failed
