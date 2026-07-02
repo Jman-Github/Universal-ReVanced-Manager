@@ -259,6 +259,7 @@ fun PatchesSelectorScreen(
     val sortSelectionModePref by viewModel.prefs.patchSelectionSortSelectionMode.getAsState()
     val searchEngineHost by viewModel.prefs.searchEngineHost.getAsState()
     val showVersionTags by viewModel.prefs.patchSelectionShowVersionTags.getAsState()
+    var patchVersionsDialogState by remember { mutableStateOf<PatchVersionsDialogState?>(null) }
     val disablePatchSelectionTabSwipe by viewModel.prefs.disablePatchSelectionTabSwipe.getAsState()
     val preventAccidentalTouching by viewModel.prefs.preventAccidentalTouching.getAsState()
     val showPatchProfilesTab by viewModel.prefs.showPatchProfilesTab.getAsState()
@@ -1077,6 +1078,7 @@ fun PatchesSelectorScreen(
                 PatchItem(
                     patch = patch,
                     onOptionsDialog = { viewModel.optionsDialog = uid to patch },
+                    onShowVersionsDialog = { patchVersionsDialogState = it },
                     selected = compatible && viewModel.isSelected(
                         uid,
                         patch
@@ -1881,12 +1883,24 @@ fun PatchesSelectorScreen(
             }
         }
     }
+
+    patchVersionsDialogState?.let { state ->
+        PatchVersionsDialog(
+            patchName = state.patchName,
+            packageName = viewModel.appPackageName,
+            versions = state.versions,
+            suggestedVersion = state.suggestedVersion,
+            searchEngineHost = searchEngineHost,
+            onDismiss = { patchVersionsDialogState = null }
+        )
+    }
 }
 
 @Composable
 private fun PatchItem(
     patch: PatchInfo,
     onOptionsDialog: () -> Unit,
+    onShowVersionsDialog: (PatchVersionsDialogState) -> Unit,
     selected: Boolean,
     onToggle: () -> Unit,
     compatible: Boolean = true,
@@ -1938,7 +1952,6 @@ private fun PatchItem(
         emptyList()
     }
     val hasChips = suggestedVersionInfo != null || showAllVersionsChip || hasMoreVersions
-    var showVersionsDialog by rememberSaveable(patch.name) { mutableStateOf(false) }
     var showOptionPreview by rememberSaveable(patch.name) { mutableStateOf(false) }
     var showOptionPreviewDialog by rememberSaveable(patch.name) { mutableStateOf(false) }
     val optionValueEnabled = stringResource(R.string.option_value_enabled)
@@ -1989,17 +2002,6 @@ private fun PatchItem(
                 experimental = version in experimentalVersions
             )
         }
-    }
-
-    if (showVersionsDialog) {
-        PatchVersionsDialog(
-            patchName = patch.name,
-            packageName = packageName,
-            versions = dialogVersions,
-            suggestedVersion = suggestedVersionInfo,
-            searchEngineHost = searchEngineHost,
-            onDismiss = { showVersionsDialog = false }
-        )
     }
 
     if (showOptionPreviewDialog) {
@@ -2116,7 +2118,15 @@ private fun PatchItem(
                             label = stringResource(R.string.more),
                             icon = Icons.Outlined.UnfoldMore,
                             outlined = true,
-                            onClick = { showVersionsDialog = true }
+                            onClick = {
+                                onShowVersionsDialog(
+                                    PatchVersionsDialogState(
+                                        patchName = patch.name,
+                                        versions = dialogVersions,
+                                        suggestedVersion = suggestedVersionInfo
+                                    )
+                                )
+                            }
                         )
                     }
                 }
@@ -2218,6 +2228,12 @@ private data class PatchVersionChipInfo(
     val highlighted: Boolean = false,
     val outlined: Boolean = false,
     val experimental: Boolean = false
+)
+
+private data class PatchVersionsDialogState(
+    val patchName: String,
+    val versions: List<PatchVersionChipInfo>,
+    val suggestedVersion: PatchVersionChipInfo?
 )
 
 @Composable
