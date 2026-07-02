@@ -422,7 +422,7 @@
     <string name="downloader_plugin_state_failed">Не вдалося завантажити. Натисніть, щоб дізнатися більше</string>
     <string name="downloader_plugin_state_untrusted">Недовірений</string>
     <string name="downloader_plugin_trust_dialog_title">Довіряти плагіну?</string>
-    <string name="downloader_plugin_revoke_trust_dialog_title">Скасувати довіру?</string>
+    <string name="downloader_plugin_revoke_trust_dialog_title">Скасувати довіру</string>
     <string name="downloader_plugin_trust_dialog_body">Продовження дозволить цьому плагіну працювати у вашій системі.
 
 Включайте цей плагін тільки в тому випадку, якщо ви довіряєте йому. Плагіни можуть виконувати довільний код і можуть поставити під загрозу ваш пристрій.</string>

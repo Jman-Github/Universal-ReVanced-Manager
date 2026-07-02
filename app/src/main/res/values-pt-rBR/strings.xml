@@ -422,7 +422,7 @@ Osperfis de patches não serão afetados.</string>
     <string name="downloader_plugin_state_failed">Falha ao carregar. Clique para mais detalhes</string>
     <string name="downloader_plugin_state_untrusted">Não confiável</string>
     <string name="downloader_plugin_trust_dialog_title">Confiar no plugin?</string>
-    <string name="downloader_plugin_revoke_trust_dialog_title">Remover confiança?</string>
+    <string name="downloader_plugin_revoke_trust_dialog_title">Remover confiança</string>
     <string name="downloader_plugin_trust_dialog_body">Continuar permitirá que este plugin execute no seu sistema.\n\nAtive isso apenas se você confia neste plugin. Plugins podem exucutar código arbitrariamente e comprometer seu dispositivo.</string>
     <string name="downloader_plugin_trust_dialog_signature">Assinatura:\n\n%s</string>
     <string name="downloader_plugin_trust_dialog_plugin">Plugin:\n%s</string>

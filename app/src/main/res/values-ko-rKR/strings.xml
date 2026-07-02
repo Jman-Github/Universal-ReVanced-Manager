@@ -430,7 +430,7 @@
     <string name="downloader_plugin_state_failed">불러올 수 없습니다. 자세한 내용을 보려면 여기를 탭하세요</string>
     <string name="downloader_plugin_state_untrusted">신뢰하지 않음</string>
     <string name="downloader_plugin_trust_dialog_title">신뢰하시겠습니까?</string>
-    <string name="downloader_plugin_revoke_trust_dialog_title">신뢰하지 않으시겠습니까?</string>
+    <string name="downloader_plugin_revoke_trust_dialog_title">신뢰 철회</string>
     <string name="downloader_plugin_trust_dialog_body">계속하면 이 플러그인이 시스템에서 실행됩니다.\n\n신뢰할 수 있는 경우에만 이 플러그인을 활성화하십시오. 플러그인은 임의의 코드를 실행할 수 있으며 기기를 손상시킬 수 있습니다.</string>
     <string name="downloader_plugin_trust_dialog_signature">서명:\n\n%s</string>
     <string name="downloader_plugin_trust_dialog_plugin">플러그인:\n%s</string>

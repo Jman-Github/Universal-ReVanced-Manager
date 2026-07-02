@@ -424,7 +424,7 @@
     <string name="downloader_plugin_state_failed">लोड नहीं हो पाया। ज़्यादा जानकारी के लिए दबाए</string>
     <string name="downloader_plugin_state_untrusted">अविश्वसनीय</string>
     <string name="downloader_plugin_trust_dialog_title">प्लगइन पर विश्वास है?</string>
-    <string name="downloader_plugin_revoke_trust_dialog_title">विश्वास रद्द करें?</string>
+    <string name="downloader_plugin_revoke_trust_dialog_title">विश्वास रद्द करें</string>
     <string name="downloader_plugin_trust_dialog_signature">हस्ताक्षर:\n\n%s</string>
     <string name="downloader_plugin_trust_dialog_plugin">प्लगइन:\n%s</string>
     <string name="downloader_plugin_view_error">त्रुटि विवरण देखें</string>
