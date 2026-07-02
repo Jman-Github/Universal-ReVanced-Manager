@@ -107,15 +107,16 @@ fun SplitApkInstallerScreen(
     var showLogExportPicker by rememberSaveable { mutableStateOf(false) }
     var logExportInProgress by rememberSaveable { mutableStateOf(false) }
     var logExportFileDialogState by remember { mutableStateOf<SplitInstallerLogExportDialogState?>(null) }
+    var pendingLogExportFileName by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingPermissionRequest by rememberSaveable {
         mutableStateOf<SplitInstallerPermissionRequest?>(null)
-    }
-    val logFileName = remember(state.inputName) {
-        defaultSplitInstallerLogFileName(state.inputName)
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(permissionContract) { granted ->
         if (!granted) {
+            if (pendingPermissionRequest == SplitInstallerPermissionRequest.LOG_EXPORT) {
+                pendingLogExportFileName = null
+            }
             pendingPermissionRequest = null
             return@rememberLauncherForActivityResult
         }
@@ -154,6 +155,7 @@ fun SplitApkInstallerScreen(
     ) { uri ->
         vm.exportLogsToUri(context, uri)
         showLogExportPicker = false
+        pendingLogExportFileName = null
     }
 
     fun launchInstall(mode: SplitInstallMode) {
@@ -190,6 +192,8 @@ fun SplitApkInstallerScreen(
     }
 
     fun openLogExportPicker() {
+        val logFileName = FilenameUtils.timestampedLogFileName("installer")
+        pendingLogExportFileName = logFileName
         if (useCustomFilePicker) {
             if (fs.hasStoragePermission()) {
                 showLogExportPicker = true
@@ -341,6 +345,7 @@ fun SplitApkInstallerScreen(
             onSelect = { selection ->
                 if (selection == null) {
                     showLogExportPicker = false
+                    pendingLogExportFileName = null
                 }
             },
             fileFilter = { false },
@@ -353,23 +358,32 @@ fun SplitApkInstallerScreen(
                 } else {
                     selection.parent ?: selection
                 }
-                logExportFileDialogState = SplitInstallerLogExportDialogState(exportDirectory, logFileName)
+                logExportFileDialogState = SplitInstallerLogExportDialogState(
+                    exportDirectory,
+                    pendingLogExportFileName ?: FilenameUtils.timestampedLogFileName("installer")
+                )
             }
         )
     }
-    LaunchedEffect(showLogExportPicker, useCustomFilePicker, logFileName) {
+    LaunchedEffect(showLogExportPicker, useCustomFilePicker, pendingLogExportFileName) {
         if (showLogExportPicker && !useCustomFilePicker) {
+            val logFileName = pendingLogExportFileName
+                ?: FilenameUtils.timestampedLogFileName("installer")
             logExportDocumentLauncher.launch(logFileName)
         }
     }
     logExportFileDialogState?.let { state ->
         ExportSavedApkFileNameDialog(
             initialName = state.fileName,
-            onDismiss = { logExportFileDialogState = null },
+            onDismiss = {
+                logExportFileDialogState = null
+                pendingLogExportFileName = null
+            },
             onConfirm = { fileName ->
                 val trimmedName = fileName.trim()
                 if (trimmedName.isBlank()) return@ExportSavedApkFileNameDialog
                 logExportFileDialogState = null
+                pendingLogExportFileName = null
                 logExportInProgress = true
                 val target = state.directory.resolve(trimmedName)
                 vm.exportLogsToPath(context, target) { success ->
@@ -740,17 +754,6 @@ private data class SplitInstallerLogExportDialogState(
     val directory: Path,
     val fileName: String
 )
-
-private fun defaultSplitInstallerLogFileName(inputName: String?): String {
-    val suffix = inputName
-        ?.substringAfterLast('/')
-        ?.substringAfterLast('\\')
-        ?.substringBeforeLast('.')
-        ?.takeIf { it.isNotBlank() }
-        ?: "installer"
-    val safeSuffix = suffix.replace(Regex("[^A-Za-z0-9._-]"), "_")
-    return "installer-log-$safeSuffix-${FilenameUtils.logTimestamp()}.txt"
-}
 
 private fun resolveDisplayName(contentResolver: ContentResolver, uri: Uri): String? =
     contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
