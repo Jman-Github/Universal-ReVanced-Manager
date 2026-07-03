@@ -1801,6 +1801,7 @@ class DashboardViewModel(
         )
         SplitMergeNotification.clear(app)
         appendSplitMergeLog("${app.getString(R.string.merge_split_apk_saved)} ($outputName)")
+        app.toast(app.getString(R.string.merge_split_apk_saved))
     }
 
     private fun updateSaveStepFailed(error: Throwable) {

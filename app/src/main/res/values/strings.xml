@@ -1472,7 +1472,7 @@ Details: %2$s</string>
     <string name="uninstall_app_fail">Failed to uninstall app: %s</string>
     <string name="open_app">Open</string>
     <string name="save_apk">Save APK</string>
-    <string name="save_apk_success">APK saved</string>
+    <string name="save_apk_success">Patched APK saved</string>
     <string name="saved_app_export_success">Exported patched app</string>
     <string name="saved_app_export_failed">Failed to export patched app</string>
     <string name="saved_apps_export_success">Exported %1$d saved app(s)</string>

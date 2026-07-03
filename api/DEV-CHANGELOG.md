@@ -17,6 +17,7 @@
 - Standardized revoke trust dialog titles across downloader and runtime plugins https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/561
 - Adjusted the supported versions dialog so it is not become too wide when opened from patch search https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/559
 - Standardized installer log filename and timestamp formatting with other exported logs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/558
+- Improved dialog text consistency and added clearer save confirmations for patched and merged APKs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/555 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/553 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/552
 
 
 # Bug fixes

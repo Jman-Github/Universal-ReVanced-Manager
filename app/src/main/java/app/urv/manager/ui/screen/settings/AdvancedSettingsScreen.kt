@@ -2343,13 +2343,7 @@ private fun LanguageDialog(
             }
         },
         title = {
-            Text(
-                text = stringResource(R.string.language_dialog_title),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center
-            )
+            CenteredDialogTitle(stringResource(R.string.language_dialog_title))
         },
         text = {
             val scrollState = rememberScrollState()

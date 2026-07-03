@@ -41,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.urv.manager.data.platform.Filesystem
@@ -460,7 +461,9 @@ fun KeystoreConverterScreen(onBackClick: () -> Unit) {
                             Icon(Icons.Outlined.Info, null)
                             Text(
                                 text = error,
-                                style = MaterialTheme.typography.bodyLarge
+                                style = MaterialTheme.typography.bodyLarge.copy(
+                                    lineBreak = LineBreak.Simple
+                                )
                             )
                         }
                     }
