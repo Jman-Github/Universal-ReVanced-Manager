@@ -1,11 +1,11 @@
 package app.urv.manager.patcher.split;
 
 import com.reandroid.apk.APKLogger;
+import com.reandroid.apk.AndroidManifestBlockMerger;
 import com.reandroid.apk.ApkBundle;
 import com.reandroid.apk.ApkModule;
 import com.reandroid.arsc.chunk.xml.AndroidManifestBlock;
 import com.reandroid.arsc.header.TableHeader;
-import com.reandroid.archive.block.ApkSignatureBlock;
 
 import java.io.Closeable;
 import java.io.File;
@@ -41,7 +41,7 @@ public final class ApkEditorMergeProcess {
         String action = args[0];
         File modulesDir = new File(args[1]);
         if (ACTION_LIST.equals(action)) {
-            List<String> order = listMergeOrder(modulesDir);
+            List<String> order = listMergeOrder(modulesDir, getLogger());
             for (String name : order) {
                 System.out.println(ORDER_PREFIX + name);
             }
@@ -59,7 +59,7 @@ public final class ApkEditorMergeProcess {
         String skipCsv = args.length > 3 ? args[3] : "";
         boolean sortApkEntries = args.length > 4 && Boolean.parseBoolean(args[4]);
         Set<String> skipModules = parseSkipModules(skipCsv);
-        merge(modulesDir, outputApk, skipModules, sortApkEntries);
+        merge(modulesDir, outputApk, skipModules, sortApkEntries, getLogger());
     }
 
     private static Set<String> parseSkipModules(String csv) {
@@ -74,15 +74,27 @@ public final class ApkEditorMergeProcess {
         return result;
     }
 
-    private static void merge(
+    public static void merge(
             File apkDir,
             File outputApk,
             Set<String> skipModules,
-            boolean sortApkEntries
+            boolean sortApkEntries,
+            APKLogger logger
+    ) throws Exception {
+        merge(apkDir, outputApk, skipModules, sortApkEntries, logger, null);
+    }
+
+    public static void merge(
+            File apkDir,
+            File outputApk,
+            Set<String> skipModules,
+            boolean sortApkEntries,
+            APKLogger logger,
+            Runnable cancellationCheckpoint
     ) throws Exception {
         List<Closeable> closeables = new ArrayList<>();
         try {
-            APKLogger logger = getLogger();
+            runCancellationCheckpoint(cancellationCheckpoint);
             ApkBundle bundle = new ApkBundle();
             bundle.setAPKLogger(logger);
             bundle.loadApkDirectory(apkDir);
@@ -91,14 +103,15 @@ public final class ApkEditorMergeProcess {
             if (modules.isEmpty()) {
                 throw new FileNotFoundException("Nothing to merge, empty modules");
             }
+            ApkModule baseModule = resolveBaseModule(bundle, modules);
 
             if (!skipModules.isEmpty()) {
                 Set<String> skipLookup = new HashSet<>();
                 for (String name : skipModules) {
                     skipLookup.add(normalizeModuleName(name));
                 }
-                ApkModule baseModule = bundle.getBaseModule();
                 for (ApkModule module : new ArrayList<>(bundle.getApkModuleList())) {
+                    runCancellationCheckpoint(cancellationCheckpoint);
                     if (module == baseModule) continue;
                     String normalized = normalizeModuleName(module.getModuleName());
                     if (skipLookup.contains(normalized)) {
@@ -111,7 +124,12 @@ public final class ApkEditorMergeProcess {
 
             ApkModule mergedModule;
             try {
-                mergedModule = mergeModules(bundle, logger);
+                mergedModule = mergeIntoBaseModule(
+                        bundle,
+                        baseModule,
+                        logger,
+                        cancellationCheckpoint
+                );
             } catch (Throwable error) {
                 Throwable cause = error.getCause();
                 if (error instanceof CoderMalfunctionError ||
@@ -128,18 +146,19 @@ public final class ApkEditorMergeProcess {
 
             mergedModule.setAPKLogger(logger);
             mergedModule.setLoadDefaultFramework(false);
-            closeables.add(mergedModule);
+            runCancellationCheckpoint(cancellationCheckpoint);
 
-            if (sortApkEntries && mergedModule.hasTableBlock()) {
-                mergedModule.getTableBlock().sortPackages();
-                mergedModule.getTableBlock().refresh();
-            }
             if (sortApkEntries) {
+                if (mergedModule.hasTableBlock()) {
+                    mergedModule.getTableBlock().sortPackages();
+                    mergedModule.getTableBlock().refresh();
+                }
                 mergedModule.getZipEntryMap().autoSortApkFiles();
             }
 
             SplitManifestCleaner.clean(mergedModule);
             applyExtractNativeLibs(mergedModule);
+            runCancellationCheckpoint(cancellationCheckpoint);
 
             outputApk.getParentFile().mkdirs();
             logger.logMessage("Writing merged APK");
@@ -154,11 +173,11 @@ public final class ApkEditorMergeProcess {
         }
     }
 
-    private static List<String> listMergeOrder(File apkDir) throws Exception {
+    public static List<String> listMergeOrder(File apkDir, APKLogger logger) throws Exception {
         List<Closeable> closeables = new ArrayList<>();
         try {
             ApkBundle bundle = new ApkBundle();
-            bundle.setAPKLogger(getLogger());
+            bundle.setAPKLogger(logger);
             bundle.loadApkDirectory(apkDir);
             List<ApkModule> modules = bundle.getApkModuleList();
             if (modules.isEmpty()) {
@@ -200,46 +219,46 @@ public final class ApkEditorMergeProcess {
         return order;
     }
 
-    private static ApkModule mergeModules(ApkBundle bundle, APKLogger logger) throws IOException {
-        List<ApkModule> modules = bundle.getApkModuleList();
+    private static ApkModule mergeIntoBaseModule(
+            ApkBundle bundle,
+            ApkModule baseModule,
+            APKLogger logger,
+            Runnable cancellationCheckpoint
+    ) throws IOException {
+        AndroidManifestBlockMerger manifestMerger = bundle.getManifestMerger();
+        if (manifestMerger != null) {
+            manifestMerger.reset();
+            manifestMerger.initializeBase(baseModule.getAndroidManifest());
+        }
+
+        runCancellationCheckpoint(cancellationCheckpoint);
+        logger.logMessage("Merging " + moduleDisplayName(baseModule));
+        for (ApkModule module : new ArrayList<>(bundle.getApkModuleList())) {
+            if (module == baseModule) continue;
+            runCancellationCheckpoint(cancellationCheckpoint);
+            baseModule.merge(module, false);
+            if (manifestMerger != null) {
+                manifestMerger.merge(module.getAndroidManifest());
+            }
+        }
+        if (manifestMerger != null) {
+            manifestMerger.sanitize(baseModule);
+        }
+        return baseModule;
+    }
+
+    private static ApkModule resolveBaseModule(ApkBundle bundle, List<ApkModule> modules) {
         ApkModule baseModule = bundle.getBaseModule();
         if (baseModule == null) {
             baseModule = findLargestTableModule(modules);
         }
-        if (baseModule == null) {
-            baseModule = modules.get(0);
-        }
-
-        ApkModule mergedModule = new ApkModule(generateMergedModuleName(bundle), new com.reandroid.archive.ZipEntryMap());
-        mergedModule.setAPKLogger(logger);
-        mergedModule.setLoadDefaultFramework(false);
-
-        ApkSignatureBlock signatureBlock = null;
-        for (ApkModule module : buildMergeOrder(modules, baseModule)) {
-            String displayName = moduleDisplayName(module);
-            logger.logMessage("Merging " + displayName);
-            ApkSignatureBlock moduleSignature = module.getApkSignatureBlock();
-            if (module == baseModule && moduleSignature != null) {
-                signatureBlock = moduleSignature;
-            } else if (signatureBlock == null) {
-                signatureBlock = moduleSignature;
-            }
-            mergedModule.merge(module, false);
-        }
-        mergedModule.setApkSignatureBlock(signatureBlock);
-        return mergedModule;
+        return baseModule != null ? baseModule : modules.get(0);
     }
 
-    private static String generateMergedModuleName(ApkBundle bundle) {
-        Set<String> moduleNames = new HashSet<>(bundle.listModuleNames());
-        String baseName = "merged";
-        String candidate = baseName;
-        int index = 1;
-        while (moduleNames.contains(candidate)) {
-            candidate = baseName + "_" + index;
-            index += 1;
+    private static void runCancellationCheckpoint(Runnable cancellationCheckpoint) {
+        if (cancellationCheckpoint != null) {
+            cancellationCheckpoint.run();
         }
-        return candidate;
     }
 
     private static ApkModule findLargestTableModule(List<ApkModule> modules) {

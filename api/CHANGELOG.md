@@ -349,6 +349,7 @@
 - Fixed the Tools screen briefly appearing when holding Back after merging or saving a split APK https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/560
 - Fixed rooted mounted apps sometimes starting without patches after reboot https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/578
 - Fixed patcher and split APK merger progress bars appearing partially filled before progress begins https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/569
+- Fixed issues with the split APK merger during corrupting and breaking some APKs
 
 
 # Refactors
